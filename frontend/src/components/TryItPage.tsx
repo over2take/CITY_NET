@@ -9,6 +9,8 @@ import {
   startingToken, asLocation, withMax, afterRest, type Character, type PretendToken,
 } from '../sheets/tryIt';
 import { restsOf } from '../sheets/rests';
+import { houseRuleList, withHouseRules, rulesOnAtStart } from '../sheets/houseRules';
+import { Switch } from './ConditionsPage';
 import { SheetRenderer } from './SheetRenderer';
 import { HeartMonitor } from './HitPoints';
 import { ModelHealthEditor, ModelHealthDescription, NoHealthNotice, monitorBandFor, type SendHealth } from './HealthModelPanels';
@@ -65,7 +67,14 @@ function PoolPanel({ token, send }: { token: PretendToken; send: SendHealth }) {
   );
 }
 
-export function TryItPage({ definition, edit, api }: Props) {
+export function TryItPage({ definition: draft, edit, api }: Props) {
+  // RULES (4j5b; approved mockup docs/mockups/optional-rules.html, 2026-10-14): the draft is tried
+  // with its house rules switched here, each starting as its STARTS says. Everything below works on
+  // the draft as the game would run it with them; only SAVE AS THE SAMPLE CHARACTER writes the draft.
+  const rules = houseRuleList(draft);
+  const [switched, setSwitched] = useState<Record<string, boolean>>({});
+  const onKey = rulesOnAtStart(draft, switched).join(',');
+  const definition = useMemo(() => withHouseRules(draft, new Set(onKey ? onKey.split(',') : [])), [draft, onKey]);
   const [character, setCharacter] = useState<Character>(() => sampleCharacter(definition));
   const [values, setValues] = useState<Record<string, number>>({});
   const [problems, setProblems] = useState<{ where: string; message: string }[]>([]);
@@ -181,11 +190,23 @@ export function TryItPage({ definition, edit, api }: Props) {
         <span style={{ ...small, opacity: 1 }}>THE DRAFT AS IT STANDS</span>
         <span style={why}>Unsaved changes included. What you type here isn&apos;t saved.</span>
         <span style={{ flex: 1 }} />
-        {edit && differsFromSample(definition, character) && (
-          <button type="button" className="utility-btn" style={btn} onClick={() => edit(withCharacterAsSample(definition, character))}>SAVE AS THE SAMPLE CHARACTER</button>
+        {edit && differsFromSample(draft, character) && (
+          <button type="button" className="utility-btn" style={btn} onClick={() => edit(withCharacterAsSample(draft, character))}>SAVE AS THE SAMPLE CHARACTER</button>
         )}
         <button type="button" className="utility-btn" style={btn} onClick={reset}>RESET TO THE SAMPLE</button>
       </div>
+
+      {rules.length > 0 && (
+        <div role="group" aria-label="House rules to try" style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', padding: '6px 12px', border: '1px solid var(--dark-green)' }}>
+          <FieldName hint={HINTS['try.rules']} style={{ ...small, opacity: 1 }}>RULES</FieldName>
+          {rules.map((r) => (
+            <span key={r.id} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 11, letterSpacing: 1 }}>
+              <Switch on={onKey.split(',').includes(r.id)} label={`${(r.name.trim() || r.id).toUpperCase()} on`} onChange={(v) => setSwitched((s) => ({ ...s, [r.id]: v }))} />
+              {(r.name.trim() || r.id).toUpperCase()}
+            </span>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: 14, alignItems: 'start' }}>
         <section aria-label="Made-up character" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

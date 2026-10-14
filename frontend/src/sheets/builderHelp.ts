@@ -193,6 +193,7 @@ export const HINTS = {
   // TRY IT
   'try.health': 'The health model from SETUP on a pretend token, through the game\'s own rules: what the HEALTH folder shows the GM and the token\'s owner.',
   'try.othersSee': 'What everyone else sees of the token\'s health: the heart monitor and words like WOUNDED, never the numbers or the notes.',
+  'try.rules': 'Try the draft with each house rule on or off. Only here: the game keeps the GM\'s choice. Each starts as its STARTS says.',
   'try.level': 'The level the NPC is made at, what @level reads in its tier\'s boxes. In play the GM picks it in ID.EXE.',
 } as const;
 

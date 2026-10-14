@@ -305,15 +305,63 @@ describe('without the server', () => {
 });
 
 describe('the "?"', () => {
-  it('explains the health, what others see, and the level an NPC is made at', async () => {
+  it('explains the health, what others see, the level an NPC is made at, and the rules to try', async () => {
   const allShown = (page: string, count: number) => {
     const keys = Object.keys(HINTS).filter((k) => k.startsWith(`${page}.`)) as (keyof typeof HINTS)[];
     expect(keys).toHaveLength(count);
     for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
   };
-    open(WITH_TIERS);
+    open({ ...WITH_TIERS, house_rules: [{ id: 'magic', name: 'MAGIC' }] } as Definition);
     await screen.findByText('WHAT OTHERS SEE');
-    allShown('try', 3);
+    allShown('try', 4);
     expect(screen.getByRole('spinbutton', { name: 'NPC level' })).toBeTruthy();
+  });
+});
+
+describe('RULES (4j5b)', () => {
+  // Approved mockup optional-rules (2026-10-14): the draft tried with each house rule on or off,
+  // starting as each STARTS says; the game keeps the GM's choice.
+  const RULED = {
+    ...H,
+    house_rules: [{ id: 'magic', name: 'Magic' }, { id: 'gritty', name: 'Gritty wounds' }, { id: 'markets', name: 'Markets', starts: true }],
+    derived: [{ id: 'save', label: 'Save', formula: '16 - (@level + @str)', alternative: { rule: 'gritty', formula: '10 - @str' } }],
+    sheet: (() => {
+      const sheet = starterSheet(H);
+      sheet.sections.push({ id: 'spells', label: 'SPELLS', layout: 'list', tab: sheet.tabs?.[0], only_with: 'magic', fields: [{ id: 'spell', label: 'Spell', type: 'text' }] });
+      return sheet;
+    })(),
+  } as unknown as Definition;
+  const rules = () => within(screen.getByRole('group', { name: 'House rules to try' }));
+  const flip = (name: string) => userEvent.click(rules().getByRole('switch', { name: `${name} on` }));
+
+  it('switches each rule, starting as it STARTS, and never touches the draft', async () => {
+    const { edits } = open(RULED);
+    expect(rules().getAllByRole('switch').map((s) => [s.getAttribute('aria-label'), s.getAttribute('aria-checked')]))
+      .toEqual([['MAGIC on', 'false'], ['GRITTY WOUNDS on', 'false'], ['MARKETS on', 'true']]);
+    await waitFor(() => expect(valueOf('Save')).toBe('11'));
+    expect(character().queryByText(/─── SPELLS ───/)).toBeNull();
+    await flip('GRITTY WOUNDS');
+    await waitFor(() => expect(valueOf('Save')).toBe('8'));
+    await flip('MAGIC');
+    expect(await character().findByText(/─── SPELLS ───/)).toBeTruthy();
+    await flip('GRITTY WOUNDS');
+    await waitFor(() => expect(valueOf('Save')).toBe('11'));
+    expect(edits).toEqual([]);
+  });
+
+  it('SAVE AS THE SAMPLE CHARACTER still writes the draft itself, rules and all', async () => {
+    const { last } = open(RULED);
+    await flip('GRITTY WOUNDS');
+    await waitFor(() => expect(valueOf('Save')).toBe('8'));
+    fireEvent.change(character().getByLabelText('Strength'), { target: { value: '5' } });
+    await userEvent.click(screen.getByRole('button', { name: 'SAVE AS THE SAMPLE CHARACTER' }));
+    expect(last().samples).toEqual({ level: 3, str: 5 });
+    expect(last().derived).toEqual(RULED.derived);
+    expect(last().sheet).toEqual(RULED.sheet);
+  });
+
+  it('isn\'t there in a system with no house rules', () => {
+    open();
+    expect(screen.queryByRole('group', { name: 'House rules to try' })).toBeNull();
   });
 });
