@@ -23,6 +23,7 @@
 //     core:    { health, advancement, dice, distance }, // the setup questions (core.js)
 //     conditions: { blinded: { on: false }, glitching: { name: 'Glitching', ... } }, // (conditions.js)
 //     rests: { long_rest: { counts_as: ['short_rest'], refills: [...] } },          // (rests.js)
+//     house_rules: [ { id: 'magic', name: 'MAGIC', starts: false } ],  // what waits on one: houseRules.js
 //   }
 //
 // Problems come in two weights. A **fatal** one means the document cannot be stored at all:
@@ -49,6 +50,7 @@ const { checkCurrencies } = require('./currencies');
 const { checkBank } = require('./bank');
 const { checkConditions } = require('./conditions');
 const { checkRests, restIdsOf } = require('./rests');
+const { checkHouseRules } = require('./houseRules');
 
 const FORMAT = 1;
 
@@ -64,7 +66,7 @@ const LIMITS = {
   word: 40,
 };
 
-const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests']);
+const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -116,8 +118,9 @@ const checkParts = (parts, problems) => {
       problems.push({ where, message: 'Must say on: true or on: false' });
       continue;
     }
+    // only_with, the house rule a part waits on, is houseRules.js's to check.
     for (const key of Object.keys(setting)) {
-      if (key !== 'on') problems.push({ where: `${where}, ${key}`, message: 'Only "on" is set here' });
+      if (key !== 'on' && key !== 'only_with') problems.push({ where: `${where}, ${key}`, message: 'Only "on" is set here' });
     }
   }
 };
@@ -171,6 +174,7 @@ const checkDefinition = (definition) => {
   checkNpc(definition, derivedIds, problems);
   checkConditions(definition.conditions, new Set([...statIdsOf(definition), ...derivedIds]), problems, restIdsOf(definition));
   checkRests(definition, problems);
+  checkHouseRules(definition, problems);
   return { problems };
 };
 

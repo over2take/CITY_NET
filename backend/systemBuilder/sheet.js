@@ -40,7 +40,8 @@ const text = (value, where, max, problems, { required = false } = {}) => {
 const EDIT = ['player', 'gm'];
 
 const FIELD_KEYS = new Set(['id', 'label', 'type', 'visibility', 'sensitivity', 'maxField', 'hint', 'placeholder', 'unit', 'options', 'source', 'edit']);
-const SECTION_KEYS = new Set(['id', 'label', 'layout', 'tab', 'columns', 'fields']);
+/** only_with, the house rule a section waits on, is houseRules.js's to check. */
+const SECTION_KEYS = new Set(['id', 'label', 'layout', 'tab', 'columns', 'fields', 'only_with']);
 const HEADER_KEYS = new Set(['nameField', 'subtitleFields', 'hpField', 'hpMaxField', 'chips']);
 
 /** Check a sheet layout. `derivedIds` are the system's derived values, which fields may show. */
