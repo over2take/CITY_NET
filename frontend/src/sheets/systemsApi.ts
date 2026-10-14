@@ -154,6 +154,10 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
       call<{ id: string; kind: ExampleKind; definition: Definition }>(fetcher, token, `/api/systems/examples/${encodeURIComponent(exampleId)}`),
     /** A new draft copied from a built-in example under the GM's own name; no link back. */
     createFromExample: (name: string, example: string) => call<{ id: string }>(fetcher, token, '/api/systems', 'POST', { name, example }),
+    /** Whether the builder's first-time tour has been seen (4i): one setting, on the server. */
+    tourSeen: () => call<{ seen: boolean }>(fetcher, token, '/api/systems/tour'),
+    /** The tour seen (finished or skipped), or to be shown again the next time the builder opens. */
+    setTourSeen: (seen: boolean) => call<{ seen: boolean }>(fetcher, token, '/api/systems/tour', 'PUT', { seen }),
     rename: (systemId: string, name: string) => call<{ name: string }>(fetcher, token, `${id(systemId)}/name`, 'PUT', { name }),
     duplicate: (systemId: string) => call<{ id: string; name: string }>(fetcher, token, `${id(systemId)}/duplicate`, 'POST', {}),
     remove: (systemId: string) => call<{ deleted: true }>(fetcher, token, id(systemId), 'DELETE'),
