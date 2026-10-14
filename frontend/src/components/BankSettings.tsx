@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import { BUILT_IN_ICONS, formatAmount, parseAmount } from '../sheets/currencies';
 import { amountProblem, amountExample } from '../sheets/moneyText';
@@ -7,6 +7,8 @@ import {
   bankSettings, withBank, CURRENCY_LIMITS, type CountedIn, type StoredCurrency,
 } from '../sheets/wordsFeatures';
 import { CurrencyIcon } from './BankWindows';
+import { HINTS } from '../sheets/builderHelp';
+import { FieldName, HelpHint } from './HelpHint';
 
 // The bank's settings on the builder's FEATURES page (4b1c2): the system's currencies and its
 // celebrations (approved mockup docs/mockups/builder-words-features.html, 2026-10-06). Each currency
@@ -51,6 +53,7 @@ function CurrencyEditor({ definition, edit, api, index, say }: Props & { index: 
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const id = useId();
 
   const upload = async (file: File | undefined) => {
     if (!file || !api) return;
@@ -68,7 +71,7 @@ function CurrencyEditor({ definition, edit, api, index, say }: Props & { index: 
         <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <input type="text" aria-label="Currency name" maxLength={CURRENCY_LIMITS.name} value={c.name} style={{ ...field, width: 150 }}
             onChange={(e) => set({ name: e.target.value })} />
-          <span style={small}>{main ? 'MAIN · THE BANK BALANCE' : 'EXTRA'}</span>
+          <FieldName hint={HINTS['bank.main']} style={small}>{main ? 'MAIN · THE BANK BALANCE' : 'EXTRA'}</FieldName>
         </span>
         <span style={{ display: 'flex', gap: 6 }}>
           {!main && <button type="button" className="utility-btn" style={btn} onClick={() => edit(withMainCurrency(definition, index))}>MAKE MAIN</button>}
@@ -87,31 +90,31 @@ function CurrencyEditor({ definition, edit, api, index, say }: Props & { index: 
       )}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span style={small}>COUNTED IN</span>
+        <FieldName hint={HINTS['bank.countedIn']} style={small}>COUNTED IN</FieldName>
         <Segments<CountedIn> label={`${c.name} counted in`} value={how} options={[['whole', 'WHOLE NUMBERS'], ['decimals', 'DECIMALS'], ['coins', 'COINS']]}
           onChange={(v) => edit(withCountedIn(definition, index, v))} />
       </div>
 
       {how !== 'coins' && (
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><span style={small}>SYMBOL</span>
-            <input type="text" maxLength={CURRENCY_LIMITS.symbol} value={c.symbol ?? ''} placeholder="none" style={{ ...field, width: 56 }}
-              onChange={(e) => set({ symbol: e.target.value })} /></label>
+          <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><FieldName htmlFor={`${id}-symbol`} hint={HINTS['bank.symbol']} style={small}>SYMBOL</FieldName>
+            <input id={`${id}-symbol`} type="text" maxLength={CURRENCY_LIMITS.symbol} value={c.symbol ?? ''} placeholder="none" style={{ ...field, width: 56 }}
+              onChange={(e) => set({ symbol: e.target.value })} /></span>
           {c.symbol && (
             <Segments<'before' | 'after'> label={`${c.name} symbol`} value={c.symbolAfter ? 'after' : 'before'} options={[['before', 'BEFORE'], ['after', 'AFTER']]}
               onChange={(v) => set({ symbolAfter: v === 'after' })} />
           )}
           {how === 'decimals' && <>
-            <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><span style={small}>DECIMALS</span>
-              <input type="number" min={1} max={CURRENCY_LIMITS.decimals} value={c.decimals ?? 2} style={{ ...field, width: 56 }}
-                onChange={(e) => set({ decimals: Math.max(1, Math.min(CURRENCY_LIMITS.decimals, Math.round(Number(e.target.value)) || 1)) })} /></label>
+            <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><FieldName htmlFor={`${id}-decimals`} hint={HINTS['bank.decimals']} style={small}>DECIMALS</FieldName>
+              <input id={`${id}-decimals`} type="number" min={1} max={CURRENCY_LIMITS.decimals} value={c.decimals ?? 2} style={{ ...field, width: 56 }}
+                onChange={(e) => set({ decimals: Math.max(1, Math.min(CURRENCY_LIMITS.decimals, Math.round(Number(e.target.value)) || 1)) })} /></span>
             <Segments<'.' | ','> label={`${c.name} decimal mark`} value={c.decimalMark === ',' ? ',' : '.'} options={[['.', 'POINT'], [',', 'COMMA']]}
               onChange={(v) => set({ decimalMark: v })} />
           </>}
           {how === 'whole' && (
-            <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><span style={small}>SHORT</span>
-              <input type="text" maxLength={CURRENCY_LIMITS.short} value={c.short ?? ''} placeholder="none" style={{ ...field, width: 70 }}
-                onChange={(e) => set({ short: e.target.value })} /></label>
+            <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><FieldName htmlFor={`${id}-short`} hint={HINTS['bank.short']} style={small}>SHORT</FieldName>
+              <input id={`${id}-short`} type="text" maxLength={CURRENCY_LIMITS.short} value={c.short ?? ''} placeholder="none" style={{ ...field, width: 70 }}
+                onChange={(e) => set({ short: e.target.value })} /></span>
           )}
         </div>
       )}
@@ -128,10 +131,10 @@ function CurrencyEditor({ definition, edit, api, index, say }: Props & { index: 
                   onChange={(e) => edit(withCoins(definition, index, { edit: j, patch: { short: e.target.value } }))} />
                 {smallest
                   ? <span style={{ ...why, fontSize: 11 }}>worth 1 (the smallest)</span>
-                  : <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}><span style={small}>WORTH</span>
+                  : <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><FieldName hint={HINTS['bank.worth']} style={small}>WORTH</FieldName>
                       <input type="number" min={2} aria-label={`Coin ${j + 1} worth`} value={d.value} style={{ ...field, width: 80 }}
                         onChange={(e) => edit(withCoins(definition, index, { edit: j, patch: { value: Math.max(2, Math.round(Number(e.target.value)) || 2) } }))} />
-                    </label>}
+                    </span>}
                 <button type="button" className="utility-btn" style={btn} aria-label={`Remove coin ${d.name}`} disabled={all.length <= 1 || smallest}
                   onClick={() => edit(withCoins(definition, index, { remove: j }))}>×</button>
               </div>
@@ -143,7 +146,7 @@ function CurrencyEditor({ definition, edit, api, index, say }: Props & { index: 
       )}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span style={small}>ICON</span>
+        <FieldName hint={HINTS['bank.icon']} style={small}>ICON</FieldName>
         <span role="group" aria-label={`${c.name} icon`} style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <button type="button" aria-pressed={!c.icon} style={{ ...btn, ...seg(!c.icon), border: '1px solid var(--green)' }} onClick={() => set({ icon: '' })}>NONE</button>
           {BUILT_IN_ICONS.map((icon) => (
@@ -163,7 +166,7 @@ function CurrencyEditor({ definition, edit, api, index, say }: Props & { index: 
       </div>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <span style={small}>READS AS</span>
+        <FieldName hint={HINTS['bank.readsAs']} style={small}>READS AS</FieldName>
         <span data-testid={`reads-as-${c.id}`} style={{ color: 'var(--cyan)', fontSize: 13 }}>{formatAmount(shapeCurrency(c), SAMPLE)}</span>
       </div>
       <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
@@ -185,12 +188,13 @@ function Whale({ definition, edit }: Props) {
   const { whale } = bankSettings(definition);
   const [text, setText] = useState(whale !== null && shaped ? formatAmount(shaped, whale) : '');
   const [problem, setProblem] = useState<string | null>(null);
+  const id = useId();
   if (!shaped) return <span style={why}>Whale status needs a currency of the system's own: add one above.</span>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <label style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-        <span style={small}>WHALE STATUS AT</span>
-        <input type="text" value={text} placeholder={`never (e.g. ${amountExample(shaped)})`} style={{ ...field, width: 180 }}
+      <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <FieldName htmlFor={`${id}-whale`} hint={HINTS['bank.whale']} style={small}>WHALE STATUS AT</FieldName>
+        <input id={`${id}-whale`} type="text" value={text} placeholder={`never (e.g. ${amountExample(shaped)})`} style={{ ...field, width: 180 }}
           aria-invalid={problem ? true : undefined}
           onChange={(e) => {
             setText(e.target.value);
@@ -201,7 +205,7 @@ function Whale({ definition, edit }: Props) {
             if (!p && parsed.ok) edit(withBank(definition, { whale: parsed.amount }));
           }} />
         <span style={why}>{whale !== null ? `= ${formatAmount(shaped, whale)} in ${main.name}` : 'Empty: whale status never fires.'}</span>
-      </label>
+      </span>
       {problem && <span role="alert" style={{ ...why, color: 'var(--danger)', opacity: 1 }}>{problem}</span>}
     </div>
   );

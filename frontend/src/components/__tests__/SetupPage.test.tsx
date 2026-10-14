@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { SetupPage } from '../SetupPage';
 import { systemsApi, type Definition } from '../../sheets/systemsApi';
 import { SYSTEMS_CHANGED_EVENT } from '../../sheets/systemsLibrary';
+import { HINTS } from '../../sheets/builderHelp';
 
 /**
  * The builder's SETUP page (4a3b). Approved mockup builder-setup (2026-10-06): five questions on one
@@ -215,5 +216,21 @@ describe('how characters grow, the dice, and distance', () => {
     expect(units.find((b) => b.getAttribute('aria-checked') === 'true')!.textContent).toMatch(/^FEET/);
     await userEvent.click(units.find((b) => b.textContent!.startsWith('ZONES'))!);
     expect((last().core as { distance: string }).distance).toBe('zones');
+  });
+});
+
+describe('the "?"', () => {
+  it('sits beside every setting the help has words for, outside the field\'s name', () => {
+    open();
+    const keys = Object.keys(HINTS).filter((k) => k.startsWith('setup.')) as (keyof typeof HINTS)[];
+    expect(keys).toHaveLength(6);
+    for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
+    for (const name of ['NAME', 'DESCRIPTION', 'AUTHOR', 'LICENSE']) expect(screen.getByRole('textbox', { name }), name).toBeTruthy();
+  });
+
+  it('stays with the health model\'s settings when the model changes', async () => {
+    open();
+    await userEvent.click(model('HARM LEVELS'));
+    expect(screen.getByRole('note', { name: HINTS['setup.health'] }).previousElementSibling!.textContent).toBe('HARM LEVELS');
   });
 });

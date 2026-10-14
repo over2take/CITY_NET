@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 
 import { WordsPage } from '../WordsPage';
 import type { Definition } from '../../sheets/systemsApi';
+import { HINTS } from '../../sheets/builderHelp';
 
 /**
  * The builder's WORDS page (4b1b). Approved mockup builder-words-features (2026-10-06): one table of
@@ -69,5 +70,17 @@ describe('WORDS', () => {
     expect((within(vehicle).getByLabelText('Back to the app\'s words for VEHICLE') as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByLabelText('HP one') as HTMLInputElement).disabled).toBe(false);
     expect(row('hp').textContent).toContain('Their health');
+  });
+});
+
+describe('the "?"', () => {
+  it('explains each form\'s column, the header still named by its word alone', () => {
+    open();
+    for (const [name, k] of [['ONE', 'words.one'], ['MANY', 'words.many'], ['SHORT', 'words.short'], ['READS AS', 'words.readsAs']] as const) {
+      const header = screen.getByRole('columnheader', { name });
+      expect(within(header).getByRole('note', { name: HINTS[k] }), name).toBeTruthy();
+    }
+    expect(Object.keys(HINTS).filter((k) => k.startsWith('words.'))).toHaveLength(4);
+    expect(within(screen.getByRole('columnheader', { name: 'TERM' })).queryByRole('note')).toBeNull();
   });
 });

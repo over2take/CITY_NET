@@ -1,10 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import type { systemsApi, Definition } from '../sheets/systemsApi';
 import { renamedMessage, SYSTEMS_CHANGED_EVENT } from '../sheets/systemsLibrary';
 import {
   HEALTH_MODELS, ADVANCEMENT, DISTANCE, COMMON_DICE, MAX_DICE, LIST_LIMITS, defaultHealth, idFor, setupOf, withCover, withCore,
   toggleAdvancement, toggleDie, addDie, healthLayout, tokenNote, type Health, type HealthModel, type Named, type HarmLevel,
 } from '../sheets/setup';
+import { HINTS } from '../sheets/builderHelp';
+import { FieldName, HelpHint } from './HelpHint';
 
 // The builder's SETUP page (4a3b): the core rules questions a new system opens on, five on one page,
 // each saved as it is answered (approved mockup docs/mockups/builder-setup.html, 2026-10-06). The
@@ -178,6 +180,7 @@ function Preview({ health }: { health: Health }) {
 
 export function SetupPage({ api, systemId, definition, edit, say }: Props) {
   const answers = setupOf(definition);
+  const id = useId();
   const [nameText, setNameText] = useState(definition.name);
   const [nameError, setNameError] = useState<string | null>(null);
   const [renaming, setRenaming] = useState(false);
@@ -224,10 +227,10 @@ export function SetupPage({ api, systemId, definition, edit, say }: Props) {
   return (
     <div style={{ maxWidth: 900, display: 'flex', flexDirection: 'column', gap: 22 }}>
       <Question n={1} title="WHAT IS IT?" ask="What players see when they pick a system, and what MY SYSTEMS shows under its name.">
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={small}>NAME</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <FieldName htmlFor={`${id}-name`} hint={HINTS['setup.name']} style={small}>NAME</FieldName>
           <span style={{ display: 'flex', gap: 6 }}>
-            <input ref={nameRef} type="text" maxLength={80} value={nameText} aria-invalid={nameError ? true : undefined}
+            <input id={`${id}-name`} ref={nameRef} type="text" maxLength={80} value={nameText} aria-invalid={nameError ? true : undefined}
               aria-describedby={nameError ? 'setup-name-error' : undefined}
               style={{ ...input, flex: 1, borderColor: nameError ? 'var(--danger)' : 'var(--green)' }}
               onChange={(e) => { setNameText(e.target.value); setNameError(null); }}
@@ -235,24 +238,24 @@ export function SetupPage({ api, systemId, definition, edit, say }: Props) {
             <button type="button" className="utility-btn" style={btn} onClick={rename}
               disabled={!nameText.trim() || nameText.trim() === definition.name || renaming}>RENAME</button>
           </span>
-        </label>
+        </div>
         {nameError && <span id="setup-name-error" role="alert" style={{ ...why, color: 'var(--danger)', opacity: 1 }}>{nameError}</span>}
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={small}>DESCRIPTION</span>
-          <textarea maxLength={2000} rows={3} value={answers.description} style={{ ...input, resize: 'vertical' }}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <FieldName htmlFor={`${id}-description`} hint={HINTS['setup.description']} style={small}>DESCRIPTION</FieldName>
+          <textarea id={`${id}-description`} maxLength={2000} rows={3} value={answers.description} style={{ ...input, resize: 'vertical' }}
             placeholder="Low fantasy around one village fire. Wounds instead of HP, coin counted in copper."
             onChange={(e) => edit(withCover(definition, 'description', e.target.value))} />
-        </label>
+        </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 200px' }}>
-            <span style={small}>AUTHOR</span>
-            <input type="text" maxLength={80} value={answers.author} style={input} onChange={(e) => edit(withCover(definition, 'author', e.target.value))} />
-          </label>
-          <label style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 200px' }}>
-            <span style={small}>LICENSE</span>
-            <input type="text" maxLength={200} value={answers.license} placeholder="CC BY 4.0, or leave blank" style={input}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 200px' }}>
+            <FieldName htmlFor={`${id}-author`} hint={HINTS['setup.author']} style={small}>AUTHOR</FieldName>
+            <input id={`${id}-author`} type="text" maxLength={80} value={answers.author} style={input} onChange={(e) => edit(withCover(definition, 'author', e.target.value))} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: '1 1 200px' }}>
+            <FieldName htmlFor={`${id}-license`} hint={HINTS['setup.license']} style={small}>LICENSE</FieldName>
+            <input id={`${id}-license`} type="text" maxLength={200} value={answers.license} placeholder="CC BY 4.0, or leave blank" style={input}
               onChange={(e) => edit(withCover(definition, 'license', e.target.value))} />
-          </label>
+          </div>
         </div>
       </Question>
 
@@ -274,7 +277,7 @@ export function SetupPage({ api, systemId, definition, edit, say }: Props) {
         )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, alignItems: 'start' }}>
           <div style={{ border: '1px solid var(--dark-green)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <span style={small}>{model.label.toUpperCase()}</span>
+            <FieldName hint={HINTS['setup.health']} style={small}>{model.label.toUpperCase()}</FieldName>
             <HealthSettings health={answers.health} onChange={setHealth} />
           </div>
           <Preview health={answers.health} />
@@ -311,6 +314,7 @@ export function SetupPage({ api, systemId, definition, edit, say }: Props) {
             aria-invalid={dieError ? true : undefined}
             onChange={(e) => { setDieText(e.target.value); setDieError(null); }}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTyped(); } }} />
+          <HelpHint text={HINTS['setup.die']} />
           <button type="button" className="utility-btn" style={btn} disabled={!dieText.trim()} onClick={addTyped}>ADD</button>
           <span style={why}>{answers.dice.length} of {MAX_DICE}.</span>
         </div>
