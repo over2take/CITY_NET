@@ -19,6 +19,8 @@ import { CONDITION_ICONS } from '../sheets/conditionIcons';
 import { TryItPage } from './TryItPage';
 import { PublishPreviewPage } from './PublishPreviewPage';
 import { HelpPage } from './HelpPage';
+import { BuilderTour } from './BuilderTour';
+import { TOUR, type TourPlace } from '../sheets/builderHelp';
 import type { PublishPreview } from '../sheets/versionPreview';
 
 // The system builder (4a2b): it takes over the whole window, with no map. A sidebar down the left
@@ -142,11 +144,12 @@ const Icons: Record<BuilderPage | 'builder' | 'systems' | 'help' | 'save' | 'pub
 
 /**
  * One button on the rail, the map's .rail-btn: its icon centered in the narrow rail, its name
- * beside it, seen once the rail is wide.
+ * beside it, seen once the rail is wide. `place` is where the tour may point at it, and `lit`
+ * says it does now.
  */
-function RailButton({ icon: glyph, label, onClick, title, active, disabled, count, big, aria }: {
+function RailButton({ icon: glyph, label, onClick, title, active, disabled, count, big, aria, place, lit }: {
   icon: React.ReactNode; label: string; onClick: () => void; title?: string; active?: boolean;
-  disabled?: boolean; count?: number; big?: boolean; aria?: string;
+  disabled?: boolean; count?: number; big?: boolean; aria?: string; place?: TourPlace; lit?: boolean;
 }) {
   return (
     <button
@@ -157,8 +160,11 @@ function RailButton({ icon: glyph, label, onClick, title, active, disabled, coun
       title={title}
       disabled={disabled}
       onClick={onClick}
+      data-tour-place={place ?? undefined}
+      data-lit={lit || undefined}
       style={{
         width: 'auto', flexShrink: 0, position: 'relative', justifyContent: 'flex-start', gap: 10, padding: 0,
+        ...(lit ? { outline: '2px solid var(--warning)', outlineOffset: -2, boxShadow: '0 0 12px color-mix(in srgb, var(--warning) 45%, transparent)' } : {}),
         margin: '0 calc((var(--rail-width) - var(--rail-btn-size)) / 2)', overflow: 'hidden', whiteSpace: 'nowrap',
         ...(big ? { height: 'calc(var(--rail-btn-size) + 6px)' } : {}),
       }}
@@ -199,6 +205,10 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
   const [preview, setPreview] = useState<{ value: Extract<PublishPreview, { first: false }>; back: Page } | null>(null);
   /** HELP's open topic, kept while the GM goes to a page and comes back. */
   const [helpTopic, setHelpTopic] = useState<string | null>(null);
+  /** The tour's step while it is showing (4i): the first time the builder opens, or from HELP. */
+  const [tourStep, setTourStep] = useState<number | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const tourRoot = useCallback(() => rootRef.current, []);
 
   const load = useCallback(async () => {
     if (!systemId) return null;
@@ -224,6 +234,16 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
     });
     return () => { live = false; autosave.current?.dispose(); };
   }, [api, load, systemId]);
+
+  // The tour, the first time: only once the server says it hasn't been seen, never on a doubt.
+  useEffect(() => {
+    let live = true;
+    api.tourSeen().then((r) => { if (live && r.ok && !r.value.seen) setTourStep(0); });
+    return () => { live = false; };
+  }, [api]);
+  /** Finished or skipped: it doesn't come back by itself (START THE TOUR on HELP plays it again). */
+  const endTour = () => { setTourStep(null); void api.setTourSeen(true); };
+  const lit: TourPlace = tourStep === null ? null : TOUR[tourStep].at;
 
   // An example to look at: its definition, with nothing to save it to.
   useEffect(() => {
@@ -329,6 +349,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
 
   return (
     <div
+      ref={rootRef}
       role="main"
       aria-label="System builder"
       data-testid="builder-screen"
@@ -338,7 +359,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
           to show each name while the pointer or keyboard focus is in it. */}
       <nav
         aria-label="Builder"
-        data-expanded={railOpen}
+        data-expanded={railOpen || !!lit}
         className="icon-rail"
         onMouseEnter={() => setRailOpen(true)}
         onMouseLeave={() => setRailOpen(false)}
@@ -346,7 +367,8 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
         onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setRailOpen(false); }}
         style={{
           position: 'absolute', left: 0, top: 0, bottom: 0, zIndex: 1, overflowX: 'hidden', overflowY: 'auto',
-          width: railOpen ? RAIL_OPEN : undefined, transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+          // Held open while the tour points at it, so the button it means can be read.
+          width: railOpen || lit ? RAIL_OPEN : undefined, transition: 'width 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
         <div className="rail-top" style={{ alignItems: 'stretch' }}>
@@ -367,17 +389,25 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
               disabled={!systemId && !looking}
               active={p.id === page}
               count={p.id === 'problems' && problems.length > 0 ? problems.length : undefined}
+              place={p.id}
+              lit={lit === p.id}
               onClick={() => { setPage(p.id); setStatus(null); }}
             />
           ))}
         </div>
         <div style={{ padding: '10px 0', display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid var(--dark-green)' }}>
           <RailButton icon={Icons.help} label="HELP" title={HELP_PAGE.what} active={page === 'help'} onClick={() => { setPage('help'); setStatus(null); }} />
-          <RailButton icon={Icons.save} label="SAVE" disabled={!autosave.current || busy} onClick={save} />
-          <RailButton icon={Icons.publish} label="PUBLISH" active={page === 'publish'} disabled={!autosave.current || busy} onClick={publish}
+          <RailButton icon={Icons.save} label="SAVE" disabled={!autosave.current || busy} onClick={save} place="publish" lit={lit === 'publish'} />
+          <RailButton icon={Icons.publish} label="PUBLISH" active={page === 'publish'} disabled={!autosave.current || busy} onClick={publish} place="publish" lit={lit === 'publish'}
             title={publishBlocked(problems) ?? 'Make this the version the game runs'} />
         </div>
       </nav>
+
+      {tourStep !== null && (
+        <BuilderTour step={tourStep} railWidth={RAIL_OPEN} root={tourRoot} onSkip={endTour}
+          onBack={() => setTourStep(Math.max(0, tourStep - 1))}
+          onNext={() => (tourStep === TOUR.length - 1 ? endTour() : setTourStep(tourStep + 1))} />
+      )}
 
       {/* The open page, beside the rail at its narrow width: the wide rail lies over it. */}
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', marginLeft: 'var(--rail-width)' }}>
@@ -446,7 +476,8 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
           {page === 'help' && (
             <HelpPage topic={helpTopic} onTopic={setHelpTopic} canGoTo={!!systemId || looking}
               onGoTo={(p) => { setPage(p); setStatus(null); }}
-              onLook={onLookAt ? (id) => leave(() => onLookAt(id)) : undefined} />
+              onLook={onLookAt ? (id) => leave(() => onLookAt(id)) : undefined}
+              onStartTour={() => setTourStep(0)} />
           )}
           {page === 'publish' && preview && (
             <PublishPreviewPage preview={preview.value} system={name} busy={busy}
