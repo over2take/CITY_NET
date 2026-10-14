@@ -31,6 +31,12 @@ describe('the tour', () => {
     }
     expect(TOUR).toHaveLength(8);
   });
+
+  it('stays eight steps, the STATS & RULES one pointing to HOUSE RULES (4j, decision 9)', () => {
+    expect(TOUR.find((s) => s.at === 'rules')!.text).toContain('HOUSE RULES');
+    expect(TOUR.some((s) => (s.at as string) === 'house_rules')).toBe(false);
+    expect(topicById('rules').body.join(' ')).toContain('WITH A RULE');
+  });
 });
 
 describe('the HELP page\'s topics', () => {

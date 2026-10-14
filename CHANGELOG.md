@@ -121,7 +121,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   stays there, out of sight). The builder has a HOUSE RULES page to make them, ONLY WITH puts a part, a sheet section
   or a condition under one, and a formula can be worked out another way while one is on. TRY IT tries the draft with
   each on or off, and the GM switches them in TTRPG_SYSTEM's HOUSE RULES, beside the shared ones. PUBLISH's preview
-  lists house rules and alternatives that change, and works its numbers out with the table's choices.
+  lists house rules and alternatives that change, and works its numbers out with the table's choices. The tour and HELP
+  point to them.
 - **A tour of the builder.** The first time the builder opens, eight short steps walk down its rail, lighting
   each page they explain. Skip it or finish it and it stays away, on any browser; START THE TOUR on HELP plays it again.
 - **HELP in the builder.** A HELP page on the builder's rail: how each page works with a GO TO button,
