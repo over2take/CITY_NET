@@ -31,14 +31,19 @@ const parseTokenConditions = (text) => {
  * (conditionsIn). Answers `{ ok: true, value }`, the list to store, or `{ ok: false, error }`
  * naming what is wrong. A condition that ends after rounds starts with its own rounds unless
  * `left` says otherwise; one that ends when removed carries no rounds whatever is sent.
+ *
+ * `kept` are the token's own conditions a house rule switched off hides (4j2b): they stay as
+ * stored, out of sight, whether or not they were asked for, and none can be put on while hidden.
  */
-const checkTokenConditions = (asked, offered) => {
+const checkTokenConditions = (asked, offered, kept = []) => {
   if (!Array.isArray(asked)) return { ok: false, error: 'Conditions must be a list' };
   if (asked.length > LIMITS.conditions) return { ok: false, error: `At most ${LIMITS.conditions} conditions on a token` };
   const byId = new Map(offered.map((c) => [c.id, c]));
+  const keptIds = new Set(kept.map((c) => c.id));
   const seen = new Set();
   const value = [];
   for (const entry of asked) {
+    if (isPlainObject(entry) && keptIds.has(entry.id)) continue;
     const c = isPlainObject(entry) && typeof entry.id === 'string' ? byId.get(entry.id) : null;
     if (!c) {
       const named = isPlainObject(entry) && typeof entry.id === 'string' ? `"${entry.id}" is` : 'That is';
@@ -53,7 +58,7 @@ const checkTokenConditions = (asked, offered) => {
     else if (Number.isInteger(entry.left)) value.push({ id: c.id, left: entry.left });
     else value.push({ id: c.id });
   }
-  return { ok: true, value };
+  return { ok: true, value: [...value, ...kept] };
 };
 
 /**
