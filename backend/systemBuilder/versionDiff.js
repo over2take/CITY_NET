@@ -12,11 +12,13 @@
 // Each change is { kind, change, id, ... }:
 //   sheet      removed | added | renamed (from, to) | gm_only | player_edit | options_removed (options)
 //   formula    changed (from, to: the formula text) | added | removed
+//              | alternative (from, to: { rule: its name, formula } or null; 4j5c)
 //   stat       range (from, to: { min, max }) | outside (one sheet's value past the new range)
 //   health     changed (from, to: the model)
 //   currency   removed | added
 //   part       off | on
 //   condition  removed | added
+//   house_rule added (to: whether it starts on) | removed | renamed (from, to) | starts (to)  (4j5c)
 //   other      changed: a section that changes nothing on a character (words, rests, NPC tiers...)
 // A value that changes for a character is { kind: 'formula', change: 'value', id, label, from, to }.
 //
@@ -28,6 +30,7 @@ const { derivedLabel } = require('./stats');
 const { conditionsOf } = require('./conditions');
 const { currenciesOf } = require('./currencies');
 const { PARTS, partOn } = require('./parts');
+const { houseRulesOf } = require('./houseRules');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -61,6 +64,13 @@ const healthOf = (definition) => (partOn(definition, 'token_health')
 
 const byId = (items) => new Map(items.map((x) => [x.id, x]));
 
+/** A house rule's name, or its id where it has none. */
+const ruleName = (r) => (typeof r.name === 'string' && r.name.trim() ? r.name : r.id);
+/** A formula's alternative as the preview says it: its rule by name, and its formula; or null. */
+const alternativeOf = (d, rules) => (isPlainObject(d.alternative) && typeof d.alternative.rule === 'string'
+  ? { rule: rules.has(d.alternative.rule) ? ruleName(rules.get(d.alternative.rule)) : d.alternative.rule, formula: String(d.alternative.formula ?? '') }
+  : null);
+
 /** What `after` changes from `before`, none of it about any one character. */
 const versionChanges = (before, after) => {
   const out = [];
@@ -91,6 +101,15 @@ const versionChanges = (before, after) => {
   }
   for (const [id, e] of newFormulas) if (!oldFormulas.has(id)) out.push({ kind: 'formula', change: 'added', id, label: derivedLabel(e), to: formulaText(e) });
 
+  // A formula worked out another way under a house rule (4j5c): its alternative added, changed or gone.
+  const oldRules = byId(houseRulesOf(before));
+  const newRules = byId(houseRulesOf(after));
+  for (const [id, e] of newFormulas) {
+    const d = oldFormulas.get(id);
+    const [from, to] = [d ? alternativeOf(d, oldRules) : null, alternativeOf(e, newRules)];
+    if (!same(from, to) && (from || to)) out.push({ kind: 'formula', change: 'alternative', id, label: derivedLabel(e), from, to });
+  }
+
   const oldStats = statMap(before);
   for (const [id, s] of statMap(after)) {
     const t = oldStats.get(id);
@@ -115,6 +134,15 @@ const versionChanges = (before, after) => {
   const newConditions = byId(conditionsOf(after));
   for (const [id, c] of oldConditions) if (!newConditions.has(id)) out.push({ kind: 'condition', change: 'removed', id, label: c.name });
   for (const [id, c] of newConditions) if (!oldConditions.has(id)) out.push({ kind: 'condition', change: 'added', id, label: c.name });
+
+  // The system's own house rules (4j5c): what the GM will find in the GAME tab.
+  for (const [id, r] of oldRules) if (!newRules.has(id)) out.push({ kind: 'house_rule', change: 'removed', id, label: ruleName(r) });
+  for (const [id, r] of newRules) {
+    const was = oldRules.get(id);
+    if (!was) { out.push({ kind: 'house_rule', change: 'added', id, label: ruleName(r), to: r.starts === true }); continue; }
+    if (ruleName(was) !== ruleName(r)) out.push({ kind: 'house_rule', change: 'renamed', id, from: ruleName(was), to: ruleName(r) });
+    if ((was.starts === true) !== (r.starts === true)) out.push({ kind: 'house_rule', change: 'starts', id, label: ruleName(r), to: r.starts === true });
+  }
 
   for (const section of OTHER) {
     if (!same((before || {})[section], (after || {})[section])) out.push({ kind: 'other', change: 'changed', id: section });

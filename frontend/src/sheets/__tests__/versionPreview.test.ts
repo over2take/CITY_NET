@@ -67,7 +67,7 @@ describe('held to the server', () => {
   });
 
   it('has a group for every kind but the one-line ones', () => {
-    expect(GROUPS.flatMap((g) => g.kinds).sort()).toEqual(['condition', 'currency', 'formula', 'health', 'part', 'sheet', 'stat']);
+    expect(GROUPS.flatMap((g) => g.kinds).sort()).toEqual(['condition', 'currency', 'formula', 'health', 'house_rule', 'part', 'sheet', 'stat']);
   });
 });
 
@@ -210,5 +210,41 @@ describe('asking the server', () => {
     const fetcher = vi.fn(async () => ({ ok: true, json: async () => ({ first: true, problems: 0 }) })) as unknown as typeof fetch;
     expect(await systemsApi('tok', fetcher).publishPreview('sys_aaaaaaaaaaaaaaaa')).toEqual({ ok: true, value: { first: true, problems: 0 } });
     expect((fetcher as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBe('/api/systems/sys_aaaaaaaaaaaaaaaa/publish-preview');
+  });
+});
+
+describe('house rules and alternatives (4j5c)', () => {
+  // Made by the server's own comparison, as the rest of this file is.
+  const R2 = { ...V2, house_rules: [{ id: 'magic', name: 'Magic' }, { id: 'gritty', name: 'Gritty', starts: true }],
+    derived: [...V2.derived, { id: 'mana', label: 'Mana', formula: '2', alternative: { rule: 'magic', formula: '4' } }] };
+  const R3 = { ...V2, house_rules: [{ id: 'gritty', name: 'Grim' }, { id: 'markets', name: 'Markets', starts: true }],
+    derived: [...V2.derived.map((d) => (d.id === 'defense' ? { ...d, alternative: { rule: 'gritty', formula: '@agility' } } : d)), { id: 'mana', label: 'Mana', formula: '2' }] };
+  const changes: Change[] = versionChanges(R2, R3);
+  const line = (kind: string, change: string, id: string) => changeLine(changes.find((c) => c.kind === kind && c.change === change && c.id === id)!)!;
+
+  it('says each in words', () => {
+    expect(line('house_rule', 'added', 'markets')).toMatchObject({ what: 'MARKETS', how: 'A new house rule, starting on. The GM switches it in the GAME tab.' });
+    expect(line('house_rule', 'removed', 'magic')).toMatchObject({ what: 'MAGIC', how: 'No longer a house rule. What waited on it is always there now.' });
+    expect(line('house_rule', 'renamed', 'gritty')).toMatchObject({ what: 'GRITTY → GRIM', how: 'Renamed. Whether the table has it on stays as it is.' });
+    expect(line('house_rule', 'starts', 'gritty')).toMatchObject({ what: 'GRIM', how: 'A game starting from now begins with it off. A table that already chose keeps its choice.' });
+    expect(line('formula', 'alternative', 'defense')).toMatchObject({ what: 'DEFENSE', how: 'With GRIM on, worked out as @agility.' });
+    expect(line('formula', 'alternative', 'mana')).toMatchObject({ what: 'MANA', how: 'No longer worked out another way with MAGIC on.' });
+    expect(changeLine({ kind: 'formula', change: 'alternative', id: 'x', label: 'X', from: { rule: 'Magic', formula: '4' }, to: { rule: 'Magic', formula: '5' } })!.how)
+      .toBe('With MAGIC on, worked out as 5 (was 4 with MAGIC).');
+  });
+
+  it('a group of their own, an alternative apart from its formula\'s own change, a value it moves under it', () => {
+    const p: Preview = {
+      first: false, from: 2, to: 3, problems: 0, sample: null,
+      changes: [...changes, { kind: 'formula', change: 'changed', id: 'defense', label: 'Defense', from: '10 + @agility', to: '11 + @agility' }],
+      characters: [{ kind: 'player', username: 'vex', name: 'Vex', changes: [{ kind: 'formula', change: 'value', id: 'mana', label: 'Mana', from: 4, to: 2 }] }],
+    };
+    const groups = byChange(p);
+    expect(groups.find((g) => g.id === 'house_rules')!.lines.map((l) => l.what)).toEqual(['MAGIC', 'GRITTY → GRIM', 'GRIM', 'MARKETS']);
+    const numbers = groups.find((g) => g.id === 'numbers')!.lines;
+    expect(numbers.filter((l) => l.what === 'DEFENSE').map((l) => l.how)).toEqual(['With GRIM on, worked out as @agility.', 'Its formula is now 11 + @agility (was 10 + @agility).']);
+    expect(numbers.find((l) => l.what === 'MANA')!.who).toEqual([{ name: 'Vex', text: '4 → 2' }]);
+    expect(numbers.some((l) => l.how === 'Reads a value that changes.')).toBe(false);
+    expect(GROUPS.map((g) => g.id).at(-1)).toBe('house_rules');
   });
 });

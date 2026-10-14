@@ -6,10 +6,15 @@
 //
 // A token keeps the running system's health and conditions on its row and every other system's in
 // token_vitals (tokens/vitals.js), so a system that isn't running is read from there.
+//
+// The numbers are worked out as the game would run each version: with the table's house-rule choices
+// (houseRules.js), a rule the new version adds as it starts (4j5c). The changes themselves are the
+// versions as written.
 
 const { versionChanges, characterChanges, sampleChanges } = require('./versionDiff');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { currenciesOf } = require('./currencies');
+const { houseRulesOn, withHouseRules, choicesFrom } = require('./houseRules');
 
 const all = (db, sql, params) => new Promise((ok, no) => db.all(sql, params, (e, rows) => (e ? no(e) : ok(rows || []))));
 const one = (db, sql, params) => new Promise((ok, no) => db.get(sql, params, (e, row) => (e ? no(e) : ok(row || null))));
@@ -52,6 +57,8 @@ const tokenOf = async (db, system, running, sheet) => {
 const previewPublish = async (db, { system, version, before, after, running }) => {
   if (!before) return { first: true };
   const changes = versionChanges(before, after);
+  const chosen = choicesFrom(await all(db, `SELECT key, value FROM global_settings WHERE key LIKE 'house_rule:%'`, []), system);
+  const [ranBefore, ranAfter] = [before, after].map((d) => withHouseRules(d, houseRulesOn(d, chosen)));
   const linked = linkedFields(before, after);
   const goneMoney = changes.filter((c) => c.kind === 'currency' && c.change === 'removed');
   const goneConditions = changes.filter((c) => c.kind === 'condition' && c.change === 'removed');
@@ -73,7 +80,7 @@ const previewPublish = async (db, { system, version, before, after, running }) =
       const account = await one(db, 'SELECT balance FROM bank_accounts WHERE username = ? AND system = ?', [s.username, system]);
       for (const [id, source] of Object.entries(linked)) if (source === 'bank_balance') sheet[id] = account ? account.balance : 0;
     }
-    const mine = characterChanges(before, after, sheet);
+    const mine = characterChanges(ranBefore, ranAfter, sheet);
     if (!s.is_npc) {
       for (const c of goneMoney) {
         const held = main && main.id === c.id
@@ -98,7 +105,7 @@ const previewPublish = async (db, { system, version, before, after, running }) =
     to: version + 1,
     changes,
     characters,
-    sample: characters.length ? null : sampleChanges(before, after),
+    sample: characters.length ? null : sampleChanges(ranBefore, ranAfter),
   };
 };
 
