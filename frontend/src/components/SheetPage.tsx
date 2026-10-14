@@ -5,6 +5,7 @@ import type { CustomRenderSheet } from '../sheets/customTemplates';
 import { SheetPreview } from './SheetPreview';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
+import { OnlyWith } from './OnlyWith';
 import {
   sheetOf, fieldKind, pagesOf, sectionsOn, LAYOUTS, TYPES,
   withCustomized, withAutomatic, tabNameProblem, withNewTab, withTabName, withTabMoved, withoutTab,
@@ -101,6 +102,11 @@ function Choices({ field, onChange }: { field: Field; onChange: (text: string) =
       {!text.trim() && <span role="alert" style={{ color: 'var(--danger)', fontSize: 11 }}>A pick-one field needs at least one choice.</span>}
     </label>
   );
+}
+
+/** ONLY WITH in a section's settings, its name above its box like the others; nothing when there is nothing to pick. */
+function OnlyWithBlock(props: React.ComponentProps<typeof OnlyWith>) {
+  return <div style={label}><OnlyWith {...props} style={small} selectStyle={input} /></div>;
 }
 
 export const blankProblem = (what: string) => (text: string) => (text.trim() ? null : `A ${what} needs a name.`);
@@ -350,6 +356,7 @@ export function SheetPage({ definition, edit, api, forNpcs = false }: Props) {
               onChange={(e) => { if (e.target.value.trim() !== '') set(withSection(definition, s.id, { columns: Number(e.target.value) })); }} />
           </div>
         )}
+        <OnlyWithBlock definition={definition} value={s.only_with} onChange={(rule) => set(withSection(definition, s.id, { only_with: rule }))} />
         <div>
           <button type="button" className="utility-btn" style={btn} disabled={s.fields.length >= 100}
             onClick={() => {

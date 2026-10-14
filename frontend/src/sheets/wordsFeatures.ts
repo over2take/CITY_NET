@@ -118,10 +118,28 @@ export const partIsOn = (def: Definition, part: string): boolean => {
   return !(isObject(setting) && setting.on === false);
 };
 
-/** The definition with a part turned on (nothing stored) or off. */
+/** The house rule a part waits on (4j), if any. */
+export const partOnlyWith = (def: Definition, part: string): string | undefined => {
+  const setting = section(def, 'parts')[part];
+  return isObject(setting) && typeof setting.only_with === 'string' ? setting.only_with : undefined;
+};
+
+/** A part's setting: off, or waiting on a house rule; nothing at all for one plainly on. */
+const partSetting = (on: boolean, rule: string | undefined) => (rule ? { on, only_with: rule } : on ? undefined : { on: false });
+
+/** The definition with a part turned on (nothing stored) or off, any house rule it waits on kept. */
 export const withPart = (def: Definition, part: string, on: boolean): Definition => {
   const parts = { ...section(def, 'parts') };
-  if (on) delete parts[part]; else parts[part] = { on: false };
+  const setting = partSetting(on, partOnlyWith(def, part));
+  if (setting) parts[part] = setting; else delete parts[part];
+  return withSection(def, 'parts', parts);
+};
+
+/** The definition with a part waiting on a house rule (4j), or on none; on or off as it was. */
+export const withPartOnlyWith = (def: Definition, part: string, rule: string | null): Definition => {
+  const parts = { ...section(def, 'parts') };
+  const setting = partSetting(partIsOn(def, part), rule || undefined);
+  if (setting) parts[part] = setting; else delete parts[part];
   return withSection(def, 'parts', parts);
 };
 

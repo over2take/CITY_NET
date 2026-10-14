@@ -235,3 +235,23 @@ describe('the "?"', () => {
     expect(screen.getByRole('combobox', { name: 'ENDS' })).toBeTruthy();
   });
 });
+
+describe('ONLY WITH (4j4a)', () => {
+  it('puts a condition under a house rule, and takes it out again', () => {
+    const { last } = open({ ...H, house_rules: [{ id: 'magic', name: 'MAGIC' }] } as unknown as Definition);
+    const box = list().getAllByRole('button').find((b) => b.textContent === 'PRONE')!;
+    fireEvent.click(box);
+    const only = detail('Prone condition').getByRole('combobox', { name: 'ONLY WITH' });
+    fireEvent.change(only, { target: { value: 'magic' } });
+    expect(last().conditions).toEqual({ prone: { only_with: 'magic' } });
+    expect((detail('Prone condition').getByRole('combobox', { name: 'ONLY WITH' }) as HTMLSelectElement).value).toBe('magic');
+    fireEvent.change(detail('Prone condition').getByRole('combobox', { name: 'ONLY WITH' }), { target: { value: '' } });
+    expect(last().conditions).toBeUndefined();
+    expect(detail('Prone condition').getByRole('note', { name: HINTS['only.with'] })).toBeTruthy();
+  });
+
+  it('isn\'t there in a system with no house rules', () => {
+    open();
+    expect(screen.queryByRole('combobox', { name: 'ONLY WITH' })).toBeNull();
+  });
+});
