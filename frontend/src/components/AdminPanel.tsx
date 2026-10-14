@@ -48,6 +48,9 @@ import { useWords, asLabel, type WordLookup } from '../sheets/words';
 import { useParts, partOn, type PartLookup } from '../sheets/parts';
 import { currenciesFor, isUploadedIcon, BUILT_IN_ICONS, type Currency } from '../sheets/currencies';
 import { useCustomTemplate, refreshCustomTemplate, isCustomSystem } from '../sheets/customTemplates';
+import { useHouseRules, changedRules } from '../sheets/houseRules';
+import { systemsApi } from '../sheets/systemsApi';
+import type { HouseRuleState } from '../sheets/types';
 import { TableConditionsPanel } from './TableConditionsPanel';
 import { GameRestsPanel } from './GameRestsPanel';
 import { npcsOnMap } from '../sheets/restCalls';
@@ -2137,11 +2140,27 @@ function ShortfallNote({ system }: { system: string }) {
   );
 }
 
-function HouseRulesPanel({ token, defs, note }: { token: string; defs: HouseRuleDef[]; note?: React.ReactNode }) {
+/**
+ * The house rules in TTRPG_SYSTEM: those every system shares and a built-in game's own, kept in the
+ * settings; and a custom system's own (4j5a; approved mockup docs/mockups/optional-rules.html,
+ * 2026-10-14), `own`, switched through the systems route so the running game takes them at once.
+ * One APPLY for all of them.
+ */
+function HouseRulesPanel({ token, defs, note, own }: {
+  token: string; defs: HouseRuleDef[]; note?: React.ReactNode;
+  own?: { system: string; name: string; rules: HouseRuleState[] };
+}) {
   const [rules, setRules] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  // The custom system's own boxes, from what the game runs; again whenever that changes.
+  const ownKey = own ? `${own.system}|${own.rules.map((r) => `${r.id}:${r.on}`).join(',')}` : '';
+  const [ownTicked, setOwnTicked] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    setOwnTicked(Object.fromEntries((own?.rules ?? []).map((r) => [r.id, r.on])));
+  }, [ownKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ownChanged = own ? changedRules(own.rules, ownTicked) : {};
 
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then((rows) => {
@@ -2156,7 +2175,7 @@ function HouseRulesPanel({ token, defs, note }: { token: string; defs: HouseRule
     }).catch(() => {});
   }, [defs.map(d => d.settingKey).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const dirty = defs.some(d => rules[d.settingKey] !== saved[d.settingKey]);
+  const dirty = defs.some(d => rules[d.settingKey] !== saved[d.settingKey]) || Object.keys(ownChanged).length > 0;
   const apply = async () => {
     try {
       for (const d of defs) {
@@ -2167,11 +2186,20 @@ function HouseRulesPanel({ token, defs, note }: { token: string; defs: HouseRule
         });
       }
       setSaved({ ...rules });
+      if (own && Object.keys(ownChanged).length) {
+        // The game redraws the system for everyone when the server says it changed.
+        const r = await systemsApi(token).setHouseRules(own.system, ownChanged);
+        if (!r.ok) throw new Error(r.error);
+      }
       setMsg('HOUSE RULES APPLIED');
     } catch {
       setMsg('APPLY FAILED');
     }
     setTimeout(() => setMsg(null), 3000);
+  };
+  const revert = () => {
+    setRules({ ...saved });
+    setOwnTicked(Object.fromEntries((own?.rules ?? []).map((r) => [r.id, r.on])));
   };
 
   return (
@@ -2199,6 +2227,23 @@ function HouseRulesPanel({ token, defs, note }: { token: string; defs: HouseRule
             <span style={{ textAlign: 'left' }}>{d.label}</span>
           </label>
         ))}
+        {own && own.rules.length > 0 && <>
+          <span style={{ fontSize: '0.55rem', letterSpacing: '2px', opacity: 0.6, marginTop: '4px' }}>{own.name.toUpperCase()}&apos;S OWN</span>
+          {own.rules.map((r) => (
+            <label key={r.id} style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'flex-start', gap: '6px', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={!!ownTicked[r.id]}
+                onChange={(e) => setOwnTicked((t) => ({ ...t, [r.id]: e.target.checked }))}
+                style={{ flexShrink: 0 }}
+              />
+              <span style={{ textAlign: 'left' }}>
+                {r.name.toUpperCase()}
+                {r.description && <span style={{ display: 'block', opacity: 0.6 }}>{r.description}</span>}
+              </span>
+            </label>
+          ))}
+        </>}
         {note}
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
           <button
@@ -2213,7 +2258,7 @@ function HouseRulesPanel({ token, defs, note }: { token: string; defs: HouseRule
             <button
               className="utility-btn"
               style={{ fontSize: '0.65rem', padding: '3px 12px' }}
-              onClick={() => setRules({ ...saved })}
+              onClick={revert}
             >
               REVERT
             </button>
@@ -2329,6 +2374,11 @@ function TTRPGSystemPanel({ token, mainAdmin, onOpenNpcLibrary, onOpenSystems, a
   // The picked system's own words for the house rules every system shares.
   const word = useWords(system);
   const on = useParts(system);
+  // A custom system's own house rules (4j5a), with whether the table has each on.
+  // (None for a built-in game: only a custom system's render copy carries them.)
+  const houseRules = useHouseRules(system);
+  const ownRules = houseRules.length
+    ? { system, name: systems.find((s) => s.id === system)?.name ?? 'THIS SYSTEM', rules: houseRules } : undefined;
 
   const refresh = () => {
     fetch('/api/sheets/system').then(r => r.json()).then(d => {
@@ -2374,7 +2424,7 @@ function TTRPGSystemPanel({ token, mainAdmin, onOpenNpcLibrary, onOpenSystems, a
               Switching the game stays here, in the picker. The builder is for making and managing systems.
             </p>
           </>}
-          <HouseRulesPanel token={token} note={<ShortfallNote system={system} />} defs={[
+          <HouseRulesPanel token={token} note={<ShortfallNote system={system} />} own={ownRules} defs={[
             ...globalHouseRules(word, on, currenciesFor(system).length > 0),
             ...(system === 'cities_without_number' ? CWN_HOUSE_RULES : []),
             ...(system === 'cyberpunk_red' ? CPR_HOUSE_RULES : []),

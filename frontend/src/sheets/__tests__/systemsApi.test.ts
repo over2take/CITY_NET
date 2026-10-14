@@ -35,6 +35,7 @@ describe('the requests', () => {
         { definition: { format: 1, name: 'H' }, token: { current: 5, max: 9 }, action: { kind: 'damage', amount: 2 } }],
       [(a) => a.create('Hearth'), '/api/systems', 'POST', { name: 'Hearth' }],
       [(a) => a.rename(ID, 'Emberhold'), `/api/systems/${ID}/name`, 'PUT', { name: 'Emberhold' }],
+      [(a) => a.setHouseRules(ID, { magic: true }), `/api/systems/${ID}/house-rules`, 'PUT', { rules: { magic: true } }],
       [(a) => a.tourSeen(), '/api/systems/tour', 'GET', undefined],
       [(a) => a.setTourSeen(true), '/api/systems/tour', 'PUT', { seen: true }],
       [(a) => a.setTourSeen(false), '/api/systems/tour', 'PUT', { seen: false }],

@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
 import {
-  houseRuleList, withNewHouseRule, withHouseRule, withoutHouseRule, waitingOn, withHouseRuleOn, LIMITS,
+  houseRuleList, withNewHouseRule, withHouseRule, withoutHouseRule, waitingOn, withHouseRuleOn, houseRulesIn, changedRules, LIMITS,
 } from '../houseRules';
 import { withAlternative, formulaList } from '../statsRules';
+import { registerCustomTemplate, clearCustomTemplates } from '../customTemplates';
 import type { Definition } from '../systemsApi';
 import { withPart, withPartOnlyWith, partOnlyWith, partIsOn } from '../wordsFeatures';
 import { withCondition } from '../conditions';
@@ -226,5 +227,29 @@ describe('a formula\'s alternative (4j4b)', () => {
     expect(on.derived).toEqual(backend.withHouseRules(def, new Set(['gritty'])).derived);
     expect(withHouseRuleOn(def, 'nope').derived).toEqual(def.derived);
     expect(withHouseRuleOn(BASE, 'gritty')).toBe(BASE);
+  });
+});
+
+describe('the rules a running game has on (4j5a)', () => {
+  const RUNNING = [
+    { id: 'magic', name: 'MAGIC', description: '', starts: false, on: false },
+    { id: 'markets', name: 'TOWN MARKETS', description: '', starts: true, on: true },
+  ];
+
+  it('are read from a custom system\'s render copy, none for anything else', () => {
+    clearCustomTemplates();
+    registerCustomTemplate({ id: 'sys_aaaaaaaaaaaaaaaa', name: 'Hearth', parts: {}, derived: [], sheet: { sections: [] }, words: {}, house_rules: RUNNING });
+    registerCustomTemplate({ id: 'sys_bbbbbbbbbbbbbbbb', name: 'Plain', parts: {}, derived: [], sheet: { sections: [] }, words: {} });
+    expect(houseRulesIn('sys_aaaaaaaaaaaaaaaa')).toEqual(RUNNING);
+    expect(houseRulesIn('sys_bbbbbbbbbbbbbbbb')).toEqual([]);
+    expect(houseRulesIn('cities_without_number')).toEqual([]);
+    expect(houseRulesIn(null)).toEqual([]);
+    clearCustomTemplates();
+  });
+
+  it('only the boxes that differ from them are sent', () => {
+    expect(changedRules(RUNNING, { magic: true, markets: true })).toEqual({ magic: true });
+    expect(changedRules(RUNNING, { magic: false, markets: false, nope: true })).toEqual({ markets: false });
+    expect(changedRules(RUNNING, {})).toEqual({});
   });
 });
