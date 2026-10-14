@@ -47,6 +47,9 @@ let previewAnswer: { status: number; body: unknown };
 let draftAnswer: { status: number; body: unknown };
 let drafts: unknown[];
 let posts: unknown[];
+/** Whether the server says the tour was seen (seen, so it stays out of the way, unless a test says), and what was marked. */
+let tour: { status: number; seen: boolean };
+let tourMarks: boolean[];
 const COPY = 'sys_cccccccccccccccc';
 
 const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -66,6 +69,13 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
     posts.push(body);
     if (body.name.trim().toLowerCase() === 'hearth') return json(409, { error: 'Another system is already called Hearth.' });
     return json(200, { id: COPY, problems: [] });
+  }
+  if (url === '/api/systems/tour' && method === 'GET') return json(tour.status, tour.status < 300 ? { seen: tour.seen } : { error: 'Down' });
+  if (url === '/api/systems/tour' && method === 'PUT') {
+    const { seen } = JSON.parse(String(init!.body));
+    tourMarks.push(seen);
+    tour = { ...tour, seen };
+    return json(200, { seen });
   }
   if (url === '/api/systems/examples') return json(200, exampleList());
   const ex = /^\/api\/systems\/examples\/([a-z0-9]+)$/.exec(url);
@@ -95,6 +105,8 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
 
 beforeEach(() => {
   calls = [];
+  tour = { status: 200, seen: true };
+  tourMarks = [];
   served = {
     id: HEARTH, name: 'Hearth', version: 3, updatedAt: '2026-10-06 14:10:00', publishedAt: '2026-10-05 20:00:00',
     draft: { format: 1, name: 'Hearth' }, published: { format: 1, name: 'Hearth' }, problems: [],
@@ -384,8 +396,8 @@ describe('with no system open', () => {
     }
     expect(within(sidebar()).getByLabelText('SETUP').title).toBe('Open a system first, in MY SYSTEMS.');
     expect(screen.queryByTestId('save-status')).toBeNull();
-    // Only the list is read: there is no system to fetch.
-    expect(calls.map((c) => c.url)).toEqual(['/api/systems']);
+    // Only the list is read, and whether the tour was seen: there is no system to fetch.
+    expect(calls.map((c) => c.url).sort()).toEqual(['/api/systems', '/api/systems/tour']);
     expect(screen.queryByRole('alert')).toBeNull();
     // Nothing is open, so OPEN goes straight there.
     await userEvent.click(within(screen.getByTestId(`system-${EMBER}`)).getAllByRole('button')[0]);
@@ -826,5 +838,87 @@ describe('HELP (4i)', () => {
     await waitFor(() => expect(onLookAt).toHaveBeenCalledWith('cpr'));
     await topic('TRY IT');
     expect((screen.getByRole('button', { name: 'GO TO TRY IT' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
+describe('the tour (4i)', () => {
+  // Approved mockup builder-help (2026-10-13): eight steps the first time, each lighting its place on
+  // the rail; BACK, NEXT, SKIP THE TOUR; remembered on the server once finished or skipped.
+  const dialog = () => screen.queryByRole('dialog', { name: 'The builder tour' });
+  const step = () => within(dialog()!).getByText(/^STEP \d OF 8$/).textContent;
+  const litNames = () => [...sidebar().querySelectorAll('[data-lit]')].map((b) => b.getAttribute('aria-label'));
+  const press = (name: string) => userEvent.click(within(dialog()!).getByRole('button', { name }));
+
+  it('shows the first time, lighting each place down the rail, and is remembered once DONE', async () => {
+    tour.seen = false;
+    open({ startPage: 'setup' });
+    await screen.findByRole('dialog', { name: 'The builder tour' });
+    expect(step()).toBe('STEP 1 OF 8');
+    expect(within(dialog()!).getByRole('heading').textContent).toBe('WELCOME TO THE SYSTEM BUILDER');
+    expect(litNames()).toEqual([]);
+    expect(within(dialog()!).queryByRole('button', { name: 'BACK' })).toBeNull();
+    expect(document.activeElement).toBe(within(dialog()!).getByRole('button', { name: 'NEXT' }));
+    const expected = [['SETUP'], ['WORDS'], ['FEATURES'], ['STATS & RULES'], ['CHARACTER SHEET'], ['TRY IT'], ['SAVE', 'PUBLISH']];
+    for (const [i, names] of expected.entries()) {
+      await press('NEXT');
+      expect(step()).toBe(`STEP ${i + 2} OF 8`);
+      expect(litNames()).toEqual(names);
+      expect(sidebar().getAttribute('data-expanded')).toBe('true');
+      expect(sidebar().style.width).toBe('220px');
+      expect(screen.getByTestId('tour-arrow')).toBeTruthy();
+    }
+    expect(tourMarks).toEqual([]);
+    await press('DONE');
+    expect(dialog()).toBeNull();
+    expect(litNames()).toEqual([]);
+    await waitFor(() => expect(tourMarks).toEqual([true]));
+    // The page under it was never changed.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('SETUP');
+  });
+
+  it('goes BACK, and ends on SKIP THE TOUR or Escape, remembered either way', async () => {
+    tour.seen = false;
+    open({ startPage: 'setup' });
+    await screen.findByRole('dialog', { name: 'The builder tour' });
+    await press('NEXT');
+    await press('NEXT');
+    await press('BACK');
+    expect(step()).toBe('STEP 2 OF 8');
+    expect(litNames()).toEqual(['SETUP']);
+    await press('SKIP THE TOUR');
+    expect(dialog()).toBeNull();
+    await waitFor(() => expect(tourMarks).toEqual([true]));
+    cleanup();
+    tour.seen = false;
+    open({ startPage: 'setup' });
+    await screen.findByRole('dialog', { name: 'The builder tour' });
+    fireEvent.keyDown(within(dialog()!).getByRole('button', { name: 'NEXT' }), { key: 'Escape' });
+    expect(dialog()).toBeNull();
+    await waitFor(() => expect(tourMarks).toEqual([true, true]));
+  });
+
+  it('stays away once seen, or when the server can\'t say', async () => {
+    open({ startPage: 'setup' });
+    await ready();
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/systems/tour')).toBe(true));
+    expect(dialog()).toBeNull();
+    cleanup();
+    tour = { status: 500, seen: false };
+    open({ startPage: 'setup' });
+    await ready();
+    await waitFor(() => expect(calls.filter((c) => c.url === '/api/systems/tour')).toHaveLength(2));
+    expect(dialog()).toBeNull();
+  });
+
+  it('plays again from START THE TOUR on HELP, with no system open too', async () => {
+    open({ systemId: null });
+    await userEvent.click(within(sidebar()).getByLabelText('HELP'));
+    await userEvent.click(screen.getByRole('button', { name: 'START THE TOUR' }));
+    expect(step()).toBe('STEP 1 OF 8');
+    await press('NEXT');
+    // Pointing at a page that can't be opened yet is still pointing at it.
+    expect(litNames()).toEqual(['SETUP']);
+    await press('SKIP THE TOUR');
+    await waitFor(() => expect(tourMarks).toEqual([true]));
   });
 });
