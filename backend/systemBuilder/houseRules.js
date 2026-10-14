@@ -18,6 +18,7 @@
 // Pure: checks only. definition.js runs them; the game's choice is applied elsewhere.
 
 const { compileSystem } = require('./derived');
+const { STANDARD } = require('./conditions');
 
 const NAME = /^[a-z][a-z0-9_]{0,39}$/;
 const LIMITS = { rules: 20, name: 40, description: 300 };
@@ -129,4 +130,80 @@ const checkHouseRules = (definition, problems) => {
   checkAlternatives(definition, ids, problems);
 };
 
-module.exports = { checkHouseRules, houseRuleIdsOf, LIMITS };
+/** The global_settings key that keeps whether the table has `rule` on while `system` runs. */
+const houseRuleKey = (system, rule) => `house_rule:${system}:${rule}`;
+
+/**
+ * The table's choices for `system` from global_settings rows ({ key, value }): rule id -> on.
+ * '1' is on, '0' off; anything else, or another system's, is no choice at all.
+ */
+const choicesFrom = (rows, system) => {
+  const prefix = `house_rule:${system}:`;
+  const chosen = {};
+  for (const r of Array.isArray(rows) ? rows : []) {
+    if (!r || typeof r.key !== 'string' || !r.key.startsWith(prefix)) continue;
+    if (r.value === '1') chosen[r.key.slice(prefix.length)] = true;
+    else if (r.value === '0') chosen[r.key.slice(prefix.length)] = false;
+  }
+  return chosen;
+};
+
+/** A definition's house rules, well formed enough to run. */
+const houseRulesOf = (definition) => (definition && Array.isArray(definition.house_rules) ? definition.house_rules : [])
+  .filter((r) => isPlainObject(r) && typeof r.id === 'string');
+
+/** Which house rules are on: the table's choice where it made one, otherwise how each starts. */
+const houseRulesOn = (definition, chosen = {}) => new Set(houseRulesOf(definition)
+  .filter((r) => (typeof chosen[r.id] === 'boolean' ? chosen[r.id] : r.starts === true)).map((r) => r.id));
+
+/** A sheet layout without the sections waiting on a rule that is off, and the tabs they leave empty. */
+const sheetWith = (sheet, on) => {
+  if (!isPlainObject(sheet) || !Array.isArray(sheet.sections)) return sheet;
+  const waiting = (s) => isPlainObject(s) && typeof s.only_with === 'string' && !on.has(s.only_with);
+  if (!sheet.sections.some(waiting)) return sheet;
+  const sections = sheet.sections.filter((s) => !waiting(s));
+  const next = { ...sheet, sections };
+  if (Array.isArray(sheet.tabs)) {
+    const used = new Set(sections.map((s) => isPlainObject(s) && s.tab));
+    const tabs = sheet.tabs.filter((t) => used.has(t));
+    if (tabs.length) next.tabs = tabs; else delete next.tabs;
+  }
+  // The header's subtitle shows only fields still on the sheet.
+  if (isPlainObject(sheet.header) && Array.isArray(sheet.header.subtitleFields)) {
+    const fields = new Set(sections.flatMap((s) => (isPlainObject(s) && Array.isArray(s.fields) ? s.fields : []).map((f) => f && f.id)));
+    next.header = { ...sheet.header, subtitleFields: sheet.header.subtitleFields.filter((id) => fields.has(id)) };
+  }
+  return next;
+};
+
+/**
+ * The definition as the game runs it with the house rules in `on` on (houseRulesOn). Whatever waits on
+ * a rule that is off is hidden, never deleted: a part is off, a sheet section (and a tab it leaves
+ * empty) is left out of the layout, a standard condition is off and one of the system's own left out;
+ * and each formula whose alternative's rule is on is worked out by the alternative instead. A new
+ * object: the stored definition is never changed.
+ */
+const withHouseRules = (definition, on) => {
+  if (!isPlainObject(definition)) return definition;
+  const off = (v) => typeof v === 'string' && !on.has(v);
+  const next = { ...definition };
+  if (isPlainObject(definition.parts)) {
+    next.parts = Object.fromEntries(Object.entries(definition.parts)
+      .map(([id, p]) => [id, isPlainObject(p) && off(p.only_with) ? { ...p, on: false } : p]));
+  }
+  next.sheet = sheetWith(definition.sheet, on);
+  if (next.sheet === undefined) delete next.sheet;
+  if (isPlainObject(definition.npc) && definition.npc.sheet !== undefined) next.npc = { ...definition.npc, sheet: sheetWith(definition.npc.sheet, on) };
+  if (isPlainObject(definition.conditions)) {
+    const standard = new Set(STANDARD.map((c) => c.id));
+    next.conditions = Object.fromEntries(Object.entries(definition.conditions)
+      .filter(([id, c]) => standard.has(id) || !(isPlainObject(c) && off(c.only_with)))
+      .map(([id, c]) => [id, standard.has(id) && isPlainObject(c) && off(c.only_with) ? { ...c, on: false } : c]));
+  }
+  if (Array.isArray(definition.derived)) next.derived = derivedWith(definition.derived, on);
+  return next;
+};
+
+module.exports = {
+  checkHouseRules, houseRuleIdsOf, houseRulesOf, houseRulesOn, withHouseRules, houseRuleKey, choicesFrom, LIMITS,
+};
