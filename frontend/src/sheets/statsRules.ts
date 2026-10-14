@@ -15,7 +15,8 @@ const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Arra
 
 export interface Stat { id: string; label: string; min?: number; max?: number; tie?: string }
 export interface StatGroup { id: string; label: string; stats: Stat[] }
-export interface Formula { id: string; label?: string; formula: string }
+/** A formula, and the one it is worked out by instead while a house rule is on (sheets/houseRules.ts, 4j). */
+export interface Formula { id: string; label?: string; formula: string; alternative?: { rule: string; formula: string } }
 export interface Band { upTo?: number; value: number }
 export interface Table { id: string; label?: string; bands: Band[] }
 
