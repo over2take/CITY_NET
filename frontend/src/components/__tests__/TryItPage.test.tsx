@@ -7,6 +7,7 @@ import { createRequire } from 'module';
 import { TryItPage, TRY_IT_DELAY_MS } from '../TryItPage';
 import type { Definition, systemsApi } from '../../sheets/systemsApi';
 import { tierList } from '../../sheets/npcs';
+import { HINTS } from '../../sheets/builderHelp';
 
 /**
  * The builder's TRY IT page (4c3). Approved mockup builder-try-it (2026-10-08): a throwaway
@@ -300,5 +301,19 @@ describe('without the server', () => {
     expect(screen.getByText('No sheet without the server.')).toBeTruthy();
     expect(screen.getByText('No health without the server.')).toBeTruthy();
     expect((npcBox().getByRole('button', { name: 'MAKE AN NPC' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe('the "?"', () => {
+  it('explains the health, what others see, and the level an NPC is made at', async () => {
+  const allShown = (page: string, count: number) => {
+    const keys = Object.keys(HINTS).filter((k) => k.startsWith(`${page}.`)) as (keyof typeof HINTS)[];
+    expect(keys).toHaveLength(count);
+    for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
+  };
+    open(WITH_TIERS);
+    await screen.findByText('WHAT OTHERS SEE');
+    allShown('try', 3);
+    expect(screen.getByRole('spinbutton', { name: 'NPC level' })).toBeTruthy();
   });
 });

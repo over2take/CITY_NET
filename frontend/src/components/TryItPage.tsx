@@ -13,6 +13,8 @@ import { SheetRenderer } from './SheetRenderer';
 import { HeartMonitor } from './HitPoints';
 import { ModelHealthEditor, ModelHealthDescription, NoHealthNotice, monitorBandFor, type SendHealth } from './HealthModelPanels';
 import type { HealthView } from '../hooks/useHealthView';
+import { HINTS } from '../sheets/builderHelp';
+import { FieldName } from './HelpHint';
 
 // The builder's TRY IT page (4c3; approved mockup docs/mockups/builder-try-it.html, 2026-10-08):
 // the draft as a player would meet it, unsaved changes included. A made-up character on the
@@ -206,7 +208,7 @@ export function TryItPage({ definition, edit, api }: Props) {
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <section aria-label="Health" style={box}>
-            <span style={small}>HEALTH{model ? ` · ${model.toUpperCase()}` : ''}</span>
+            <FieldName hint={HINTS['try.health']} style={small}>HEALTH{model ? ` · ${model.toUpperCase()}` : ''}</FieldName>
             {!health || !fullView ? <p style={why}>{api ? 'LOADING…' : 'No health without the server.'}</p>
               : model === 'none' ? <NoHealthNotice editing />
                 : model === 'pool'
@@ -215,7 +217,7 @@ export function TryItPage({ definition, edit, api }: Props) {
             {healthError && model === 'pool' && <p role="alert" style={{ color: 'var(--danger)', fontSize: 11, margin: 0 }}>{healthError}</p>}
             {health && othersView && model !== 'none' && (
               <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={small}>WHAT OTHERS SEE</span>
+                <FieldName hint={HINTS['try.othersSee']} style={small}>WHAT OTHERS SEE</FieldName>
                 <HeartMonitor band={monitorBandFor(othersView, location)} />
                 <ModelHealthDescription view={othersView} target={location} />
               </div>
@@ -249,7 +251,7 @@ export function TryItPage({ definition, edit, api }: Props) {
                   <select aria-label="Tier" value={pickedTier} style={input} onChange={(e) => setTier(e.target.value)}>
                     {tiers.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
                   </select>
-                  <span style={small}>LEVEL</span>
+                  <FieldName hint={HINTS['try.level']} style={small}>LEVEL</FieldName>
                   <input type="number" aria-label="NPC level" min={0} max={99} value={level} style={{ ...input, width: 56 }}
                     onChange={(e) => { if (e.target.value.trim() !== '') setLevel(Math.max(0, Math.min(99, Math.round(Number(e.target.value) || 0)))); }} />
                   <button type="button" className="utility-btn" style={{ ...btn, background: 'var(--green)', color: 'var(--black)' }} disabled={!api} onClick={makeNpc}>

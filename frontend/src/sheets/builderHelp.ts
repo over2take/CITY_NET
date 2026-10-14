@@ -170,6 +170,18 @@ export const HINTS = {
   'npcs.hp': 'The NPC token\'s HP: a number, a formula reading @level, or dice, rolled fresh for each NPC made from the tier. Blank: the token keeps its own.',
   'npcs.defense': 'The NPC token\'s armor, worked out the same way as HP. Blank: the token keeps its own.',
   'npcs.level': 'The level to try the tier at, what @level reads. In play the GM picks the level in ID.EXE, beside GENERATE_SHEET.',
+  // CONDITIONS
+  'conditions.chip': 'The short word on the condition\'s chip in a token\'s HEALTH folder, up to 8 letters.',
+  'conditions.icon': 'Drawn on the chip beside its word: one of the drawn icons, or one you upload.',
+  'conditions.description': 'What it means at the table, shown under the chips in the token\'s HEALTH folder to everyone who sees them.',
+  'conditions.ends': 'WHEN REMOVED: it stays until someone who may change the token\'s health takes it off. AFTER ROUNDS: it counts down with the initiative rounds. AT A REST: it comes off at the rests you pick.',
+  // RESTS
+  'rests.refills': 'What the rest puts back, line by line in order: health, a number on the sheet, or a whole section, to its maximum, by an amount or to a number. Rolled for each character.',
+  'rests.sample': 'This rest on the sample character, its token hurt to half, worked out the way the game would. Nothing is saved.',
+  // TRY IT
+  'try.health': 'The health model from SETUP on a pretend token, through the game\'s own rules: what the HEALTH folder shows the GM and the token\'s owner.',
+  'try.othersSee': 'What everyone else sees of the token\'s health: the heart monitor and words like WOUNDED, never the numbers or the notes.',
+  'try.level': 'The level the NPC is made at, what @level reads in its tier\'s boxes. In play the GM picks it in ID.EXE.',
 } as const;
 
 export type HintKey = keyof typeof HINTS;

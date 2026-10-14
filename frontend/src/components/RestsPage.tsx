@@ -11,6 +11,8 @@ import { Switch } from './ConditionsPage';
 import { TRY_DELAY_MS } from './NpcsPage';
 import { sampleCharacter, hurtToken } from '../sheets/tryIt';
 import { changeText } from '../sheets/restCalls';
+import { HINTS } from '../sheets/builderHelp';
+import { FieldName } from './HelpHint';
 
 // The builder's RESTS page (4f4a; approved mockup docs/mockups/builder-rests.html, 2026-10-09): the
 // moments the game refills things and wears things off. The standard four, each with a switch,
@@ -181,7 +183,7 @@ function Detail({ rest, definition, edit, targets, api }: { rest: Rest; definiti
           <p style={{ ...why, fontSize: 11 }}>Everything those rests do happens first, then this one&apos;s own.</p>
         </div>
 
-        <span style={{ ...small, textAlign: 'right', paddingTop: 6 }}>REFILLS</span>
+        <FieldName boxStyle={{ justifySelf: 'end', paddingTop: 6 }} hint={HINTS['rests.refills']} style={small}>REFILLS</FieldName>
         <Refills rest={rest} definition={definition} edit={edit} targets={targets} />
 
         <span style={{ ...small, textAlign: 'right', paddingTop: 6 }}>WEARS OFF</span>
@@ -207,7 +209,7 @@ function Detail({ rest, definition, edit, targets, api }: { rest: Rest; definiti
         </div>
 
         {api && <>
-          <span style={{ ...small, textAlign: 'right', paddingTop: 6 }}>ON THE SAMPLE</span>
+          <FieldName boxStyle={{ justifySelf: 'end', paddingTop: 6 }} hint={HINTS['rests.sample']} style={small}>ON THE SAMPLE</FieldName>
           <Sample rest={rest} definition={definition} api={api} />
         </>}
       </div>

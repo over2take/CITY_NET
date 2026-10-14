@@ -7,6 +7,8 @@ import {
 import { restList } from '../sheets/rests';
 import { ConditionIcon } from './ConditionIcon';
 import { ConditionIconPicker } from './ConditionIconPicker';
+import { HINTS } from '../sheets/builderHelp';
+import { FieldName } from './HelpHint';
 
 // The builder's CONDITIONS page (4e1b; approved mockup docs/mockups/builder-conditions.html,
 // 2026-10-09): what can happen to a character besides losing health. The standard set, each with
@@ -115,15 +117,15 @@ function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
         <input id={`cond-name-${c.id}`} type="text" maxLength={LIMITS.name} value={typed('name')} placeholder={base?.name ?? 'Name'} style={input}
           aria-invalid={!base && !c.name.trim() ? true : undefined}
           onChange={(e) => set({ name: e.target.value })} />
-        <label style={{ ...small, textAlign: 'right' }} htmlFor={`cond-short-${c.id}`}>ON THE CHIP</label>
+        <FieldName boxStyle={{ justifySelf: 'end' }} htmlFor={`cond-short-${c.id}`} hint={HINTS['conditions.chip']} style={small}>ON THE CHIP</FieldName>
         <input id={`cond-short-${c.id}`} type="text" maxLength={LIMITS.short} value={typed('short')} placeholder={c.short} style={{ ...input, width: 120 }}
           onChange={(e) => set({ short: e.target.value.toUpperCase() })} />
-        <span style={{ ...small, textAlign: 'right' }}>ICON</span>
+        <FieldName boxStyle={{ justifySelf: 'end' }} hint={HINTS['conditions.icon']} style={small}>ICON</FieldName>
         <ConditionIconPicker value={c.icon} onPick={(icon) => set({ icon })} api={api} name={c.name || c.id} />
-        <label style={{ ...small, textAlign: 'right' }} htmlFor={`cond-desc-${c.id}`}>DESCRIPTION</label>
+        <FieldName boxStyle={{ justifySelf: 'end' }} htmlFor={`cond-desc-${c.id}`} hint={HINTS['conditions.description']} style={small}>DESCRIPTION</FieldName>
         <textarea id={`cond-desc-${c.id}`} rows={2} maxLength={LIMITS.description} value={c.description} style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }}
           onChange={(e) => set({ description: e.target.value })} />
-        <label style={{ ...small, textAlign: 'right' }} htmlFor={`cond-ends-${c.id}`}>ENDS</label>
+        <FieldName boxStyle={{ justifySelf: 'end' }} htmlFor={`cond-ends-${c.id}`} hint={HINTS['conditions.ends']} style={small}>ENDS</FieldName>
         <div style={row}>
           <select id={`cond-ends-${c.id}`} value={c.ends} style={input} onChange={(e) => set({ ends: e.target.value as Listed['ends'] })}>
             <option value="removed">WHEN REMOVED</option>
