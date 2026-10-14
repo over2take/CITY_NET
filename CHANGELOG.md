@@ -115,6 +115,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **SHEET IMPORT in the builder.** FEATURES' greyed PDF IMPORT is now SHEET IMPORT, a switch like the
+  others, on to start. The CHARACTER SHEET page has DOWNLOAD FORM: the blank PDF players would get,
+  made from the draft, to look at before publishing.
 - **IMPORT for custom systems.** A custom system's character sheet has IMPORT now: download the blank
   PDF or the JSON template, fill it in, upload it back. The preview says what it left and why, and
   an upload never wipes what the GM wrote in the fields only the GM sets. NPC stat blocks keep

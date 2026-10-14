@@ -32,9 +32,9 @@ describe('held to the server', () => {
     expect(Object.fromEntries(rows.map((r) => [r.id, r.app]))).toEqual(TERMS);
   });
 
-  it('lists every part, marking the four with no rules for a custom system yet', () => {
+  it('lists every part, marking the three with no rules for a custom system yet', () => {
     expect(PART_ROWS.map((p) => p.id).sort()).toEqual([...PARTS].sort());
-    expect(PART_ROWS.filter((p) => p.unused).map((p) => p.id)).toEqual(['xp', 'death', 'luck', 'sheet_import']);
+    expect(PART_ROWS.filter((p) => p.unused).map((p) => p.id)).toEqual(['xp', 'death', 'luck']);
   });
 
   it('reads a part on or off as the server does, whatever a file says', () => {

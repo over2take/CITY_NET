@@ -106,10 +106,10 @@ export const PART_ROWS: PartRow[] = [
   { id: 'combat', label: 'COMBAT', what: 'Attack and damage rolls from the sheet.' },
   { id: 'token_health', label: 'TOKEN HEALTH', what: 'The health monitor over each token.' },
   { id: 'npc_tiers', label: 'NPC TIERS', what: 'Tiers to pick when generating an NPC sheet.' },
+  { id: 'sheet_import', label: 'SHEET IMPORT', what: 'Filling a character sheet from a PDF form or JSON file through IMPORT.' },
   { id: 'xp', label: 'XP AWARDS', what: 'The GM awarding XP from the admin panel.', unused: true },
   { id: 'death', label: 'DEATH SAVES', what: 'Rolling against death when dying.', unused: true },
   { id: 'luck', label: 'LUCK', what: 'A pool of luck points to spend on rolls.', unused: true },
-  { id: 'sheet_import', label: 'PDF IMPORT', what: 'Filling a sheet from a PDF.', unused: true },
 ];
 
 /** Is a part on? Everything is, unless the system turns it off (parts.js partOn). */
