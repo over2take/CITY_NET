@@ -225,7 +225,7 @@ describe('the builder', () => {
     open({ startPage: 'problems' });
     await ready();
     const pages = within(sidebar()).getAllByRole('button').filter((b) => b.title && !['PUBLISH', 'MY SYSTEMS', 'HELP'].includes(b.textContent!));
-    expect(pages.map((b) => b.textContent)).toEqual(['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'TRY IT', 'PROBLEMS']);
+    expect(pages.map((b) => b.textContent)).toEqual(['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT', 'PROBLEMS']);
     expect(pages[1].title).toBe('What the game calls things: HP, credits, skills.');
     await userEvent.click(pages[1]);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('WORDS');
@@ -920,5 +920,20 @@ describe('the tour (4i)', () => {
     expect(litNames()).toEqual(['SETUP']);
     await press('SKIP THE TOUR');
     await waitFor(() => expect(tourMarks).toEqual([true]));
+  });
+});
+
+describe('HOUSE RULES (4j3b)', () => {
+  it('is on the rail after RESTS, and GO TO opens where a thing under a rule lives', async () => {
+    served = { ...served, draft: { format: 1, name: 'Hearth', house_rules: [{ id: 'magic', name: 'MAGIC' }], conditions: { hexed: { name: 'Hexed', only_with: 'magic' } } } };
+    open({ startPage: 'house_rules' });
+    await ready();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('HOUSE RULES');
+    await userEvent.click(await screen.findByRole('button', { name: 'Go to Hexed' }));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('CONDITIONS');
+    await userEvent.click(within(sidebar()).getByLabelText('HOUSE RULES'));
+    await userEvent.click(screen.getByRole('button', { name: '+ RULE' }));
+    await userEvent.click(within(sidebar()).getByLabelText('SAVE'));
+    await waitFor(() => expect(drafts.at(-1)).toMatchObject({ house_rules: [{ id: 'magic', name: 'MAGIC' }, { id: 'new_rule', name: 'NEW RULE' }] }));
   });
 });

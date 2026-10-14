@@ -60,6 +60,10 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
     'The moments a game refills things: a short rest, a long rest, the end of a scene or a session, and your own. Each says what it refills, in order, and a rest can count as another.',
     'The GM calls one from the GAME tab for everyone or chosen characters, with a preview first.',
   ] },
+  { page: 'house_rules', title: 'HOUSE RULES', body: [
+    'Rules the GM turns on or off for their table, like MAGIC or GRITTY WOUNDS: each with a name, what it means, and whether a game starts with it on.',
+    'Things go under a rule on their own pages, with ONLY WITH: a FEATURES part, a sheet section, a condition, or a formula\'s alternative. While the rule is off they are hidden, never deleted. The GM switches the rules in the GAME tab\'s HOUSE RULES.',
+  ] },
   { page: 'try', title: 'TRY IT', body: [
     'A test character for the draft as it stands: change its stats and watch the formulas, hurt and heal it, call a rest, make an NPC from a tier.',
     'Nothing here reaches any player. SAVE AS SAMPLE keeps the test character as the one STATS & RULES checks formulas against.',
@@ -178,6 +182,10 @@ export const HINTS = {
   // RESTS
   'rests.refills': 'What the rest puts back, line by line in order: health, a number on the sheet, or a whole section, to its maximum, by an amount or to a number. Rolled for each character.',
   'rests.sample': 'This rest on the sample character, its token hurt to half, worked out the way the game would. Nothing is saved.',
+  // HOUSE RULES
+  'house.name': 'What the GM sees beside its checkbox in the GAME tab\'s HOUSE RULES, like MAGIC. Renaming keeps everything under it.',
+  'house.description': 'A line on what the rule changes, shown with its checkbox so the GM knows what they are turning on.',
+  'house.starts': 'Whether a game begins with the rule on, and how a copy installed from a file arrives. After that it is the GM\'s choice at the table.',
   // TRY IT
   'try.health': 'The health model from SETUP on a pretend token, through the game\'s own rules: what the HEALTH folder shows the GM and the token\'s owner.',
   'try.othersSee': 'What everyone else sees of the token\'s health: the heart monitor and words like WOUNDED, never the numbers or the notes.',
