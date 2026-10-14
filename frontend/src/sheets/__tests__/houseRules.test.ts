@@ -5,6 +5,9 @@ import {
   houseRuleList, withNewHouseRule, withHouseRule, withoutHouseRule, waitingOn, LIMITS,
 } from '../houseRules';
 import type { Definition } from '../systemsApi';
+import { withPart, withPartOnlyWith, partOnlyWith, partIsOn } from '../wordsFeatures';
+import { withCondition } from '../conditions';
+import { withSection, sheetOf } from '../sheetDesigner';
 
 /**
  * The builder's HOUSE RULES as logic (4j3a; approved mockup docs/mockups/optional-rules.html,
@@ -150,5 +153,47 @@ describe('what waits on a rule', () => {
     ]);
     expect(waitingOn(def, 'markets')).toEqual([{ kind: 'FEATURES PART', id: 'shops', label: 'SHOPS', page: 'features' }]);
     expect(waitingOn(def, 'nope')).toEqual([]);
+  });
+});
+
+describe('putting things under a rule (4j4a)', () => {
+  const ruled = { ...BASE, house_rules: [{ id: 'magic', name: 'MAGIC' }] } as Definition;
+
+  it('a part, on or off as it was, its rule kept when it is switched', () => {
+    let def = withPartOnlyWith(ruled, 'shops', 'magic');
+    expect(def.parts).toEqual({ shops: { on: true, only_with: 'magic' } });
+    expect(partOnlyWith(def, 'shops')).toBe('magic');
+    def = withPart(def, 'shops', false);
+    expect(def.parts).toEqual({ shops: { on: false, only_with: 'magic' } });
+    expect(partIsOn(def, 'shops')).toBe(false);
+    def = withPart(def, 'shops', true);
+    expect(def.parts).toEqual({ shops: { on: true, only_with: 'magic' } });
+    expect(problems(def)).toEqual([]);
+    expect(withPartOnlyWith(def, 'shops', null).parts).toBeUndefined();
+    expect(withPartOnlyWith(withPart(ruled, 'vehicles', false), 'vehicles', null).parts).toEqual({ vehicles: { on: false } });
+    expect(partOnlyWith(ruled, 'shops')).toBeUndefined();
+  });
+
+  it('a condition, standard or the system\'s own, cleared to store nothing', () => {
+    let def = withCondition(ruled, 'prone', { only_with: 'magic' });
+    expect(def.conditions).toEqual({ prone: { only_with: 'magic' } });
+    def = withCondition(def, 'prone', { only_with: null });
+    expect(def.conditions).toBeUndefined();
+    def = withCondition(ruled, 'hexed', { name: 'Hexed', only_with: 'magic' });
+    expect(def.conditions).toEqual({ hexed: { name: 'Hexed', only_with: 'magic' } });
+    expect(problems(def)).toEqual([]);
+    expect(withCondition(def, 'hexed', { only_with: '' }).conditions).toEqual({ hexed: { name: 'Hexed' } });
+  });
+
+  it('a sheet section, cleared to store nothing', () => {
+    const custom = { ...ruled, sheet: starterSheet(ruled) } as Definition;
+    const id = sheetOf(custom)!.sections[0].id;
+    let def = withSection(custom, id, { only_with: 'magic' });
+    expect(sheetOf(def)!.sections[0].only_with).toBe('magic');
+    expect(problems(def)).toEqual([]);
+    // Another setting changed keeps it.
+    expect(sheetOf(withSection(def, id, { label: 'X' }))!.sections[0].only_with).toBe('magic');
+    def = withSection(def, id, { only_with: null });
+    expect(sheetOf(def)!.sections[0]).not.toHaveProperty('only_with');
   });
 });

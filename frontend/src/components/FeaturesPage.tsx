@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import { BankSettings } from './BankSettings';
 import {
-  PART_ROWS, partIsOn, withPart, SHOP_TYPES, OTHER_TYPES, CATALOGUE_ROWS, BUILDING_NAME_LIMIT, buildingSetting, withBuilding,
+  PART_ROWS, partIsOn, withPart, partOnlyWith, withPartOnlyWith, SHOP_TYPES, OTHER_TYPES, CATALOGUE_ROWS, BUILDING_NAME_LIMIT, buildingSetting, withBuilding,
   cataloguePartOff, currencyList, type BuildingKind,
 } from '../sheets/wordsFeatures';
+import { OnlyWith } from './OnlyWith';
 
 // The builder's FEATURES page (4b1c): which parts of the app the game uses, one switch each, the
 // parts with settings opening out beneath (approved mockup docs/mockups/builder-words-features.html,
@@ -138,6 +139,12 @@ export function FeaturesPage({ definition, edit, api }: Props) {
                 <span style={{ ...why, gridColumn: 2, opacity: on ? 0.8 : 0.5 }}>
                   {p.unused ? `${p.what} Not used by custom systems yet.` : p.what}
                 </span>
+                {on && (
+                  <span style={{ gridColumn: 2, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <OnlyWith definition={definition} value={partOnlyWith(definition, p.id)} style={small} selectStyle={{ ...field, width: 'auto', border: '1px solid var(--green)' }}
+                      onChange={(rule) => edit(withPartOnlyWith(definition, p.id, rule))} />
+                  </span>
+                )}
               </div>
               {isOpen && <div style={{ padding: '0 14px 14px 72px', display: 'flex', flexDirection: 'column', gap: 10 }}><Settings definition={definition} edit={edit} api={api} /></div>}
             </div>

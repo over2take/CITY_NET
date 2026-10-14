@@ -175,7 +175,7 @@ export const withNewSection = (def: Definition, tab: string | null, label = 'NEW
  * A section changed: its name, its tab, how it looks, its columns (1 to 8, for a grid). Its id
  * stays. A blank name or one tab the sheet doesn't have is not stored.
  */
-export const withSection = (def: Definition, id: string, patch: { label?: string; tab?: string; layout?: Section['layout']; columns?: number }): Definition => {
+export const withSection = (def: Definition, id: string, patch: { label?: string; tab?: string; layout?: Section['layout']; columns?: number; only_with?: string | null }): Definition => {
   const tabs = sheetOf(def)?.tabs ?? [];
   return withSections(def, (sections) => sections.map((s) => {
     if (s.id !== id) return s;
@@ -184,6 +184,8 @@ export const withSection = (def: Definition, id: string, patch: { label?: string
     if (patch.tab !== undefined && tabs.includes(patch.tab)) next.tab = patch.tab;
     if (patch.layout !== undefined && LAYOUTS.some((l) => l.id === patch.layout)) next.layout = patch.layout;
     if (patch.columns !== undefined && Number.isFinite(patch.columns)) next.columns = Math.max(1, Math.min(8, Math.round(patch.columns)));
+    // The house rule it waits on (4j), or none.
+    if (patch.only_with !== undefined) { if (patch.only_with) next.only_with = patch.only_with; else delete next.only_with; }
     return next;
   }));
 };

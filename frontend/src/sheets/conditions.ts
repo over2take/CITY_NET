@@ -30,7 +30,8 @@ export interface Condition {
 /** A condition as the page lists it: whole, and whether it is on. */
 export type Listed = Condition & { on: boolean };
 /** What the page changes on one condition. */
-export type ConditionPatch = Partial<Pick<Condition, 'name' | 'short' | 'icon' | 'description' | 'ends' | 'rounds' | 'at' | 'modifiers'>> & { on?: boolean };
+/** `only_with`: the house rule it waits on (4j), or null for none. */
+export type ConditionPatch = Partial<Pick<Condition, 'name' | 'short' | 'icon' | 'description' | 'ends' | 'rounds' | 'at' | 'modifiers'>> & { on?: boolean; only_with?: string | null };
 
 /** The standard set every system starts with, as the server has it. */
 export const STANDARD: Omit<Condition, 'ends' | 'modifiers' | 'standard'>[] = [
@@ -123,6 +124,7 @@ export const withCondition = (def: Definition, id: string, patch: ConditionPatch
     delete entry.at;
   }
   if (Array.isArray(entry.modifiers) && entry.modifiers.length === 0) delete entry.modifiers;
+  if (typeof entry.only_with !== 'string' || !entry.only_with) delete entry.only_with;
   if (typeof entry.short === 'string' && !entry.short.trim()) delete entry.short;
   if (typeof entry.description === 'string' && !entry.description && !base) delete entry.description;
   if (base) {

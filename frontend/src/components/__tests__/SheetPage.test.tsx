@@ -695,3 +695,21 @@ describe('the "?"', () => {
     allSeen('sheet', 6);
   });
 });
+
+describe('ONLY WITH (4j4a)', () => {
+  it('puts a section under a house rule', async () => {
+    const { last } = await customized({ ...HEARTH, house_rules: [{ id: 'magic', name: 'MAGIC' }] } as unknown as Definition);
+    await userEvent.click(node('IDENTITY section'));
+    fireEvent.change(screen.getByRole('combobox', { name: 'ONLY WITH' }), { target: { value: 'magic' } });
+    expect((last().sheet as CustomRenderSheet).sections.find((s) => s.id === 'identity')!.only_with).toBe('magic');
+    fireEvent.change(screen.getByRole('combobox', { name: 'ONLY WITH' }), { target: { value: '' } });
+    expect((last().sheet as CustomRenderSheet).sections.find((s) => s.id === 'identity')).not.toHaveProperty('only_with');
+    expect(screen.getByRole('note', { name: HINTS['only.with'] })).toBeTruthy();
+  });
+
+  it('isn\'t there in a system with no house rules', async () => {
+    await customized();
+    await userEvent.click(node('IDENTITY section'));
+    expect(screen.queryByRole('combobox', { name: 'ONLY WITH' })).toBeNull();
+  });
+});

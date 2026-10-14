@@ -29,7 +29,7 @@ export interface CustomRenderField {
 export interface CustomRenderSheet {
   tabs?: string[];
   header?: { nameField?: string; subtitleFields?: string[]; hpField?: string; hpMaxField?: string; chips?: { field: string; label: string }[] };
-  sections: { id: string; label: string; layout: SectionLayout; tab?: string; columns?: number; fields: CustomRenderField[] }[];
+  sections: { id: string; label: string; layout: SectionLayout; tab?: string; columns?: number; only_with?: string; fields: CustomRenderField[] }[];
 }
 
 /** A system's own names for the app's building types and catalogues, and which it turned off. */

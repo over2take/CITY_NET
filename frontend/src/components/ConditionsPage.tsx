@@ -7,6 +7,7 @@ import {
 import { restList } from '../sheets/rests';
 import { ConditionIcon } from './ConditionIcon';
 import { ConditionIconPicker } from './ConditionIconPicker';
+import { OnlyWith } from './OnlyWith';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
 
@@ -138,6 +139,8 @@ function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
           </>}
           {c.ends === 'rest' && <EndsAt c={c} definition={definition} set={set} />}
         </div>
+        <OnlyWith definition={definition} value={typeof stored.only_with === 'string' ? stored.only_with : undefined} style={small} boxStyle={{ justifySelf: 'end' }}
+          selectStyle={{ ...input, justifySelf: 'start' }} onChange={(rule) => set({ only_with: rule })} />
         <span style={{ ...small, textAlign: 'right' }}>MODIFIERS</span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           {c.modifiers.map((m, i) => (

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup, within } from '@testing-library/react';
+import { render, screen, cleanup, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { FeaturesPage } from '../FeaturesPage';
 import type { Definition } from '../../sheets/systemsApi';
+import { HINTS } from '../../sheets/builderHelp';
 
 /**
  * The builder's FEATURES page, parts and shops (4b1c1). Approved mockup builder-words-features
@@ -156,5 +157,23 @@ describe('SHOPS', () => {
     expect(last().buildings).toEqual({ catalogues: { weapons: { currency: 'favor' } } });
     await userEvent.selectOptions(select, 'gold');
     expect('buildings' in last()).toBe(false);
+  });
+});
+
+describe('ONLY WITH (4j4a)', () => {
+  it('puts a part under a house rule, shown only while the part is on', async () => {
+    const { last } = open({ format: 1, name: 'Hearth', house_rules: [{ id: 'magic', name: 'MAGIC' }] } as unknown as Definition);
+    const shops = within(screen.getByTestId('part-shops'));
+    fireEvent.change(shops.getByRole('combobox', { name: 'ONLY WITH' }), { target: { value: 'magic' } });
+    expect(last().parts).toEqual({ shops: { on: true, only_with: 'magic' } });
+    await userEvent.click(shops.getByRole('switch', { name: 'SHOPS' }));
+    expect(last().parts).toEqual({ shops: { on: false, only_with: 'magic' } });
+    expect(shops.queryByRole('combobox', { name: 'ONLY WITH' })).toBeNull();
+    expect(within(screen.getByTestId('part-bank')).getByRole('note', { name: HINTS['only.with'] })).toBeTruthy();
+  });
+
+  it('isn\'t there in a system with no house rules', () => {
+    open();
+    expect(screen.queryByRole('combobox', { name: 'ONLY WITH' })).toBeNull();
   });
 });
