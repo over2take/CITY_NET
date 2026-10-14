@@ -235,6 +235,25 @@ describe('a published system with them', () => {
       expect(saved).toMatchObject({ renown: 2, boon: 'Blessed blade', name: 'Sir Ash', might: 16, might_mod: 1 });
     });
 
+    it('are kept by an upload that replaces the sheet, as it clears the rest (4h2c)', async () => {
+      await playing('GHOST', { renown: 2, boon: 'Blessed blade', might: 10, name: 'Old' });
+      const { handlers } = await connectAs('GHOST');
+      handlers.importSheetFields({ fields: { name: 'Sir Ash' }, replace: true });
+      const saved = await untilValue(() => sheetOf('GHOST'), (d) => d.name === 'Sir Ash', { label: 'the replace' });
+      expect(saved.renown).toBe(2);
+      expect(saved.boon).toBe('Blessed blade');
+      expect(saved.might).toBeUndefined();
+    });
+
+    it('are replaced when the GM\'s upload carries them', async () => {
+      await playing('ROOK', { renown: 1, boon: 'Old', might: 9 });
+      elevatedUsers.add('ROOK');
+      const granted = await connectAs('ROOK');
+      granted.handlers.importSheetFields({ fields: { renown: 3, name: 'Rook' }, replace: true });
+      const saved = await untilValue(() => sheetOf('ROOK'), (d) => d.name === 'Rook', { label: 'the granted replace' });
+      expect([saved.renown, saved.boon, saved.might]).toEqual([3, 'Old', undefined]);
+    });
+
     it('are the GM\'s to change, on their own sheet or by a grant', async () => {
       await playing('gm', { renown: 1 });
       const { handlers } = await connectAs('gm', { admin: true });

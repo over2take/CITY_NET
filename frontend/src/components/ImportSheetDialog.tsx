@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import { ImportPreviewWindow, type ImportPreview } from './ImportPreviewWindow';
+import { hasJsonTemplate } from '../sheets/importable';
+import { getTemplate } from '../sheets';
 
 // Sheet import dialog. Three inputs, one preview, one APPLY:
 //   - a fillable character-sheet PDF (form fields extracted server-side)
@@ -32,6 +34,17 @@ interface ImportSheetDialogProps {
 }
 
 const label9: React.CSSProperties = { fontFamily: 'monospace', fontSize: 9, letterSpacing: 0.5 };
+const download: React.CSSProperties = { ...label9, color: 'var(--green)', opacity: 0.8, textAlign: 'center', textDecoration: 'none', border: '1px dashed var(--green)', padding: '4px 8px' };
+/** The boxes typed into: the theme's own colors, so they follow it rather than staying Classic green. */
+const boxColors: React.CSSProperties = { background: 'color-mix(in srgb, var(--green) 6%, var(--black))', border: '1px solid var(--dark-green)', color: 'var(--green)' };
+
+/**
+ * The fields a replace leaves as they are, so the preview doesn't list them as lost: worked-out values
+ * (the game works them out again) and GM-only fields (kept by the server, 4h2c; no upload sets them).
+ */
+export const keptFields = (system: string | null | undefined): string[] => (system
+  ? getTemplate(system).sections.flatMap((s) => s.fields).filter((f) => f.derived || f.gmOnly).map((f) => f.id)
+  : []);
 
 export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, currentData }: ImportSheetDialogProps) {
   const [pasted, setPasted] = useState('');
@@ -168,14 +181,28 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
         </label>
         {/* The blank form the upload above expects. Without it, "upload a fillable PDF"
             assumed you already had one whose field names matched — which players did not.
-            Generated per system, so it always asks for what the importer reads. */}
-        <a
-          href="/api/sheets/import/template.pdf"
-          download
-          style={{ ...label9, color: 'var(--green)', opacity: 0.8, textAlign: 'center', textDecoration: 'none', border: '1px dashed var(--green)', padding: '4px 8px' }}
-        >
-          ↓ DOWNLOAD BLANK FORM
-        </a>
+            Generated per system, so it always asks for what the importer reads. A custom system
+            hands out its JSON template beside it (4h2c), both made from its own sheet. */}
+        {hasJsonTemplate(gameSystem) ? (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            <a href="/api/sheets/import/template.pdf" download style={download}>↓ BLANK FORM (PDF)</a>
+            <a href="/api/sheets/import/template.json" download style={download}>↓ JSON TEMPLATE</a>
+          </div>
+        ) : (
+          <a href="/api/sheets/import/template.pdf" download style={download}>↓ DOWNLOAD BLANK FORM</a>
+        )}
+        {hasJsonTemplate(gameSystem) && (
+          <label style={{ ...label9, color: 'var(--green)', border: '1px solid var(--green)', padding: '6px 8px', textAlign: 'center', cursor: 'pointer' }}>
+            <input
+              type="file"
+              accept="application/json,.json"
+              aria-label="Upload a JSON file"
+              style={{ display: 'none' }}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) handleJson(f); e.target.value = ''; }}
+            />
+            UPLOAD JSON FILE
+          </label>
+        )}
         {/* CWN only: Characters Without Number builds Cities Without Number characters, so
             offering it under another system would be a button that could only ever fail -
             the same reasoning as the Companion below. An ADDITION rather than a
@@ -222,8 +249,7 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
                 onChange={(e) => setCode(e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase())}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleCode(); }}
                 style={{
-                  flex: 1, minWidth: 0, boxSizing: 'border-box', textAlign: 'center',
-                  background: '#001a00', border: '1px solid #1a3a1a', color: 'var(--green)',
+                  ...boxColors, flex: 1, minWidth: 0, boxSizing: 'border-box', textAlign: 'center',
                   fontFamily: 'monospace', fontSize: 11, letterSpacing: 3, padding: '0 8px',
                 }}
               />
@@ -246,7 +272,8 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
           value={pasted}
           onChange={(e) => setPasted(e.target.value)}
           placeholder={'{ "ref": 7, "handgun": 5 }  or  REF 7  Handgun 5 ...'}
-          style={{ fontFamily: 'monospace', fontSize: 9, minHeight: 70, background: '#001a00', border: '1px solid #1a3a1a', color: 'var(--green)', padding: 6, resize: 'vertical' }}
+          aria-label="Paste JSON or a stat block"
+          style={{ ...boxColors, fontFamily: 'monospace', fontSize: 9, minHeight: 70, padding: 6, resize: 'vertical' }}
         />
         <button className="upload-btn" disabled={busy || !pasted.trim()} onClick={handlePaste} style={{ padding: '5px' }}>
           {busy ? 'READING…' : 'PREVIEW'}
@@ -265,6 +292,7 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
         setPos={setPreviewPos}
         preview={preview}
         currentData={currentData}
+        keeps={keptFields(gameSystem)}
         busy={busy}
         applied={applied}
         onApply={handleApply}

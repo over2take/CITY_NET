@@ -29,6 +29,13 @@ export interface ImportPreview {
   skipped: Record<string, unknown>;
   /** What the source had no way to provide — an export names a car but carries no SDP. */
   missing?: string[];
+  /**
+   * What a custom system's importer left, and why (backend systemBuilder/sheetImport.js, 4h2a):
+   * values the game works out, fields only the GM sets, and choices that aren't among the options.
+   */
+  workedOut?: Record<string, unknown>;
+  gmOnly?: Record<string, unknown>;
+  notAChoice?: Record<string, unknown>;
 }
 
 interface Props {
@@ -37,6 +44,8 @@ interface Props {
   preview: ImportPreview;
   /** The sheet as it stands, to work out what a replace would erase. */
   currentData?: Record<string, unknown>;
+  /** Fields a replace leaves as they are (worked out again, or the GM's), so never listed as lost. */
+  keeps?: string[];
   busy?: boolean;
   applied?: boolean;
   onApply: () => void;
@@ -58,19 +67,30 @@ const KEPT = ['in_vehicle', 'ride_owner', 'ride_vehicle', 'vehicle_seat'];
 export const lossesFrom = (
   preview: ImportPreview,
   currentData?: Record<string, unknown>,
+  keeps: string[] = [],
 ): string[] => (currentData
   ? Object.entries(currentData)
       .filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '')
       .filter(([k]) => !(k in preview.mapped))
-      .filter(([k]) => !KEPT.includes(k))
+      .filter(([k]) => !KEPT.includes(k) && !keeps.includes(k))
       .map(([k]) => k)
   : []);
 
-export function ImportPreviewWindow({ pos, setPos, preview, currentData, busy, applied, onApply, onCancel }: Props) {
+/** Why a custom system's import left something, as the window says it (keys as the file named them). */
+export const leftLines = (preview: ImportPreview): { key: string; text: string }[] => [
+  ['workedOut', 'WORKED OUT BY THE GAME, NOT TAKEN', false],
+  ['gmOnly', 'ONLY THE GM SETS, NOT TAKEN', false],
+  ['notAChoice', 'NOT ONE OF THE CHOICES, LEFT AS IT WAS', true],
+].flatMap(([key, label, withValue]) => {
+  const found = Object.entries(preview[key as 'workedOut' | 'gmOnly' | 'notAChoice'] ?? {});
+  return found.length ? [{ key: String(key), text: `${label}: ${found.map(([k, v]) => (withValue ? `${k} (${String(v)})` : k)).join(', ')}` }] : [];
+});
+
+export function ImportPreviewWindow({ pos, setPos, preview, currentData, keeps, busy, applied, onApply, onCancel }: Props) {
   const mapped = Object.entries(preview.mapped);
   const unmappedKeys = Object.keys(preview.unmapped);
   const skippedKeys = Object.keys(preview.skipped);
-  const losses = lossesFrom(preview, currentData);
+  const losses = lossesFrom(preview, currentData, keeps);
 
   const row: React.CSSProperties = { ...label9, maxHeight: 96, overflowY: 'auto', wordBreak: 'break-word' };
 
@@ -97,6 +117,10 @@ export function ImportPreviewWindow({ pos, setPos, preview, currentData, busy, a
           </div>
         )}
 
+        {leftLines(preview).map((l) => (
+          <div key={l.key} style={{ ...label9, color: l.key === 'notAChoice' ? 'var(--warning)' : 'var(--cyan)' }}>{l.text}</div>
+        ))}
+
         {unmappedKeys.length > 0 && (
           <div style={{ ...row, opacity: 0.55 }}>
             NOT RECOGNIZED: {unmappedKeys.slice(0, 30).join(', ')}{unmappedKeys.length > 30 ? '…' : ''}
@@ -106,7 +130,7 @@ export function ImportPreviewWindow({ pos, setPos, preview, currentData, busy, a
         {/* Different from NOT RECOGNIZED: this is what the source never held, not what we
             failed to read. A player not told the difference reads a gap as a broken import. */}
         {preview.missing && preview.missing.length > 0 && (
-          <div style={{ ...label9, color: '#00ccff' }}>
+          <div style={{ ...label9, color: 'var(--cyan)' }}>
             TYPE IN YOURSELF: {preview.missing.join(' · ')}
           </div>
         )}
