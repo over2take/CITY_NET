@@ -9,7 +9,7 @@
 import type { Definition } from './systemsApi';
 import type { BuilderPage } from './builderSession';
 import { idFor } from './setup';
-import { conditionList } from './conditions';
+import { conditionList, STANDARD } from './conditions';
 import { formulaList } from './statsRules';
 import { PART_ROWS } from './wordsFeatures';
 import { customTemplate, useCustomTemplate } from './customTemplates';
@@ -92,6 +92,57 @@ export const withoutHouseRule = (def: Definition, id: string): Definition => {
   }
   return next;
 };
+
+/** A sheet layout without the sections waiting on a rule that is off, and the tabs they leave empty. */
+const sheetWith = (sheet: unknown, on: Set<string>): unknown => {
+  if (!isObject(sheet) || !Array.isArray(sheet.sections)) return sheet;
+  const waiting = (s: unknown) => isObject(s) && typeof s.only_with === 'string' && !on.has(s.only_with);
+  if (!sheet.sections.some(waiting)) return sheet;
+  const sections = sheet.sections.filter((s) => !waiting(s));
+  const next: Obj = { ...sheet, sections };
+  if (Array.isArray(sheet.tabs)) {
+    const used = new Set(sections.map((s) => isObject(s) && s.tab));
+    const tabs = sheet.tabs.filter((t) => used.has(t));
+    if (tabs.length) next.tabs = tabs; else delete next.tabs;
+  }
+  if (isObject(sheet.header) && Array.isArray(sheet.header.subtitleFields)) {
+    const fields = new Set(sections.flatMap((s) => (isObject(s) && Array.isArray(s.fields) ? s.fields : []).map((f) => (isObject(f) ? f.id : undefined))));
+    next.header = { ...sheet.header, subtitleFields: sheet.header.subtitleFields.filter((id) => fields.has(id)) };
+  }
+  return next;
+};
+
+/**
+ * The draft as the game would run it with the house rules in `on` on (4j5b, for TRY IT's RULES
+ * switches): a part waiting on a rule that is off is off, a sheet or NPC stat block section is left
+ * out with any tab it empties, a standard condition is off and one of the system's own left out, and
+ * a formula whose alternative's rule is on is worked out by it. Mirrors the server's own
+ * (backend houseRules.js withHouseRules); a test holds the two together. Never changes the draft.
+ */
+export const withHouseRules = (def: Definition, on: Set<string>): Definition => {
+  const off = (v: unknown) => typeof v === 'string' && !on.has(v);
+  const next: Definition = { ...def };
+  if (isObject(def.parts)) {
+    next.parts = Object.fromEntries(Object.entries(def.parts).map(([id, p]) => [id, isObject(p) && off(p.only_with) ? { ...p, on: false } : p]));
+  }
+  if (def.sheet !== undefined) next.sheet = sheetWith(def.sheet, on) as Definition['sheet'];
+  if (isObject(def.npc) && def.npc.sheet !== undefined) next.npc = { ...def.npc, sheet: sheetWith(def.npc.sheet, on) };
+  if (isObject(def.conditions)) {
+    const standard = new Set(STANDARD.map((c) => c.id));
+    next.conditions = Object.fromEntries(Object.entries(def.conditions)
+      .filter(([id, c]) => standard.has(id) || !(isObject(c) && off(c.only_with)))
+      .map(([id, c]) => [id, standard.has(id) && isObject(c) && off(c.only_with) ? { ...c, on: false } : c]));
+  }
+  if (Array.isArray(def.derived)) {
+    next.derived = (def.derived as unknown[]).map((d) => (isObject(d) && isObject(d.alternative) && on.has(d.alternative.rule as string) && typeof d.alternative.formula === 'string'
+      ? { ...d, formula: d.alternative.formula } : d)) as Definition['derived'];
+  }
+  return next;
+};
+
+/** The house rules on as each starts, with `chosen` (rule -> on) where something chose otherwise. */
+export const rulesOnAtStart = (def: Definition, chosen: Record<string, boolean> = {}): string[] => houseRuleList(def)
+  .filter((r) => (typeof chosen[r.id] === 'boolean' ? chosen[r.id] : r.starts === true)).map((r) => r.id);
 
 /**
  * The draft as it would be worked out with house rule `rule` on (4j4b): each formula whose

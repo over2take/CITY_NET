@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
 import {
-  houseRuleList, withNewHouseRule, withHouseRule, withoutHouseRule, waitingOn, withHouseRuleOn, houseRulesIn, changedRules, LIMITS,
+  houseRuleList, withNewHouseRule, withHouseRule, withoutHouseRule, waitingOn, withHouseRuleOn, houseRulesIn, changedRules, withHouseRules, rulesOnAtStart, LIMITS,
 } from '../houseRules';
 import { withAlternative, formulaList } from '../statsRules';
 import { registerCustomTemplate, clearCustomTemplates } from '../customTemplates';
@@ -251,5 +251,40 @@ describe('the rules a running game has on (4j5a)', () => {
     expect(changedRules(RUNNING, { magic: true, markets: true })).toEqual({ magic: true });
     expect(changedRules(RUNNING, { magic: false, markets: false, nope: true })).toEqual({ markets: false });
     expect(changedRules(RUNNING, {})).toEqual({});
+  });
+});
+
+describe('the draft as the game would run it (4j5b)', () => {
+  /** HEARTH on two tabs, with something of every kind under each rule. */
+  const tabbed = (): Definition => {
+    const def = hearth();
+    const sheet = def.sheet as { tabs?: string[]; header?: object; sections: { id: string; tab?: string; only_with?: string }[] };
+    sheet.tabs = ['STATS', 'MAGIC'];
+    sheet.header = { nameField: 'name', subtitleFields: ['concept', 'spell'] };
+    sheet.sections = [...sheet.sections.map(({ only_with: _o, ...s }) => ({ ...s, tab: 'STATS' })),
+      { id: 'spells', label: 'SPELLS', layout: 'list', tab: 'MAGIC', only_with: 'magic', fields: [{ id: 'spell', label: 'Spell', type: 'text' }] } as never];
+    return def;
+  };
+
+  it('is what the server runs, rule for rule', () => {
+    const def = tabbed();
+    for (const on of [[], ['magic'], ['gritty'], ['markets'], ['magic', 'gritty'], ['magic', 'gritty', 'markets']]) {
+      expect(withHouseRules(def, new Set(on)), on.join(',')).toEqual(backend.withHouseRules(def, new Set(on)));
+    }
+    expect(withHouseRules(BASE, new Set())).toEqual(backend.withHouseRules(BASE, new Set()));
+  });
+
+  it('never changes the draft', () => {
+    const def = tabbed();
+    const before = JSON.stringify(def);
+    withHouseRules(def, new Set());
+    withHouseRules(def, new Set(['magic', 'gritty']));
+    expect(JSON.stringify(def)).toBe(before);
+  });
+
+  it('starts each rule as it STARTS, unless switched', () => {
+    expect(rulesOnAtStart(hearth())).toEqual(['markets']);
+    expect(rulesOnAtStart(hearth(), { magic: true, markets: false })).toEqual(['magic']);
+    expect(rulesOnAtStart(BASE)).toEqual([]);
   });
 });
