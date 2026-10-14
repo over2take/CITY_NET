@@ -116,8 +116,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Under the hood
 
 - **Random systems for testing.** A generator makes a whole custom system from a seed, every part of the builder
-  in play, and a soak test makes, publishes, loads, shares and republishes each through the real routes. Playing them
-  comes next.
+  in play, and soak tests make, publish, load, share and republish each through the real routes, then play it as the
+  game: health, conditions, rests, initiative, the bank and GIVE ITEM, with every part it turned off refused.
 - **House rules for custom systems, in the format and in the game.** A system can list its own house rules, and a
   part, a sheet section, a condition or a formula's alternative can wait on one; the server checks them all and runs
   the game with them, hiding what waits on a rule that is off and never deleting it (a condition already on a token
