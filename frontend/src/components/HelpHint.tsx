@@ -71,11 +71,12 @@ export function ColumnHead({ hint, style, children }: { hint?: string; style?: C
 
 /**
  * A setting's name with its "?" after it. The "?" stays outside the <label>: inside, its words would
- * be read as part of the field's name. `htmlFor` ties the name to its field, when it has one.
+ * be read as part of the field's name. `htmlFor` ties the name to its field, when it has one; `boxStyle`
+ * places the pair, as in a grid of names beside their fields.
  */
-export function FieldName({ htmlFor, hint, style, children }: { htmlFor?: string; hint: string; style?: CSSProperties; children: ReactNode }) {
+export function FieldName({ htmlFor, hint, style, boxStyle, children }: { htmlFor?: string; hint: string; style?: CSSProperties; boxStyle?: CSSProperties; children: ReactNode }) {
   return (
-    <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }}>
+    <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center', ...boxStyle }}>
       {htmlFor ? <label htmlFor={htmlFor} style={style}>{children}</label> : <span style={style}>{children}</span>}
       <HelpHint text={hint} />
     </span>

@@ -6,6 +6,7 @@ import { createRequire } from 'module';
 
 import { ConditionsPage } from '../ConditionsPage';
 import type { Definition, systemsApi } from '../../sheets/systemsApi';
+import { HINTS } from '../../sheets/builderHelp';
 
 /**
  * The builder's CONDITIONS page (4e1b). Approved mockup builder-conditions (2026-10-09): the standard
@@ -218,5 +219,19 @@ describe('the limit', () => {
     open({ ...H, conditions: own });
     expect(screen.getByText('60 ON · 60 OF 60')).toBeTruthy();
     expect((screen.getByRole('button', { name: '+ CONDITION' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe('the "?"', () => {
+  it('sits beside a condition\'s settings, the fields still named by their words', () => {
+  const allShown = (page: string, count: number) => {
+    const keys = Object.keys(HINTS).filter((k) => k.startsWith(`${page}.`)) as (keyof typeof HINTS)[];
+    expect(keys).toHaveLength(count);
+    for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
+  };
+    open();
+    allShown('conditions', 4);
+    for (const name of ['ON THE CHIP', 'DESCRIPTION']) expect(screen.getByRole('textbox', { name }), name).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'ENDS' })).toBeTruthy();
   });
 });

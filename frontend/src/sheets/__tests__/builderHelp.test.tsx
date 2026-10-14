@@ -81,7 +81,7 @@ describe('the formula reference', () => {
 describe('the words beside each setting', () => {
   it('are sentences, filed by the page that shows them (each page\'s test checks they are all there)', () => {
     for (const [k, text] of Object.entries(HINTS)) {
-      expect(k, k).toMatch(/^(setup|words|bank|rules|sheet|npcs)\.[a-zA-Z]+$/);
+      expect(k, k).toMatch(/^(setup|words|bank|rules|sheet|npcs|conditions|rests|try)\.[a-zA-Z]+$/);
       expect(text.length, k).toBeGreaterThan(30);
       expect(text.trim(), k).toMatch(/\.$/);
     }
@@ -135,6 +135,11 @@ describe('a setting\'s name with its "?"', () => {
     render(<p><FieldName htmlFor="f" hint="What it does.">SYMBOL</FieldName><input id="f" /></p>);
     expect(screen.getByRole('textbox', { name: 'SYMBOL' })).toBeTruthy();
     expect(screen.getByRole('note', { name: 'What it does.' })).toBeTruthy();
+  });
+
+  it('places the pair where it is asked to', () => {
+    render(<p><FieldName hint="Where it ends." boxStyle={{ justifySelf: 'end' }}>ENDS</FieldName></p>);
+    expect((screen.getByText('ENDS').parentElement as HTMLElement).style.justifySelf).toBe('end');
   });
 
   it('is plain words where there is no one field', () => {

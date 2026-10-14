@@ -6,6 +6,7 @@ import { createRequire } from 'module';
 
 import { RestsPage } from '../RestsPage';
 import type { Definition } from '../../sheets/systemsApi';
+import { HINTS } from '../../sheets/builderHelp';
 
 /**
  * The builder's RESTS page (4f4a). Approved mockup builder-rests (2026-10-09): the standard four with
@@ -254,5 +255,24 @@ describe('on the sample', () => {
     cleanup();
     open(H, null);
     expect(screen.queryByTestId('rest-sample')).toBeNull();
+  });
+});
+
+describe('the "?"', () => {
+  it('sits beside a rest\'s refills and what it does to the sample', async () => {
+  const allShown = (page: string, count: number) => {
+    const keys = Object.keys(HINTS).filter((k) => k.startsWith(`${page}.`)) as (keyof typeof HINTS)[];
+    expect(keys).toHaveLength(count);
+    for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
+  };
+    open();
+    await screen.findByTestId('rest-sample');
+    allShown('rests', 2);
+  });
+
+  it('has nothing to say about the sample without the server to try it', () => {
+    open(H, null);
+    expect(screen.queryByRole('note', { name: HINTS['rests.sample'] })).toBeNull();
+    expect(screen.getByRole('note', { name: HINTS['rests.refills'] })).toBeTruthy();
   });
 });
