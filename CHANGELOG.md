@@ -72,6 +72,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **IMPORT.EXE follows your theme.** Its paste box, its Companion code box and its "type in yourself"
+  line stayed Classic green (and blue) in every theme; they take the theme's colors now.
 - **No more "undefined" Encumbrance.** A GM's uploaded armor or gear with no Encumbrance column
   landed in the inventory with an Enc of "undefined"; it now lands blank, as the rest do.
 - **CWN's LONG_REST recovers System Strain again.** Since an earlier change to how table-wide
@@ -113,6 +115,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **IMPORT for custom systems.** A custom system's character sheet has IMPORT now: download the blank
+  PDF or the JSON template, fill it in, upload it back. The preview says what it left and why, and
+  an upload never wipes what the GM wrote in the fields only the GM sets. NPC stat blocks keep
+  importing for the built-in games only.
 - **A fillable PDF for any custom system.** The blank form IMPORT hands out is now made for custom
   systems too, from the system's own sheet: a box for every field a player fills in, a dropdown for
   each choice, lines for the inventory. Filled in, saved and uploaded, it comes straight back in.

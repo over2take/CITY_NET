@@ -1439,10 +1439,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             // its damage. What survives is state that is not character data at all:
             // occupancy says which car this player is sitting in, and re-importing a sheet
             // is not a statement about that. Dropping them would turn someone out of a
-            // vehicle mid-session with no message.
+            // vehicle mid-session with no message. Nor are a custom system's GM-only fields
+            // (4h2c): no upload carries them (its importer leaves them out), so a player's import
+            // would otherwise wipe what the GM wrote there.
             const data = payload.replace
               ? Object.fromEntries(
-                  Object.entries(existing).filter(([k]) => vehicleState.OCCUPANCY_FIELDS.includes(k)),
+                  Object.entries(existing).filter(([k]) => vehicleState.OCCUPANCY_FIELDS.includes(k)
+                    || !sheetTemplates.playerMayEdit(system, k)),
                 )
               : existing;
             entries.forEach(([k, v]) => { data[k] = v; });

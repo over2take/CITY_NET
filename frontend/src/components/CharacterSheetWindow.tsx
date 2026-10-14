@@ -7,6 +7,7 @@ import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
 import { VehicleBadgeButton } from './VehicleBadgeButton';
 import type { SheetLinkSource } from '../sheets';
 import { canImport } from '../sheets/importable';
+import { themeRoot } from '../utils/themeRoot';
 
 // The player's own character sheet (in-game floating window). Identity is
 // the socket's registered user - the server only ever returns / edits the
@@ -61,8 +62,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
             onDisembark={(occupant) => socket?.emit('seatOut', { occupant })}
             compact
           />
-          {/* Not for a custom system: there is no importer for one, so the server refuses every
-              import (3b6c). Once custom systems can import, this is the sheet_import part. */}
+          {/* A built-in game with an importer, or a custom system with SHEET IMPORT on (4h2c). */}
           {canImport(sheet?.system) && <button
             title="Import from PDF / JSON / text"
             className="win95-close-btn"
@@ -144,7 +144,8 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           });
         }}
       />,
-      document.body
+      // Inside the theme, so IMPORT.EXE takes the theme's colors rather than Classic's.
+      themeRoot(),
     )}
     </>
   );
