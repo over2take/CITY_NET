@@ -1,0 +1,121 @@
+import React from 'react';
+import { describe, it, expect, afterEach } from 'vitest';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { createRequire } from 'module';
+
+import { TOUR, TOPICS, FORMULA_FUNCTIONS, EXAMPLES, topicById } from '../builderHelp';
+import { BUILDER_PAGES } from '../builderSession';
+import { HEALTH_MODELS } from '../setup';
+import { HelpHint, popoverPlace, POP_WIDTH } from '../../components/HelpHint';
+
+/**
+ * Help for GMs in the builder (4i; approved mockup docs/mockups/builder-help.html, 2026-10-13):
+ * one module for the tour, the HELP page and every "?", held here to the builder's pages, the
+ * formula engine's own functions (backend systemBuilder/expression.js) and the built-in examples.
+ */
+
+const req = createRequire(import.meta.url);
+const { BUILTINS, parse } = req('../../../../backend/systemBuilder/expression.js');
+const { exampleList } = req('../../../../backend/systemBuilder/examples.js');
+
+afterEach(() => cleanup());
+
+describe('the tour', () => {
+  it('welcomes, then walks the rail top to bottom, SETUP to PUBLISH', () => {
+    expect(TOUR.map((s) => s.at)).toEqual([null, 'setup', 'words', 'features', 'rules', 'sheet', 'try', 'publish']);
+    const pages = new Set(BUILDER_PAGES.map((p) => p.id as string));
+    for (const s of TOUR) {
+      if (s.at && s.at !== 'publish') expect(pages.has(s.at), s.at).toBe(true);
+      expect(s.text.length, s.title).toBeGreaterThan(40);
+    }
+    expect(TOUR).toHaveLength(8);
+  });
+});
+
+describe('the HELP page\'s topics', () => {
+  it('getting started, a topic for every page with GO TO, and the references', () => {
+    expect(TOPICS[0]).toMatchObject({ id: 'start', group: 'START', tour: true });
+    const pages = TOPICS.filter((t) => t.group === 'PAGES');
+    expect(pages.map((t) => t.page)).toEqual(BUILDER_PAGES.map((p) => p.id));
+    expect(pages.map((t) => t.title)).toEqual(BUILDER_PAGES.map((p) => p.label));
+    expect(TOPICS.filter((t) => t.group === 'REFERENCE').map((t) => t.title)).toEqual(['FORMULAS', 'DICE', 'HEALTH MODELS', 'SHARING AND VERSIONS', 'EXAMPLES']);
+    expect(new Set(TOPICS.map((t) => t.id)).size).toBe(TOPICS.length);
+    for (const t of TOPICS) expect(t.body.length, t.id).toBeGreaterThan(0);
+  });
+
+  it('finds a topic by id, or the first', () => {
+    expect(topicById('dice').title).toBe('DICE');
+    expect(topicById('nope').id).toBe('start');
+    expect(topicById(undefined).id).toBe('start');
+  });
+
+  it('explains every health model there is', () => {
+    expect(topicById('health').body).toEqual(HEALTH_MODELS.map((m) => `${m.label}: ${m.worksLike}. Like ${m.examples}.`));
+  });
+
+  it('opens the built-in examples there are', () => {
+    expect(topicById('examples').examples).toBe(true);
+    expect(EXAMPLES.map((e) => e.id)).toEqual(exampleList().map((e: { id: string }) => e.id));
+    expect(EXAMPLES.map((e) => e.name)).toEqual(exampleList().map((e: { name: string }) => e.name.toUpperCase()));
+  });
+});
+
+describe('the formula reference', () => {
+  it('lists every function the engine knows, and nothing it doesn\'t', () => {
+    expect(FORMULA_FUNCTIONS.map((f) => f.name).sort()).toEqual(Object.keys(BUILTINS).sort());
+  });
+
+  it('gives each the arguments the engine takes, and an example it reads', () => {
+    for (const f of FORMULA_FUNCTIONS) {
+      const { min, max } = BUILTINS[f.name];
+      const listed = f.args.split(', ');
+      if (listed.includes('...')) expect(max, f.name).toBeGreaterThan(listed.length);
+      else expect([min, max], f.name).toEqual([listed.length, listed.length]);
+      expect(() => parse(f.example, () => false), f.example).not.toThrow();
+      expect(f.example.startsWith(`${f.name}(`), f.example).toBe(true);
+    }
+  });
+});
+
+describe('the "?"', () => {
+  it('says its words to screen readers, and shows them on hover and focus, gone again after', async () => {
+    render(<p>Health model <HelpHint text="How characters get hurt." /></p>);
+    const q = screen.getByRole('note', { name: 'How characters get hurt.' });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    fireEvent.mouseEnter(q);
+    expect(screen.getByRole('tooltip').textContent).toBe('How characters get hurt.');
+    fireEvent.mouseLeave(q);
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    await userEvent.tab();
+    expect(document.activeElement).toBe(q);
+    expect(screen.getByRole('tooltip')).toBeTruthy();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    await userEvent.tab();
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+
+  it('goes when focus moves on', async () => {
+    render(<p><HelpHint text="first" /><button type="button">next</button></p>);
+    await userEvent.tab();
+    expect(screen.getByRole('tooltip').textContent).toBe('first');
+    await userEvent.tab();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'next' }));
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
+
+  it('leaves Escape to the window when nothing is shown', () => {
+    let reached = false;
+    render(<div onKeyDown={(e) => { if (e.key === 'Escape') reached = true; }}><HelpHint text="x" /></div>);
+    fireEvent.keyDown(screen.getByRole('note'), { key: 'Escape' });
+    expect(reached).toBe(true);
+  });
+
+  it('sits right of the "?", or left of it where there is no room', () => {
+    expect(popoverPlace({ left: 100, right: 114, top: 50 }, 1200)).toEqual({ left: 122, top: 46 });
+    expect(popoverPlace({ left: 1000, right: 1014, top: 2 }, 1200)).toEqual({ left: 1000 - 8 - POP_WIDTH, top: 8 });
+    expect(popoverPlace({ left: 100, right: 114, top: 50 }, 200)).toEqual({ left: 8, top: 46 });
+    expect(popoverPlace({ left: 0, right: 14, top: 50 }, 14 + 8 + POP_WIDTH + 8)).toEqual({ left: 22, top: 46 });
+  });
+});
