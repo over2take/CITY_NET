@@ -115,6 +115,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Help for the builder, written.** The words of the builder's help in one place: a first-time tour,
+  a topic for every page, and a reference for formulas, dice, health models and sharing; and the "?"
+  that will sit beside each setting. They reach the screen in the next pieces.
 - **SHEET IMPORT in the builder.** FEATURES' greyed PDF IMPORT is now SHEET IMPORT, a switch like the
   others, on to start. The CHARACTER SHEET page has DOWNLOAD FORM: the blank PDF players would get,
   made from the draft, to look at before publishing.
