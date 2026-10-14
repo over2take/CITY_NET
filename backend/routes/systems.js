@@ -19,6 +19,7 @@ const { tryRest } = require('../systemBuilder/tryRest');
 const { exampleList, exampleDefinition, exampleKind, KINDS } = require('../systemBuilder/examples');
 const { checkTableConditions, saveTableConditions } = require('../systemBuilder/tableConditions');
 const { isBuiltIn } = require('../sheets/templates');
+const { houseRuleKey } = require('../systemBuilder/houseRules');
 
 /** The global_settings key that says the builder's first-time tour has been seen. */
 const TOUR_SEEN = 'builder_tour_seen';
@@ -127,6 +128,36 @@ module.exports = (db, io = null) => {
   });
 
   router.get('/:id', gm, (req, res) => store.getSystem(db, req.params.id, (err, sys) => answer(res, err, sys)));
+
+  /**
+   * The table's house rules for a published system (4j2b; approved mockup
+   * docs/mockups/optional-rules.html, 2026-10-14): the GM or a granted editor switches them, as with
+   * the built-in games' house rules, from TTRPG_SYSTEM. { rules: { magic: true, ... } }, any number
+   * at once, kept in global_settings; the running game takes them at once, and every browser drawing
+   * the system fetches it again. Answers the rules, each with whether it is on.
+   */
+  router.put('/:id/house-rules', authenticate, (req, res) => {
+    const known = new Set(runtime.houseRulesIn(req.params.id).map((r) => r.id));
+    if (!known.size) return res.status(404).json({ error: 'That system has no house rules running' });
+    const asked = req.body && req.body.rules;
+    if (!asked || typeof asked !== 'object' || Array.isArray(asked) || !Object.keys(asked).length) {
+      return res.status(400).json({ error: 'Say which house rules are on' });
+    }
+    for (const [rule, on] of Object.entries(asked)) {
+      if (!known.has(rule)) return res.status(400).json({ error: `"${rule}" is not one of this system's house rules` });
+      if (typeof on !== 'boolean') return res.status(400).json({ error: `Say on or off for ${rule}` });
+    }
+    const pairs = Object.entries(asked);
+    // One statement, so the table's choices change together or not at all.
+    db.run(`INSERT INTO global_settings (key, value) VALUES ${pairs.map(() => '(?, ?)').join(', ')}
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value`, pairs.flatMap(([rule, on]) => [houseRuleKey(req.params.id, rule), on ? '1' : '0']), (err) => {
+      if (err) return answer(res, err);
+      return runtime.refresh(db, req.params.id, () => {
+        if (io) io.emit('customSystemChanged', { id: req.params.id });
+        res.json({ house_rules: runtime.houseRulesIn(req.params.id) });
+      });
+    });
+  });
 
   /**
    * What PUBLISH would change (4h1b; approved mockup docs/mockups/version-preview.html): the draft

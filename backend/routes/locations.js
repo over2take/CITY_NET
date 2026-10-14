@@ -13,7 +13,7 @@ const { shopsOpen } = require('../shops/availability');
 const { selectByIds, deleteByIds } = require('../bulk');
 const { canReadNpcSheets, redactLocation } = require('../sheets/npcPrivacy');
 const tokenAccess = require('../tokens/tokenAccess');
-const { checkTokenConditions, publicTokenConditions } = require('../tokens/conditions');
+const { checkTokenConditions, publicTokenConditions, parseTokenConditions } = require('../tokens/conditions');
 
 /** A change to a token refused (tokens/tokenAccess.js): 401 when nobody said who they are. */
 const refuse = (res, caller, message = 'You can only change your own token') =>
@@ -849,18 +849,22 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   /**
    * A token's conditions (4e2a): the whole list, as with injuries, each one the running system
    * offers (runtime.conditionsIn). Whoever may change the token's health may change them; a
-   * player's conditions follow them onto every token of theirs, as their health does.
+   * player's conditions follow them onto every token of theirs, as their health does. Those a
+   * house rule switched off hides stay on the token as they were (4j2b).
    */
   router.put('/:id/conditions', optionalAuthenticate, (req, res) => {
     const { id } = req.params;
-    db.get('SELECT shape, owner, controllers FROM locations WHERE id = ?', [id], (err, row) => {
+    db.get('SELECT shape, owner, controllers, conditions FROM locations WHERE id = ?', [id], (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!row) return res.status(404).json({ error: 'Not found' });
       const caller = tokenAccess.callerOf(req);
       if (!tokenAccess.mayChangeHealth(row, caller)) return refuse(res, caller);
       db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (gErr, gRow) => {
         if (gErr) return res.status(500).json({ error: gErr.message });
-        const checked = checkTokenConditions(req.body && req.body.conditions, customSystems.conditionsIn((gRow && gRow.value) || DEFAULT_SYSTEM));
+        const system = (gRow && gRow.value) || DEFAULT_SYSTEM;
+        const hidden = customSystems.hiddenConditionsIn(system);
+        const kept = parseTokenConditions(row.conditions).filter((c) => hidden.has(c.id));
+        const checked = checkTokenConditions(req.body && req.body.conditions, customSystems.conditionsIn(system), kept);
         if (!checked.ok) return res.status(400).json({ error: checked.error });
         const json = JSON.stringify(checked.value);
         const query = row.shape === 'rhombus' && row.owner

@@ -137,7 +137,7 @@ const put = (id, publishedText, version, chosen = {}) => {
   const definition = withHouseRules(published, on);
   const meta = metaOf(definition);
   loaded.set(id, {
-    name: definition.name, version: version || 0, definition, meta,
+    name: definition.name, version: version || 0, published, definition, meta,
     render: renderOf(id, definition, on), tiers: tiersFor(definition, meta.recompute),
   });
 };
@@ -257,7 +257,18 @@ const conditionsIn = (system) => conditionsOf(loaded.has(system)
  */
 const definitionOf = (system) => (loaded.has(system) ? loaded.get(system).definition : null);
 
+/**
+ * The conditions a published system has that a house rule switched off hides (4j2b): a token keeps
+ * them, out of sight, until the rule is back on. Empty for any other system.
+ */
+const hiddenConditionsIn = (system) => {
+  if (!loaded.has(system)) return new Set();
+  const { published, definition } = loaded.get(system);
+  const shown = new Set(conditionsOf(definition).map((c) => c.id));
+  return new Set(conditionsOf(published).map((c) => c.id).filter((id) => !shown.has(id)));
+};
+
 /** A published system's house rules, each with whether the table has it on; empty for any other. */
 const houseRulesIn = (system) => (loaded.has(system) ? loaded.get(system).render.house_rules : []);
 
-module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, catalogueCurrencyIn, conditionsIn, definitionOf, houseRulesIn, metaOf, renderOf };
+module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, catalogueCurrencyIn, conditionsIn, hiddenConditionsIn, definitionOf, houseRulesIn, metaOf, renderOf };
