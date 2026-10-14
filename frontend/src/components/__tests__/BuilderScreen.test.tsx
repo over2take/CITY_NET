@@ -212,7 +212,7 @@ describe('the builder', () => {
   it('lists every page, each saying what it is for, and opens the one picked', async () => {
     open({ startPage: 'problems' });
     await ready();
-    const pages = within(sidebar()).getAllByRole('button').filter((b) => b.title && !['PUBLISH', 'MY SYSTEMS'].includes(b.textContent!));
+    const pages = within(sidebar()).getAllByRole('button').filter((b) => b.title && !['PUBLISH', 'MY SYSTEMS', 'HELP'].includes(b.textContent!));
     expect(pages.map((b) => b.textContent)).toEqual(['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'TRY IT', 'PROBLEMS']);
     expect(pages[1].title).toBe('What the game calls things: HP, credits, skills.');
     await userEvent.click(pages[1]);
@@ -783,5 +783,48 @@ describe('PUBLISH from v2 on (4h4)', () => {
     expect(await screen.findByText('Could not reach the systems store')).toBeTruthy();
     expect(heading()).toBe('RESTS');
     expect(screen.queryByTestId('publish-preview')).toBeNull();
+  });
+});
+
+describe('HELP (4i)', () => {
+  // Approved mockup builder-help (2026-10-13): HELP on the rail above SAVE, with or without a system.
+  const help = () => userEvent.click(within(sidebar()).getByLabelText('HELP'));
+  const topic = (title: string) => userEvent.click(within(screen.getByRole('navigation', { name: 'Help topics' })).getByRole('button', { name: title }));
+
+  it('sits on the rail just above SAVE, and opens with no system open, GO TO waiting for one', async () => {
+    open({ systemId: null });
+    const names = within(sidebar()).getAllByRole('button').map((b) => b.getAttribute('aria-label'));
+    expect(names.indexOf('HELP')).toBe(names.indexOf('SAVE') - 1);
+    expect((within(sidebar()).getByLabelText('HELP') as HTMLButtonElement).disabled).toBe(false);
+    await help();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('HELP');
+    expect(within(sidebar()).getByLabelText('HELP').getAttribute('aria-current')).toBe('page');
+    await topic('SETUP');
+    expect((screen.getByRole('button', { name: 'GO TO SETUP' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('GO TO opens the page, and HELP comes back on the same topic', async () => {
+    open({ startPage: 'setup' });
+    await ready();
+    await help();
+    await topic('WORDS');
+    await userEvent.click(screen.getByRole('button', { name: 'GO TO WORDS' }));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('WORDS');
+    await help();
+    expect(screen.getByRole('article', { name: 'WORDS' })).toBeTruthy();
+  });
+
+  it('works while looking at an example, unlocked, and opens another from EXAMPLES', async () => {
+    const onLookAt = vi.fn();
+    open({ systemId: null, example: 'cwn', startPage: 'rules', onLookAt });
+    await screen.findByRole('region', { name: 'Example' });
+    await help();
+    expect(screen.queryByRole('region', { name: 'Example' })).toBeNull();
+    expect(screen.queryByTestId('locked-page')?.contains(screen.getByTestId('help-page')) ?? false).toBe(false);
+    await topic('EXAMPLES');
+    await userEvent.click(screen.getByRole('button', { name: 'LOOK AT CYBERPUNK RED' }));
+    await waitFor(() => expect(onLookAt).toHaveBeenCalledWith('cpr'));
+    await topic('TRY IT');
+    expect((screen.getByRole('button', { name: 'GO TO TRY IT' }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

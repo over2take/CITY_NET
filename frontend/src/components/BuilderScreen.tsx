@@ -18,6 +18,7 @@ import { RestsPage } from './RestsPage';
 import { CONDITION_ICONS } from '../sheets/conditionIcons';
 import { TryItPage } from './TryItPage';
 import { PublishPreviewPage } from './PublishPreviewPage';
+import { HelpPage } from './HelpPage';
 import type { PublishPreview } from '../sheets/versionPreview';
 
 // The system builder (4a2b): it takes over the whole window, with no map. A sidebar down the left
@@ -81,7 +82,12 @@ const MY_SYSTEMS = { id: 'systems' as const, label: 'MY SYSTEMS', what: 'Every s
  * new version changes, in place of the open page, with BACK TO EDITING and PUBLISH vN.
  */
 const PUBLISH_PAGE = { id: 'publish' as const, label: 'PUBLISH', what: 'What the new version changes, before it goes live.' };
-type Page = BuilderPage | 'systems' | 'publish';
+/**
+ * HELP (4i; approved mockup docs/mockups/builder-help.html, 2026-10-13): every page explained, the
+ * references, and the examples to open, on the rail above SAVE. Open with or without a system.
+ */
+const HELP_PAGE = { id: 'help' as const, label: 'HELP', what: 'How the builder works, page by page, with formulas and dice explained.' };
+type Page = BuilderPage | 'systems' | 'publish' | 'help';
 
 /** Above the map and its panels, below the windows (DraggableWindow starts at 2000). */
 const Z = 1900;
@@ -116,7 +122,7 @@ const icon = (...paths: string[]) => (
     {paths.map((d) => <path key={d} d={d} />)}
   </svg>
 );
-const Icons: Record<BuilderPage | 'builder' | 'systems' | 'save' | 'publish', React.ReactNode> = {
+const Icons: Record<BuilderPage | 'builder' | 'systems' | 'help' | 'save' | 'publish', React.ReactNode> = {
   builder: icon('M3 3h7v7H3z', 'M14 3h7v7h-7z', 'M3 14h7v7H3z', 'M14 14h7v7h-7z'),
   systems: icon('M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'),
   setup: icon('M4 21v-7', 'M4 10V3', 'M12 21v-9', 'M12 8V3', 'M20 21v-5', 'M20 12V3', 'M1 14h6', 'M9 8h6', 'M17 16h6'),
@@ -129,6 +135,7 @@ const Icons: Record<BuilderPage | 'builder' | 'systems' | 'save' | 'publish', Re
   rests: icon('M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z'),
   try: icon('M5 3l14 9-14 9z'),
   problems: icon('M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z', 'M12 9v4', 'M12 17h.01'),
+  help: icon('M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20z', 'M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3', 'M12 17h.01'),
   save: icon('M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z', 'M17 21v-8H7v8', 'M7 3v5h8'),
   publish: icon('M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'M17 8l-5-5-5 5', 'M12 3v12'),
 };
@@ -190,6 +197,8 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
   const [definition, setDefinition] = useState<Definition | null>(null);
   /** What PUBLISH would change, while its page is open, and the page to go back to. */
   const [preview, setPreview] = useState<{ value: Extract<PublishPreview, { first: false }>; back: Page } | null>(null);
+  /** HELP's open topic, kept while the GM goes to a page and comes back. */
+  const [helpTopic, setHelpTopic] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!systemId) return null;
@@ -313,7 +322,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
     window.dispatchEvent(new Event(SYSTEMS_CHANGED_EVENT));
   };
 
-  const current = page === 'systems' ? MY_SYSTEMS : page === 'publish' ? PUBLISH_PAGE : BUILDER_PAGES.find((p) => p.id === page)!;
+  const current = page === 'systems' ? MY_SYSTEMS : page === 'publish' ? PUBLISH_PAGE : page === 'help' ? HELP_PAGE : BUILDER_PAGES.find((p) => p.id === page)!;
   const saveLine = state ? saveStatus(state) : null;
   /** Whether the pages have something to show: an open system's draft, or an example. */
   const ready = !!definition && (looking || !!system);
@@ -363,6 +372,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
           ))}
         </div>
         <div style={{ padding: '10px 0', display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid var(--dark-green)' }}>
+          <RailButton icon={Icons.help} label="HELP" title={HELP_PAGE.what} active={page === 'help'} onClick={() => { setPage('help'); setStatus(null); }} />
           <RailButton icon={Icons.save} label="SAVE" disabled={!autosave.current || busy} onClick={save} />
           <RailButton icon={Icons.publish} label="PUBLISH" active={page === 'publish'} disabled={!autosave.current || busy} onClick={publish}
             title={publishBlocked(problems) ?? 'Make this the version the game runs'} />
@@ -405,7 +415,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
               startTab={looking ? 'new' : undefined}
             />
           )}
-          {looking && ready && page !== 'systems' && (
+          {looking && ready && page !== 'systems' && page !== 'help' && (
             <div role="region" aria-label="Example" style={{ border: '1px solid var(--cyan)', padding: '10px 12px', marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 900 }}>
               <span style={{ color: 'var(--cyan)', fontSize: 10, letterSpacing: 2 }}>{starter ? 'A GENRE STARTER' : 'A BUILT-IN EXAMPLE'}</span>
               <span style={{ fontSize: 12, lineHeight: 1.45 }}>
@@ -432,6 +442,11 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
               </div>
               {copy.error && <span role="alert" style={{ color: 'var(--danger)', fontSize: 12 }}>{copy.error}</span>}
             </div>
+          )}
+          {page === 'help' && (
+            <HelpPage topic={helpTopic} onTopic={setHelpTopic} canGoTo={!!systemId || looking}
+              onGoTo={(p) => { setPage(p); setStatus(null); }}
+              onLook={onLookAt ? (id) => leave(() => onLookAt(id)) : undefined} />
           )}
           {page === 'publish' && preview && (
             <PublishPreviewPage preview={preview.value} system={name} busy={busy}

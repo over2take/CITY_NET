@@ -115,6 +115,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **HELP in the builder.** A HELP page on the builder's rail: how each page works with a GO TO button,
+  every function a formula can use, dice, health models, sharing and versions, and the built-in games to look at.
 - **A "?" beside the builder's settings.** Every page from SETUP to TRY IT now explains its settings on
   hover or keyboard focus: what a box does, where it shows in the game, and what leaving it empty means.
 - **Help for the builder, written.** The words of the builder's help in one place: a first-time tour,
