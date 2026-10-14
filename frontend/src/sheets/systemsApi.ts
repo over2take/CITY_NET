@@ -199,5 +199,26 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
       const named = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '');
       return { ok: true, value: { fileName: named ? named[1] : 'system.citysys', text: await res.text() } };
     },
+    /**
+     * The blank PDF form a draft would give players to fill in and upload through IMPORT (4h2c),
+     * made by the server from the draft as it stands (POST /api/systems/form.pdf). Changes nothing.
+     */
+    formPdf: async (definition: Definition): Promise<Answer<Blob>> => {
+      let res: Response;
+      try {
+        res = await fetcher('/api/systems/form.pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ definition }),
+        });
+      } catch {
+        return { ok: false, error: UNREACHABLE, status: 0 };
+      }
+      if (!res.ok) {
+        const json = await res.json().catch(() => null);
+        return { ok: false, status: res.status, error: json && typeof json.error === 'string' ? json.error : UNREACHABLE };
+      }
+      return { ok: true, value: await res.blob() };
+    },
   };
 };

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
+import { partIsOn } from '../sheets/wordsFeatures';
 import type { CustomRenderSheet } from '../sheets/customTemplates';
 import { SheetPreview } from './SheetPreview';
 import {
@@ -102,6 +103,10 @@ function Choices({ field, onChange }: { field: Field; onChange: (text: string) =
 
 export const blankProblem = (what: string) => (text: string) => (text.trim() ? null : `A ${what} needs a name.`);
 
+/** The draft form's file name: the system's name in lower case, words joined by dashes. */
+export const formFileName = (name: string | undefined) =>
+  `citynet-${String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'system'}-form.pdf`;
+
 export function SheetPage({ definition, edit, api, forNpcs = false }: Props) {
   const back = forNpcs ? 'BACK TO THE CHARACTER SHEET' : 'BACK TO AUTOMATIC';
   const [preview, setPreview] = useState<{ sheet: CustomRenderSheet; starter: CustomRenderSheet } | null>(null);
@@ -109,6 +114,7 @@ export function SheetPage({ definition, edit, api, forNpcs = false }: Props) {
   const [asked, setAsked] = useState(false);
   const [pick, setPick] = useState<Pick>({ kind: 'none' });
   const [confirmReset, setConfirmReset] = useState(false);
+  const [form, setForm] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
   const [confirmTab, setConfirmTab] = useState<string | null>(null);
   const [tabDest, setTabDest] = useState('');
   const [confirmSection, setConfirmSection] = useState<string | null>(null);
@@ -457,6 +463,33 @@ export function SheetPage({ definition, edit, api, forNpcs = false }: Props) {
     );
   })();
 
+  /**
+   * DOWNLOAD FORM (4h2c; approved mockup docs/mockups/sheet-import.html): the blank PDF this draft
+   * would give players to fill in and upload through IMPORT, so the GM sees it before publishing.
+   */
+  const downloadForm = async () => {
+    if (!api) return;
+    setForm({ busy: true, error: null });
+    const r = await api.formPdf(definition);
+    if (!r.ok) { setForm({ busy: false, error: r.error }); return; }
+    const url = URL.createObjectURL(r.value);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${formFileName(definition.name)}`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setForm({ busy: false, error: null });
+  };
+  const formButton = !forNpcs && api && partIsOn(definition, 'sheet_import') && (
+    <>
+      <button type="button" className="utility-btn" style={btn} disabled={form.busy} onClick={downloadForm}
+        title="The blank PDF players would fill in and upload through IMPORT">
+        {form.busy ? 'MAKING THE FORM…' : 'DOWNLOAD FORM'}
+      </button>
+      {form.error && <span role="alert" style={{ ...why, color: 'var(--danger)' }}>{form.error}</span>}
+    </>
+  );
+
   return (
     <div data-testid="sheet-page" style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%' }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '8px 12px', border: '1px solid var(--dark-green)' }}>
@@ -474,11 +507,14 @@ export function SheetPage({ definition, edit, api, forNpcs = false }: Props) {
             ) : (
               <button type="button" className="utility-btn" style={btn} onClick={() => setConfirmReset(true)}>{back}</button>
             )}
+            {formButton}
           </>
         ) : (
           <>
             <span style={{ ...small, opacity: 1 }}>AUTOMATIC</span>
             <span style={why}>The starter sheet, built from your stats, formulas and health model.</span>
+            <span style={{ flex: 1 }} />
+            {formButton}
           </>
         )}
       </div>

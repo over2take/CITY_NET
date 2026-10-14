@@ -9,7 +9,7 @@ import type { Definition } from '../../sheets/systemsApi';
 /**
  * The builder's FEATURES page, parts and shops (4b1c1). Approved mockup builder-words-features
  * (2026-10-06): a switch per part; SHOPS opens out to building types and catalogues; renames blank =
- * the app's; XP awards, death saves, luck and PDF import off and greyed for custom systems.
+ * the app's; XP awards, death saves and luck off and greyed for custom systems (SHEET IMPORT usable since 4h2c).
  */
 
 afterEach(() => cleanup());
@@ -59,9 +59,18 @@ describe('the parts', () => {
     expect(sw('GIVE ITEM').getAttribute('aria-checked')).toBe('false');
   });
 
-  it('shows the four a custom system can\'t use yet as off and greyed', () => {
+  it('turns SHEET IMPORT off and on, a part like the others since 4h2c', async () => {
+    const { last } = open();
+    expect(part('sheet_import').textContent).toContain('Filling a character sheet from a PDF form or JSON file through IMPORT.');
+    expect(sw('SHEET IMPORT').disabled).toBe(false);
+    expect(sw('SHEET IMPORT').getAttribute('aria-checked')).toBe('true');
+    await userEvent.click(sw('SHEET IMPORT'));
+    expect(last().parts).toEqual({ sheet_import: { on: false } });
+  });
+
+  it('shows the three a custom system can\'t use yet as off and greyed', () => {
     open({ format: 1, name: 'Hearth' });
-    for (const p of ['XP AWARDS', 'DEATH SAVES', 'LUCK', 'PDF IMPORT']) {
+    for (const p of ['XP AWARDS', 'DEATH SAVES', 'LUCK']) {
       expect(sw(p).getAttribute('aria-checked'), p).toBe('false');
       expect(sw(p).disabled, p).toBe(true);
     }
