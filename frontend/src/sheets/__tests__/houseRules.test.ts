@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
 import {
-  houseRuleList, withNewHouseRule, withHouseRule, withoutHouseRule, waitingOn, LIMITS,
+  houseRuleList, withNewHouseRule, withHouseRule, withoutHouseRule, waitingOn, withHouseRuleOn, LIMITS,
 } from '../houseRules';
+import { withAlternative, formulaList } from '../statsRules';
 import type { Definition } from '../systemsApi';
 import { withPart, withPartOnlyWith, partOnlyWith, partIsOn } from '../wordsFeatures';
 import { withCondition } from '../conditions';
@@ -195,5 +196,35 @@ describe('putting things under a rule (4j4a)', () => {
     expect(sheetOf(withSection(def, id, { label: 'X' }))!.sections[0].only_with).toBe('magic');
     def = withSection(def, id, { only_with: null });
     expect(sheetOf(def)!.sections[0]).not.toHaveProperty('only_with');
+  });
+});
+
+describe('a formula\'s alternative (4j4b)', () => {
+  const ruled = { ...BASE, house_rules: [{ id: 'magic', name: 'MAGIC' }, { id: 'gritty', name: 'GRITTY' }],
+    derived: [{ id: 'max_hp', formula: '10 + @con' }, { id: 'mana', formula: '2' }, { id: 'hurt', kind: 'condition', when: '1', then: '1', else: '0' }] } as unknown as Definition;
+
+  it('starts from the formula as it stands, then is written, and cleared with its rule', () => {
+    let def = withAlternative(ruled, 'max_hp', { rule: 'gritty' });
+    expect(formulaList(def)[0]).toEqual({ id: 'max_hp', formula: '10 + @con', alternative: { rule: 'gritty', formula: '10 + @con' } });
+    def = withAlternative(def, 'max_hp', { formula: '@con' });
+    def = withAlternative(def, 'max_hp', { rule: 'magic' });
+    expect(formulaList(def)[0].alternative).toEqual({ rule: 'magic', formula: '@con' });
+    expect(problems(def)).toEqual([]);
+    expect(formulaList(withAlternative(def, 'max_hp', { rule: null }))[0]).toEqual({ id: 'max_hp', formula: '10 + @con' });
+    expect(formulaList(withAlternative(def, 'max_hp', { rule: '' }))[0]).not.toHaveProperty('alternative');
+  });
+
+  it('needs a rule first, and never goes on a condition', () => {
+    expect(withAlternative(ruled, 'mana', { formula: '4' }).derived).toEqual(ruled.derived);
+    expect(withAlternative(ruled, 'hurt', { rule: 'magic' }).derived).toEqual(ruled.derived);
+  });
+
+  it('is worked out in its formula\'s place with its rule on, as the server runs it', () => {
+    const def = withAlternative(withAlternative(withAlternative(ruled, 'max_hp', { rule: 'gritty' }), 'max_hp', { formula: '@con' }), 'mana', { rule: 'magic' });
+    const on = withHouseRuleOn(def, 'gritty');
+    expect((on.derived as { formula: string }[]).map((d) => d.formula)).toEqual(['@con', '2', undefined]);
+    expect(on.derived).toEqual(backend.withHouseRules(def, new Set(['gritty'])).derived);
+    expect(withHouseRuleOn(def, 'nope').derived).toEqual(def.derived);
+    expect(withHouseRuleOn(BASE, 'gritty')).toBe(BASE);
   });
 });

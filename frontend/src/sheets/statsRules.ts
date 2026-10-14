@@ -145,6 +145,23 @@ export const withFormula = (def: Definition, id: string, patch: { label?: string
     return next;
   }));
 
+/**
+ * A formula's alternative under a house rule (4j4b): its rule set (starting from the formula as it
+ * stands, or the alternative it had), or its own formula changed; no rule, no alternative. Only a
+ * formula has one, never a condition.
+ */
+export const withAlternative = (def: Definition, id: string, patch: { rule?: string | null; formula?: string }): Definition =>
+  withList(def, 'derived', formulaList(def).map((f) => {
+    if (f.id !== id || (f as { kind?: string }).kind === 'condition') return f;
+    if (patch.rule === null || patch.rule === '') {
+      const { alternative: _gone, ...rest } = f;
+      return rest;
+    }
+    const rule = patch.rule ?? f.alternative?.rule;
+    if (!rule) return f;
+    return { ...f, alternative: { rule, formula: patch.formula ?? f.alternative?.formula ?? f.formula ?? '' } };
+  }));
+
 /** A formula removed. Formulas reading it show the problem until they're changed. */
 export const withoutFormula = (def: Definition, id: string): Definition => withList(def, 'derived', formulaList(def).filter((f) => f.id !== id));
 

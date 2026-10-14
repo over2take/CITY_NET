@@ -183,6 +183,8 @@ export const HINTS = {
   'rests.refills': 'What the rest puts back, line by line in order: health, a number on the sheet, or a whole section, to its maximum, by an amount or to a number. Rolled for each character.',
   'rests.sample': 'This rest on the sample character, its token hurt to half, worked out the way the game would. Nothing is saved.',
   // ONLY WITH, on FEATURES, CHARACTER SHEET (and the NPC stat block) and CONDITIONS
+  'only.alternative': 'A house rule under which this formula is worked out another way, like fewer hit points with GRITTY WOUNDS. Off, it is worked out as written.',
+  'only.instead': 'The formula used while the rule is on, written like any other. The sample character\'s value with the rule on shows under it.',
   'only.with': 'The house rule this waits on. While the GM has the rule off it is hidden in the game, never deleted; always means it is always there.',
   // HOUSE RULES
   'house.name': 'What the GM sees beside its checkbox in the GAME tab\'s HOUSE RULES, like MAGIC. Renaming keeps everything under it.',
