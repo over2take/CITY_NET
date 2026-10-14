@@ -209,3 +209,37 @@ describe('a system nobody plays yet', () => {
     ]);
   });
 });
+
+describe('house rules (4j5c)', () => {
+  const RULES = [{ id: 'magic', name: 'Magic' }, { id: 'gritty', name: 'Gritty', starts: true }];
+  const base = { format: 1, name: 'Hearth', house_rules: RULES, derived: [{ id: 'hp', label: 'HP max', formula: '10' }, { id: 'mana', formula: '2', alternative: { rule: 'magic', formula: '4' } }] };
+  const changes = (after, before = base) => versionChanges(before, after).filter((c) => c.kind === 'house_rule' || c.change === 'alternative');
+
+  it('lists a rule added, gone, renamed, or starting the other way', () => {
+    const plain = { format: 1, name: 'Hearth', house_rules: RULES };
+    expect(changes({ ...plain, house_rules: [{ id: 'gritty', name: 'Grim', starts: false }, { id: 'markets', name: 'Markets', starts: true }] }, plain)).toEqual([
+      { kind: 'house_rule', change: 'removed', id: 'magic', label: 'Magic' },
+      { kind: 'house_rule', change: 'renamed', id: 'gritty', from: 'Gritty', to: 'Grim' },
+      { kind: 'house_rule', change: 'starts', id: 'gritty', label: 'Grim', to: false },
+      { kind: 'house_rule', change: 'added', id: 'markets', label: 'Markets', to: true },
+    ]);
+  });
+  it('lists a formula\'s alternative added, rewritten, moved to another rule or gone, by the rule\'s name', () => {
+    const with_ = (hp, mana) => ({ ...base, derived: [{ id: 'hp', label: 'HP max', formula: '10', ...(hp ? { alternative: hp } : {}) }, { id: 'mana', formula: '2', ...(mana ? { alternative: mana } : {}) }] });
+    expect(changes(with_({ rule: 'gritty', formula: '6' }, { rule: 'magic', formula: '5' }))).toEqual([
+      { kind: 'formula', change: 'alternative', id: 'hp', label: 'HP max', from: null, to: { rule: 'Gritty', formula: '6' } },
+      { kind: 'formula', change: 'alternative', id: 'mana', label: 'MANA', from: { rule: 'Magic', formula: '4' }, to: { rule: 'Magic', formula: '5' } },
+    ]);
+    expect(changes(with_(null, { rule: 'gritty', formula: '4' }))).toEqual([
+      { kind: 'formula', change: 'alternative', id: 'mana', label: 'MANA', from: { rule: 'Magic', formula: '4' }, to: { rule: 'Gritty', formula: '4' } },
+    ]);
+    expect(changes(with_(null, null))).toEqual([
+      { kind: 'formula', change: 'alternative', id: 'mana', label: 'MANA', from: { rule: 'Magic', formula: '4' }, to: null },
+    ]);
+  });
+
+  it('lists nothing when nothing about them changed, or a system has none', () => {
+    expect(changes(base)).toEqual([]);
+    expect(changes({ format: 1, name: 'Plain' }, { format: 1, name: 'Plain' })).toEqual([]);
+  });
+});

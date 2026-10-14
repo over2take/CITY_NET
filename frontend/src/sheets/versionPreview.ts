@@ -9,7 +9,7 @@ import { PART_ROWS } from './wordsFeatures';
 
 /** One change, as the server lists it (versionDiff.js). */
 export interface Change {
-  kind: 'sheet' | 'formula' | 'stat' | 'health' | 'currency' | 'part' | 'condition' | 'other';
+  kind: 'sheet' | 'formula' | 'stat' | 'health' | 'currency' | 'part' | 'condition' | 'house_rule' | 'other';
   change: string;
   id: string;
   label?: string;
@@ -36,6 +36,7 @@ export const GROUPS: { id: string; label: string; kinds: Change['kind'][] }[] = 
   { id: 'money', label: 'MONEY', kinds: ['currency'] },
   { id: 'features', label: 'FEATURES', kinds: ['part'] },
   { id: 'conditions', label: 'CONDITIONS', kinds: ['condition'] },
+  { id: 'house_rules', label: 'HOUSE RULES', kinds: ['house_rule'] },
 ];
 
 /** The sections that change nothing on a character, in words (versionDiff.js OTHER). */
@@ -83,6 +84,16 @@ export const changeLine = (c: Change): Line | null => {
     case 'part:on': return { key, what: `${partLabel(c.id)} ON`, how: 'It shows again, with everything it held.' };
     case 'condition:removed': return { key, what: upper(c.label), how: 'No longer one of the conditions. A token that has it keeps it, not shown, and it comes back if the condition does.', kept: true };
     case 'condition:added': return { key, what: upper(c.label), how: 'A new condition.' };
+    case 'formula:alternative': {
+      const [from, to] = [c.from, c.to] as ({ rule: string; formula: string } | null)[];
+      return to
+        ? { key, what: upper(c.label), how: `With ${upper(to.rule)} on, worked out as ${to.formula}${from ? ` (was ${from.formula} with ${upper(from.rule)})` : ''}.` }
+        : { key, what: upper(c.label), how: `No longer worked out another way with ${upper(from?.rule)} on.` };
+    }
+    case 'house_rule:added': return { key, what: upper(c.label), how: `A new house rule, starting ${c.to ? 'on' : 'off'}. The GM switches it in the GAME tab.` };
+    case 'house_rule:removed': return { key, what: upper(c.label), how: 'No longer a house rule. What waited on it is always there now.' };
+    case 'house_rule:renamed': return { key, what: `${upper(c.from)} → ${upper(c.to)}`, how: 'Renamed. Whether the table has it on stays as it is.' };
+    case 'house_rule:starts': return { key, what: upper(c.label), how: `A game starting from now begins with it ${c.to ? 'on' : 'off'}. A table that already chose keeps its choice.` };
     default: return null;
   }
 };
@@ -108,8 +119,12 @@ const parentKey = (c: Change): string => {
   if (c.kind === 'condition') return `condition:${c.id}`;
   return `sheet:${c.change}:${c.id}`;
 };
-/** A field can change two ways at once (renamed and GM-only), so a sheet change is keyed by both. */
-const ownKey = (c: Change): string => (c.kind === 'sheet' ? `sheet:${c.change}:${c.id}` : `${c.kind}:${c.id}`);
+/**
+ * A field can change two ways at once (renamed and GM-only), so a sheet change is keyed by both; a
+ * formula's alternative is keyed apart from its own formula's change, and a house rule by each change.
+ */
+const ownKey = (c: Change): string => (c.kind === 'sheet' || c.kind === 'house_rule' || (c.kind === 'formula' && c.change === 'alternative')
+  ? `${c.kind}:${c.change}:${c.id}` : `${c.kind}:${c.id}`);
 
 /** A line BY CHANGE with who it reaches: each character's own value, or on the sample. */
 export interface GroupLine extends Line { who: { name: string; text: string }[] }
@@ -130,7 +145,9 @@ export const byChange = (p: Extract<PublishPreview, { first: false }>): Group[] 
     if (line) lines.set(ownKey(c), { kind: c.kind, line: { ...line, who: [] } });
   }
   for (const { name, c } of people) {
-    const key = parentKey(c);
+    // A number that moves only because its formula's alternative changed goes under that.
+    const own = parentKey(c);
+    const key = !lines.has(own) && c.kind === 'formula' && lines.has(`formula:alternative:${c.id}`) ? `formula:alternative:${c.id}` : own;
     if (!lines.has(key)) {
       // A number that moves because a formula it reads changed.
       lines.set(key, { kind: c.kind, line: { key: `${c.kind}:value:${c.id}`, what: upper(c.label), how: 'Reads a value that changes.', who: [] } });

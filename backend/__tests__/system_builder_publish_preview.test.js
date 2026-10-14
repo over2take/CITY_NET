@@ -166,6 +166,19 @@ describe('the preview', () => {
     ]);
   });
 
+  it('works the numbers out as the game runs them, with the table\'s house rules (4j5c)', async () => {
+    const ruled = (formula) => ({ ...V2, house_rules: [{ id: 'gritty', name: 'GRITTY' }],
+      derived: [{ id: 'defense', label: 'Defense', formula, alternative: { rule: 'gritty', formula: '@agility' } }] });
+    await run(db, 'UPDATE custom_systems SET published = ?, draft = ? WHERE id = ?', [JSON.stringify(ruled('10 + @agility')), JSON.stringify(ruled('10 + @agility + 2')), HEARTH]);
+    const defense = async () => byName((await preview()).body, 'Vex').changes.filter((c) => c.id === 'defense');
+    // GRITTY starts off: the formula as written moves.
+    expect(await defense()).toEqual([{ kind: 'formula', change: 'value', id: 'defense', label: 'Defense', from: 24, to: 26 }]);
+    // The table has it on: the game works Defense out by the alternative, which didn't change.
+    await run(db, `INSERT INTO global_settings (key, value) VALUES ('house_rule:${HEARTH}:gritty', '1')`);
+    expect(await defense()).toEqual([]);
+    const all = (await preview()).body;
+    expect(all.changes.map((c) => `${c.kind} ${c.change} ${c.id}`)).toContain('formula changed defense');
+  });
   it('has nothing to compare a first version with', async () => {
     expect((await preview(NEW)).body).toEqual({ first: true, problems: 0 });
   });
