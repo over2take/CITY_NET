@@ -51,6 +51,9 @@ const requireAdmin = (req, res, next) => {
 const COMPANION_LIMIT = 10;
 const companionLimit = rateLimit({ limit: COMPANION_LIMIT, windowMs: 10 * 60 * 1000 });
 
+/** A system's name as a file name: lower case, words joined by dashes, "system" when nothing is left. */
+const fileSlug = (name) => String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'system';
+
 module.exports = (db, io) => {
   const router = express.Router();
 
@@ -248,16 +251,20 @@ module.exports = (db, io) => {
   // through the importer — so what comes back out is what went in.
   //
   // Unauthenticated like the preview: it is a blank form with nobody's data in it.
+  // A custom system's is made from its own published sheet (4h2b), while it has SHEET IMPORT on.
   router.get('/import/template.pdf', (req, res) => {
     getGameSystem(async (err, system) => {
       if (err) return res.status(500).json({ error: err.message });
-      if (!pdfTemplate.hasTemplate(system)) {
+      const definition = customSystems.definitionOf(system);
+      const custom = !!definition && customSystems.partIn(system, 'sheet_import');
+      if (!pdfTemplate.hasTemplate(system) && !custom) {
         return res.status(400).json({ error: `No import form for ${system} yet` });
       }
       try {
-        const pdf = await pdfTemplate.buildTemplate(system);
+        const { version } = customSystems.list().find((s) => s.id === system) || {};
+        const pdf = custom ? await pdfTemplate.buildCustomTemplate(definition, { version }) : await pdfTemplate.buildTemplate(system);
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `attachment; filename="citynet-${system}-import.pdf"`);
+        res.setHeader('Content-Disposition', `attachment; filename="citynet-${custom ? fileSlug(definition.name) : system}-import.pdf"`);
         res.send(pdf);
       } catch (e) {
         res.status(500).json({ error: 'Could not build the form' });
@@ -278,8 +285,7 @@ module.exports = (db, io) => {
       }
       const { version } = customSystems.list().find((s) => s.id === system) || {};
       const template = jsonTemplate(definition, { version });
-      const file = String(template.system || 'system').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'system';
-      res.setHeader('Content-Disposition', `attachment; filename="citynet-${file}-import.json"`);
+      res.setHeader('Content-Disposition', `attachment; filename="citynet-${fileSlug(template.system)}-import.json"`);
       res.type('application/json').send(JSON.stringify(template, null, 2));
     });
   });

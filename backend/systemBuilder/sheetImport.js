@@ -23,6 +23,9 @@ const optionValue = (o) => String(o.value ?? o.label);
 
 /** The inventory's one field, whichever section holds it. */
 const INVENTORY = 'inventory';
+/** The blank PDF form's inventory lines (4h2b): a name and a quantity each, named inventory_<n>_name and _qty. */
+const INVENTORY_ROWS = 12;
+const ROW = /^inventory_(\d{1,2})_(name|qty)$/;
 
 /** Each stat's range, by id: printed beside its box. */
 const rangesOf = (definition) => new Map(list(definition && definition.stats)
@@ -66,10 +69,30 @@ const sheetFields = (definition) => {
   return { ask, left };
 };
 
-/** A JSON template's own fields, unwrapped, or the candidates as they came. */
+/**
+ * The PDF form's numbered inventory lines gathered into the inventory's list, in order, a missing
+ * quantity read as one (a line with no name is dropped with the rest, below); an inventory already
+ * given as a whole wins.
+ */
+const withRows = (candidates) => {
+  const rows = new Map();
+  const rest = {};
+  for (const [key, value] of Object.entries(candidates)) {
+    const m = ROW.exec(key);
+    if (!m) { rest[key] = value; continue; }
+    const n = Number(m[1]);
+    rows.set(n, { ...(rows.get(n) || {}), [m[2]]: value });
+  }
+  const items = [...rows.entries()].sort((a, b) => a[0] - b[0])
+    .map(([, r]) => ({ name: String(r.name ?? '').trim(), qty: Math.max(1, Math.floor(Number(r.qty)) || 1) }));
+  if (items.length && rest[INVENTORY] === undefined) rest[INVENTORY] = items;
+  return rest;
+};
+
+/** A JSON template's own fields, unwrapped, or the candidates as they came; a form's lines gathered. */
 const candidatesOf = (raw) => {
   if (!isPlainObject(raw)) return {};
-  return isPlainObject(raw.fields) && (raw.help !== undefined || raw.instructions !== undefined || raw.system !== undefined) ? raw.fields : raw;
+  return withRows(isPlainObject(raw.fields) && (raw.help !== undefined || raw.instructions !== undefined || raw.system !== undefined) ? raw.fields : raw);
 };
 
 /**
@@ -173,4 +196,4 @@ const jsonTemplate = (definition, { name, version } = {}) => {
   };
 };
 
-module.exports = { INVENTORY, sheetFields, customImporter, jsonTemplate, norm };
+module.exports = { INVENTORY, INVENTORY_ROWS, sheetFields, customImporter, jsonTemplate, norm };

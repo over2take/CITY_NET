@@ -7,6 +7,7 @@ const { authenticate, optionalAuthenticate, requireMainAdmin } = require('../mid
 const { LIMITS, rejectFormat, uploadErrors } = require('../middleware/uploadConstraints');
 const store = require('../systemBuilder/store');
 const { previewPublish } = require('../systemBuilder/publishPreview');
+const { buildCustomTemplate } = require('../sheets/pdfTemplate');
 const runtime = require('../systemBuilder/runtime');
 const { checkDefinition } = require('../systemBuilder/definition');
 const { previewDerived } = require('../systemBuilder/derived');
@@ -252,6 +253,24 @@ module.exports = (db, io = null) => {
     res.json({ sheet: effectiveSheet(definition), starter: starterSheet(definition) });
   });
 
+  /**
+   * The blank form a draft would give players (4h2b), for the builder's CHARACTER SHEET page to
+   * download before publishing: the same form IMPORT hands out once it is published. Changes nothing.
+   */
+  router.post('/form.pdf', gm, async (req, res) => {
+    const definition = req.body && req.body.definition;
+    const checked = checkDefinition(definition);
+    if (checked.fatal) return res.status(400).json({ error: checked.fatal });
+    try {
+      const pdf = await buildCustomTemplate(definition);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', 'attachment; filename="citynet-draft-form.pdf"');
+      res.send(pdf);
+    } catch (e) {
+      console.error('[systems] form', e.message);
+      res.status(500).json({ error: 'Could not build the form' });
+    }
+  });
   // What installing a file would do, changing nothing. The file arrives as text so its size is
   // checked before it is parsed.
   router.post('/install/preview', gm, (req, res) => {

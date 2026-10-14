@@ -261,4 +261,155 @@ async function buildTemplate(system) {
   return Buffer.from(await pdf.save());
 }
 
-module.exports = { LAYOUTS, hasTemplate, layoutFor, labelsFor, buildTemplate };
+// ─── A custom system's form (4h2b) ──────────────────────────────────────────
+//
+// Made from the system's own sheet (approved mockup docs/mockups/sheet-import.html, 2026-10-13):
+// every field a player fills in (systemBuilder/sheetImport.js sheetFields), tabs as headings,
+// sections as they are on the sheet, each box named by the field's id so the custom importer maps
+// it straight back. A choice is a dropdown of its options; long text a tall box; a stat's range
+// and a choice's options printed under the box; the inventory as numbered lines. What is not on
+// the form, and why, is said at the foot.
+
+/** The PDF's standard font draws Latin-1 only: anything else a GM typed becomes a question mark. */
+const printable = (s) => String(s ?? '').replace(/[^\x20-\x7E\xA0-\xFF]/g, '?');
+
+/** What a box is for, printed small under it. */
+const hintOf = (f) => {
+  if (f.type === 'select') return `One of: ${f.options.map((o) => o.label).join(', ')}`;
+  if (f.min !== undefined && f.max !== undefined) return `${f.min} to ${f.max}`;
+  if (f.min !== undefined) return `At least ${f.min}`;
+  if (f.max !== undefined) return `At most ${f.max}`;
+  return '';
+};
+
+const LEFT_SAYS = { worked_out: 'worked out by the game', elsewhere: 'kept elsewhere in CITY_NET', gm_only: 'filled in by the GM' };
+
+/** The form's last line: what is not on it, and why. Empty when everything is. */
+const leftLine = (left) => {
+  const parts = Object.entries(LEFT_SAYS)
+    .map(([why, says]) => [left.filter((l) => l.why === why).map((l) => l.label), says])
+    .filter(([labels]) => labels.length)
+    .map(([labels, says]) => `${labels.join(', ')} (${says})`);
+  return parts.length ? printable(`Not on this form: ${parts.join('; ')}.`) : '';
+};
+
+/**
+ * The blank form for a custom system's `definition`, named `name` at version `version`. Each box is
+ * named by its field's id (inventory_<n>_name and _qty for the inventory's lines), the contract the
+ * round-trip test walks.
+ */
+async function buildCustomTemplate(definition, { name, version } = {}) {
+  // Required here rather than at the top: it is a builder module, and this file loads first.
+  const { sheetFields, INVENTORY_ROWS } = require('../systemBuilder/sheetImport');
+  const { ask, left } = sheetFields(definition);
+  const title = printable(name || (definition && definition.name) || 'System').toUpperCase();
+
+  const pdf = await PDFDocument.create();
+  pdf.setTitle(`${title} character sheet`);
+  pdf.setSubject('Fill this in, save it, and upload it in CITY_NET: your sheet, IMPORT.');
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const form = pdf.getForm();
+  const grey = rgb(0.35, 0.35, 0.35);
+
+  let page = pdf.addPage([PAGE.w, PAGE.h]);
+  let y = PAGE.h - MARGIN;
+  const room = (h) => { if (y - h < MARGIN) { page = pdf.addPage([PAGE.w, PAGE.h]); y = PAGE.h - MARGIN; } };
+
+  page.drawText(title, { x: MARGIN, y: y - 14, size: 16, font: bold });
+  page.drawText(`CHARACTER SHEET${Number.isSafeInteger(version) ? ` - v${version}` : ''} - fill in, save, and upload in CITY_NET: your sheet, IMPORT`,
+    { x: MARGIN, y: y - 28, size: 8, font, color: grey });
+  y -= 44;
+
+  const box = (id, x, width, height, multiline) => {
+    const field = form.createTextField(id);
+    if (multiline) field.enableMultiline();
+    field.setText('');
+    field.addToPage(page, { x, y: y - 12 - height, width, height, borderWidth: 0.5, borderColor: rgb(0.55, 0.55, 0.55), backgroundColor: rgb(0.93, 0.95, 1) });
+  };
+
+  let tab;
+  let section;
+  let col = 0;
+  const rowH = (items) => 16 + Math.max(...items.map((f) => (f.type === 'textarea' ? 48 : 14))) + (items.some((f) => hintOf(f)) ? 12 : 4);
+  let row = [];
+  const flush = () => {
+    if (!row.length) return;
+    const h = rowH(row.map((r) => r.f));
+    room(h);
+    row.forEach(({ f, at, span }) => {
+      const x = MARGIN + at * COL_W;
+      const width = span * COL_W - 12;
+      page.drawText(printable(f.label).toUpperCase(), { x, y: y - 9, size: 7, font, color: grey });
+      const height = f.type === 'textarea' ? 48 : 14;
+      if (f.type === 'select') {
+        const field = form.createDropdown(f.id);
+        field.addOptions(f.options.map((o) => printable(o.label)));
+        field.addToPage(page, { x, y: y - 12 - height, width, height, borderWidth: 0.5, borderColor: rgb(0.55, 0.55, 0.55), backgroundColor: rgb(0.93, 0.95, 1) });
+      } else box(f.id, x, width, height, f.type === 'textarea');
+      const hint = hintOf(f);
+      if (hint) page.drawText(printable(hint).slice(0, 90), { x, y: y - 22 - height, size: 6, font, color: grey });
+    });
+    y -= h;
+    row = [];
+    col = 0;
+  };
+  // A heading keeps what follows it close: a section its first row, a tab its first section's
+  // heading and row too, so neither is left alone at the foot of a page.
+  const heading = (text, size, keep) => {
+    flush();
+    room(size + keep);
+    page.drawText(printable(text).toUpperCase(), { x: MARGIN, y: y - size, size, font: bold });
+    if (size < 12) page.drawLine({ start: { x: MARGIN, y: y - size - 3 }, end: { x: PAGE.w - MARGIN, y: y - size - 3 }, thickness: 0.5 });
+    y -= size + 12;
+  };
+
+  for (const f of ask) {
+    if (f.tab !== tab) { tab = f.tab; section = undefined; if (tab) heading(tab, 12, 120); }
+    if (f.section !== section) { section = f.section; heading(section, 9, 72); }
+    if (f.type === 'inventory') {
+      flush();
+      const columns = () => {
+        page.drawText('ITEM', { x: MARGIN, y: y - 9, size: 7, font, color: grey });
+        page.drawText('HOW MANY', { x: MARGIN + COL_W * 2, y: y - 9, size: 7, font, color: grey });
+        y -= 4;
+      };
+      columns();
+      for (let n = 1; n <= INVENTORY_ROWS; n += 1) {
+        if (y - 34 < MARGIN) { room(PAGE.h); columns(); }
+        box(`inventory_${n}_name`, MARGIN, COL_W * 2 - 12, 14, false);
+        box(`inventory_${n}_qty`, MARGIN + COL_W * 2, COL_W - 12, 14, false);
+        y -= 20;
+      }
+      room(20);
+      page.drawText('One item per line.', { x: MARGIN, y: y - 14, size: 6, font, color: grey });
+      y -= 22;
+      continue;
+    }
+    // Long text takes a whole row; a select two columns; anything else one.
+    const span = f.type === 'textarea' ? COLS : f.type === 'select' ? 2 : 1;
+    if (col + span > COLS) flush();
+    row.push({ f, at: col, span });
+    col += span;
+    if (col >= COLS) flush();
+  }
+  flush();
+
+  const text = leftLine(left);
+  if (text) {
+    const words = text.split(' ');
+    const wrapped = [];
+    let line = '';
+    for (const w of words) {
+      if (font.widthOfTextAtSize(`${line} ${w}`, 7) > PAGE.w - MARGIN * 2 && line) { wrapped.push(line); line = w; } else line = line ? `${line} ${w}` : w;
+    }
+    wrapped.push(line);
+    room(12 + wrapped.length * 10);
+    page.drawLine({ start: { x: MARGIN, y: y - 2 }, end: { x: PAGE.w - MARGIN, y: y - 2 }, thickness: 0.5, color: grey });
+    wrapped.forEach((l, i) => page.drawText(l, { x: MARGIN, y: y - 12 - i * 10, size: 7, font, color: grey }));
+  }
+
+  return Buffer.from(await pdf.save());
+}
+
+module.exports = { LAYOUTS, hasTemplate, layoutFor, labelsFor, buildTemplate, buildCustomTemplate, printable, hintOf, leftLine };
