@@ -54,8 +54,9 @@ const STANDARD = [
 ];
 const STANDARD_IDS = new Set(STANDARD.map((c) => c.id));
 
-const STANDARD_KEYS = new Set(['on', 'name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers']);
-const OWN_KEYS = new Set(['name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers']);
+// only_with, the house rule a condition waits on, is houseRules.js's to check.
+const STANDARD_KEYS = new Set(['on', 'name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with']);
+const OWN_KEYS = new Set(['name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
