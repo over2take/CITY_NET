@@ -113,6 +113,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Importing a custom system's sheet, on the server.** A custom system now has an importer made
+  from its own sheet, so a character filled in outside CITY_NET can be brought in: a JSON template
+  to download and fill in, or a pasted stat block. The preview says what it left and why (worked
+  out by the game, kept elsewhere, GM-only, not one of the choices). The windows come next.
 - **PUBLISH shows what changes first.** From a system's second version on, PUBLISH in the builder
   stops to show what the new version changes, by change or by character: fields that go (their
   values kept), numbers old to new for each character or on the sample values, money, features and
