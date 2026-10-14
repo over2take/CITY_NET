@@ -115,9 +115,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
-- **House rules for custom systems, in the format.** A system can list its own house rules, and a part, a sheet
-  section, a condition or a formula's alternative can wait on one; the server checks them all. The builder's page
-  and the GAME tab's switches come next.
+- **House rules for custom systems, in the format and in the game.** A system can list its own house rules, and a
+  part, a sheet section, a condition or a formula's alternative can wait on one; the server checks them all and runs
+  the game with them, hiding what waits on a rule that is off and never deleting it. The builder's page and the GAME
+  tab's switches come next.
 - **A tour of the builder.** The first time the builder opens, eight short steps walk down its rail, lighting
   each page they explain. Skip it or finish it and it stays away, on any browser; START THE TOUR on HELP plays it again.
 - **HELP in the builder.** A HELP page on the builder's rail: how each page works with a GO TO button,

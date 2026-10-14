@@ -4,13 +4,16 @@
  * formula's alternative), as the definition checks see them.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { createRequire } from 'module';
+import { makeTestDb, run } from './helpers/testDb.js';
 
 const require_ = createRequire(import.meta.url);
 const { checkDefinition } = require_('../systemBuilder/definition');
 const { starterSheet } = require_('../systemBuilder/sheet');
-const { houseRuleIdsOf, LIMITS } = require_('../systemBuilder/houseRules');
+const { houseRuleIdsOf, houseRulesOn, withHouseRules, choicesFrom, houseRuleKey, LIMITS } = require_('../systemBuilder/houseRules');
+const runtime = require_('../systemBuilder/runtime');
+const { conditionsOf } = require_('../systemBuilder/conditions');
 
 const RULES = [
   { id: 'magic', name: 'MAGIC', description: 'Characters can learn spells.', starts: false },
@@ -172,5 +175,129 @@ describe('a formula\'s alternative', () => {
       { id: 'a', formula: '1', alternative: { rule: 'magic', formula: '@con + 2' } },
       { id: 'b', formula: '@a * 2', alternative: { rule: 'gritty', formula: '@a' } },
     ]))).toEqual([]);
+  });
+});
+
+describe('which are on', () => {
+  it('as each starts, until the table chooses', () => {
+    expect([...houseRulesOn(hearth())]).toEqual(['markets']);
+    expect([...houseRulesOn(hearth(), { magic: true, markets: false })]).toEqual(['magic']);
+    expect([...houseRulesOn(hearth(), { nope: true, gritty: 'yes' })]).toEqual(['markets']);
+    expect([...houseRulesOn(BASE)]).toEqual([]);
+  });
+
+  it('the table\'s choices for one system, from the settings', () => {
+    const rows = [
+      { key: houseRuleKey('sys_a', 'magic'), value: '1' }, { key: 'house_rule:sys_a:gritty', value: '0' },
+      { key: 'house_rule:sys_a:odd', value: 'yes' }, { key: 'house_rule:sys_b:magic', value: '0' }, { key: 'game_system', value: 'sys_a' },
+    ];
+    expect(houseRuleKey('sys_a', 'magic')).toBe('house_rule:sys_a:magic');
+    expect(choicesFrom(rows, 'sys_a')).toEqual({ magic: true, gritty: false });
+    expect(choicesFrom(rows, 'sys_b')).toEqual({ magic: false });
+    expect(choicesFrom(null, 'sys_a')).toEqual({});
+  });
+});
+
+describe('the game, with its house rules applied', () => {
+  /** HEARTH on two tabs: SPELLS (and its tab) waits on MAGIC. */
+  const tabbed = () => {
+    const def = hearth();
+    def.sheet = { ...def.sheet, tabs: ['STATS', 'MAGIC'], header: { nameField: 'name', subtitleFields: ['concept', 'spell'] },
+      sections: [...def.sheet.sections.map(({ only_with, ...s }) => ({ ...s, tab: 'STATS' })),
+        { id: 'spells', label: 'SPELLS', layout: 'list', tab: 'MAGIC', only_with: 'magic', fields: [{ id: 'spell', label: 'Spell', type: 'text' }] }] };
+    return def;
+  };
+
+  it('hides what waits on a rule that is off, never deleting it', () => {
+    const def = tabbed();
+    const stored = JSON.stringify(def);
+    const off = withHouseRules(def, new Set());
+    expect(JSON.stringify(def)).toBe(stored);
+    expect(off.parts.shops).toEqual({ on: false, only_with: 'markets' });
+    expect(off.sheet.sections.map((s) => s.id)).not.toContain('spells');
+    expect(off.sheet.tabs).toEqual(['STATS']);
+    expect(off.sheet.header.subtitleFields).toEqual(['concept']);
+    expect(off.npc.sheet.sections).toHaveLength(def.npc.sheet.sections.length - 1);
+    expect(conditionsOf(off).map((c) => c.id)).not.toContain('hexed');
+    expect(conditionsOf(off).map((c) => c.id)).not.toContain('prone');
+    expect(off.conditions.prone).toEqual({ only_with: 'gritty', on: false });
+    expect(off.derived[0].formula).toBe('10 + @con');
+  });
+
+  it('and shows it all again with the rules on, alternatives in their formulas\' place', () => {
+    const def = tabbed();
+    const on = withHouseRules(def, new Set(['magic', 'gritty', 'markets']));
+    expect(on.parts.shops).toEqual({ on: true, only_with: 'markets' });
+    expect(on.sheet).toBe(def.sheet);
+    expect(on.npc.sheet).toBe(def.npc.sheet);
+    expect(conditionsOf(on).map((c) => c.id)).toEqual(conditionsOf(def).map((c) => c.id));
+    expect(on.derived[0].formula).toBe('@con');
+    expect(on.derived[1]).toBe(def.derived[1]);
+  });
+
+  it('drops every tab when nothing is left on any, and leaves a system with no rules as it is', () => {
+    const def = tabbed();
+    def.sheet.sections = def.sheet.sections.map((s) => ({ ...s, only_with: 'magic' }));
+    const off = withHouseRules(def, new Set());
+    expect(off.sheet.sections).toEqual([]);
+    expect(off.sheet).not.toHaveProperty('tabs');
+    expect(withHouseRules(BASE, new Set())).toEqual(BASE);
+    expect(withHouseRules(null, new Set())).toBeNull();
+  });
+
+  describe('as the running game loads it', () => {
+    const HEARTH = 'sys_aaaaaaaaaaaaaaaa';
+    let db;
+    beforeEach(async () => {
+      db = await makeTestDb();
+      const def = JSON.stringify(tabbed());
+      await run(db, 'INSERT INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 1)', [HEARTH, 'Hearth', def, def]);
+    });
+    const choose = (rule, value) => run(db, 'INSERT OR REPLACE INTO global_settings (key, value) VALUES (?, ?)', [houseRuleKey(HEARTH, rule), value]);
+    const load = () => new Promise((resolve) => runtime.load(db, resolve));
+    const refresh = () => new Promise((resolve) => runtime.refresh(db, HEARTH, resolve));
+
+    it('runs each rule as it starts, and says so', async () => {
+      await load();
+      expect(runtime.houseRulesIn(HEARTH)).toEqual([
+        { id: 'magic', name: 'MAGIC', description: 'Characters can learn spells.', starts: false, on: false },
+        { id: 'gritty', name: 'GRITTY WOUNDS', description: '', starts: false, on: false },
+        { id: 'markets', name: 'TOWN MARKETS', description: '', starts: true, on: true },
+      ]);
+      expect(runtime.render(HEARTH).house_rules).toEqual(runtime.houseRulesIn(HEARTH));
+      expect(runtime.partIn(HEARTH, 'shops')).toBe(true);
+      expect(runtime.render(HEARTH).sheet.tabs).toEqual(['STATS']);
+      expect(runtime.conditionsIn(HEARTH).map((c) => c.id)).not.toContain('hexed');
+      const data = { con: 3 };
+      runtime.meta(HEARTH).recompute(data);
+      expect(data.max_hp).toBe(13);
+    });
+
+    it('runs the table\'s choice, read again when one changes', async () => {
+      await choose('magic', '1');
+      await choose('markets', '0');
+      await load();
+      expect(runtime.houseRulesIn(HEARTH).filter((r) => r.on).map((r) => r.id)).toEqual(['magic']);
+      expect(runtime.partIn(HEARTH, 'shops')).toBe(false);
+      expect(runtime.render(HEARTH).sheet.tabs).toEqual(['STATS', 'MAGIC']);
+      expect(runtime.conditionsIn(HEARTH).map((c) => c.id)).toContain('hexed');
+      await choose('gritty', '1');
+      await refresh();
+      const data = { con: 3 };
+      runtime.meta(HEARTH).recompute(data);
+      expect(data.max_hp).toBe(3);
+      expect(runtime.conditionsIn(HEARTH).map((c) => c.id)).toContain('prone');
+      await choose('gritty', '0');
+      await refresh();
+      const again = { con: 3 };
+      runtime.meta(HEARTH).recompute(again);
+      expect(again.max_hp).toBe(13);
+    });
+
+    it('has none for a built-in game or a system it hasn\'t loaded', async () => {
+      await load();
+      expect(runtime.houseRulesIn('cities_without_number')).toEqual([]);
+      expect(runtime.houseRulesIn('sys_zzzzzzzzzzzzzzzz')).toEqual([]);
+    });
   });
 });

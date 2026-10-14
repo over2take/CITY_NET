@@ -8,6 +8,10 @@
 // which would make a circle (templates -> here -> the engine -> rules -> templates).
 //
 // Also the render copy the browser draws a sheet from: layout and words, never formulas.
+//
+// A system runs with its house rules applied (houseRules.js, 4j): the table's choice for each, kept
+// in global_settings, or how each starts. Everything here reads the definition as it runs, so a part,
+// section or condition waiting on a rule that is off is hidden from every answer at once.
 
 const { compileSystem } = require('./derived');
 const { effectiveSheet, fieldsOf } = require('./sheet');
@@ -21,6 +25,7 @@ const { conditionsOf } = require('./conditions');
 const { loadTableConditions, tableConditionsOf } = require('./tableConditions');
 const { bankOf } = require('./bank');
 const { distanceOf } = require('./core');
+const { houseRulesOf, houseRulesOn, withHouseRules, choicesFrom } = require('./houseRules');
 const templates = require('../sheets/templates');
 const npcTiers = require('../sheets/npcTiers');
 
@@ -93,8 +98,13 @@ const tiersFor = (definition, recompute) => {
  */
 const tiersWhenOn = (definition) => (partOn(definition, 'npc_tiers') ? tiersOf(definition) : []);
 
-/** What the browser draws a sheet from: no formulas, lookups or rule names. */
-const renderOf = (id, definition) => ({
+/** A system's house rules as the GAME tab offers them: each with whether it is on now. */
+const houseRuleList = (definition, on) => houseRulesOf(definition).map((r) => ({
+  id: r.id, name: r.name, description: typeof r.description === 'string' ? r.description : '', starts: r.starts === true, on: on.has(r.id),
+}));
+
+/** What the browser draws a sheet from: no formulas, lookups or rule names. `on` is its house rules on. */
+const renderOf = (id, definition, on = new Set()) => ({
   id,
   name: definition.name,
   // The terms this system renamed, every form filled in. A term it left alone is absent, so
@@ -116,34 +126,49 @@ const renderOf = (id, definition) => ({
     sheet: definition.npc && definition.npc.sheet ? npcSheetOf(definition) : null,
     tiers: tiersWhenOn(definition).map((t) => ({ id: t.id, label: t.label })),
   },
+  house_rules: houseRuleList(definition, on),
 });
 
-const put = (id, publishedText, version) => {
-  const definition = parse(publishedText);
-  if (!definition) { loaded.delete(id); return; }
+/** A published system, held as the game runs it: its house rules applied, by the table's `chosen` (rule -> on). */
+const put = (id, publishedText, version, chosen = {}) => {
+  const published = parse(publishedText);
+  if (!published) { loaded.delete(id); return; }
+  const on = houseRulesOn(published, chosen);
+  const definition = withHouseRules(published, on);
   const meta = metaOf(definition);
   loaded.set(id, {
     name: definition.name, version: version || 0, definition, meta,
-    render: renderOf(id, definition), tiers: tiersFor(definition, meta.recompute),
+    render: renderOf(id, definition, on), tiers: tiersFor(definition, meta.recompute),
   });
 };
+
+/** The table's house-rule choices, every system's (houseRules.js choicesFrom reads one system's). cb(rows). */
+const readChoices = (db, cb) => db.all(`SELECT key, value FROM global_settings WHERE key LIKE 'house_rule:%'`, [], (err, rows) => {
+  if (err) console.error('[systems] Could not read house rules:', err.message);
+  cb(err ? [] : rows);
+});
 
 /** Load every published system, and the built-in games' own conditions. cb(err, count). */
 const load = (db, cb = () => {}) => {
   db.all('SELECT id, published, version FROM custom_systems WHERE published IS NOT NULL AND deleted_at IS NULL', [], (err, rows) => {
     if (err) { console.error('[systems] Could not load custom systems:', err.message); return cb(err); }
-    loaded.clear();
-    for (const r of rows) put(r.id, r.published, r.version);
-    loadTableConditions(db, () => cb(null, loaded.size));
+    readChoices(db, (choices) => {
+      loaded.clear();
+      for (const r of rows) put(r.id, r.published, r.version, choicesFrom(choices, r.id));
+      loadTableConditions(db, () => cb(null, loaded.size));
+    });
   });
 };
 
-/** Reload one system after it is published or deleted. cb(err). */
+/** Reload one system after it is published or deleted, or one of its house rules is switched. cb(err). */
 const refresh = (db, id, cb = () => {}) => {
   db.get('SELECT published, version FROM custom_systems WHERE id = ? AND deleted_at IS NULL', [id], (err, row) => {
     if (err) return cb(err);
-    if (row && row.published) put(id, row.published, row.version); else loaded.delete(id);
-    cb(null);
+    if (!row || !row.published) { loaded.delete(id); return cb(null); }
+    return readChoices(db, (choices) => {
+      put(id, row.published, row.version, choicesFrom(choices, id));
+      cb(null);
+    });
   });
 };
 
@@ -232,4 +257,7 @@ const conditionsIn = (system) => conditionsOf(loaded.has(system)
  */
 const definitionOf = (system) => (loaded.has(system) ? loaded.get(system).definition : null);
 
-module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, catalogueCurrencyIn, conditionsIn, definitionOf, metaOf, renderOf };
+/** A published system's house rules, each with whether the table has it on; empty for any other. */
+const houseRulesIn = (system) => (loaded.has(system) ? loaded.get(system).render.house_rules : []);
+
+module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, catalogueCurrencyIn, conditionsIn, definitionOf, houseRulesIn, metaOf, renderOf };
