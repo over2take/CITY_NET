@@ -113,6 +113,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A fillable PDF for any custom system.** The blank form IMPORT hands out is now made for custom
+  systems too, from the system's own sheet: a box for every field a player fills in, a dropdown for
+  each choice, lines for the inventory. Filled in, saved and uploaded, it comes straight back in.
 - **Importing a custom system's sheet, on the server.** A custom system now has an importer made
   from its own sheet, so a character filled in outside CITY_NET can be brought in: a JSON template
   to download and fill in, or a pasted stat block. The preview says what it left and why (worked

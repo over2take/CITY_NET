@@ -118,6 +118,13 @@ describe('the importer', () => {
     expect(mapFields({ inventory: '  ' }).mapped).toEqual({});
   });
 
+  it('gathers the PDF form\'s numbered inventory lines, in order, unless the inventory came whole', () => {
+    const lines = { inventory_10_name: 'Rations', inventory_10_qty: '3', inventory_2_name: 'Rope', inventory_2_qty: 'x', inventory_3_qty: '4' };
+    expect(JSON.parse(mapFields(lines).mapped.inventory)).toEqual([{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }]);
+    expect(mapFields({ ...lines, inventory: 'Lantern' }).mapped.inventory).toBe(JSON.stringify([{ name: 'Lantern', qty: 1, enc: '', bundled: false, carry: 'stowed', location: '' }]));
+    expect(mapFields({ inventory_3_qty: '4' }).mapped).toEqual({});
+    expect(mapFields({ inventory_3_qty: '4' }).unmapped).toEqual({});
+  });
   it('unwraps its own JSON template once filled in, and reads any other object as it is', () => {
     const filled = jsonTemplate(HEARTH, { name: 'Hearth', version: 3 });
     filled.fields.name = 'Vex';
