@@ -347,6 +347,81 @@ describe('update routes', () => {
   });
 });
 
+// ─── release channel (LOOK FOR DEV BUILDS) ───────────────────────────────────
+
+/** The wiring of the box's two routes; updateChannel.test.js covers what a switch does. */
+describe('release channel routes', () => {
+  const updateChannel = createRequire(import.meta.url)('../updateChannel.js');
+  const READY = { ok: true, labels: { workingDir: '/opt/citynet', configFile: '/opt/citynet/docker-compose.yml', projectName: 'citynet' } };
+  let was;
+  beforeEach(() => { was = process.env.IMAGE_TAG; });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    if (was === undefined) delete process.env.IMAGE_TAG; else process.env.IMAGE_TAG = was;
+  });
+  const put = (body, token = ADMIN_TOKEN) => request(app).put('/api/admin/update/channel').set('Authorization', `Bearer ${token}`).send(body);
+
+  it('GET says which channel this is, and that a stack without docker cannot switch, with the line to set by hand', async () => {
+    process.env.IMAGE_TAG = 'dev';
+    const res = await request(app).get('/api/admin/update/channel').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ channel: 'dev', dev: true, canSwitch: false });
+    expect(res.body.manual).toMatch(/IMAGE_TAG=dev/);
+  });
+
+  it('GET reads a stack that can switch as one that can', async () => {
+    delete process.env.IMAGE_TAG;
+    vi.spyOn(updater, 'preflight').mockReturnValue(READY);
+    const res = await request(app).get('/api/admin/update/channel').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(res.body).toEqual({ channel: 'latest', dev: false, canSwitch: true });
+  });
+
+  it('PUT switches through updateChannel and tells the copy by name only', async () => {
+    vi.spyOn(updater, 'preflight').mockReturnValue(READY);
+    const switched = vi.spyOn(updateChannel, 'switchChannel').mockResolvedValue({ channel: 'dev', backup: '/app/data/city.db.before-dev-builds-2026-10-14T21-05-09.bak' });
+    const res = await put({ dev: true });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ channel: 'dev', dev: true, backup: 'city.db.before-dev-builds-2026-10-14T21-05-09.bak' });
+    expect(switched).toHaveBeenCalledWith(expect.objectContaining({ tag: 'dev', labels: READY.labels }));
+    await put({ dev: false });
+    expect(switched).toHaveBeenLastCalledWith(expect.objectContaining({ tag: 'latest' }));
+  });
+
+  it('PUT answers a switch that failed as one that did not happen', async () => {
+    vi.spyOn(updater, 'preflight').mockReturnValue(READY);
+    vi.spyOn(updateChannel, 'switchChannel').mockRejectedValue(new Error('the channel helper exited with code 1'));
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await put({ dev: true });
+    expect(res.status).toBe(500);
+    expect(res.body.error).toMatch(/Nothing was switched/);
+  });
+
+  it('PUT refuses where the app cannot switch, saying what to set by hand', async () => {
+    const switched = vi.spyOn(updateChannel, 'switchChannel');
+    const res = await put({ dev: true });
+    expect(res.status).toBe(409);
+    expect(res.body.manual).toMatch(/IMAGE_TAG=dev/);
+    expect(switched).not.toHaveBeenCalled();
+  });
+
+  it('PUT refuses while an update is running, and anything but true or false', async () => {
+    const switched = vi.spyOn(updateChannel, 'switchChannel');
+    expect((await put({ dev: 'yes' })).status).toBe(400);
+    expect((await put({})).status).toBe(400);
+    vi.spyOn(updater, 'preflight').mockReturnValue(READY);
+    vi.spyOn(updater, 'isRunning').mockReturnValue(true);
+    expect((await put({ dev: true })).status).toBe(409);
+    expect(switched).not.toHaveBeenCalled();
+  });
+
+  it('only the primary admin, signed in', async () => {
+    const tempToken = jwt.sign({ id: 2, username: 'temp', role: 'admin', isTemporary: true }, 'test-secret');
+    expect((await put({ dev: true }, tempToken)).status).toBe(401);
+    expect((await request(app).get('/api/admin/update/channel').set('Authorization', `Bearer ${tempToken}`)).status).toBe(401);
+    expect((await request(app).put('/api/admin/update/channel').send({ dev: true })).status).toBe(401);
+  });
+});
+
 // ─── check-update ─────────────────────────────────────────────────────────────
 
 /**
