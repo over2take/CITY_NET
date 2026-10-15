@@ -8,7 +8,9 @@ const { insertLocations } = require('../buildings/locationRows');
 const SECRET = process.env.JWT_SECRET;
 let currentController = 'GM';
 
+const path = require('path');
 const updater = require('../updater');
+const updateChannel = require('../updateChannel');
 
 module.exports = (db, io, { emitUpdate, recordAction }) => {
   const router = express.Router();
@@ -350,6 +352,47 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       return res.status(409).json({ error: 'An update is already running.' });
     }
     res.json({ message: 'Update started' });
+  });
+
+  // --- Release channel: the LOOK FOR DEV BUILDS box (updateChannel.js) ---
+  //
+  // What the box shows: whether this deployment follows dev builds, and whether the app can
+  // switch it. Where it can't (no Docker socket, say), `manual` is the line to set by hand.
+  const MANUAL_DEV = 'Set IMAGE_TAG=dev in backend/.env and in the .env beside docker-compose.yml, then run "docker compose pull && docker compose up -d".';
+  router.get('/update/channel', authenticate, (req, res) => {
+    if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
+    const check = updater.preflight();
+    res.json({
+      channel: updater.imageTag(),
+      dev: updater.allowsDevBuilds(),
+      canSwitch: check.ok,
+      ...(check.ok ? {} : { reason: check.error, manual: MANUAL_DEV }),
+    });
+  });
+
+  // Tick or untick it: { dev: true | false }. Turning dev on copies the database first.
+  let switching = false;
+  router.put('/update/channel', authenticate, (req, res) => {
+    if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
+    const { dev } = req.body || {};
+    if (typeof dev !== 'boolean') return res.status(400).json({ error: 'dev is true or false' });
+    // Not while an update is pulling or restarting: it reads the channel as it goes.
+    if (switching || updater.isRunning()) return res.status(409).json({ error: 'An update is running. Try again when it has finished.' });
+    const check = updater.preflight();
+    if (!check.ok) return res.status(409).json({ error: check.error, manual: MANUAL_DEV });
+    switching = true;
+    updateChannel.switchChannel({
+      tag: dev ? 'dev' : 'latest',
+      labels: check.labels,
+      db,
+      dbPath: process.env.DB_PATH || path.resolve(__dirname, '..', 'city.db'),
+    }).then(({ channel, backup }) => {
+      // The copy's name, not where it is on the host.
+      res.json({ channel, dev: channel === 'dev', backup: backup ? path.basename(backup) : null });
+    }, (err) => {
+      console.error('[update channel]', err.message);
+      res.status(500).json({ error: 'The channel could not be changed. Nothing was switched.' });
+    }).finally(() => { switching = false; });
   });
 
   // --- Update progress ---
