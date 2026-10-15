@@ -72,6 +72,25 @@ If that trust is more than you want to extend:
 
 On startup the backend checks for missing required env vars and logs a warning if any are absent. If you see a warning banner on login, compare your `backend/.env` against `backend/.env.example` and add any missing keys.
 
+### Testing a development build (1.14.6+)
+
+Development builds are the next version before it is released. They are only offered to a
+deployment that asks for them, and they may break.
+
+1. **Update to 1.14.6 or later** as usual, with **CLICK TO UPDATE**.
+2. Open **SYSTEM_INFO** and tick **LOOK FOR DEV BUILDS** under "Check for update", then **TURN ON**.
+   The app copies your database to `backend/data/city.db.before-dev-builds-<time>.bak` as a
+   precaution, and sets `IMAGE_TAG=dev` in `backend/.env` and in the `.env` beside
+   `docker-compose.yml`. Only that line changes.
+3. Press **Check for update**. The newest development build is offered with the usual update
+   button, and each later one as it is published.
+
+To go back, untick the box. The app never installs an older version, so you stay on the build you
+have until a stable release newer than it comes out, and that is offered as usual.
+
+Without the Docker socket the box can't change the files and says so. Set `IMAGE_TAG=dev` in
+both files yourself, then run `docker compose pull && docker compose up -d`.
+
 ---
 
 ## Manual install (non-Docker)

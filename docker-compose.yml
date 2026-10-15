@@ -1,6 +1,7 @@
 # IMAGE_TAG selects the release channel and defaults to the stable images. Set it to
-# "dev" in backend/.env, alongside DEV=true, to run development builds — the flag alone
-# only changes what the update check *offers*, while this is what is actually pulled.
+# "dev" in backend/.env and in the .env beside this file to run development builds, or tick
+# LOOK FOR DEV BUILDS in SYSTEM_INFO, which sets both. It is the one setting: what compose
+# pulls, and what the update check offers.
 services:
   backend:
     image: over2take/citynet-backend:${IMAGE_TAG:-latest}
