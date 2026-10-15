@@ -117,7 +117,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - **Browser tests.** The first tests in a real browser (e2e/, Playwright): the real app started on a throwaway
   database, the GM signing in, building a system through the builder's screens, publishing it twice and switching
-  the game to it. They run on every pull request; e2e/README.md says how
+  the game to it; and a custom game played in two browsers at once, a player making a character in its words
+  and numbers while the GM gives them an item and calls a rest, and the player seeing both. They run on every pull request; e2e/README.md says how
   to run them locally. The frontend's dev server can be pointed at another backend (API_TARGET).
 - **Random systems for testing.** A generator makes a whole custom system from a seed, every part of the builder
   in play, and soak tests make, publish, load, share and republish each through the real routes, then play it as the
