@@ -37,9 +37,10 @@ describe('the helpers, on a Windows host', () => {
     expect(mountsOf(args)).toEqual([
       '/var/run/docker.sock:/var/run/docker.sock',
       '/x/CITY_NET:/x/CITY_NET',
-      '/x/CITY_NET/docker-compose.yml:/tmp/docker-compose.yml:ro',
+      '/x/CITY_NET/docker-compose.yml:/x/CITY_NET/docker-compose.yml:ro',
     ]);
     expect(args[args.indexOf('--project-directory') + 1]).toBe('/x/CITY_NET');
+    expect(args[args.indexOf('-f') + 1]).toBe('/x/CITY_NET/docker-compose.yml');
   });
 
   it('the LOOK FOR DEV BUILDS helper mounts and writes the /x/ form', () => {

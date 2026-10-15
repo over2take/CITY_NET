@@ -110,6 +110,31 @@ jobs:
         if: always()
         run: docker rm -f proxy || true
 
+  updater-journey:
+    name: Updater on Real Docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # The in-app updater's own tests replace Docker with stand-ins, and the stand-ins shared
+      # the code's wrong assumptions: Windows servers failed every helper, and the second
+      # in-app update after any first one failed, neither seen until a real install hit it.
+      # This builds the real server image from the checkout, starts a throwaway install from
+      # the real docker-compose.yml with a local registry, and drives the real updater through
+      # the server's API: two updates in a row, dev builds on and off, the data kept.
+      #
+      # Run by hand on Docker Desktop for Windows before being written down, and the
+      # counterfactual checked: with the previous updater it fails at the second update with
+      # the error a real install reported ("read /tmp/docker-compose.yml: is a directory").
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Two in-app updates, then dev builds on and off
+        run: node docker-test/updater-journey.mjs
+
   test-backend:
     name: Backend Tests
     runs-on: ubuntu-latest

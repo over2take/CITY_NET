@@ -326,13 +326,14 @@ describe('buildUpdateHelperArgs', () => {
     expect(args).toContain('/srv/citynet:/srv/citynet');
   });
 
-  it('runs compose against the mounted config with the project name', () => {
+  it('runs compose against the host compose file with the project name', () => {
     const args = updater.buildUpdateHelperArgs('/srv/citynet', '/srv/citynet/docker-compose.yml', ['-p', 'citynet']);
-    // Argv, so each of these is its own element and none of it is ever parsed as shell.
+    // Argv, so each of these is its own element and none of it is ever parsed as shell. The
+    // compose file by its host path, which compose records in the labels the next update reads.
     expect(args.slice(-10)).toEqual([
       'docker', 'compose',
       '--project-directory', '/srv/citynet',
-      '-f', updater.COMPOSE_FILE,
+      '-f', '/srv/citynet/docker-compose.yml',
       '-p', 'citynet',
       'up', '-d',
     ]);
@@ -345,20 +346,48 @@ describe('readComposeLabels', () => {
       readFileSync: () => 'abc123',
       execSync: () => { throw new Error('docker: not found'); },
     });
-    expect(labels).toEqual({ projectName: null, configFile: null, workingDir: null });
+    expect(labels).toEqual({ projectName: null, configFile: null, workingDir: null, image: null });
   });
 
   it('reads the compose labels off the running container', () => {
     const labels = updater.readComposeLabels({
       readFileSync: () => 'abc123\\n',
-      execSync: () => JSON.stringify({
+      execSync: () => JSON.stringify({ Config: { Image: 'over2take/citynet-backend:latest', Labels: {
         'com.docker.compose.project': 'citynet',
         'com.docker.compose.project.config_files': '/srv/citynet/docker-compose.yml',
         'com.docker.compose.project.working_dir': '/srv/citynet',
-      }),
+      } } }),
     });
     expect(labels.projectName).toBe('citynet');
     expect(labels.workingDir).toBe('/srv/citynet');
+    expect(labels.configFile).toBe('/srv/citynet/docker-compose.yml');
+    expect(labels.image).toBe('over2take/citynet-backend:latest');
+  });
+
+  it('takes the compose file from its real mount, not a label an earlier update left naming /tmp', () => {
+    // A real Windows install after one in-app update (its mounts as `docker inspect` reported them):
+    // the config_files label had become the helper's /tmp path, and the next update failed on it.
+    const labels = updater.readComposeLabels({
+      readFileSync: () => 'abc123\n',
+      execSync: () => JSON.stringify({
+        Config: { Image: 'over2take/citynet-backend:dev', Labels: {
+          'com.docker.compose.project': 'city_net',
+          'com.docker.compose.project.config_files': '/tmp/docker-compose.yml',
+          'com.docker.compose.project.working_dir': '/x/CITY_NET',
+        } },
+        Mounts: [
+          { Type: 'bind', Source: 'X:\\CITY_NET\\backend\\data', Destination: '/app/data' },
+          { Type: 'bind', Source: '/var/run/docker.sock', Destination: '/var/run/docker.sock' },
+          { Type: 'bind', Source: 'X:\\CITY_NET\\docker-compose.yml', Destination: '/tmp/docker-compose.yml' },
+          { Type: 'bind', Source: 'X:\\CITY_NET\\backend\\.env', Destination: '/tmp/backend/.env' },
+        ],
+      }),
+    });
+    expect(labels.configFile).toBe('X:\\CITY_NET\\docker-compose.yml');
+    // And the helper is then given a path Docker accepts, for the mount and for compose's -f.
+    const args = updater.buildUpdateHelperArgs(labels.workingDir, labels.configFile, ['-p', labels.projectName], labels.image);
+    expect(args).toContain('/x/CITY_NET/docker-compose.yml:/x/CITY_NET/docker-compose.yml:ro');
+    expect(args[args.indexOf('-f') + 1]).toBe('/x/CITY_NET/docker-compose.yml');
   });
 });
 
@@ -422,6 +451,20 @@ describe('runUpdate', () => {
     pull.emit('close', 0);
     expect(spawn).toHaveBeenCalledTimes(2);
     expect(spawn.mock.calls[1][1]).toContain('run');
+  });
+
+  it('runs the helper on the image this server runs, and on the stable image when it can not say', () => {
+    const helperImage = (given) => {
+      const pull = fakeChild();
+      const spawn = vi.fn().mockReturnValueOnce(pull).mockReturnValueOnce(fakeChild());
+      updater.resetState();
+      updater.runUpdate(given, { spawn, openSync: () => { throw new Error('no log'); } });
+      pull.emit('close', 0);
+      const args = spawn.mock.calls[1][1];
+      return args[args.indexOf('docker') - 1];
+    };
+    expect(helperImage({ ...labels, image: 'over2take/citynet-backend:2.0.0-dev.2' })).toBe('over2take/citynet-backend:2.0.0-dev.2');
+    expect(helperImage({ ...labels, image: null })).toBe('over2take/citynet-backend:latest');
   });
 
   it('exposes a boot id so a restart can be detected without a version change', () => {
