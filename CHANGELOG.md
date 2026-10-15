@@ -18,6 +18,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **A conditions test no longer fails on a busy machine.** It read a token's condition chips as soon
+  as they appeared, but the rounds left arrive a moment later with the server's reply, so under load
+  it sometimes read POISON before it said POISON 2R. It now waits for them. Nothing in the game changes.
 - **Version 2.0.0, for the System Builder's dev builds.** The version is now 2.0.0, ahead of the
   1.14.6 release, so its development builds are 2.0.0-dev.1 onwards and are offered to any install
   that ticked LOOK FOR DEV BUILDS. 2.0.0 itself is the release they lead to.
