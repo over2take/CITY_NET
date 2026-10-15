@@ -95,7 +95,13 @@ frontend suites.
   by placeholder or label. Avoid CSS selectors; the windows' names and buttons are what players see.
 - Sign in with `GM` from `playwright.config.ts`. The database starts empty each run, so a journey
   makes what it needs (a system, a character) rather than expecting it to be there.
-- The tests share one database and run in order, one at a time.
+- The tests share one database and run in order, one at a time, files alphabetically. A journey that needs a
+  fresh state (the tour unseen) sets it up through the API first, rather than counting on running first.
+- In CI a failed journey is tried once more, on the same database, so a journey that makes something
+  named gives the retry a name of its own (`Hearthfall 2`).
+- The builder's rail widens over the page while the pointer is on it. Click it with `clickRail` (or
+  `builderPage`), which moves the pointer back to the page after, as a person would.
+- Put shared steps (signing in, opening the builder) in `tests/helpers.ts`.
 
 ## Files
 
@@ -103,4 +109,6 @@ frontend suites.
 | --- | --- |
 | `playwright.config.ts` | Starts both servers on their own ports with the throwaway database and the test GM; one headless browser |
 | `cleanup.ts` | Before a run, deletes the throwaway databases earlier runs left |
-| `tests/builder-smoke.spec.ts` | The GM signs in, opens the System Builder, meets and skips the first-time tour, and goes back to the map |
+| `tests/helpers.ts` | Signing in as the GM, opening the GAME tab and the builder (past the tour), a rail button clicked with the pointer moved off after, and a builder page from the rail |
+| `tests/builder-journey.spec.ts` | The GM builds a system from + NEW (words, a part off, a stat and a formula worked out on the sample), publishes it, changes it and publishes v2 through the version preview, and switches the game to it |
+| `tests/builder-smoke.spec.ts` | The GM signs in, opens the System Builder, meets and skips the first-time tour (reset first, so it always shows), and goes back to the map |

@@ -1136,7 +1136,9 @@ CITY_NET/
 │   ├── playwright.config.ts    # Starts both servers (Secure Mode on, a temp database, the test GM), one worker, the installed Chrome locally or Playwright's Chromium in CI
 │   ├── cleanup.ts              # Before a run, the throwaway databases earlier runs left in the temp folder
 │   └── tests/
-│       └── builder-smoke.spec.ts   # The GM signs in, opens the System Builder, meets and skips the first-time tour, finds MY SYSTEMS, and goes back to the map
+│       ├── helpers.ts              # Signing in as the GM, the GAME tab, the builder past its tour, a rail button (pointer moved off after), a builder page
+│       ├── builder-journey.spec.ts # The GM builds a system from + NEW through the builder's screens, publishes it, publishes v2 through the version preview, and switches the game to it
+│       └── builder-smoke.spec.ts   # The GM signs in, opens the System Builder, meets and skips the first-time tour (reset first), finds MY SYSTEMS, and goes back to the map
 ├── Dockerfile.backend
 ├── Dockerfile.frontend
 ├── .github/workflows/          # CI Tests on PRs and main; Release to Docker Hub on green main; Dev Build to Docker Hub on dispatch or a push to dev. Includes Nginx Proxy Behaviour, which runs the real nginx against the repository config and a stub upstream — a 40MB body through, the caller's address forwarded, the socket upgrading — because every other test mounts a router directly and never sees the proxy. And Browser Journeys, the e2e/ Playwright tests in a real browser
