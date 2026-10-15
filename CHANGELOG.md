@@ -5,6 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.14.7] - 2026-10-15
+
+In-app updates and LOOK FOR DEV BUILDS work on Windows.
+
+### Fixed
+
+- **CLICK TO UPDATE and LOOK FOR DEV BUILDS on Windows.** On a server running Docker Desktop for
+  Windows, both failed: the app handed Docker your CITY_NET folder by its Windows name
+  (`X:\CITY_NET`), and Docker reads the colon after the drive letter as a separator, so it
+  refused. LOOK FOR DEV BUILDS said "The channel could not be changed. Nothing was switched." The app
+  now gives Docker the same folder in a form it accepts (`/x/CITY_NET`). Linux and Mac servers are
+  unchanged. Checked on Docker Desktop for Windows: the switch to dev builds, and an update
+  restarting the stack on the same data.
+
+  **If your server is on Windows, update to 1.14.7 by hand once**, since the update button in your
+  current version is the part that's broken: in your CITY_NET folder, run
+  `docker compose pull` and then `docker compose up -d`. After that, updates work from the app.
+
+---
+
 ## [1.14.6] - 2026-10-14
 
 Development builds, from inside the app.

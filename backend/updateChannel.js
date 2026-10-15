@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
+const { dockerPath } = require('./dockerPath');
 
 /**
  * The LOOK FOR DEV BUILDS box: which release channel this deployment follows, switched from
@@ -75,7 +76,9 @@ function writeChannel(projectDir, tag, deps = {}) {
 }
 
 /** The argument list for the helper that runs writeChannel on the host's files. */
-function channelHelperArgs(image, projectDir, tag) {
+function channelHelperArgs(image, reportedProjectDir, tag) {
+  // As Docker accepts it from in here: a Windows host's `X:\...` becomes `/x/...` (dockerPath.js).
+  const projectDir = dockerPath(reportedProjectDir);
   return [
     'run', '--rm',
     // At its own absolute path, as the update helper mounts it (updater.js buildUpdateHelperArgs).

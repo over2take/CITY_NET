@@ -14,6 +14,12 @@ If it cannot update, it now says why rather than waiting — the commonest reaso
 
 **The in-app update pulls images, not files.** `docker-compose.yml`, `nginx.conf` and the rest come from the repository, so a release that changes one of them needs a `git pull` as well. Everything keeps working without it; only the new capability is missing.
 
+### Windows servers before 1.14.7
+
+On Docker Desktop for Windows, **CLICK TO UPDATE** and **LOOK FOR DEV BUILDS** did not work before
+1.14.7. If yours is older, update once by hand with the steps below. From 1.14.7 on, both work
+from inside the app.
+
 ### Manual Docker update
 
 ```bash
