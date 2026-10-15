@@ -373,7 +373,7 @@ describe('release channel routes', () => {
     delete process.env.IMAGE_TAG;
     vi.spyOn(updater, 'preflight').mockReturnValue(READY);
     const res = await request(app).get('/api/admin/update/channel').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
-    expect(res.body).toEqual({ channel: 'latest', dev: false, canSwitch: true });
+    expect(res.body).toEqual({ channel: 'latest', dev: false, canSwitch: true, devBuild: false });
   });
 
   it('PUT switches through updateChannel and tells the copy by name only', async () => {
@@ -419,6 +419,64 @@ describe('release channel routes', () => {
     expect((await put({ dev: true }, tempToken)).status).toBe(401);
     expect((await request(app).get('/api/admin/update/channel').set('Authorization', `Bearer ${tempToken}`)).status).toBe(401);
     expect((await request(app).put('/api/admin/update/channel').send({ dev: true })).status).toBe(401);
+  });
+
+  // GO BACK TO STABLE: POST /update/revert, and the copy GET names on a dev build.
+  const back = (token = ADMIN_TOKEN) => request(app).post('/api/admin/update/revert').set('Authorization', `Bearer ${token}`);
+  const PLAN = { ok: true, copy: 'city.db.before-dev-builds-2026-10-15T09-00-00.bak', dataDir: '/opt/citynet/backend/data', service: 'backend', image: 'img:dev' };
+
+  it('GET on a dev build names the copy going back would put back', async () => {
+    vi.spyOn(updater, 'isDevBuild').mockReturnValue(true);
+    vi.spyOn(updateChannel, 'newestDevCopy').mockReturnValue(PLAN.copy);
+    const res = await request(app).get('/api/admin/update/channel').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(res.body).toMatchObject({ devBuild: true, copy: PLAN.copy });
+  });
+
+  it('POST starts the helper with the plan, holds the lock, and names the copy', async () => {
+    vi.spyOn(updater, 'isDevBuild').mockReturnValue(true);
+    vi.spyOn(updater, 'preflight').mockReturnValue(READY);
+    vi.spyOn(updateChannel, 'revertPlan').mockReturnValue(PLAN);
+    const helper = { on: () => {} };
+    const started = vi.spyOn(updateChannel, 'startRevert').mockReturnValue(helper);
+    const tracked = vi.spyOn(updater, 'trackRevert').mockImplementation(() => {});
+    const res = await back();
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ copy: PLAN.copy });
+    expect(started).toHaveBeenCalledWith(expect.objectContaining({ plan: PLAN, labels: READY.labels }));
+    expect(tracked).toHaveBeenCalledWith(helper);
+  });
+
+  it('POST refuses off a dev build, during an update, where the app cannot, and without a plan, saying what to do by hand', async () => {
+    // Stubbed, so a route that wrongly went ahead could never start a real helper.
+    const started = vi.spyOn(updateChannel, 'startRevert').mockReturnValue({ on: () => {} });
+    vi.spyOn(updater, 'trackRevert').mockImplementation(() => {});
+    vi.spyOn(updater, 'isDevBuild').mockReturnValue(false);
+    const notDev = await back();
+    expect(notDev.status).toBe(409);
+    expect(notDev.body.error).toMatch(/not running a dev build/);
+    updater.isDevBuild.mockReturnValue(true);
+    const cannot = await back();
+    expect(cannot.status).toBe(409);
+    expect(cannot.body.manual).toMatch(/IMAGE_TAG=latest/);
+    vi.spyOn(updater, 'preflight').mockReturnValue(READY);
+    vi.spyOn(updateChannel, 'revertPlan').mockReturnValue({ ok: false, error: 'There is no copy from before dev builds were turned on to go back to.' });
+    const noPlan = await back();
+    expect(noPlan.status).toBe(409);
+    expect(noPlan.body.error).toMatch(/no copy/);
+    expect(noPlan.body.manual).toMatch(/before-dev-builds/);
+    // Everything else ready, but an update under way.
+    updateChannel.revertPlan.mockReturnValue(PLAN);
+    vi.spyOn(updater, 'isRunning').mockReturnValue(true);
+    const busy = await back();
+    expect(busy.status).toBe(409);
+    expect(busy.body.error).toMatch(/update is running/);
+    expect(started).not.toHaveBeenCalled();
+  });
+
+  it('POST is the primary admin only, signed in', async () => {
+    const tempToken = jwt.sign({ id: 2, username: 'temp', role: 'admin', isTemporary: true }, 'test-secret');
+    expect((await back(tempToken)).status).toBe(401);
+    expect((await request(app).post('/api/admin/update/revert')).status).toBe(401);
   });
 });
 

@@ -618,3 +618,33 @@ describe('the helper leg reports its own failures', () => {
     expect(updater.getState().code).toBeNull();
   });
 });
+
+describe('trackRevert and isDevBuild (GO BACK TO STABLE)', () => {
+  const fakeChild = () => {
+    const handlers = {};
+    return { on: (evt, fn) => { handlers[evt] = fn; }, emit: (evt, arg) => handlers[evt]?.(arg), exitCode: null, signalCode: null };
+  };
+  beforeEach(() => updater.resetState());
+
+  it('holds the lock like an update, so a second press is refused', () => {
+    updater.trackRevert(fakeChild());
+    expect(updater.getState().phase).toBe('restarting');
+    expect(updater.isRunning()).toBe(true);
+  });
+
+  it('a helper that fails before stopping the server is told to the page', () => {
+    const child = fakeChild();
+    updater.trackRevert(child);
+    child.emit('close', 1);
+    expect(updater.getState()).toMatchObject({ phase: 'failed', code: 'REVERT_FAILED' });
+    expect(updater.getState().error).toBe(updater.FAILURES.REVERT_FAILED);
+  });
+
+  it('knows a dev build from a release and from a build without a version', () => {
+    expect(updater.isDevBuild('2.0.0-dev.3')).toBe(true);
+    expect(updater.isDevBuild('2.0.0-dev')).toBe(true);
+    expect(updater.isDevBuild('1.14.6')).toBe(false);
+    expect(updater.isDevBuild('dev')).toBe(false);
+    expect(updater.isDevBuild('')).toBe(false);
+  });
+});

@@ -411,6 +411,7 @@ const FAILURES = {
   DOCKER_UNAVAILABLE: 'Could not run docker. See backend/data/update.log.',
   COMPOSE_PULL_FAILED: 'The image pull failed. See backend/data/update.log for the reason.',
   HELPER_FAILED: 'The update helper could not be started. See backend/data/update.log.',
+  REVERT_FAILED: 'Going back to stable did not finish. See backend/data/update.log.',
 };
 
 /**
@@ -446,6 +447,31 @@ function fail(code, detail) {
   state.error = FAILURES[code] || 'The update failed. See backend/data/update.log.';
   state.finishedAt = Date.now();
   if (detail) note(`${code}: ${detail}`);
+}
+
+/**
+ * GO BACK TO STABLE's helper (updateChannel.js startRevert), held like an update: a second press
+ * is refused while it runs, and if it fails before it stops this server, the page is told. When
+ * it succeeds this process is stopped part way, so its close is usually never heard.
+ */
+function trackRevert(child, deps = {}) {
+  const nowFn = deps.now || Date.now;
+  state.phase = 'restarting';
+  state.code = null;
+  state.error = null;
+  state.startedAt = nowFn();
+  state.finishedAt = null;
+  activeChild = child;
+  child.on('error', (err) => fail('REVERT_FAILED', err.message));
+  child.on('close', (code) => {
+    if (code !== 0) fail('REVERT_FAILED', `the go-back-to-stable helper exited with code ${code}`);
+  });
+}
+
+/** Whether this server is a dev build (X.Y.Z-dev.N), which GO BACK TO STABLE leaves. */
+function isDevBuild(version = process.env.APP_VERSION) {
+  const parsed = parseVersion(version || '');
+  return !!parsed && parsed.dev !== null;
 }
 
 /**
@@ -540,6 +566,8 @@ module.exports = {
   readComposeLabels,
   preflight,
   runUpdate,
+  trackRevert,
+  isDevBuild,
   isRunning,
   STALE_RUN_MS,
   FAILURES,

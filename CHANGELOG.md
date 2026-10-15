@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
+  first, it puts back the copy of your database made when you turned dev builds on, downloads the
+  stable release and restarts on it. Nothing is deleted: the dev database is set aside beside it as
+  `city.db.dev-<time>.bak`. Anything done while testing is in that copy, since the stable release
+  hasn't been tested on data a dev build has changed. Where the app can't do it (no Docker socket,
+  say), the box says how by hand.
+
 ### Under the hood (tidying)
 
 - **The server keeps the mods fitted to each implant.** Its reading of a cyberware row had

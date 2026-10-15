@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { spawn, execSync } = require('child_process');
+const { spawn, execSync, execFileSync } = require('child_process');
 
 /**
  * The LOOK FOR DEV BUILDS box: which release channel this deployment follows, switched from
@@ -86,25 +86,41 @@ function channelHelperArgs(image, projectDir, tag) {
 }
 
 /**
- * The image this container runs, so the helper runs the same code as this file. Falls back to
- * the stable image, which has had this file since it was added.
+ * This container as Docker sees it: its image, its compose service, and its mounts (where each
+ * of its folders comes from on the host). Null when Docker can't say.
  */
-function ownImage(deps = {}) {
+function inspectSelf(deps = {}) {
   const read = deps.readFileSync || fs.readFileSync;
   const exec = deps.execSync || execSync;
   try {
     const containerId = read('/etc/hostname', 'utf8').trim();
-    const image = exec(`docker inspect ${containerId} --format '{{.Config.Image}}'`, { encoding: 'utf8' }).trim();
-    return image || 'over2take/citynet-backend:latest';
+    const self = JSON.parse(exec(`docker inspect ${containerId} --format '{{json .}}'`, { encoding: 'utf8' }));
+    const config = self.Config || {};
+    return {
+      image: config.Image || null,
+      service: (config.Labels || {})['com.docker.compose.service'] || null,
+      mounts: Array.isArray(self.Mounts) ? self.Mounts.map((m) => ({ source: m.Source, destination: m.Destination })) : [],
+    };
   } catch {
-    return 'over2take/citynet-backend:latest';
+    return null;
   }
 }
 
+/**
+ * The image this container runs, so the helper runs the same code as this file. Falls back to
+ * the stable image, which has had this file since it was added.
+ */
+function ownImage(deps = {}) {
+  const self = inspectSelf(deps);
+  return (self && self.image) || 'over2take/citynet-backend:latest';
+}
+
+/** A stamp for a file name: the time to the second, with nothing a file system minds. */
+const stampOf = (now) => now.toISOString().replace(/[:.]/g, '-').replace(/-\d{3}Z$/, '');
+
 /** Where the copy made before following dev builds goes: beside the database, named as other copies are. */
 function backupPath(dbPath, now = new Date()) {
-  const stamp = now.toISOString().replace(/[:.]/g, '-').replace(/-\d{3}Z$/, '');
-  return path.join(path.dirname(dbPath), `${path.basename(dbPath)}.before-dev-builds-${stamp}.bak`);
+  return path.join(path.dirname(dbPath), `${path.basename(dbPath)}.before-dev-builds-${stampOf(now)}.bak`);
 }
 
 /**
@@ -138,15 +154,160 @@ function switchChannel({ tag, labels, db, dbPath }, deps = {}) {
   }));
 }
 
+// ─── GO BACK TO STABLE ────────────────────────────────────────────────────────
+//
+// A dev build may change how the database stores things, and no stable release has been tested
+// on data a dev build has changed. So going back puts back the copy made when dev builds were
+// turned on, after setting the dev database aside beside it (never deleted). The server can't
+// swap a database it has open, and it is stopped part way, so the whole thing is done by a
+// helper container, detached, that outlives it: pull stable, write `latest`, stop the server,
+// swap the files, start everything on stable.
+
+/** SQLite's own files beside a database, which go wherever the database goes. */
+const SIDE_FILES = ['-journal', '-wal', '-shm'];
+
+/** Where the compose file is mounted in the helper, as in the update's own helper. */
+const COMPOSE_IN_HELPER = '/tmp/docker-compose.yml';
+
+/** The newest copy made before dev builds were turned on, among a data folder's file names, or null. */
+function newestDevCopy(names, dbName) {
+  const prefix = `${dbName}.before-dev-builds-`;
+  // The stamp is an ISO time, so the names sort in time order.
+  const copies = names.filter((n) => n.startsWith(prefix) && n.endsWith('.bak')).sort();
+  return copies.length ? copies[copies.length - 1] : null;
+}
+
+/** Where `containerDir` comes from on the host, read off this container's mounts, or null. */
+function hostPathOf(mounts, containerDir) {
+  const plain = (p) => path.posix.normalize(String(p)).replace(/(.)\/$/, '$1');
+  const found = (mounts || []).find((m) => plain(m.destination) === plain(containerDir));
+  return found ? found.source : null;
+}
+
+/**
+ * In `dataDir`: the dev database set aside as <db>.dev-<stamp>.bak with its side files (named so
+ * SQLite still finds them, should it be opened again), and the copy put back as the database. The
+ * copy itself stays. A failure part way puts the dev database back as it was. Returns the name the
+ * dev database was set aside as.
+ */
+function swapBack(dataDir, dbName, copyName, stamp, deps = {}) {
+  const fsx = deps.fs || fs;
+  const at = (n) => path.join(dataDir, n);
+  if (!fsx.existsSync(at(copyName))) throw new Error(`${copyName} is missing`);
+  const aside = `${dbName}.dev-${stamp}.bak`;
+  const moved = [];
+  try {
+    for (const suffix of ['', ...SIDE_FILES]) {
+      if (!fsx.existsSync(at(dbName + suffix))) continue;
+      fsx.renameSync(at(dbName + suffix), at(aside + suffix));
+      moved.push(suffix);
+    }
+    fsx.copyFileSync(at(copyName), at(dbName));
+  } catch (err) {
+    if (moved.includes('') && fsx.existsSync(at(dbName))) fsx.unlinkSync(at(dbName));
+    for (const suffix of moved) fsx.renameSync(at(aside + suffix), at(dbName + suffix));
+    throw err;
+  }
+  return aside;
+}
+
+/**
+ * The helper's whole job, in order. Nothing is stopped until stable is downloaded and `latest`
+ * is written, and once the server is stopped, everything is started again whatever happened.
+ */
+function revertToStable({ projectDir, dataDir, dbName, copyName, service, projectName, stamp }, deps = {}) {
+  const fsx = deps.fs || fs;
+  const env = { ...process.env, IMAGE_TAG: 'latest' };
+  const run = deps.run || ((args) => execFileSync('docker', args, { stdio: 'inherit', env }));
+  const say = deps.say || ((line) => console.log(`[go back to stable] ${line}`));
+  if (!fsx.existsSync(path.join(dataDir, copyName))) throw new Error(`${copyName} is missing`);
+  if (!service) throw new Error('The server\'s compose service is unknown');
+  const compose = ['compose', '--project-directory', projectDir, '-f', COMPOSE_IN_HELPER, ...(projectName ? ['-p', projectName] : [])];
+  say('downloading the stable release');
+  run([...compose, 'pull']);
+  writeChannel(projectDir, 'latest', deps);
+  say(`stopping ${service}`);
+  run([...compose, 'stop', service]);
+  try {
+    const aside = swapBack(dataDir, dbName, copyName, stamp, deps);
+    say(`dev database set aside as ${aside}; ${copyName} put back as ${dbName}`);
+  } finally {
+    say('starting the stable release');
+    run([...compose, 'up', '-d']);
+  }
+}
+
+/** Whether `inner` is `outer` or inside it, as host paths. */
+const within = (inner, outer) => inner === outer || inner.startsWith(`${outer.replace(/\/$/, '')}/`);
+
+/** The argument list for the helper that runs revertToStable. */
+function revertHelperArgs(image, { projectDir, configFile, dataDir, dbName, copyName, service, projectName, stamp }) {
+  return [
+    'run', '--rm',
+    '-v', '/var/run/docker.sock:/var/run/docker.sock',
+    '-v', `${projectDir}:${projectDir}`,
+    '-v', `${configFile}:${COMPOSE_IN_HELPER}:ro`,
+    // The data folder is usually inside the project, and so already there.
+    ...(within(dataDir, projectDir) ? [] : ['-v', `${dataDir}:${dataDir}`]),
+    image, 'node', SCRIPT_IN_IMAGE, 'revert', projectDir, dataDir, dbName, copyName, service, projectName || '', stamp,
+  ];
+}
+
+/**
+ * What going back would use, or why it can't: { ok: true, copy, dataDir, service, image } or
+ * { ok: false, error }. Read from this container, so nothing is assumed about the layout.
+ */
+function revertPlan(dbPath, deps = {}) {
+  const fsx = deps.fs || fs;
+  let names = [];
+  try { names = fsx.readdirSync(path.dirname(dbPath)); } catch { /* no folder, no copy */ }
+  const copy = newestDevCopy(names, path.basename(dbPath));
+  if (!copy) return { ok: false, error: 'There is no copy from before dev builds were turned on to go back to.' };
+  const self = deps.self !== undefined ? deps.self : inspectSelf(deps);
+  if (!self) return { ok: false, error: 'Docker could not say how this server is set up.', copy };
+  const dataDir = hostPathOf(self.mounts, path.dirname(dbPath));
+  if (!dataDir) return { ok: false, error: 'The database folder is not mounted from the host, so there is nothing to put back.', copy };
+  if (!self.service) return { ok: false, error: 'This server was not started by docker compose.', copy };
+  return { ok: true, copy, dataDir, service: self.service, image: self.image || 'over2take/citynet-backend:latest' };
+}
+
+/** Start the helper, detached: it stops this server part way, so it can't be waited for here. */
+function startRevert({ plan, labels, dbPath, out = 'ignore' }, deps = {}) {
+  const spawnFn = deps.spawn || spawn;
+  const now = deps.now ? deps.now() : new Date();
+  const args = revertHelperArgs(plan.image, {
+    projectDir: labels.workingDir,
+    configFile: labels.configFile,
+    dataDir: plan.dataDir,
+    dbName: path.basename(dbPath),
+    copyName: plan.copy,
+    service: plan.service,
+    projectName: labels.projectName,
+    stamp: stampOf(now),
+  });
+  const helper = spawnFn('docker', args, { detached: true, stdio: out === 'ignore' ? 'ignore' : ['ignore', out, out] });
+  helper.unref();
+  return helper;
+}
+
 module.exports = {
-  CHANNELS, ENV_FILES, SCRIPT_IN_IMAGE,
-  withImageTag, writeChannel, channelHelperArgs, ownImage, backupPath, backupDatabase, switchChannel,
+  CHANNELS, ENV_FILES, SCRIPT_IN_IMAGE, SIDE_FILES,
+  withImageTag, writeChannel, channelHelperArgs, inspectSelf, ownImage, backupPath, backupDatabase, switchChannel,
+  newestDevCopy, hostPathOf, swapBack, revertToStable, revertHelperArgs, revertPlan, startRevert,
 };
 
-// The helper's half: node updateChannel.js <project directory> <channel>
+// The helper's half:
+//   node updateChannel.js <project directory> <channel>
+//   node updateChannel.js revert <project directory> <data directory> <db> <copy> <service> <project name> <stamp>
 if (require.main === module) {
   try {
-    writeChannel(process.argv[2], process.argv[3]);
+    const [first, ...rest] = process.argv.slice(2);
+    if (first === 'revert') {
+      const [projectDir, dataDir, dbName, copyName, service, projectName, stamp] = rest;
+      revertToStable({ projectDir, dataDir, dbName, copyName, service, projectName, stamp });
+    } else {
+      writeChannel(first, rest[0]);
+    }
   } catch (err) {
     console.error(err.message);
     process.exit(1);

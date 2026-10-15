@@ -8,6 +8,7 @@ const { insertLocations } = require('../buildings/locationRows');
 const SECRET = process.env.JWT_SECRET;
 let currentController = 'GM';
 
+const fs = require('fs');
 const path = require('path');
 const updater = require('../updater');
 const updateChannel = require('../updateChannel');
@@ -365,19 +366,48 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   // What the box shows: whether this deployment follows dev builds, and whether the app can
   // switch it. Where it can't (no Docker socket, say), `manual` is the line to set by hand.
   const MANUAL_DEV = 'Set IMAGE_TAG=dev in backend/.env and in the .env beside docker-compose.yml, then run "docker compose pull && docker compose up -d".';
+  const MANUAL_BACK = 'Set IMAGE_TAG=latest in backend/.env and in the .env beside docker-compose.yml, run "docker compose down", put the city.db.before-dev-builds-<time>.bak copy back as backend/data/city.db (setting the dev one aside), then run "docker compose pull && docker compose up -d".';
+  /** A channel switch under way; going back and switching wait for each other. */
+  let switching = false;
+  const dbPathNow = () => process.env.DB_PATH || path.resolve(__dirname, '..', 'city.db');
   router.get('/update/channel', authenticate, (req, res) => {
     if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
     const check = updater.preflight();
+    const devBuild = updater.isDevBuild();
+    // On a dev build, the copy GO BACK TO STABLE would put back: its name, read off the data folder.
+    let copy = null;
+    if (devBuild) {
+      try { copy = updateChannel.newestDevCopy(fs.readdirSync(path.dirname(dbPathNow())), path.basename(dbPathNow())); } catch { /* none */ }
+    }
     res.json({
       channel: updater.imageTag(),
       dev: updater.allowsDevBuilds(),
       canSwitch: check.ok,
+      devBuild,
+      ...(devBuild ? { copy } : {}),
       ...(check.ok ? {} : { reason: check.error, manual: MANUAL_DEV }),
     });
   });
 
+  // GO BACK TO STABLE, from a dev build: the copy made when dev builds were turned on put back
+  // (the dev database set aside, never deleted), and the stable release started, by a helper that
+  // outlives this server (updateChannel.js startRevert). The page waits for the restart.
+  router.post('/update/revert', authenticate, (req, res) => {
+    if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
+    if (!updater.isDevBuild()) return res.status(409).json({ error: 'This server is not running a dev build.' });
+    if (switching || updater.isRunning()) return res.status(409).json({ error: 'An update is running. Try again when it has finished.' });
+    const check = updater.preflight();
+    if (!check.ok) return res.status(409).json({ error: check.error, manual: MANUAL_BACK });
+    const plan = updateChannel.revertPlan(dbPathNow());
+    if (!plan.ok) return res.status(409).json({ error: plan.error, manual: MANUAL_BACK });
+    let out = 'ignore';
+    try { out = fs.openSync(updater.logPath(), 'a'); } catch { /* the log is a convenience */ }
+    const helper = updateChannel.startRevert({ plan, labels: check.labels, dbPath: dbPathNow(), out });
+    updater.trackRevert(helper);
+    res.json({ copy: plan.copy });
+  });
+
   // Tick or untick it: { dev: true | false }. Turning dev on copies the database first.
-  let switching = false;
   router.put('/update/channel', authenticate, (req, res) => {
     if (req.user.isTemporary) return res.status(403).json({ error: 'Primary admin only' });
     const { dev } = req.body || {};
