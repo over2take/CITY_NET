@@ -3,13 +3,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DevBuildsBox } from '../DevBuildsBox';
+import * as updateClient from '../../utils/updateClient';
+
+vi.mock('../../utils/updateClient', () => ({ currentBootId: vi.fn(async () => 'boot-1'), waitForRestart: vi.fn(async () => {}) }));
 
 /** The server as the box sees it: /api/version, and GET and PUT /api/update/channel. */
-const serve = ({ isDocker = true, channel = { channel: 'latest', dev: false, canSwitch: true } as Record<string, unknown>, put = null as null | ((dev: boolean) => { status: number; body: unknown }) } = {}) => {
-  const puts: boolean[] = [];
+const serve = ({ isDocker = true, channel = { channel: 'latest', dev: false, canSwitch: true } as Record<string, unknown>, put = null as null | ((dev: boolean) => { status: number; body: unknown }), revert = { status: 200, body: { copy: 'city.db.before-dev-builds-2026-10-15T09-00-00.bak' } as unknown } } = {}) => {
+  const puts: (boolean | 'back')[] = [];
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: RequestInfo | URL, init?: RequestInit) => {
     const reply = (status: number, body: unknown) => ({ ok: status < 400, status, json: async () => body }) as Response;
-    if (url === '/api/version') return reply(200, { version: '1.14.6', isDocker });
+    if (url === '/api/version') return reply(200, { version: '2.0.0-dev.1', isDocker });
+    if (url === '/api/update/revert' && init?.method === 'POST') { puts.push('back'); return reply(revert.status, revert.body); }
     if (url === '/api/update/channel' && init?.method === 'PUT') {
       const { dev } = JSON.parse(String(init.body));
       puts.push(dev);
@@ -89,5 +93,74 @@ describe('DevBuildsBox', () => {
     render(<DevBuildsBox token="t" />);
     expect(await box()).toBeDisabled();
     expect(screen.getByText('Set IMAGE_TAG=dev in backend/.env.')).toBeInTheDocument();
+  });
+});
+
+describe('DevBuildsBox: GO BACK TO STABLE', () => {
+  const COPY = 'city.db.before-dev-builds-2026-10-15T09-00-00.bak';
+  const onDev = { channel: 'dev', dev: true, canSwitch: true, devBuild: true, copy: COPY };
+  beforeEach(() => {
+    vi.mocked(updateClient.currentBootId).mockResolvedValue('boot-1');
+    vi.mocked(updateClient.waitForRestart).mockReset().mockResolvedValue(undefined);
+  });
+
+  it('is offered on a dev build only', async () => {
+    serve({ channel: { channel: 'dev', dev: true, canSwitch: true, devBuild: false } });
+    const { unmount } = render(<DevBuildsBox token="t" />);
+    await box();
+    expect(screen.queryByRole('button', { name: 'GO BACK TO STABLE' })).not.toBeInTheDocument();
+    unmount();
+    serve({ channel: onDev });
+    render(<DevBuildsBox token="t" />);
+    expect(await screen.findByRole('button', { name: 'GO BACK TO STABLE' })).toBeInTheDocument();
+  });
+
+  it('asks first, naming the copy and saying nothing is deleted; CANCEL does nothing', async () => {
+    const calls = serve({ channel: onDev });
+    render(<DevBuildsBox token="t" />);
+    await userEvent.click(await screen.findByRole('button', { name: 'GO BACK TO STABLE' }));
+    const ask = screen.getByRole('group', { name: 'Go back to stable' });
+    expect(ask).toHaveTextContent(COPY);
+    expect(ask).toHaveTextContent('Anything done since is set aside in a copy, not deleted.');
+    await userEvent.click(screen.getByRole('button', { name: 'CANCEL' }));
+    expect(calls).toEqual([]);
+    expect(screen.getByRole('button', { name: 'GO BACK TO STABLE' })).toBeInTheDocument();
+  });
+
+  it('GO BACK asks the server, then waits for the restart from the boot id it had', async () => {
+    const calls = serve({ channel: onDev });
+    render(<DevBuildsBox token="t" />);
+    await userEvent.click(await screen.findByRole('button', { name: 'GO BACK TO STABLE' }));
+    await userEvent.click(screen.getByRole('button', { name: 'GO BACK' }));
+    await waitFor(() => expect(updateClient.waitForRestart).toHaveBeenCalled());
+    expect(calls).toEqual(['back']);
+    expect(vi.mocked(updateClient.waitForRestart).mock.calls[0][0]).toMatchObject({ bootId: 'boot-1', currentVersion: '2.0.0-dev.1' });
+    expect(screen.getByRole('status')).toHaveTextContent('Going back to stable');
+  });
+
+  it('a restart that fails is said, with what to run', async () => {
+    vi.mocked(updateClient.waitForRestart).mockImplementation(async (o) => o.onFailed('Going back to stable did not finish.', 'docker compose up -d'));
+    serve({ channel: onDev });
+    render(<DevBuildsBox token="t" />);
+    await userEvent.click(await screen.findByRole('button', { name: 'GO BACK TO STABLE' }));
+    await userEvent.click(screen.getByRole('button', { name: 'GO BACK' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('Going back to stable did not finish. docker compose up -d');
+  });
+
+  it('a refusal is said with the steps by hand, and nothing waits for a restart', async () => {
+    serve({ channel: onDev, revert: { status: 409, body: { error: 'The database folder is not mounted from the host.', manual: 'Set IMAGE_TAG=latest by hand.' } } });
+    render(<DevBuildsBox token="t" />);
+    await userEvent.click(await screen.findByRole('button', { name: 'GO BACK TO STABLE' }));
+    await userEvent.click(screen.getByRole('button', { name: 'GO BACK' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('The database folder is not mounted from the host. Set IMAGE_TAG=latest by hand.');
+    expect(updateClient.waitForRestart).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'GO BACK TO STABLE' })).toBeInTheDocument();
+  });
+
+  it('with no copy to put back, says so instead of offering it', async () => {
+    serve({ channel: { ...onDev, copy: null } });
+    render(<DevBuildsBox token="t" />);
+    expect(await screen.findByText('No copy from before dev builds to go back to.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'GO BACK TO STABLE' })).not.toBeInTheDocument();
   });
 });

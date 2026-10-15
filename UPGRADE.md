@@ -85,8 +85,19 @@ deployment that asks for them, and they may break.
 3. Press **Check for update**. The newest development build is offered with the usual update
    button, and each later one as it is published.
 
-To go back, untick the box. The app never installs an older version, so you stay on the build you
-have until a stable release newer than it comes out, and that is offered as usual.
+To stop getting dev builds, untick the box. The app never installs an older version that way, so
+you stay on the build you have until a stable release newer than it comes out, and that is offered
+as usual.
+
+To go back to stable now, press **GO BACK TO STABLE** in the same box (on a dev build that has it),
+then **GO BACK**. It puts back the copy made when you turned dev builds on, downloads the stable
+release and restarts on it. The dev database is set aside beside it as
+`backend/data/city.db.dev-<time>.bak`, not deleted, and anything done while testing stays in
+that copy.
+
+By hand instead: set `IMAGE_TAG=latest` in both files, run `docker compose down`, rename
+`backend/data/city.db` to keep it, copy the `city.db.before-dev-builds-<time>.bak` back as
+`city.db`, and run `docker compose pull && docker compose up -d`.
 
 Without the Docker socket the box can't change the files and says so. Set `IMAGE_TAG=dev` in
 both files yourself, then run `docker compose pull && docker compose up -d`.

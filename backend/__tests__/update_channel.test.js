@@ -110,10 +110,20 @@ describe('channelHelperArgs', () => {
   });
 });
 
-describe('ownImage', () => {
-  const deps = (out) => ({ readFileSync: () => 'abc123\n', execSync: () => out });
+describe('inspectSelf and ownImage', () => {
+  const INSPECT = JSON.stringify({
+    Config: { Image: 'over2take/citynet-backend:dev', Labels: { 'com.docker.compose.service': 'backend' } },
+    Mounts: [{ Source: '/opt/citynet/backend/data', Destination: '/app/data', Mode: 'rw' }],
+  });
+  const deps = (out) => ({ readFileSync: () => 'abc123\n', execSync: (cmd) => { expect(cmd).toContain('abc123'); return out; } });
+  it('reads the image, the compose service and the mounts off this container', () => {
+    expect(channel.inspectSelf(deps(INSPECT))).toEqual({
+      image: 'over2take/citynet-backend:dev', service: 'backend',
+      mounts: [{ source: '/opt/citynet/backend/data', destination: '/app/data' }],
+    });
+  });
   it('is the image this container runs', () => {
-    expect(channel.ownImage(deps('over2take/citynet-backend:dev\n'))).toBe('over2take/citynet-backend:dev');
+    expect(channel.ownImage(deps(INSPECT))).toBe('over2take/citynet-backend:dev');
   });
   it('falls back to the stable image when docker cannot say', () => {
     expect(channel.ownImage({ readFileSync: () => { throw new Error('no'); } })).toBe('over2take/citynet-backend:latest');
@@ -199,5 +209,200 @@ describe('switchChannel', () => {
     await expect(channel.switchChannel({ tag: 'dev', labels, db, dbPath: '/app/data/city.db' }, { spawn, image: 'img', now })).rejects.toThrow(/disk full/);
     expect(order).toEqual([]);
     expect(process.env.IMAGE_TAG).toBe('latest');
+  });
+});
+
+// ─── GO BACK TO STABLE ────────────────────────────────────────────────────────
+
+describe('newestDevCopy and hostPathOf', () => {
+  it('picks the newest copy made before dev builds, and nothing else', () => {
+    const names = [
+      'city.db', 'city.db.bak', 'city.db.before-bank-accounts-2026-09-30T13-50-55.bak',
+      'city.db.before-dev-builds-2026-10-15T09-00-00.bak', 'city.db.before-dev-builds-2026-11-02T18-30-00.bak',
+      'city.db.dev-2026-10-20T10-00-00.bak', 'other.db.before-dev-builds-2026-12-01T00-00-00.bak', 'update.log',
+    ];
+    expect(channel.newestDevCopy(names, 'city.db')).toBe('city.db.before-dev-builds-2026-11-02T18-30-00.bak');
+    expect(channel.newestDevCopy(['city.db', 'city.db.bak'], 'city.db')).toBeNull();
+  });
+
+  it('finds where a folder comes from on the host', () => {
+    const mounts = [{ source: '/srv/up', destination: '/app/uploads' }, { source: '/srv/data', destination: '/app/data' }];
+    expect(channel.hostPathOf(mounts, '/app/data')).toBe('/srv/data');
+    expect(channel.hostPathOf(mounts, '/app/data/')).toBe('/srv/data');
+    expect(channel.hostPathOf(mounts, '/app')).toBeNull();
+  });
+});
+
+describe('swapBack: the data folder', () => {
+  let dir;
+  const COPY = 'city.db.before-dev-builds-2026-10-15T09-00-00.bak';
+  const STAMP = '2026-10-20T10-00-00';
+  const read = (n) => fs.readFileSync(path.join(dir, n), 'utf8');
+  const has = (n) => fs.existsSync(path.join(dir, n));
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'citynet-swap-'));
+    fs.writeFileSync(path.join(dir, 'city.db'), 'dev data');
+    fs.writeFileSync(path.join(dir, 'city.db-journal'), 'dev journal');
+    fs.writeFileSync(path.join(dir, COPY), 'stable data');
+  });
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  it('sets the dev database aside with its side files, and puts the copy back, keeping the copy', () => {
+    const aside = channel.swapBack(dir, 'city.db', COPY, STAMP);
+    expect(aside).toBe(`city.db.dev-${STAMP}.bak`);
+    expect(read('city.db')).toBe('stable data');
+    expect(read(aside)).toBe('dev data');
+    // Named as SQLite names a journal, so the set-aside database opens whole.
+    expect(read(`${aside}-journal`)).toBe('dev journal');
+    expect(has('city.db-journal')).toBe(false);
+    expect(read(COPY)).toBe('stable data');
+  });
+
+  it('moves nothing when the copy is missing', () => {
+    fs.rmSync(path.join(dir, COPY));
+    expect(() => channel.swapBack(dir, 'city.db', COPY, STAMP)).toThrow(/missing/);
+    expect(read('city.db')).toBe('dev data');
+    expect(read('city.db-journal')).toBe('dev journal');
+  });
+
+  it('a failure part way puts the dev database back as it was', () => {
+    const failing = { ...fs, copyFileSync: () => { throw new Error('disk full'); } };
+    expect(() => channel.swapBack(dir, 'city.db', COPY, STAMP, { fs: failing })).toThrow(/disk full/);
+    expect(read('city.db')).toBe('dev data');
+    expect(read('city.db-journal')).toBe('dev journal');
+    expect(has(`city.db.dev-${STAMP}.bak`)).toBe(false);
+  });
+});
+
+describe('revertToStable: the helper steps, in order', () => {
+  let project;
+  let data;
+  const COPY = 'city.db.before-dev-builds-2026-10-15T09-00-00.bak';
+  const job = () => ({ projectDir: project, dataDir: data, dbName: 'city.db', copyName: COPY, service: 'backend', projectName: 'citynet', stamp: '2026-10-20T10-00-00' });
+  beforeEach(() => {
+    project = fs.mkdtempSync(path.join(os.tmpdir(), 'citynet-revert-'));
+    data = path.join(project, 'backend', 'data');
+    fs.mkdirSync(data, { recursive: true });
+    fs.writeFileSync(path.join(project, 'backend/.env'), 'IMAGE_TAG=dev\n');
+    fs.writeFileSync(path.join(project, '.env'), 'IMAGE_TAG=dev\n');
+    fs.writeFileSync(path.join(data, 'city.db'), 'dev data');
+    fs.writeFileSync(path.join(data, COPY), 'stable data');
+  });
+  afterEach(() => fs.rmSync(project, { recursive: true, force: true }));
+
+  /** docker, recorded: each call notes what the files said at that moment. */
+  const recorder = (failOn) => {
+    const steps = [];
+    const run = (args) => {
+      const verb = args[args.indexOf('-p') + 2];
+      steps.push(`${verb} env=${fs.readFileSync(path.join(project, '.env'), 'utf8').trim()} db=${fs.readFileSync(path.join(data, 'city.db'), 'utf8')}`);
+      if (verb === failOn) throw new Error(`${verb} failed`);
+    };
+    return { steps, run };
+  };
+
+  it('downloads stable, writes latest, stops the server, swaps, then starts everything', () => {
+    const { steps, run } = recorder();
+    channel.revertToStable(job(), { run, say: () => {} });
+    expect(steps).toEqual([
+      'pull env=IMAGE_TAG=dev db=dev data',
+      'stop env=IMAGE_TAG=latest db=dev data',
+      'up env=IMAGE_TAG=latest db=stable data',
+    ]);
+    expect(fs.readFileSync(path.join(project, 'backend/.env'), 'utf8')).toBe('IMAGE_TAG=latest\n');
+  });
+
+  it('a download that fails stops nothing and changes nothing', () => {
+    const { steps, run } = recorder('pull');
+    expect(() => channel.revertToStable(job(), { run, say: () => {} })).toThrow(/pull failed/);
+    expect(steps).toHaveLength(1);
+    expect(fs.readFileSync(path.join(project, '.env'), 'utf8')).toBe('IMAGE_TAG=dev\n');
+    expect(fs.readFileSync(path.join(data, 'city.db'), 'utf8')).toBe('dev data');
+  });
+
+  it('once the server is stopped, it is started again even when the swap fails', () => {
+    const { steps, run } = recorder();
+    const failing = { ...fs, copyFileSync: () => { throw new Error('disk full'); } };
+    expect(() => channel.revertToStable(job(), { run, fs: failing, say: () => {} })).toThrow(/disk full/);
+    expect(steps.map((s) => s.split(' ')[0])).toEqual(['pull', 'stop', 'up']);
+    expect(fs.readFileSync(path.join(data, 'city.db'), 'utf8')).toBe('dev data');
+  });
+
+  it('refuses before touching anything when the copy is gone', () => {
+    fs.rmSync(path.join(data, COPY));
+    const { steps, run } = recorder();
+    expect(() => channel.revertToStable(job(), { run, say: () => {} })).toThrow(/missing/);
+    expect(steps).toEqual([]);
+  });
+
+  it('runs compose against the helper compose file, for this project', () => {
+    const calls = [];
+    channel.revertToStable(job(), { run: (args) => calls.push(args), say: () => {} });
+    expect(calls[0]).toEqual(['compose', '--project-directory', project, '-f', '/tmp/docker-compose.yml', '-p', 'citynet', 'pull']);
+    expect(calls[1].slice(-2)).toEqual(['stop', 'backend']);
+    expect(calls[2].slice(-2)).toEqual(['up', '-d']);
+  });
+
+  it('is what the helper runs: node updateChannel.js revert ..., exiting non-zero on a refusal', () => {
+    fs.rmSync(path.join(data, COPY));
+    const j = job();
+    let refusal = null;
+    try {
+      execFileSync(process.execPath, [SCRIPT, 'revert', j.projectDir, j.dataDir, j.dbName, j.copyName, j.service, j.projectName, j.stamp], { stdio: 'pipe' });
+    } catch (err) { refusal = err; }
+    expect(refusal.status).toBe(1);
+    // Refused by the revert, for the reason it has, not by something else reading the arguments.
+    expect(String(refusal.stderr)).toContain(`${COPY} is missing`);
+    expect(fs.readFileSync(path.join(project, '.env'), 'utf8')).toBe('IMAGE_TAG=dev\n');
+  });
+});
+
+describe('revertHelperArgs', () => {
+  const job = { projectDir: '/opt/citynet', configFile: '/opt/citynet/docker-compose.yml', dataDir: '/opt/citynet/backend/data', dbName: 'city.db', copyName: 'c.bak', service: 'backend', projectName: 'citynet', stamp: 's' };
+  const mountsOf = (args) => args.filter((_, i) => args[i - 1] === '-v');
+
+  it('mounts the socket, the project at its own path and the compose file, and runs this file with argv', () => {
+    const args = channel.revertHelperArgs('img:dev', job);
+    expect(mountsOf(args)).toEqual(['/var/run/docker.sock:/var/run/docker.sock', '/opt/citynet:/opt/citynet', '/opt/citynet/docker-compose.yml:/tmp/docker-compose.yml:ro']);
+    expect(args.slice(args.indexOf('img:dev'))).toEqual(['img:dev', 'node', '/app/updateChannel.js', 'revert', '/opt/citynet', '/opt/citynet/backend/data', 'city.db', 'c.bak', 'backend', 'citynet', 's']);
+    expect(args).not.toContain('sh');
+  });
+
+  it('mounts a data folder kept outside the project as well', () => {
+    expect(mountsOf(channel.revertHelperArgs('img', { ...job, dataDir: '/srv/citynet-data' }))).toContain('/srv/citynet-data:/srv/citynet-data');
+    // A sibling whose name only starts the same is outside.
+    expect(mountsOf(channel.revertHelperArgs('img', { ...job, dataDir: '/opt/citynet-data' }))).toContain('/opt/citynet-data:/opt/citynet-data');
+  });
+});
+
+describe('revertPlan', () => {
+  const self = { image: 'img:dev', service: 'backend', mounts: [{ source: '/opt/citynet/backend/data', destination: '/app/data' }] };
+  const files = (names) => ({ readdirSync: () => names });
+  const COPY = 'city.db.before-dev-builds-2026-10-15T09-00-00.bak';
+
+  it('is ready with the newest copy, the host data folder and the service', () => {
+    expect(channel.revertPlan('/app/data/city.db', { fs: files(['city.db', COPY]), self }))
+      .toEqual({ ok: true, copy: COPY, dataDir: '/opt/citynet/backend/data', service: 'backend', image: 'img:dev' });
+  });
+
+  it('says why not: no copy, docker silent, no mounted folder, no compose service', () => {
+    expect(channel.revertPlan('/app/data/city.db', { fs: files(['city.db']), self }).error).toMatch(/no copy/);
+    expect(channel.revertPlan('/app/data/city.db', { fs: files([COPY]), self: null }).error).toMatch(/Docker could not say/);
+    expect(channel.revertPlan('/app/data/city.db', { fs: files([COPY]), self: { ...self, mounts: [] } }).error).toMatch(/not mounted/);
+    expect(channel.revertPlan('/app/data/city.db', { fs: files([COPY]), self: { ...self, service: null } }).error).toMatch(/docker compose/);
+  });
+});
+
+describe('startRevert', () => {
+  it('starts the helper detached, so it outlives this server', () => {
+    const seen = {};
+    const spawn = (cmd, args, opts) => { Object.assign(seen, { cmd, args, opts }); return { unref: () => { seen.unref = true; } }; };
+    const plan = { ok: true, copy: 'c.bak', dataDir: '/opt/citynet/backend/data', service: 'backend', image: 'img:dev' };
+    const labels = { workingDir: '/opt/citynet', configFile: '/opt/citynet/docker-compose.yml', projectName: 'citynet' };
+    channel.startRevert({ plan, labels, dbPath: '/app/data/city.db' }, { spawn, now: () => new Date('2026-10-20T10:00:00Z') });
+    expect(seen.cmd).toBe('docker');
+    expect(seen.opts.detached).toBe(true);
+    expect(seen.unref).toBe(true);
+    expect(seen.args.slice(-8)).toEqual(['revert', '/opt/citynet', '/opt/citynet/backend/data', 'city.db', 'c.bak', 'backend', 'citynet', '2026-10-20T10-00-00']);
   });
 });
