@@ -14,6 +14,14 @@ If it cannot update, it now says why rather than waiting — the commonest reaso
 
 **The in-app update pulls images, not files.** `docker-compose.yml`, `nginx.conf` and the rest come from the repository, so a release that changes one of them needs a `git pull` as well. Everything keeps working without it; only the new capability is missing.
 
+### Dev builds on a docker-compose.yml from before 1.8.1
+
+Before 1.14.9, an install whose `docker-compose.yml` predates 1.8.1 (its images written as
+`over2take/citynet-backend:latest`) never reached a dev build: updates kept restarting on the
+stable release. From 1.14.9 the app changes those two image lines to
+`:${IMAGE_TAG:-latest}` when dev builds are on, and keeps the original as
+`docker-compose.yml.before-dev-builds-<time>.bak`. Nothing else in the file is changed.
+
 ### Windows servers before 1.14.7
 
 On Docker Desktop for Windows, **CLICK TO UPDATE** and **LOOK FOR DEV BUILDS** did not work before

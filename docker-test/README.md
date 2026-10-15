@@ -13,9 +13,14 @@ after any first one failed. Neither showed until a real install hit it.
 3. Starts a **throwaway install** in your temp folder from the real `docker-compose.yml` (images
    from the local registry; no DuckDNS), with a test-only GM and its own `.env` files. Your own
    install and database are never touched.
+   Its `docker-compose.yml` is made as an install from before 1.8.1 has it, images written as
+   `:latest`, since many real installs still have that one.
 4. Drives the **real updater through the server's API** and checks a value in the database
    survives every step:
    - an in-app update, then a second one straight after;
+   - dev builds turned on by an earlier version and the server restarted, still on stable, then
+     one in-app update, which must land on the dev build (and leave the compose file following
+     `IMAGE_TAG`, the original kept);
    - LOOK FOR DEV BUILDS ticked: a copy of the database, `IMAGE_TAG=dev` in both `.env` files, and
      an update onto a dev build;
    - the box unticked: `IMAGE_TAG=latest` in both files.
