@@ -4,6 +4,10 @@ import { readFileSync } from 'fs'
 
 const { version } = JSON.parse(readFileSync('./package.json', 'utf-8'))
 
+// Where the dev server sends /api, /uploads and the socket: the backend on 5000, or another for
+// the browser tests (e2e/), which run their own beside a dev setup that may already be on 5000.
+const api = process.env.API_TARGET || 'http://127.0.0.1:5000'
+
 export default defineConfig({
   plugins: [react()],
   define: {
@@ -18,10 +22,10 @@ export default defineConfig({
     host: '0.0.0.0',
     allowedHosts: true,
     proxy: {
-      '/api': 'http://127.0.0.1:5000',
-      '/uploads': 'http://127.0.0.1:5000',
+      '/api': api,
+      '/uploads': api,
       '/socket.io': {
-        target: 'http://127.0.0.1:5000',
+        target: api,
         ws: true
       }
     }

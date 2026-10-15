@@ -1130,9 +1130,16 @@ CITY_NET/
 │       └── ...                 # Audio, icons, kofi.png
 │
 ├── docs/                       # Reference docs (deployment plans, feature notes)
+├── e2e/                        # The browser journeys: the real backend and frontend on ports of their own (5055, 5174) with a throwaway database and a test-only GM, driven by Playwright in one headless browser. CI runs them on every pull request; locally only when asked. e2e/README.md says how to install and run them
+│   ├── README.md               # How to install and run the journeys, read a failure, and write a new one
+│   ├── package.json            # Playwright's test runner, and nothing else
+│   ├── playwright.config.ts    # Starts both servers (Secure Mode on, a temp database, the test GM), one worker, the installed Chrome locally or Playwright's Chromium in CI
+│   ├── cleanup.ts              # Before a run, the throwaway databases earlier runs left in the temp folder
+│   └── tests/
+│       └── builder-smoke.spec.ts   # The GM signs in, opens the System Builder, meets and skips the first-time tour, finds MY SYSTEMS, and goes back to the map
 ├── Dockerfile.backend
 ├── Dockerfile.frontend
-├── .github/workflows/          # CI Tests on PRs and main; Release to Docker Hub on green main; Dev Build to Docker Hub on dispatch or a push to dev. Includes Nginx Proxy Behaviour, which runs the real nginx against the repository config and a stub upstream — a 40MB body through, the caller's address forwarded, the socket upgrading — because every other test mounts a router directly and never sees the proxy
+├── .github/workflows/          # CI Tests on PRs and main; Release to Docker Hub on green main; Dev Build to Docker Hub on dispatch or a push to dev. Includes Nginx Proxy Behaviour, which runs the real nginx against the repository config and a stub upstream — a 40MB body through, the caller's address forwarded, the socket upgrading — because every other test mounts a router directly and never sees the proxy. And Browser Journeys, the e2e/ Playwright tests in a real browser
 ├── docker-compose.yml          # Image tags read ${IMAGE_TAG:-latest}, so the release channel is a setting rather than an edit
 ├── nginx.conf                  # Proxies /api and the socket to the backend. Forwards X-Forwarded-For, without which every request reaches the app from this container's address and anything counting per caller counts the whole table as one; and allows a body at least as large as the biggest upload the app accepts, or a large map is refused by the proxy before the app ever sees it. A backend test asserts the second
 └── .env.example

@@ -162,3 +162,54 @@ jobs:
 
       - name: Build (type-check + bundle)
         run: npm run build
+
+  # The browser journeys (e2e/, 4l): the real backend and frontend started on a throwaway database,
+  # driven in Playwright's own headless Chromium. On a developer's machine they run only when asked
+  # (e2e/README.md); here, on every pull request.
+  test-e2e:
+    name: Browser Journeys
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            ./backend/package-lock.json
+            ./frontend/package-lock.json
+            ./e2e/package-lock.json
+
+      - name: Install the backend
+        working-directory: ./backend
+        run: npm ci
+
+      - name: Install the frontend
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Install the journeys
+        working-directory: ./e2e
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: ./e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the journeys
+        working-directory: ./e2e
+        run: npx playwright test
+
+      # What failed and why: screenshots, a trace of every step, and the HTML report.
+      - name: Keep the report of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 14
