@@ -77,10 +77,8 @@ describe('for whoever may change the token\'s health', () => {
   it('shows each condition as a chip with rounds left, its description and modifiers', async () => {
     const socket = fakeSocket([{ id: 'poisoned', left: 2, modifiers: [{ target: 'all_rolls', amount: -1 }] }, { id: 'glitching', modifiers: [] }]);
     render(<TokenConditions location={token('[{"id":"poisoned"},{"id":"glitching"}]')} gameSystem={HEARTH} socket={socket} canChange authToken="gm-token" />);
-    // The chips draw at once from the token; the rounds left arrive after, with the server's reply.
-    // Waited for, since on a busy machine the reply can land after the chips first appear.
-    await waitFor(() => expect(section().getAllByRole('listitem').map((c) => c.textContent)).toEqual(['POISON2R×', 'GLITCH×']));
-    const chips = section().getAllByRole('listitem');
+    const chips = await section().findAllByRole('listitem');
+    expect(chips.map((c) => c.textContent)).toEqual(['POISON2R×', 'GLITCH×']);
     expect(chips[1].getAttribute('title')).toBe('Chrome misfiring.');
     await waitFor(() => expect(screen.getByTestId('condition-poisoned').textContent).toBe('POISONED · 2 ROUNDS LEFTSickened by a toxin.ALL ROLLS −1'));
     expect(listAsked[0]).toEqual({ url: `/api/systems/conditions/${HEARTH}`, auth: 'Bearer gm-token' });
