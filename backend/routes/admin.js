@@ -353,13 +353,36 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     const check = updater.preflight();
     if (!check.ok) return res.status(409).json({ error: check.error });
 
-    // Refused inside runUpdate as well, which is what actually holds if two requests
-    // arrive close enough together to both pass the check above.
-    if (!updater.runUpdate(check.labels)) {
-      return res.status(409).json({ error: 'An update is already running.' });
+    const start = () => {
+      // Refused inside runUpdate as well, which is what actually holds if two requests
+      // arrive close enough together to both pass the check above.
+      if (!updater.runUpdate(check.labels)) {
+        return res.status(409).json({ error: 'An update is already running.' });
+      }
+      return res.json({ message: 'Update started' });
+    };
+
+    // On dev builds, a docker-compose.yml from before 1.8.1 names its images `:latest`, and an
+    // update would download and restart on the stable release whatever IMAGE_TAG says (a real
+    // install did, every time). Its images are made to follow IMAGE_TAG first, the original kept,
+    // and the .env files put in step with the channel this server follows.
+    if (updater.allowsDevBuilds() && !composeFollowsTag()) {
+      if (switching) return res.status(409).json({ error: 'The release channel is being changed. Try again in a moment.' });
+      switching = true;
+      return updateChannel.syncChannel({ tag: 'dev', labels: check.labels })
+        .then(start, (err) => {
+          console.error('[update] docker-compose.yml:', err.message);
+          res.status(500).json({ error: 'docker-compose.yml could not be set to follow the dev builds, so nothing was updated.' });
+        })
+        .finally(() => { switching = false; });
     }
-    res.json({ message: 'Update started' });
+    return start();
   });
+
+  /** Whether this server's docker-compose.yml names its CITY_NET images to follow IMAGE_TAG. */
+  const composeFollowsTag = () => {
+    try { return updateChannel.followsTag(fs.readFileSync(updater.COMPOSE_FILE, 'utf8')); } catch { return true; }
+  };
 
   // --- Release channel: the LOOK FOR DEV BUILDS box (updateChannel.js) ---
   //

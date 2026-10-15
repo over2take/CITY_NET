@@ -75,7 +75,11 @@ const publishFrontend = () => {
 
 // ─── The install ─────────────────────────────────────────────────────────────
 
-/** docker-compose.yml as shipped, its images from the local registry, without DuckDNS or builds. */
+/**
+ * docker-compose.yml as shipped, its images from the local registry, without DuckDNS or builds;
+ * then as an install from before 1.8.1 still has it, its images written as `:latest` rather than
+ * following IMAGE_TAG (an in-app update replaces images, never this file, so many installs do).
+ */
 const testCompose = () => {
   let yml = fs.readFileSync(path.join(ROOT, 'docker-compose.yml'), 'utf8').replace(/\r\n/g, '\n');
   yml = yml.replaceAll('over2take/citynet-', `${REG}/citynet-`);
@@ -86,7 +90,7 @@ const testCompose = () => {
   if (!yml.includes(`${REG}/citynet-backend:\${IMAGE_TAG:-latest}`) || /build:|duckdns/i.test(yml)) {
     fail('Could not make the test compose file from docker-compose.yml; has its shape changed?');
   }
-  return yml;
+  return yml.replaceAll(':${IMAGE_TAG:-latest}', ':latest');
 };
 
 const backendId = () => quietly(['ps', '-q', '--filter', `label=com.docker.compose.project=${PROJECT}`, '--filter', 'label=com.docker.compose.service=backend']);
@@ -116,15 +120,27 @@ const waitFor = async (label, test, seconds = 360) => {
 
 const version = () => api('GET', '/api/version')?.body?.version;
 
-/** An in-app update, as the UPDATE NOW button starts it, waited for until `to` is running. */
+/**
+ * An in-app update, as the UPDATE NOW button starts it, waited for until `to` is running. A server
+ * that restarts on another version fails at once (a real install came back on the version it left).
+ */
 const update = async (token, to) => {
+  const from = api('GET', '/api/version')?.body?.bootId;
   const started = api('POST', '/api/update', null, token);
   if (!started || started.status !== 200) fail(`POST /api/update answered ${started && started.status}: ${JSON.stringify(started && started.body)}`);
   await waitFor(`the server to come back as ${to}`, async () => {
     const st = api('GET', '/api/update/status');
     if (st && st.body && st.body.phase === 'failed') fail(`The update failed: ${st.body.error}`);
-    return version() === to;
-  });
+    const now = api('GET', '/api/version')?.body;
+    if (now && now.bootId && now.bootId !== from && now.version !== to) fail(`The server restarted on ${now.version}, not ${to}`);
+    return now && now.version === to;
+  }, 240);
+};
+
+/** Whether the install's docker-compose.yml has its CITY_NET images following IMAGE_TAG. */
+const composeFollowsTag = () => {
+  const images = read('docker-compose.yml').split(/\r?\n/).filter((l) => /^\s*image:.*citynet-(backend|frontend)/.test(l));
+  return images.length === 2 && images.every((l) => l.includes('${IMAGE_TAG'));
 };
 
 /** The value written at the start, still in the database. */
@@ -186,19 +202,32 @@ const run = async () => {
   noFailureLogged();
   ok('updated again in the app to 1.0.2, the marker kept');
 
-  step('LOOK FOR DEV BUILDS ticked');
+  step('Dev builds turned on by an earlier version, its docker-compose.yml older than 1.8.1');
+  // As a real install was found: both .env files saying dev, the server reading dev, and the
+  // compose file still naming its images :latest, so nothing it was told could reach a dev build.
+  for (const f of ['backend/.env', '.env']) fs.writeFileSync(path.join(dir, f), read(f).replace(/^IMAGE_TAG=.*$/m, 'IMAGE_TAG=dev'));
+  docker(['compose', '-p', PROJECT, 'up', '-d', '--force-recreate'], { cwd: dir });
+  await waitFor('the server to come back after the restart', async () => version() === '1.0.2', 120);
+  if (composeFollowsTag()) fail('The test install\'s compose file should still name its images :latest here');
+  ok('IMAGE_TAG=dev in both files, still 1.0.2, the images written :latest');
+
+  step('An in-app update onto the dev build, from there');
+  publishBackend('1.0.3-dev.1', 'dev');
+  await update(token, '1.0.3-dev.1');
+  markerKept(token);
+  noFailureLogged();
+  if (!composeFollowsTag()) fail('docker-compose.yml still names its images :latest');
+  if (!fs.readdirSync(dir).some((n) => n.startsWith('docker-compose.yml.before-dev-builds-'))) fail('No copy of the original docker-compose.yml was kept');
+  ok('running the dev build 1.0.3-dev.1, the compose file now following IMAGE_TAG (the original kept), the marker kept');
+
+  step('LOOK FOR DEV BUILDS unticked, then ticked');
+  const off1 = api('PUT', '/api/update/channel', { dev: false }, token);
+  if (!off1 || off1.status !== 200 || tagIn('backend/.env') !== 'latest' || tagIn('.env') !== 'latest') fail(`Unticking: ${JSON.stringify(off1 && off1.body)}`);
   const on = api('PUT', '/api/update/channel', { dev: true }, token);
   if (!on || on.status !== 200) fail(`Turning dev builds on answered ${on && on.status}: ${JSON.stringify(on && on.body)}`);
   if (tagIn('backend/.env') !== 'dev' || tagIn('.env') !== 'dev') fail(`IMAGE_TAG after ticking: backend/.env=${tagIn('backend/.env')} .env=${tagIn('.env')}`);
   if (!fs.readdirSync(data).some((n) => n.startsWith('city.db.before-dev-builds-'))) fail('No copy of the database was made before dev builds');
   ok(`IMAGE_TAG=dev in both .env files, the database copied (${on.body.backup})`);
-
-  step('An in-app update onto the dev build');
-  publishBackend('1.0.3-dev.1', 'dev');
-  await update(token, '1.0.3-dev.1');
-  markerKept(token);
-  noFailureLogged();
-  ok('running the dev build 1.0.3-dev.1, the marker kept');
 
   if (api('GET', '/api/update/channel', null, token)?.body?.devBuild) {
     step('The stack restarted by hand from the host, as a manual update leaves it');
@@ -260,7 +289,7 @@ const cleanUp = () => {
 
 try {
   await run();
-  console.log('\nPASSED: in-app updates one after another, dev builds on and off, going back to stable where the build has it, the data kept throughout.');
+  console.log('\nPASSED: two in-app updates in a row, an old compose file brought onto dev builds, dev builds on and off, going back to stable where the build has it, the data kept throughout.');
   if (!KEEP) cleanUp();
 } catch (err) {
   console.error(`\nFAILED: ${err.message}`);

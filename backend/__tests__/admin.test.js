@@ -478,6 +478,64 @@ describe('release channel routes', () => {
     expect((await back(tempToken)).status).toBe(401);
     expect((await request(app).post('/api/admin/update/revert')).status).toBe(401);
   });
+
+  // POST /update on dev builds with a docker-compose.yml from before 1.8.1 (images written :latest).
+  describe('an update on dev builds with an old docker-compose.yml', () => {
+    const fsReal = createRequire(import.meta.url)('fs');
+    const OLD = '    image: over2take/citynet-backend:latest\n    image: over2take/citynet-frontend:latest\n';
+    const NEW = '    image: over2take/citynet-backend:${IMAGE_TAG:-latest}\n    image: over2take/citynet-frontend:${IMAGE_TAG:-latest}\n';
+    const composeReads = (text) => {
+      const original = fsReal.readFileSync;
+      vi.spyOn(fsReal, 'readFileSync').mockImplementation((file, ...rest) => (file === updater.COMPOSE_FILE ? text : original(file, ...rest)));
+    };
+    const post = () => request(app).post('/api/admin/update').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    beforeEach(() => {
+      vi.spyOn(updater, 'isRunning').mockReturnValue(false);
+      vi.spyOn(updater, 'preflight').mockReturnValue(READY);
+    });
+
+    it('makes the images follow IMAGE_TAG first, then updates', async () => {
+      process.env.IMAGE_TAG = 'dev';
+      composeReads(OLD);
+      const order = [];
+      vi.spyOn(updateChannel, 'syncChannel').mockImplementation(async (args) => { order.push(`sync ${args.tag}`); });
+      vi.spyOn(updater, 'runUpdate').mockImplementation(() => { order.push('update'); return {}; });
+      const res = await post();
+      expect(res.status).toBe(200);
+      expect(order).toEqual(['sync dev', 'update']);
+      expect(updateChannel.syncChannel).toHaveBeenCalledWith(expect.objectContaining({ labels: READY.labels }));
+    });
+
+    it('updates nothing when the compose file could not be changed', async () => {
+      process.env.IMAGE_TAG = 'dev';
+      composeReads(OLD);
+      vi.spyOn(updateChannel, 'syncChannel').mockRejectedValue(new Error('the channel helper exited with code 1'));
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const ran = vi.spyOn(updater, 'runUpdate').mockReturnValue({});
+      const res = await post();
+      expect(res.status).toBe(500);
+      expect(res.body.error).toMatch(/nothing was updated/);
+      expect(ran).not.toHaveBeenCalled();
+    });
+
+    it('leaves the compose file alone on the stable channel, and when it already follows the tag', async () => {
+      const synced = vi.spyOn(updateChannel, 'syncChannel').mockResolvedValue();
+      vi.spyOn(updater, 'runUpdate').mockReturnValue({});
+      process.env.IMAGE_TAG = 'latest';
+      composeReads(OLD);
+      expect((await post()).status).toBe(200);
+      vi.restoreAllMocks();
+      vi.spyOn(updater, 'isRunning').mockReturnValue(false);
+      vi.spyOn(updater, 'preflight').mockReturnValue(READY);
+      vi.spyOn(updater, 'runUpdate').mockReturnValue({});
+      const syncedAgain = vi.spyOn(updateChannel, 'syncChannel').mockResolvedValue();
+      process.env.IMAGE_TAG = 'dev';
+      composeReads(NEW);
+      expect((await post()).status).toBe(200);
+      expect(synced).not.toHaveBeenCalled();
+      expect(syncedAgain).not.toHaveBeenCalled();
+    });
+  });
 });
 
 // ─── check-update ─────────────────────────────────────────────────────────────
