@@ -5,7 +5,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [1.14.8] - 2026-10-15
+
+In-app updates work one after another.
 
 ### Fixed
 
@@ -13,6 +15,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   stopped with "read /tmp/docker-compose.yml: is a directory", on any OS. The update recorded the
   compose file under a name that only existed inside its own helper, and the next update looked
   for it there. Updates now find the compose file where it really is, and record it there.
+
+  **If an in-app update has already failed with "is a directory", update to 1.14.8 by hand once**:
+  in your CITY_NET folder, `docker compose pull` and then `docker compose up -d`. If yours hasn't,
+  the update button installs 1.14.8 as usual.
 
 ### Under the hood
 
