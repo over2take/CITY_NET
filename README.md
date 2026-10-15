@@ -759,10 +759,11 @@ CITY_NET/
 │       ├── signs/              # Preset neon SVG sign images (motel, bar, cyber-clinic, etc.)
 │       └── ...                 # Audio, icons, kofi.png
 │
+├── docker-test/                # The updater on real Docker: updater-journey.mjs builds the real server image, starts a throwaway install from docker-compose.yml with a local registry, and drives the real in-app updater through the API (two updates in a row, dev builds on and off, the data kept); CI runs it on Linux, and it is run by hand on Windows before an updater release. README.md says how
 ├── docs/                       # Reference docs (deployment plans, feature notes)
 ├── Dockerfile.backend
 ├── Dockerfile.frontend
-├── .github/workflows/          # CI Tests on PRs and main; Release to Docker Hub on green main; Dev Build to Docker Hub on dispatch or a push to dev. Includes Nginx Proxy Behaviour, which runs the real nginx against the repository config and a stub upstream — a 40MB body through, the caller's address forwarded, the socket upgrading — because every other test mounts a router directly and never sees the proxy
+├── .github/workflows/          # CI Tests on PRs and main; Release to Docker Hub on green main; Dev Build to Docker Hub on dispatch or a push to dev. Includes Updater on Real Docker (docker-test/updater-journey.mjs), and Nginx Proxy Behaviour, which runs the real nginx against the repository config and a stub upstream — a 40MB body through, the caller's address forwarded, the socket upgrading — because every other test mounts a router directly and never sees the proxy
 ├── docker-compose.yml          # Image tags read ${IMAGE_TAG:-latest}, so the release channel is a setting rather than an edit
 ├── nginx.conf                  # Proxies /api and the socket to the backend. Forwards X-Forwarded-For, without which every request reaches the app from this container's address and anything counting per caller counts the whole table as one; and allows a body at least as large as the biggest upload the app accepts, or a large map is refused by the proxy before the app ever sees it. A backend test asserts the second
 └── .env.example

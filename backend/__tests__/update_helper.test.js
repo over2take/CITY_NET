@@ -37,10 +37,22 @@ describe('buildUpdateHelperArgs — volume mounts', () => {
     expect(args).not.toContain('/project');
   });
 
-  it('mounts the compose file read-only at /tmp/docker-compose.yml', () => {
+  it('mounts the compose file read-only at its own host path, and gives compose that path', () => {
+    // Compose writes the `-f` it was given into the containers' labels. Given the helper-only
+    // /tmp/docker-compose.yml, the stack was left naming a file nobody else has, and the next
+    // in-app update failed with "read /tmp/docker-compose.yml: is a directory" (seen on a real
+    // install after its first successful in-app update).
     const args = buildUpdateHelperArgs(WORKING_DIR, CONFIG_FILE, NO_PROJECT);
     const vArgs = args.filter((_, i) => args[i - 1] === '-v');
-    expect(vArgs).toContain(`${CONFIG_FILE}:/tmp/docker-compose.yml:ro`);
+    expect(vArgs).toContain(`${CONFIG_FILE}:${CONFIG_FILE}:ro`);
+    expect(args[args.indexOf('-f') + 1]).toBe(CONFIG_FILE);
+    expect(args).not.toContain('/tmp/docker-compose.yml');
+  });
+
+  it('runs the helper on the image it is given, the one this server runs', () => {
+    const args = buildUpdateHelperArgs(WORKING_DIR, CONFIG_FILE, NO_PROJECT, 'over2take/citynet-backend:2.0.0-dev.2');
+    expect(args[args.indexOf('docker') - 1]).toBe('over2take/citynet-backend:2.0.0-dev.2');
+    expect(buildUpdateHelperArgs(WORKING_DIR, CONFIG_FILE, NO_PROJECT)).toContain('over2take/citynet-backend:latest');
   });
 
   it('includes the docker socket mount', () => {
