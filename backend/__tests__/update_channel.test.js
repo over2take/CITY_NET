@@ -157,7 +157,7 @@ describe('switchChannel', () => {
   const harness = (code, order = []) => ({
     db: { run: (sql, params, cb) => { order.push(`copy ${params[0]}`); cb(null); } },
     spawn: (cmd, args) => {
-      order.push(`helper ${args.slice(-2).join(' ')}`);
+      order.push(`helper ${args.slice(args.indexOf('/app/updateChannel.js') + 1).join(' ')}`);
       const child = new EventEmitter();
       setTimeout(() => child.emit('close', code), 0);
       return child;
@@ -170,7 +170,7 @@ describe('switchChannel', () => {
     const order = [];
     const { db, spawn } = harness(0, order);
     const done = await channel.switchChannel({ tag: 'dev', labels, db, dbPath: '/app/data/city.db' }, { spawn, image: 'img', now });
-    expect(order).toEqual([`copy ${path.join('/app/data', 'city.db.before-dev-builds-2026-10-14T21-05-09.bak')}`, 'helper /opt/citynet dev']);
+    expect(order).toEqual([`copy ${path.join('/app/data', 'city.db.before-dev-builds-2026-10-14T21-05-09.bak')}`, 'helper /opt/citynet dev /opt/citynet/docker-compose.yml']);
     expect(done.channel).toBe('dev');
     expect(process.env.IMAGE_TAG).toBe('dev');
   });
@@ -180,7 +180,7 @@ describe('switchChannel', () => {
     const order = [];
     const { db, spawn } = harness(0, order);
     const done = await channel.switchChannel({ tag: 'latest', labels, db, dbPath: '/app/data/city.db' }, { spawn, image: 'img' });
-    expect(order).toEqual(['helper /opt/citynet latest']);
+    expect(order).toEqual(['helper /opt/citynet latest /opt/citynet/docker-compose.yml']);
     expect(done).toEqual({ channel: 'latest', backup: null });
     expect(process.env.IMAGE_TAG).toBe('latest');
   });
@@ -199,5 +199,77 @@ describe('switchChannel', () => {
     await expect(channel.switchChannel({ tag: 'dev', labels, db, dbPath: '/app/data/city.db' }, { spawn, image: 'img', now })).rejects.toThrow(/disk full/);
     expect(order).toEqual([]);
     expect(process.env.IMAGE_TAG).toBe('latest');
+  });
+});
+
+// ─── docker-compose.yml from before 1.8.1 ─────────────────────────────────────
+
+describe('a docker-compose.yml whose images ignore IMAGE_TAG', () => {
+  // The two image lines as a real install's file had them (Select-String "image:" docker-compose.yml).
+  const OLD = 'services:\r\n  backend:\r\n    image: over2take/citynet-backend:latest\r\n    env_file:\r\n      - ./backend/.env\r\n  frontend:\r\n    image: over2take/citynet-frontend:latest\r\n  duckdns:\r\n    image: lscr.io/linuxserver/duckdns:latest\r\n';
+
+  it('is seen as not following, and the current shape as following', () => {
+    expect(channel.followsTag(OLD)).toBe(false);
+    expect(channel.followsTag(channel.withTaggedImages(OLD))).toBe(true);
+    expect(channel.followsTag('    image: over2take/citynet-backend:${IMAGE_TAG:-latest}\n    image: over2take/citynet-frontend:${IMAGE_TAG:-latest}\n')).toBe(true);
+    expect(channel.followsTag('services:\n  other:\n    image: nginx:alpine\n')).toBe(true);
+  });
+
+  it('changes only the two CITY_NET image lines, keeping line endings and everything else', () => {
+    const next = channel.withTaggedImages(OLD);
+    expect(next).toBe(OLD
+      .replace('citynet-backend:latest', 'citynet-backend:${IMAGE_TAG:-latest}')
+      .replace('citynet-frontend:latest', 'citynet-frontend:${IMAGE_TAG:-latest}'));
+    expect(next).toContain('lscr.io/linuxserver/duckdns:latest');
+    expect(channel.withTaggedImages(next)).toBe(next);
+    // A line already following IMAGE_TAG in its own way is the admin's, and stays.
+    expect(channel.withTaggedImages('    image: over2take/citynet-backend:${IMAGE_TAG}')).toBe('    image: over2take/citynet-backend:${IMAGE_TAG}');
+  });
+
+  it('handles a pinned tag, no tag, quotes, and a registry with a port', () => {
+    expect(channel.withTaggedImages('    image: over2take/citynet-backend:1.7.0')).toBe('    image: over2take/citynet-backend:${IMAGE_TAG:-latest}');
+    expect(channel.withTaggedImages('    image: over2take/citynet-frontend')).toBe('    image: over2take/citynet-frontend:${IMAGE_TAG:-latest}');
+    expect(channel.withTaggedImages('    image: "over2take/citynet-backend:latest"')).toBe('    image: "over2take/citynet-backend:${IMAGE_TAG:-latest}"');
+    expect(channel.withTaggedImages('    image: localhost:5099/citynet-backend:latest')).toBe('    image: localhost:5099/citynet-backend:${IMAGE_TAG:-latest}');
+  });
+
+  describe('written by the helper', () => {
+    let dir;
+    beforeEach(() => {
+      dir = fs.mkdtempSync(path.join(os.tmpdir(), 'citynet-compose-'));
+      fs.mkdirSync(path.join(dir, 'backend'));
+      fs.writeFileSync(path.join(dir, 'backend/.env'), 'IMAGE_TAG=latest\n');
+      fs.writeFileSync(path.join(dir, 'docker-compose.yml'), OLD);
+    });
+    afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+    it('makes the images follow IMAGE_TAG and keeps the original beside it, once', () => {
+      const compose = path.join(dir, 'docker-compose.yml');
+      const now = () => new Date('2026-10-15T21:00:00Z');
+      channel.writeChannel(dir, 'dev', { now }, compose);
+      expect(channel.followsTag(fs.readFileSync(compose, 'utf8'))).toBe(true);
+      expect(fs.readFileSync(`${compose}.before-dev-builds-2026-10-15T21-00-00.bak`, 'utf8')).toBe(OLD);
+      // A second run finds nothing to change, and makes no second copy.
+      channel.writeChannel(dir, 'latest', { now: () => new Date('2026-10-16T08:00:00Z') }, compose);
+      expect(fs.readdirSync(dir).filter((n) => n.includes('.before-dev-builds-'))).toHaveLength(1);
+    });
+
+    it('leaves the compose file alone when none is given, as before', () => {
+      channel.writeChannel(dir, 'dev');
+      expect(fs.readFileSync(path.join(dir, 'docker-compose.yml'), 'utf8')).toBe(OLD);
+    });
+
+    it('is what the helper runs: node updateChannel.js <directory> <channel> <compose file>', () => {
+      const compose = path.join(dir, 'docker-compose.yml');
+      execFileSync(process.execPath, [SCRIPT, dir, 'dev', compose]);
+      expect(channel.followsTag(fs.readFileSync(compose, 'utf8'))).toBe(true);
+      expect(fs.readFileSync(path.join(dir, '.env'), 'utf8')).toBe('IMAGE_TAG=dev\n');
+    });
+  });
+
+  it('the helper is given the compose file, at its own path, in the form Docker accepts', () => {
+    const args = channel.channelHelperArgs('img', String.raw`X:\CITY_NET`, 'dev', String.raw`X:\CITY_NET\docker-compose.yml`);
+    expect(args.filter((_, i) => args[i - 1] === '-v')).toEqual(['/x/CITY_NET:/x/CITY_NET', '/x/CITY_NET/docker-compose.yml:/x/CITY_NET/docker-compose.yml']);
+    expect(args.slice(-3)).toEqual(['/x/CITY_NET', 'dev', '/x/CITY_NET/docker-compose.yml']);
   });
 });
