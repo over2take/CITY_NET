@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
 const outbound = require('./net/outbound');
+const { dockerPath } = require('./dockerPath');
 
 /**
  * In-app self-update.
@@ -246,7 +247,10 @@ function fetchVersionTags(opts = {}) {
  * creates a new empty directory, wiping existing bind-mount data (issue that
  * caused data loss on in-app updates prior to 1.6.3).
  */
-function buildUpdateHelperArgs(hostWorkingDir, hostConfigFile, projectArgs) {
+function buildUpdateHelperArgs(reportedWorkingDir, reportedConfigFile, projectArgs) {
+  // As Docker accepts them from in here: a Windows host's `X:\...` becomes `/x/...` (dockerPath.js).
+  const hostWorkingDir = dockerPath(reportedWorkingDir);
+  const hostConfigFile = dockerPath(reportedConfigFile);
   return [
     'run', '--rm',
     '-v', '/var/run/docker.sock:/var/run/docker.sock',
