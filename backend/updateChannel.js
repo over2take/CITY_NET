@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn, execSync, execFileSync } = require('child_process');
+const { dockerPath } = require('./dockerPath');
 
 /**
  * The LOOK FOR DEV BUILDS box: which release channel this deployment follows, switched from
@@ -75,7 +76,9 @@ function writeChannel(projectDir, tag, deps = {}) {
 }
 
 /** The argument list for the helper that runs writeChannel on the host's files. */
-function channelHelperArgs(image, projectDir, tag) {
+function channelHelperArgs(image, reportedProjectDir, tag) {
+  // As Docker accepts it from in here: a Windows host's `X:\...` becomes `/x/...` (dockerPath.js).
+  const projectDir = dockerPath(reportedProjectDir);
   return [
     'run', '--rm',
     // At its own absolute path, as the update helper mounts it (updater.js buildUpdateHelperArgs).
@@ -166,9 +169,6 @@ function switchChannel({ tag, labels, db, dbPath }, deps = {}) {
 /** SQLite's own files beside a database, which go wherever the database goes. */
 const SIDE_FILES = ['-journal', '-wal', '-shm'];
 
-/** Where the compose file is mounted in the helper, as in the update's own helper. */
-const COMPOSE_IN_HELPER = '/tmp/docker-compose.yml';
-
 /** The newest copy made before dev builds were turned on, among a data folder's file names, or null. */
 function newestDevCopy(names, dbName) {
   const prefix = `${dbName}.before-dev-builds-`;
@@ -215,14 +215,17 @@ function swapBack(dataDir, dbName, copyName, stamp, deps = {}) {
  * The helper's whole job, in order. Nothing is stopped until stable is downloaded and `latest`
  * is written, and once the server is stopped, everything is started again whatever happened.
  */
-function revertToStable({ projectDir, dataDir, dbName, copyName, service, projectName, stamp }, deps = {}) {
+function revertToStable({ projectDir, configFile, dataDir, dbName, copyName, service, projectName, stamp }, deps = {}) {
   const fsx = deps.fs || fs;
   const env = { ...process.env, IMAGE_TAG: 'latest' };
   const run = deps.run || ((args) => execFileSync('docker', args, { stdio: 'inherit', env }));
   const say = deps.say || ((line) => console.log(`[go back to stable] ${line}`));
   if (!fsx.existsSync(path.join(dataDir, copyName))) throw new Error(`${copyName} is missing`);
   if (!service) throw new Error('The server\'s compose service is unknown');
-  const compose = ['compose', '--project-directory', projectDir, '-f', COMPOSE_IN_HELPER, ...(projectName ? ['-p', projectName] : [])];
+  if (!configFile) throw new Error('The compose file is unknown');
+  // The compose file by its host path, as the update's own helper gives it (updater.js): compose
+  // records the -f it is given in the containers' labels, which the next update reads.
+  const compose = ['compose', '--project-directory', projectDir, '-f', configFile, ...(projectName ? ['-p', projectName] : [])];
   say('downloading the stable release');
   run([...compose, 'pull']);
   writeChannel(projectDir, 'latest', deps);
@@ -240,16 +243,22 @@ function revertToStable({ projectDir, dataDir, dbName, copyName, service, projec
 /** Whether `inner` is `outer` or inside it, as host paths. */
 const within = (inner, outer) => inner === outer || inner.startsWith(`${outer.replace(/\/$/, '')}/`);
 
-/** The argument list for the helper that runs revertToStable. */
-function revertHelperArgs(image, { projectDir, configFile, dataDir, dbName, copyName, service, projectName, stamp }) {
+/**
+ * The argument list for the helper that runs revertToStable. Every host path as Docker accepts it
+ * from in here (dockerPath.js: a Windows host's X:\ becomes /x/), each mounted at its own path.
+ */
+function revertHelperArgs(image, { projectDir: reportedProjectDir, configFile: reportedConfigFile, dataDir: reportedDataDir, dbName, copyName, service, projectName, stamp }) {
+  const projectDir = dockerPath(reportedProjectDir);
+  const configFile = dockerPath(reportedConfigFile);
+  const dataDir = dockerPath(reportedDataDir);
   return [
     'run', '--rm',
     '-v', '/var/run/docker.sock:/var/run/docker.sock',
     '-v', `${projectDir}:${projectDir}`,
-    '-v', `${configFile}:${COMPOSE_IN_HELPER}:ro`,
+    '-v', `${configFile}:${configFile}:ro`,
     // The data folder is usually inside the project, and so already there.
     ...(within(dataDir, projectDir) ? [] : ['-v', `${dataDir}:${dataDir}`]),
-    image, 'node', SCRIPT_IN_IMAGE, 'revert', projectDir, dataDir, dbName, copyName, service, projectName || '', stamp,
+    image, 'node', SCRIPT_IN_IMAGE, 'revert', projectDir, dataDir, dbName, copyName, service, projectName || '', stamp, configFile,
   ];
 }
 
@@ -298,13 +307,13 @@ module.exports = {
 
 // The helper's half:
 //   node updateChannel.js <project directory> <channel>
-//   node updateChannel.js revert <project directory> <data directory> <db> <copy> <service> <project name> <stamp>
+//   node updateChannel.js revert <project directory> <data directory> <db> <copy> <service> <project name> <stamp> <compose file>
 if (require.main === module) {
   try {
     const [first, ...rest] = process.argv.slice(2);
     if (first === 'revert') {
-      const [projectDir, dataDir, dbName, copyName, service, projectName, stamp] = rest;
-      revertToStable({ projectDir, dataDir, dbName, copyName, service, projectName, stamp });
+      const [projectDir, dataDir, dbName, copyName, service, projectName, stamp, configFile] = rest;
+      revertToStable({ projectDir, configFile, dataDir, dbName, copyName, service, projectName, stamp });
     } else {
       writeChannel(first, rest[0]);
     }

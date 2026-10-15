@@ -7,6 +7,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **GO BACK TO STABLE on Windows, and after it.** On a Windows server it failed the same way the
+  update did before 1.14.7 (Docker refused the `X:\` folder names), whenever the stack had last
+  been started by hand; and like updates before 1.14.8 it left the stack naming a compose file only
+  its helper had. It now gives Docker the folder names in the form it accepts and records the real
+  compose file. Checked on Docker Desktop for Windows: going back straight after a restart by hand,
+  then an in-app update after going back.
+
 ### Added
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
@@ -866,6 +875,50 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   every sheet is still worked out exactly as before. It is proven by restating CWN's and
   Shadowrun's derived values as data and checking the results match the existing code on
   thousands of generated sheets.
+
+---
+
+## [1.14.8] - 2026-10-15
+
+In-app updates work one after another.
+
+### Fixed
+
+- **A second in-app update in a row failed.** After one successful in-app update, the next one
+  stopped with "read /tmp/docker-compose.yml: is a directory", on any OS. The update recorded the
+  compose file under a name that only existed inside its own helper, and the next update looked
+  for it there. Updates now find the compose file where it really is, and record it there.
+
+  **If an in-app update has already failed with "is a directory", update to 1.14.8 by hand once**:
+  in your CITY_NET folder, `docker compose pull` and then `docker compose up -d`. If yours hasn't,
+  the update button installs 1.14.8 as usual.
+
+### Under the hood
+
+- **The updater is tested on real Docker.** A new check builds the real server image, starts a
+  throwaway install from the real `docker-compose.yml`, and runs two in-app updates in a row and
+  dev builds on and off, checking the data survives each one. It runs on every pull request, and by
+  hand on Windows before a release. It fails on the previous updater exactly as a real install did.
+
+---
+
+## [1.14.7] - 2026-10-15
+
+In-app updates and LOOK FOR DEV BUILDS work on Windows.
+
+### Fixed
+
+- **CLICK TO UPDATE and LOOK FOR DEV BUILDS on Windows.** On a server running Docker Desktop for
+  Windows, both failed: the app handed Docker your CITY_NET folder by its Windows name
+  (`X:\CITY_NET`), and Docker reads the colon after the drive letter as a separator, so it
+  refused. LOOK FOR DEV BUILDS said "The channel could not be changed. Nothing was switched." The app
+  now gives Docker the same folder in a form it accepts (`/x/CITY_NET`). Linux and Mac servers are
+  unchanged. Checked on Docker Desktop for Windows: the switch to dev builds, and an update
+  restarting the stack on the same data.
+
+  **If your server is on Windows, update to 1.14.7 by hand once**, since the update button in your
+  current version is the part that's broken: in your CITY_NET folder, run
+  `docker compose pull` and then `docker compose up -d`. After that, updates work from the app.
 
 ---
 
