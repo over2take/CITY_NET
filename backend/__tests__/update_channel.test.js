@@ -278,7 +278,7 @@ describe('revertToStable: the helper steps, in order', () => {
   let project;
   let data;
   const COPY = 'city.db.before-dev-builds-2026-10-15T09-00-00.bak';
-  const job = () => ({ projectDir: project, dataDir: data, dbName: 'city.db', copyName: COPY, service: 'backend', projectName: 'citynet', stamp: '2026-10-20T10-00-00' });
+  const job = () => ({ projectDir: project, configFile: path.join(project, 'docker-compose.yml'), dataDir: data, dbName: 'city.db', copyName: COPY, service: 'backend', projectName: 'citynet', stamp: '2026-10-20T10-00-00' });
   beforeEach(() => {
     project = fs.mkdtempSync(path.join(os.tmpdir(), 'citynet-revert-'));
     data = path.join(project, 'backend', 'data');
@@ -335,10 +335,11 @@ describe('revertToStable: the helper steps, in order', () => {
     expect(steps).toEqual([]);
   });
 
-  it('runs compose against the helper compose file, for this project', () => {
+  it('runs compose against the real compose file, for this project', () => {
     const calls = [];
     channel.revertToStable(job(), { run: (args) => calls.push(args), say: () => {} });
-    expect(calls[0]).toEqual(['compose', '--project-directory', project, '-f', '/tmp/docker-compose.yml', '-p', 'citynet', 'pull']);
+    // By its host path: compose records the -f in the containers' labels, which the next update reads.
+    expect(calls[0]).toEqual(['compose', '--project-directory', project, '-f', path.join(project, 'docker-compose.yml'), '-p', 'citynet', 'pull']);
     expect(calls[1].slice(-2)).toEqual(['stop', 'backend']);
     expect(calls[2].slice(-2)).toEqual(['up', '-d']);
   });
@@ -348,7 +349,7 @@ describe('revertToStable: the helper steps, in order', () => {
     const j = job();
     let refusal = null;
     try {
-      execFileSync(process.execPath, [SCRIPT, 'revert', j.projectDir, j.dataDir, j.dbName, j.copyName, j.service, j.projectName, j.stamp], { stdio: 'pipe' });
+      execFileSync(process.execPath, [SCRIPT, 'revert', j.projectDir, j.dataDir, j.dbName, j.copyName, j.service, j.projectName, j.stamp, j.configFile], { stdio: 'pipe' });
     } catch (err) { refusal = err; }
     expect(refusal.status).toBe(1);
     // Refused by the revert, for the reason it has, not by something else reading the arguments.
@@ -361,11 +362,20 @@ describe('revertHelperArgs', () => {
   const job = { projectDir: '/opt/citynet', configFile: '/opt/citynet/docker-compose.yml', dataDir: '/opt/citynet/backend/data', dbName: 'city.db', copyName: 'c.bak', service: 'backend', projectName: 'citynet', stamp: 's' };
   const mountsOf = (args) => args.filter((_, i) => args[i - 1] === '-v');
 
-  it('mounts the socket, the project at its own path and the compose file, and runs this file with argv', () => {
+  it('mounts the socket, the project and the compose file each at its own path, and runs this file with argv', () => {
     const args = channel.revertHelperArgs('img:dev', job);
-    expect(mountsOf(args)).toEqual(['/var/run/docker.sock:/var/run/docker.sock', '/opt/citynet:/opt/citynet', '/opt/citynet/docker-compose.yml:/tmp/docker-compose.yml:ro']);
-    expect(args.slice(args.indexOf('img:dev'))).toEqual(['img:dev', 'node', '/app/updateChannel.js', 'revert', '/opt/citynet', '/opt/citynet/backend/data', 'city.db', 'c.bak', 'backend', 'citynet', 's']);
+    expect(mountsOf(args)).toEqual(['/var/run/docker.sock:/var/run/docker.sock', '/opt/citynet:/opt/citynet', '/opt/citynet/docker-compose.yml:/opt/citynet/docker-compose.yml:ro']);
+    expect(args.slice(args.indexOf('img:dev'))).toEqual(['img:dev', 'node', '/app/updateChannel.js', 'revert', '/opt/citynet', '/opt/citynet/backend/data', 'city.db', 'c.bak', 'backend', 'citynet', 's', '/opt/citynet/docker-compose.yml']);
     expect(args).not.toContain('sh');
+    expect(args).not.toContain('/tmp/docker-compose.yml');
+  });
+
+  it('gives Docker a Windows host\'s paths in the /x/ form it accepts (as a real install reported them)', () => {
+    const args = channel.revertHelperArgs('img:dev', {
+      ...job, projectDir: 'X:\\CITY_NET', configFile: 'X:\\CITY_NET\\docker-compose.yml', dataDir: 'X:\\CITY_NET\\backend\\data',
+    });
+    expect(mountsOf(args)).toEqual(['/var/run/docker.sock:/var/run/docker.sock', '/x/CITY_NET:/x/CITY_NET', '/x/CITY_NET/docker-compose.yml:/x/CITY_NET/docker-compose.yml:ro']);
+    expect(args.slice(-8)).toEqual(['/x/CITY_NET', '/x/CITY_NET/backend/data', 'city.db', 'c.bak', 'backend', 'citynet', 's', '/x/CITY_NET/docker-compose.yml']);
   });
 
   it('mounts a data folder kept outside the project as well', () => {
@@ -403,6 +413,6 @@ describe('startRevert', () => {
     expect(seen.cmd).toBe('docker');
     expect(seen.opts.detached).toBe(true);
     expect(seen.unref).toBe(true);
-    expect(seen.args.slice(-8)).toEqual(['revert', '/opt/citynet', '/opt/citynet/backend/data', 'city.db', 'c.bak', 'backend', 'citynet', '2026-10-20T10-00-00']);
+    expect(seen.args.slice(-9)).toEqual(['revert', '/opt/citynet', '/opt/citynet/backend/data', 'city.db', 'c.bak', 'backend', 'citynet', '2026-10-20T10-00-00', '/opt/citynet/docker-compose.yml']);
   });
 });

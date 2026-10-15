@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
 const outbound = require('./net/outbound');
+const { dockerPath } = require('./dockerPath');
 
 /**
  * In-app self-update.
@@ -246,13 +247,22 @@ function fetchVersionTags(opts = {}) {
  * creates a new empty directory, wiping existing bind-mount data (issue that
  * caused data loss on in-app updates prior to 1.6.3).
  */
-function buildUpdateHelperArgs(hostWorkingDir, hostConfigFile, projectArgs) {
+function buildUpdateHelperArgs(reportedWorkingDir, reportedConfigFile, projectArgs, image = HELPER_IMAGE) {
+  // As Docker accepts them from in here: a Windows host's `X:\...` becomes `/x/...` (dockerPath.js).
+  const hostWorkingDir = dockerPath(reportedWorkingDir);
+  const hostConfigFile = dockerPath(reportedConfigFile);
   return [
     'run', '--rm',
     '-v', '/var/run/docker.sock:/var/run/docker.sock',
     '-v', `${hostWorkingDir}:${hostWorkingDir}`,
-    '-v', `${hostConfigFile}:${COMPOSE_FILE}:ro`,
-    'over2take/citynet-backend:latest',
+    // The compose file at its own host path too, and compose told that path (below), not a
+    // helper-only one: compose records the `-f` it was given in the containers' labels, and
+    // the next update reads them. Given /tmp/docker-compose.yml, the stack was left naming a
+    // file that exists only inside this helper, and the next update had Docker mount a
+    // folder it made in its place ("read /tmp/docker-compose.yml: is a directory").
+    '-v', `${hostConfigFile}:${hostConfigFile}:ro`,
+    // The image this server runs, so the helper is the same code and needs nothing pulled.
+    image,
     // No `sh -c`. The command used to be assembled into a shell string with the working
     // directory interpolated in double quotes, which reads safe and is not: double quotes
     // stop word-splitting, they do not stop `$(...)` or backticks. Both that path and the
@@ -264,35 +274,46 @@ function buildUpdateHelperArgs(hostWorkingDir, hostConfigFile, projectArgs) {
     // and all, so it also fixes a working directory with a space in it.
     'docker', 'compose',
     '--project-directory', hostWorkingDir,
-    '-f', COMPOSE_FILE,
+    '-f', hostConfigFile,
     ...projectArgs,
     'up', '-d',
   ];
 }
 
+/** The helper's image when this container can't say which it runs. */
+const HELPER_IMAGE = 'over2take/citynet-backend:latest';
+
 /**
- * Read the compose project name and host paths from this container's own labels.
+ * Read the compose project, its host paths and this container's image off the container.
  *
  * A stack started with plain `docker run`, or by a compose old enough not to set these,
  * has none of them — and the helper would then be handed `undefined` as a mount source,
  * fail instantly, and report nothing.
+ *
+ * The compose file is the one this container really has mounted at COMPOSE_FILE, read off its
+ * mounts, before the config_files label. The label is only what the last `compose -f` was
+ * given: one in-app update used to leave it naming the helper's own /tmp path, so the next
+ * update could not find the file. A mount is what Docker itself resolved, whatever wrote it.
  */
 function readComposeLabels(deps = {}) {
   const read = deps.readFileSync || fs.readFileSync;
   const exec = deps.execSync || execSync;
   try {
     const containerId = read('/etc/hostname', 'utf8').trim();
-    const labels = JSON.parse(exec(
-      `docker inspect ${containerId} --format '{{json .Config.Labels}}'`,
+    const self = JSON.parse(exec(
+      `docker inspect ${containerId} --format '{{json .}}'`,
       { encoding: 'utf8' }
     ).trim());
+    const labels = (self.Config && self.Config.Labels) || {};
+    const mounted = (Array.isArray(self.Mounts) ? self.Mounts : []).find((m) => m.Destination === COMPOSE_FILE);
     return {
       projectName: labels['com.docker.compose.project'] || null,
-      configFile: labels['com.docker.compose.project.config_files'] || null,
+      configFile: (mounted && mounted.Source) || labels['com.docker.compose.project.config_files'] || null,
       workingDir: labels['com.docker.compose.project.working_dir'] || null,
+      image: (self.Config && self.Config.Image) || null,
     };
   } catch {
-    return { projectName: null, configFile: null, workingDir: null };
+    return { projectName: null, configFile: null, workingDir: null, image: null };
   }
 }
 
@@ -524,7 +545,7 @@ function runUpdate(labels, deps = {}) {
     state.phase = 'restarting';
     const helper = spawnFn(
       'docker',
-      buildUpdateHelperArgs(labels.workingDir, labels.configFile, projectArgs),
+      buildUpdateHelperArgs(labels.workingDir, labels.configFile, projectArgs, labels.image || undefined),
       { detached: true, stdio }
     );
     // The lock follows the work: the pull is finished, the helper now holds it.
