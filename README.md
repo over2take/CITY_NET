@@ -584,6 +584,7 @@ CITY_NET/
 │   │   │   ├── vehicleArt.tsx           # Ten top-down wireframes, one per book vehicle. Stroke-only and currentColor, matching how the city itself is drawn
 │   │   │   ├── TvPortrait.tsx           # Reusable glitchy TV/CRT portrait effect (chromatic fringe, scanlines, rollband); optional shadow silhouette
 │   │   │   ├── UpdateModal.tsx          # Draggable update notification modal (shown on admin login when update available; Update Now / Remind Me Later / Skip Version; docker-aware)
+│   │   │   ├── DevBuildsBox.tsx         # LOOK FOR DEV BUILDS under Check for update in SYSTEM_INFO (primary admin, Docker installs): ticking asks, then the server copies the database and sets IMAGE_TAG=dev in both .env files; unticking sets latest; greyed with the line to set by hand where the app cannot
 │   │   │   └── __tests__/              # Component unit tests (Vitest + Testing Library)
 │   │   │       ├── AdminPanel.test.tsx
 │   │   │       ├── AttackAnimations.test.tsx
@@ -624,6 +625,7 @@ CITY_NET/
 │   │   │       ├── VehicleBadgeButton.test.tsx      # Reads as an action on your own and a statement on someone else's; themed rather than a fixed colour
 │   │   │       ├── SheetRenderer.vehicles.test.tsx  # Collapsing repeated entries — one empty vehicle at rest, filled ones visible on reload, whitespace not counting as data
 │   │   │       ├── Sidebar.test.tsx
+│   │   │       ├── DevBuildsBox.test.tsx  # Ticked as the server says, hidden off Docker, asks before turning on and names the copy, CANCEL changes nothing, unticks without asking, a refusal stays unticked with the line to set by hand
 │   │   │       └── UpdateModal.test.tsx  # Rendering, docker/non-docker branching, button callbacks, update flow
 │   │   ├── modules/
 │   │   │   ├── signs/

@@ -5,6 +5,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.14.6] - 2026-10-14
+
+Development builds, from inside the app.
+
+### Added
+
+- **LOOK FOR DEV BUILDS.** A box under "Check for update" in SYSTEM_INFO, for the main admin on a
+  Docker install. Ticking it asks first, makes a copy of your database beside it
+  (`city.db.before-dev-builds-<time>.bak`), and sets `IMAGE_TAG=dev` in `backend/.env` and in
+  the `.env` beside `docker-compose.yml`, changing only that line. "Check for update" then offers
+  the newest development build. Unticking sets it back to `latest`. Before this, it meant editing
+  both files by hand and pulling from a terminal. Where the app can't change them (an install
+  without the Docker socket), the box says which line to set by hand.
+
+### Fixed
+
+- **The compose file's note about development builds** no longer mentions a `DEV=true` setting
+  that no longer exists; `IMAGE_TAG` alone chooses.
+
+---
+
 ## [1.14.5] - 2026-10-02
 
 Database backups stay out of the server image.

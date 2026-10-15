@@ -15,6 +15,7 @@ import { CWN_VEHICLE_ROWS, CWN_VEHICLE_WEAPON_ROWS } from '../sheets/templates/c
 import { hasVehicles } from '../sheets/vehicleSystems';
 import { startUpdate, waitForRestart, currentBootId } from '../utils/updateClient';
 import { cyberWeaponsOf } from '../sheets/cwnCyberWeapons';
+import { DevBuildsBox } from './DevBuildsBox';
 
 // Token defense config for the active game system; default is D&D-style AC
 const getTokenDefense = (gameSystem?: string) =>
@@ -441,6 +442,7 @@ export function SystemInfoMenu({ userName, token, currentTheme, onThemeChange }:
         <h1 style={{ fontSize: '1.5rem', margin: 0, textShadow: 'var(--glow)' }}>CITY_NET</h1>
         <div style={{ fontSize: '0.65rem', opacity: 0.7, letterSpacing: '2px', marginTop: '2px' }}>NAV_OS_v{__APP_VERSION__}</div>
         {isPrimaryAdmin && <CheckUpdateButton token={token} />}
+        {isPrimaryAdmin && <DevBuildsBox token={token} />}
         <a href="https://github.com/over2take/CITY_NET/blob/main/CHANGELOG.md" target="_blank" rel="noreferrer" style={{ fontSize: '0.6rem', opacity: 0.5, letterSpacing: '1px', marginTop: '2px', color: 'var(--green)' }}>CHANGELOG ↗</a>
       </header>
       <div style={{ fontSize: '0.8rem', lineHeight: '1.8', borderTop: '1px solid var(--dark-green)', paddingTop: '15px' }}>
