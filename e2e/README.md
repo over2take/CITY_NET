@@ -12,9 +12,11 @@ journeys check the pieces work together on screen.
   for every run. Your real `backend/city.db` is never opened. Each run deletes the one before it, so
   at most one is ever left behind.
 - Signs in with a **test-only GM** (`e2e_gm`), which exists only in that throwaway database. No real
-  account or password is used.
+  account or password is used. The player journey registers its own test player (`e2e_player`) the
+  same way, in the same throwaway database.
 - Runs in **Secure Mode**, as a real table does: everyone signs in.
-- Drives **one headless browser**, one test at a time. Both servers are stopped when it finishes.
+- Drives **one headless browser**, one test at a time (the player journey opens a second, separate
+  window in it for the player). Both servers are stopped when it finishes.
 
 ## Install (once)
 
@@ -94,7 +96,11 @@ frontend suites.
 - Find things the way a person would: by role and name (`getByRole('button', { name: 'PUBLISH' })`),
   by placeholder or label. Avoid CSS selectors; the windows' names and buttons are what players see.
 - Sign in with `GM` from `playwright.config.ts`. The database starts empty each run, so a journey
-  makes what it needs (a system, a character) rather than expecting it to be there.
+  makes what it needs (a system, a character) rather than expecting it to be there. What a journey
+  is not about can be set up through the API (`runningSystem`, `approvedPlayer`); what it is about
+  is done on screen.
+- Two people at once: a second browser of their own with `browser.newContext({ baseURL })`, as the
+  player journey does, so each has their own sign-in.
 - The tests share one database and run in order, one at a time, files alphabetically. A journey that needs a
   fresh state (the tour unseen) sets it up through the API first, rather than counting on running first.
 - In CI a failed journey is tried once more, on the same database, so a journey that makes something
@@ -109,6 +115,7 @@ frontend suites.
 | --- | --- |
 | `playwright.config.ts` | Starts both servers on their own ports with the throwaway database and the test GM; one headless browser |
 | `cleanup.ts` | Before a run, deletes the throwaway databases earlier runs left |
-| `tests/helpers.ts` | Signing in as the GM, opening the GAME tab and the builder (past the tour), a rail button clicked with the pointer moved off after, and a builder page from the rail |
+| `tests/helpers.ts` | Signing in as the GM or a player, opening the GAME tab and the builder (past the tour), a rail button clicked with the pointer moved off after, a builder page from the rail; and through the API, a system made, published and running, and a player registered and approved |
 | `tests/builder-journey.spec.ts` | The GM builds a system from + NEW (words, a part off, a stat and a formula worked out on the sample), publishes it, changes it and publishes v2 through the version preview, and switches the game to it |
+| `tests/player-journey.spec.ts` | A custom system running (set up through the API), played in two browsers at once: a player makes a character and sees the system's words and its formula worked out; the GM types in a catalogue, gives the player something from it with a note, and calls a rest from the GAME tab; the player sees the gift arrive and the rest change their sheet |
 | `tests/builder-smoke.spec.ts` | The GM signs in, opens the System Builder, meets and skips the first-time tour (reset first, so it always shows), and goes back to the map |

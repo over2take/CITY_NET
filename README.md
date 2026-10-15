@@ -1136,8 +1136,9 @@ CITY_NET/
 │   ├── playwright.config.ts    # Starts both servers (Secure Mode on, a temp database, the test GM), one worker, the installed Chrome locally or Playwright's Chromium in CI
 │   ├── cleanup.ts              # Before a run, the throwaway databases earlier runs left in the temp folder
 │   └── tests/
-│       ├── helpers.ts              # Signing in as the GM, the GAME tab, the builder past its tour, a rail button (pointer moved off after), a builder page
+│       ├── helpers.ts              # Signing in as the GM or a player, the GAME tab, the builder past its tour, a rail button (pointer moved off after), a builder page; a running system and an approved player through the API
 │       ├── builder-journey.spec.ts # The GM builds a system from + NEW through the builder's screens, publishes it, publishes v2 through the version preview, and switches the game to it
+│       ├── player-journey.spec.ts  # A custom system played in two browsers: a player makes a character in its words and numbers; the GM types in a catalogue, gives them an item and calls a rest; the player sees both
 │       └── builder-smoke.spec.ts   # The GM signs in, opens the System Builder, meets and skips the first-time tour (reset first), finds MY SYSTEMS, and goes back to the map
 ├── Dockerfile.backend
 ├── Dockerfile.frontend
