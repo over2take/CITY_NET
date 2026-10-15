@@ -18,6 +18,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Version 2.0.0, for the System Builder's dev builds.** The version is now 2.0.0, ahead of the
+  1.14.6 release, so its development builds are 2.0.0-dev.1 onwards and are offered to any install
+  that ticked LOOK FOR DEV BUILDS. 2.0.0 itself is the release they lead to.
 - **The server keeps the mods fitted to each implant.** Its reading of a cyberware row had
   drifted from the sheet's and dropped the list of fitted mods (a Tailored Interface, say), so
   anything the server read and wrote back would have lost them. It now reads rows exactly as the
