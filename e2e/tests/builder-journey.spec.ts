@@ -1,14 +1,14 @@
 import { test, expect } from '@playwright/test';
-import { signInAsGm, openBuilder, openGameSystem, builderPage } from './helpers';
+import { signInAsGm, openBuilder, openGameSystem, builderPage, clickRail } from './helpers';
 
 // The builder journey, the GM's half (4l2a; plan row 4l browser-journey): a system built through
 // the builder's own screens from + NEW (its words, a part off, a stat and a formula worked out on
 // the sample), published, changed and published again through the version preview, and the game
 // switched to it. The player's half (a character, GIVE ITEM, a rest) is 4l2b.
 
-const NAME = 'Hearthfall';
-
-test('the GM builds a system, publishes it twice, and switches the game to it', async ({ page }) => {
+test('the GM builds a system, publishes it twice, and switches the game to it', async ({ page }, info) => {
+  // A retry runs on the same database as the try before it, so it makes a system of its own name.
+  const NAME = info.retry ? `Hearthfall ${info.retry + 1}` : 'Hearthfall';
   await signInAsGm(page);
   await openBuilder(page);
 
@@ -44,8 +44,7 @@ test('the GM builds a system, publishes it twice, and switches the game to it', 
   await expect(page.getByTestId('value-new_formula')).toHaveText('13');
 
   // PUBLISH: the first version goes straight through.
-  const rail = page.getByRole('navigation', { name: 'Builder' });
-  await rail.getByRole('button', { name: 'PUBLISH', exact: true }).click();
+  await clickRail(page, 'PUBLISH');
   await expect(page.getByRole('status')).toContainText('Published v1.');
   await expect(page.getByTestId('builder-system')).toContainText('PUBLISHED v1');
 
@@ -53,7 +52,7 @@ test('the GM builds a system, publishes it twice, and switches the game to it', 
   await builderPage(page, 'WORDS');
   await page.getByLabel('HP one').fill('Scar');
   await page.getByLabel('HP many').fill('Scars');
-  await rail.getByRole('button', { name: 'PUBLISH', exact: true }).click();
+  await clickRail(page, 'PUBLISH');
   await expect(page.getByText('PUBLISH v2 · WHAT CHANGES FROM v1')).toBeVisible();
   await page.getByRole('button', { name: 'PUBLISH v2', exact: true }).click();
   await expect(page.getByTestId('builder-system')).toContainText('PUBLISHED v2');
@@ -63,7 +62,7 @@ test('the GM builds a system, publishes it twice, and switches the game to it', 
   await expect(page.getByRole('main', { name: 'System builder' })).toBeHidden();
   await openGameSystem(page);
   await page.locator('button[aria-haspopup="listbox"]').click();
-  await page.getByRole('option', { name: new RegExp(NAME.toUpperCase()) }).click();
+  await page.getByRole('option', { name: new RegExp(`^${NAME.toUpperCase()} ?v\\d`) }).click();
   const confirm = page.getByRole('dialog', { name: '!! SWITCH GAME SYSTEM !!' });
   await confirm.getByRole('button', { name: 'SWITCH', exact: true }).click();
   await expect(confirm).toBeHidden();

@@ -39,8 +39,19 @@ export const openBuilder = async (page: Page) => {
   }
 };
 
+/** A button on the builder's rail, clicked. The rail widens over the page while the pointer is on
+ *  it, so the pointer then moves off it to the page, as a person's would, and the rail narrows
+ *  again; otherwise it covers whatever sits at the page's left edge. */
+export const clickRail = async (page: Page, name: string) => {
+  const rail = page.getByRole('navigation', { name: 'Builder' });
+  await rail.getByRole('button', { name, exact: true }).click();
+  const { width, height } = page.viewportSize()!;
+  await page.mouse.move(width - 20, height / 2);
+  await expect(rail).toHaveAttribute('data-expanded', 'false');
+};
+
 /** A page of the builder, from the rail. */
 export const builderPage = async (page: Page, name: string) => {
-  await page.getByRole('navigation', { name: 'Builder' }).getByRole('button', { name, exact: true }).click();
+  await clickRail(page, name);
   await expect(page.getByRole('heading', { level: 1, name, exact: true })).toBeVisible();
 };
