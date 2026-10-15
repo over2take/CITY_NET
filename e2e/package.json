@@ -1,0 +1,12 @@
+{
+  "name": "citynet-e2e",
+  "private": true,
+  "description": "The browser journeys: the real app in a real browser, on a throwaway database.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.48.2"
+  },
+  "license": "AGPL-3.0-only"
+}

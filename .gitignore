@@ -69,3 +69,7 @@ frontend/src/*.bak
 # Local .env backups (created when testing setup scripts)
 *.env.bak
 *.env.backup
+
+# Browser journeys (e2e/): what a run leaves behind
+e2e/test-results/
+e2e/playwright-report/
