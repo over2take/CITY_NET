@@ -1,0 +1,360 @@
+{
+  "citysys": 1,
+  "manifest": {
+    "name": "Emberline (test system)",
+    "author": "CITY_NET test generator",
+    "version": 1,
+    "builder": "2.0.0",
+    "license": "",
+    "origin": "test-emberline-7031",
+    "exported": "2026-10-16T13:55:16.096Z"
+  },
+  "definition": {
+    "format": 1,
+    "name": "Emberline (test system)",
+    "words": {
+      "xp": {
+        "singular": "KA",
+        "plural": "KAS"
+      },
+      "class": {
+        "singular": "GORDRA",
+        "plural": "GORDRAS"
+      },
+      "initiative": {
+        "singular": "AN",
+        "plural": "ANS",
+        "short": "AN"
+      },
+      "gm": {
+        "singular": "MORTIS",
+        "plural": "MORTISS"
+      }
+    },
+    "parts": {
+      "xp": {
+        "on": false
+      },
+      "cyberware": {
+        "on": true,
+        "only_with": "rule1"
+      }
+    },
+    "currencies": [
+      {
+        "id": "cur1",
+        "name": "Anzen",
+        "short": "bel",
+        "debt": true
+      },
+      {
+        "id": "cur2",
+        "name": "Tisan",
+        "denominations": [
+          {
+            "id": "cur2c3",
+            "name": "Zenul",
+            "short": "ro",
+            "value": 176
+          },
+          {
+            "id": "cur2c2",
+            "name": "Velqui",
+            "short": "tis",
+            "value": 11
+          },
+          {
+            "id": "cur2c1",
+            "name": "Sar",
+            "short": "qui",
+            "value": 1
+          }
+        ],
+        "negative": true
+      }
+    ],
+    "buildings": {
+      "types": {
+        "gun_shop": {
+          "name": "Velul"
+        },
+        "clinic": {
+          "name": "An"
+        },
+        "corp": {
+          "name": "Tis"
+        }
+      },
+      "catalogues": {
+        "skillplugs": {
+          "on": false
+        },
+        "weapons": {
+          "name": "Tis",
+          "currency": "cur1"
+        },
+        "weapon_mods": {
+          "on": false
+        },
+        "vehicle_weapons": {
+          "name": "Mor"
+        },
+        "gear": {
+          "on": false
+        }
+      }
+    },
+    "bank": {
+      "celebrations": true,
+      "whale": 5882
+    },
+    "core": {
+      "health": {
+        "model": "typed",
+        "types": [
+          {
+            "id": "dmg1",
+            "label": "SAR"
+          },
+          {
+            "id": "dmg2",
+            "label": "ETH"
+          },
+          {
+            "id": "dmg3",
+            "label": "VEL"
+          },
+          {
+            "id": "dmg4",
+            "label": "ETHSAR"
+          }
+        ]
+      },
+      "advancement": [
+        "spend"
+      ],
+      "dice": [
+        "d20",
+        "d100",
+        "4dF"
+      ],
+      "distance": "hexes"
+    },
+    "stats": [
+      {
+        "id": "grp1",
+        "label": "GOR",
+        "stats": [
+          {
+            "id": "st1_1",
+            "label": "Velqui",
+            "min": 1,
+            "max": 15
+          },
+          {
+            "id": "st1_2",
+            "label": "Sar",
+            "min": 1,
+            "max": 21
+          }
+        ]
+      }
+    ],
+    "samples": {
+      "st1_1": 8,
+      "st1_2": 5
+    },
+    "lookups": {
+      "tbl1": {
+        "bands": [
+          {
+            "upTo": 5,
+            "value": 2
+          },
+          {
+            "upTo": 11,
+            "value": 2
+          },
+          {
+            "upTo": 17,
+            "value": -2
+          },
+          {
+            "upTo": 18,
+            "value": 5
+          },
+          {
+            "value": 6
+          }
+        ]
+      },
+      "tbl2": {
+        "bands": [
+          {
+            "upTo": 1,
+            "value": 5
+          },
+          {
+            "upTo": 5,
+            "value": 3
+          },
+          {
+            "value": -3
+          }
+        ]
+      }
+    },
+    "derived": [
+      {
+        "id": "fx1",
+        "label": "Mor",
+        "formula": "min(@st1_2, 26)"
+      },
+      {
+        "id": "fx2",
+        "label": "Belqui",
+        "formula": "clamp(@st1_2, 0, 16)"
+      },
+      {
+        "id": "fx3",
+        "label": "Photis",
+        "formula": "@st1_2 + @st1_1"
+      },
+      {
+        "id": "fx4",
+        "label": "Ny",
+        "formula": "clamp(@fx2, -4, 19)"
+      }
+    ],
+    "npc": {
+      "tiers": [
+        {
+          "id": "tier1",
+          "label": "BELNY",
+          "hp": "@level d8 + 4",
+          "defense": 10,
+          "values": {
+            "dmg2": "@level + 1",
+            "dmg3": "2d6",
+            "dmg4": "2d6",
+            "st1_1": "2d6",
+            "st1_2": "2d6"
+          }
+        },
+        {
+          "id": "tier2",
+          "label": "QUISAR",
+          "hp": "2 + @level",
+          "defense": "10 + floor(@level / 4)",
+          "values": {
+            "st1_1": "2d6"
+          }
+        },
+        {
+          "id": "tier3",
+          "label": "MORVEL",
+          "hp": "@level d8 + 4",
+          "defense": 12,
+          "values": {
+            "dmg3": "2d6",
+            "dmg4": 9
+          }
+        }
+      ]
+    },
+    "conditions": {
+      "bleeding": {
+        "on": false
+      },
+      "unconscious": {
+        "name": "Tisbel"
+      },
+      "restrained": {
+        "name": "Zen",
+        "only_with": "rule1"
+      },
+      "exhausted": {
+        "name": "Belka"
+      },
+      "cond1": {
+        "name": "Ul",
+        "icon": "zzz",
+        "description": "Velan ny.",
+        "ends": "rounds",
+        "rounds": 5,
+        "only_with": "rule4"
+      },
+      "cond2": {
+        "name": "Ulro",
+        "icon": "spiral",
+        "description": "Ulka moranan.",
+        "ends": "rounds",
+        "rounds": 7,
+        "only_with": "rule3"
+      },
+      "cond3": {
+        "name": "Pho",
+        "icon": "closed",
+        "description": "Vel photisqui.",
+        "only_with": "rule3"
+      }
+    },
+    "rests": {
+      "short_rest": {
+        "on": false
+      },
+      "end_of_session": {
+        "on": false
+      },
+      "rest1": {
+        "name": "Mor",
+        "counts_as": [
+          "end_of_session"
+        ],
+        "refills": [
+          {
+            "what": "health",
+            "how": "by",
+            "amount": "1d6"
+          }
+        ]
+      },
+      "rest2": {
+        "name": "Veltis",
+        "counts_as": [
+          "end_of_session"
+        ],
+        "refills": [
+          {
+            "what": "st1_2",
+            "how": "by",
+            "amount": "1"
+          }
+        ]
+      }
+    },
+    "house_rules": [
+      {
+        "id": "rule1",
+        "name": "UL"
+      },
+      {
+        "id": "rule2",
+        "name": "NY",
+        "starts": true
+      },
+      {
+        "id": "rule3",
+        "name": "PHOETH",
+        "description": "Moranny."
+      },
+      {
+        "id": "rule4",
+        "name": "MORMOR",
+        "description": "Sarphoeth."
+      }
+    ],
+    "author": "CITY_NET test generator",
+    "description": "A random system made to test INSTALL A FILE (generator seed 7031)."
+  }
+}
