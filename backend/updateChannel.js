@@ -54,14 +54,48 @@ function withImageTag(text, tag) {
   return `${source}${ends ? '' : eol}IMAGE_TAG=${tag}${eol}`;
 }
 
+/** A stamp for a file name: the time to the second, with nothing a file system minds. */
+const stampOf = (now) => now.toISOString().replace(/[:.]/g, '-').replace(/-\d{3}Z$/, '');
+
+// ─── docker-compose.yml from before 1.8.1 ────────────────────────────────────
+//
+// IMAGE_TAG only reaches the images where docker-compose.yml names them `:${IMAGE_TAG:-latest}`,
+// which it has since 1.8.1. An in-app update replaces images, never this file, so an install set
+// up earlier still names them `:latest`, and there IMAGE_TAG changes nothing: a real install on dev
+// builds pulled and restarted on the stable images every time. Its two CITY_NET image lines are
+// changed to follow IMAGE_TAG, and nothing else in the file (ports, DuckDNS) is touched.
+
+/** A CITY_NET image line: indentation, the image (any registry), its tag if any, the line's end. */
+const CITYNET_IMAGE = /^([ \t]*image:[ \t]*["']?)(\S*?citynet-(?:backend|frontend))(?::([^\s"'/]+))?(["']?[ \t]*)$/;
+
+/** Whether every CITY_NET image in a compose file follows IMAGE_TAG (true when it names none). */
+function followsTag(text) {
+  return String(text ?? '').split(/\r?\n/).every((line) => {
+    const m = CITYNET_IMAGE.exec(line);
+    return !m || /\$\{IMAGE_TAG/.test(m[3] || '');
+  });
+}
+
+/** A compose file's text with its CITY_NET images following IMAGE_TAG; line endings kept. */
+function withTaggedImages(text) {
+  const source = String(text ?? '');
+  const eol = source.includes('\r\n') ? '\r\n' : '\n';
+  return source.split(/\r?\n/).map((line) => {
+    const m = CITYNET_IMAGE.exec(line);
+    if (!m || /\$\{IMAGE_TAG/.test(m[3] || '')) return line;
+    return `${m[1]}${m[2]}:\${IMAGE_TAG:-latest}${m[4]}`;
+  }).join(eol);
+}
+
 /**
- * Set IMAGE_TAG in both files under `projectDir` (the helper's half, run as a command).
+ * Set IMAGE_TAG in both files under `projectDir` (the helper's half, run as a command), and make
+ * `composeFile`'s images follow it if they don't, keeping the original beside it.
  *
  * backend/.env must already exist, since the stack cannot start without it; its absence means
  * this is not the directory it was told, and nothing is written. The .env beside the compose
  * file is made if it is missing, because without it compose would still pull the stable images.
  */
-function writeChannel(projectDir, tag, deps = {}) {
+function writeChannel(projectDir, tag, deps = {}, composeFile = null) {
   const fsx = deps.fs || fs;
   if (!CHANNELS.includes(tag)) throw new Error(`Not a channel: ${tag}`);
   if (!path.isAbsolute(projectDir)) throw new Error('The project directory must be an absolute path');
@@ -70,21 +104,33 @@ function writeChannel(projectDir, tag, deps = {}) {
   for (const file of [backendEnv, composeEnv]) {
     const was = fsx.existsSync(file) ? fsx.readFileSync(file, 'utf8') : '';
     const next = withImageTag(was, tag);
-    // Written in place, so the file keeps its owner and permissions.
+    // Written in place, so the file keeps its owner and permissions (and a container with it
+    // mounted sees the change).
     if (next !== was) fsx.writeFileSync(file, next);
+  }
+  if (composeFile && fsx.existsSync(composeFile)) {
+    const was = fsx.readFileSync(composeFile, 'utf8');
+    const next = withTaggedImages(was);
+    if (next !== was) {
+      fsx.copyFileSync(composeFile, `${composeFile}.before-dev-builds-${stampOf(deps.now ? deps.now() : new Date())}.bak`);
+      fsx.writeFileSync(composeFile, next);
+    }
   }
 }
 
 /** The argument list for the helper that runs writeChannel on the host's files. */
-function channelHelperArgs(image, reportedProjectDir, tag) {
-  // As Docker accepts it from in here: a Windows host's `X:\...` becomes `/x/...` (dockerPath.js).
+function channelHelperArgs(image, reportedProjectDir, tag, reportedComposeFile = null) {
+  // As Docker accepts them from in here: a Windows host's `X:\...` becomes `/x/...` (dockerPath.js).
   const projectDir = dockerPath(reportedProjectDir);
+  const composeFile = reportedComposeFile ? dockerPath(reportedComposeFile) : null;
   return [
     'run', '--rm',
     // At its own absolute path, as the update helper mounts it (updater.js buildUpdateHelperArgs).
     '-v', `${projectDir}:${projectDir}`,
+    // The compose file too, writable, at its own path (it is usually inside the project already).
+    ...(composeFile ? ['-v', `${composeFile}:${composeFile}`] : []),
     // argv, never a shell string: the directory comes from compose labels.
-    image, 'node', SCRIPT_IN_IMAGE, projectDir, tag,
+    image, 'node', SCRIPT_IN_IMAGE, projectDir, tag, ...(composeFile ? [composeFile] : []),
   ];
 }
 
@@ -118,9 +164,6 @@ function ownImage(deps = {}) {
   return (self && self.image) || 'over2take/citynet-backend:latest';
 }
 
-/** A stamp for a file name: the time to the second, with nothing a file system minds. */
-const stampOf = (now) => now.toISOString().replace(/[:.]/g, '-').replace(/-\d{3}Z$/, '');
-
 /** Where the copy made before following dev builds goes: beside the database, named as other copies are. */
 function backupPath(dbPath, now = new Date()) {
   return path.join(path.dirname(dbPath), `${path.basename(dbPath)}.before-dev-builds-${stampOf(now)}.bak`);
@@ -144,17 +187,29 @@ function backupDatabase(db, dbPath, now = new Date()) {
  */
 function switchChannel({ tag, labels, db, dbPath }, deps = {}) {
   if (!CHANNELS.includes(tag)) return Promise.reject(new Error(`Not a channel: ${tag}`));
-  const spawnFn = deps.spawn || spawn;
   const copy = tag === 'dev' ? backupDatabase(db, dbPath, deps.now ? deps.now() : new Date()) : Promise.resolve(null);
-  return copy.then((backup) => new Promise((resolve, reject) => {
-    const helper = spawnFn('docker', channelHelperArgs(deps.image || ownImage(deps), labels.workingDir, tag), { stdio: 'ignore' });
+  return copy.then((backup) => syncChannel({ tag, labels }, deps).then(() => ({ channel: tag, backup })));
+}
+
+/**
+ * The helper run for `tag`: both .env files set, and the compose file's images made to follow
+ * IMAGE_TAG if they don't. Then this process follows `tag` too. No database copy; the box makes
+ * one when dev builds are turned on, and an update on dev builds calls this to put the files in
+ * step before it pulls anything.
+ */
+function syncChannel({ tag, labels }, deps = {}) {
+  if (!CHANNELS.includes(tag)) return Promise.reject(new Error(`Not a channel: ${tag}`));
+  const spawnFn = deps.spawn || spawn;
+  return new Promise((resolve, reject) => {
+    const args = channelHelperArgs(deps.image || ownImage(deps), labels.workingDir, tag, labels.configFile || null);
+    const helper = spawnFn('docker', args, { stdio: 'ignore' });
     helper.on('error', (err) => reject(err));
     helper.on('close', (code) => {
       if (code !== 0) return reject(new Error(`the channel helper exited with code ${code}`));
       process.env.IMAGE_TAG = tag;
-      resolve({ channel: tag, backup });
+      resolve();
     });
-  }));
+  });
 }
 
 // ─── GO BACK TO STABLE ────────────────────────────────────────────────────────
@@ -301,12 +356,13 @@ function startRevert({ plan, labels, dbPath, out = 'ignore' }, deps = {}) {
 
 module.exports = {
   CHANNELS, ENV_FILES, SCRIPT_IN_IMAGE, SIDE_FILES,
-  withImageTag, writeChannel, channelHelperArgs, inspectSelf, ownImage, backupPath, backupDatabase, switchChannel,
+  withImageTag, followsTag, withTaggedImages, writeChannel, channelHelperArgs, inspectSelf, ownImage, backupPath, backupDatabase,
+  switchChannel, syncChannel,
   newestDevCopy, hostPathOf, swapBack, revertToStable, revertHelperArgs, revertPlan, startRevert,
 };
 
 // The helper's half:
-//   node updateChannel.js <project directory> <channel>
+//   node updateChannel.js <project directory> <channel> [<compose file>]
 //   node updateChannel.js revert <project directory> <data directory> <db> <copy> <service> <project name> <stamp> <compose file>
 if (require.main === module) {
   try {
@@ -315,7 +371,7 @@ if (require.main === module) {
       const [projectDir, dataDir, dbName, copyName, service, projectName, stamp, configFile] = rest;
       revertToStable({ projectDir, configFile, dataDir, dbName, copyName, service, projectName, stamp });
     } else {
-      writeChannel(first, rest[0]);
+      writeChannel(first, rest[0], {}, rest[1] || null);
     }
   } catch (err) {
     console.error(err.message);

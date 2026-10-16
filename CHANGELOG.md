@@ -878,6 +878,30 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.14.9] - 2026-10-15
+
+Dev builds reach installs set up before 1.8.1.
+
+### Fixed
+
+- **Dev builds on an older docker-compose.yml.** An install set up before 1.8.1 still has a
+  `docker-compose.yml` that names its images `:latest` (an in-app update replaces the images, never
+  that file). On one, ticking LOOK FOR DEV BUILDS changed nothing that mattered: every update
+  downloaded and restarted on the stable release again. Now, when the server is on dev builds and
+  its compose file doesn't follow `IMAGE_TAG`, ticking the box or updating changes just its two
+  CITY_NET image lines to follow it, keeps the original beside it
+  (`docker-compose.yml.before-dev-builds-<time>.bak`), and touches nothing else in the file.
+
+### Under the hood
+
+- **The real-Docker updater check starts from an old install.** It now begins with a compose file
+  from before 1.8.1, as many real installs have, and recreates a real install's state: dev builds
+  turned on, the server restarted, still on the stable release. From there one in-app update must
+  land on the dev build. It failed exactly as the real install did before this fix, and passes with
+  it on Docker Desktop for Windows.
+
+---
+
 ## [1.14.8] - 2026-10-15
 
 In-app updates work one after another.
