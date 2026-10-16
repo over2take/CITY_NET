@@ -234,6 +234,14 @@ describe('the builder', () => {
     expect(calls.some((c) => c.url === '/api/systems')).toBe(false);
   });
 
+  it('claims the pointer for the whole screen, which the map\'s overlay otherwise lets through to the map', async () => {
+    // Without it, labels, "?" hints, plain buttons and INSTALL A FILE's drop box took no clicks on a
+    // real install. jsdom can't lay a page out, so e2e/tests/builder-clicks checks it in a browser.
+    open();
+    await ready();
+    expect(screen.getByTestId('builder-screen').style.pointerEvents).toBe('auto');
+  });
+
   it('keeps the map\'s icon rail narrow, widening to show the names on hover or keyboard focus', async () => {
     open();
     await ready();

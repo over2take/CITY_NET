@@ -1141,9 +1141,12 @@ CITY_NET/
 │   ├── README.md               # How to install and run the journeys, read a failure, and write a new one
 │   ├── package.json            # Playwright's test runner, and nothing else
 │   ├── playwright.config.ts    # Starts both servers (Secure Mode on, a temp database, the test GM), one worker, the installed Chrome locally or Playwright's Chromium in CI
+│   ├── fixtures/
+│   │   └── emberline.citysys   # A random system from the test generator, exported as the builder does: the file INSTALL A FILE is given in builder-clicks
 │   ├── cleanup.ts              # Before a run, the throwaway databases earlier runs left in the temp folder
 │   └── tests/
 │       ├── helpers.ts              # Signing in as the GM or a player, the GAME tab, the builder past its tour, a rail button (pointer moved off after), a builder page; a running system and an approved player through the API
+│       ├── builder-clicks.spec.ts  # Every control on every builder page takes a click (the map's overlay lets the pointer through to the map wherever nothing claims it); INSTALL A FILE opens the file picker when clicked and takes a dropped file
 │       ├── builder-journey.spec.ts # The GM builds a system from + NEW through the builder's screens, publishes it, publishes v2 through the version preview, and switches the game to it
 │       ├── player-journey.spec.ts  # A custom system played in two browsers: a player makes a character in its words and numbers; the GM types in a catalogue, gives them an item and calls a rest; the player sees both
 │       └── builder-smoke.spec.ts   # The GM signs in, opens the System Builder, meets and skips the first-time tour (reset first), finds MY SYSTEMS, and goes back to the map

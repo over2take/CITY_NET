@@ -9,6 +9,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Parts of the System Builder ignored clicks.** The builder sits over the map, and the map's
+  layer lets the pointer through wherever nothing claims it. Anything in the builder without a rule
+  of its own was passed over: INSTALL A FILE took neither a click nor a dropped file, and RENAME,
+  the advancement choices on SETUP, the field labels and every "?" hint did nothing. The builder now
+  claims the pointer for its whole screen. A new browser test clicks every control on every page,
+  and installs a file by clicking and by dropping it.
+
 - **GO BACK TO STABLE on Windows, and after it.** On a Windows server it failed the same way the
   update did before 1.14.7 (Docker refused the `X:\` folder names), whenever the stack had last
   been started by hand; and like updates before 1.14.8 it left the stack naming a compose file only

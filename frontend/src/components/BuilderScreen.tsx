@@ -355,7 +355,11 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
       role="main"
       aria-label="System builder"
       data-testid="builder-screen"
-      style={{ position: 'fixed', inset: 0, zIndex: Z, display: 'flex', background: 'var(--black)', color: 'var(--text)', ...mono }}
+      // pointerEvents: the map's .ui-overlay, which holds this screen, lets clicks through to the 3D
+      // map (pointer-events: none) wherever nothing claims them, and that is inherited. Without
+      // claiming them here, anything not given its own rule (a label, a "?" hint, a plain button,
+      // INSTALL A FILE's drop box) took neither clicks nor dropped files. e2e/tests/builder-clicks.
+      style={{ position: 'fixed', inset: 0, zIndex: Z, display: 'flex', background: 'var(--black)', color: 'var(--text)', pointerEvents: 'auto', ...mono }}
     >
       {/* The sidebar: the map's icon rail (App.css .icon-rail, .rail-*), widening over the page
           to show each name while the pointer or keyboard focus is in it. */}
