@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Docs
+
+- **The README says what CITY_NET is now.** Its opening still described only the city generator; it now
+  covers the game systems, sheets, economy and streaming, and a new Features list sets out what the
+  app does, with the System Builder marked as coming in 2.0.
+
+---
+
 ## [1.14.9] - 2026-10-15
 
 Dev builds reach installs set up before 1.8.1.

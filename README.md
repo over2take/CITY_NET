@@ -7,9 +7,9 @@
 
 ## CITY_NET
 
-**A self-hosted, real-time 3D city for tabletop RPG sessions.**
+**A self-hosted, real-time 3D city for running tabletop RPG sessions, with the game built in.**
 
-The GM generates a living cyberpunk city — procedural districts, roads, overpasses, traffic, and custom signs — while players connect live and interact with it. Run a battle map, manage the economy, roll dice, stream to an audience, and never touch a third-party platform.
+Generate a living city, bring your players into it from their browsers, and run the whole session there: character sheets for Cyberpunk RED, Cities Without Number and Shadowrun 6E, battle maps, initiative, dice, a working economy with a bank and shops, and an overlay for streaming to an audience. Everything runs on your own machine, with no third-party platform in between.
 
 Built with React + Three.js · Node.js + SQLite · Socket.IO · Docker
 
@@ -30,6 +30,35 @@ Built with React + Three.js · Node.js + SQLite · Socket.IO · Docker
 ---
 
 [CITY_NET Trailer](https://youtu.be/3DfL-aB5MKU)
+
+---
+
+## Features
+
+### The city
+- **Procedural cities**: districts, street layouts, roads and overpasses, traffic, water with bridges, and parks. Draw the area to fill and generate it again until it fits.
+- **Build by hand too**: place, move and edit buildings, save your own structures, hide places until your players find them, and put up signs with text, images and your own fonts.
+- **Battle maps** for any location: upload an image or an animated map, with floors above and below ground.
+- **Export the map** as an image or a short recording.
+
+### At the table
+- **Character sheets** for Cyberpunk RED, Cities Without Number and Shadowrun 6E, plus a generic sheet for anything else. Rolls, attacks, damage, cyberware and vehicles work from the sheet, and characters can be imported from a PDF, pasted JSON or the Cyberpunk RED Companion.
+- **Tokens** for players and NPCs on the city and the battle maps, with health, armor and injuries. Enemy and friendly NPCs, an NPC library, and portraits.
+- **Initiative tracker** for combat.
+- **Dice**: a dice roller and tray, custom dice, and rolls made on the server so nobody can fake one. A roll history for the GM.
+- **Economy**: a bank with a ledger and pay for the party, and shops on the map with a cart and buy-back. Upload your own catalogues of what the shops sell.
+- **Vehicles** in Cities Without Number and Cyberpunk RED, in combat and shared across the table.
+- **Chat**, a measuring tape, pings, a radio feed and music.
+
+### Running it
+- **Self-hosted** with Docker (recommended) or Node.js. Players only need a browser.
+- **Updates from inside the app**, and optional development builds for trying what's next.
+- **Secure Mode**: player accounts that you approve, or name-only joining for a game at home.
+- **Streaming**: a spectator view and overlay for an audience, which follows the GM's camera.
+- **Seven themes**, including ones picked for color blindness, chosen by each player.
+
+### Coming in 2.0: the System Builder
+Make your own game system, or change a built-in one: what it calls things, its stats and formulas, its character sheet, NPC tiers, conditions, rests and optional house rules. Then run it at your table like the built-in games. It's in early testing now; to try it, see [Testing a development build](UPGRADE.md#testing-a-development-build-1146).
 
 ---
 
@@ -293,7 +322,7 @@ docker compose up -d
 
 When `SECURE_MODE=false` (default), players just enter a name to join — no password required.
 
-When `SECURE_MODE=true`, players must register an account before they can access the map. Registration is self-service from the login screen.
+When `SECURE_MODE=true`, players must register an account before they can access the map. They register from the login screen, and each new account waits until you approve it in the admin panel.
 
 **Admin first login with Secure Mode ON:**
 Enter your `.env` admin credentials on the player login screen. The app will recognise them as admin credentials, log you in, and open the admin dashboard automatically — no separate player account needed.
