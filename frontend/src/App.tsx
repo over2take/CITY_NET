@@ -2371,6 +2371,7 @@ function App() {
                 running={gameSystem}
                 onExit={() => setBuilder(null)}
                 onOpenSystem={(id, page) => setBuilder({ id, page })}
+                onCloseSystem={() => setBuilder({ id: null, page: 'systems' })}
                 onLookAt={(example) => setBuilder({ id: null, page: 'rules', example })}
               />
             )}

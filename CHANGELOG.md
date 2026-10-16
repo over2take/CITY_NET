@@ -9,6 +9,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **A system open in the builder can be closed.** DELETE is off for the system open in the
+  builder, and there was no way to close it: the only way to free one was to make or open another.
+  MY SYSTEMS now has CLOSE on the open system, which saves it and leaves the builder with no system
+  open, and DELETE says to CLOSE it first.
+- **The builder's rail no longer overlaps itself on a short window.** Squeezed to fit, EXIT TO MAP
+  lay over MY SYSTEMS (a click on its top half left the builder) and PROBLEMS over HELP. Now only
+  the pages in the middle scroll, with a thin scrollbar, and HELP, SAVE and PUBLISH stay in view.
+
 - **Parts of the System Builder ignored clicks.** The builder sits over the map, and the map's
   layer lets the pointer through wherever nothing claims it. Anything in the builder without a rule
   of its own was passed over: INSTALL A FILE took neither a click nor a dropped file, and RENAME,

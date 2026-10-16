@@ -46,6 +46,8 @@ interface Props {
   onExit: () => void;
   /** Another system, opened here in its place at a page (MY SYSTEMS), once the open one is saved. */
   onOpenSystem: (id: string, page: BuilderPage) => void;
+  /** The open system closed (MY SYSTEMS' CLOSE), once saved, leaving the builder with none open. */
+  onCloseSystem?: () => void;
   /**
    * A built-in example open to look at (4d1b) instead of a system: every page shown, everything
    * locked but TRY IT, nothing saved, and COPY TO CHANGE IT to make it the GM's own.
@@ -185,7 +187,7 @@ function RailButton({ icon: glyph, label, onClick, title, active, disabled, coun
   );
 }
 
-export function BuilderScreen({ token, systemId, startPage = 'setup', running, onExit, onOpenSystem, example = null, onLookAt, fetcher }: Props) {
+export function BuilderScreen({ token, systemId, startPage = 'setup', running, onExit, onOpenSystem, onCloseSystem, example = null, onLookAt, fetcher }: Props) {
   const api = useMemo(() => systemsApi(token, fetcher), [token, fetcher]);
   const [system, setSystem] = useState<SystemCopies | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -380,10 +382,20 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
         <div className="rail-top" style={{ alignItems: 'stretch' }}>
           <RailButton icon={Icons.builder} label="SYSTEM_BUILDER" big onClick={() => setPage(systemId || looking ? 'setup' : 'systems')} />
         </div>
-        <div style={{ padding: '10px 0' }}>
+        {/* On a short window only the pages in the middle scroll; EXIT above and HELP, SAVE and
+            PUBLISH below stay put (flexShrink 0). Squeezed instead, EXIT TO MAP lay over MY SYSTEMS
+            and PROBLEMS over HELP (e2e/tests/builder-clicks). A thin scrollbar in the theme's
+            colors, as the menus have, shows there is more. */}
+        <div style={{ padding: '10px 0', flexShrink: 0 }}>
           <RailButton icon={<ExitIcon />} label="EXIT TO MAP" aria="Exit the builder and go back to the map" onClick={() => leave(onExit)} />
         </div>
-        <div className="rail-center" style={{ alignItems: 'stretch' }}>
+        <div className="rail-center" style={{
+          alignItems: 'stretch', flex: '1 1 0', minHeight: 0, overflowY: 'auto', overflowX: 'hidden',
+          scrollbarWidth: 'thin', scrollbarColor: 'var(--dark-green) transparent',
+          // Centred as the map's rail is, but from the top once it overflows: plain centring split
+          // the overflow and left MY SYSTEMS above the top, where no scrolling reaches.
+          justifyContent: 'safe center',
+        }}>
           <RailButton icon={Icons.systems} label="MY SYSTEMS" title={MY_SYSTEMS.what} active={page === 'systems'}
             onClick={() => { setPage('systems'); setStatus(null); }} />
           {BUILDER_PAGES.map((p) => (
@@ -401,7 +413,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
             />
           ))}
         </div>
-        <div style={{ padding: '10px 0', display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid var(--dark-green)' }}>
+        <div style={{ padding: '10px 0', display: 'flex', flexDirection: 'column', gap: 4, borderTop: '1px solid var(--dark-green)', flexShrink: 0 }}>
           <RailButton icon={Icons.help} label="HELP" title={HELP_PAGE.what} active={page === 'help'} onClick={() => { setPage('help'); setStatus(null); }} />
           <RailButton icon={Icons.save} label="SAVE" disabled={!autosave.current || busy} onClick={save} place="publish" lit={lit === 'publish'} />
           <RailButton icon={Icons.publish} label="PUBLISH" active={page === 'publish'} disabled={!autosave.current || busy} onClick={publish} place="publish" lit={lit === 'publish'}
@@ -446,6 +458,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
               openId={systemId}
               running={running}
               onOpen={(id, at) => leave(() => onOpenSystem(id, at))}
+              onClose={onCloseSystem ? () => leave(onCloseSystem) : undefined}
               say={(text, bad) => setStatus({ text, bad })}
               onLook={onLookAt ? (id) => leave(() => onLookAt(id)) : undefined}
               startTab={looking ? 'new' : undefined}
