@@ -1147,6 +1147,7 @@ CITY_NET/
 │   └── tests/
 │       ├── helpers.ts              # Signing in as the GM or a player, the GAME tab, the builder past its tour, a rail button (pointer moved off after), a builder page; a running system and an approved player through the API
 │       ├── builder-clicks.spec.ts  # Every control on every builder page takes a click (the map's overlay lets the pointer through to the map wherever nothing claims it); INSTALL A FILE opens the file picker when clicked and takes a dropped file
+│       ├── builder-systems.spec.ts # MY SYSTEMS as a GM uses it: a system just made is closed with CLOSE, then deleted
 │       ├── builder-journey.spec.ts # The GM builds a system from + NEW through the builder's screens, publishes it, publishes v2 through the version preview, and switches the game to it
 │       ├── player-journey.spec.ts  # A custom system played in two browsers: a player makes a character in its words and numbers; the GM types in a catalogue, gives them an item and calls a rest; the player sees both
 │       └── builder-smoke.spec.ts   # The GM signs in, opens the System Builder, meets and skips the first-time tour (reset first), finds MY SYSTEMS, and goes back to the map
