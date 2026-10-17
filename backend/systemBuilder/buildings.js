@@ -39,7 +39,8 @@ const checkBuildings = (buildings, problems, currencyIds = []) => {
   if (buildings === undefined) return;
   if (!isPlainObject(buildings)) { problems.push({ where: 'buildings', message: 'Must be a set of types and catalogues' }); return; }
   for (const [kind, entries] of Object.entries(buildings)) {
-    const ids = KINDS[kind];
+    // Own keys only: a file's "constructor" or "__proto__" is a kind like any other, and refused.
+    const ids = Object.prototype.hasOwnProperty.call(KINDS, kind) ? KINDS[kind] : null;
     if (!ids) { problems.push({ where: `buildings ${kind}`, message: 'Only "types" and "catalogues" are set here' }); continue; }
     if (!isPlainObject(entries)) { problems.push({ where: `buildings ${kind}`, message: 'Must be a set of ids' }); continue; }
     for (const [id, setting] of Object.entries(entries)) {
