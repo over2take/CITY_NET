@@ -37,8 +37,13 @@ const LIMITS = {
 
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
-/** Built-in functions, by name: how many arguments each takes, and what it does. */
-const BUILTINS = {
+/**
+ * Built-in functions, by name: how many arguments each takes, and what it does. With no
+ * prototype, so a name a formula calls finds only these: as a plain object, `constructor(1)` or
+ * `toString(1)` passed every check and then threw each time it was worked out (found by the
+ * hostile-file tests, __tests__/system_builder_hostile_files.test.js).
+ */
+const BUILTINS = Object.assign(Object.create(null), {
   min: { min: 1, max: 32, fn: (...a) => Math.min(...a) },
   max: { min: 1, max: 32, fn: (...a) => Math.max(...a) },
   floor: { min: 1, max: 1, fn: (x) => Math.floor(x) },
@@ -49,7 +54,7 @@ const BUILTINS = {
   clamp: { min: 3, max: 3, fn: (x, lo, hi) => Math.min(Math.max(x, lo), hi) },
   /** if(condition, then, else). Only the branch taken is evaluated. */
   if: { min: 3, max: 3, lazy: true },
-};
+});
 
 const KEYWORDS = new Set(['and', 'or', 'not']);
 

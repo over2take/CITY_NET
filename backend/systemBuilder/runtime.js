@@ -59,8 +59,15 @@ const metaOf = (definition) => {
     maxPairs,
     // Derived values on every save, as the built-in recompute functions do. A published
     // definition compiles (publishing refuses one with problems); should one not, nothing is
-    // recomputed rather than a save failing.
-    recompute: compiled.ok ? (data) => compiled.system.apply(data) : () => [],
+    // recomputed rather than a save failing. Saves call this inside database callbacks, where a
+    // throw would stop the server, so one never leaves here: whatever a system's formulas do,
+    // the sheet keeps the values it had and the server logs why.
+    recompute: compiled.ok ? (data) => {
+      try { return compiled.system.apply(data); } catch (err) {
+        console.error(`[systems] ${definition.name}: derived values not worked out:`, err.message);
+        return [];
+      }
+    } : () => [],
   };
 };
 

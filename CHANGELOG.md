@@ -9,6 +9,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **A system file can't stop the server.** A formula calling `constructor(1)` or `toString(1)`
+  passed every check and could be published, and then each save of a sheet in that system threw
+  where nothing caught it, stopping the server. Those names are now refused like any other unknown
+  function. A `buildings` section naming its own kinds this way made the check itself throw, and
+  is now an ordinary problem. And a system's formulas can no longer throw out into a save at all:
+  should one fail, the sheet keeps the values it had and the server logs why. Found by new tests
+  that put harmful names everywhere a system file has a key or a name (in the CWN example and
+  two random systems, thousands of variations each), with nesting and sizes past the caps, and check that
+  nothing throws, nothing leaks, and a file with problems installs only as a draft to fix.
+
 - **A system open in the builder can be closed.** DELETE is off for the system open in the
   builder, and there was no way to close it: the only way to free one was to make or open another.
   MY SYSTEMS now has CLOSE on the open system, which saves it and leaves the builder with no system
