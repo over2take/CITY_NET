@@ -97,9 +97,10 @@ afterEach(() => cleanup());
 
 const open = ({ openId = HEARTH as string | null, running = HEARTH as string | null, onLook = undefined as ((id: string) => void) | undefined, startTab = undefined as 'list' | 'new' | 'install' | undefined } = {}) => {
   const onOpen = vi.fn();
+  const onClose = vi.fn();
   const say = vi.fn();
-  render(<MySystemsPage api={systemsApi('gm', fakeServer as typeof fetch)} openId={openId} running={running} onOpen={onOpen} say={say} onLook={onLook} startTab={startTab} />);
-  return { onOpen, say };
+  render(<MySystemsPage api={systemsApi('gm', fakeServer as typeof fetch)} openId={openId} running={running} onOpen={onOpen} onClose={onClose} say={say} onLook={onLook} startTab={startTab} />);
+  return { onOpen, onClose, say };
 };
 const line = (id: string) => screen.getByTestId(`system-${id}`);
 const header = (id: string) => within(line(id)).getAllByRole('button')[0];
@@ -220,7 +221,19 @@ describe('RENAME, DUPLICATE, EXPORT, DELETE', () => {
     expect((within(line(HEARTH)).getByText('DELETE') as HTMLButtonElement).disabled).toBe(true);
     expect(within(line(HEARTH)).getByText('DELETE: This is the system the game is running. Switch to another first.')).toBeTruthy();
     await userEvent.click(header(NEON));
-    expect(within(line(NEON)).getByText('DELETE: It\'s open in the builder. Open another first.')).toBeTruthy();
+    expect(within(line(NEON)).getByText('DELETE: It\'s open in the builder. CLOSE it first.')).toBeTruthy();
+  });
+
+  it('CLOSE is on the system open in the builder, and only there', async () => {
+    // Without it, the only way to free a system for DELETE was to make or open another one.
+    const { onClose, onOpen } = open({ openId: NEON, running: HEARTH });
+    await ready();
+    // The open one starts opened out.
+    await userEvent.click(within(line(NEON)).getByRole('button', { name: 'CLOSE' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onOpen).not.toHaveBeenCalled();
+    await userEvent.click(header(VAULT));
+    expect(within(line(VAULT)).queryByRole('button', { name: 'CLOSE' })).toBeNull();
   });
 
   it('DELETE asks first; KEEP IT keeps it, DELETE hides it', async () => {

@@ -348,6 +348,20 @@ describe('PUBLISH', () => {
 });
 
 describe('leaving', () => {
+  it('CLOSE in MY SYSTEMS saves an unsaved change, then closes the system and stays in the builder', async () => {
+    const onCloseSystem = vi.fn();
+    const { onExit, onOpenSystem } = open({ startPage: 'rules', onCloseSystem });
+    await ready();
+    await userEvent.click(await screen.findByText('+ GROUP'));
+    await userEvent.click(within(sidebar()).getByLabelText('MY SYSTEMS'));
+    await waitFor(() => expect(screen.getByTestId(`system-${HEARTH}`)).toBeTruthy());
+    await userEvent.click(within(screen.getByTestId(`system-${HEARTH}`)).getByRole('button', { name: 'CLOSE' }));
+    await waitFor(() => expect(onCloseSystem).toHaveBeenCalledTimes(1));
+    expect(drafts.at(-1)).toEqual({ format: 1, name: 'Hearth', stats: [{ id: 'new_group', label: 'NEW GROUP', stats: [] }] });
+    expect(onExit).not.toHaveBeenCalled();
+    expect(onOpenSystem).not.toHaveBeenCalled();
+  });
+
   it('EXIT TO MAP goes straight back when nothing is unsaved', async () => {
     const { onExit, onOpenSystem } = open();
     await ready();

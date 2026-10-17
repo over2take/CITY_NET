@@ -89,7 +89,7 @@ export const SYSTEMS_CHANGED_EVENT = 'citynet:systems-changed';
 /** Why a button can't be used now, or null when it can. */
 export const deleteBlocked = (s: LibrarySystem, running: string | null, openInBuilder: string | null = null): string | null => {
   if (s.id === running) return 'This is the system the game is running. Switch to another first.';
-  if (s.id === openInBuilder) return 'It\'s open in the builder. Open another first.';
+  if (s.id === openInBuilder) return 'It\'s open in the builder. CLOSE it first.';
   return null;
 };
 export const exportBlocked = (s: LibrarySystem): string | null =>

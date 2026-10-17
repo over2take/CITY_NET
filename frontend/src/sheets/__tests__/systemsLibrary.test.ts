@@ -73,7 +73,7 @@ describe('facts', () => {
   it('why DELETE and EXPORT are off', () => {
     expect(deleteBlocked(sys(), 'sys_aaaaaaaaaaaaaaaa')).toBe('This is the system the game is running. Switch to another first.');
     expect(deleteBlocked(sys(), 'cities_without_number')).toBeNull();
-    expect(deleteBlocked(sys(), null, 'sys_aaaaaaaaaaaaaaaa')).toBe('It\'s open in the builder. Open another first.');
+    expect(deleteBlocked(sys(), null, 'sys_aaaaaaaaaaaaaaaa')).toBe('It\'s open in the builder. CLOSE it first.');
     expect(deleteBlocked(sys(), 'sys_aaaaaaaaaaaaaaaa', 'sys_aaaaaaaaaaaaaaaa')).toBe('This is the system the game is running. Switch to another first.');
     expect(deleteBlocked(sys(), null, 'sys_bbbbbbbbbbbbbbbb')).toBeNull();
     expect(exportBlocked(sys({ published: false }))).toBe('Publish it before sharing it. Only a published system is shared.');

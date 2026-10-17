@@ -12,13 +12,14 @@ import { signInAsGm, openBuilder, builderPage } from './helpers';
 
 const FIXTURE = path.join(__dirname, '..', 'fixtures', 'emberline.citysys');
 
-/** Every visible control in the builder, outside the rail, that a click at its centre misses. */
+/**
+ * Every visible control in the builder that a click at its centre misses. The rail too: squeezed
+ * on a short window, its EXIT TO MAP lay over MY SYSTEMS and PROBLEMS over HELP.
+ */
 const unreachable = (page: Page) => page.evaluate(() => {
   const root = document.querySelector('[data-testid="builder-screen"]')!;
-  const rail = root.querySelector('nav[aria-label="Builder"]');
   const controls = [...root.querySelectorAll('input:not([type=hidden]), textarea, select, button, label, summary, [role=switch], [role=tab], [role=note], [draggable=true]')] as HTMLElement[];
   return controls
-    .filter((el) => !rail?.contains(el))
     .filter((el) => { const r = el.getBoundingClientRect(); return r.width > 1 && r.height > 1; })
     .filter((el) => {
       // Scrolled to, as a person would, so a control just below the fold isn't counted as covered.

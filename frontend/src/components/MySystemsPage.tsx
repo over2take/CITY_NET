@@ -24,6 +24,11 @@ interface Props {
   running: string | null;
   /** Open a system in the builder at a page; the builder saves the one it has first. */
   onOpen: (id: string, page: BuilderPage) => void;
+  /**
+   * Close the system open in the builder, saving it first, and stay in MY SYSTEMS with none open.
+   * Without it, a system open here could only be freed for DELETE by opening or making another.
+   */
+  onClose?: () => void;
   /** A line for the builder's status bar. */
   say: (text: string, bad?: boolean) => void;
   /** Open a built-in example in the builder to look at first (4d1b). */
@@ -38,7 +43,7 @@ const tabStyle = (on: boolean): React.CSSProperties => ({
   color: on ? 'var(--green)' : 'color-mix(in srgb, var(--green) 55%, transparent)', fontFamily: 'monospace', fontSize: 11, letterSpacing: 1,
 });
 
-export function MySystemsPage({ api, openId, running, onOpen, say, onLook, startTab = 'list' }: Props) {
+export function MySystemsPage({ api, openId, running, onOpen, onClose, say, onLook, startTab = 'list' }: Props) {
   const [tab, setTab] = useState<Tab>(startTab);
   const [systems, setSystems] = useState<LibrarySystem[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -157,7 +162,13 @@ export function MySystemsPage({ api, openId, running, onOpen, say, onLook, start
         )}
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
           {isOpen
-            ? <span style={{ ...small, color: 'var(--cyan)', opacity: 1 }}>OPEN NOW IN THE BUILDER</span>
+            ? <>
+                <span style={{ ...small, color: 'var(--cyan)', opacity: 1 }}>OPEN NOW IN THE BUILDER</span>
+                {onClose && (
+                  <button type="button" className="utility-btn" style={btn} disabled={busy} onClick={onClose}
+                    title="Save it and close it, leaving no system open">CLOSE</button>
+                )}
+              </>
             : <button type="button" className="utility-btn active" style={btn} disabled={busy} onClick={() => onOpen(s.id, 'setup')}>OPEN</button>}
           <button type="button" className="utility-btn" style={btn} disabled={!!renaming || busy}
             onClick={() => { setRenaming({ text: s.name, error: null }); setConfirmDelete(false); }}>RENAME</button>
