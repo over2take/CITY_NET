@@ -62,6 +62,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **STATS & RULES' controls shared (5a3b1).** Nothing to see: the boxes that edit a stats group, a
+  table and a formula are now one copy that FORMS lays out, ready for the graph view's node panel to
+  show the same ones, so an edit made from the map is the very same edit as one made in FORMS.
+
 - **The System Builder's graph view as logic (5a2).** Nothing to see yet: the builder can now read
   a system as the map will draw it (a node for every stat, table, house rule, formula, condition
   and note, a wire for each name a formula reads, stats grouped as on the STATS tab), lay it out in
