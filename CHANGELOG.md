@@ -62,6 +62,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **A shared system file installs on a builder from before the map.** A .citysys file now carries
+  the graph view's layout beside the system rather than inside it. A builder from before the map
+  reads only the system, so it installs and publishes the file as it always did, its map laid out
+  afresh; a builder with the map puts the layout back. Checked against the dev branch's own reader.
+
 - **STATS & RULES' controls shared (5a3b1).** Nothing to see: the boxes that edit a stats group, a
   table and a formula are now one copy that FORMS lays out, ready for the graph view's node panel to
   show the same ones, so an edit made from the map is the very same edit as one made in FORMS.

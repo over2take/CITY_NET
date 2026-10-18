@@ -3,8 +3,14 @@
 //   {
 //     "citysys": 1,
 //     "manifest": { "name", "author", "version", "builder", "license", "origin", "exported" },
-//     "definition": { ...the system, format 1 (definition.js) }
+//     "definition": { ...the system, format 1 (definition.js) },
+//     "graph": { ...the map's layout, when it has one (graph.js) }
 //   }
+//
+// The map's layout travels beside the system, not in it (2026-10-18): a builder from before the
+// map reads only "manifest" and "definition", so a file from here installs and publishes there,
+// its map laid out afresh. Here, installing puts it back in the definition, where it is checked
+// with the rest; a file with the layout inside its definition is read too.
 //
 // Plain JSON, pretty-printed, so a system can be read, diffed and kept on GitHub. The plan's
 // zip form, a folder of images beside the JSON, arrives when a system can hold images; until
@@ -45,19 +51,23 @@ const fileNameFor = (name) => {
 };
 
 /** The file for a system's published definition. */
-const buildFile = ({ definition, version, origin }) => ({
-  citysys: FILE_FORMAT,
-  manifest: {
-    name: definition.name,
-    author: typeof definition.author === 'string' ? definition.author : '',
-    version,
-    builder: appVersion(),
-    license: typeof definition.license === 'string' ? definition.license : '',
-    origin,
-    exported: new Date().toISOString(),
-  },
-  definition,
-});
+const buildFile = ({ definition: whole, version, origin }) => {
+  const { graph, ...definition } = whole;
+  return {
+    citysys: FILE_FORMAT,
+    manifest: {
+      name: definition.name,
+      author: typeof definition.author === 'string' ? definition.author : '',
+      version,
+      builder: appVersion(),
+      license: typeof definition.license === 'string' ? definition.license : '',
+      origin,
+      exported: new Date().toISOString(),
+    },
+    definition,
+    ...(graph !== undefined ? { graph } : {}),
+  };
+};
 
 /**
  * Read a file's text. Returns { fatal } when it cannot be installed at all (not a system file,
@@ -86,9 +96,12 @@ const readFile = (text) => {
     origin: m.origin,
   };
 
-  const checked = checkDefinition(parsed.definition);
+  // The layout beside the system goes back into it, to be checked like the rest of it.
+  const definition = 'graph' in parsed && !('graph' in parsed.definition)
+    ? { ...parsed.definition, graph: parsed.graph } : parsed.definition;
+  const checked = checkDefinition(definition);
   if (checked.fatal) return { fatal: checked.fatal };
-  return { file: { manifest, definition: parsed.definition }, problems: checked.problems };
+  return { file: { manifest, definition }, problems: checked.problems };
 };
 
 /** What the preview lists as inside: counts, never the content itself. */

@@ -46,6 +46,8 @@ const graphProblems = (definition) => {
   return checked.problems.filter((p) => p.where.startsWith('graph')).map((p) => `${p.where}: ${p.message}`);
 };
 const withGraph = (graph) => ({ ...HEARTH, graph });
+/** A .citysys file's text with the layout inside its definition, as files from 5a1 to 5a3 had it. */
+const fileText = (definition) => JSON.stringify({ citysys: 1, manifest: { name: definition.name, origin: 'org_hearth' }, definition });
 
 describe('the graph section', () => {
   it('takes a map\'s layout', () => {
@@ -193,11 +195,50 @@ describe('through the server', () => {
     expect((await request(app).post(`/api/systems/${installed.id}/publish`).set(gm)).status).toBe(200);
   });
 
+  it('a .citysys file carries the layout beside the system, so a builder from before the map reads it as it always did', async () => {
+    const id = (await request(app).post('/api/systems').set(gm).send({ definition: HEARTH })).body.id;
+    expect((await request(app).post(`/api/systems/${id}/publish`).set(gm)).status).toBe(200);
+    const file = JSON.parse((await request(app).get(`/api/systems/${id}/export`).set(gm)).text);
+    expect(Object.keys(file)).toEqual(['citysys', 'manifest', 'definition', 'graph']);
+    expect(file.graph).toEqual(HEARTH.graph);
+    // An older builder reads only "manifest" and "definition": nothing in the definition is new to it.
+    const BEFORE_THE_MAP = ['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules'];
+    expect(Object.keys(file.definition).filter((k) => !BEFORE_THE_MAP.includes(k))).toEqual([]);
+    const { graph, ...rest } = HEARTH;
+    expect(file.definition).toEqual(rest);
+  });
+
+  it('a system with no layout writes no layout to its file', async () => {
+    const { graph, ...plain } = HEARTH;
+    const id = (await request(app).post('/api/systems').set(gm).send({ definition: plain })).body.id;
+    await request(app).post(`/api/systems/${id}/publish`).set(gm);
+    expect(Object.keys(JSON.parse((await request(app).get(`/api/systems/${id}/export`).set(gm)).text))).toEqual(['citysys', 'manifest', 'definition']);
+  });
+
+  it('reads a layout inside the definition too, and keeps the definition\'s own when a file has both', () => {
+    const inside = fileText({ ...HEARTH });
+    expect(citysys.readFile(inside).file.definition.graph).toEqual(HEARTH.graph);
+    const both = JSON.stringify({ ...JSON.parse(inside), graph: { notes: [{ id: 'other', text: 'Beside.' }] } });
+    expect(citysys.readFile(both).file.definition.graph).toEqual(HEARTH.graph);
+  });
+
+  it('checks a layout beside the system as strictly as one inside it', () => {
+    const beside = (graph) => {
+      const { graph: _g, ...definition } = HEARTH;
+      return JSON.stringify({ citysys: 1, manifest: { name: 'Hearth', origin: 'org_hearth' }, definition, graph });
+    };
+    expect(citysys.readFile(beside([])).problems.map((p) => `${p.where}: ${p.message}`)).toEqual(['graph: Must be the map\'s layout']);
+    expect(citysys.readFile(beside({ positions: { 'Not An Id': [0, 0] } })).problems.map((p) => `${p.where}: ${p.message}`))
+      .toEqual(['graph position Not An Id: Not the name of a node']);
+    expect(citysys.readFile(beside(JSON.parse('{"__proto__":{"polluted":1}}'))).problems.map((p) => p.where)).toEqual(['graph __proto__']);
+    expect({}.polluted).toBeUndefined();
+  });
+
   it('a .citysys file carries the layout and its notes, and installs it unchanged', async () => {
     const id = (await request(app).post('/api/systems').set(gm).send({ definition: HEARTH })).body.id;
     expect((await request(app).post(`/api/systems/${id}/publish`).set(gm)).status).toBe(200);
     const text = (await request(app).get(`/api/systems/${id}/export`).set(gm)).text;
-    expect(JSON.parse(text).definition.graph).toEqual(HEARTH.graph);
+    expect(JSON.parse(text).graph).toEqual(HEARTH.graph);
     const copy = text.replace(`"origin": "${id}"`, '"origin": "org_elsewhere"');
     const installed = (await request(app).post('/api/systems/install').set(gm).send({ file: copy, mode: 'new' })).body;
     const draft = (await request(app).get(`/api/systems/${installed.id}`).set(gm)).body;
