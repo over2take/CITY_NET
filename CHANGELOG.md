@@ -52,6 +52,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **The System Builder's graph view as logic (5a2).** Nothing to see yet: the builder can now read
+  a system as the map will draw it (a node for every stat, table, house rule, formula, condition
+  and note, a wire for each name a formula reads, stats grouped as on the STATS tab), lay it out in
+  columns on a grid, and write moved nodes and folded groups back into the system. Its reading of
+  formulas is held to the server's own over every built-in example and sixty random systems. The
+  map itself comes in 5a3.
+
 - **The System Builder's graph view can be saved (5a1).** Nothing to see yet: a system can now
   hold the map's layout (where each node sits, groups of formulas, which groups are folded, and
   notes), checked as strictly as the rest of a shared file, carried in a .citysys file and never
