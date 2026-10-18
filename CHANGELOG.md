@@ -51,7 +51,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   shows them. Drag nodes on a grid (they stay put), fold a group to one line, zoom, FIT, a minimap,
   AUTO-LAYOUT (it asks first), and a line under the map with the counts and the sample character.
   Your choice of FORMS or GRAPH is remembered. The map opens at a zoom that can be read, and takes
-  every theme's colors. Editing on the map comes next; for now, edit in FORMS.
+  every theme's colors.
+- **Click a node to edit it (5a3b2).** A node clicked on the map opens a panel beside it with the very
+  boxes FORMS has: a stats group with the modifiers its table gives, a formula's name, text, INSERT,
+  value and alternative, a table's rows and TRY IT. A change there is a change in FORMS, and the map
+  follows at once: a new wire, the new value. A house rule goes to HOUSE RULES; a note is read.
+  ×, Escape or a click on the map closes it, and the map slides a node the panel would cover into view.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

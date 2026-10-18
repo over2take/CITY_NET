@@ -544,7 +544,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
             {ready && page === 'rules' && !graphOn && <StatsRulesPage definition={definition!} edit={edit} api={api} />}
             {graphOn && (
               <React.Suspense fallback={<p style={{ opacity: 0.7, padding: 24 }}>LOADING THE MAP…</p>}>
-                <GraphView definition={definition!} edit={edit} api={api} readOnly={looking} />
+                <GraphView definition={definition!} edit={edit} api={api} readOnly={looking} onGoTo={(p) => { setPage(p); setStatus(null); }} />
               </React.Suspense>
             )}
             {ready && page === 'sheet' && <SheetPage definition={definition!} edit={edit} api={api} />}
