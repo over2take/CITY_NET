@@ -110,6 +110,42 @@ test('a system as a map: drawn, dragged, folded, and all of it kept', async ({ p
   expect((await asGm(request, token, 'get', '/api/systems/view')).views.rules).toBe('forms');
 });
 
+test('a node edited in its panel is the same system in FORMS, and the map follows', async ({ page, request }, info) => {
+  const name = `Panel Map ${info.retry + 1}`;
+  const token = await gmToken(request);
+  await asGm(request, token, 'post', '/api/systems', { definition: HEARTH(name) });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'graph' });
+  await signInAsGm(page);
+  await openSystem(page, name);
+  await toGraph(page);
+  const map = page.getByTestId('graph-view');
+  await expect(map.locator('.react-flow__edge')).toHaveCount(WIRES);
+
+  // A click on a node opens its panel, the same boxes as FORMS.
+  await map.getByTestId('graph-node-melee').click();
+  const panel = page.getByTestId('graph-panel');
+  await expect(panel).toHaveAttribute('aria-label', 'FORMULA MELEE ATTACK');
+  const text = panel.getByLabel('Melee attack formula');
+  await text.click();
+  await text.press('End');
+  await text.pressSequentially(' + @dex_mod + 3');
+
+  // The map follows: a wire from DEX MOD, and the server's new value, in the panel and on the node.
+  await expect(map.locator('.react-flow__edge')).toHaveCount(WIRES + 1);
+  await expect(panel.getByTestId('panel-value-melee')).toHaveText('= 5');
+  await expect(map.getByTestId('graph-node-melee').locator('[data-value]')).toHaveText('5');
+  await expect(map.getByTestId('graph-node-melee')).toContainText('STR MOD + floor(LEVEL / 2) + DEX MOD + 3');
+
+  // Escape closes it; FORMS has the same formula, the same value.
+  await page.keyboard.press('Escape');
+  await expect(panel).toBeHidden();
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'FORMS' }).click();
+  await page.getByRole('tab', { name: 'FORMULAS' }).click();
+  await expect(page.getByLabel('Melee attack formula')).toHaveValue('@str_mod + floor(@lvl / 2) + @dex_mod + 3');
+  await expect(page.getByTestId('value-melee')).toHaveText('5');
+});
+
 test('a busy system lays out to be read: dots on their rows, every wire drawn, nothing overlapping, a readable zoom', async ({ page, request }, info) => {
   const name = `Busy Map ${info.retry + 1}`;
   const token = await gmToken(request);

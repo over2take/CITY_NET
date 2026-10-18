@@ -3,7 +3,7 @@ import path from 'path';
 import { signInAsGm, openBuilder, builderPage, gmToken, asGm } from './helpers';
 
 // Reference pictures of the graph view, to look at by eye before a PR that changes how it looks
-// (5a3a): the CWN example as the map opens, fitted, and in each theme. Not a check, so it runs
+// (5a3a): the CWN example as the map opens, fitted, with a node's panel open (5a3b2), and in each theme. Not a check, so it runs
 // only when asked:
 //
 //   GRAPH_SHOTS=1 npx playwright test tests/graph-shots.spec.ts
@@ -34,6 +34,12 @@ test('the graph view, for looking at', async ({ page, request }, info) => {
   await page.getByRole('button', { name: 'FIT', exact: true }).click();
   await page.waitForTimeout(600);
   await page.screenshot({ path: path.join(SHOTS, 'graph-cwn-fit.png') });
+  // A node's panel: the same boxes as FORMS, beside the map.
+  await page.getByTestId('graph-node-save_physical').click();
+  await page.getByTestId('graph-panel').waitFor();
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: path.join(SHOTS, 'graph-cwn-panel.png') });
+  await page.keyboard.press('Escape');
   for (const theme of THEMES) {
     await page.evaluate((t) => {
       const root = document.querySelector('.crt-container') as HTMLElement;

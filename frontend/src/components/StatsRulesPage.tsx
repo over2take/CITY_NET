@@ -1,8 +1,9 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
-  statGroups, withNewGroup, tableList, withNewTable, formulaList, withNewFormula, withFormula, withoutFormula, insertToken,
+  statGroups, withNewGroup, tableList, withNewTable, formulaList, withNewFormula, withoutFormula,
 } from '../sheets/statsRules';
+import { useFormulaInsert } from '../hooks/useFormulaInsert';
 import { usePreviewValues } from '../hooks/usePreviewValues';
 import { HINTS } from '../sheets/builderHelp';
 import { ColumnHead } from './HelpHint';
@@ -65,18 +66,7 @@ function TablesTab({ definition, edit }: Props) {
 function FormulasTab({ definition, edit, api }: Props) {
   const formulas = formulaList(definition);
   const { preview, tried } = usePreviewValues(definition, api);
-  const [cursor, setCursor] = useState<{ id: string; at: number } | null>(null);
-  const inputs = useRef<Record<string, HTMLInputElement | null>>({});
-
-  const insert = (token: string) => {
-    if (!cursor) return;
-    const f = formulas.find((x) => x.id === cursor.id);
-    if (!f) return;
-    const next = insertToken(f.formula ?? '', cursor.at, token);
-    edit(withFormula(definition, f.id, { formula: next.text }));
-    setCursor({ id: f.id, at: next.cursor });
-    requestAnimationFrame(() => { const el = inputs.current[f.id]; if (el) { el.focus(); el.setSelectionRange(next.cursor, next.cursor); } });
-  };
+  const insert = useFormulaInsert(definition, edit);
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 230px', gap: 16, alignItems: 'start' }}>
@@ -97,8 +87,7 @@ function FormulasTab({ definition, edit, api }: Props) {
                   <tr key={f.id} data-testid={`formula-${f.id}`}>
                     <td style={td}><FormulaName definition={definition} edit={edit} f={f} /></td>
                     <td style={td}>
-                      <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried}
-                        inputRef={(el) => { inputs.current[f.id] = el; }} onCursor={(at) => setCursor({ id: f.id, at })} />
+                      <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried} {...insert.bind(f.id)} />
                     </td>
                     <td data-testid={`value-${f.id}`} style={{ ...td, textAlign: 'right', color: 'var(--cyan)', fontSize: 13 }}>
                       {value !== undefined ? value : '·'}
@@ -116,7 +105,7 @@ function FormulasTab({ definition, edit, api }: Props) {
         </div>
       </div>
       <aside aria-label="Insert" style={{ border: '1px solid var(--dark-green)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <InsertChips definition={definition} active={!!cursor} onInsert={insert} />
+        <InsertChips definition={definition} active={insert.active} onInsert={insert.insert} />
       </aside>
     </div>
   );

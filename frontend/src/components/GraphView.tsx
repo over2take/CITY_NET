@@ -12,6 +12,8 @@ import {
 } from '../sheets/graphModel';
 import { sampleOf } from '../sheets/statsRules';
 import { usePreviewValues } from '../hooks/usePreviewValues';
+import type { BuilderPage } from '../sheets/builderSession';
+import { GraphPanel } from './GraphPanel';
 
 // STATS & RULES with GRAPH on (5a3a; approved mockup docs/mockups/builder-graph.html, 2026-10-17,
 // nodes as the builder design's node kit draws them, docs/mockups/builder-design, 2026-09-29): the
@@ -27,6 +29,8 @@ interface Props {
   api?: ReturnType<typeof systemsApi>;
   /** An example being looked at: the map moves and zooms, nothing on it changes. */
   readOnly?: boolean;
+  /** Where a house rule's GO TO HOUSE RULES goes: the builder's own page. */
+  onGoTo?: (page: BuilderPage) => void;
 }
 
 /**
@@ -391,9 +395,13 @@ function StatusLine({ graph, definition }: { graph: Graph; definition: Definitio
   );
 }
 
-function GraphMap({ definition, edit, api, readOnly = false }: Props) {
+function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
   const graph = useMemo(() => graphOf(definition), [definition]);
-  const { preview } = usePreviewValues(definition, api);
+  const { preview, tried } = usePreviewValues(definition, api);
+  // The node picked on the map, whose controls the panel shows (5a3b2). Gone when it is: a formula
+  // removed, or turned into a modifier its stat's list now shows.
+  const [selected, setSelected] = useState<string | null>(null);
+  const picked = selected ? graph.nodes.find((n) => n.id === selected) : undefined;
   const values: Values = useMemo(() => ({
     values: preview?.values ?? {},
     problems: preview?.problems ?? {},
@@ -442,10 +450,11 @@ function GraphMap({ definition, edit, api, readOnly = false }: Props) {
       out.push({
         id: n.id, type: n.kind, position: positions[n.id] ?? { x: 0, y: 0 }, width: n.width, height: n.height, measured: measured[n.id],
         hidden: folded.has(n.id), draggable: !readOnly, selectable: false, data: { node: n, values } satisfies NodeData,
+        style: n.id === picked?.id ? { outline: '2px solid var(--cyan)', outlineOffset: 3 } : undefined,
       });
     }
     return out;
-  }, [graph, positions, values, readOnly, fold, measured]);
+  }, [graph, positions, values, readOnly, fold, measured, picked]);
 
   const edges: Edge[] = useMemo(() => shownWires(graph).map((w) => ({
     id: w.id, source: w.source, target: w.target, sourceHandle: w.sourceHandle, targetHandle: w.targetHandle,
@@ -495,7 +504,7 @@ function GraphMap({ definition, edit, api, readOnly = false }: Props) {
     const shown = flow.getNodes().filter((n) => !n.hidden);
     if (!shown.length) return;
     const bounds = flow.getNodesBounds(shown);
-    const pane = document.querySelector('[data-testid="graph-view"]')?.getBoundingClientRect();
+    const pane = document.querySelector('[data-testid="graph-map"]')?.getBoundingClientRect();
     const fits = pane ? Math.min(pane.width / (bounds.width * 1.1), pane.height / (bounds.height * 1.1), 1) : 1;
     if (fits >= OPENING_ZOOM) void flow.fitView({ padding: 0.1, maxZoom: 1 });
     else void flow.setViewport({ x: 24 - bounds.x * OPENING_ZOOM, y: 24 - bounds.y * OPENING_ZOOM, zoom: OPENING_ZOOM });
@@ -505,6 +514,17 @@ function GraphMap({ definition, edit, api, readOnly = false }: Props) {
     edit(withPositions(definition, graph, layoutOf(graph)));
     requestAnimationFrame(() => { void flow.fitView({ padding: 0.1, maxZoom: 1 }); });
   }, [definition, edit, graph, flow]);
+
+  /** The map slid just enough that a node the panel opened over is in view again. */
+  const keepInView = useCallback((id: string) => {
+    requestAnimationFrame(() => {
+      const node = document.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`)?.getBoundingClientRect();
+      const area = document.querySelector('[data-testid="graph-map"]')?.getBoundingClientRect();
+      if (!node || !area || node.right <= area.right - 16) return;
+      const vp = flow.getViewport();
+      void flow.setViewport({ ...vp, x: vp.x - (node.right - area.right + 40) }, { duration: 200 });
+    });
+  }, [flow]);
 
   const onNodeDragStop = useCallback(() => {
     grabbed.current = null;
@@ -519,15 +539,18 @@ function GraphMap({ definition, edit, api, readOnly = false }: Props) {
   }, [definition, edit, graph, readOnly, saved]);
 
   return (
-    <div data-testid="graph-view" style={{
-      position: 'relative', width: '100%', height: '100%',
+    <div data-testid="graph-view" onKeyDown={(e) => { if (e.key === 'Escape' && picked) setSelected(null); }} style={{
+      display: 'flex', width: '100%', height: '100%',
       ['--xy-background-color' as string]: GROUND.base,
       ['--xy-minimap-background-color' as string]: GROUND.base,
       ['--xy-handle-border-color' as string]: GROUND.base,
     }}>
+      <div data-testid="graph-map" style={{ position: 'relative', flex: 1, minWidth: 0, height: '100%' }}>
       <ReactFlow
         nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} edgeTypes={EDGE_TYPES}
         onNodesChange={onNodesChange} onNodeDragStop={onNodeDragStop}
+        onNodeClick={(_, n) => { if (!n.id.startsWith('group:')) { setSelected(n.id); keepInView(n.id); } }}
+        onPaneClick={() => setSelected(null)}
         nodesConnectable={false} elementsSelectable={false} deleteKeyCode={null}
         panOnScroll zoomOnScroll={false} zoomOnDoubleClick={false}
         minZoom={0.1} maxZoom={4}
@@ -543,6 +566,11 @@ function GraphMap({ definition, edit, api, readOnly = false }: Props) {
         <Toolbar onTidy={readOnly ? undefined : tidy} />
       </ReactFlow>
       <StatusLine graph={graph} definition={definition} />
+      </div>
+      {picked && (
+        <GraphPanel definition={definition} edit={edit} node={picked} preview={preview} tried={tried}
+          onClose={() => setSelected(null)} onGoTo={onGoTo} />
+      )}
     </div>
   );
 }
