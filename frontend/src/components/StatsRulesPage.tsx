@@ -1,18 +1,16 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   statGroups, allStats, withNewGroup, withGroupLabel, withoutGroup, withNewStat, withStat, withoutStat, sampleOf, withSample,
   tableList, withNewTable, withTableLabel, withoutTable, withBands, lookupIn,
-  formulaList, withNewFormula, withFormula, withoutFormula, withAlternative, usedBy, problemsByFormula, insertToken, FUNCTIONS,
+  formulaList, withNewFormula, withFormula, withoutFormula, withAlternative, usedBy, insertToken, FUNCTIONS,
   type Formula,
 } from '../sheets/statsRules';
-import { houseRuleList, withHouseRuleOn } from '../sheets/houseRules';
+import { houseRuleList } from '../sheets/houseRules';
+import { usePreviewValues, type Tried } from '../hooks/usePreviewValues';
 import { OnlyWith } from './OnlyWith';
 import { HINTS } from '../sheets/builderHelp';
 import { ColumnHead, FieldName } from './HelpHint';
-
-/** Worked out values and mistakes, by formula. */
-type Tried = { values: Record<string, number>; problems: Record<string, string> };
 
 // The builder's STATS & RULES page (4b2d): the numbers players fill in (STATS) and the lookup
 // tables formulas read (TABLES), with FORMULAS between them (approved mockup
@@ -30,8 +28,7 @@ interface Props {
 
 type Tab = 'stats' | 'formulas' | 'tables';
 
-/** How long after the last keystroke the live values are asked for. */
-export const PREVIEW_DELAY_MS = 400;
+export { PREVIEW_DELAY_MS } from '../hooks/usePreviewValues';
 
 const small: React.CSSProperties = { fontSize: 10, letterSpacing: 2, opacity: 0.75 };
 const why: React.CSSProperties = { fontSize: 12, lineHeight: 1.45, opacity: 0.85 };
@@ -218,27 +215,9 @@ function Alternative({ f, definition, edit, tried, field }: { f: Formula; defini
  */
 function FormulasTab({ definition, edit, api }: Props) {
   const formulas = formulaList(definition);
-  const [preview, setPreview] = useState<Tried | null>(null);
-  /** The values with each house rule an alternative follows on, by rule (4j4b). */
-  const [tried, setTried] = useState<Record<string, Tried>>({});
+  const { preview, tried } = usePreviewValues(definition, api);
   const [cursor, setCursor] = useState<{ id: string; at: number } | null>(null);
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
-
-  useEffect(() => {
-    if (!api) return undefined;
-    let live = true;
-    const timer = setTimeout(() => {
-      api.previewValues(definition).then((r) => {
-        if (live && r.ok) setPreview({ values: r.value.values, problems: problemsByFormula(r.value.problems) });
-      });
-      for (const rule of new Set(formulaList(definition).map((f) => f.alternative?.rule).filter((x): x is string => !!x))) {
-        api.previewValues(withHouseRuleOn(definition, rule)).then((r) => {
-          if (live && r.ok) setTried((was) => ({ ...was, [rule]: { values: r.value.values, problems: problemsByFormula(r.value.problems) } }));
-        });
-      }
-    }, PREVIEW_DELAY_MS);
-    return () => { live = false; clearTimeout(timer); };
-  }, [api, definition]);
 
   const insert = (token: string) => {
     if (!cursor) return;

@@ -14,6 +14,10 @@ type Problem = { where: string; message: string };
 /** A system's definition as stored: the builder edits it whole (backend/systemBuilder/definition.js). */
 export type Definition = { format: number; name: string; author?: string; [section: string]: unknown };
 
+/** The builder pages with a map, so a FORMS / GRAPH choice (backend routes/systems.js MAP_PAGES). */
+export type MapPage = 'rules';
+export type BuilderView = 'forms' | 'graph';
+
 /** One system as GET /api/systems/:id answers (store.getSystem). */
 export interface SystemCopies {
   id: string;
@@ -161,6 +165,9 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
     tourSeen: () => call<{ seen: boolean }>(fetcher, token, '/api/systems/tour'),
     /** The tour seen (finished or skipped), or to be shown again the next time the builder opens. */
     setTourSeen: (seen: boolean) => call<{ seen: boolean }>(fetcher, token, '/api/systems/tour', 'PUT', { seen }),
+    /** FORMS or GRAPH on each builder page with a map (Phase 5: STATS & RULES only), as last picked. */
+    views: () => call<{ views: Record<MapPage, BuilderView> }>(fetcher, token, '/api/systems/view'),
+    setView: (page: MapPage, view: BuilderView) => call<{ page: MapPage; view: BuilderView }>(fetcher, token, '/api/systems/view', 'PUT', { page, view }),
     rename: (systemId: string, name: string) => call<{ name: string }>(fetcher, token, `${id(systemId)}/name`, 'PUT', { name }),
     duplicate: (systemId: string) => call<{ id: string; name: string }>(fetcher, token, `${id(systemId)}/duplicate`, 'POST', {}),
     remove: (systemId: string) => call<{ deleted: true }>(fetcher, token, id(systemId), 'DELETE'),
