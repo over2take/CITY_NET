@@ -310,6 +310,23 @@ describe('where things sit, and writing it back', () => {
     expect(problems(withCollapsed(open, 'attacks', true))).toEqual([]);
   });
 
+  it('a system made before the map existed opens laid out, and its first move writes what the server takes', () => {
+    // e2e/fixtures/emberline.citysys: exported 2026-10-16 by a 2.0.0 dev build, no graph section.
+    const file = JSON.parse(req('fs').readFileSync(req('path').join(__dirname, '..', '..', '..', '..', 'e2e', 'fixtures', 'emberline.citysys'), 'utf8'));
+    const old = file.definition as Definition;
+    expect(old.graph).toBeUndefined();
+    const graph = graphOf(old);
+    expect(graph.nodes.length).toBeGreaterThan(3);
+    expect(positionsOf(old, graph)).toEqual(layoutOf(graph));
+    const ids = new Set(graph.nodes.map((n) => n.id));
+    for (const w of graph.wires) { expect(ids.has(w.from)).toBe(true); expect(ids.has(w.to)).toBe(true); }
+    const moved = withPositions(old, graph, { [graph.nodes[0].id]: { x: 480, y: 480 } });
+    expect(problems(moved)).toEqual([]);
+    // Everything else in it is as it was: the map only adds its own section.
+    const { graph: _layout, ...rest } = moved;
+    expect(rest).toEqual(old);
+  });
+
   it('writes what the server takes, for any system', () => {
     for (const def of [...randoms, ...examples]) {
       const graph = graphOf(def);

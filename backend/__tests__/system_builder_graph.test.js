@@ -3,6 +3,8 @@ import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { createRequire } from 'module';
+import fs from 'fs';
+import path from 'path';
 import { makeTestDb, run } from './helpers/testDb.js';
 
 /**
@@ -177,6 +179,18 @@ describe('through the server', () => {
     app.use(express.json({ limit: '2mb' }));
     app.use('/api/systems', require_('../routes/systems.js')(db));
     await new Promise((resolve) => runtime.load(db, resolve));
+  });
+
+  it('a file exported before the map existed installs as it was, and publishes', async () => {
+    // e2e/fixtures/emberline.citysys: exported 2026-10-16 by a 2.0.0 dev build, no graph section.
+    const text = fs.readFileSync(path.join(__dirname, '..', '..', 'e2e', 'fixtures', 'emberline.citysys'), 'utf8');
+    const file = JSON.parse(text);
+    expect(file.definition.graph).toBeUndefined();
+    expect(citysys.readFile(text).problems).toEqual([]);
+    const installed = (await request(app).post('/api/systems/install').set(gm).send({ file: text, mode: 'new' })).body;
+    const draft = (await request(app).get(`/api/systems/${installed.id}`).set(gm)).body.draft;
+    expect(draft).toEqual(file.definition);
+    expect((await request(app).post(`/api/systems/${installed.id}/publish`).set(gm)).status).toBe(200);
   });
 
   it('a .citysys file carries the layout and its notes, and installs it unchanged', async () => {
