@@ -52,6 +52,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **The System Builder's graph view can be saved (5a1).** Nothing to see yet: a system can now
+  hold the map's layout (where each node sits, groups of formulas, which groups are folded, and
+  notes), checked as strictly as the rest of a shared file, carried in a .citysys file and never
+  sent to players. Nothing done in FORMS can make a problem in it. The builder also remembers
+  whether STATS & RULES was last shown as FORMS or GRAPH. The map itself comes in 5a3.
+
 - **A conditions test no longer fails on a busy machine.** It read a token's condition chips as soon
   as they appeared, but the rounds left arrive a moment later with the server's reply, so under load
   it sometimes read POISON before it said POISON 2R. It now waits for them. Nothing in the game changes.

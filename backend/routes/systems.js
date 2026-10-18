@@ -23,6 +23,9 @@ const { houseRuleKey } = require('../systemBuilder/houseRules');
 
 /** The global_settings key that says the builder's first-time tour has been seen. */
 const TOUR_SEEN = 'builder_tour_seen';
+/** The builder pages with a map, so a FORMS / GRAPH choice (Phase 5: STATS & RULES only). */
+const MAP_PAGES = ['rules'];
+const VIEW_KEY = (page) => `builder_view_${page}`;
 
 /** What a currency's or condition's icon may be uploaded as (decided with the user, 2026-10-01). */
 const ICON_EXT = new Set(['.png', '.webp', '.svg']);
@@ -125,6 +128,25 @@ module.exports = (db, io = null) => {
     const done = (err) => (err ? answer(res, err) : res.json({ seen }));
     if (seen) db.run(`INSERT INTO global_settings (key, value) VALUES (?, '1') ON CONFLICT(key) DO UPDATE SET value = '1'`, [TOUR_SEEN], done);
     else db.run('DELETE FROM global_settings WHERE key = ?', [TOUR_SEEN], done);
+  });
+
+  // FORMS or GRAPH, per builder page that has a map (Phase 5; approved mockup
+  // docs/mockups/builder-graph.html, 2026-10-17): remembered here like the tour, one setting per
+  // page as only the main admin builds. FORMS until GRAPH is picked. Before /:id, as /tour is.
+  router.get('/view', gm, (req, res) => {
+    const keys = MAP_PAGES.map((p) => VIEW_KEY(p));
+    db.all(`SELECT key, value FROM global_settings WHERE key IN (${keys.map(() => '?').join(', ')})`, keys, (err, rows) => {
+      if (err) return answer(res, err);
+      const set = new Map((rows || []).map((r) => [r.key, r.value]));
+      return res.json({ views: Object.fromEntries(MAP_PAGES.map((p) => [p, set.get(VIEW_KEY(p)) === 'graph' ? 'graph' : 'forms'])) });
+    });
+  });
+  router.put('/view', gm, (req, res) => {
+    const { page, view } = req.body || {};
+    if (!MAP_PAGES.includes(page)) return res.status(400).json({ error: 'That page has no map' });
+    if (view !== 'forms' && view !== 'graph') return res.status(400).json({ error: 'The view is forms or graph' });
+    db.run('INSERT INTO global_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [VIEW_KEY(page), view],
+      (err) => (err ? answer(res, err) : res.json({ page, view })));
   });
 
   router.get('/:id', gm, (req, res) => store.getSystem(db, req.params.id, (err, sys) => answer(res, err, sys)));

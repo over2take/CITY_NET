@@ -262,6 +262,19 @@ const randomSystem = (seed, { parts = true } = {}) => {
     // An alternative reads only stats and tables, so no rule can make a loop.
     for (const d of derived) if (r.chance(0.3)) d.alternative = { rule: ruleId(), formula: formulaFrom(r, statIds, tables, []) };
   }
+
+  // GRAPH: the map's layout for some systems, last so every seed's system is otherwise as before.
+  if (r.chance(0.6)) {
+    const nodes = [...statIds, ...derived.map((d) => d.id), ...tables.map((t) => `table:${t}`), ...rules.map((x) => `rule:${x.id}`)];
+    const notes = Array.from({ length: r.int(0, 3) }, (_, i) => ({ id: `n${i + 1}`, text: `${r.word()} ${r.word()}.`, ...(nodes.length && r.chance(0.8) ? { on: r.pick(nodes.filter((n) => !n.startsWith('note:'))) } : {}) }));
+    const grouped = r.some(derived.map((d) => d.id), 0.4);
+    const graph = { positions: Object.fromEntries([...nodes, ...notes.map((n) => `note:${n.id}`)].map((n) => [n, [r.int(0, 60) * 24, r.int(0, 40) * 24]])) };
+    if (grouped.length) graph.groups = [{ id: 'mapgroup1', label: r.word(2).toUpperCase().slice(0, 40), members: grouped }];
+    const foldable = [...groups.map((g) => g.id), ...(grouped.length ? ['mapgroup1'] : [])];
+    if (foldable.length && r.chance(0.5)) graph.collapsed = r.some(foldable, 0.5);
+    if (notes.length) graph.notes = notes;
+    def.graph = graph;
+  }
   return def;
 };
 
