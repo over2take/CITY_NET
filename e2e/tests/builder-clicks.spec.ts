@@ -49,6 +49,14 @@ test('every control in the builder takes a click, on every page', async ({ page 
   for (const p of ['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
     await builderPage(page, p);
     missed[p] = await unreachable(page);
+    if (p === 'STATS & RULES') {
+      // And as a map (5a3a): the map's own controls, then back to FORMS, as the next journeys expect.
+      const view = page.getByRole('group', { name: 'View' });
+      await view.getByRole('button', { name: 'GRAPH' }).click();
+      await expect(page.getByTestId('graph-view')).toBeVisible();
+      missed[`${p} · GRAPH`] = await unreachable(page);
+      await view.getByRole('button', { name: 'FORMS' }).click();
+    }
   }
   expect(Object.fromEntries(Object.entries(missed).filter(([, v]) => v.length))).toEqual({});
 });

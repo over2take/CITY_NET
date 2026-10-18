@@ -1,5 +1,6 @@
-// The builder's GRAPH view as logic (5a2; approved mockup docs/mockups/builder-graph.html,
-// 2026-10-17): a system read as nodes, wires and groups, laid out on a grid, and the map's moves
+// The builder's GRAPH view as logic (5a2, node styles 5a3a; approved mockups
+// docs/mockups/builder-graph.html, 2026-10-17, and the node kit in docs/mockups/builder-design,
+// 2026-09-29): a system read as nodes, wires and groups, laid out on a grid, and the map's moves
 // written back. Pure, so the map only draws it.
 //
 // One system, two views: everything here is read from the same definition FORMS edits. A wire is
@@ -8,12 +9,17 @@
 // positions, groups of formulas, which groups are folded, and notes. Anything in it naming what
 // FORMS has since deleted is left out here, never a problem.
 //
+// Drawn to be read, as the node kit draws it: a stats group is one list node with a row and a dot
+// per stat, and a modifier worked out from each stat by one table (`attribute_mod(@str)`) is a
+// column on that list rather than a node of its own; a formula's inputs and text are in the names
+// players see, `max(@a, @b)` reading as BEST with a wire from each.
+//
 // The server works the values out (POST /api/systems/preview-values), as for FORMS. This only
 // needs to know what each formula reads, which referencesIn finds the way the server's
 // expression.js does (a test holds the two together).
 
 import type { Definition } from './systemsApi';
-import { statGroups, formulaList, tableList, FUNCTIONS } from './statsRules';
+import { statGroups, formulaList, tableList, takenIds, FUNCTIONS } from './statsRules';
 import { houseRuleList, waitingOn } from './houseRules';
 
 type Obj = Record<string, unknown>;
@@ -25,11 +31,15 @@ export const GRID = 24;
 export const REACH = 100000;
 /** Node sizes in the map's pixels. The map's node components draw to these. */
 export const SIZE = {
-  width: 240, noteWidth: 216,
-  header: 26, noteHeader: 20, text: 32, row: 16, band: 14, ruleRow: 18, pad: 4,
-  border: 2, noteLine: 14,
-  groupHeader: 23, groupRow: 18, groupPad: 12, groupTitle: 32,
-  columnGap: 72, left: 48, top: 24,
+  width: 264, noteWidth: 240,
+  header: 28, row: 20, listRow: 22, colHead: 18, exprLine: 16, exprPad: 8, result: 24, band: 18, ruleRow: 20, pad: 6,
+  border: 2, noteHeader: 22, noteLine: 16,
+  groupHeader: 25, foldedLine: 24, groupPad: 12, groupTitle: 32,
+  columnGap: 120, left: 48, top: 24,
+  /** How tall a column grows before the next nodes start one beside it, so a busy system spreads sideways. */
+  columnHeight: 864,
+  /** Characters of a formula's text on one line of a node, at its font. */
+  exprChars: 32,
 } as const;
 /** The most "also under it" lines a house rule node lists; more say how many. */
 const ALSO_LINES = 3;
@@ -58,30 +68,58 @@ export const referencesIn = (text: unknown): References => {
   return out;
 };
 
+/** `max(@a, @b, ...)` or `min(...)` of names only: one input, the best or worst of several. */
+const COMBINED = /\b(max|min)\(\s*(@[a-z][a-z0-9_]*(?:\s*,\s*@[a-z][a-z0-9_]*)+)\s*\)/g;
+/** A modifier worked out from one stat by one table: `attribute_mod(@str)`. */
+const MODIFIER = /^\s*([a-z][a-z0-9_]*)\(\s*@([a-z][a-z0-9_]*)\s*\)\s*$/;
+
 // ─── NODES, WIRES, GROUPS ──────────────────────────────────────────────────
 
-export type NodeKind = 'stat' | 'table' | 'formula' | 'condition' | 'rule' | 'note';
+export type NodeKind = 'list' | 'table' | 'formula' | 'condition' | 'rule' | 'note';
+
+/** Where a value comes from on the map: the node, the dot on it, and what players call it. */
+export interface Source { value: string; label: string; node: string; handle: string }
 
 /**
- * One name a formula reads, a row on its node. `value`: a stat or formula on the map, wired;
- * `table`: a table, wired when it exists; `field`: a sheet field that is neither (the health
- * boxes, cash), not on the map; `engine`: one of the engine's own $rules.
+ * One input on a formula's node, a row with its dot. `value`: a stat or formula; `combined`: the
+ * BEST (or WORST) of several, a wire from each; `table`: a table called by name; `field`: a sheet
+ * field that is neither (the health boxes, cash), not on the map, `known` when the sheet has it
+ * (the server reads any other @name as a field nothing fills, worth 0); `engine`: one of the
+ * engine's own $rules. `missing` when what it names isn't there.
  */
-export interface GraphInput { key: string; name: string; kind: 'value' | 'table' | 'field' | 'engine'; source: string | null; alt: boolean }
+export interface GraphInput {
+  key: string;
+  kind: 'value' | 'combined' | 'table' | 'field' | 'engine';
+  /** What the row says: the name players see. */
+  label: string;
+  /** For a stat: the group it is in, shown as where it comes from. */
+  where?: string;
+  /** What its wires come from: one, several for BEST, none for a field or the engine's own. */
+  from: Source[];
+  alt: boolean;
+  known?: boolean;
+  missing?: boolean;
+}
+
+/** A row of a list node: a stat, and its modifier when one table works one out for each. */
+export interface ListRow { stat: string; label: string; short: string | null; mod: string | null }
 
 export interface GraphNode {
   id: string;
   kind: NodeKind;
   label: string;
-  /** The group it is drawn in: a stats group, or one of the map's own. */
+  /** The map's own group it is drawn in. */
   group: string | null;
-  /** A formula's or condition's text (a condition's as IF / THEN / ELSE), a table's id, a rule's or note's words. */
+  /** A formula's text in the names players see (a condition's as IF / THEN / ELSE), a rule's or note's words. */
   text: string;
   inputs: GraphInput[];
-  /** A formula's alternative: the house rule it is under, and its text. */
-  alternative?: { rule: string; text: string };
+  /** A formula's alternative: the house rule it is under, and its text in names. */
+  alternative?: { rule: string; ruleName: string; text: string };
   /** A table's rows: what each reads as, and what it gives. */
   bands?: { upTo: number | null; value: number }[];
+  /** A list's rows, and the table its modifiers are worked out by. */
+  rows?: ListRow[];
+  via?: { table: string; label: string };
   /** A house rule's other things waiting on it, on other pages. */
   also?: string[];
   /** A note's node. */
@@ -90,9 +128,10 @@ export interface GraphNode {
   height: number;
 }
 
-export interface GraphWire { id: string; from: string; to: string; input: string; kind: 'value' | 'table' | 'gate' | 'note'; alt: boolean }
+/** A wire: from a node's dot (`out`, or a list's `out:<stat or modifier>`) to an input. `value` is what flows. */
+export interface GraphWire { id: string; from: string; fromHandle: string; value: string; to: string; input: string; kind: 'value' | 'table' | 'gate' | 'note'; alt: boolean }
 
-export interface GraphGroup { id: string; label: string; kind: 'stats' | 'map'; members: string[]; collapsed: boolean }
+export interface GraphGroup { id: string; label: string; members: string[]; collapsed: boolean }
 
 export interface Graph { nodes: GraphNode[]; wires: GraphWire[]; groups: GraphGroup[] }
 
@@ -101,20 +140,29 @@ const layoutPart = (def: Definition): Obj => (isObject(def.graph) ? def.graph : 
 
 interface Derived { id: string; label?: string; kind?: string; formula?: string; when?: string; then?: string; else?: string; alternative?: { rule: string; formula: string } }
 
-const lines = (text: string) => Math.min(6, Math.max(1, Math.ceil(text.length / 31)));
+const upper = (s: string) => s.toUpperCase();
+const exprLines = (text: string) => Math.min(4, Math.max(1, Math.ceil(text.length / SIZE.exprChars)));
+const noteLines = (text: string) => Math.min(8, Math.max(1, Math.ceil(text.length / 30)));
+/** How tall a formula's text is drawn (up to four lines, then cut short with its whole on hover). */
+export const exprHeight = (text: string) => exprLines(text) * SIZE.exprLine + SIZE.exprPad;
+/** How tall a note's words are drawn. */
+export const noteHeight = (text: string) => noteLines(text) * SIZE.noteLine + 8;
 
 /** A node's height in the map's pixels, from what it shows. */
-export const heightOf = (node: Pick<GraphNode, 'kind' | 'inputs' | 'alternative' | 'bands' | 'also' | 'text'>): number => {
+export const heightOf = (node: Pick<GraphNode, 'kind' | 'inputs' | 'alternative' | 'bands' | 'also' | 'text' | 'rows' | 'via'>): number => {
   const S = SIZE;
-  const base = node.inputs.filter((i) => !i.alt).length;
-  const alt = node.inputs.filter((i) => i.alt).length;
+  const expr = exprHeight;
   switch (node.kind) {
-    case 'stat': return S.header + S.row + S.border;
-    case 'table': return S.header + (node.bands?.length ?? 0) * S.band + 6 + S.border;
-    case 'rule': return S.header + S.text + S.ruleRow + (node.also?.length ?? 0) * S.row + S.pad + S.border;
-    case 'note': return S.noteHeader + lines(node.text) * S.noteLine + 6 + S.border;
-    default: return S.header + S.text + base * S.row
-      + (node.alternative ? S.row + S.text + alt * S.row : 0) + S.pad + S.border;
+    case 'list': return S.header + (node.via ? S.row : 0) + S.colHead + (node.rows?.length ?? 0) * S.listRow + S.pad + S.border;
+    case 'table': return S.header + (node.bands?.length ?? 0) * S.band + S.pad + S.border;
+    case 'rule': return S.header + (node.text ? expr(node.text) : 0) + S.ruleRow + (node.also?.length ?? 0) * S.row + S.pad + S.border;
+    case 'note': return S.noteHeader + noteHeight(node.text) + S.border;
+    default: {
+      const base = node.inputs.filter((i) => !i.alt).length;
+      const alt = node.inputs.filter((i) => i.alt).length;
+      return S.header + base * S.row + expr(node.text) + S.result
+        + (node.alternative ? S.row + alt * S.row + expr(node.alternative.text) : 0) + S.pad + S.border;
+    }
   }
 };
 
@@ -122,13 +170,15 @@ export const heightOf = (node: Pick<GraphNode, 'kind' | 'inputs' | 'alternative'
 export const graphOf = (def: Definition): Graph => {
   const layout = layoutPart(def);
   const groups = statGroups(def);
-  const statIds = new Set(groups.flatMap((g) => g.stats.filter(isObject).map((s) => s.id)));
   const derived = formulaList(def) as unknown as Derived[];
   const derivedIds = new Set(derived.map((d) => d.id));
   const tables = tableList(def);
   const tableIds = new Set(tables.map((t) => t.id));
+  const tableName = (id: string) => upper(tables.find((t) => t.id === id)?.label || id);
   const rules = houseRuleList(def);
   const ruleIds = new Set(rules.map((r) => r.id));
+  /** Every name the sheet has: its starter fields, the health boxes, a customized sheet's own. */
+  const onSheet = new Set(takenIds(def));
 
   // The map's own groups: of formulas that exist, each formula in the first group naming it.
   const mapGroups: GraphGroup[] = [];
@@ -139,78 +189,139 @@ export const graphOf = (def: Definition): Graph => {
     const members = (Array.isArray(g.members) ? g.members : [])
       .filter((m): m is string => typeof m === 'string' && derivedIds.has(m) && !inMapGroup.has(m));
     members.forEach((m) => inMapGroup.set(m, g.id as string));
-    mapGroups.push({ id: g.id, label: typeof g.label === 'string' ? g.label : g.id, kind: 'map', members, collapsed: collapsed.has(g.id) });
+    mapGroups.push({ id: g.id, label: typeof g.label === 'string' ? g.label : g.id, members, collapsed: collapsed.has(g.id) });
   }
+
+  // Modifiers that join their stat's row: one table, one stat each, every one in a group by the same table.
+  const groupOfStat = new Map(groups.flatMap((g) => g.stats.filter(isObject).map((s) => [s.id, g.id] as const)));
+  const offered = new Map<string, { stat: string; mod: string; table: string }[]>();
+  for (const d of derived) {
+    if (d.kind === 'condition' || d.alternative || inMapGroup.has(d.id)) continue;
+    const m = MODIFIER.exec(String(d.formula ?? ''));
+    if (!m || !tableIds.has(m[1]) || !groupOfStat.has(m[2])) continue;
+    const g = groupOfStat.get(m[2])!;
+    offered.set(g, [...(offered.get(g) ?? []), { stat: m[2], mod: d.id, table: m[1] }]);
+  }
+  const modOf = new Map<string, string>();
+  const via = new Map<string, string>();
+  for (const [g, list] of offered) {
+    if (new Set(list.map((x) => x.table)).size !== 1 || new Set(list.map((x) => x.stat)).size !== list.length) continue;
+    via.set(g, list[0].table);
+    for (const x of list) modOf.set(x.stat, x.mod);
+  }
+  const absorbed = new Set(modOf.values());
+
+  // Where every value comes from: a list's row, or a formula's own node.
+  const at = new Map<string, Source & { where?: string }>();
+  for (const g of groups) {
+    for (const s of g.stats.filter(isObject)) {
+      at.set(s.id, { value: s.id, label: upper(s.label || s.id), node: g.id, handle: `out:${s.id}`, where: upper(g.label || g.id) });
+      const mod = modOf.get(s.id);
+      const d = mod ? derived.find((x) => x.id === mod) : undefined;
+      if (mod) at.set(mod, { value: mod, label: upper(d?.label || mod), node: g.id, handle: `out:${mod}`, where: upper(g.label || g.id) });
+    }
+  }
+  for (const d of derived) if (!absorbed.has(d.id)) at.set(d.id, { value: d.id, label: upper(d.label || d.id), node: d.id, handle: 'out' });
 
   const nodes: GraphNode[] = [];
   const wires: GraphWire[] = [];
   const push = (n: Omit<GraphNode, 'width' | 'height'>) => nodes.push({ ...n, width: n.kind === 'note' ? SIZE.noteWidth : SIZE.width, height: heightOf(n) });
+  const wire = (to: string, i: GraphInput) => {
+    for (const f of i.from) wires.push({ id: `${f.node}:${f.handle}>${to}:${i.key}`, from: f.node, fromHandle: f.handle, value: f.value, to, input: i.key, kind: i.kind === 'table' ? 'table' : 'value', alt: i.alt });
+  };
 
   for (const g of groups) {
-    for (const s of g.stats.filter(isObject)) {
-      push({ id: s.id, kind: 'stat', label: s.label || s.id, group: g.id, text: s.tie ? `TIED TO ${s.tie}` : '', inputs: [] });
-    }
+    const t = via.get(g.id);
+    const inputs: GraphInput[] = t ? [{ key: 'via', kind: 'table', label: tableName(t), from: [{ value: t, label: tableName(t), node: `table:${t}`, handle: 'out' }], alt: false }] : [];
+    push({
+      id: g.id, kind: 'list', label: upper(g.label || g.id), group: null, text: '', inputs,
+      via: t ? { table: t, label: tableName(t) } : undefined,
+      rows: g.stats.filter(isObject).map((s) => ({ stat: s.id, label: upper(s.label || s.id), short: s.id.length <= 4 ? upper(s.id) : null, mod: modOf.get(s.id) ?? null })),
+    });
+    for (const i of inputs) wire(g.id, i);
   }
   for (const r of rules) {
     const also = waitingOn(def, r.id).filter((w) => w.kind !== 'FORMULA').map((w) => `${w.label} · ${w.kind}`);
     push({
-      id: `rule:${r.id}`, kind: 'rule', label: r.name || r.id, group: null, text: r.description || '', inputs: [],
+      id: `rule:${r.id}`, kind: 'rule', label: upper(r.name || r.id), group: null, text: r.description || '', inputs: [],
       also: also.length > ALSO_LINES ? [...also.slice(0, ALSO_LINES - 1), `and ${also.length - ALSO_LINES + 1} more`] : also,
     });
   }
   for (const t of tables) {
     push({
-      id: `table:${t.id}`, kind: 'table', label: t.label || t.id, group: null, text: t.id, inputs: [],
+      id: `table:${t.id}`, kind: 'table', label: tableName(t.id), group: null, text: t.id, inputs: [],
       bands: (Array.isArray(t.bands) ? t.bands : []).map((b) => ({ upTo: typeof b.upTo === 'number' ? b.upTo : null, value: Number(b.value) || 0 })),
     });
   }
 
-  const inputsFrom = (text: string, alt: boolean): GraphInput[] => {
-    const refs = referencesIn(text);
+  /** A formula's inputs, in the order its text first reads each, and its text in names. */
+  const read = (text: string, alt: boolean): { inputs: GraphInput[]; text: string } => {
     const side = alt ? 'a' : 'b';
-    return [
-      ...refs.fields.map((name): GraphInput => (statIds.has(name) || derivedIds.has(name)
-        ? { key: `${side}:@${name}`, name, kind: 'value', source: name, alt }
-        : { key: `${side}:@${name}`, name, kind: 'field', source: null, alt })),
-      ...refs.tables.map((name): GraphInput => ({ key: `${side}:${name}()`, name, kind: 'table', source: tableIds.has(name) ? `table:${name}` : null, alt })),
-      ...refs.rules.map((name): GraphInput => ({ key: `${side}:$${name}`, name, kind: 'engine', source: null, alt })),
-    ];
+    const found: { at: number; input: GraphInput }[] = [];
+    const combos = [...text.matchAll(COMBINED)].filter((m) => m[2].split(',').every((n) => at.has(n.trim().slice(1))));
+    let rest = text;
+    let shown = text;
+    combos.forEach((m, k) => {
+      const name = `${m[1] === 'max' ? 'BEST' : 'WORST'}${combos.length > 1 ? ` ${k + 1}` : ''}`;
+      const from = [...new Set(m[2].split(',').map((n) => n.trim().slice(1)))].map((n) => at.get(n)!);
+      found.push({ at: m.index ?? 0, input: { key: `${side}:${name.toLowerCase().replace(' ', '')}`, kind: 'combined', label: name, from, alt } });
+      rest = rest.replace(m[0], ' '.repeat(m[0].length));
+      shown = shown.replace(m[0], name);
+    });
+    const refs = referencesIn(rest);
+    for (const name of refs.fields) {
+      const src = at.get(name);
+      const input: GraphInput = src
+        ? { key: `${side}:@${name}`, kind: 'value', label: src.label, where: src.where, from: [src], alt }
+        : { key: `${side}:@${name}`, kind: 'field', label: `@${name}`, from: [], alt, known: onSheet.has(name), missing: !onSheet.has(name) && !derivedIds.has(name) };
+      found.push({ at: rest.indexOf(`@${name}`), input });
+    }
+    for (const name of referencesIn(text).tables) {
+      const has = tableIds.has(name);
+      found.push({ at: text.indexOf(name), input: { key: `${side}:${name}()`, kind: 'table', label: has ? tableName(name) : name, from: has ? [{ value: name, label: tableName(name), node: `table:${name}`, handle: 'out' }] : [], alt, missing: !has } });
+    }
+    for (const name of refs.rules) found.push({ at: rest.indexOf(`$${name}`), input: { key: `${side}:$${name}`, kind: 'engine', label: upper(name.replace(/_/g, ' ')), from: [], alt } });
+    shown = shown
+      .replace(/@([a-z][a-z0-9_]*)/g, (_, id: string) => at.get(id)?.label ?? `@${id}`)
+      .replace(/\$([a-z][a-z0-9_]*)/g, (_, id: string) => upper(id.replace(/_/g, ' ')))
+      .replace(/\b([a-z][a-z0-9_]*)(\s*\()/g, (m: string, id: string, p: string) => (FUNCTIONS.includes(id) || KEYWORDS.includes(id) || !tableIds.has(id) ? m : `${tableName(id)}${p}`))
+      .replace(/\*/g, '×').replace(/-/g, '−');
+    return { inputs: found.sort((a, b) => a.at - b.at).map((f) => f.input), text: shown };
   };
 
   for (const d of derived) {
+    if (absorbed.has(d.id)) continue;
     const condition = d.kind === 'condition';
-    const text = condition ? `IF ${d.when ?? ''} THEN ${d.then ?? ''} ELSE ${d.else ?? ''}` : String(d.formula ?? '');
-    const inputs = condition ? inputsFrom([d.when, d.then, d.else].map((x) => x ?? '').join(' '), false) : inputsFrom(text, false);
-    const alternative = !condition && d.alternative && typeof d.alternative.rule === 'string'
-      ? { rule: d.alternative.rule, text: String(d.alternative.formula ?? '') } : undefined;
-    if (alternative) inputs.push(...inputsFrom(alternative.text, true));
-    push({ id: d.id, kind: condition ? 'condition' : 'formula', label: d.label || d.id, group: inMapGroup.get(d.id) ?? null, text, inputs, alternative });
-    for (const i of inputs) {
-      if (i.source) wires.push({ id: `${i.source}>${d.id}:${i.key}`, from: i.source, to: d.id, input: i.key, kind: i.kind === 'table' ? 'table' : 'value', alt: i.alt });
+    const own = condition
+      ? read(`IF ${d.when ?? ''} THEN ${d.then ?? ''} ELSE ${d.else ?? ''}`, false)
+      : read(String(d.formula ?? ''), false);
+    const inputs = [...own.inputs];
+    let alternative: GraphNode['alternative'];
+    if (!condition && d.alternative && typeof d.alternative.rule === 'string') {
+      const alt = read(String(d.alternative.formula ?? ''), true);
+      inputs.push(...alt.inputs);
+      alternative = { rule: d.alternative.rule, ruleName: upper(rules.find((r) => r.id === d.alternative!.rule)?.name || d.alternative.rule), text: alt.text };
     }
+    push({ id: d.id, kind: condition ? 'condition' : 'formula', label: upper(d.label || d.id), group: inMapGroup.get(d.id) ?? null, text: own.text, inputs, alternative });
+    for (const i of inputs) wire(d.id, i);
     if (alternative && ruleIds.has(alternative.rule)) {
-      wires.push({ id: `rule:${alternative.rule}>${d.id}:gate`, from: `rule:${alternative.rule}`, to: d.id, input: 'gate', kind: 'gate', alt: true });
+      wires.push({ id: `rule:${alternative.rule}>${d.id}:gate`, from: `rule:${alternative.rule}`, fromHandle: 'out', value: alternative.rule, to: d.id, input: 'gate', kind: 'gate', alt: true });
     }
   }
 
+  // Notes, pinned to the node that shows what they are pinned to (a stat's list).
   const pinnable = new Set(nodes.map((n) => n.id));
   const noteIds = new Set<string>();
   for (const n of Array.isArray(layout.notes) ? layout.notes : []) {
     if (!isObject(n) || typeof n.id !== 'string' || noteIds.has(n.id)) continue;
     noteIds.add(n.id);
-    const on = typeof n.on === 'string' && pinnable.has(n.on) ? n.on : undefined;
+    const pin = typeof n.on === 'string' ? (at.get(n.on)?.node ?? n.on) : undefined;
+    const on = pin && pinnable.has(pin) ? pin : undefined;
     push({ id: `note:${n.id}`, kind: 'note', label: 'NOTE', group: null, text: typeof n.text === 'string' ? n.text : '', inputs: [], on });
-    if (on) wires.push({ id: `note:${n.id}>${on}`, from: `note:${n.id}`, to: on, input: 'note', kind: 'note', alt: false });
+    if (on) wires.push({ id: `note:${n.id}>${on}`, from: `note:${n.id}`, fromHandle: 'out', value: n.id, to: on, input: 'note', kind: 'note', alt: false });
   }
 
-  return {
-    nodes,
-    wires,
-    groups: [
-      ...groups.map((g): GraphGroup => ({ id: g.id, label: g.label, kind: 'stats', members: g.stats.filter(isObject).map((s) => s.id), collapsed: collapsed.has(g.id) })),
-      ...mapGroups,
-    ],
-  };
+  return { nodes, wires, groups: mapGroups };
 };
 
 // ─── WHERE THINGS SIT ──────────────────────────────────────────────────────
@@ -221,13 +332,14 @@ export type Positions = Record<string, Point>;
 const snapUp = (v: number) => Math.ceil(v / GRID) * GRID;
 const snap = (v: number) => Math.round(v / GRID) * GRID;
 const clamp = (v: number) => Math.max(-REACH, Math.min(REACH, v));
-const columnX = (col: number) => SIZE.left + col * (SIZE.width + SIZE.columnGap);
-/** A folded group's box height. */
-export const foldedHeight = (members: number) => SIZE.groupHeader + members * SIZE.groupRow + 6;
+const STEP = SIZE.width + SIZE.columnGap;
+/** A folded group's box height: its title, and how many nodes and wires out. */
+export const foldedHeight = () => SIZE.groupHeader + SIZE.foldedLine + 6;
 
 /**
- * Which column each node goes in: stats first, then tables and house rules, then each formula one
- * to the right of the furthest stat or formula it reads, and a note beside its node.
+ * Which column each node goes in, as the node kit's map reads left to right: tables, house rules
+ * and stats with nothing to look up first, then a list whose modifiers come from a table, then
+ * each formula one to the right of the furthest node it reads, and a note beside its node.
  */
 export const columnsOf = (graph: Graph): Record<string, number> => {
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
@@ -237,13 +349,13 @@ export const columnsOf = (graph: Graph): Record<string, number> => {
     if (col[id] !== undefined) return col[id];
     const n = byId.get(id);
     if (!n) return 0;
-    if (n.kind === 'stat') return (col[id] = 0);
-    if (n.kind === 'table' || n.kind === 'rule') return (col[id] = 1);
+    if (n.kind === 'table' || n.kind === 'rule') return (col[id] = 0);
+    if (n.kind === 'list') return (col[id] = n.via ? 1 : 0);
     if (n.kind === 'note') return (col[id] = n.on ? of(n.on) + 1 : 0);
     if (visiting.has(id)) return 1; // a loop: the server reports it; the map just needs a column
     visiting.add(id);
     let furthest = 0;
-    for (const i of n.inputs) if (i.kind === 'value' && i.source) furthest = Math.max(furthest, of(i.source));
+    for (const i of n.inputs) if (i.kind === 'value' || i.kind === 'combined') for (const f of i.from) furthest = Math.max(furthest, of(f.node));
     visiting.delete(id);
     return (col[id] = Math.max(1, furthest + 1));
   };
@@ -251,33 +363,48 @@ export const columnsOf = (graph: Graph): Record<string, number> => {
   return col;
 };
 
-/** Every node placed by columnsOf, top to bottom, groups kept together, on the grid. */
+/**
+ * Every node placed by columnsOf, top to bottom, groups kept together, on the grid. A column
+ * that would grow past SIZE.columnHeight carries on in another beside it (a group moves across
+ * whole), and the next column starts to the right of them all.
+ */
 export const layoutOf = (graph: Graph): Positions => {
   const col = columnsOf(graph);
   const groupOf = new Map(graph.groups.flatMap((g) => g.members.map((m) => [m, g] as const)));
   const pos: Positions = {};
   const columns = [...new Set(Object.values(col))].sort((a, b) => a - b);
+  let x: number = SIZE.left;
   for (const c of columns) {
-    const x = columnX(c);
-    const here = graph.nodes.filter((n) => col[n.id] === c);
+    // Tables and house rules at the top, so what feeds a list sits above or left of it, never after it.
+    const first = (n: GraphNode) => (n.kind === 'table' ? 0 : n.kind === 'rule' ? 1 : 2);
+    const here = graph.nodes.filter((n) => col[n.id] === c).sort((a, b) => first(a) - first(b));
     let y: number = SIZE.top;
+    /** Room for `height` more in this column, or a fresh column beside it. */
+    const room = (height: number) => {
+      // On the grid first: a node lands at the next grid line, which is where its height counts from.
+      if (y > SIZE.top && snapUp(y) + height > SIZE.top + SIZE.columnHeight) { x += STEP; y = SIZE.top; }
+    };
     const done = new Set<string>();
     for (const n of here) {
       if (done.has(n.id)) continue;
       const g = groupOf.get(n.id);
       if (g) {
         const members = here.filter((m) => groupOf.get(m.id) === g);
+        const open = members.reduce((h, m) => snapUp(h + m.height + 16), 0) + 20;
+        room(SIZE.groupTitle + (g.collapsed ? foldedHeight() + GRID : open));
         y = snapUp(y) + SIZE.groupTitle;
         let my = snapUp(y);
         for (const m of members) { pos[m.id] = { x, y: my }; my = snapUp(my + m.height + 16); done.add(m.id); }
-        y = g.collapsed ? y + foldedHeight(members.length) + GRID : my + 20;
+        y = g.collapsed ? y + foldedHeight() + GRID : my + 20;
         continue;
       }
-      if (n.kind === 'note' && n.on && pos[n.on]) y = Math.max(y, pos[n.on].y);
+      room(n.height);
+      if (n.kind === 'note' && n.on && pos[n.on] && pos[n.on].x <= x) y = Math.max(y, pos[n.on].y);
       pos[n.id] = { x, y: snapUp(y) };
       y = snapUp(y) + n.height + GRID;
       done.add(n.id);
     }
+    x += STEP;
   }
   return pos;
 };
@@ -303,19 +430,19 @@ export const positionsOf = (def: Definition, graph: Graph): Positions => {
   const laid = layoutOf(graph);
   if (!Object.keys(saved).length) return laid;
   const out: Positions = { ...saved };
-  const col = columnsOf(graph);
+  // The lowest node already put in each column, by where its left edge sits.
   const bottom: Record<number, number> = {};
   for (const n of graph.nodes) {
     if (!saved[n.id]) continue;
-    const c = col[n.id];
-    bottom[c] = Math.max(bottom[c] ?? SIZE.top, saved[n.id].y + n.height + GRID);
+    const x = saved[n.id].x;
+    bottom[x] = Math.max(bottom[x] ?? SIZE.top, saved[n.id].y + n.height + GRID);
   }
   for (const n of graph.nodes) {
     if (out[n.id]) continue;
-    const c = col[n.id];
-    const y = snapUp(bottom[c] ?? laid[n.id].y);
-    out[n.id] = { x: laid[n.id].x, y };
-    bottom[c] = y + n.height + GRID;
+    const x = laid[n.id].x;
+    const y = snapUp(bottom[x] ?? laid[n.id].y);
+    out[n.id] = { x, y };
+    bottom[x] = y + n.height + GRID;
   }
   return out;
 };
@@ -348,26 +475,28 @@ export const withCollapsed = (def: Definition, groupId: string, folded: boolean)
 
 // ─── WHAT IS DRAWN, WITH GROUPS FOLDED ─────────────────────────────────────
 
-export interface GroupBox { id: string; x: number; y: number; width: number; height: number; collapsed: boolean; members: string[] }
+export interface GroupBox { id: string; x: number; y: number; width: number; height: number; collapsed: boolean; members: string[]; wiresOut: number }
 
-/** A group's box: around its members, or folded at the same corner with a row per member. */
+/** A group's box: around its members, or folded at the same corner into one line. */
 export const groupBoxOf = (group: GraphGroup, graph: Graph, positions: Positions): GroupBox | null => {
   const members = group.members.map((id) => graph.nodes.find((n) => n.id === id)).filter((n): n is GraphNode => !!n && !!positions[n.id]);
   if (!members.length) return null;
+  const ids = new Set(members.map((m) => m.id));
+  const wiresOut = graph.wires.filter((w) => ids.has(w.from) && !ids.has(w.to)).length;
   const x = Math.min(...members.map((m) => positions[m.id].x)) - SIZE.groupPad;
   const y = Math.min(...members.map((m) => positions[m.id].y)) - SIZE.groupTitle;
-  if (group.collapsed) return { id: group.id, x, y, width: SIZE.width + SIZE.groupPad * 2, height: foldedHeight(members.length), collapsed: true, members: members.map((m) => m.id) };
+  if (group.collapsed) return { id: group.id, x, y, width: SIZE.width + SIZE.groupPad * 2, height: foldedHeight(), collapsed: true, members: [...ids], wiresOut };
   const right = Math.max(...members.map((m) => positions[m.id].x + m.width)) + SIZE.groupPad;
   const bottom = Math.max(...members.map((m) => positions[m.id].y + m.height)) + SIZE.groupPad;
-  return { id: group.id, x, y, width: right - x, height: bottom - y, collapsed: false, members: members.map((m) => m.id) };
+  return { id: group.id, x, y, width: right - x, height: bottom - y, collapsed: false, members: [...ids], wiresOut };
 };
 
 export interface ShownWire extends GraphWire { source: string; target: string; sourceHandle: string; targetHandle: string }
 
 /**
- * The wires as drawn: a node in a folded group is reached through the group's box, at its row
- * (handles `out:<id>` and `in:<id>`), and a wire between two members of one folded group isn't
- * drawn. Anything else goes from a node's `out` handle to the input's own handle.
+ * The wires as drawn: a folded group is one box with one dot in (`in`) and one out (`out`), its
+ * members' wires going through them, and a wire between two of its members isn't drawn. Anything
+ * else goes from its own dot to the input's.
  */
 export const shownWires = (graph: Graph): ShownWire[] => {
   const folded = new Map(graph.groups.filter((g) => g.collapsed).flatMap((g) => g.members.map((m) => [m, `group:${g.id}`] as const)));
@@ -377,8 +506,8 @@ export const shownWires = (graph: Graph): ShownWire[] => {
     if (from && from === to) continue;
     out.push({
       ...w,
-      source: from ?? w.from, sourceHandle: from ? `out:${w.from}` : 'out',
-      target: to ?? w.to, targetHandle: to ? `in:${w.to}` : w.input,
+      source: from ?? w.from, sourceHandle: from ? 'out' : w.fromHandle,
+      target: to ?? w.to, targetHandle: to ? 'in' : w.input,
     });
   }
   return out;

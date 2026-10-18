@@ -43,6 +43,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **STATS & RULES as a map (System Builder, 5a3a).** FORMS / GRAPH in the top bar shows the same
+  system as nodes and wires, read left to right: a stats group is one node with a row per stat (and
+  the modifier a table gives each, so ATTRIBUTES lists STR 16 +1), each formula reads its inputs by
+  the names players see, where each comes from, BEST of several, its text in those names and
+  `= 12`, and a formula's mistake shows inside it. Values are worked out by the server, as FORMS
+  shows them. Drag nodes on a grid (they stay put), fold a group to one line, zoom, FIT, a minimap,
+  AUTO-LAYOUT (it asks first), and a line under the map with the counts and the sample character.
+  Your choice of FORMS or GRAPH is remembered. The map opens at a zoom that can be read, and takes
+  every theme's colors. Editing on the map comes next; for now, edit in FORMS.
+
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the
   stable release and restarts on it. Nothing is deleted: the dev database is set aside beside it as

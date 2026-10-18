@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll } from 'vitest';
 import { render, screen, cleanup, waitFor, within, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -16,6 +16,7 @@ import { BuilderScreen } from '../BuilderScreen';
 import { AdminPanel } from '../AdminPanel';
 import { SYSTEMS_CHANGED_EVENT } from '../../sheets/systemsLibrary';
 import type { SystemCopies } from '../../sheets/systemsApi';
+import { standInsForReactFlow } from '../../test/reactFlow';
 import { createRequire } from 'module';
 
 const { starterSheet, effectiveSheet } = createRequire(import.meta.url)('../../../../backend/systemBuilder/sheet.js');
@@ -50,6 +51,9 @@ let posts: unknown[];
 /** Whether the server says the tour was seen (seen, so it stays out of the way, unless a test says), and what was marked. */
 let tour: { status: number; seen: boolean };
 let tourMarks: boolean[];
+/** FORMS or GRAPH on STATS & RULES, as the server keeps it (Phase 5), and what was set. */
+let rulesView: 'forms' | 'graph';
+let viewMarks: unknown[];
 const COPY = 'sys_cccccccccccccccc';
 
 const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -76,6 +80,13 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
     tourMarks.push(seen);
     tour = { ...tour, seen };
     return json(200, { seen });
+  }
+  if (url === '/api/systems/view' && method === 'GET') return json(200, { views: { rules: rulesView } });
+  if (url === '/api/systems/view' && method === 'PUT') {
+    const body = JSON.parse(String(init!.body));
+    viewMarks.push(body);
+    rulesView = body.view;
+    return json(200, body);
   }
   if (url === '/api/systems/examples') return json(200, exampleList());
   const ex = /^\/api\/systems\/examples\/([a-z0-9]+)$/.exec(url);
@@ -107,6 +118,8 @@ beforeEach(() => {
   calls = [];
   tour = { status: 200, seen: true };
   tourMarks = [];
+  rulesView = 'forms';
+  viewMarks = [];
   served = {
     id: HEARTH, name: 'Hearth', version: 3, updatedAt: '2026-10-06 14:10:00', publishedAt: '2026-10-05 20:00:00',
     draft: { format: 1, name: 'Hearth' }, published: { format: 1, name: 'Hearth' }, problems: [],
@@ -118,6 +131,7 @@ beforeEach(() => {
   posts = [];
 });
 afterEach(() => cleanup());
+beforeAll(() => standInsForReactFlow());
 
 const open = (over: Partial<React.ComponentProps<typeof BuilderScreen>> = {}) => {
   const onExit = vi.fn();
@@ -148,6 +162,49 @@ describe('the builder', () => {
     await userEvent.click(await screen.findByText('+ GROUP'));
     await userEvent.click(within(sidebar()).getByLabelText('SAVE'));
     await waitFor(() => expect(drafts.at(-1)).toEqual({ format: 1, name: 'Hearth', stats: [{ id: 'new_group', label: 'NEW GROUP', stats: [] }] }));
+  });
+
+  // FORMS or GRAPH (Phase 5, 5a3a; approved mockup docs/mockups/builder-graph.html, 2026-10-17).
+  describe('STATS & RULES as FORMS or GRAPH', () => {
+    const view = () => screen.getByRole('group', { name: 'View' });
+
+    it('offers FORMS and GRAPH on STATS & RULES only, FORMS until GRAPH is picked', async () => {
+      open({ startPage: 'rules' });
+      await ready();
+      expect(within(view()).getByRole('button', { name: 'FORMS' }).getAttribute('aria-pressed')).toBe('true');
+      expect(within(view()).getByRole('button', { name: 'GRAPH' }).getAttribute('aria-pressed')).toBe('false');
+      expect(screen.getByRole('tab', { name: 'FORMULAS' })).toBeTruthy();
+      await userEvent.click(within(sidebar()).getByText('WORDS'));
+      expect(screen.queryByRole('group', { name: 'View' })).toBeNull();
+    });
+
+    it('GRAPH shows the map in place of the forms, and the server remembers it', async () => {
+      open({ startPage: 'rules' });
+      await ready();
+      await userEvent.click(within(view()).getByRole('button', { name: 'GRAPH' }));
+      expect(await screen.findByTestId('graph-view')).toBeTruthy();
+      expect(screen.queryByRole('tab', { name: 'FORMULAS' })).toBeNull();
+      expect(viewMarks).toEqual([{ page: 'rules', view: 'graph' }]);
+      await userEvent.click(within(view()).getByRole('button', { name: 'FORMS' }));
+      expect(screen.getByRole('tab', { name: 'FORMULAS' })).toBeTruthy();
+      expect(viewMarks).toEqual([{ page: 'rules', view: 'graph' }, { page: 'rules', view: 'forms' }]);
+    });
+
+    it('opens on GRAPH when that was picked last', async () => {
+      rulesView = 'graph';
+      open({ startPage: 'rules' });
+      await ready();
+      expect(await screen.findByTestId('graph-view')).toBeTruthy();
+      expect(within(view()).getByRole('button', { name: 'GRAPH' }).getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('stays on FORMS when the server can\'t say', async () => {
+      open({ startPage: 'rules', fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => (String(input) === '/api/systems/view'
+        ? { ok: false, status: 500, json: async () => ({ error: 'Down' }) } : fakeServer(input, init))) as never });
+      await ready();
+      expect(within(view()).getByRole('button', { name: 'FORMS' }).getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByRole('tab', { name: 'FORMULAS' })).toBeTruthy();
+    });
   });
 
   it('TRY IT tries the draft without saving anything', async () => {

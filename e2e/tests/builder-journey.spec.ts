@@ -33,6 +33,8 @@ test('the GM builds a system, publishes it twice, and switches the game to it', 
 
   // STATS & RULES: a stat, and a formula worked out from it on the sample character.
   await builderPage(page, 'STATS & RULES');
+  // In FORMS (the map is builder-graph.spec's): picked on screen, whatever was picked last.
+  await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'FORMS' }).click();
   await page.getByRole('button', { name: '+ GROUP' }).click();
   await page.getByRole('button', { name: '+ STAT' }).click();
   await page.getByLabel('New stat name').fill('Grit');
