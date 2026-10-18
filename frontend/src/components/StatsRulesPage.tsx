@@ -1,23 +1,21 @@
 import React, { useRef, useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
-  statGroups, allStats, withNewGroup, withGroupLabel, withoutGroup, withNewStat, withStat, withoutStat, sampleOf, withSample,
-  tableList, withNewTable, withTableLabel, withoutTable, withBands, lookupIn,
-  formulaList, withNewFormula, withFormula, withoutFormula, withAlternative, usedBy, insertToken, FUNCTIONS,
-  type Formula,
+  statGroups, withNewGroup, tableList, withNewTable, formulaList, withNewFormula, withFormula, withoutFormula, insertToken,
 } from '../sheets/statsRules';
-import { houseRuleList } from '../sheets/houseRules';
-import { usePreviewValues, type Tried } from '../hooks/usePreviewValues';
-import { OnlyWith } from './OnlyWith';
+import { usePreviewValues } from '../hooks/usePreviewValues';
 import { HINTS } from '../sheets/builderHelp';
-import { ColumnHead, FieldName } from './HelpHint';
+import { ColumnHead } from './HelpHint';
+import { GroupSection, TableSection, FormulaName, FormulaBody, InsertChips } from './statsRulesFields';
+import { why, btn, th, td } from './statsRulesStyles';
 
 // The builder's STATS & RULES page (4b2d): the numbers players fill in (STATS) and the lookup
 // tables formulas read (TABLES), with FORMULAS between them (approved mockup
 // docs/mockups/builder-stats-rules.html, 2026-10-06). STATS are in groups, each shown as a section
 // of the starter sheet; skills are a group whose stats may tie to an ability; the SAMPLE column is a
 // made-up character for checking formulas, saved with the draft. What it reads and writes is
-// sheets/statsRules.ts; every change goes through the builder's `edit`, which autosaves it.
+// sheets/statsRules.ts; every change goes through the builder's `edit`, which autosaves it. The
+// controls themselves are statsRulesFields.tsx, shared with the graph view's node panel.
 
 interface Props {
   definition: Definition;
@@ -30,180 +28,31 @@ type Tab = 'stats' | 'formulas' | 'tables';
 
 export { PREVIEW_DELAY_MS } from '../hooks/usePreviewValues';
 
-const small: React.CSSProperties = { fontSize: 10, letterSpacing: 2, opacity: 0.75 };
-const why: React.CSSProperties = { fontSize: 12, lineHeight: 1.45, opacity: 0.85 };
-const btn: React.CSSProperties = { fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, padding: '4px 9px' };
-const field: React.CSSProperties = {
-  background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'monospace', fontSize: 12, padding: '5px 7px', minWidth: 0, boxSizing: 'border-box',
-};
-const th: React.CSSProperties = { textAlign: 'left', ...small, fontWeight: 'normal', padding: '6px 8px 4px 10px' };
-const td: React.CSSProperties = { padding: '3px 8px 3px 10px', verticalAlign: 'middle', borderTop: '1px solid color-mix(in srgb, var(--dark-green) 60%, transparent)' };
-const box: React.CSSProperties = { border: '1px solid var(--dark-green)', marginBottom: 12 };
-const head: React.CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', padding: '6px 10px', borderBottom: '1px solid var(--dark-green)', background: 'color-mix(in srgb, var(--green) 8%, transparent)', flexWrap: 'wrap' };
 const tabStyle = (on: boolean): React.CSSProperties => ({
   background: on ? 'color-mix(in srgb, var(--green) 10%, transparent)' : 'none', border: 0, borderBottom: `2px solid ${on ? 'var(--green)' : 'transparent'}`,
   color: on ? 'var(--green)' : 'color-mix(in srgb, var(--green) 55%, transparent)', fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, padding: '7px 14px', cursor: 'pointer',
 });
 
-/** A whole number box where empty means none (null). */
-const wholeOrNone = (v: string): number | null => (v.trim() === '' || !Number.isFinite(Number(v)) ? null : Math.round(Number(v)));
-
 function StatsTab({ definition, edit }: Props) {
-  const groups = statGroups(definition);
-  const abilities = groups[0]?.stats ?? [];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <p style={{ ...why, margin: '0 0 10px', maxWidth: '72ch' }}>
         The numbers players fill in on their sheet. Each group becomes a section of the starter sheet. The SAMPLE column is a made-up character to check formulas with.
       </p>
-      {groups.map((g) => (
-        <section key={g.id} aria-label={`${g.label || g.id} stats`} style={box}>
-          <div style={head}>
-            <input type="text" aria-label="Group name" maxLength={40} value={g.label} style={{ ...field, width: 180 }}
-              onChange={(e) => edit(withGroupLabel(definition, g.id, e.target.value))} />
-            <span style={{ ...why, fontSize: 11 }}>{g.stats.length} stat{g.stats.length === 1 ? '' : 's'}</span>
-            <span style={{ flex: 1 }} />
-            <button type="button" className="utility-btn" style={btn} aria-label={`Remove the ${g.label || g.id} group`}
-              onClick={() => edit(withoutGroup(definition, g.id))}>REMOVE GROUP</button>
-          </div>
-          {g.stats.length > 0 && (
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead><tr>
-                <ColumnHead style={th}>NAME</ColumnHead><ColumnHead style={th} hint={HINTS['rules.id']}>ID</ColumnHead>
-                <ColumnHead style={th} hint={HINTS['rules.lowest']}>LOWEST</ColumnHead><ColumnHead style={th} hint={HINTS['rules.highest']}>HIGHEST</ColumnHead>
-                <ColumnHead style={th} hint={HINTS['rules.tiedTo']}>TIED TO</ColumnHead><ColumnHead style={th} hint={HINTS['rules.sample']}>SAMPLE</ColumnHead><ColumnHead style={th} />
-              </tr></thead>
-              <tbody>
-                {g.stats.map((s) => (
-                  <tr key={s.id} data-testid={`stat-${s.id}`}>
-                    <td style={td}><input type="text" aria-label={`${s.label || s.id} name`} maxLength={40} value={s.label} style={{ ...field, width: '100%' }}
-                      onChange={(e) => edit(withStat(definition, s.id, { label: e.target.value }))} /></td>
-                    <td style={{ ...td, fontSize: 11, opacity: 0.6 }}>@{s.id}</td>
-                    <td style={td}><input type="number" aria-label={`${s.label} lowest`} value={s.min ?? ''} placeholder="none" style={{ ...field, width: 70 }}
-                      onChange={(e) => edit(withStat(definition, s.id, { min: wholeOrNone(e.target.value) }))} /></td>
-                    <td style={td}><input type="number" aria-label={`${s.label} highest`} value={s.max ?? ''} placeholder="none" style={{ ...field, width: 70 }}
-                      onChange={(e) => edit(withStat(definition, s.id, { max: wholeOrNone(e.target.value) }))} /></td>
-                    <td style={td}>
-                      <select aria-label={`${s.label} tied to`} value={s.tie ?? ''} style={field}
-                        onChange={(e) => edit(withStat(definition, s.id, { tie: e.target.value || null }))}>
-                        <option value="">none</option>
-                        {groups.flatMap((x) => x.stats).filter((o) => o.id !== s.id).map((o) => <option key={o.id} value={o.id}>{o.label || o.id}</option>)}
-                      </select>
-                    </td>
-                    <td style={td}><input type="number" aria-label={`${s.label} sample`} value={sampleOf(definition, s.id) ?? ''} placeholder="0"
-                      style={{ ...field, width: 70, borderColor: 'var(--cyan)', color: 'var(--cyan)' }}
-                      onChange={(e) => edit(withSample(definition, s.id, e.target.value.trim() === '' ? null : Number(e.target.value)))} /></td>
-                    <td style={td}><button type="button" className="utility-btn" style={btn} aria-label={`Remove ${s.label || s.id}`}
-                      onClick={() => edit(withoutStat(definition, s.id))}>×</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-          <div style={{ padding: '6px 10px' }}>
-            <button type="button" className="utility-btn" style={btn} onClick={() => edit(withNewStat(definition, g.id))}>+ STAT</button>
-            {g.stats.length === 0 && abilities.length === 0 && <span style={{ ...why, marginLeft: 8 }}>Abilities, skills, level: anything players write down as a number.</span>}
-          </div>
-        </section>
-      ))}
+      {statGroups(definition).map((g) => <GroupSection key={g.id} definition={definition} edit={edit} group={g} />)}
       <div><button type="button" className="utility-btn" style={btn} onClick={() => edit(withNewGroup(definition))}>+ GROUP</button></div>
     </div>
   );
 }
 
 function TablesTab({ definition, edit }: Props) {
-  const tables = tableList(definition);
-  const [tests, setTests] = useState<Record<string, string>>({});
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <p style={{ ...why, margin: '0 0 10px', maxWidth: '72ch' }}>
         Tables a formula reads by name, like an ability score to its modifier: mod(@str). Read top to bottom: the first row the number isn't above gives the answer.
       </p>
-      {tables.map((t) => {
-        const test = tests[t.id] ?? '10';
-        return (
-          <section key={t.id} aria-label={`${t.label || t.id} table`} style={box}>
-            <div style={head}>
-              <input type="text" aria-label="Table name" maxLength={40} value={t.label ?? ''} placeholder={t.id} style={{ ...field, width: 220 }}
-                onChange={(e) => edit(withTableLabel(definition, t.id, e.target.value))} />
-              <span style={{ fontSize: 11, opacity: 0.6 }}>{t.id}()</span>
-              <span style={{ flex: 1 }} />
-              <button type="button" className="utility-btn" style={btn} aria-label={`Remove the ${t.label || t.id} table`}
-                onClick={() => edit(withoutTable(definition, t.id))}>REMOVE TABLE</button>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 220px', gap: 16, padding: '8px 10px', alignItems: 'start' }}>
-              <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead><tr><ColumnHead style={th} hint={HINTS['rules.upTo']}>UP TO</ColumnHead><ColumnHead style={th} hint={HINTS['rules.gives']}>GIVES</ColumnHead><ColumnHead style={th} /></tr></thead>
-                <tbody>
-                  {t.bands.map((b, i) => {
-                    const last = i === t.bands.length - 1;
-                    return (
-                      <tr key={i} data-testid={`band-${t.id}-${i}`}>
-                        <td style={td}>{last
-                          ? <span style={{ opacity: 0.6 }}>anything higher</span>
-                          : <input type="number" aria-label={`Row ${i + 1} up to`} value={b.upTo ?? ''} style={{ ...field, width: 80 }}
-                              onChange={(e) => edit(withBands(definition, t.id, { set: i, upTo: Number(e.target.value) }))} />}</td>
-                        <td style={td}><input type="number" aria-label={`Row ${i + 1} gives`} value={b.value} style={{ ...field, width: 80 }}
-                          onChange={(e) => edit(withBands(definition, t.id, { set: i, value: Number(e.target.value) }))} /></td>
-                        <td style={td}>{!last && <button type="button" className="utility-btn" style={btn} aria-label={`Remove row ${i + 1}`}
-                          onClick={() => edit(withBands(definition, t.id, { remove: i }))}>×</button>}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              <div style={{ border: '1px solid var(--dark-green)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <FieldName hint={HINTS['rules.tryTable']} style={small}>TRY IT</FieldName>
-                <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input type="number" aria-label={`Try ${t.label || t.id}`} value={test} style={{ ...field, width: 70 }}
-                    onChange={(e) => setTests({ ...tests, [t.id]: e.target.value })} />
-                  <span>→</span>
-                  <b data-testid={`try-${t.id}`} style={{ color: 'var(--cyan)' }}>{lookupIn(t.bands, Number(test) || 0)}</b>
-                </label>
-              </div>
-            </div>
-            <div style={{ padding: '0 10px 8px' }}>
-              <button type="button" className="utility-btn" style={btn} onClick={() => edit(withBands(definition, t.id, { add: true }))}>+ ROW</button>
-            </div>
-          </section>
-        );
-      })}
+      {tableList(definition).map((t) => <TableSection key={t.id} definition={definition} edit={edit} table={t} />)}
       <div><button type="button" className="utility-btn" style={btn} onClick={() => edit(withNewTable(definition))}>+ TABLE</button></div>
-    </div>
-  );
-}
-
-/**
- * A formula's alternative under a house rule (4j4b; approved mockup docs/mockups/optional-rules.html,
- * 2026-10-14): WITH A RULE, then USE INSTEAD, and the sample character's value with that rule on (or
- * the alternative's mistake), worked out by the server like the formula's own. Nothing in a system with
- * no house rules, unless a formula still has one naming a rule since deleted.
- */
-function Alternative({ f, definition, edit, tried, field }: { f: Formula; definition: Definition; edit: (next: Definition) => void; tried: Record<string, Tried>; field: React.CSSProperties }) {
-  const id = React.useId();
-  const rule = f.alternative?.rule;
-  const rules = houseRuleList(definition);
-  if (!rules.length && !rule) return null;
-  const ruleName = (rules.find((r) => r.id === rule)?.name.trim() || rule || '').toUpperCase();
-  const t = rule ? tried[rule] : undefined;
-  const mistake = t?.problems[f.id];
-  const label: React.CSSProperties = { fontSize: 9, letterSpacing: 2, opacity: 0.75 };
-  return (
-    <div data-testid={`alternative-${f.id}`} style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: '4px 8px', alignItems: 'center', marginTop: 4 }}>
-      <OnlyWith definition={definition} value={rule} label="WITH A RULE" hint={HINTS['only.alternative']} none="— none —" style={label}
-        selectStyle={{ ...field, justifySelf: 'start' }} onChange={(r) => edit(withAlternative(definition, f.id, { rule: r }))} />
-      {rule && <>
-        <FieldName htmlFor={id} hint={HINTS['only.instead']} style={label}>USE INSTEAD</FieldName>
-        <input id={id} type="text" maxLength={1000} value={f.alternative?.formula ?? ''} aria-invalid={mistake ? true : undefined}
-          style={{ ...field, width: '100%', borderColor: mistake ? 'var(--danger)' : 'var(--cyan)' }}
-          onChange={(e) => edit(withAlternative(definition, f.id, { formula: e.target.value }))} />
-        <span />
-        {mistake
-          ? <span role="alert" style={{ color: 'var(--danger)', fontSize: 11 }}>{mistake}</span>
-          : <span data-testid={`alt-value-${f.id}`} style={{ color: 'var(--cyan)', fontSize: 11 }}>
-              {t && t.values[f.id] !== undefined ? `${t.values[f.id]} with ${ruleName} on` : '·'}
-            </span>}
-      </>}
     </div>
   );
 }
@@ -228,17 +77,6 @@ function FormulasTab({ definition, edit, api }: Props) {
     setCursor({ id: f.id, at: next.cursor });
     requestAnimationFrame(() => { const el = inputs.current[f.id]; if (el) { el.focus(); el.setSelectionRange(next.cursor, next.cursor); } });
   };
-  const chips = (title: string, tokens: string[]) => tokens.length > 0 && (
-    <>
-      <span style={{ ...small, opacity: 0.55 }}>{title}</span>
-      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-        {tokens.map((t) => (
-          <button key={t} type="button" disabled={!cursor} onMouseDown={(e) => e.preventDefault()} onClick={() => insert(t)}
-            style={{ border: '1px solid var(--dark-green)', background: 'none', color: 'var(--green)', fontFamily: 'monospace', fontSize: 11, padding: '1px 6px', cursor: cursor ? 'pointer' : 'default' }}>{t}</button>
-        ))}
-      </div>
-    </>
-  );
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 230px', gap: 16, alignItems: 'start' }}>
@@ -254,28 +92,13 @@ function FormulasTab({ definition, edit, api }: Props) {
             </tr></thead>
             <tbody>
               {formulas.map((f) => {
-                const problem = preview?.problems[f.id];
                 const value = preview?.values[f.id];
-                const users = usedBy(definition, f.id);
-                const condition = (f as { kind?: string }).kind === 'condition';
                 return (
                   <tr key={f.id} data-testid={`formula-${f.id}`}>
+                    <td style={td}><FormulaName definition={definition} edit={edit} f={f} /></td>
                     <td style={td}>
-                      <input type="text" aria-label={`${f.label || f.id} name`} maxLength={40} value={f.label ?? ''} placeholder={f.id} style={{ ...field, width: '100%' }}
-                        onChange={(e) => edit(withFormula(definition, f.id, { label: e.target.value }))} />
-                      <div style={{ fontSize: 11, opacity: 0.6 }}>@{f.id}{users.length > 0 && ` · used by ${users.join(', ')}`}</div>
-                    </td>
-                    <td style={td}>
-                      {condition
-                        ? <span style={{ ...why, fontSize: 11 }}>A condition: if {(f as { when?: string }).when} then {(f as { then?: string }).then} else {(f as { else?: string }).else}. Edited in the node graph later.</span>
-                        : <input ref={(el) => { inputs.current[f.id] = el; }} type="text" aria-label={`${f.label || f.id} formula`} maxLength={1000} value={f.formula ?? ''}
-                            aria-invalid={problem ? true : undefined}
-                            style={{ ...field, width: '100%', borderColor: problem ? 'var(--danger)' : 'var(--green)' }}
-                            onChange={(e) => { edit(withFormula(definition, f.id, { formula: e.target.value })); setCursor({ id: f.id, at: e.target.selectionStart ?? e.target.value.length }); }}
-                            onSelect={(e) => setCursor({ id: f.id, at: (e.target as HTMLInputElement).selectionStart ?? 0 })}
-                            onFocus={(e) => setCursor({ id: f.id, at: e.target.selectionStart ?? e.target.value.length })} />}
-                      {problem && <div role="alert" style={{ ...why, color: 'var(--danger)', opacity: 1, fontSize: 11 }}>{problem}</div>}
-                      {!condition && <Alternative f={f} definition={definition} edit={edit} tried={tried} field={field} />}
+                      <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried}
+                        inputRef={(el) => { inputs.current[f.id] = el; }} onCursor={(at) => setCursor({ id: f.id, at })} />
                     </td>
                     <td data-testid={`value-${f.id}`} style={{ ...td, textAlign: 'right', color: 'var(--cyan)', fontSize: 13 }}>
                       {value !== undefined ? value : '·'}
@@ -293,12 +116,7 @@ function FormulasTab({ definition, edit, api }: Props) {
         </div>
       </div>
       <aside aria-label="Insert" style={{ border: '1px solid var(--dark-green)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <span style={small}>INSERT</span>
-        {chips('STATS', allStats(definition).map((s) => `@${s.id}`))}
-        {chips('FORMULAS', formulas.map((f) => `@${f.id}`))}
-        {chips('TABLES', tableList(definition).map((t) => `${t.id}()`))}
-        {chips('FUNCTIONS', FUNCTIONS.map((fn) => `${fn}()`))}
-        <span style={{ ...why, fontSize: 11 }}>{cursor ? 'Click one to put it at the cursor.' : 'Click in a formula first, then a name to put it there.'}</span>
+        <InsertChips definition={definition} active={!!cursor} onInsert={insert} />
       </aside>
     </div>
   );

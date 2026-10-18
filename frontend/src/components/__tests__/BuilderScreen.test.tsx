@@ -182,7 +182,8 @@ describe('the builder', () => {
       open({ startPage: 'rules' });
       await ready();
       await userEvent.click(within(view()).getByRole('button', { name: 'GRAPH' }));
-      expect(await screen.findByTestId('graph-view')).toBeTruthy();
+      // The map loads on first use (React.lazy): given time, as a busy test run is slow to fetch it.
+      expect(await screen.findByTestId('graph-view', {}, { timeout: 5000 })).toBeTruthy();
       expect(screen.queryByRole('tab', { name: 'FORMULAS' })).toBeNull();
       expect(viewMarks).toEqual([{ page: 'rules', view: 'graph' }]);
       await userEvent.click(within(view()).getByRole('button', { name: 'FORMS' }));
@@ -194,7 +195,8 @@ describe('the builder', () => {
       rulesView = 'graph';
       open({ startPage: 'rules' });
       await ready();
-      expect(await screen.findByTestId('graph-view')).toBeTruthy();
+      // The map loads on first use (React.lazy): given time, as a busy test run is slow to fetch it.
+      expect(await screen.findByTestId('graph-view', {}, { timeout: 5000 })).toBeTruthy();
       expect(within(view()).getByRole('button', { name: 'GRAPH' }).getAttribute('aria-pressed')).toBe('true');
     });
 
