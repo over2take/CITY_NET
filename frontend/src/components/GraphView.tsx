@@ -15,6 +15,7 @@ import { usePreviewValues } from '../hooks/usePreviewValues';
 import type { BuilderPage } from '../sheets/builderSession';
 import { GraphPanel } from './GraphPanel';
 import { emptyHistory, recorded, undone, redone, type History } from '../sheets/editHistory';
+import { withWire, withoutWire, wireLabel } from '../sheets/graphEdits';
 
 // STATS & RULES with GRAPH on (5a3a; approved mockup docs/mockups/builder-graph.html, 2026-10-17,
 // nodes as the builder design's node kit draws them, docs/mockups/builder-design, 2026-09-29): the
@@ -48,11 +49,14 @@ const dim: React.CSSProperties = { fontSize: 10, letterSpacing: 1, opacity: 0.7 
 const hidden: React.CSSProperties = { opacity: 0, pointerEvents: 'none' };
 const dot = (color: string): React.CSSProperties => ({ width: 10, height: 10, minWidth: 0, minHeight: 0, background: color, border: `2px solid ${GROUND.base}`, borderRadius: '50%' });
 
+/** A list row's dot: shown where it is wired, and on a map that can be changed faint until it is, to draw from. */
+const rowDot = (wired: boolean, editable: boolean): React.CSSProperties => (wired ? dot('var(--green)')
+  : editable ? { ...dot('var(--green)'), opacity: 0.35, cursor: 'crosshair' } : hidden);
 const show = (v: number | null | undefined) => (v === undefined || v === null ? '·' : String(Math.round(v * 100) / 100).replace('-', '−'));
 const signed = (v: number | null | undefined) => (typeof v === 'number' && v > 0 ? `+${show(v)}` : show(v));
 
 /** The server's values, the sample character's stats, and which dots have wires leaving them. */
-type Values = { values: Record<string, number>; problems: Record<string, string>; samples: (id: string) => number; stats: Set<string>; used: Set<string> };
+type Values = { values: Record<string, number>; problems: Record<string, string>; samples: (id: string) => number; stats: Set<string>; used: Set<string>; editable: boolean };
 type NodeData = { node: GraphNode; values: Values };
 type BoxData = { group: GraphGroup; count: number; wiresOut: number; onFold: () => void; readOnly: boolean };
 
@@ -104,11 +108,11 @@ function Words({ text, faint, color = 'var(--cyan)' }: { text: string; faint?: b
 }
 
 /** Every node takes a note's line at its top right, and most give a value out there. */
-function Ends({ out = true, color = 'var(--green)' }: { out?: boolean; color?: string }) {
+function Ends({ out = true, color = 'var(--green)', editable = false }: { out?: boolean; color?: string; editable?: boolean }) {
   return (
     <>
       <Handle type="target" id="note" position={Position.Right} isConnectable={false} style={{ ...hidden, top: 14 }} />
-      {out && <Handle type="source" id="out" position={Position.Right} isConnectable={false} style={{ ...dot(color), top: 14 }} />}
+      {out && <Handle type="source" id="out" position={Position.Right} isConnectable={editable} title={editable ? 'Drag onto a formula to wire it in' : undefined} style={{ ...dot(color), top: 14, cursor: editable ? 'crosshair' : undefined }} />}
     </>
   );
 }
@@ -147,10 +151,10 @@ function ListNode({ data }: NodeProps<Node<NodeData>>) {
         return (
           <React.Fragment key={r.stat}>
             {/* With a MOD column, the score's dot sits between the two, so each column's wires leave from its own number. */}
-            <Handle type="source" id={scoreOut} position={Position.Right} isConnectable={false}
-              style={{ ...(v.used.has(`${n.id}:${scoreOut}`) ? dot('var(--green)') : hidden), top: y, ...(r.mod ? { right: 'auto', left: n.width - 64 } : {}) }} />
-            {r.mod && <Handle type="source" id={`out:${r.mod}`} position={Position.Right} isConnectable={false}
-              style={{ ...(v.used.has(`${n.id}:out:${r.mod}`) ? dot('var(--green)') : hidden), top: y }} />}
+            <Handle type="source" id={scoreOut} position={Position.Right} isConnectable={v.editable}
+              style={{ ...rowDot(v.used.has(`${n.id}:${scoreOut}`), v.editable), top: y, ...(r.mod ? { right: 'auto', left: n.width - 64 } : {}) }} />
+            {r.mod && <Handle type="source" id={`out:${r.mod}`} position={Position.Right} isConnectable={v.editable}
+              style={{ ...rowDot(v.used.has(`${n.id}:out:${r.mod}`), v.editable), top: y }} />}
           </React.Fragment>
         );
       })}
@@ -172,7 +176,7 @@ function TableNode({ data }: NodeProps<Node<NodeData>>) {
           </div>
         );
       })}
-      <Ends />
+      <Ends editable={data.values.editable} />
     </div>
   );
 }
@@ -187,7 +191,7 @@ function RuleNode({ data }: NodeProps<Node<NodeData>>) {
       {(n.also ?? []).map((a) => (
         <div key={a} style={{ ...line, height: SIZE.row, padding: '0 10px', fontSize: 11, textOverflow: 'ellipsis' }}>ALSO · {a}</div>
       ))}
-      <Ends color="var(--cyan)" />
+      <Ends color="var(--cyan)" editable={data.values.editable} />
     </div>
   );
 }
@@ -253,7 +257,7 @@ function FormulaNode({ data }: NodeProps<Node<NodeData>>) {
         <Handle key={i.key} type="target" id={i.key} position={Position.Left} isConnectable={false} style={{ ...dot(dotColor(i)), top: tops[i.key] }} />
       ))}
       {n.alternative && <Handle type="target" id="gate" position={Position.Left} isConnectable={false} style={{ ...dot('var(--cyan)'), top: tops.gate }} />}
-      <Ends />
+      <Ends editable={data.values.editable} />
     </div>
   );
 }
@@ -419,14 +423,24 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
   // The node picked on the map, whose controls the panel shows (5a3b2). Gone when it is: a formula
   // removed, or turned into a modifier its stat's list now shows.
   const [selected, setSelected] = useState<string | null>(null);
+  /** A line at the top of the map saying what a wire drawn or cut did. */
+  const [said, setSaid] = useState<{ text: string; at: number } | null>(null);
+  useEffect(() => {
+    if (!said) return undefined;
+    const t = setTimeout(() => setSaid(null), 4500);
+    return () => clearTimeout(t);
+  }, [said]);
+  /** A wire clicked: what it is, and where the click was in the map. */
+  const [asked, setAsked] = useState<{ wire: string; x: number; y: number } | null>(null);
   const picked = selected ? graph.nodes.find((n) => n.id === selected) : undefined;
   const values: Values = useMemo(() => ({
     values: preview?.values ?? {},
     problems: preview?.problems ?? {},
     samples: (id: string) => sampleOf(definition, id) ?? 0,
     stats: new Set(graph.nodes.flatMap((n) => (n.rows ?? []).map((r) => r.stat))),
+    editable: !readOnly,
     used: new Set(graph.wires.map((w) => `${w.from}:${w.fromHandle}`)),
-  }), [preview, definition, graph]);
+  }), [preview, definition, graph, readOnly]);
 
   // Where nodes sit: the draft's places, and while a drag lasts, the dragged nodes' own over them.
   const saved = useMemo(() => positionsOf(definition, graph), [definition, graph]);
@@ -559,6 +573,27 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
     return () => window.removeEventListener('keydown', onKey);
   }, [readOnly, undo, redo]);
 
+  /** A wire edit applied (undoably), what it did said, and the panel opened where it says to change something by hand. */
+  const apply = useCallback((r: { definition: Definition | null; message: string; open?: string }) => {
+    if (r.definition) mapEdit(r.definition);
+    setSaid({ text: r.message, at: Date.now() });
+    if (r.open) setSelected(r.open);
+  }, [mapEdit]);
+  /** A wire drawn: dropped on whichever node is under the pointer (anywhere on it, not only a dot). */
+  const onConnectEnd = useCallback((event: MouseEvent | TouchEvent, state: { fromHandle?: { nodeId: string; id?: string | null } | null }) => {
+    if (readOnly || !state.fromHandle) return;
+    const point = 'changedTouches' in event ? event.changedTouches[0] : event;
+    const under = document.elementFromPoint(point.clientX, point.clientY)?.closest('.react-flow__node');
+    const to = under?.getAttribute('data-id');
+    if (!to || to.startsWith('group:') || to === state.fromHandle.nodeId && state.fromHandle.id !== 'out') return;
+    apply(withWire(definition, graph, { node: state.fromHandle.nodeId, handle: state.fromHandle.id ?? 'out' }, to));
+  }, [readOnly, definition, graph, apply]);
+  const cut = useCallback(() => {
+    const wire = asked && graph.wires.find((w) => w.id === asked.wire);
+    setAsked(null);
+    if (wire) apply(withoutWire(definition, graph, wire));
+  }, [asked, graph, definition, apply]);
+
   const onNodeDragStop = useCallback(() => {
     grabbed.current = null;
     const moves = latest.current;
@@ -583,8 +618,16 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
         nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} edgeTypes={EDGE_TYPES}
         onNodesChange={onNodesChange} onNodeDragStop={onNodeDragStop}
         onNodeClick={(_, n) => { if (!n.id.startsWith('group:')) { setSelected(n.id); keepInView(n.id); } }}
-        onPaneClick={() => setSelected(null)}
-        nodesConnectable={false} elementsSelectable={false} deleteKeyCode={null}
+        onPaneClick={() => { setSelected(null); setAsked(null); }}
+        nodesConnectable={!readOnly} onConnectEnd={onConnectEnd}
+        connectionLineStyle={{ stroke: 'var(--cyan)', strokeWidth: 2, strokeDasharray: '4 3' }}
+        onEdgeClick={readOnly ? undefined : (event, edge) => {
+          const wire = graph.wires.find((w) => w.id === edge.id);
+          const area = document.querySelector('[data-testid="graph-map"]')?.getBoundingClientRect();
+          if (!wire || wire.kind === 'note' || !area) return;
+          setAsked({ wire: wire.id, x: event.clientX - area.left, y: event.clientY - area.top });
+        }}
+        elementsSelectable={false} deleteKeyCode={null}
         panOnScroll zoomOnScroll={false} zoomOnDoubleClick={false}
         minZoom={0.1} maxZoom={4}
         attributionPosition="top-left"
@@ -599,6 +642,24 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
         <Toolbar edits={readOnly ? undefined : { onTidy: tidy, onUndo: undo, onRedo: redo, canUndo: history.past.length > 0, canRedo: history.future.length > 0 }} />
       </ReactFlow>
       <StatusLine graph={graph} definition={definition} />
+      {said && (
+        <div role="status" key={said.at} style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 6, maxWidth: '60%', padding: '6px 12px',
+          background: 'var(--black)', border: '1px solid var(--cyan)', color: 'var(--cyan)', fontFamily: 'monospace', fontSize: 12, boxShadow: '0 4px 16px rgba(0, 0, 0, 0.6)' }}>{said.text}</div>
+      )}
+      {asked && (() => {
+        const wire = graph.wires.find((w) => w.id === asked.wire);
+        if (!wire) return null;
+        return (
+          <div role="dialog" aria-label="Cut this wire?" style={{ position: 'absolute', left: asked.x + 8, top: asked.y + 8, zIndex: 6, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6,
+            background: 'var(--black)', border: '1px solid var(--green)', fontFamily: 'monospace', fontSize: 12, boxShadow: '0 4px 16px rgba(0, 0, 0, 0.6)' }}>
+            <span>{wireLabel(definition, wire)}</span>
+            <span style={{ display: 'flex', gap: 6 }}>
+              <button type="button" className="utility-btn" style={{ fontFamily: 'monospace', fontSize: 11, padding: '3px 10px' }} onClick={cut}>CUT</button>
+              <button type="button" className="utility-btn" style={{ fontFamily: 'monospace', fontSize: 11, padding: '3px 10px' }} onClick={() => setAsked(null)}>KEEP</button>
+            </span>
+          </div>
+        );
+      })()}
       </div>
       {picked && (
         <GraphPanel definition={definition} edit={mapEdit} node={picked} preview={preview} tried={tried}

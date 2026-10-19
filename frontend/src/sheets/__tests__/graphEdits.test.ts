@@ -1,0 +1,201 @@
+/**
+ * Drawing and cutting wires on the graph view (5b2). Approved mockup builder-graph (2026-10-17),
+ * decision 3: a wire is a formula reading a name. A wire drawn or cut is one formula's text (or its
+ * WITH-rule formula) changed, exactly as typing it in FORMS would; where cutting can't leave a
+ * whole formula, the panel opens instead. Over every random system and example: cutting any wire
+ * takes out that wire alone and changes nothing else, and drawing a wire then cutting it gives the
+ * system back.
+ */
+import { describe, it, expect } from 'vitest';
+import { createRequire } from 'module';
+import { withWire, withoutWire, withoutName, givenBy, reads, wireLabel } from '../graphEdits';
+import { graphOf, type Graph, type GraphWire } from '../graphModel';
+import { withFormula, withAlternative, formulaList } from '../statsRules';
+import type { Definition } from '../systemsApi';
+
+const req = createRequire(import.meta.url);
+const { checkDefinition } = req('../../../../backend/systemBuilder/definition.js');
+const { EXAMPLES } = req('../../../../backend/systemBuilder/examples.js');
+const { randomSystem } = req('../../../../backend/__tests__/helpers/randomSystem.js');
+
+const HEARTH: Definition = {
+  format: 1,
+  name: 'Hearth',
+  stats: [
+    { id: 'character', label: 'Character', stats: [{ id: 'lvl', label: 'Level' }] },
+    { id: 'abilities', label: 'Abilities', stats: [{ id: 'str', label: 'Strength' }, { id: 'wit', label: 'Wits' }] },
+  ],
+  lookups: { attribute_mod: { bands: [{ upTo: 13, value: 0 }, { value: 1 }] } },
+  derived: [
+    { id: 'str_mod', label: 'Str mod', formula: 'attribute_mod(@str)' },
+    { id: 'wit_mod', label: 'Wit mod', formula: 'attribute_mod(@wit)' },
+    { id: 'melee', label: 'Melee', formula: '@str_mod + floor(@lvl / 2)' },
+    { id: 'save', label: 'Save', formula: '16 - max(@str_mod, @wit_mod, @lvl)' },
+    { id: 'blank', label: 'Blank', formula: '0' },
+    { id: 'spell', label: 'Spell', formula: '@wit_mod', alternative: { rule: 'magic', formula: '@wit_mod + @lvl' } },
+    { id: 'can', label: 'Can', kind: 'condition', when: '@spell > 1', then: '1', else: '0' },
+  ],
+  house_rules: [{ id: 'magic', name: 'Magic' }],
+};
+const g = graphOf(HEARTH);
+const formula = (def: Definition | null, id: string) => (formulaList(def!) as { id: string; formula: string; alternative?: { formula: string } }[]).find((f) => f.id === id)!;
+const wireOf = (graph: Graph, test: (w: GraphWire) => boolean) => graph.wires.find(test)!;
+const problems = (def: Definition) => checkDefinition(def).problems.map((p: { where: string }) => p.where);
+
+describe('what a dot gives', () => {
+  it('a stat\'s or modifier\'s row, a formula, a table, a house rule; nothing else', () => {
+    expect(givenBy(g, { node: 'abilities', handle: 'out:str' })).toEqual({ kind: 'value', id: 'str' });
+    expect(givenBy(g, { node: 'abilities', handle: 'out:str_mod' })).toEqual({ kind: 'value', id: 'str_mod' });
+    expect(givenBy(g, { node: 'melee', handle: 'out' })).toEqual({ kind: 'value', id: 'melee' });
+    expect(givenBy(g, { node: 'table:attribute_mod', handle: 'out' })).toEqual({ kind: 'table', id: 'attribute_mod' });
+    expect(givenBy(g, { node: 'rule:magic', handle: 'out' })).toEqual({ kind: 'rule', id: 'magic' });
+    expect(givenBy(g, { node: 'nowhere', handle: 'out' })).toBeNull();
+  });
+});
+
+describe('a wire drawn', () => {
+  it('adds + @name to the end of the formula, as typing it in FORMS would', () => {
+    const drawn = withWire(HEARTH, g, { node: 'abilities', handle: 'out:wit' }, 'melee');
+    expect(drawn.definition).toEqual(withFormula(HEARTH, 'melee', { formula: '@str_mod + floor(@lvl / 2) + @wit' }));
+    expect(drawn.message).toBe('MELEE: added + WITS.');
+  });
+
+  it('makes a formula of just 0 read the name', () => {
+    expect(formula(withWire(HEARTH, g, { node: 'character', handle: 'out:lvl' }, 'blank').definition, 'blank').formula).toBe('@lvl');
+  });
+
+  it('refuses a name already read, a formula reading itself, and a loop', () => {
+    expect(withWire(HEARTH, g, { node: 'abilities', handle: 'out:str_mod' }, 'melee')).toEqual({ definition: null, message: 'MELEE already reads STR MOD.' });
+    expect(withWire(HEARTH, g, { node: 'melee', handle: 'out' }, 'melee')).toEqual({ definition: null, message: 'A formula can\'t read itself.' });
+    const loop = withWire(HEARTH, g, { node: 'can', handle: 'out' }, 'spell');
+    expect(loop).toEqual({ definition: null, message: 'That would make a loop: CAN already reads SPELL.' });
+  });
+
+  it('from a house rule, gives a formula one to use WITH it, and opens it to change', () => {
+    const drawn = withWire(HEARTH, g, { node: 'rule:magic', handle: 'out' }, 'melee');
+    expect(drawn.definition).toEqual(withAlternative(HEARTH, 'melee', { rule: 'magic' }));
+    expect(drawn).toMatchObject({ message: 'MELEE now has a formula to use WITH MAGIC: change it in the panel.', open: 'melee' });
+    expect(withWire(HEARTH, g, { node: 'rule:magic', handle: 'out' }, 'spell')).toMatchObject({ definition: null, open: 'spell' });
+  });
+
+  it('from a table, says how a table is read and opens the formula', () => {
+    expect(withWire(HEARTH, g, { node: 'table:attribute_mod', handle: 'out' }, 'melee')).toEqual({
+      definition: null, message: 'A table needs a number to read: type attribute_mod(@something) in MELEE\'s formula.', open: 'melee',
+    });
+  });
+
+  it('goes only into formulas', () => {
+    expect(withWire(HEARTH, g, { node: 'melee', handle: 'out' }, 'abilities').definition).toBeNull();
+    expect(withWire(HEARTH, g, { node: 'melee', handle: 'out' }, 'table:attribute_mod').definition).toBeNull();
+    expect(withWire(HEARTH, g, { node: 'melee', handle: 'out' }, 'can').definition).toBeNull();
+    expect(withWire(HEARTH, g, { node: 'note:x', handle: 'out' }, 'melee').definition).toBeNull();
+  });
+});
+
+describe('a wire cut', () => {
+  it('takes the name out where a whole formula is left', () => {
+    expect(withoutName('@a + @b', 'b')).toBe('@a');
+    expect(withoutName('@a + @b', 'a')).toBe('@b');
+    expect(withoutName('10 - @b + 2', 'b')).toBe('10 + 2');
+    expect(withoutName('-@b + 1', 'b')).toBe('1');
+    expect(withoutName('@b', 'b')).toBe('0');
+    expect(withoutName('16 - max(@a, @b, @c)', 'b')).toBe('16 - max(@a, @c)');
+    expect(withoutName('16 - max(@a, @b)', 'a')).toBe('16 - @b');
+  });
+
+  it('leaves alone a name inside a bigger piece, or read twice', () => {
+    expect(withoutName('floor(@lvl / 2)', 'lvl')).toBeNull();
+    expect(withoutName('2 * @a + 1', 'a')).toBeNull();
+    expect(withoutName('1 + @a * 2', 'a')).toBeNull();
+    expect(withoutName('2 * -@a', 'a')).toBeNull();
+    expect(withoutName('6 / - @a + 1', 'a')).toBeNull();
+    expect(withoutName('@a + @a', 'a')).toBeNull();
+    expect(withoutName('table(@a)', 'a')).toBeNull();
+    expect(withoutName('@ab + @a', 'a')).toBe('@ab');
+  });
+
+  it('cuts a name from a formula, as typing it out in FORMS would', () => {
+    const cut = withoutWire(HEARTH, g, wireOf(g, (w) => w.to === 'melee' && w.value === 'str_mod'));
+    expect(cut.definition).toEqual(withFormula(HEARTH, 'melee', { formula: 'floor(@lvl / 2)' }));
+    expect(cut.message).toBe('MELEE: took out STR MOD.');
+  });
+
+  it('opens the panel where it can\'t', () => {
+    expect(withoutWire(HEARTH, g, wireOf(g, (w) => w.to === 'melee' && w.value === 'lvl'))).toEqual({
+      definition: null, message: 'LEVEL is part of a bigger piece of MELEE\'s formula: change it in the panel.', open: 'melee',
+    });
+    expect(withoutWire(HEARTH, g, wireOf(g, (w) => w.kind === 'table'))).toMatchObject({ definition: null, open: 'abilities' });
+  });
+
+  it('cuts one name from a BEST, a name from a WITH-rule formula, and a house rule\'s wire', () => {
+    expect(formula(withoutWire(HEARTH, g, wireOf(g, (w) => w.to === 'save' && w.value === 'wit_mod')).definition, 'save').formula).toBe('16 - max(@str_mod, @lvl)');
+    expect(formula(withoutWire(HEARTH, g, wireOf(g, (w) => w.to === 'spell' && w.alt && w.value === 'lvl')).definition, 'spell').alternative!.formula).toBe('@wit_mod');
+    const gate = withoutWire(HEARTH, g, wireOf(g, (w) => w.kind === 'gate'));
+    expect(gate.definition).toEqual(withAlternative(HEARTH, 'spell', { rule: null }));
+    expect(gate.message).toBe('SPELL no longer has a formula to use WITH MAGIC.');
+  });
+});
+
+describe('a wire named', () => {
+  it('in the names players see, to ask before cutting it', () => {
+    expect(wireLabel(HEARTH, wireOf(g, (w) => w.to === 'melee' && w.value === 'str_mod'))).toBe('STR MOD into MELEE');
+    expect(wireLabel(HEARTH, wireOf(g, (w) => w.to === 'spell' && w.alt && w.value === 'lvl'))).toBe('LEVEL into SPELL (WITH-rule formula)');
+    expect(wireLabel(HEARTH, wireOf(g, (w) => w.kind === 'gate'))).toBe("MAGIC swapping SPELL's formula");
+    expect(wireLabel(HEARTH, wireOf(g, (w) => w.kind === 'table'))).toBe('The table attribute_mod into ABILITIES');
+  });
+});
+
+describe('over every random system and example', () => {
+  const systems = [
+    ...Array.from({ length: 40 }, (_, i) => randomSystem(i + 1) as Definition),
+    ...(EXAMPLES as { definition: Definition }[]).map((e) => e.definition),
+  ];
+
+  it('cutting any wire takes out that wire alone, changes one formula, and adds no problem; or opens the panel', () => {
+    let cut = 0;
+    let opened = 0;
+    for (const def of systems) {
+      const graph = graphOf(def);
+      const before = new Set(problems(def));
+      for (const w of graph.wires) {
+        const r = withoutWire(def, graph, w);
+        if (!r.definition) { if (w.kind !== 'note') { expect(r.open, `${w.id}`).toBeTruthy(); opened += 1; } continue; }
+        cut += 1;
+        const after = graphOf(r.definition);
+        expect(after.wires.some((x) => x.id === w.id), w.id).toBe(false);
+        const changed = (formulaList(r.definition) as unknown[]).filter((f, i) => JSON.stringify(f) !== JSON.stringify(formulaList(def)[i]));
+        expect(changed.length, w.id).toBe(1);
+        expect({ ...r.definition, derived: def.derived }).toEqual(def);
+        expect(problems(r.definition).filter((p: string) => !before.has(p)), w.id).toEqual([]);
+      }
+    }
+    expect(cut).toBeGreaterThan(50);
+    expect(opened).toBeGreaterThan(5);
+  });
+
+  it('drawing a stat into a formula, then cutting it, gives the system back', () => {
+    let round = 0;
+    for (const def of systems) {
+      const graph = graphOf(def);
+      const stat = graph.nodes.find((n) => n.kind === 'list' && n.rows?.length);
+      const target = graph.nodes.find((n) => n.kind === 'formula' && !n.alternative);
+      if (!stat || !target) continue;
+      const row = stat.rows![0];
+      const drawn = withWire(def, graph, { node: stat.id, handle: `out:${row.stat}` }, target.id);
+      if (!drawn.definition) continue;
+      const g2 = graphOf(drawn.definition);
+      const w = g2.wires.find((x) => x.to === target.id && x.value === row.stat && !x.alt)!;
+      const back = withoutWire(drawn.definition, g2, w);
+      const original = formula(def, target.id).formula.trim();
+      expect(formula(back.definition, target.id).formula, def.name as string).toBe(original === '' ? '0' : original);
+      round += 1;
+    }
+    expect(round).toBeGreaterThan(15);
+  });
+
+  it('reads follows formulas through their alternatives', () => {
+    expect(reads(HEARTH, 'can', 'spell')).toBe(true);
+    expect(reads(HEARTH, 'spell', 'lvl')).toBe(true);
+    expect(reads(HEARTH, 'melee', 'wit_mod')).toBe(false);
+  });
+});
