@@ -26,6 +26,8 @@ interface Props {
   tried: Record<string, Tried>;
   onClose: () => void;
   onGoTo?: (page: BuilderPage) => void;
+  /** The house rules TRY ON THE MAP has on (5b6c), which the values here are worked out with. */
+  trying?: Set<string>;
 }
 
 const KIND: Record<GraphNode['kind'], string> = { list: 'STATS', table: 'TABLE', formula: 'FORMULA', condition: 'CONDITION', rule: 'HOUSE RULE', note: 'NOTE' };
@@ -104,24 +106,25 @@ function NoteForm({ definition, edit, node }: { definition: Definition; edit: (n
 }
 
 /** A formula as FORMULAS shows it, laid out down the panel: name, text, = value, alternative. */
-function FormulaForm({ definition, edit, id, preview, tried, insert }: Omit<Props, 'node' | 'onClose' | 'onGoTo'> & { id: string; insert: ReturnType<typeof useFormulaInsert> }) {
+function FormulaForm({ definition, edit, id, preview, tried, insert, trying }: Omit<Props, 'node' | 'onClose' | 'onGoTo'> & { id: string; insert: ReturnType<typeof useFormulaInsert> }) {
   const f = formulaList(definition).find((x) => x.id === id);
   if (!f) return null;
   const value = preview?.values[f.id];
+  const rule = f.alternative && trying?.has(f.alternative.rule) ? houseRuleList(definition).find((r) => r.id === f.alternative!.rule) : undefined;
   return (
     <div data-testid={`panel-formula-${f.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <FormulaName definition={definition} edit={edit} f={f} />
       <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried} bind={(box) => insert.bind(f.id, box)} />
       <OnTheWayIn definition={definition} edit={edit} id={f.id} />
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 8 }}>
-        <span style={small}>ON THE SAMPLE</span>
+        <span style={small}>ON THE SAMPLE{rule ? `, WITH ${(rule.name || rule.id).toUpperCase()} (TRYING)` : ''}</span>
         <b data-testid={`panel-value-${f.id}`} style={{ color: 'var(--cyan)', fontSize: 15 }}>{value !== undefined ? `= ${value}` : '·'}</b>
       </div>
     </div>
   );
 }
 
-export function GraphPanel({ definition, edit, node, preview, tried, onClose, onGoTo }: Props) {
+export function GraphPanel({ definition, edit, node, preview, tried, onClose, onGoTo, trying }: Props) {
   const insert = useFormulaInsert(definition, edit);
   const formulaIds = node.kind === 'formula' || node.kind === 'condition' ? [node.id]
     : node.kind === 'list' ? (node.rows ?? []).map((r) => r.mod).filter((m): m is string => !!m) : [];
@@ -137,7 +140,7 @@ export function GraphPanel({ definition, edit, node, preview, tried, onClose, on
         {formulaIds.length > 0 && (
           <>
             <span style={small}>MODIFIERS · FROM {node.via?.label}</span>
-            {formulaIds.map((id) => <FormulaForm key={id} definition={definition} edit={edit} id={id} preview={preview} tried={tried} insert={insert} />)}
+            {formulaIds.map((id) => <FormulaForm key={id} definition={definition} edit={edit} id={id} preview={preview} tried={tried} insert={insert} trying={trying} />)}
           </>
         )}
       </>
@@ -145,7 +148,7 @@ export function GraphPanel({ definition, edit, node, preview, tried, onClose, on
   } else if (node.kind === 'formula' || node.kind === 'condition') {
     body = (
       <>
-        <FormulaForm definition={definition} edit={edit} id={node.id} preview={preview} tried={tried} insert={insert} />
+        <FormulaForm definition={definition} edit={edit} id={node.id} preview={preview} tried={tried} insert={insert} trying={trying} />
         <div><button type="button" className="utility-btn" style={btn} onClick={() => edit(withoutFormula(definition, node.id))}>REMOVE {node.kind === 'condition' ? 'CONDITION' : 'FORMULA'}</button></div>
       </>
     );
@@ -159,6 +162,7 @@ export function GraphPanel({ definition, edit, node, preview, tried, onClose, on
         <p style={{ ...why, margin: 0 }}>{rule.description || 'No description yet.'}</p>
         <p style={{ ...why, margin: 0 }}>The formulas wired to it are worked out by their WITH {node.label} formula while the table has it on.{node.also?.length ? ' Also under it:' : ''}</p>
         {(node.also ?? []).map((a) => <span key={a} style={{ fontSize: 12 }}>· {a}</span>)}
+        <p style={{ ...why, margin: 0 }}>TRY ON THE MAP, on its node, changes only the numbers here, never the game. The GM switches it for the table in the GAME tab.</p>
         {onGoTo && <div><button type="button" className="utility-btn" style={btn} onClick={() => onGoTo('house_rules')}>GO TO HOUSE RULES</button></div>}
       </>
     );

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
 import { render, screen, cleanup, within, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { createRequire } from 'module';
 
 import { GraphView } from '../GraphView';
 import { GraphProblems } from '../GraphProblems';
@@ -361,5 +362,66 @@ describe('the PROBLEMS box itself', () => {
     expect(head.textContent).toBe('PROBLEMS1 ✕2 !▸');
     await userEvent.click(head);
     expect(screen.getAllByRole('listitem').map((li) => li.textContent![0])).toEqual(['✕', '!', '!']);
+  });
+});
+
+describe('TRY ON THE MAP (5b6c)', () => {
+  const req = createRequire(import.meta.url);
+  const { previewDerived } = req('../../../../backend/systemBuilder/derived.js');
+  /** The route's own work, with the server's engine, and what it was asked. */
+  const asked: Definition[] = [];
+  const engine = { previewValues: vi.fn(async (definition: Definition) => {
+    asked.push(definition);
+    return { ok: true as const, value: previewDerived({ lookups: definition.lookups, derived: definition.derived }, definition.samples ?? {}) };
+  }) } as never;
+  const openTrying = (readOnly = false) => {
+    const edits: Definition[] = [];
+    render(<div style={{ width: 1200, height: 800 }}><GraphView definition={HEARTH} edit={(d) => edits.push(d)} api={engine} readOnly={readOnly} /></div>);
+    return edits;
+  };
+  const sw = () => within(node('rule:magic')).getByRole('switch', { name: 'Try on the map' });
+  const spellValue = () => node('spell').querySelector('[data-value]')?.textContent;
+
+  it('works the map out with the rule on, its formulas swapped, and changes nothing', async () => {
+    const edits = openTrying();
+    expect(sw().getAttribute('aria-checked')).toBe('false');
+    expect(sw().textContent).toBe('TRY ON THE MAP: OFF');
+    await waitFor(() => expect(spellValue()).toBe('0'), { timeout: 2000 });
+    expect(node('spell').querySelector('[data-in-use]')!.textContent).toBe('NOT IN USE');
+    expect(screen.queryByTestId('graph-trying')).toBeNull();
+
+    fireEvent.click(sw());
+    expect(sw().getAttribute('aria-checked')).toBe('true');
+    expect(sw().textContent).toBe('TRY ON THE MAP: ON');
+    expect(node('spell').querySelector('[data-in-use]')!.textContent).toBe('IN USE');
+    expect(screen.getByTestId('graph-trying').textContent).toBe('TRYING MAGIC · THE MAP ONLY');
+    // WITS 9 gives +0, LEVEL 3: the WITH MAGIC formula's 3, by the server's engine.
+    await waitFor(() => expect(spellValue()).toBe('3'), { timeout: 2000 });
+    expect((asked.at(-1)!.derived as { id: string; formula: string }[]).find((d) => d.id === 'spell')!.formula).toBe('@wit_mod + @lvl');
+    expect(edits).toEqual([]);
+
+    fireEvent.click(sw());
+    await waitFor(() => expect(spellValue()).toBe('0'), { timeout: 2000 });
+    expect(screen.queryByTestId('graph-trying')).toBeNull();
+  });
+
+  it('the panel says its value is the WITH-rule one while trying', async () => {
+    openTrying();
+    fireEvent.click(sw());
+    fireEvent.click(node('spell'));
+    const panel = await screen.findByTestId('graph-panel');
+    expect(panel.textContent).toContain('ON THE SAMPLE, WITH MAGIC (TRYING)');
+    await waitFor(() => expect(within(panel).getByTestId('panel-value-spell').textContent).toBe('= 3'), { timeout: 2000 });
+    fireEvent.click(node('rule:magic'));
+    expect(screen.getByTestId('graph-panel').textContent).toContain('changes only the numbers here, never the game');
+  });
+
+  it('works on an example being looked at, its page locked', async () => {
+    const edits = openTrying(true);
+    lockControls(screen.getByTestId('graph-view'));
+    expect((sw() as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(sw());
+    await waitFor(() => expect(spellValue()).toBe('3'), { timeout: 2000 });
+    expect(edits).toEqual([]);
   });
 });
