@@ -49,7 +49,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   the names players see, where each comes from, BEST of several, its text in those names and
   `= 12`, and a formula's mistake shows inside it. Values are worked out by the server, as FORMS
   shows them. Drag nodes on a grid (they stay put), fold a group to one line, zoom, FIT, a minimap,
-  AUTO-LAYOUT (it asks first), and a line under the map with the counts and the sample character.
+  AUTO-LAYOUT, and a line under the map with the counts and the sample character.
   Your choice of FORMS or GRAPH is remembered. The map opens at a zoom that can be read, and takes
   every theme's colors.
 - **Click a node to edit it (5a3b2).** A node clicked on the map opens a panel beside it with the very
@@ -57,6 +57,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   value and alternative, a table's rows and TRY IT. A change there is a change in FORMS, and the map
   follows at once: a new wire, the new value. A house rule goes to HOUSE RULES; a note is read.
   ×, Escape or a click on the map closes it, and the map slides a node the panel would cover into view.
+- **UNDO and REDO on the map (5b1).** ↶ and ↷ in the map's toolbar, or Ctrl+Z and Ctrl+Y (Ctrl+Shift+Z
+  too), take back what was done on the map and in a node's panel: a move, a fold, AUTO-LAYOUT (now one
+  click), a change typed in the panel (one step for the typing, not one a key). A box being typed in
+  keeps its own undo.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

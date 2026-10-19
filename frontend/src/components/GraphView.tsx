@@ -14,6 +14,7 @@ import { sampleOf } from '../sheets/statsRules';
 import { usePreviewValues } from '../hooks/usePreviewValues';
 import type { BuilderPage } from '../sheets/builderSession';
 import { GraphPanel } from './GraphPanel';
+import { emptyHistory, recorded, undone, redone, type History } from '../sheets/editHistory';
 
 // STATS & RULES with GRAPH on (5a3a; approved mockup docs/mockups/builder-graph.html, 2026-10-17,
 // nodes as the builder design's node kit draws them, docs/mockups/builder-design, 2026-09-29): the
@@ -348,28 +349,24 @@ const EDGE_TYPES: EdgeTypes = { wire: Wire };
 const OPENING_ZOOM = 0.8;
 
 /**
- * AUTO-LAYOUT puts every node back in its column (5c's, brought forward: places are kept once
- * anything moves, so this is the way back to a tidy map). It asks first, as there is no undo
- * until 5b: a second click within a few seconds does it.
+ * UNDO and REDO (5b1) for what was done on the map and in its panel; AUTO-LAYOUT puts every node
+ * back in its column (5c's, brought forward: places are kept once anything moves, so this is the
+ * way back to a tidy map), one click now that it can be undone. None of these on an example.
  */
-function Toolbar({ onTidy }: { onTidy?: () => void }) {
+function Toolbar({ edits }: { edits?: { onTidy: () => void; onUndo: () => void; onRedo: () => void; canUndo: boolean; canRedo: boolean } }) {
   const flow = useReactFlow();
   const { zoom } = useViewport();
-  const [asking, setAsking] = useState(false);
-  useEffect(() => {
-    if (!asking) return undefined;
-    const t = setTimeout(() => setAsking(false), 4000);
-    return () => clearTimeout(t);
-  }, [asking]);
   const b: React.CSSProperties = { fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, padding: '3px 9px' };
   return (
     <div role="toolbar" aria-label="Map" style={{ position: 'absolute', top: 10, right: 10, zIndex: 5, display: 'flex', gap: 4, alignItems: 'center', background: 'var(--black)', border: '1px solid var(--dark-green)', padding: 4 }}>
-      {onTidy && (
-        <button type="button" className="utility-btn" style={{ ...b, ...(asking ? { borderColor: 'var(--warning)', color: 'var(--warning)' } : {}) }}
-          title="Every node back in its column, stats on the left and each formula right of what it reads"
-          onClick={() => { if (asking) { setAsking(false); onTidy(); } else setAsking(true); }}>
-          {asking ? 'REPLACE MY LAYOUT?' : 'AUTO-LAYOUT'}
-        </button>
+      {edits && (
+        <>
+          <button type="button" className="utility-btn" style={b} aria-label="Undo" title="Undo (Ctrl+Z)" disabled={!edits.canUndo} onClick={edits.onUndo}>↶</button>
+          <button type="button" className="utility-btn" style={b} aria-label="Redo" title="Redo (Ctrl+Y)" disabled={!edits.canRedo} onClick={edits.onRedo}>↷</button>
+          <button type="button" className="utility-btn" style={b}
+            title="Every node back in its column, stats on the left and each formula right of what it reads"
+            onClick={edits.onTidy}>AUTO-LAYOUT</button>
+        </>
       )}
       <button type="button" data-browse className="utility-btn" style={b} aria-label="Zoom out" onClick={() => flow.zoomOut()}>−</button>
       <span data-testid="graph-zoom" style={{ minWidth: 44, textAlign: 'center', fontSize: 11, color: 'var(--green)' }}>{Math.round(zoom * 100)}%</span>
@@ -398,6 +395,27 @@ function StatusLine({ graph, definition }: { graph: Graph; definition: Definitio
 function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
   const graph = useMemo(() => graphOf(definition), [definition]);
   const { preview, tried } = usePreviewValues(definition, api);
+  // Every change made on the map or in its panel goes through here, so it can be undone.
+  const [history, setHistory] = useState<History<Definition>>(emptyHistory);
+  const mapEdit = useCallback((next: Definition) => {
+    if (readOnly) return;
+    // Typing in a box of the panel joins one step while it lasts; the map's own edits are a step each.
+    const typing = document.activeElement?.closest('[data-testid="graph-panel"]') ? document.activeElement.getAttribute('aria-label') ?? document.activeElement.id : null;
+    setHistory((h) => recorded(h, definition, Date.now(), typing || null));
+    edit(next);
+  }, [definition, edit, readOnly]);
+  const undo = useCallback(() => {
+    const step = undone(history, definition);
+    if (!step) return;
+    setHistory(step.history);
+    edit(step.show);
+  }, [history, definition, edit]);
+  const redo = useCallback(() => {
+    const step = redone(history, definition);
+    if (!step) return;
+    setHistory(step.history);
+    edit(step.show);
+  }, [history, definition, edit]);
   // The node picked on the map, whose controls the panel shows (5a3b2). Gone when it is: a formula
   // removed, or turned into a modifier its stat's list now shows.
   const [selected, setSelected] = useState<string | null>(null);
@@ -430,8 +448,8 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
   useEffect(() => { updateInternals([...graph.nodes.map((n) => n.id), ...graph.groups.map((g) => `group:${g.id}`)]); }, [graph, updateInternals]);
 
   const fold = useCallback((g: GraphGroup) => {
-    if (!readOnly) edit(withCollapsed(definition, g.id, !g.collapsed));
-  }, [definition, edit, readOnly]);
+    mapEdit(withCollapsed(definition, g.id, !g.collapsed));
+  }, [definition, mapEdit]);
 
   const nodes: Node[] = useMemo(() => {
     const folded = new Set(graph.groups.filter((g) => g.collapsed).flatMap((g) => g.members));
@@ -511,9 +529,9 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
   }, [measuredAll, flow]);
 
   const tidy = useCallback(() => {
-    edit(withPositions(definition, graph, layoutOf(graph)));
+    mapEdit(withPositions(definition, graph, layoutOf(graph)));
     requestAnimationFrame(() => { void flow.fitView({ padding: 0.1, maxZoom: 1 }); });
-  }, [definition, edit, graph, flow]);
+  }, [definition, mapEdit, graph, flow]);
 
   /** The map slid just enough that a node the panel opened over is in view again. */
   const keepInView = useCallback((id: string) => {
@@ -526,6 +544,21 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
     });
   }, [flow]);
 
+  // Keys while the map is open, wherever the focus is (after a drag it is on nothing in particular):
+  // Escape closes the panel; Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z) undo and redo, except in a box
+  // being typed in, which keeps its own.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setSelected(null); return; }
+      const typing = (e.target as HTMLElement | null)?.closest?.('input, textarea, select');
+      if (readOnly || typing || !(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); } else if (key === 'y' || (key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [readOnly, undo, redo]);
+
   const onNodeDragStop = useCallback(() => {
     grabbed.current = null;
     const moves = latest.current;
@@ -535,11 +568,11 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
     // Only a real move is saved: a click on a node ends a "drag" too, and saving then would pin
     // every node where auto-layout happened to put it.
     const moved = Object.entries(moves).some(([id, p]) => !saved[id] || saved[id].x !== p.x || saved[id].y !== p.y);
-    if (moved) edit(withPositions(definition, graph, moves));
-  }, [definition, edit, graph, readOnly, saved]);
+    if (moved) mapEdit(withPositions(definition, graph, moves));
+  }, [definition, mapEdit, graph, readOnly, saved]);
 
   return (
-    <div data-testid="graph-view" onKeyDown={(e) => { if (e.key === 'Escape' && picked) setSelected(null); }} style={{
+    <div data-testid="graph-view" style={{
       display: 'flex', width: '100%', height: '100%',
       ['--xy-background-color' as string]: GROUND.base,
       ['--xy-minimap-background-color' as string]: GROUND.base,
@@ -563,12 +596,12 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
           nodeColor={(n) => (n.type === 'rule' ? 'var(--cyan)' : n.type === 'groupBox' ? 'transparent' : 'var(--green)')}
           nodeStrokeColor={(n) => (n.type === 'groupBox' ? 'var(--dark-green)' : 'transparent')}
           maskColor="rgba(0, 0, 0, 0.55)" style={{ background: GROUND.base, border: '1px solid var(--dark-green)', bottom: 24 }} />
-        <Toolbar onTidy={readOnly ? undefined : tidy} />
+        <Toolbar edits={readOnly ? undefined : { onTidy: tidy, onUndo: undo, onRedo: redo, canUndo: history.past.length > 0, canRedo: history.future.length > 0 }} />
       </ReactFlow>
       <StatusLine graph={graph} definition={definition} />
       </div>
       {picked && (
-        <GraphPanel definition={definition} edit={edit} node={picked} preview={preview} tried={tried}
+        <GraphPanel definition={definition} edit={mapEdit} node={picked} preview={preview} tried={tried}
           onClose={() => setSelected(null)} onGoTo={onGoTo} />
       )}
     </div>

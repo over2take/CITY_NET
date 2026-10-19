@@ -85,6 +85,12 @@ test('a system as a map: drawn, dragged, folded, and all of it kept', async ({ p
   const [x, y] = after.match(/-?\d+(\.\d+)?/g)!.map(Number);
   expect([x % 24, y % 24]).toEqual([0, 0]);
 
+  // Undone with Ctrl+Z wherever the focus is after a drag, and done again with Ctrl+Y.
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => placeOf(page, 'save')).toBe(before);
+  await page.keyboard.press('Control+y');
+  await expect.poll(() => placeOf(page, 'save')).toBe(after);
+
   // A group folded: one box, how many nodes and wires out, its member's wires through its one dot.
   await map.getByRole('button', { name: 'Fold ATTACKS' }).click();
   await expect(map.getByTestId('graph-node-melee')).toBeHidden();

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
-import { render, screen, cleanup, within, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, within, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { GraphView } from '../GraphView';
@@ -134,14 +134,14 @@ describe('the toolbar and the status line', () => {
     expect(within(bar).getByTestId('graph-zoom').textContent).toMatch(/^\d+%$/);
   });
 
-  it('AUTO-LAYOUT asks first, then puts every node back in its column', async () => {
+  it('AUTO-LAYOUT puts every node back in its column, in one click it can undo', async () => {
     const moved = { ...HEARTH, graph: { ...(HEARTH.graph as object), positions: { save: [2400, 2400] } } };
-    const { edits, last } = open(moved);
+    const { last } = open(moved);
     await userEvent.click(screen.getByRole('button', { name: 'AUTO-LAYOUT' }));
-    expect(edits).toEqual([]);
-    await userEvent.click(screen.getByRole('button', { name: 'REPLACE MY LAYOUT?' }));
     const laid = layoutOf(graphOf(moved));
     expect((last().graph as { positions: Record<string, number[]> }).positions.save).toEqual([laid.save.x, laid.save.y]);
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(last()).toEqual(moved);
   });
 
   it('says how much is on the map and the sample character it is worked out on', () => {
@@ -152,12 +152,58 @@ describe('the toolbar and the status line', () => {
   });
 });
 
+describe('undo and redo', () => {
+  it('start with nothing to undo or redo', () => {
+    open();
+    expect((screen.getByRole('button', { name: 'Undo' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Redo' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('take back a fold and a change made in a node\'s panel, in turn, and put them back', async () => {
+    const { last } = open();
+    await userEvent.click(screen.getByRole('button', { name: 'Fold SAVES' }));
+    const folded = last();
+    fireEvent.click(node('spell'));
+    const text = within(await screen.findByTestId('graph-panel')).getByLabelText('Spell power formula');
+    await userEvent.type(text, ' + 1');
+    const typed = last();
+    expect((typed.derived as { id: string; formula: string }[]).find((d) => d.id === 'spell')!.formula).toBe('0 + 1');
+    // The typing is one step, the fold another.
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(last()).toEqual(folded);
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(last()).toEqual(HEARTH);
+    expect((screen.getByRole('button', { name: 'Undo' }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(screen.getByRole('button', { name: 'Redo' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Redo' }));
+    expect(last()).toEqual(typed);
+  });
+
+  it('answer Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z on the map, but leave a box being typed in its own', async () => {
+    const { last } = open();
+    await userEvent.click(screen.getByRole('button', { name: 'Fold SAVES' }));
+    const map = screen.getByTestId('graph-map');
+    fireEvent.keyDown(map, { key: 'z', ctrlKey: true });
+    expect(last()).toEqual(HEARTH);
+    fireEvent.keyDown(map, { key: 'y', ctrlKey: true });
+    expect((last().graph as { collapsed: string[] }).collapsed).toEqual(['saves']);
+    fireEvent.keyDown(map, { key: 'z', ctrlKey: true });
+    fireEvent.keyDown(map, { key: 'Z', ctrlKey: true, shiftKey: true });
+    expect((last().graph as { collapsed: string[] }).collapsed).toEqual(['saves']);
+    fireEvent.click(node('spell'));
+    const before = last();
+    fireEvent.keyDown(within(await screen.findByTestId('graph-panel')).getByLabelText('Spell power formula'), { key: 'z', ctrlKey: true });
+    expect(last()).toBe(before);
+  });
+});
+
 describe('an example, looked at', () => {
   it('folds and lays out nothing, and keeps zoom usable when the page is locked', () => {
     const { edits } = open(HEARTH, true);
     lockControls(screen.getByTestId('graph-view'));
     expect((screen.getByRole('button', { name: 'Fold SAVES' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole('button', { name: 'AUTO-LAYOUT' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
     const bar = screen.getByRole('toolbar', { name: 'Map' });
     for (const name of ['Zoom in', 'Zoom out', 'FIT']) expect((within(bar).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false);
     expect(edits).toEqual([]);
