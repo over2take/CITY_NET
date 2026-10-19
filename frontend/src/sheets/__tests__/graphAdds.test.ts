@@ -6,9 +6,9 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import { addChoices, matching, withAdded, withRemoved } from '../graphAdds';
-import { graphOf } from '../graphModel';
+import { graphOf, positionsOf } from '../graphModel';
 import { notesOf, withNewNote, withoutNote } from '../graphNotes';
-import { withNewFormula, withNewStat, withNewGroup, withNewTable, withoutFormula, withoutTable, withoutGroup } from '../statsRules';
+import { withNewFormula, withNewCondition, withNewStat, withNewGroup, withNewTable, withoutFormula, withoutTable, withoutGroup } from '../statsRules';
 import type { Definition } from '../systemsApi';
 
 const req = createRequire(import.meta.url);
@@ -25,10 +25,10 @@ const HEARTH: Definition = {
 const without = (def: Definition) => { const { graph: _g, ...rest } = def; return rest; };
 
 describe('what can be added', () => {
-  it('a formula, a stat in each group, a group, a table and a note now; the rest saying when', () => {
+  it('a formula, a stat in each group, a group, a table, a condition and a note now; the rest saying when', () => {
     expect(addChoices(HEARTH).map((c) => `${c.label}${c.soon ? ` (${c.soon})` : ''}`)).toEqual([
       'FORMULA', 'STAT IN ABILITIES', 'STATS GROUP', 'TABLE',
-      'CONDITION (With editing conditions on the map)', 'NOTE', 'ROLL (Phase 6)', 'CHOICE · FEATURE (Phase 7)',
+      'CONDITION', 'NOTE', 'ROLL (Phase 6)', 'CHOICE · FEATURE (Phase 7)',
     ]);
   });
 
@@ -51,13 +51,39 @@ describe('a node added', () => {
     expect(without(t.definition)).toEqual(withNewTable(HEARTH));
     expect(t.node).toBe('table:new_table');
 
+    const c = withAdded(HEARTH, 'condition', { x: 96, y: 96 })!;
+    expect(without(c.definition)).toEqual(withNewCondition(HEARTH));
+    expect(c.node).toBe('new_condition');
+    expect(graphOf(c.definition).nodes.find((n) => n.id === 'new_condition')!.kind).toBe('condition');
+
     const gr = withAdded(HEARTH, 'group', { x: 24, y: 24 })!;
     expect(without(gr.definition)).toEqual(withNewGroup(HEARTH));
     expect(gr.node).toBe('new_group');
   });
 
+  it('where something already is, the nearest place clear of every node instead (5b6a)', () => {
+    const graph = graphOf(HEARTH);
+    const at = positionsOf(HEARTH, graph).abilities;
+    for (const key of ['formula', 'condition', 'table', 'group', 'note']) {
+      const a = withAdded(HEARTH, key, at)!;
+      const after = graphOf(a.definition);
+      const places = positionsOf(a.definition, after);
+      const mine = after.nodes.find((n) => n.id === a.node)!;
+      // Kept a cell clear of every other node, and a cell or two from where it was asked for.
+      for (const n of after.nodes.filter((x) => x.id !== a.node)) {
+        const p = places[n.id];
+        const apart = places[a.node].x + mine.width + 24 <= p.x || p.x + n.width + 24 <= places[a.node].x
+          || places[a.node].y + mine.height + 24 <= p.y || p.y + n.height + 24 <= places[a.node].y;
+        expect(apart, `${key} on ${n.id}`).toBe(true);
+      }
+      expect(Math.hypot(places[a.node].x - at.x, places[a.node].y - at.y), key).toBeLessThan(24 * 20);
+      // Nothing else moved.
+      for (const n of graph.nodes) expect(places[n.id], `${key}: ${n.id}`).toEqual(positionsOf(HEARTH, graph)[n.id]);
+    }
+  });
+
   it('a note, pinned to the node picked (never a note), placed where asked', () => {
-    expect(withAdded(HEARTH, 'note', { x: 72, y: 96 }, 'melee')).toEqual(withNewNote(HEARTH, { x: 72, y: 96 }, 'melee'));
+    expect(withAdded(HEARTH, 'note', { x: 1200, y: 960 }, 'melee')).toEqual(withNewNote(HEARTH, { x: 1200, y: 960 }, 'melee'));
     expect(notesOf(withAdded(HEARTH, 'note', { x: 0, y: 0 }, 'melee')!.definition)[0].on).toBe('melee');
     expect(notesOf(withAdded(HEARTH, 'note', { x: 0, y: 0 })!.definition)[0].on).toBeUndefined();
     const one = withAdded(HEARTH, 'note', { x: 0, y: 0 })!;
@@ -71,11 +97,11 @@ describe('a node added', () => {
   });
 
   it('nothing for what can\'t be added yet, or a group that isn\'t there', () => {
-    for (const key of ['condition', 'roll', 'choice', 'stat:nowhere']) expect(withAdded(HEARTH, key, { x: 0, y: 0 })).toBeNull();
+    for (const key of ['roll', 'choice', 'stat:nowhere']) expect(withAdded(HEARTH, key, { x: 0, y: 0 })).toBeNull();
   });
 
   it('every one taken by the server\'s check', () => {
-    for (const key of ['formula', 'table', 'group', 'stat:abilities', 'note']) {
+    for (const key of ['formula', 'condition', 'table', 'group', 'stat:abilities', 'note']) {
       const a = withAdded(HEARTH, key, { x: 48, y: 48 })!;
       expect(checkDefinition(a.definition).problems.filter((p: { where: string }) => p.where.startsWith('graph'))).toEqual([]);
       expect(graphOf(a.definition).nodes.some((n) => n.id === a.node)).toBe(true);

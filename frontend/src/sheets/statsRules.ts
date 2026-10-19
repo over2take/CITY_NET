@@ -17,6 +17,9 @@ export interface Stat { id: string; label: string; min?: number; max?: number; t
 export interface StatGroup { id: string; label: string; stats: Stat[] }
 /** A formula, and the one it is worked out by instead while a house rule is on (sheets/houseRules.ts, 4j). */
 export interface Formula { id: string; label?: string; formula: string; alternative?: { rule: string; formula: string } }
+/** A condition's three parts (5b6a): IF `when` is not 0, THEN, ELSE (derived.js). */
+export type ConditionPart = 'when' | 'then' | 'else';
+export const CONDITION_PARTS: ConditionPart[] = ['when', 'then', 'else'];
 export interface Band { upTo?: number; value: number }
 export interface Table { id: string; label?: string; bands: Band[] }
 
@@ -136,6 +139,33 @@ export const withSample = (def: Definition, statId: string, value: number | null
 export const withNewFormula = (def: Definition, label = 'New formula'): Definition =>
   withList(def, 'derived', [...formulaList(def), { id: idFor(label, takenIds(def)), label, formula: '0' }]);
 
+/** Whether a formula is a condition: IF something THEN one number ELSE another. */
+export const isCondition = (f: Formula): boolean => (f as { kind?: string }).kind === 'condition';
+/** A condition's part, as stored ('' where missing). */
+export const partOf = (f: Formula, part: ConditionPart): string => {
+  const text = (f as unknown as Record<string, unknown>)[part];
+  return typeof text === 'string' ? text : '';
+};
+/** Every piece of text a formula is worked out from: its formula, a condition's three parts, its alternative's. */
+export const textsOf = (f: Formula): string[] => [
+  ...(isCondition(f) ? CONDITION_PARTS.map((p) => partOf(f, p)) : [f.formula ?? '']),
+  ...(f.alternative ? [f.alternative.formula] : []),
+];
+
+/**
+ * A new condition at the end (5b6a): IF the first stat is above 0 THEN 1 ELSE 0, something real to
+ * change, or IF 0 > 0 with no stats yet.
+ */
+export const withNewCondition = (def: Definition, label = 'New condition'): Definition => {
+  const first = allStats(def)[0];
+  const condition = { id: idFor(label, takenIds(def)), label, kind: 'condition', when: first ? `@${first.id} > 0` : '0 > 0', then: '1', else: '0' };
+  return withList(def, 'derived', [...formulaList(def), condition]);
+};
+
+/** A condition's IF, THEN or ELSE changed. */
+export const withCondition = (def: Definition, id: string, patch: Partial<Record<ConditionPart, string>>): Definition =>
+  withList(def, 'derived', formulaList(def).map((f) => (f.id === id && isCondition(f) ? { ...f, ...patch } : f)));
+
 /** A formula's name or text changed; its id stays. A blank name shows its id, so it isn't stored. */
 export const withFormula = (def: Definition, id: string, patch: { label?: string; formula?: string }): Definition =>
   withList(def, 'derived', formulaList(def).map((f) => {
@@ -165,10 +195,10 @@ export const withAlternative = (def: Definition, id: string, patch: { rule?: str
 /** A formula removed. Formulas reading it show the problem until they're changed. */
 export const withoutFormula = (def: Definition, id: string): Definition => withList(def, 'derived', formulaList(def).filter((f) => f.id !== id));
 
-/** The names of the formulas that read @id. */
+/** The names of the formulas that read @id: in their text, a condition's parts or their alternative. */
 export const usedBy = (def: Definition, id: string): string[] => {
   const reads = new RegExp(`@${id}(?![a-z0-9_])`);
-  return formulaList(def).filter((f) => f.id !== id && reads.test(f.formula ?? '')).map((f) => f.label || f.id);
+  return formulaList(def).filter((f) => f.id !== id && textsOf(f).some((t) => reads.test(t))).map((f) => f.label || f.id);
 };
 
 /** A formula's problems, by its id, from the preview's list ("derived save, formula" is save's). */

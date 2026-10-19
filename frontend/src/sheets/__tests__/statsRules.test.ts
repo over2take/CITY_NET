@@ -9,6 +9,7 @@ import {
   statGroups, allStats, formulaList, tableList, takenIds, FUNCTIONS,
   withNewGroup, withGroupLabel, withoutGroup, withNewStat, withStat, withoutStat, sampleOf, withSample,
   withNewFormula, withFormula, withoutFormula, usedBy, problemsByFormula, insertToken,
+  withNewCondition, withCondition, isCondition, partOf, textsOf, CONDITION_PARTS,
   withNewTable, withTableLabel, withoutTable, withBands, lookupIn,
 } from '../statsRules';
 import type { Definition } from '../systemsApi';
@@ -147,6 +148,34 @@ describe('formulas', () => {
     expect(Object.keys(found)).toEqual(['save']);
     expect(problemsByFormula([{ where: 'derived value 3', message: 'x' }, { where: 'lookup mod', message: 'y' }, { where: 'derived a', message: 'first' }, { where: 'derived a, formula', message: 'second' }]))
       .toEqual({ a: 'first' });
+  });
+
+  it('adds a condition comparing the first stat, the server taking it and working it out', () => {
+    let def = withSample(withNewCondition(built(), 'Strong'), 'strength', 16);
+    expect(formulaList(def).at(-1)).toEqual({ id: 'strong', label: 'Strong', kind: 'condition', when: '@strength > 0', then: '1', else: '0' });
+    expect(withNewCondition(H).derived).toEqual([{ id: 'new_condition', label: 'New condition', kind: 'condition', when: '0 > 0', then: '1', else: '0' }]);
+    def = withCondition(def, 'strong', { when: '@strength > 15', then: '@strength_mod * 2' });
+    expect(problems(def)).toEqual([]);
+    expect(previewDerived({ lookups: def.lookups, derived: def.derived }, def.samples).values.strong).toBe(2);
+    expect(previewDerived({ lookups: def.lookups, derived: def.derived }, { strength: 10 }).values.strong).toBe(0);
+  });
+
+  it('changes only a condition\'s part asked for, never a formula\'s', () => {
+    const def = withNewCondition(built(), 'Strong');
+    expect(withCondition(def, 'strong', { else: '-1' }).derived).toEqual(formulaList(def).map((f) => (f.id === 'strong' ? { ...f, else: '-1' } : f)));
+    expect(withCondition(def, 'save', { when: '1' })).toEqual(def);
+    expect(CONDITION_PARTS.map((p) => partOf(formulaList(def).at(-1)!, p))).toEqual(['@strength > 0', '1', '0']);
+    expect(partOf({ id: 'x', formula: '1' }, 'when')).toBe('');
+  });
+
+  it('counts a condition\'s parts and a formula\'s alternative as reading a name', () => {
+    let def = withCondition(withNewCondition(built(), 'Strong'), 'strong', { then: '@save' });
+    expect(usedBy(def, 'save')).toEqual(['Strong']);
+    def = { ...def, derived: [...(def.derived as object[]), { id: 'swap', label: 'Swap', formula: '1', alternative: { rule: 'r', formula: '@save' } }] };
+    expect(usedBy(def, 'save')).toEqual(['Strong', 'Swap']);
+    expect(textsOf(formulaList(def).at(-1)!)).toEqual(['1', '@save']);
+    expect(isCondition(formulaList(def)[2])).toBe(true);
+    expect(isCondition(formulaList(def)[0])).toBe(false);
   });
 
   it('puts a chip at the cursor, inside the brackets of a call', () => {

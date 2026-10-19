@@ -185,10 +185,56 @@ describe('FORMULAS', () => {
     expect(screen.getByRole('button', { name: '@str_mod' })).toBeTruthy();
   });
 
-  it('shows a condition without editing it', async () => {
-    await openFormulas({ ...SYSTEM, derived: [{ id: 'hurt', kind: 'condition', when: '@str < 5', then: '1', else: '0' }] });
-    expect(screen.getByTestId('formula-hurt').textContent).toContain('A condition: if @str < 5 then 1 else 0.');
-    expect(screen.queryByLabelText('hurt formula')).toBeNull();
+  // Conditions written in FORMS as on the map (5b6a): IF, THEN and ELSE, worked out by the server's engine.
+  const HURT: Definition = { ...SYSTEM, derived: [...(SYSTEM.derived as object[]), { id: 'hurt', label: 'Hurt', kind: 'condition', when: '@str < 5', then: '1', else: '@str_mod' }] };
+  const hurt = (last: () => Definition) => (last().derived as Record<string, string>[]).find((f) => f.id === 'hurt')!;
+
+  it('shows a condition as IF, THEN and ELSE, each written like a formula and worked out on the sample', async () => {
+    const { last } = await openFormulas(HURT);
+    expect((screen.getByLabelText('Hurt if') as HTMLInputElement).value).toBe('@str < 5');
+    expect((screen.getByLabelText('Hurt then') as HTMLInputElement).value).toBe('1');
+    expect((screen.getByLabelText('Hurt else') as HTMLInputElement).value).toBe('@str_mod');
+    expect(screen.queryByLabelText('Hurt formula')).toBeNull();
+    await waitFor(() => expect(value('hurt')).toBe('1'));
+    const when = screen.getByLabelText('Hurt if');
+    await userEvent.clear(when);
+    await userEvent.type(when, '@str > 5');
+    const then = screen.getByLabelText('Hurt then');
+    await userEvent.clear(then);
+    await userEvent.type(then, '3');
+    expect(hurt(last)).toEqual({ id: 'hurt', label: 'Hurt', kind: 'condition', when: '@str > 5', then: '3', else: '@str_mod' });
+    await waitFor(() => expect(value('hurt')).toBe('3'));
+    // What reads a formula counts a condition's parts.
+    expect(screen.getByTestId('formula-str_mod').textContent).toContain('used by Save, Hurt');
+  });
+
+  it('marks all three boxes when a condition has a mistake', async () => {
+    await openFormulas({ ...SYSTEM, derived: [{ id: 'odd', kind: 'condition', when: '@str >', then: '1', else: '0' }] });
+    expect((await screen.findByRole('alert')).textContent).toMatch(/.+/);
+    for (const part of ['if', 'then', 'else']) expect(screen.getByLabelText(`odd ${part}`).getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('adds a condition with + CONDITION, comparing the first stat', async () => {
+    const { last } = await openFormulas(HEARTH);
+    await userEvent.click(screen.getByText('+ CONDITION'));
+    expect(last().derived).toEqual([{ id: 'new_condition', label: 'New condition', kind: 'condition', when: '@str > 0', then: '1', else: '0' }]);
+  });
+
+  it('puts a name from INSERT in whichever box of a condition was clicked', async () => {
+    const { last } = await openFormulas(HURT);
+    const otherwise = screen.getByLabelText('Hurt else') as HTMLInputElement;
+    await userEvent.click(otherwise);
+    otherwise.setSelectionRange(0, 0);
+    fireEvent.select(otherwise);
+    await userEvent.click(screen.getByRole('button', { name: '@dex' }));
+    expect(hurt(last).else).toBe('@dex@str_mod');
+    expect(hurt(last).when).toBe('@str < 5');
+    const when = screen.getByLabelText('Hurt if') as HTMLInputElement;
+    await userEvent.click(when);
+    when.setSelectionRange(4, 4);
+    fireEvent.select(when);
+    await userEvent.click(screen.getByRole('button', { name: 'max()' }));
+    expect(hurt(last).when).toBe('@strmax() < 5');
   });
 });
 

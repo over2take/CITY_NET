@@ -3,11 +3,12 @@ import type { Definition } from '../sheets/systemsApi';
 import {
   statGroups, allStats, withGroupLabel, withoutGroup, withNewStat, withStat, withoutStat, sampleOf, withSample,
   tableList, withTableLabel, withoutTable, withBands, lookupIn,
-  formulaList, withFormula, withAlternative, usedBy, FUNCTIONS,
-  type Formula, type StatGroup, type Table,
+  formulaList, withFormula, withAlternative, withCondition, isCondition, partOf, usedBy, FUNCTIONS, CONDITION_PARTS,
+  type Formula, type StatGroup, type Table, type ConditionPart,
 } from '../sheets/statsRules';
 import { houseRuleList } from '../sheets/houseRules';
 import type { Tried } from '../hooks/usePreviewValues';
+import type { FormulaBox } from '../hooks/useFormulaInsert';
 import { OnlyWith } from './OnlyWith';
 import { HINTS } from '../sheets/builderHelp';
 import { ColumnHead, FieldName } from './HelpHint';
@@ -178,27 +179,50 @@ export function FormulaName({ definition, edit, f }: Edits & { f: Formula }) {
   );
 }
 
+/** Where INSERT puts a name in one box: the box's input, and where its cursor is. */
+export type InsertBinding = { inputRef?: (el: HTMLInputElement | null) => void; onCursor?: (at: number) => void };
+
+/** One box of formula text, its cursor told to INSERT. */
+function TextBox({ label, value, bad, onText, inputRef, onCursor }: InsertBinding & { label: string; value: string; bad: boolean; onText: (text: string) => void }) {
+  return (
+    <input ref={inputRef} type="text" aria-label={label} maxLength={1000} value={value}
+      aria-invalid={bad ? true : undefined}
+      style={{ ...field, width: '100%', borderColor: bad ? 'var(--danger)' : 'var(--green)' }}
+      onChange={(e) => { onText(e.target.value); onCursor?.(e.target.selectionStart ?? e.target.value.length); }}
+      onSelect={(e) => onCursor?.((e.target as HTMLInputElement).selectionStart ?? 0)}
+      onFocus={(e) => onCursor?.(e.target.selectionStart ?? e.target.value.length)} />
+  );
+}
+
+const PART_WORD: Record<ConditionPart, string> = { when: 'IF', then: 'THEN', else: 'ELSE' };
+
 /**
- * A formula's text (a condition's IF / THEN / ELSE, read only for now), its mistake under it, and its
- * alternative under a house rule. `inputRef` and `onCursor` let INSERT put a name where the cursor is.
+ * A formula's text, or a condition's IF, THEN and ELSE (5b6a: IF something isn't 0, THEN one
+ * number, ELSE another); its mistake under it, and a formula's alternative under a house rule.
+ * `bind` lets INSERT put a name where the cursor is, in whichever box.
  */
-export function FormulaBody({ definition, edit, f, problem, tried, inputRef, onCursor }: Edits & {
-  f: Formula; problem?: string; tried: Record<string, Tried>;
-  inputRef?: (el: HTMLInputElement | null) => void; onCursor?: (at: number) => void;
+export function FormulaBody({ definition, edit, f, problem, tried, bind }: Edits & {
+  f: Formula; problem?: string; tried: Record<string, Tried>; bind?: (box: FormulaBox) => InsertBinding;
 }) {
-  const condition = (f as { kind?: string }).kind === 'condition';
+  const name = f.label || f.id;
   return (
     <>
-      {condition
-        ? <span style={{ ...why, fontSize: 11 }}>A condition: if {(f as { when?: string }).when} then {(f as { then?: string }).then} else {(f as { else?: string }).else}. Edited in the node graph later.</span>
-        : <input ref={inputRef} type="text" aria-label={`${f.label || f.id} formula`} maxLength={1000} value={f.formula ?? ''}
-            aria-invalid={problem ? true : undefined}
-            style={{ ...field, width: '100%', borderColor: problem ? 'var(--danger)' : 'var(--green)' }}
-            onChange={(e) => { edit(withFormula(definition, f.id, { formula: e.target.value })); onCursor?.(e.target.selectionStart ?? e.target.value.length); }}
-            onSelect={(e) => onCursor?.((e.target as HTMLInputElement).selectionStart ?? 0)}
-            onFocus={(e) => onCursor?.(e.target.selectionStart ?? e.target.value.length)} />}
+      {isCondition(f)
+        ? (
+          <div data-testid={`condition-${f.id}`} style={{ display: 'grid', gridTemplateColumns: '36px minmax(0, 1fr)', gap: '4px 6px', alignItems: 'center' }}>
+            {CONDITION_PARTS.map((part) => (
+              <React.Fragment key={part}>
+                <span style={{ ...small, color: 'var(--cyan)', opacity: 1 }}>{PART_WORD[part]}</span>
+                <TextBox label={`${name} ${PART_WORD[part].toLowerCase()}`} value={partOf(f, part)} bad={!!problem}
+                  onText={(text) => edit(withCondition(definition, f.id, { [part]: text }))} {...bind?.(part)} />
+              </React.Fragment>
+            ))}
+          </div>
+        )
+        : <TextBox label={`${name} formula`} value={f.formula ?? ''} bad={!!problem}
+            onText={(text) => edit(withFormula(definition, f.id, { formula: text }))} {...bind?.('formula')} />}
       {problem && <div role="alert" style={{ ...why, color: 'var(--danger)', opacity: 1, fontSize: 11 }}>{problem}</div>}
-      {!condition && <Alternative f={f} definition={definition} edit={edit} tried={tried} />}
+      {!isCondition(f) && <Alternative f={f} definition={definition} edit={edit} tried={tried} />}
     </>
   );
 }

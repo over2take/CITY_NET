@@ -8,11 +8,14 @@
 // where that leaves a whole formula (`a + @x`, `@x + a`, one of the names in a BEST); anywhere else
 // (`floor(@level / 2)`, read twice) the panel opens on the formula to change by hand.
 //
+// Into a condition (5b6a): drawn, its panel opens to compare the name in IF; cut, the name comes out
+// of THEN or ELSE as from a formula, never out of IF's comparison.
+//
 // A note's dashed line is the one wire that is stored (5b5): its square dot dropped on a node pins
 // it there, and cutting the line unpins it.
 
 import type { Definition } from './systemsApi';
-import { allStats, formulaList, withFormula, withAlternative, type Formula } from './statsRules';
+import { allStats, formulaList, withFormula, withAlternative, withCondition, isCondition, partOf, type Formula } from './statsRules';
 import { houseRuleList } from './houseRules';
 import { referencesIn, type Graph, type GraphWire } from './graphModel';
 import { withNotePinned } from './graphNotes';
@@ -29,7 +32,6 @@ const nameOf = (def: Definition, id: string): string => upper(
   allStats(def).find((s) => s.id === id)?.label || formulaList(def).find((f) => f.id === id)?.label || id,
 );
 const ruleName = (def: Definition, id: string) => upper(houseRuleList(def).find((r) => r.id === id)?.name || id);
-const isCondition = (f: Formula) => (f as { kind?: string }).kind === 'condition';
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** What flows from a dot on the map: a stat's or formula's value, a table, a house rule, a note to pin, or nothing to wire. */
@@ -75,7 +77,15 @@ export const withWire = (def: Definition, graph: Graph, from: Dot, to: string): 
   if (target.kind !== 'formula' && target.kind !== 'condition') return { definition: null, message: 'Wires go into formulas.' };
   const f = formulaList(def).find((x) => x.id === to)!;
   const label = upper(f.label || f.id);
-  if (isCondition(f)) return { definition: null, message: `${label} is a condition: wires into conditions come with editing them on the map.` };
+  if (isCondition(f)) {
+    // A condition compares, so where the name goes and against what is the GM's to say.
+    if (given.kind === 'rule') return { definition: null, message: `${label} is a condition: only a formula has one to use WITH a house rule.` };
+    if (given.kind === 'table') return { definition: null, message: `A table needs a number to read: type ${given.id}(@something) in ${label}'s IF, THEN or ELSE.`, open: to };
+    const name = nameOf(def, given.id);
+    if (given.id === f.id) return { definition: null, message: 'A condition can\'t read itself.' };
+    if (reads(def, given.id, f.id)) return { definition: null, message: `That would make a loop: ${name} already reads ${label}.` };
+    return { definition: null, message: `A condition compares: add ${name} to ${label}'s IF in the panel, and say how it compares (@${given.id} > 2).`, open: to };
+  }
 
   if (given.kind === 'rule') {
     if (f.alternative) return { definition: null, message: `${label} already has a formula to use WITH ${ruleName(def, f.alternative.rule)}.`, open: to };
@@ -132,8 +142,16 @@ export const withoutWire = (def: Definition, graph: Graph, wire: GraphWire): Wir
     const rule = f.alternative ? ruleName(def, f.alternative.rule) : '';
     return { definition: withAlternative(def, f.id, { rule: null }), message: `${label} no longer has a formula to use WITH ${rule}.` };
   }
-  if (isCondition(f)) return { definition: null, message: `${label} is a condition: change it on the map when conditions can be.` };
   if (wire.kind === 'table') return { definition: null, message: `The table is read inside ${label}'s formula: change it in the panel.`, open: f.id };
+  if (isCondition(f)) {
+    const name = nameOf(def, wire.value);
+    const at = new RegExp(`@${escape(wire.value)}(?![a-z0-9_])`);
+    if (at.test(partOf(f, 'when'))) return { definition: null, message: `${name} is compared in ${label}'s IF: change it in the panel.`, open: f.id };
+    const parts = (['then', 'else'] as const).filter((p) => at.test(partOf(f, p)));
+    const next = parts.length === 1 ? withoutName(partOf(f, parts[0]), wire.value) : null;
+    if (next === null) return { definition: null, message: `${name} is part of a bigger piece of ${label}: change it in the panel.`, open: f.id };
+    return { definition: withCondition(def, f.id, { [parts[0]]: next }), message: `${label}: took out ${name}.` };
+  }
   const text = wire.alt ? f.alternative?.formula ?? '' : f.formula ?? '';
   const next = withoutName(text, wire.value);
   const name = nameOf(def, wire.value);

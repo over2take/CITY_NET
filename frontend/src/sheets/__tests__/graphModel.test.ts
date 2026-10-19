@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
   referencesIn, graphOf, heightOf, exprHeight, columnsOf, layoutOf, positionsOf, savedPositions, withPositions, withCollapsed,
-  groupBoxOf, shownWires, foldedHeight, GRID, REACH, SIZE, type Graph, type GraphNode,
+  groupBoxOf, shownWires, foldedHeight, clearSpot, clearOf, takenBoxes, GRID, REACH, SIZE, type Graph, type GraphNode,
 } from '../graphModel';
 import type { Definition } from '../systemsApi';
 
@@ -375,5 +375,61 @@ describe('what is drawn with groups folded', () => {
     const inner = with_({ derived: [...(HEARTH.derived as unknown[]), { id: 'combo', formula: '@melee' }],
       graph: { groups: [{ id: 'attacks', label: 'A', members: ['melee', 'combo'] }], collapsed: ['attacks'] } });
     expect(shownWires(graphOf(inner)).some((w) => w.from === 'melee' && w.to === 'combo')).toBe(false);
+  });
+});
+
+describe('room for something new (5b6a)', () => {
+  const size = { width: SIZE.width, height: 120 };
+
+  it('clear means a whole cell between, on every side', () => {
+    const taken = [{ x: 240, y: 240, width: 264, height: 96 }];
+    const one = { width: 120, height: 48 };
+    // Right, left, below, above: a cell apart is clear, touching or nearer is not.
+    expect(clearOf(taken, { x: 240 + 264 + GRID, y: 240 }, one)).toBe(true);
+    expect(clearOf(taken, { x: 240 + 264, y: 240 }, one)).toBe(false);
+    expect(clearOf(taken, { x: 240 - 120 - GRID, y: 240 }, one)).toBe(true);
+    expect(clearOf(taken, { x: 240 - 120, y: 240 }, one)).toBe(false);
+    expect(clearOf(taken, { x: 240, y: 240 + 96 + GRID }, one)).toBe(true);
+    expect(clearOf(taken, { x: 240, y: 240 + 96 + GRID - 1 }, one)).toBe(false);
+    expect(clearOf(taken, { x: 240, y: 240 - 48 - GRID }, one)).toBe(true);
+    expect(clearOf(taken, { x: 240, y: 240 - 48 }, one)).toBe(false);
+  });
+
+  it('the spot asked for when it is clear', () => {
+    const g = graphOf(HEARTH);
+    expect(clearSpot(g, positionsOf(HEARTH, g), { x: 4800, y: 4800 }, size)).toEqual({ x: 4800, y: 4800 });
+  });
+
+  it('on a node, the nearest whole cells away that are clear of every node and group box; none nearer is', () => {
+    for (const def of [HEARTH, ...examples, ...randoms.slice(0, 20)]) {
+      const g = graphOf(def);
+      const places = positionsOf(def, g);
+      const taken = takenBoxes(g, places);
+      for (const n of g.nodes.slice(0, 4)) {
+        const at = places[n.id];
+        const spot = clearSpot(g, places, at, size);
+        expect(clearOf(taken, spot, size), `${def.name} ${n.id}`).toBe(true);
+        const far = Math.hypot(spot.x - at.x, spot.y - at.y) / GRID;
+        expect(far, `${def.name} ${n.id}`).toBeGreaterThan(0);
+        const reach = Math.ceil(far);
+        for (let dx = -reach; dx <= reach; dx += 1) for (let dy = -reach; dy <= reach; dy += 1) {
+          if (Math.hypot(dx, dy) < far) expect(clearOf(taken, { x: at.x + dx * GRID, y: at.y + dy * GRID }, size), `${def.name} ${n.id} ${dx},${dy}`).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('keeps out of a group\'s box, and leaves out the node being placed', () => {
+    const g = graphOf(HEARTH);
+    const places = positionsOf(HEARTH, g);
+    const box = groupBoxOf(g.groups.find((x) => x.id === 'attacks')!, g, places)!;
+    expect(takenBoxes(g, places)).toContainEqual({ x: box.x, y: box.y, width: box.width, height: box.height, ...{ id: box.id, collapsed: box.collapsed, members: box.members, wiresOut: box.wiresOut } });
+    expect(clearOf(takenBoxes(g, places), { x: box.x, y: box.y }, { width: 24, height: 24 })).toBe(false);
+    const can = places.can_cast;
+    expect(takenBoxes(g, places, 'can_cast')).toHaveLength(takenBoxes(g, places).length - 1);
+    expect(takenBoxes(g, places, 'can_cast').some((b) => b.x === can.x && b.y === can.y)).toBe(false);
+    // On its own, far from anything: where it is, itself not in the way.
+    const alone = { ...places, can_cast: { x: 9600, y: 9600 } };
+    expect(clearSpot(g, alone, alone.can_cast, node(g, 'can_cast'), 'can_cast')).toEqual(alone.can_cast);
   });
 });

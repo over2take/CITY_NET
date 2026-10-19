@@ -92,6 +92,47 @@ describe('a wire drawn', () => {
   });
 });
 
+describe('a condition\'s wires (5b6a)', () => {
+  const CONDS: Definition = { ...HEARTH, derived: [...(HEARTH.derived as object[]),
+    { id: 'edge', label: 'Edge', kind: 'condition', when: '@lvl > 3', then: '@str_mod + 1', else: '0' },
+    { id: 'both', label: 'Both', kind: 'condition', when: '1 > 0', then: '@wit_mod', else: '@wit_mod + 1' },
+  ] };
+  const cg = graphOf(CONDS);
+  const part = (def: Definition | null, id: string, p: string) => (formulaList(def!) as unknown as Record<string, string>[]).find((f) => f.id === id)![p];
+
+  it('drawn in, opens the panel to compare the name in IF, changing nothing', () => {
+    expect(withWire(CONDS, cg, { node: 'abilities', handle: 'out:str' }, 'can')).toEqual({
+      definition: null, open: 'can', message: 'A condition compares: add STRENGTH to CAN\'s IF in the panel, and say how it compares (@str > 2).',
+    });
+  });
+
+  it('refuses itself, a loop, a house rule, and says how a table is read', () => {
+    expect(withWire(CONDS, cg, { node: 'can', handle: 'out' }, 'can').message).toBe('A condition can\'t read itself.');
+    expect(withWire(CONDS, cg, { node: 'edge', handle: 'out' }, 'edge').definition).toBeNull();
+    const looped: Definition = { ...CONDS, derived: [...(CONDS.derived as object[]), { id: 'after', formula: '@can + 1' }] };
+    expect(withWire(looped, graphOf(looped), { node: 'after', handle: 'out' }, 'can').message).toBe('That would make a loop: AFTER already reads CAN.');
+    expect(withWire(CONDS, cg, { node: 'rule:magic', handle: 'out' }, 'can')).toEqual({ definition: null, message: 'CAN is a condition: only a formula has one to use WITH a house rule.' });
+    expect(withWire(CONDS, cg, { node: 'table:attribute_mod', handle: 'out' }, 'can')).toMatchObject({ definition: null, open: 'can' });
+  });
+
+  it('cut, takes the name out of THEN or ELSE as from a formula', () => {
+    const cut = withoutWire(CONDS, cg, wireOf(cg, (w) => w.to === 'edge' && w.value === 'str_mod'));
+    expect(part(cut.definition, 'edge', 'then')).toBe('1');
+    expect(part(cut.definition, 'edge', 'when')).toBe('@lvl > 3');
+    expect(cut.message).toBe('EDGE: took out STR MOD.');
+    expect(problems(cut.definition!)).toEqual(problems(CONDS));
+  });
+
+  it('never out of IF\'s comparison, nor where it is in THEN and ELSE both: the panel opens', () => {
+    expect(withoutWire(CONDS, cg, wireOf(cg, (w) => w.to === 'edge' && w.value === 'lvl'))).toEqual({
+      definition: null, open: 'edge', message: 'LEVEL is compared in EDGE\'s IF: change it in the panel.',
+    });
+    expect(withoutWire(CONDS, cg, wireOf(cg, (w) => w.to === 'both' && w.value === 'wit_mod'))).toEqual({
+      definition: null, open: 'both', message: 'WIT MOD is part of a bigger piece of BOTH: change it in the panel.',
+    });
+  });
+});
+
 describe('a note\'s line (5b5)', () => {
   const NOTED: Definition = { ...HEARTH, graph: { notes: [{ id: 'n1', on: 'melee', text: 'Half level.' }, { id: 'n2', text: 'Loose.' }] } };
   const ng = graphOf(NOTED);

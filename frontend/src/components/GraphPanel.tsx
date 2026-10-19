@@ -111,7 +111,7 @@ function FormulaForm({ definition, edit, id, preview, tried, insert }: Omit<Prop
   return (
     <div data-testid={`panel-formula-${f.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <FormulaName definition={definition} edit={edit} f={f} />
-      <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried} {...insert.bind(f.id)} />
+      <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried} bind={(box) => insert.bind(f.id, box)} />
       <OnTheWayIn definition={definition} edit={edit} id={f.id} />
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 8 }}>
         <span style={small}>ON THE SAMPLE</span>
@@ -179,7 +179,7 @@ export function GraphPanel({ definition, edit, node, preview, tried, onClose, on
       <div className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, fontSize: 12 }}>
         {node.kind !== 'note' && <p style={{ ...why, margin: 0, fontSize: 11 }}>The same boxes as FORMS: a change here is a change there.</p>}
         {body}
-        {formulaIds.length > 0 && node.kind !== 'condition' && (
+        {formulaIds.length > 0 && (
           <div style={{ border: '1px solid var(--dark-green)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
             <InsertChips definition={definition} active={insert.active} onInsert={insert.insert} />
           </div>

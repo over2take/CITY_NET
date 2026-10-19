@@ -201,6 +201,29 @@ describe('the panel', () => {
     expect(onGoTo).toHaveBeenCalledWith('house_rules');
   });
 
+  it('a condition\'s IF, THEN and ELSE written in the panel as in FORMS, with INSERT (5b6a)', async () => {
+    const WITH: Definition = { ...HEARTH, derived: [...(HEARTH.derived as object[]), { id: 'strong', label: 'Strong', kind: 'condition', when: '@str > 15', then: '1', else: '0' }] };
+    const act = async () => {
+      const when = screen.getByLabelText('Strong if');
+      await userEvent.clear(when);
+      await userEvent.type(when, '@lvl > 2');
+      await userEvent.type(screen.getByLabelText('Strong then'), ' + ');
+      await userEvent.click(screen.getByRole('button', { name: '@str_mod' }));
+    };
+    const forms = openForms(WITH);
+    await userEvent.click(screen.getByRole('tab', { name: 'FORMULAS' }));
+    await act();
+    const fromForms = forms.last();
+    forms.unmount();
+    const map = openMap(WITH);
+    const panel = await pick('strong');
+    expect(panel.getAttribute('aria-label')).toBe('CONDITION STRONG');
+    await act();
+    expect(map.last()).toEqual(fromForms);
+    expect((fromForms.derived as Record<string, string>[])[2]).toEqual({ id: 'strong', label: 'Strong', kind: 'condition', when: '@lvl > 2', then: '1 + @str_mod', else: '0' });
+    expect(screen.getByTestId('graph-node-strong').textContent).toContain('IF LEVEL > 2');
+  });
+
   it('a note is written in the panel, its typing one step to undo', async () => {
     const map = openMap();
     const panel = await pick('note:n1');

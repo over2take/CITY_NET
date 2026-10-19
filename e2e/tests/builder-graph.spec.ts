@@ -279,6 +279,58 @@ test('a node added with A where the GM is looking, and removed with Delete', asy
   await expect(added).toBeVisible();
 });
 
+test('a condition added with A, written IF, THEN and ELSE in its panel, a wire into it asking to compare, and the same in FORMS', async ({ page, request }, info) => {
+  const name = `Condition Map ${info.retry + 1}`;
+  const token = await gmToken(request);
+  await asGm(request, token, 'post', '/api/systems', { definition: HEARTH(name) });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'graph' });
+  await signInAsGm(page);
+  await openSystem(page, name);
+  await toGraph(page);
+  const map = page.getByTestId('graph-view');
+  const panel = page.getByTestId('graph-panel');
+
+  // A, CONDITION: comparing the first stat, its panel open.
+  await page.mouse.click(5, 5);
+  await page.keyboard.press('a');
+  await page.getByLabel('Add a node: type to search').fill('condition');
+  await page.keyboard.press('Enter');
+  const node = map.getByTestId('graph-node-new_condition');
+  await expect(node).toBeVisible();
+  await expect(panel).toHaveAttribute('aria-label', 'CONDITION NEW CONDITION');
+  await expect(panel.getByLabel('New condition if')).toHaveValue('@lvl > 0');
+
+  // Written: the node and its value follow (level 3 on the sample).
+  await panel.getByLabel('New condition if').fill('@lvl > 2');
+  await panel.getByLabel('New condition then').fill('@str_mod + 1');
+  await expect(node).toContainText('IF LEVEL > 2');
+  await expect(node.locator('[data-value]')).toHaveText('2');
+  await expect(map.getByTestId('rf__edge-abilities:out:str_mod>new_condition:b:@str_mod')).toHaveCount(1);
+
+  // A wire dragged into it: nothing changed, the panel says to compare it in IF.
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'FIT', exact: true }).click();
+  const from = (await map.getByTestId('graph-node-abilities').locator('[data-handleid="out:dex"]').boundingBox())!;
+  const onto = (await node.boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(onto.x + onto.width / 2, onto.y + onto.height / 2, { steps: 12 });
+  await page.mouse.up();
+  await expect(map.getByRole('status')).toHaveText("A condition compares: add DEXTERITY to NEW CONDITION's IF in the panel, and say how it compares (@dex > 2).");
+  await expect(panel).toHaveAttribute('aria-label', 'CONDITION NEW CONDITION');
+  await expect(panel.getByLabel('New condition if')).toHaveValue('@lvl > 2');
+
+  // FORMS: the same three boxes, the same value.
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'FORMS' }).click();
+  await page.getByRole('tab', { name: 'FORMULAS' }).click();
+  await expect(page.getByLabel('New condition if')).toHaveValue('@lvl > 2');
+  await expect(page.getByLabel('New condition then')).toHaveValue('@str_mod + 1');
+  await expect(page.getByLabel('New condition else')).toHaveValue('0');
+  await expect(page.getByTestId('value-new_condition')).toHaveText('2');
+});
+
 test('a note pinned to the node picked, written, dragged to another, unpinned, and read in FORMS', async ({ page, request }, info) => {
   const name = `Noted Map ${info.retry + 1}`;
   const token = await gmToken(request);

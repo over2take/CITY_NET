@@ -495,6 +495,42 @@ export const groupBoxOf = (group: GraphGroup, graph: Graph, positions: Positions
   return { id: group.id, x, y, width: right - x, height: bottom - y, collapsed: false, members: [...ids], wiresOut };
 };
 
+// ─── ROOM FOR SOMETHING NEW ────────────────────────────────────────────────
+
+type Box = { x: number; y: number; width: number; height: number };
+
+/** What a new node must keep a cell clear of: every node placed (but `skip`), and every group's box. */
+export const takenBoxes = (graph: Graph, positions: Positions, skip?: string): Box[] => [
+  ...graph.nodes.filter((n) => n.id !== skip && positions[n.id]).map((n) => ({ ...positions[n.id], width: n.width, height: n.height })),
+  ...graph.groups.map((g) => groupBoxOf({ ...g, members: g.members.filter((m) => m !== skip) }, graph, positions)).filter((b): b is GroupBox => !!b),
+];
+
+/** Whether a box at `at` of `size` keeps a cell clear of all of `taken`. */
+export const clearOf = (taken: Box[], at: Point, size: { width: number; height: number }): boolean => taken.every((b) =>
+  at.x + size.width + GRID <= b.x || b.x + b.width + GRID <= at.x || at.y + size.height + GRID <= b.y || b.y + b.height + GRID <= at.y);
+
+/** Steps a cell at a time out from a spot, nearest first (and down, then right, before up and left). */
+const STEPS = (() => {
+  const reach = 40;
+  const out: Point[] = [];
+  for (let dx = -reach; dx <= reach; dx += 1) for (let dy = -reach; dy <= reach; dy += 1) out.push({ x: dx, y: dy });
+  return out.sort((a, b) => (a.x * a.x + a.y * a.y) - (b.x * b.x + b.y * b.y) || b.y - a.y || b.x - a.x);
+})();
+
+/**
+ * The nearest place to `at`, whole cells away, where a box of `size` covers no node or group (5b6a:
+ * something added where the GM is looking lands beside what is there, not on it). `at` itself when
+ * nothing near is clear.
+ */
+export const clearSpot = (graph: Graph, positions: Positions, at: Point, size: { width: number; height: number }, skip?: string): Point => {
+  const taken = takenBoxes(graph, positions, skip);
+  for (const s of STEPS) {
+    const spot = { x: at.x + s.x * GRID, y: at.y + s.y * GRID };
+    if (clearOf(taken, spot, size)) return spot;
+  }
+  return at;
+};
+
 export interface ShownWire extends GraphWire { source: string; target: string; sourceHandle: string; targetHandle: string }
 
 /**

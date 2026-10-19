@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
-  statGroups, withNewGroup, tableList, withNewTable, formulaList, withNewFormula, withoutFormula,
+  statGroups, withNewGroup, tableList, withNewTable, formulaList, withNewFormula, withNewCondition, withoutFormula,
 } from '../sheets/statsRules';
 import { notesOn } from '../sheets/graphNotes';
 import { useFormulaInsert } from '../hooks/useFormulaInsert';
@@ -120,7 +120,7 @@ function FormulasTab({ definition, edit, api, onOpenNote }: Props) {
                     <tr data-testid={`formula-${f.id}`}>
                       <td style={td}><FormulaName definition={definition} edit={edit} f={f} /></td>
                       <td style={td}>
-                        <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried} {...insert.bind(f.id)} />
+                        <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried} bind={(box) => insert.bind(f.id, box)} />
                       </td>
                       <td data-testid={`value-${f.id}`} style={{ ...td, textAlign: 'right', color: 'var(--cyan)', fontSize: 13 }}>
                         {value !== undefined ? value : '·'}
@@ -136,7 +136,8 @@ function FormulasTab({ definition, edit, api, onOpenNote }: Props) {
           </table>
         )}
         <div style={{ padding: '8px 0' }}>
-          <button type="button" className="utility-btn" style={btn} onClick={() => edit(withNewFormula(definition))}>+ FORMULA</button>
+          <button type="button" className="utility-btn" style={btn} onClick={() => edit(withNewFormula(definition))}>+ FORMULA</button>{' '}
+          <button type="button" className="utility-btn" style={btn} title="IF something THEN one number ELSE another" onClick={() => edit(withNewCondition(definition))}>+ CONDITION</button>
         </div>
       </div>
       <aside aria-label="Insert" style={{ border: '1px solid var(--dark-green)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
