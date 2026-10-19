@@ -16,6 +16,8 @@ import type { BuilderPage } from '../sheets/builderSession';
 import { GraphPanel } from './GraphPanel';
 import { emptyHistory, recorded, undone, redone, type History } from '../sheets/editHistory';
 import { withWire, withoutWire, wireLabel } from '../sheets/graphEdits';
+import { addChoices, withAdded, withRemoved } from '../sheets/graphAdds';
+import { GraphAddPalette } from './GraphAddPalette';
 
 // STATS & RULES with GRAPH on (5a3a; approved mockup docs/mockups/builder-graph.html, 2026-10-17,
 // nodes as the builder design's node kit draws them, docs/mockups/builder-design, 2026-09-29): the
@@ -368,7 +370,7 @@ const OPENING_ZOOM = 0.8;
  * back in its column (5c's, brought forward: places are kept once anything moves, so this is the
  * way back to a tidy map), one click now that it can be undone. None of these on an example.
  */
-function Toolbar({ edits }: { edits?: { onTidy: () => void; onUndo: () => void; onRedo: () => void; canUndo: boolean; canRedo: boolean } }) {
+function Toolbar({ edits }: { edits?: { onTidy: () => void; onUndo: () => void; onRedo: () => void; onAdd: () => void; canUndo: boolean; canRedo: boolean } }) {
   const flow = useReactFlow();
   const { zoom } = useViewport();
   const b: React.CSSProperties = { fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, padding: '3px 9px' };
@@ -376,6 +378,7 @@ function Toolbar({ edits }: { edits?: { onTidy: () => void; onUndo: () => void; 
     <div role="toolbar" aria-label="Map" style={{ position: 'absolute', top: 10, right: 10, zIndex: 5, display: 'flex', gap: 4, alignItems: 'center', background: 'var(--black)', border: '1px solid var(--dark-green)', padding: 4 }}>
       {edits && (
         <>
+          <button type="button" className="utility-btn" style={b} title="Add a node (A)" onClick={edits.onAdd}>+ ADD</button>
           <button type="button" className="utility-btn" style={b} aria-label="Undo" title="Undo (Ctrl+Z)" disabled={!edits.canUndo} onClick={edits.onUndo}>↶</button>
           <button type="button" className="utility-btn" style={b} aria-label="Redo" title="Redo (Ctrl+Y)" disabled={!edits.canRedo} onClick={edits.onRedo}>↷</button>
           <button type="button" className="utility-btn" style={b}
@@ -434,6 +437,8 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
   // The node picked on the map, whose controls the panel shows (5a3b2). Gone when it is: a formula
   // removed, or turned into a modifier its stat's list now shows.
   const [selected, setSelected] = useState<string | null>(null);
+  /** + ADD's search open (5b4). */
+  const [adding, setAdding] = useState(false);
   /** A line at the top of the map saying what a wire drawn or cut did. */
   const [said, setSaid] = useState<{ text: string; at: number } | null>(null);
   useEffect(() => {
@@ -569,21 +574,6 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
     });
   }, [flow]);
 
-  // Keys while the map is open, wherever the focus is (after a drag it is on nothing in particular):
-  // Escape closes the panel; Ctrl+Z and Ctrl+Y (or Ctrl+Shift+Z) undo and redo, except in a box
-  // being typed in, which keeps its own.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setSelected(null); return; }
-      const typing = (e.target as HTMLElement | null)?.closest?.('input, textarea, select');
-      if (readOnly || typing || !(e.ctrlKey || e.metaKey)) return;
-      const key = e.key.toLowerCase();
-      if (key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); } else if (key === 'y' || (key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [readOnly, undo, redo]);
-
   /** A wire edit applied (undoably), what it did said, and the panel opened where it says to change something by hand. */
   const apply = useCallback((r: { definition: Definition | null; message: string; open?: string }) => {
     if (r.definition) mapEdit(r.definition);
@@ -604,6 +594,43 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
     setAsked(null);
     if (wire) apply(withoutWire(definition, graph, wire));
   }, [asked, graph, definition, apply]);
+
+  /** Something added from + ADD, where the GM is looking (a third of the way down the map's middle), its panel opened. */
+  const add = useCallback((key: string) => {
+    setAdding(false);
+    const area = document.querySelector('[data-testid="graph-map"]')?.getBoundingClientRect();
+    const spot = area ? flow.screenToFlowPosition({ x: area.left + area.width / 2 - SIZE.width / 2, y: area.top + area.height / 3 }) : { x: SIZE.left, y: SIZE.top };
+    const r = withAdded(definition, key, { x: snap(spot.x), y: snap(spot.y) });
+    if (!r) return;
+    mapEdit(r.definition);
+    setSelected(r.node);
+  }, [definition, flow, mapEdit]);
+  /** The picked node removed, as FORMS' × does. */
+  const remove = useCallback(() => {
+    if (!picked) return;
+    const r = withRemoved(definition, picked.id);
+    if (r.definition) { mapEdit(r.definition); setSelected(null); }
+    if (r.message) setSaid({ text: r.message, at: Date.now() });
+  }, [definition, picked, mapEdit]);
+
+  // Keys while the map is open, wherever the focus is (after a drag it is on nothing in particular),
+  // except in a box being typed in, which keeps its own: Escape closes what is open; Ctrl+Z and
+  // Ctrl+Y (or Ctrl+Shift+Z) undo and redo; A opens + ADD; Delete removes the picked node.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setSelected(null); setAdding(false); setAsked(null); return; }
+      const typing = (e.target as HTMLElement | null)?.closest?.('input, textarea, select');
+      if (readOnly || typing) return;
+      const key = e.key.toLowerCase();
+      if (e.ctrlKey || e.metaKey) {
+        if (key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); } else if (key === 'y' || (key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+        return;
+      }
+      if (key === 'a' && !e.altKey) { e.preventDefault(); setAdding(true); } else if ((e.key === 'Delete' || e.key === 'Backspace') && picked) { e.preventDefault(); remove(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [readOnly, undo, redo, remove, picked]);
 
   const onNodeDragStop = useCallback(() => {
     grabbed.current = null;
@@ -650,9 +677,10 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
           nodeColor={(n) => (n.type === 'rule' ? 'var(--cyan)' : n.type === 'groupBox' ? 'transparent' : 'var(--green)')}
           nodeStrokeColor={(n) => (n.type === 'groupBox' ? 'var(--dark-green)' : 'transparent')}
           maskColor="rgba(0, 0, 0, 0.55)" style={{ background: GROUND.base, border: '1px solid var(--dark-green)', bottom: 24 }} />
-        <Toolbar edits={readOnly ? undefined : { onTidy: tidy, onUndo: undo, onRedo: redo, canUndo: history.past.length > 0, canRedo: history.future.length > 0 }} />
+        <Toolbar edits={readOnly ? undefined : { onTidy: tidy, onUndo: undo, onRedo: redo, onAdd: () => setAdding(true), canUndo: history.past.length > 0, canRedo: history.future.length > 0 }} />
       </ReactFlow>
       <StatusLine graph={graph} definition={definition} />
+      {adding && !readOnly && <GraphAddPalette choices={addChoices(definition)} onAdd={add} onClose={() => setAdding(false)} />}
       {said && (
         <div role="status" key={said.at} style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 6, maxWidth: '60%', padding: '6px 12px',
           background: 'var(--black)', border: '1px solid var(--cyan)', color: 'var(--cyan)', fontFamily: 'monospace', fontSize: 12, boxShadow: '0 4px 16px rgba(0, 0, 0, 0.6)' }}>{said.text}</div>

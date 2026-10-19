@@ -71,6 +71,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   way in (`@level * 6`, `@x / 2`, `floor(@level / 2)`, `ceil(...)`), a diamond on that name's wire
   shows it (×6, ÷2, ÷2↓, ÷2↑), and the input's row says it too. A node's panel lists them under ON THE
   WAY IN, each number changeable: that rewrites the formula's text, as typing it in FORMS would.
+- **Add and remove on the map (5b4).** + ADD, or A on the map, searches what can be added: a formula, a
+  stat in a group you pick, a stats group or a table, placed where you are looking with its panel open
+  to name it. Conditions, notes, rolls and choices show greyed, saying when they come. Delete removes
+  the node picked. Each is the same edit as FORMS' own + and × buttons, and undoes.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

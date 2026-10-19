@@ -244,6 +244,41 @@ test('a modifier is a diamond on its wire, its number changed in the panel', asy
   await expect(page.getByLabel('Melee attack formula')).toHaveValue('@str_mod + floor(@lvl / 4)');
 });
 
+test('a node added with A where the GM is looking, and removed with Delete', async ({ page, request }, info) => {
+  const name = `Added Map ${info.retry + 1}`;
+  const token = await gmToken(request);
+  await asGm(request, token, 'post', '/api/systems', { definition: HEARTH(name) });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'graph' });
+  await signInAsGm(page);
+  await openSystem(page, name);
+  await toGraph(page);
+  const map = page.getByTestId('graph-view');
+
+  // A, a word, Enter: a table, in view, its panel open to name it.
+  await page.mouse.click(5, 5);
+  await page.keyboard.press('a');
+  const search = page.getByRole('dialog', { name: 'Add a node' });
+  await search.getByLabel('Add a node: type to search').fill('table');
+  await page.keyboard.press('Enter');
+  const added = map.getByTestId('graph-node-table:new_table');
+  await expect(added).toBeVisible();
+  const box = (await added.boundingBox())!;
+  const area = (await page.getByTestId('graph-map').boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(area.x);
+  expect(box.y).toBeGreaterThanOrEqual(area.y);
+  expect(box.x + box.width / 2).toBeLessThanOrEqual(area.x + area.width);
+  await expect(page.getByTestId('graph-panel')).toHaveAttribute('aria-label', 'TABLE NEW TABLE');
+
+  // Delete takes it away; Ctrl+Z brings it back.
+  await page.getByTestId('graph-panel').getByRole('button', { name: 'Close the panel' }).click();
+  await added.click();
+  await page.mouse.move(area.x + 5, area.y + area.height - 40);
+  await page.keyboard.press('Delete');
+  await expect(added).toHaveCount(0);
+  await page.keyboard.press('Control+z');
+  await expect(added).toBeVisible();
+});
+
 test('a busy system lays out to be read: dots on their rows, every wire drawn, nothing overlapping, a readable zoom', async ({ page, request }, info) => {
   const name = `Busy Map ${info.retry + 1}`;
   const token = await gmToken(request);

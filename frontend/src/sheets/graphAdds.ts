@@ -1,0 +1,62 @@
+// Adding and removing nodes on the graph view (5b4; approved mockup docs/mockups/builder-graph.html,
+// 2026-10-17: "+ ADD (A)" and Delete). Pure: each is the very edit FORMS' own + and × buttons make
+// (statsRules.ts), with the new node placed where the GM is looking. A stat is a row of its group's
+// list, so a new one goes in a group; a house rule is made and removed on HOUSE RULES, a note with
+// 5b5, a condition with 5b6.
+
+import type { Definition } from './systemsApi';
+import {
+  statGroups, allStats, formulaList, tableList,
+  withNewGroup, withNewStat, withNewFormula, withNewTable, withoutGroup, withoutFormula, withoutTable,
+} from './statsRules';
+import { graphOf, withPositions, type Point } from './graphModel';
+
+/** What can be added from the map now, and what is still to come. */
+export interface AddChoice { key: string; label: string; what: string; soon?: string; group?: string }
+
+export const addChoices = (def: Definition): AddChoice[] => [
+  { key: 'formula', label: 'FORMULA', what: 'A number worked out from others: STR MOD + FIGHT.' },
+  ...statGroups(def).map((g): AddChoice => ({ key: `stat:${g.id}`, label: `STAT IN ${(g.label || g.id).toUpperCase()}`, what: 'A number the player fills in, a row of that group.', group: g.id })),
+  { key: 'group', label: 'STATS GROUP', what: 'A new group of stats: a list on the map, a section of the sheet.' },
+  { key: 'table', label: 'TABLE', what: 'A number in, a number out, by bands read top to bottom.' },
+  { key: 'condition', label: 'CONDITION', what: 'IF something THEN one number ELSE another.', soon: 'With editing conditions on the map' },
+  { key: 'note', label: 'NOTE', what: 'Words for you, pinned to a node.', soon: 'With notes on the map' },
+  { key: 'roll', label: 'ROLL', what: 'A roll and its dice.', soon: 'Phase 6' },
+  { key: 'choice', label: 'CHOICE · FEATURE', what: 'Classes, backgrounds and what they give.', soon: 'Phase 7' },
+];
+
+/** The choices whose name or what-it-is holds every word typed. */
+export const matching = (choices: AddChoice[], query: string): AddChoice[] => {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  return choices.filter((c) => words.every((w) => `${c.label} ${c.what}`.toLowerCase().includes(w)));
+};
+
+/** Something added at `at`: the system after, and the node to open (a stat's is its group's list). */
+export const withAdded = (def: Definition, key: string, at: Point): { definition: Definition; node: string } | null => {
+  const ids = (d: Definition) => new Set([...allStats(d).map((s) => s.id), ...formulaList(d).map((f) => f.id), ...tableList(d).map((t) => `table:${t.id}`), ...statGroups(d).map((g) => `group:${g.id}`)]);
+  const before = ids(def);
+  let next: Definition;
+  let place = true;
+  if (key === 'formula') next = withNewFormula(def);
+  else if (key === 'group') next = withNewGroup(def);
+  else if (key === 'table') next = withNewTable(def);
+  else if (key.startsWith('stat:') && statGroups(def).some((g) => g.id === key.slice(5))) { next = withNewStat(def, key.slice(5)); place = false; }
+  else return null;
+  const added = [...ids(next)].find((id) => !before.has(id));
+  if (!added) return null;
+  // A new group's list is its own node; a new stat is a row of its group's, which stays where it is.
+  const node = key.startsWith('stat:') ? key.slice(5) : added.replace(/^group:/, '');
+  return { definition: place ? withPositions(next, graphOf(next), { [node]: at }) : next, node };
+};
+
+/** A node removed, as FORMS' × does: a formula, a table, or a stats group with its stats. House rules and notes say where they go. */
+export const withRemoved = (def: Definition, node: string): { definition: Definition | null; message: string } => {
+  const graph = graphOf(def);
+  const n = graph.nodes.find((x) => x.id === node);
+  if (!n) return { definition: null, message: '' };
+  if (n.kind === 'formula' || n.kind === 'condition') return { definition: withoutFormula(def, n.id), message: `Removed ${n.label}. Anything that read it shows the problem.` };
+  if (n.kind === 'table') return { definition: withoutTable(def, n.id.slice('table:'.length)), message: `Removed the table ${n.label}. Anything that read it shows the problem.` };
+  if (n.kind === 'list') return { definition: withoutGroup(def, n.id), message: `Removed ${n.label} and its ${n.rows?.length ?? 0} stats. Undo brings them back.` };
+  if (n.kind === 'rule') return { definition: null, message: 'House rules are removed on HOUSE RULES, where removing one says what stays.' };
+  return { definition: null, message: 'Notes are removed on the map soon.' };
+};
