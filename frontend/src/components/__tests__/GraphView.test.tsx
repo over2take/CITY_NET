@@ -4,6 +4,7 @@ import { render, screen, cleanup, within, waitFor, fireEvent } from '@testing-li
 import userEvent from '@testing-library/user-event';
 
 import { GraphView } from '../GraphView';
+import { GraphProblems } from '../GraphProblems';
 import type { Definition } from '../../sheets/systemsApi';
 import { graphOf, layoutOf, positionsOf } from '../../sheets/graphModel';
 import { lockControls } from '../../sheets/examples';
@@ -303,5 +304,62 @@ describe('an example, looked at', () => {
     const bar = screen.getByRole('toolbar', { name: 'Map' });
     for (const name of ['Zoom in', 'Zoom out', 'FIT']) expect((within(bar).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false);
     expect(edits).toEqual([]);
+  });
+});
+
+describe('PROBLEMS on the map (5b6b)', () => {
+  const serverSays = [
+    { where: 'derived odd, formula', message: 'No function or table called "nothing"' },
+    { where: 'words currency', message: 'Too long' },
+  ];
+  const withProblems = (onGoTo = vi.fn()) => {
+    render(<div style={{ width: 1200, height: 800 }}><GraphView definition={HEARTH} edit={() => {}} api={api} problems={serverSays} onGoTo={onGoTo} /></div>);
+    return onGoTo;
+  };
+  const box = () => screen.getByTestId('graph-problems');
+
+  it('counts errors and warnings, closed until opened, then lists them in players\' names', async () => {
+    withProblems();
+    const head = within(box()).getByRole('button', { name: /PROBLEMS/ });
+    expect(head.textContent).toContain('2 ✕');
+    expect(head.textContent).toContain('0 !');
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    expect(within(box()).queryByRole('list')).toBeNull();
+    await userEvent.click(head);
+    const items = within(within(box()).getByRole('list', { name: 'Problems' })).getAllByRole('button').map((b) => b.textContent);
+    expect(items).toEqual(['✕ODD: No function or table called "nothing"', '✕words currency: Too longNOT ON THE MAP · GO TO PROBLEMS']);
+  });
+
+  it('a problem clicked opens its node; one on another page goes to PROBLEMS', async () => {
+    const onGoTo = withProblems();
+    await userEvent.click(within(box()).getByRole('button', { name: /PROBLEMS/ }));
+    await userEvent.click(within(box()).getByRole('button', { name: /^✕ODD/ }));
+    expect(screen.getByTestId('graph-panel').getAttribute('aria-label')).toBe('FORMULA ODD');
+    await userEvent.click(within(box()).getByRole('button', { name: /words currency/ }));
+    expect(onGoTo).toHaveBeenCalledWith('problems');
+  });
+
+  it('draws a node with an error red, and says so when there are none', async () => {
+    withProblems();
+    expect((node('odd').closest('.react-flow__node') as HTMLElement).style.outline).toBe('2px solid var(--danger)');
+    expect((node('save').closest('.react-flow__node') as HTMLElement).style.outline).toBe('');
+    cleanup();
+    open();
+    await userEvent.click(within(box()).getByRole('button', { name: /PROBLEMS/ }));
+    expect(box().textContent).toContain('No problems. It can be published.');
+  });
+});
+
+describe('the PROBLEMS box itself', () => {
+  it('counts errors and warnings apart, each marked its own way', async () => {
+    render(<GraphProblems onPick={() => {}} problems={[
+      { kind: 'error', text: 'ODD: Wrong', node: 'odd' },
+      { kind: 'warning', text: "SPARE isn't on the character sheet, and nothing reads it", node: 'spare' },
+      { kind: 'warning', text: "MORE isn't on the character sheet, and nothing reads it", node: 'more' },
+    ]} />);
+    const head = screen.getByRole('button', { name: /PROBLEMS/ });
+    expect(head.textContent).toBe('PROBLEMS1 ✕2 !▸');
+    await userEvent.click(head);
+    expect(screen.getAllByRole('listitem').map((li) => li.textContent![0])).toEqual(['✕', '!', '!']);
   });
 });

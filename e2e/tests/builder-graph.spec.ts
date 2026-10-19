@@ -331,6 +331,45 @@ test('a condition added with A, written IF, THEN and ELSE in its panel, a wire i
   await expect(page.getByTestId('value-new_condition')).toHaveText('2');
 });
 
+test('PROBLEMS on the map: a broken formula drawn red, picked from the list, fixed in its panel, and gone once saved', async ({ page, request }, info) => {
+  const name = `Problem Map ${info.retry + 1}`;
+  const token = await gmToken(request);
+  const broken = HEARTH(name);
+  broken.derived[3] = { id: 'save', label: 'Physical save', formula: '16 - (@lvl + nothing(@dex))' };
+  await asGm(request, token, 'post', '/api/systems', { definition: broken });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'graph' });
+  await signInAsGm(page);
+  await openSystem(page, name);
+  await toGraph(page);
+  const map = page.getByTestId('graph-view');
+  const box = map.getByTestId('graph-problems');
+
+  // Counted, the node drawn red, and listed in players' names when opened.
+  const head = box.getByRole('button', { name: /PROBLEMS/ });
+  await expect(head).toContainText('1 ✕');
+  expect(await map.locator('.react-flow__node[data-id="save"]').evaluate((el) => (el as HTMLElement).style.outline)).toBe('2px solid var(--danger)');
+  await head.click();
+  const item = box.getByRole('button', { name: /PHYSICAL SAVE/ });
+  await expect(item).toContainText('nothing');
+
+  // Picked: its panel opens and the map moves to it.
+  // Zoomed out and slid away first, so picking it has to bring it back.
+  await page.getByRole('button', { name: 'Zoom in' }).click();
+  await page.getByRole('button', { name: 'Zoom in' }).click();
+  await page.getByRole('button', { name: 'Zoom in' }).click();
+  await item.click();
+  const panel = page.getByTestId('graph-panel');
+  await expect(panel).toHaveAttribute('aria-label', 'FORMULA PHYSICAL SAVE');
+  await expect(map.getByTestId('graph-node-save')).toBeInViewport();
+
+  // Fixed there: once saved, no problems, and the red is gone.
+  await panel.getByLabel('Physical save formula').fill('16 - (@lvl + @dex_mod)');
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  await expect(head).toContainText('0 ✕');
+  await expect(box).toContainText('No problems. It can be published.');
+  expect(await map.locator('.react-flow__node[data-id="save"]').evaluate((el) => (el as HTMLElement).style.outline)).not.toContain('danger');
+});
+
 test('a note pinned to the node picked, written, dragged to another, unpinned, and read in FORMS', async ({ page, request }, info) => {
   const name = `Noted Map ${info.retry + 1}`;
   const token = await gmToken(request);

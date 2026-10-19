@@ -218,6 +218,18 @@ describe('the builder', () => {
       expect(screen.queryByTestId('graph-panel')).toBeNull();
     });
 
+    it('the map lists the draft\'s problems, the same as PROBLEMS (5b6b)', async () => {
+      rulesView = 'graph';
+      served = { ...served, draft: { format: 1, name: 'Hearth', derived: [{ id: 'odd', label: 'Odd', formula: '@nowhere' }] },
+        problems: [{ where: 'derived odd, formula', message: 'No stat or formula called @nowhere' }] };
+      open({ startPage: 'rules' });
+      await ready();
+      const box = await screen.findByTestId('graph-problems', {}, { timeout: 5000 });
+      await userEvent.click(within(box).getByRole('button', { name: /PROBLEMS/ }));
+      expect(within(box).getByRole('list', { name: 'Problems' }).textContent).toContain('ODD: No stat or formula called @nowhere');
+      expect(within(sidebar()).getByText('PROBLEMS').closest('button')!.textContent).toContain('1');
+    });
+
     it('stays on FORMS when the server can\'t say', async () => {
       open({ startPage: 'rules', fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => (String(input) === '/api/systems/view'
         ? { ok: false, status: 500, json: async () => ({ error: 'Down' }) } : fakeServer(input, init))) as never });
