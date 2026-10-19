@@ -279,6 +279,73 @@ test('a node added with A where the GM is looking, and removed with Delete', asy
   await expect(added).toBeVisible();
 });
 
+test('a note pinned to the node picked, written, dragged to another, unpinned, and read in FORMS', async ({ page, request }, info) => {
+  const name = `Noted Map ${info.retry + 1}`;
+  const token = await gmToken(request);
+  await asGm(request, token, 'post', '/api/systems', { definition: HEARTH(name) });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'graph' });
+  await signInAsGm(page);
+  await openSystem(page, name);
+  await toGraph(page);
+  const map = page.getByTestId('graph-view');
+  const panel = page.getByTestId('graph-panel');
+
+  // MELEE picked, A, NOTE: a note beside it on a dashed line, its panel open to write it.
+  await map.getByTestId('graph-node-melee').click();
+  await page.keyboard.press('a');
+  await page.getByLabel('Add a node: type to search').fill('note');
+  await page.keyboard.press('Enter');
+  const note = map.getByTestId('graph-node-note:n1');
+  await expect(note).toBeVisible();
+  await expect(panel).toHaveAttribute('aria-label', 'NOTE ON MELEE ATTACK');
+  await expect(map.getByTestId('rf__edge-note:n1>melee')).toHaveCount(1);
+  await panel.getByLabel('Note').fill('Half level, rounded down.');
+  await expect(note).toContainText('Half level, rounded down.');
+
+  // Its square dot dragged onto the save: pinned there instead.
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'FIT', exact: true }).click();
+  const dot = (await note.locator('.react-flow__handle').boundingBox())!;
+  const save = (await map.getByTestId('graph-node-save').boundingBox())!;
+  await page.mouse.move(dot.x + dot.width / 2, dot.y + dot.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(save.x + save.width / 2, save.y + save.height / 2, { steps: 12 });
+  await page.mouse.up();
+  await expect(map.getByRole('status')).toHaveText('Note pinned to PHYSICAL SAVE.');
+  await expect(map.getByTestId('rf__edge-note:n1>save')).toHaveCount(1);
+  await expect(map.getByTestId('rf__edge-note:n1>melee')).toHaveCount(0);
+
+  // Its line cut, asked first: unpinned, its words kept.
+  const line = await map.getByTestId('rf__edge-note:n1>save').locator('.react-flow__edge-path').evaluate((p) => {
+    const path = p as SVGPathElement;
+    // Just past the note's own dot, clear of the node it is pinned to.
+    const at = path.getPointAtLength(16);
+    const m = path.getScreenCTM()!;
+    return { x: at.x * m.a + at.y * m.c + m.e, y: at.x * m.b + at.y * m.d + m.f };
+  });
+  await page.mouse.click(line.x, line.y);
+  const ask = page.getByRole('dialog', { name: 'Cut this wire?' });
+  await expect(ask).toContainText('A note pinned to PHYSICAL SAVE: cutting unpins it');
+  await ask.getByRole('button', { name: 'CUT' }).click();
+  await expect(map.getByTestId('rf__edge-note:n1>save')).toHaveCount(0);
+  await expect(map.locator('.react-flow__edge')).toHaveCount(WIRES);
+  await expect(note).toContainText('Half level, rounded down.');
+
+  // Pinned again from its panel, then read in FORMS under MELEE, with EDIT IN GRAPH back to it.
+  await note.click();
+  await expect(panel).toHaveAttribute('aria-label', 'NOTE NOT PINNED');
+  await panel.getByLabel('Pinned to').selectOption({ label: 'MELEE ATTACK' });
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'FORMS' }).click();
+  await page.getByRole('tab', { name: 'FORMULAS' }).click();
+  const read = page.getByTestId('forms-note-n1');
+  await expect(read).toContainText('Half level, rounded down.');
+  await read.getByRole('button', { name: 'EDIT IN GRAPH' }).click();
+  await expect(panel).toHaveAttribute('aria-label', 'NOTE ON MELEE ATTACK');
+  await expect(panel.getByLabel('Note')).toHaveValue('Half level, rounded down.');
+});
+
 test('a busy system lays out to be read: dots on their rows, every wire drawn, nothing overlapping, a readable zoom', async ({ page, request }, info) => {
   const name = `Busy Map ${info.retry + 1}`;
   const token = await gmToken(request);

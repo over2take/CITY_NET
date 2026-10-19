@@ -92,6 +92,39 @@ describe('a wire drawn', () => {
   });
 });
 
+describe('a note\'s line (5b5)', () => {
+  const NOTED: Definition = { ...HEARTH, graph: { notes: [{ id: 'n1', on: 'melee', text: 'Half level.' }, { id: 'n2', text: 'Loose.' }] } };
+  const ng = graphOf(NOTED);
+  const notes = (def: Definition | null) => (def!.graph as { notes: { id: string; on?: string }[] }).notes;
+
+  it('a note\'s square dot gives the note', () => {
+    expect(givenBy(ng, { node: 'note:n2', handle: 'out' })).toEqual({ kind: 'note', id: 'n2' });
+  });
+
+  it('dropped on a node pins it there: a stats list, a formula, a condition, a table, a house rule', () => {
+    for (const to of ['abilities', 'save', 'can', 'table:attribute_mod', 'rule:magic']) {
+      const r = withWire(NOTED, ng, { node: 'note:n2', handle: 'out' }, to);
+      expect(notes(r.definition)[1], to).toEqual({ id: 'n2', on: to, text: 'Loose.' });
+      expect(graphOf(r.definition!).wires.some((w) => w.kind === 'note' && w.from === 'note:n2' && w.to === to), to).toBe(true);
+      expect(problems(r.definition!), to).toEqual(problems(NOTED));
+    }
+    expect(withWire(NOTED, ng, { node: 'note:n1', handle: 'out' }, 'save').message).toBe('Note pinned to SAVE.');
+  });
+
+  it('dropped on a note, or nowhere, pins it to nothing new', () => {
+    expect(withWire(NOTED, ng, { node: 'note:n2', handle: 'out' }, 'note:n1').definition).toBeNull();
+    expect(withWire(NOTED, ng, { node: 'note:n2', handle: 'out' }, 'nowhere').definition).toBeNull();
+  });
+
+  it('cut, unpins it and keeps its words', () => {
+    const line = wireOf(ng, (w) => w.kind === 'note');
+    const r = withoutWire(NOTED, ng, line);
+    expect(notes(r.definition)[0]).toEqual({ id: 'n1', text: 'Half level.' });
+    expect(r.message).toBe('Note unpinned. Drag its square dot onto a node to pin it again.');
+    expect(wireLabel(NOTED, line)).toBe('A note pinned to MELEE: cutting unpins it');
+  });
+});
+
 describe('a wire cut', () => {
   it('takes the name out where a whole formula is left', () => {
     expect(withoutName('@a + @b', 'b')).toBe('@a');
@@ -154,12 +187,20 @@ describe('over every random system and example', () => {
   it('cutting any wire takes out that wire alone, changes one formula, and adds no problem; or opens the panel', () => {
     let cut = 0;
     let opened = 0;
+    let unpinned = 0;
     for (const def of systems) {
       const graph = graphOf(def);
       const before = new Set(problems(def));
       for (const w of graph.wires) {
         const r = withoutWire(def, graph, w);
-        if (!r.definition) { if (w.kind !== 'note') { expect(r.open, `${w.id}`).toBeTruthy(); opened += 1; } continue; }
+        if (w.kind === 'note') {
+          // A note's line unpins it, and changes nothing else.
+          expect(graphOf(r.definition!).wires.some((x) => x.id === w.id), w.id).toBe(false);
+          expect({ ...r.definition, graph: def.graph }).toEqual(def);
+          unpinned += 1;
+          continue;
+        }
+        if (!r.definition) { expect(r.open, `${w.id}`).toBeTruthy(); opened += 1; continue; }
         cut += 1;
         const after = graphOf(r.definition);
         expect(after.wires.some((x) => x.id === w.id), w.id).toBe(false);
@@ -171,6 +212,7 @@ describe('over every random system and example', () => {
     }
     expect(cut).toBeGreaterThan(50);
     expect(opened).toBeGreaterThan(5);
+    expect(unpinned).toBeGreaterThan(0);
   });
 
   it('drawing a stat into a formula, then cutting it, gives the system back', () => {

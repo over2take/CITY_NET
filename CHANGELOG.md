@@ -55,7 +55,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Click a node to edit it (5a3b2).** A node clicked on the map opens a panel beside it with the very
   boxes FORMS has: a stats group with the modifiers its table gives, a formula's name, text, INSERT,
   value and alternative, a table's rows and TRY IT. A change there is a change in FORMS, and the map
-  follows at once: a new wire, the new value. A house rule goes to HOUSE RULES; a note is read.
+  follows at once: a new wire, the new value. A house rule goes to HOUSE RULES.
   ×, Escape or a click on the map closes it, and the map slides a node the panel would cover into view.
 - **UNDO and REDO on the map (5b1).** ↶ and ↷ in the map's toolbar, or Ctrl+Z and Ctrl+Y (Ctrl+Shift+Z
   too), take back what was done on the map and in a node's panel: a move, a fold, AUTO-LAYOUT (now one
@@ -73,8 +73,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   WAY IN, each number changeable: that rewrites the formula's text, as typing it in FORMS would.
 - **Add and remove on the map (5b4).** + ADD, or A on the map, searches what can be added: a formula, a
   stat in a group you pick, a stats group or a table, placed where you are looking with its panel open
-  to name it. Conditions, notes, rolls and choices show greyed, saying when they come. Delete removes
+  to name it. Conditions, rolls and choices show greyed, saying when they come. Delete removes
   the node picked. Each is the same edit as FORMS' own + and × buttons, and undoes.
+- **Notes on the map (5b5).** + ADD → NOTE makes a note for you, pinned with a dashed line to the
+  node you have picked and put in clear space beside it. Its panel is where you write it (up to 1000
+  characters), choose what it's pinned to (or nothing) and remove it; Delete removes it too. Drag
+  its square dot onto another node to pin it there, or cut its line to unpin it. Players never see
+  notes. FORMS shows each one, read only, under the stats group, formula or table it's pinned to,
+  with EDIT IN GRAPH to open the map on it. Notes travel in a shared system file.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

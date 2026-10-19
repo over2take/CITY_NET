@@ -7,17 +7,21 @@
 // `@name`); from a house rule, a WITH-rule formula to change in the panel. Cut: the name taken out
 // where that leaves a whole formula (`a + @x`, `@x + a`, one of the names in a BEST); anywhere else
 // (`floor(@level / 2)`, read twice) the panel opens on the formula to change by hand.
+//
+// A note's dashed line is the one wire that is stored (5b5): its square dot dropped on a node pins
+// it there, and cutting the line unpins it.
 
 import type { Definition } from './systemsApi';
 import { allStats, formulaList, withFormula, withAlternative, type Formula } from './statsRules';
 import { houseRuleList } from './houseRules';
 import { referencesIn, type Graph, type GraphWire } from './graphModel';
+import { withNotePinned } from './graphNotes';
 
 /** What a wire drawn or cut does: the system after it (null when nothing changes), what to say, and a node to open the panel on. */
 export interface WireEdit { definition: Definition | null; message: string; open?: string }
 
 type Dot = { node: string; handle: string };
-type Given = { kind: 'value' | 'table' | 'rule'; id: string } | null;
+type Given = { kind: 'value' | 'table' | 'rule' | 'note'; id: string } | null;
 
 const upper = (s: string) => s.toUpperCase();
 /** What players call a stat or formula. */
@@ -28,7 +32,7 @@ const ruleName = (def: Definition, id: string) => upper(houseRuleList(def).find(
 const isCondition = (f: Formula) => (f as { kind?: string }).kind === 'condition';
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** What flows from a dot on the map: a stat's or formula's value, a table, a house rule, or nothing to wire. */
+/** What flows from a dot on the map: a stat's or formula's value, a table, a house rule, a note to pin, or nothing to wire. */
 export const givenBy = (graph: Graph, dot: Dot): Given => {
   const n = graph.nodes.find((x) => x.id === dot.node);
   if (!n) return null;
@@ -36,6 +40,7 @@ export const givenBy = (graph: Graph, dot: Dot): Given => {
   if ((n.kind === 'formula' || n.kind === 'condition') && dot.handle === 'out') return { kind: 'value', id: n.id };
   if (n.kind === 'table' && dot.handle === 'out') return { kind: 'table', id: n.id.slice('table:'.length) };
   if (n.kind === 'rule' && dot.handle === 'out') return { kind: 'rule', id: n.id.slice('rule:'.length) };
+  if (n.kind === 'note' && dot.handle === 'out') return { kind: 'note', id: n.id.slice('note:'.length) };
   return null;
 };
 
@@ -61,6 +66,10 @@ export const withWire = (def: Definition, graph: Graph, from: Dot, to: string): 
   const target = graph.nodes.find((n) => n.id === to);
   const given = givenBy(graph, from);
   if (!given) return { definition: null, message: 'Wires start from a stat, a formula, a table or a house rule.' };
+  if (given.kind === 'note') {
+    if (!target || target.kind === 'note') return { definition: null, message: 'Drop the note\'s square dot on a stats group, a formula, a table or a house rule to pin it there.' };
+    return { definition: withNotePinned(def, given.id, target.id), message: `Note pinned to ${upper(target.label)}.` };
+  }
   if (!target) return { definition: null, message: 'Drop the wire on a formula.' };
   if (target.kind === 'list') return { definition: null, message: 'Players fill in stats, so nothing is wired into them. Drop the wire on a formula.' };
   if (target.kind !== 'formula' && target.kind !== 'condition') return { definition: null, message: 'Wires go into formulas.' };
@@ -115,8 +124,8 @@ export const withoutName = (text: string, name: string): string | null => {
 
 /** A wire cut. */
 export const withoutWire = (def: Definition, graph: Graph, wire: GraphWire): WireEdit => {
+  if (wire.kind === 'note') return { definition: withNotePinned(def, wire.value, null), message: 'Note unpinned. Drag its square dot onto a node to pin it again.' };
   const f = formulaList(def).find((x) => x.id === wire.to);
-  if (wire.kind === 'note') return { definition: null, message: 'Notes are moved and unpinned on the map soon.' };
   if (!f) return { definition: null, message: 'These modifiers are each a formula reading the table: change them in the panel.', open: wire.to };
   const label = upper(f.label || f.id);
   if (wire.kind === 'gate') {
@@ -141,6 +150,6 @@ export const wireLabel = (def: Definition, wire: GraphWire): string => {
   const into = upper(f?.label || f?.id || wire.to.replace(/^[a-z]+:/, ''));
   if (wire.kind === 'gate') return `${ruleName(def, wire.value)} swapping ${into}'s formula`;
   if (wire.kind === 'table') return `The table ${wire.value} into ${into}`;
-  if (wire.kind === 'note') return 'A note pinned here';
+  if (wire.kind === 'note') return `A note pinned to ${into}: cutting unpins it`;
   return `${nameOf(def, wire.value)} into ${into}${wire.alt ? ' (WITH-rule formula)' : ''}`;
 };

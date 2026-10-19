@@ -5,6 +5,7 @@ import { statGroups, allStats, tableList, formulaList, withoutFormula, withFormu
 import { modifiersIn, withModifierNumber } from '../sheets/modifiers';
 import { houseRuleList } from '../sheets/houseRules';
 import type { GraphNode } from '../sheets/graphModel';
+import { notesOf, pinChoices, withNoteText, withNotePinned, withoutNote, NOTE_MAX } from '../sheets/graphNotes';
 import type { Tried } from '../hooks/usePreviewValues';
 import { useFormulaInsert } from '../hooks/useFormulaInsert';
 import { GroupSection, TableSection, FormulaName, FormulaBody, InsertChips } from './statsRulesFields';
@@ -15,7 +16,7 @@ import { small, why, btn, field } from './statsRulesStyles';
 // FORMS lays out (statsRulesFields), through the same `edit`: a stats list as its group's section,
 // with the modifiers its table gives; a formula's name, text, INSERT, value and alternative; a
 // table's rows and TRY IT. A house rule is made on HOUSE RULES, so it says what it is and goes
-// there; a note is read here, and written on the map with 5b.
+// there; a note (5b5) is written here, pinned to a node or to nothing, and removed.
 
 interface Props {
   definition: Definition;
@@ -72,6 +73,36 @@ function NumberBox({ label, value, onNumber }: { label: string; value: number; o
   );
 }
 
+/** A note: its words, what it is pinned to, and REMOVE. */
+function NoteForm({ definition, edit, node }: { definition: Definition; edit: (next: Definition) => void; node: GraphNode }) {
+  const id = node.id.slice('note:'.length);
+  const note = notesOf(definition).find((n) => n.id === id);
+  if (!note) return null;
+  const choices = pinChoices(definition);
+  // Pinned to a stat (a file written by hand): the list that shows it.
+  const on = choices.some((c) => c.id === note.on) ? note.on! : node.on ?? '';
+  return (
+    <div data-testid={`panel-note-${id}`} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span style={small}>NOTE · {note.text.length} / {NOTE_MAX}</span>
+        <textarea aria-label="Note" value={note.text} maxLength={NOTE_MAX} rows={6}
+          style={{ ...field, width: '100%', boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.5, fontFamily: 'monospace' }}
+          onChange={(e) => edit(withNoteText(definition, id, e.target.value))} />
+      </label>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span style={small}>PINNED TO</span>
+        <select aria-label="Pinned to" value={on} style={{ ...field, width: '100%' }}
+          onChange={(e) => edit(withNotePinned(definition, id, e.target.value || null))}>
+          <option value="">NOTHING</option>
+          {choices.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+      </label>
+      <p style={{ ...why, margin: 0 }}>Only you see notes. FORMS shows this one under what it is pinned to. Drag its square dot onto a node to pin it there; cut its line to unpin it.</p>
+      <div><button type="button" className="utility-btn" style={btn} onClick={() => edit(withoutNote(definition, id))}>REMOVE NOTE</button></div>
+    </div>
+  );
+}
+
 /** A formula as FORMULAS shows it, laid out down the panel: name, text, = value, alternative. */
 function FormulaForm({ definition, edit, id, preview, tried, insert }: Omit<Props, 'node' | 'onClose' | 'onGoTo'> & { id: string; insert: ReturnType<typeof useFormulaInsert> }) {
   const f = formulaList(definition).find((x) => x.id === id);
@@ -94,6 +125,9 @@ export function GraphPanel({ definition, edit, node, preview, tried, onClose, on
   const insert = useFormulaInsert(definition, edit);
   const formulaIds = node.kind === 'formula' || node.kind === 'condition' ? [node.id]
     : node.kind === 'list' ? (node.rows ?? []).map((r) => r.mod).filter((m): m is string => !!m) : [];
+  // A note is named by what it is pinned to.
+  const pinned = node.kind === 'note' ? pinChoices(definition).find((c) => c.id === node.on) : undefined;
+  const title = node.kind === 'note' ? (pinned ? `ON ${pinned.label}` : 'NOT PINNED') : node.label;
   let body: React.ReactNode;
   if (node.kind === 'list') {
     const group = statGroups(definition).find((g) => g.id === node.id);
@@ -129,26 +163,21 @@ export function GraphPanel({ definition, edit, node, preview, tried, onClose, on
       </>
     );
   } else {
-    body = (
-      <>
-        <p style={{ fontSize: 13, lineHeight: 1.5, margin: 0, whiteSpace: 'pre-wrap' }}>{node.text}</p>
-        <p style={{ ...why, margin: 0 }}>Notes are written and moved on the map itself, coming next.</p>
-      </>
-    );
+    body = <NoteForm definition={definition} edit={edit} node={node} />;
   }
 
   return (
-    <aside data-testid="graph-panel" aria-label={`${KIND[node.kind]} ${node.label}`}
+    <aside data-testid="graph-panel" aria-label={`${KIND[node.kind]} ${title}`}
       onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}
       // textAlign: the page around the builder centres text; the panel reads from the left, as FORMS does.
       style={{ width: 460, flexShrink: 0, boxSizing: 'border-box', borderLeft: '1px solid var(--green)', background: 'var(--black)', display: 'flex', flexDirection: 'column', minHeight: 0, fontFamily: 'monospace', textAlign: 'left' }}>
       <div style={{ height: 40, flexShrink: 0, padding: '0 8px 0 14px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--dark-green)' }}>
         <span style={{ fontSize: 10, letterSpacing: 1, color: 'var(--cyan)' }}>{KIND[node.kind]}</span>
-        <b style={{ flex: 1, minWidth: 0, color: 'var(--green)', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.label}</b>
+        <b style={{ flex: 1, minWidth: 0, color: 'var(--green)', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</b>
         <button type="button" className="utility-btn" style={btn} aria-label="Close the panel" data-browse onClick={onClose}>×</button>
       </div>
       <div className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, fontSize: 12 }}>
-        <p style={{ ...why, margin: 0, fontSize: 11 }}>The same boxes as FORMS: a change here is a change there.</p>
+        {node.kind !== 'note' && <p style={{ ...why, margin: 0, fontSize: 11 }}>The same boxes as FORMS: a change here is a change there.</p>}
         {body}
         {formulaIds.length > 0 && node.kind !== 'condition' && (
           <div style={{ border: '1px solid var(--dark-green)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
