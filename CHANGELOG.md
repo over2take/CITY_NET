@@ -95,6 +95,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Click one to open its node and move the map to it; one on another page (WORDS, the sheet) goes to
   PROBLEMS. A node with a problem is outlined red. One warning is the map's own: a formula your
   customized character sheet leaves off that nothing reads either, so it would show nowhere.
+- **TRY a house rule on the map (5b6c).** A house rule's node has a TRY ON THE MAP switch. On, the
+  map's numbers are worked out with the rule on, by the game's own engine: the formulas wired to it
+  use their WITH-rule formula (marked IN USE), their usual one and its wires go faint, and the line
+  along the bottom says TRYING. It is never saved and never changes the game, so it works on an
+  example too. The GM still switches rules for the table in the GAME tab.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

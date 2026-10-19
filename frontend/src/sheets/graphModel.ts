@@ -158,7 +158,8 @@ export const heightOf = (node: Pick<GraphNode, 'kind' | 'inputs' | 'alternative'
   switch (node.kind) {
     case 'list': return S.header + (node.via ? S.row : 0) + S.colHead + (node.rows?.length ?? 0) * S.listRow + S.pad + S.border;
     case 'table': return S.header + (node.bands?.length ?? 0) * S.band + S.pad + S.border;
-    case 'rule': return S.header + (node.text ? expr(node.text) : 0) + S.ruleRow + (node.also?.length ?? 0) * S.row + S.pad + S.border;
+    // Its words, what it does, its TRY ON THE MAP switch (5b6c), and what else is under it.
+    case 'rule': return S.header + (node.text ? expr(node.text) : 0) + S.ruleRow + S.row + (node.also?.length ?? 0) * S.row + S.pad + S.border;
     case 'note': return S.noteHeader + noteHeight(node.text) + S.border;
     default: {
       const base = node.inputs.filter((i) => !i.alt).length;

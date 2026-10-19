@@ -8,7 +8,7 @@ import '@xyflow/react/dist/style.css';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   graphOf, positionsOf, layoutOf, withPositions, withCollapsed, groupBoxOf, shownWires, exprHeight, noteHeight, SIZE, GRID,
-  type Graph, type GraphGroup, type GraphNode, type GraphInput, type Positions, type Point, type Source,
+  type Graph, type GraphGroup, type GraphNode, type GraphInput, type GraphWire, type Positions, type Point, type Source,
 } from '../sheets/graphModel';
 import { sampleOf } from '../sheets/statsRules';
 import { usePreviewValues } from '../hooks/usePreviewValues';
@@ -65,7 +65,11 @@ const show = (v: number | null | undefined) => (v === undefined || v === null ? 
 const signed = (v: number | null | undefined) => (typeof v === 'number' && v > 0 ? `+${show(v)}` : show(v));
 
 /** The server's values, the sample character's stats, and which dots have wires leaving them. */
-type Values = { values: Record<string, number>; problems: Record<string, string>; samples: (id: string) => number; stats: Set<string>; used: Set<string>; editable: boolean };
+type Values = {
+  values: Record<string, number>; problems: Record<string, string>; samples: (id: string) => number; stats: Set<string>; used: Set<string>; editable: boolean;
+  /** The house rules TRY ON THE MAP has on (5b6c), and switching one. */
+  trying: Set<string>; onTry: (rule: string) => void;
+};
 type NodeData = { node: GraphNode; values: Values };
 type BoxData = { group: GraphGroup; count: number; wiresOut: number; onFold: () => void; readOnly: boolean };
 
@@ -190,6 +194,26 @@ function TableNode({ data }: NodeProps<Node<NodeData>>) {
   );
 }
 
+/**
+ * TRY ON THE MAP (5b6c; approved mockup builder-graph): the map's numbers worked out with this house
+ * rule on, never the game's. Not saved; an example's map can try it too.
+ */
+function TrySwitch({ rule, values }: { rule: string; values: Values }) {
+  const on = values.trying.has(rule);
+  return (
+    <div style={{ ...line, height: SIZE.row, padding: '0 10px' }}>
+      <button type="button" role="switch" aria-checked={on} aria-label="Try on the map" data-browse className="nodrag"
+        onClick={(e) => { e.stopPropagation(); values.onTry(rule); }}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 0, background: 'none', border: 0, color: 'var(--cyan)', fontFamily: 'monospace', fontSize: 10, letterSpacing: 1, cursor: 'pointer' }}>
+        <span aria-hidden style={{ position: 'relative', width: 22, height: 10, borderRadius: 5, border: '1px solid var(--cyan)', background: on ? 'var(--cyan)' : 'none', boxSizing: 'border-box' }}>
+          <span style={{ position: 'absolute', top: 1, left: on ? 13 : 1, width: 6, height: 6, borderRadius: 3, background: on ? GROUND.base : 'var(--cyan)' }} />
+        </span>
+        TRY ON THE MAP: <b>{on ? 'ON' : 'OFF'}</b>
+      </button>
+    </div>
+  );
+}
+
 function RuleNode({ data }: NodeProps<Node<NodeData>>) {
   const n = data.node;
   return (
@@ -197,6 +221,7 @@ function RuleNode({ data }: NodeProps<Node<NodeData>>) {
       <Header kindTag="HOUSE RULE" label={n.label} cyan />
       {n.text && <Words text={n.text} color="var(--text)" />}
       <div style={{ ...line, height: SIZE.ruleRow, padding: '0 10px', ...dim, color: 'var(--cyan)', opacity: 1 }}>SWAPS THE FORMULAS WIRED TO IT</div>
+      <TrySwitch rule={n.id.slice('rule:'.length)} values={data.values} />
       {(n.also ?? []).map((a) => (
         <div key={a} style={{ ...line, height: SIZE.row, padding: '0 10px', fontSize: 11, textOverflow: 'ellipsis' }}>ALSO · {a}</div>
       ))}
@@ -218,7 +243,7 @@ function NoteNode({ data }: NodeProps<Node<NodeData>>) {
 }
 
 /** One input's row: what players call it, where it comes from, and what it brings in. */
-function InputRow({ i, values }: { i: GraphInput; values: Values }) {
+function InputRow({ i, values, off }: { i: GraphInput; values: Values; off: boolean }) {
   const bad = i.missing && i.kind !== 'field';
   const about = i.kind === 'combined'
     ? `${i.from.map((s) => s.label).join(', ')} · ${i.label.startsWith('BEST') ? 'HIGHEST' : 'LOWEST'}`
@@ -228,7 +253,7 @@ function InputRow({ i, values }: { i: GraphInput; values: Values }) {
           : i.where ? `↗ ${i.where}` : '';
   const v = i.kind === 'value' || i.kind === 'combined' ? incoming(i, values) : undefined;
   return (
-    <div style={{ ...line, height: SIZE.row, padding: '0 10px 0 14px', gap: 8, opacity: i.alt ? 0.6 : 1, color: bad ? 'var(--danger)' : undefined }}>
+    <div style={{ ...line, height: SIZE.row, padding: '0 10px 0 14px', gap: 8, opacity: off ? 0.45 : 1, color: bad ? 'var(--danger)' : undefined }}>
       <b style={{ color: bad ? 'var(--danger)' : 'var(--green)', fontSize: 12, flexShrink: 0 }}>{i.label}</b>
       <span style={{ ...dim, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', color: i.kind === 'field' && !i.known ? 'var(--warning)' : undefined, opacity: i.kind === 'field' && !i.known ? 1 : 0.7 }}>{about}</span>
       {i.modifier && <span data-modifier style={{ color: 'var(--cyan)', fontSize: 11, fontWeight: 700 }}>{i.modifier.label}</span>}
@@ -244,11 +269,13 @@ function FormulaNode({ data }: NodeProps<Node<NodeData>>) {
   const value = data.values.values[n.id];
   const tops = inputTops(n);
   const dotColor = (i: GraphInput) => (i.from.length ? 'var(--green)' : i.missing && i.kind !== 'field' ? 'var(--danger)' : 'color-mix(in srgb, var(--green) 35%, transparent)');
+  // Its WITH-rule formula in use while TRY ON THE MAP has the rule on, and its own then not.
+  const swapped = !!n.alternative && data.values.trying.has(n.alternative.rule);
   return (
     <div data-testid={`graph-node-${n.id}`} style={shell(n, problem ? { borderColor: 'var(--danger)', boxShadow: '0 0 10px color-mix(in srgb, var(--danger) 30%, transparent)' } : {})}>
       <Header kindTag={n.kind === 'condition' ? 'CONDITION' : 'FORMULA'} label={n.label} />
-      {n.inputs.filter((i) => !i.alt).map((i) => <InputRow key={i.key} i={i} values={data.values} />)}
-      <Words text={n.text} />
+      {n.inputs.filter((i) => !i.alt).map((i) => <InputRow key={i.key} i={i} values={data.values} off={swapped} />)}
+      <Words text={n.text} faint={swapped} />
       <div style={{ ...line, height: SIZE.result, padding: '0 10px', justifyContent: problem ? 'flex-start' : 'flex-end', gap: 8, borderTop: '1px solid color-mix(in srgb, var(--green) 15%, transparent)' }}>
         {problem
           ? <span role="alert" title={problem} style={{ color: 'var(--danger)', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis' }}>✕ {problem}</span>
@@ -257,10 +284,11 @@ function FormulaNode({ data }: NodeProps<Node<NodeData>>) {
       {n.alternative && (
         <>
           <div style={{ ...line, height: SIZE.row, padding: '0 10px 0 14px', ...dim, opacity: 1, color: 'var(--cyan)', background: 'color-mix(in srgb, var(--cyan) 10%, transparent)', borderTop: '1px solid color-mix(in srgb, var(--cyan) 35%, transparent)' }}>
-            WITH {n.alternative.ruleName}, USE
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>WITH {n.alternative.ruleName}, USE</span>
+            <span data-in-use={swapped} style={{ opacity: swapped ? 1 : 0.6 }}>{swapped ? 'IN USE' : 'NOT IN USE'}</span>
           </div>
-          {n.inputs.filter((i) => i.alt).map((i) => <InputRow key={i.key} i={i} values={data.values} />)}
-          <Words text={n.alternative.text} faint />
+          {n.inputs.filter((i) => i.alt).map((i) => <InputRow key={i.key} i={i} values={data.values} off={!swapped} />)}
+          <Words text={n.alternative.text} faint={!swapped} />
         </>
       )}
       {n.inputs.map((i) => (
@@ -402,7 +430,7 @@ function Toolbar({ edits }: { edits?: { onTidy: () => void; onUndo: () => void; 
 }
 
 /** Under the map, as the builder design's: how much is on it, the grid, and the sample character it is worked out on. */
-function StatusLine({ graph, definition }: { graph: Graph; definition: Definition }) {
+function StatusLine({ graph, definition, trying }: { graph: Graph; definition: Definition; trying: Set<string> }) {
   const sample = graph.nodes.filter((n) => n.kind === 'list').flatMap((n) => n.rows ?? [])
     .map((r) => `${r.short ?? r.label} ${show(sampleOf(definition, r.stat) ?? 0)}`).join(' · ');
   return (
@@ -410,6 +438,11 @@ function StatusLine({ graph, definition }: { graph: Graph; definition: Definitio
       position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5, height: 24, padding: '0 12px', display: 'flex', alignItems: 'center', gap: 16,
       background: 'var(--black)', borderTop: '1px solid var(--dark-green)', fontSize: 10, letterSpacing: 1, whiteSpace: 'nowrap', overflow: 'hidden', fontFamily: 'monospace',
     }}>
+      {trying.size > 0 && (
+        <span data-testid="graph-trying" style={{ color: 'var(--cyan)' }}>
+          TRYING {graph.nodes.filter((n) => n.kind === 'rule' && trying.has(n.id.slice('rule:'.length))).map((n) => n.label).join(', ')} · THE MAP ONLY
+        </span>
+      )}
       <span style={{ color: 'var(--green)' }}>{graph.nodes.length} NODES · {graph.wires.filter((w) => w.kind !== 'note').length} WIRES</span>
       <span style={{ opacity: 0.7 }}>SNAP 24 · ZOOM 10–400% · CTRL + WHEEL</span>
       {sample && <span style={{ opacity: 0.7, overflow: 'hidden', textOverflow: 'ellipsis' }}>SAMPLE: {sample}</span>}
@@ -419,7 +452,11 @@ function StatusLine({ graph, definition }: { graph: Graph; definition: Definitio
 
 function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, problems }: Props) {
   const graph = useMemo(() => graphOf(definition), [definition]);
-  const { preview, tried } = usePreviewValues(definition, api);
+  /** The house rules TRY ON THE MAP has on (5b6c): the map's numbers only, never saved. */
+  const [trying, setTrying] = useState<string[]>([]);
+  const tryingSet = useMemo(() => new Set(trying), [trying]);
+  const onTry = useCallback((rule: string) => setTrying((was) => (was.includes(rule) ? was.filter((r) => r !== rule) : [...was, rule].sort())), []);
+  const { preview, tried } = usePreviewValues(definition, api, trying);
   // Every change made on the map or in its panel goes through here, so it can be undone.
   const [history, setHistory] = useState<History<Definition>>(emptyHistory);
   const mapEdit = useCallback((next: Definition) => {
@@ -466,7 +503,9 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
     stats: new Set(graph.nodes.flatMap((n) => (n.rows ?? []).map((r) => r.stat))),
     editable: !readOnly,
     used: new Set(graph.wires.map((w) => `${w.from}:${w.fromHandle}`)),
-  }), [preview, definition, graph, readOnly]);
+    trying: tryingSet,
+    onTry,
+  }), [preview, definition, graph, readOnly, tryingSet, onTry]);
 
   // Where nodes sit: the draft's places, and while a drag lasts, the dragged nodes' own over them.
   const saved = useMemo(() => positionsOf(definition, graph), [definition, graph]);
@@ -514,12 +553,22 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
     return out;
   }, [graph, positions, values, readOnly, fold, measured, picked, broken]);
 
+  /**
+   * A wire whose formula isn't the one in use, drawn faint: one into a WITH-rule formula, until TRY ON
+   * THE MAP has its rule on (5b6c), and then the ones into the formula it stands in for.
+   */
+  const unused = useCallback((w: GraphWire) => {
+    if (w.kind === 'gate' || w.kind === 'note') return false;
+    const rule = graph.nodes.find((n) => n.id === w.to)?.alternative?.rule;
+    const swapped = !!rule && tryingSet.has(rule);
+    return w.alt ? !swapped : swapped;
+  }, [graph, tryingSet]);
   const edges: Edge[] = useMemo(() => shownWires(graph).map((w) => ({
     id: w.id, source: w.source, target: w.target, sourceHandle: w.sourceHandle, targetHandle: w.targetHandle,
     type: w.kind === 'note' ? 'straight' : 'wire', selectable: false, focusable: false,
     data: { lane: Math.max(0, graph.nodes.find((n) => n.id === w.to)?.inputs.findIndex((i) => i.key === w.input) ?? 0), modifier: w.modifier },
-    style: { ...EDGE_STYLE[w.kind], ...(w.alt && w.kind !== 'gate' ? { strokeDasharray: '5 4', opacity: 0.4 } : {}) },
-  })), [graph]);
+    style: { ...EDGE_STYLE[w.kind], ...(unused(w) ? { strokeDasharray: '5 4', opacity: 0.4 } : {}) },
+  })), [graph, unused]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     const sizes = changes.filter((c): c is Extract<NodeChange, { type: 'dimensions' }> => c.type === 'dimensions' && !!c.dimensions);
@@ -711,7 +760,7 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
           maskColor="rgba(0, 0, 0, 0.55)" style={{ background: GROUND.base, border: '1px solid var(--dark-green)', bottom: 24 }} />
         <Toolbar edits={readOnly ? undefined : { onTidy: tidy, onUndo: undo, onRedo: redo, onAdd: () => setAdding(true), canUndo: history.past.length > 0, canRedo: history.future.length > 0 }} />
       </ReactFlow>
-      <StatusLine graph={graph} definition={definition} />
+      <StatusLine graph={graph} definition={definition} trying={tryingSet} />
       <GraphProblems problems={listed} onPick={goToProblem} />
       {adding && !readOnly && <GraphAddPalette choices={addChoices(definition)} onAdd={add} onClose={() => setAdding(false)} />}
       {said && (
@@ -734,7 +783,7 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
       })()}
       </div>
       {picked && (
-        <GraphPanel definition={definition} edit={mapEdit} node={picked} preview={preview} tried={tried}
+        <GraphPanel definition={definition} edit={mapEdit} node={picked} preview={preview} tried={tried} trying={tryingSet}
           onClose={() => setSelected(null)} onGoTo={onGoTo} />
       )}
     </div>

@@ -72,3 +72,37 @@ test('the graph view, for looking at', async ({ page, request }, info) => {
     await page.screenshot({ path: path.join(SHOTS, `graph-cwn-theme-${theme}.png`), clip: { x: 0, y: 0, width: 1440, height: 520 } });
   }
 });
+
+// TRY ON THE MAP (5b6c): no example has a house rule, so a small system with one, switched on.
+test('a house rule tried on the map, for looking at', async ({ page, request }, info) => {
+  const name = `Shots Try ${info.retry + 1}`;
+  const token = await gmToken(request);
+  await asGm(request, token, 'post', '/api/systems', { definition: {
+    format: 1, name,
+    stats: [{ id: 'character', label: 'Character', stats: [{ id: 'lvl', label: 'Level' }] }, { id: 'abilities', label: 'Abilities', stats: [{ id: 'str', label: 'Strength' }, { id: 'wis', label: 'Wisdom' }] }],
+    samples: { lvl: 3, str: 16, wis: 12 },
+    lookups: { attribute_mod: { label: 'Attribute mod', bands: [{ upTo: 7, value: -1 }, { upTo: 13, value: 0 }, { value: 1 }] } },
+    derived: [
+      { id: 'str_mod', label: 'Str mod', formula: 'attribute_mod(@str)' },
+      { id: 'wis_mod', label: 'Wis mod', formula: 'attribute_mod(@wis)' },
+      { id: 'spell', label: 'Spell power', formula: '0', alternative: { rule: 'magic', formula: '@wis_mod + @lvl' } },
+      { id: 'melee', label: 'Melee attack', formula: '@str_mod + floor(@lvl / 2)' },
+    ],
+    house_rules: [{ id: 'magic', name: 'Magic', description: 'Characters can learn spells.' }],
+  } });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'graph' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signInAsGm(page);
+  await openBuilder(page);
+  const card = page.getByTestId(/^system-/).filter({ hasText: name.toUpperCase() });
+  if (!(await card.getByRole('button', { name: 'OPEN', exact: true }).isVisible())) await card.getByRole('button').first().click();
+  await card.getByRole('button', { name: 'OPEN', exact: true }).click();
+  await builderPage(page, 'STATS & RULES');
+  await page.getByTestId('graph-view').waitFor();
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: path.join(SHOTS, 'graph-try-off.png') });
+  await page.getByRole('switch', { name: 'Try on the map' }).click();
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: path.join(SHOTS, 'graph-try-on.png') });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'forms' });
+});

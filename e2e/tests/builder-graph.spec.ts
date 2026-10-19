@@ -370,6 +370,49 @@ test('PROBLEMS on the map: a broken formula drawn red, picked from the list, fix
   expect(await map.locator('.react-flow__node[data-id="save"]').evaluate((el) => (el as HTMLElement).style.outline)).not.toContain('danger');
 });
 
+test("TRY ON THE MAP swaps a house rule's formulas in for the map's numbers only, never saved", async ({ page, request }, info) => {
+  const name = `Try Map ${info.retry + 1}`;
+  const token = await gmToken(request);
+  const def = HEARTH(name);
+  const magic = { ...def, house_rules: [{ id: 'magic', name: 'Magic', description: 'Characters can learn spells.' }],
+    derived: def.derived.map((d) => (d.id === 'melee' ? { ...d, alternative: { rule: 'magic', formula: '@dex_mod + @lvl' } } : d)) };
+  await asGm(request, token, 'post', '/api/systems', { definition: magic });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'graph' });
+  await signInAsGm(page);
+  await openSystem(page, name);
+  await toGraph(page);
+  const map = page.getByTestId('graph-view');
+  const melee = map.getByTestId('graph-node-melee');
+  const sw = map.getByTestId('graph-node-rule:magic').getByRole('switch', { name: 'Try on the map' });
+
+  // Off: STR MOD 1 + half of LEVEL 3 is 2; the WITH MAGIC formula waits.
+  await expect(sw).toHaveAttribute('aria-checked', 'false');
+  await expect(melee.locator('[data-value]')).toHaveText('2');
+  await expect(melee.locator('[data-in-use]')).toHaveText('NOT IN USE');
+  // The wire into the formula in use solid, the other faint.
+  const faint = (id: string) => map.getByTestId(`rf__edge-${id}`).locator('.react-flow__edge-path').evaluate((p) => (p as SVGPathElement).style.opacity === '0.4');
+  const own = 'abilities:out:str_mod>melee:b:@str_mod';
+  const withMagic = 'abilities:out:dex_mod>melee:a:@dex_mod';
+  expect([await faint(own), await faint(withMagic)]).toEqual([false, true]);
+
+  // On: DEX MOD 0 + LEVEL 3, by the server's engine; said along the bottom.
+  await sw.click();
+  await expect(sw).toHaveAttribute('aria-checked', 'true');
+  await expect(melee.locator('[data-value]')).toHaveText('3');
+  await expect(melee.locator('[data-in-use]')).toHaveText('IN USE');
+  expect([await faint(own), await faint(withMagic)]).toEqual([true, false]);
+  await expect(map.getByTestId('graph-trying')).toHaveText('TRYING MAGIC · THE MAP ONLY');
+  await expect(page.getByTestId('save-status')).not.toContainText('UNSAVED');
+
+  // Never saved: FORMS still works the formula out its own way, and the map opens with it off.
+  await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'FORMS' }).click();
+  await page.getByRole('tab', { name: 'FORMULAS' }).click();
+  await expect(page.getByTestId('value-melee')).toHaveText('2');
+  await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'GRAPH' }).click();
+  await expect(sw).toHaveAttribute('aria-checked', 'false');
+  await expect(melee.locator('[data-value]')).toHaveText('2');
+});
+
 test('a note pinned to the node picked, written, dragged to another, unpinned, and read in FORMS', async ({ page, request }, info) => {
   const name = `Noted Map ${info.retry + 1}`;
   const token = await gmToken(request);
