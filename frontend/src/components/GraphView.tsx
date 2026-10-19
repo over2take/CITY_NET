@@ -222,6 +222,7 @@ function InputRow({ i, values }: { i: GraphInput; values: Values }) {
     <div style={{ ...line, height: SIZE.row, padding: '0 10px 0 14px', gap: 8, opacity: i.alt ? 0.6 : 1, color: bad ? 'var(--danger)' : undefined }}>
       <b style={{ color: bad ? 'var(--danger)' : 'var(--green)', fontSize: 12, flexShrink: 0 }}>{i.label}</b>
       <span style={{ ...dim, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', color: i.kind === 'field' && !i.known ? 'var(--warning)' : undefined, opacity: i.kind === 'field' && !i.known ? 1 : 0.7 }}>{about}</span>
+      {i.modifier && <span data-modifier style={{ color: 'var(--cyan)', fontSize: 11, fontWeight: 700 }}>{i.modifier.label}</span>}
       {v !== undefined && <span style={{ fontSize: 12 }}>{show(v)}</span>}
     </div>
   );
@@ -320,8 +321,16 @@ const snap = (v: number) => Math.round(v / GRID) * GRID;
  * on a node in a lane of its own, so wires into one node don't merge into one line), straight in,
  * solder at each turn. Drawn this way, the wires into a busy column stay apart.
  */
-function Wire({ id, sourceX, sourceY, targetX, targetY, style, data }: EdgeProps<Edge<{ lane: number }>>) {
+function Wire({ id, sourceX, sourceY, targetX, targetY, style, data }: EdgeProps<Edge<{ lane: number; modifier?: string }>>) {
   const lane = (data?.lane ?? 0) % 5;
+  /** A modifier (5b3): a diamond on the last stretch into the input, its label above it. */
+  const diamond = (x: number) => data?.modifier ? (
+    <g transform={`translate(${x} ${targetY})`} data-modifier={data.modifier}>
+      <title>{`On its way in: ${data.modifier}`}</title>
+      <path d="M0 -7 L7 0 L0 7 L-7 0 Z" style={{ fill: GROUND.base, stroke: 'var(--cyan)', strokeWidth: 1.5 }} />
+      <text y={-10} textAnchor="middle" style={{ fill: 'var(--cyan)', fontFamily: 'monospace', fontSize: 10, fontWeight: 700 }}>{data.modifier}</text>
+    </g>
+  ) : null;
   const fill = (style?.stroke as string) ?? 'var(--green)';
   const solder = (points: [number, number][]) => points.map(([x, y], i) => <circle key={i} cx={x} cy={y} r={2.6} style={{ fill }} />);
   if (targetX - sourceX > 60) {
@@ -331,6 +340,7 @@ function Wire({ id, sourceX, sourceY, targetX, targetY, style, data }: EdgeProps
       <>
         <BaseEdge id={id} path={path} style={style} />
         {Math.abs(sourceY - targetY) > 1 && solder([[centerX, sourceY], [centerX, targetY]])}
+        {diamond((centerX + targetX) / 2)}
       </>
     );
   }
@@ -344,6 +354,7 @@ function Wire({ id, sourceX, sourceY, targetX, targetY, style, data }: EdgeProps
     <>
       <BaseEdge id={id} path={path} style={style} />
       {solder([[out, sourceY], [out, above], [back, above], [back, targetY]])}
+      {diamond((back + targetX) / 2)}
     </>
   );
 }
@@ -491,7 +502,7 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
   const edges: Edge[] = useMemo(() => shownWires(graph).map((w) => ({
     id: w.id, source: w.source, target: w.target, sourceHandle: w.sourceHandle, targetHandle: w.targetHandle,
     type: w.kind === 'note' ? 'straight' : 'wire', selectable: false, focusable: false,
-    data: { lane: Math.max(0, graph.nodes.find((n) => n.id === w.to)?.inputs.findIndex((i) => i.key === w.input) ?? 0) },
+    data: { lane: Math.max(0, graph.nodes.find((n) => n.id === w.to)?.inputs.findIndex((i) => i.key === w.input) ?? 0), modifier: w.modifier },
     style: { ...EDGE_STYLE[w.kind], ...(w.alt && w.kind !== 'gate' ? { strokeDasharray: '5 4', opacity: 0.4 } : {}) },
   })), [graph]);
 

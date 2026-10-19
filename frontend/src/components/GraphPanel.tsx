@@ -1,13 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { Definition } from '../sheets/systemsApi';
 import type { BuilderPage } from '../sheets/builderSession';
-import { statGroups, tableList, formulaList, withoutFormula } from '../sheets/statsRules';
+import { statGroups, allStats, tableList, formulaList, withoutFormula, withFormula, withAlternative } from '../sheets/statsRules';
+import { modifiersIn, withModifierNumber } from '../sheets/modifiers';
 import { houseRuleList } from '../sheets/houseRules';
 import type { GraphNode } from '../sheets/graphModel';
 import type { Tried } from '../hooks/usePreviewValues';
 import { useFormulaInsert } from '../hooks/useFormulaInsert';
 import { GroupSection, TableSection, FormulaName, FormulaBody, InsertChips } from './statsRulesFields';
-import { small, why, btn } from './statsRulesStyles';
+import { small, why, btn, field } from './statsRulesStyles';
 
 // The graph view's node panel (5a3b2; approved mockup docs/mockups/builder-graph.html, 2026-10-17:
 // "the panel is the same form as FORMS"). The node picked on the map, edited with the very controls
@@ -28,6 +29,49 @@ interface Props {
 
 const KIND: Record<GraphNode['kind'], string> = { list: 'STATS', table: 'TABLE', formula: 'FORMULA', condition: 'CONDITION', rule: 'HOUSE RULE', note: 'NOTE' };
 
+/**
+ * ON THE WAY IN (5b3): the diamonds on a formula's wires, each number changeable, which rewrites
+ * the formula's text (and its WITH-rule formula's) as typing it would.
+ */
+function OnTheWayIn({ definition, edit, id }: { definition: Definition; edit: (next: Definition) => void; id: string }) {
+  const f = formulaList(definition).find((x) => x.id === id);
+  if (!f || (f as { kind?: string }).kind === 'condition') return null;
+  const name = (n: string) => (allStats(definition).find((s) => s.id === n)?.label || formulaList(definition).find((x) => x.id === n)?.label || n).toUpperCase();
+  const rows = [
+    ...modifiersIn(f.formula ?? '').map((m) => ({ m, alt: false })),
+    ...(f.alternative ? modifiersIn(f.alternative.formula).map((m) => ({ m, alt: true })) : []),
+  ];
+  if (!rows.length) return null;
+  const change = (alt: boolean, n: string, value: string) => {
+    const text = alt ? f.alternative!.formula : f.formula ?? '';
+    const next = withModifierNumber(text, n, Number(value));
+    if (next !== null) edit(alt ? withAlternative(definition, f.id, { formula: next }) : withFormula(definition, f.id, { formula: next }));
+  };
+  return (
+    <div style={{ border: '1px solid var(--dark-green)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span style={small}>ON THE WAY IN</span>
+      {rows.map(({ m, alt }) => {
+        const label = `${name(m.name)} ${m.words}${alt ? ' (WITH-rule formula)' : ''}`;
+        return (
+          <label key={`${alt}:${m.name}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 72px', gap: 8, alignItems: 'center', fontSize: 12 }}>
+            <span><b style={{ color: 'var(--cyan)' }}>{m.label}</b> {label}</span>
+            <NumberBox label={label} value={m.n} onNumber={(v) => change(alt, m.name, v)} />
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+/** A number typed: kept as typed (an empty box while retyping), each number that will do applied, and the real one back when left. */
+function NumberBox({ label, value, onNumber }: { label: string; value: number; onNumber: (v: string) => void }) {
+  const [typed, setTyped] = useState<string | null>(null);
+  return (
+    <input type="number" min={0} step="any" aria-label={label} value={typed ?? String(value)} style={{ ...field, width: '100%' }}
+      onChange={(e) => { setTyped(e.target.value); onNumber(e.target.value); }} onBlur={() => setTyped(null)} />
+  );
+}
+
 /** A formula as FORMULAS shows it, laid out down the panel: name, text, = value, alternative. */
 function FormulaForm({ definition, edit, id, preview, tried, insert }: Omit<Props, 'node' | 'onClose' | 'onGoTo'> & { id: string; insert: ReturnType<typeof useFormulaInsert> }) {
   const f = formulaList(definition).find((x) => x.id === id);
@@ -37,6 +81,7 @@ function FormulaForm({ definition, edit, id, preview, tried, insert }: Omit<Prop
     <div data-testid={`panel-formula-${f.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <FormulaName definition={definition} edit={edit} f={f} />
       <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried} {...insert.bind(f.id)} />
+      <OnTheWayIn definition={definition} edit={edit} id={f.id} />
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 8 }}>
         <span style={small}>ON THE SAMPLE</span>
         <b data-testid={`panel-value-${f.id}`} style={{ color: 'var(--cyan)', fontSize: 15 }}>{value !== undefined ? `= ${value}` : '·'}</b>

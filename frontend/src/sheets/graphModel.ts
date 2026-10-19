@@ -21,6 +21,7 @@
 import type { Definition } from './systemsApi';
 import { statGroups, formulaList, tableList, takenIds, FUNCTIONS } from './statsRules';
 import { houseRuleList, waitingOn } from './houseRules';
+import { modifierOn, type Modifier } from './modifiers';
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -99,6 +100,8 @@ export interface GraphInput {
   alt: boolean;
   known?: boolean;
   missing?: boolean;
+  /** What the formula does to this one name on its way in (×6, ÷2↓): a diamond on its wire (5b3). */
+  modifier?: Modifier;
 }
 
 /** A row of a list node: a stat, and its modifier when one table works one out for each. */
@@ -129,7 +132,7 @@ export interface GraphNode {
 }
 
 /** A wire: from a node's dot (`out`, or a list's `out:<stat or modifier>`) to an input. `value` is what flows. */
-export interface GraphWire { id: string; from: string; fromHandle: string; value: string; to: string; input: string; kind: 'value' | 'table' | 'gate' | 'note'; alt: boolean }
+export interface GraphWire { id: string; from: string; fromHandle: string; value: string; to: string; input: string; kind: 'value' | 'table' | 'gate' | 'note'; alt: boolean; modifier?: string }
 
 export interface GraphGroup { id: string; label: string; members: string[]; collapsed: boolean }
 
@@ -227,7 +230,7 @@ export const graphOf = (def: Definition): Graph => {
   const wires: GraphWire[] = [];
   const push = (n: Omit<GraphNode, 'width' | 'height'>) => nodes.push({ ...n, width: n.kind === 'note' ? SIZE.noteWidth : SIZE.width, height: heightOf(n) });
   const wire = (to: string, i: GraphInput) => {
-    for (const f of i.from) wires.push({ id: `${f.node}:${f.handle}>${to}:${i.key}`, from: f.node, fromHandle: f.handle, value: f.value, to, input: i.key, kind: i.kind === 'table' ? 'table' : 'value', alt: i.alt });
+    for (const f of i.from) wires.push({ id: `${f.node}:${f.handle}>${to}:${i.key}`, from: f.node, fromHandle: f.handle, value: f.value, to, input: i.key, kind: i.kind === 'table' ? 'table' : 'value', alt: i.alt, ...(i.modifier ? { modifier: i.modifier.label } : {}) });
   };
 
   for (const g of groups) {
@@ -258,6 +261,7 @@ export const graphOf = (def: Definition): Graph => {
   const read = (text: string, alt: boolean): { inputs: GraphInput[]; text: string } => {
     const side = alt ? 'a' : 'b';
     const found: { at: number; input: GraphInput }[] = [];
+    const modified = (name: string) => { const m = modifierOn(text, name); return m ? { modifier: m } : {}; };
     const combos = [...text.matchAll(COMBINED)].filter((m) => m[2].split(',').every((n) => at.has(n.trim().slice(1))));
     let rest = text;
     let shown = text;
@@ -272,7 +276,7 @@ export const graphOf = (def: Definition): Graph => {
     for (const name of refs.fields) {
       const src = at.get(name);
       const input: GraphInput = src
-        ? { key: `${side}:@${name}`, kind: 'value', label: src.label, where: src.where, from: [src], alt }
+        ? { key: `${side}:@${name}`, kind: 'value', label: src.label, where: src.where, from: [src], alt, ...modified(name) }
         : { key: `${side}:@${name}`, kind: 'field', label: `@${name}`, from: [], alt, known: onSheet.has(name), missing: !onSheet.has(name) && !derivedIds.has(name) };
       found.push({ at: rest.indexOf(`@${name}`), input });
     }

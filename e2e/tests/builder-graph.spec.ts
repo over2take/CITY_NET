@@ -214,6 +214,36 @@ test("wires drawn and cut on the map are the formula's own text, and undo", asyn
   await expect(page.getByLabel('Melee attack formula')).toHaveValue('floor(@lvl / 2) + @dex_mod');
 });
 
+test('a modifier is a diamond on its wire, its number changed in the panel', async ({ page, request }, info) => {
+  const name = `Diamond Map ${info.retry + 1}`;
+  const token = await gmToken(request);
+  await asGm(request, token, 'post', '/api/systems', { definition: HEARTH(name) });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'graph' });
+  await signInAsGm(page);
+  await openSystem(page, name);
+  await toGraph(page);
+  const map = page.getByTestId('graph-view');
+
+  // floor(@lvl / 2) in MELEE: the level's wire carries ÷2↓, the only wire with a diamond.
+  const lvlWire = map.getByTestId('rf__edge-character:out:lvl>melee:b:@lvl');
+  await expect(lvlWire.locator('[data-modifier]')).toHaveAttribute('data-modifier', '÷2↓');
+  await expect(lvlWire.locator('text')).toHaveText('÷2↓');
+  await expect(map.locator('.react-flow__edge [data-modifier]')).toHaveCount(1);
+
+  // Changed to 4 in the panel: the diamond, the value and the formula all follow.
+  await map.getByTestId('graph-node-melee').click();
+  const box = page.getByTestId('graph-panel').getByLabel('LEVEL divided by, rounded down');
+  await expect(box).toHaveValue('2');
+  await box.fill('4');
+  await expect(lvlWire.locator('text')).toHaveText('÷4↓');
+  await expect(map.getByTestId('graph-node-melee').locator('[data-value]')).toHaveText('1');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'FORMS' }).click();
+  await page.getByRole('tab', { name: 'FORMULAS' }).click();
+  await expect(page.getByLabel('Melee attack formula')).toHaveValue('@str_mod + floor(@lvl / 4)');
+});
+
 test('a busy system lays out to be read: dots on their rows, every wire drawn, nothing overlapping, a readable zoom', async ({ page, request }, info) => {
   const name = `Busy Map ${info.retry + 1}`;
   const token = await gmToken(request);
