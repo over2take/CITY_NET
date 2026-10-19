@@ -122,6 +122,43 @@ describe('the panel is the same form as FORMS', () => {
   });
 });
 
+describe('ON THE WAY IN (5b3)', () => {
+  const HALF: Definition = { ...HEARTH, derived: [...(HEARTH.derived as unknown[]), { id: 'half', label: 'Half level', formula: '@str_mod + floor(@lvl / 2)' }] };
+  const node = (id: string) => screen.getByTestId(`graph-node-${id}`);
+
+  it("a modifier's number changed is the formula typed anew in FORMS", async () => {
+    const forms = openForms(HALF);
+    await userEvent.click(screen.getByRole('tab', { name: 'FORMULAS' }));
+    const text = screen.getByLabelText('Half level formula');
+    await userEvent.clear(text);
+    await userEvent.type(text, '@str_mod + floor(@lvl / 4)');
+    const fromForms = forms.last();
+    forms.unmount();
+    const map = openMap(HALF);
+    const panel = await pick('half');
+    const box = within(panel).getByLabelText('LEVEL divided by, rounded down');
+    expect((box as HTMLInputElement).value).toBe('2');
+    await userEvent.clear(box);
+    await userEvent.type(box, '4');
+    expect(map.last()).toEqual(fromForms);
+    expect(within(node('half')).getByText('÷4↓')).toBeTruthy();
+  });
+
+  it("shows a WITH-rule formula's modifiers too, and changes that formula", async () => {
+    const def: Definition = { ...HEARTH, derived: [...(HEARTH.derived as unknown[]), { id: 'spell', label: 'Spell', formula: '0', alternative: { rule: 'magic', formula: '@lvl * 2' } }] };
+    const { last } = openMap(def);
+    const box = within(await pick('spell')).getByLabelText('LEVEL times (WITH-rule formula)');
+    await userEvent.clear(box);
+    await userEvent.type(box, '3');
+    expect((last().derived as { id: string; formula: string; alternative?: { formula: string } }[]).find((d) => d.id === 'spell')).toMatchObject({ formula: '0', alternative: { formula: '@lvl * 3' } });
+  });
+
+  it('is not there for a formula with no modifier', async () => {
+    openMap(HALF);
+    expect((await pick('melee')).textContent).not.toContain('ON THE WAY IN');
+  });
+});
+
 describe('the panel', () => {
   it('opens on the node clicked, outlined, and closes with ×, Escape or a click on the map', async () => {
     openMap();

@@ -125,6 +125,14 @@ describe('the system as nodes and wires', () => {
     expect(wiresInto(g, 'melee')).toEqual(['abilities out:str_mod value', 'skills out:fight value', 'character out:lvl value', 'note:n1 out note']);
   });
 
+  it('carries what a formula does to a name on its way in (5b3), on its input and its wire', () => {
+    const lvl = node(g, 'melee').inputs.find((i) => i.key === 'b:@lvl')!;
+    expect(lvl.modifier).toMatchObject({ kind: 'down', n: 2, label: '÷2↓' });
+    expect(node(g, 'melee').inputs.find((i) => i.key === 'b:@str_mod')!.modifier).toBeUndefined();
+    expect(g.wires.find((w) => w.to === 'melee' && w.value === 'lvl')!.modifier).toBe('÷2↓');
+    expect(g.wires.find((w) => w.to === 'melee' && w.value === 'str_mod')!.modifier).toBeUndefined();
+  });
+
   it('writes a formula\'s text in those names', () => {
     expect(node(g, 'melee').text).toBe('STR MOD + FIGHT + floor(LEVEL / 2) + @cash');
     expect(node(g, 'can_cast').text).toBe('IF SPELL POWER > 2 THEN 1 ELSE 0');

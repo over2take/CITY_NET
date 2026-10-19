@@ -67,6 +67,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   name of a BEST keeps the others); where it isn't (a name inside `floor(...)`), the formula's panel
   opens to change it by hand. A name already read, a formula reading itself and a loop are refused,
   each saying why. Every one is the formula's own text, the same as typing it in FORMS, and undoes.
+- **Modifiers as diamonds on wires (5b3).** Where a formula does something simple to one name on its
+  way in (`@level * 6`, `@x / 2`, `floor(@level / 2)`, `ceil(...)`), a diamond on that name's wire
+  shows it (×6, ÷2, ÷2↓, ÷2↑), and the input's row says it too. A node's panel lists them under ON THE
+  WAY IN, each number changeable: that rewrites the formula's text, as typing it in FORMS would.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the
