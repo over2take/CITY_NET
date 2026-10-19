@@ -200,6 +200,24 @@ describe('the builder', () => {
       expect(within(view()).getByRole('button', { name: 'GRAPH' }).getAttribute('aria-pressed')).toBe('true');
     });
 
+    it('a note\'s EDIT IN GRAPH opens the map on that note (5b5)', async () => {
+      served = { ...served, draft: { format: 1, name: 'Hearth', stats: [{ id: 'abilities', label: 'Abilities', stats: [{ id: 'str', label: 'Strength' }] }],
+        graph: { notes: [{ id: 'n1', on: 'abilities', text: 'Roll 3d6 in order.' }] } } };
+      open({ startPage: 'rules' });
+      await ready();
+      const note = await screen.findByTestId('forms-note-n1');
+      await userEvent.click(within(note).getByRole('button', { name: 'EDIT IN GRAPH' }));
+      const panel = await screen.findByTestId('graph-panel', {}, { timeout: 5000 });
+      expect((within(panel).getByLabelText('Note') as HTMLTextAreaElement).value).toBe('Roll 3d6 in order.');
+      expect(within(view()).getByRole('button', { name: 'GRAPH' }).getAttribute('aria-pressed')).toBe('true');
+      expect(viewMarks).toEqual([{ page: 'rules', view: 'graph' }]);
+      // Back to FORMS and to GRAPH again: the map opens on nothing in particular.
+      await userEvent.click(within(view()).getByRole('button', { name: 'FORMS' }));
+      await userEvent.click(within(view()).getByRole('button', { name: 'GRAPH' }));
+      expect(await screen.findByTestId('graph-view', {}, { timeout: 5000 })).toBeTruthy();
+      expect(screen.queryByTestId('graph-panel')).toBeNull();
+    });
+
     it('stays on FORMS when the server can\'t say', async () => {
       open({ startPage: 'rules', fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => (String(input) === '/api/systems/view'
         ? { ok: false, status: 500, json: async () => ({ error: 'Down' }) } : fakeServer(input, init))) as never });

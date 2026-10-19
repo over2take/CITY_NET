@@ -215,6 +215,8 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
   const [tourStep, setTourStep] = useState<number | null>(null);
   /** STATS & RULES as FORMS or GRAPH (Phase 5): FORMS until GRAPH is picked, then as last picked, on the server. */
   const [rulesView, setRulesView] = useState<BuilderView>('forms');
+  /** A note FORMS' EDIT IN GRAPH asked to open the map on (5b5). */
+  const [graphStart, setGraphStart] = useState<string | undefined>(undefined);
   const rootRef = useRef<HTMLDivElement>(null);
   const tourRoot = useCallback(() => rootRef.current, []);
 
@@ -257,7 +259,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
     api.views().then((r) => { if (live && r.ok) setRulesView(r.value.views.rules); });
     return () => { live = false; };
   }, [api, hasPages]);
-  const pickRulesView = (view: BuilderView) => { setRulesView(view); void api.setView('rules', view); };
+  const pickRulesView = (view: BuilderView, start?: string) => { setGraphStart(start); setRulesView(view); void api.setView('rules', view); };
 
   /** Finished or skipped: it doesn't come back by itself (START THE TOUR on HELP plays it again). */
   const endTour = () => { setTourStep(null); void api.setTourSeen(true); };
@@ -541,10 +543,10 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
             )}
             {ready && page === 'words' && <WordsPage definition={definition!} edit={edit} />}
             {ready && page === 'features' && <FeaturesPage definition={definition!} edit={edit} api={api} />}
-            {ready && page === 'rules' && !graphOn && <StatsRulesPage definition={definition!} edit={edit} api={api} />}
+            {ready && page === 'rules' && !graphOn && <StatsRulesPage definition={definition!} edit={edit} api={api} onOpenNote={(node) => pickRulesView('graph', node)} />}
             {graphOn && (
               <React.Suspense fallback={<p style={{ opacity: 0.7, padding: 24 }}>LOADING THE MAP…</p>}>
-                <GraphView definition={definition!} edit={edit} api={api} readOnly={looking} onGoTo={(p) => { setPage(p); setStatus(null); }} />
+                <GraphView definition={definition!} edit={edit} api={api} readOnly={looking} startWith={graphStart} onGoTo={(p) => { setPage(p); setStatus(null); }} />
               </React.Suspense>
             )}
             {ready && page === 'sheet' && <SheetPage definition={definition!} edit={edit} api={api} />}

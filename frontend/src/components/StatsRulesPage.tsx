@@ -3,6 +3,7 @@ import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   statGroups, withNewGroup, tableList, withNewTable, formulaList, withNewFormula, withoutFormula,
 } from '../sheets/statsRules';
+import { notesOn } from '../sheets/graphNotes';
 import { useFormulaInsert } from '../hooks/useFormulaInsert';
 import { usePreviewValues } from '../hooks/usePreviewValues';
 import { HINTS } from '../sheets/builderHelp';
@@ -16,13 +17,16 @@ import { why, btn, th, td } from './statsRulesStyles';
 // of the starter sheet; skills are a group whose stats may tie to an ability; the SAMPLE column is a
 // made-up character for checking formulas, saved with the draft. What it reads and writes is
 // sheets/statsRules.ts; every change goes through the builder's `edit`, which autosaves it. The
-// controls themselves are statsRulesFields.tsx, shared with the graph view's node panel.
+// controls themselves are statsRulesFields.tsx, shared with the graph view's node panel. Notes are
+// made on the graph view (5b5); here they show, read only, under what they are pinned to.
 
 interface Props {
   definition: Definition;
   edit: (next: Definition) => void;
   /** For the live values (FORMULAS); without it the tab shows no values. */
   api?: ReturnType<typeof systemsApi>;
+  /** EDIT IN GRAPH on a note: the map, opened on it. */
+  onOpenNote?: (node: string) => void;
 }
 
 type Tab = 'stats' | 'formulas' | 'tables';
@@ -34,25 +38,52 @@ const tabStyle = (on: boolean): React.CSSProperties => ({
   color: on ? 'var(--green)' : 'color-mix(in srgb, var(--green) 55%, transparent)', fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, padding: '7px 14px', cursor: 'pointer',
 });
 
-function StatsTab({ definition, edit }: Props) {
+/** The notes pinned to an entry (a stats group, a formula, `table:<id>`), read only, each with EDIT IN GRAPH. */
+function PinnedNotes({ definition, on, onOpenNote }: { definition: Definition; on: string; onOpenNote?: (node: string) => void }) {
+  const notes = notesOn(definition, on);
+  if (!notes.length) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, margin: '2px 0 8px' }}>
+      {notes.map((n) => (
+        <div key={n.id} data-testid={`forms-note-${n.id}`} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '6px 10px', border: '1px dashed color-mix(in srgb, var(--text) 50%, transparent)', fontFamily: 'monospace', fontSize: 12 }}>
+          <span style={{ fontSize: 10, letterSpacing: 1, opacity: 0.7, paddingTop: 1 }}>NOTE</span>
+          <span style={{ flex: 1, minWidth: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.5 }}>{n.text}</span>
+          {onOpenNote && <button type="button" className="utility-btn" style={btn} onClick={() => onOpenNote(`note:${n.id}`)}>EDIT IN GRAPH</button>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatsTab({ definition, edit, onOpenNote }: Props) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <p style={{ ...why, margin: '0 0 10px', maxWidth: '72ch' }}>
         The numbers players fill in on their sheet. Each group becomes a section of the starter sheet. The SAMPLE column is a made-up character to check formulas with.
       </p>
-      {statGroups(definition).map((g) => <GroupSection key={g.id} definition={definition} edit={edit} group={g} />)}
+      {statGroups(definition).map((g) => (
+        <React.Fragment key={g.id}>
+          <GroupSection definition={definition} edit={edit} group={g} />
+          <PinnedNotes definition={definition} on={g.id} onOpenNote={onOpenNote} />
+        </React.Fragment>
+      ))}
       <div><button type="button" className="utility-btn" style={btn} onClick={() => edit(withNewGroup(definition))}>+ GROUP</button></div>
     </div>
   );
 }
 
-function TablesTab({ definition, edit }: Props) {
+function TablesTab({ definition, edit, onOpenNote }: Props) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <p style={{ ...why, margin: '0 0 10px', maxWidth: '72ch' }}>
         Tables a formula reads by name, like an ability score to its modifier: mod(@str). Read top to bottom: the first row the number isn't above gives the answer.
       </p>
-      {tableList(definition).map((t) => <TableSection key={t.id} definition={definition} edit={edit} table={t} />)}
+      {tableList(definition).map((t) => (
+        <React.Fragment key={t.id}>
+          <TableSection definition={definition} edit={edit} table={t} />
+          <PinnedNotes definition={definition} on={`table:${t.id}`} onOpenNote={onOpenNote} />
+        </React.Fragment>
+      ))}
       <div><button type="button" className="utility-btn" style={btn} onClick={() => edit(withNewTable(definition))}>+ TABLE</button></div>
     </div>
   );
@@ -63,7 +94,7 @@ function TablesTab({ definition, edit }: Props) {
  * typing stops (worked out by the server, POST /api/systems/preview-values, so it is the game's own
  * engine), its mistake under it, and which formulas read it; INSERT puts a name at the cursor.
  */
-function FormulasTab({ definition, edit, api }: Props) {
+function FormulasTab({ definition, edit, api, onOpenNote }: Props) {
   const formulas = formulaList(definition);
   const { preview, tried } = usePreviewValues(definition, api);
   const insert = useFormulaInsert(definition, edit);
@@ -83,18 +114,22 @@ function FormulasTab({ definition, edit, api }: Props) {
             <tbody>
               {formulas.map((f) => {
                 const value = preview?.values[f.id];
+                const pinned = notesOn(definition, f.id).length > 0;
                 return (
-                  <tr key={f.id} data-testid={`formula-${f.id}`}>
-                    <td style={td}><FormulaName definition={definition} edit={edit} f={f} /></td>
-                    <td style={td}>
-                      <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried} {...insert.bind(f.id)} />
-                    </td>
-                    <td data-testid={`value-${f.id}`} style={{ ...td, textAlign: 'right', color: 'var(--cyan)', fontSize: 13 }}>
-                      {value !== undefined ? value : '·'}
-                    </td>
-                    <td style={td}><button type="button" className="utility-btn" style={btn} aria-label={`Remove ${f.label || f.id}`}
-                      onClick={() => edit(withoutFormula(definition, f.id))}>×</button></td>
-                  </tr>
+                  <React.Fragment key={f.id}>
+                    <tr data-testid={`formula-${f.id}`}>
+                      <td style={td}><FormulaName definition={definition} edit={edit} f={f} /></td>
+                      <td style={td}>
+                        <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried} {...insert.bind(f.id)} />
+                      </td>
+                      <td data-testid={`value-${f.id}`} style={{ ...td, textAlign: 'right', color: 'var(--cyan)', fontSize: 13 }}>
+                        {value !== undefined ? value : '·'}
+                      </td>
+                      <td style={td}><button type="button" className="utility-btn" style={btn} aria-label={`Remove ${f.label || f.id}`}
+                        onClick={() => edit(withoutFormula(definition, f.id))}>×</button></td>
+                    </tr>
+                    {pinned && <tr><td colSpan={4} style={{ padding: '0 0 0 8px' }}><PinnedNotes definition={definition} on={f.id} onOpenNote={onOpenNote} /></td></tr>}
+                  </React.Fragment>
                 );
               })}
             </tbody>
@@ -111,7 +146,7 @@ function FormulasTab({ definition, edit, api }: Props) {
   );
 }
 
-export function StatsRulesPage({ definition, edit, api }: Props) {
+export function StatsRulesPage({ definition, edit, api, onOpenNote }: Props) {
   const [tab, setTab] = useState<Tab>('stats');
   const tabs: [Tab, string][] = [['stats', 'STATS'], ['formulas', 'FORMULAS'], ['tables', 'TABLES']];
   return (
@@ -121,9 +156,9 @@ export function StatsRulesPage({ definition, edit, api }: Props) {
           <button key={id} type="button" role="tab" aria-selected={tab === id} style={tabStyle(tab === id)} onClick={() => setTab(id)}>{label}</button>
         ))}
       </div>
-      {tab === 'stats' && <StatsTab definition={definition} edit={edit} />}
-      {tab === 'formulas' && <FormulasTab definition={definition} edit={edit} api={api} />}
-      {tab === 'tables' && <TablesTab definition={definition} edit={edit} />}
+      {tab === 'stats' && <StatsTab definition={definition} edit={edit} onOpenNote={onOpenNote} />}
+      {tab === 'formulas' && <FormulasTab definition={definition} edit={edit} api={api} onOpenNote={onOpenNote} />}
+      {tab === 'tables' && <TablesTab definition={definition} edit={edit} onOpenNote={onOpenNote} />}
     </div>
   );
 }

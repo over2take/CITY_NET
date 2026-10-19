@@ -17,6 +17,7 @@ import { GraphPanel } from './GraphPanel';
 import { emptyHistory, recorded, undone, redone, type History } from '../sheets/editHistory';
 import { withWire, withoutWire, wireLabel } from '../sheets/graphEdits';
 import { addChoices, withAdded, withRemoved } from '../sheets/graphAdds';
+import { spotBeside } from '../sheets/graphNotes';
 import { GraphAddPalette } from './GraphAddPalette';
 
 // STATS & RULES with GRAPH on (5a3a; approved mockup docs/mockups/builder-graph.html, 2026-10-17,
@@ -35,6 +36,8 @@ interface Props {
   readOnly?: boolean;
   /** Where a house rule's GO TO HOUSE RULES goes: the builder's own page. */
   onGoTo?: (page: BuilderPage) => void;
+  /** A node to open the panel on when the map opens: a note FORMS' EDIT IN GRAPH asked for (5b5). */
+  startWith?: string;
 }
 
 /**
@@ -204,8 +207,8 @@ function NoteNode({ data }: NodeProps<Node<NodeData>>) {
     <div data-testid={`graph-node-${n.id}`} style={shell(n, { background: GROUND.cell, border: '1px dashed var(--text)', boxShadow: 'none' })}>
       <div style={{ ...line, height: SIZE.noteHeader, padding: '0 10px' }}><span style={tag}>NOTE</span></div>
       <div style={{ height: noteHeight(n.text), boxSizing: 'border-box', padding: '0 10px 8px', fontSize: 12, lineHeight: `${SIZE.noteLine}px`, overflow: 'hidden' }}>{n.text}</div>
-      <Handle type="source" id="out" position={Position.Left} isConnectable={false}
-        style={{ width: 10, height: 10, minWidth: 0, minHeight: 0, borderRadius: 0, background: GROUND.base, border: '2px solid var(--text)', top: 11 }} />
+      <Handle type="source" id="out" position={Position.Left} isConnectable={data.values.editable} title={data.values.editable ? 'Drag onto a node to pin the note there' : undefined}
+        style={{ width: 10, height: 10, minWidth: 0, minHeight: 0, borderRadius: 0, background: GROUND.base, border: '2px solid var(--text)', top: 11, cursor: data.values.editable ? 'crosshair' : undefined }} />
     </div>
   );
 }
@@ -410,7 +413,7 @@ function StatusLine({ graph, definition }: { graph: Graph; definition: Definitio
   );
 }
 
-function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
+function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith }: Props) {
   const graph = useMemo(() => graphOf(definition), [definition]);
   const { preview, tried } = usePreviewValues(definition, api);
   // Every change made on the map or in its panel goes through here, so it can be undone.
@@ -436,7 +439,7 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
   }, [history, definition, edit]);
   // The node picked on the map, whose controls the panel shows (5a3b2). Gone when it is: a formula
   // removed, or turned into a modifier its stat's list now shows.
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(startWith ?? null);
   /** + ADD's search open (5b4). */
   const [adding, setAdding] = useState(false);
   /** A line at the top of the map saying what a wire drawn or cut did. */
@@ -543,7 +546,8 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
 
   const flow = useReactFlow();
   // Opened: all of it if that can be read, otherwise its top left at a zoom that can, the
-  // minimap showing the rest. Once, when React Flow has measured the nodes.
+  // minimap showing the rest; opened on a note, that note and what it is pinned to. Once, when
+  // React Flow has measured the nodes.
   const opened = useRef(false);
   const measuredAll = useNodesInitialized();
   useEffect(() => {
@@ -551,11 +555,18 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
     opened.current = true;
     const shown = flow.getNodes().filter((n) => !n.hidden);
     if (!shown.length) return;
+    const start = startWith ? graph.nodes.find((n) => n.id === startWith) : undefined;
+    if (start) {
+      void flow.fitView({ nodes: [{ id: start.id }, ...(start.on ? [{ id: start.on }] : [])], padding: 0.3, maxZoom: 1 });
+      return;
+    }
     const bounds = flow.getNodesBounds(shown);
     const pane = document.querySelector('[data-testid="graph-map"]')?.getBoundingClientRect();
     const fits = pane ? Math.min(pane.width / (bounds.width * 1.1), pane.height / (bounds.height * 1.1), 1) : 1;
     if (fits >= OPENING_ZOOM) void flow.fitView({ padding: 0.1, maxZoom: 1 });
     else void flow.setViewport({ x: 24 - bounds.x * OPENING_ZOOM, y: 24 - bounds.y * OPENING_ZOOM, zoom: OPENING_ZOOM });
+    // Only ever once: what it opened on is read then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [measuredAll, flow]);
 
   const tidy = useCallback(() => {
@@ -563,14 +574,18 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
     requestAnimationFrame(() => { void flow.fitView({ padding: 0.1, maxZoom: 1 }); });
   }, [definition, mapEdit, graph, flow]);
 
-  /** The map slid just enough that a node the panel opened over is in view again. */
+  /** The map slid just enough that a node the panel opened over, or one just added at an edge, is in view again. */
   const keepInView = useCallback((id: string) => {
     requestAnimationFrame(() => {
       const node = document.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`)?.getBoundingClientRect();
       const area = document.querySelector('[data-testid="graph-map"]')?.getBoundingClientRect();
-      if (!node || !area || node.right <= area.right - 16) return;
+      if (!node || !area) return;
+      // Clear of the panel's edge, the toolbar along the top and the status line along the bottom.
+      const dx = node.right > area.right - 16 ? node.right - area.right + 40 : 0;
+      const dy = node.top < area.top + 56 ? node.top - area.top - 72 : node.bottom > area.bottom - 40 ? Math.min(node.bottom - area.bottom + 56, node.top - area.top - 72) : 0;
+      if (!dx && !dy) return;
       const vp = flow.getViewport();
-      void flow.setViewport({ ...vp, x: vp.x - (node.right - area.right + 40) }, { duration: 200 });
+      void flow.setViewport({ ...vp, x: vp.x - dx, y: vp.y - dy }, { duration: 200 });
     });
   }, [flow]);
 
@@ -600,11 +615,14 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
     setAdding(false);
     const area = document.querySelector('[data-testid="graph-map"]')?.getBoundingClientRect();
     const spot = area ? flow.screenToFlowPosition({ x: area.left + area.width / 2 - SIZE.width / 2, y: area.top + area.height / 3 }) : { x: SIZE.left, y: SIZE.top };
-    const r = withAdded(definition, key, { x: snap(spot.x), y: snap(spot.y) });
-    if (!r) return;
+    // A note goes beside the node it is pinned to, where its line is short.
+    const beside = key === 'note' && picked ? spotBeside(graph, positions, picked.id) : null;
+    const r = withAdded(definition, key, beside ?? { x: snap(spot.x), y: snap(spot.y) }, picked?.id);
+    if (!r) { if (key === 'note') setSaid({ text: 'That is the most notes a system can have.', at: Date.now() }); return; }
     mapEdit(r.definition);
     setSelected(r.node);
-  }, [definition, flow, mapEdit]);
+    keepInView(r.node);
+  }, [definition, flow, mapEdit, picked, positions, keepInView, graph]);
   /** The picked node removed, as FORMS' × does. */
   const remove = useCallback(() => {
     if (!picked) return;
@@ -662,7 +680,7 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo }: Props) {
         onEdgeClick={readOnly ? undefined : (event, edge) => {
           const wire = graph.wires.find((w) => w.id === edge.id);
           const area = document.querySelector('[data-testid="graph-map"]')?.getBoundingClientRect();
-          if (!wire || wire.kind === 'note' || !area) return;
+          if (!wire || !area) return;
           setAsked({ wire: wire.id, x: event.clientX - area.left, y: event.clientY - area.top });
         }}
         elementsSelectable={false} deleteKeyCode={null}

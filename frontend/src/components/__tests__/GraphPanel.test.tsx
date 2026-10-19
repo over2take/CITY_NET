@@ -14,8 +14,9 @@ import { standInsForReactFlow } from '../../test/reactFlow';
  * the same form as FORMS". A node clicked opens its controls beside the map, the very controls
  * FORMS lays out (statsRulesFields): so here every change is made twice, once in FORMS and once in
  * the panel, and the two systems that come out must be the same. And the panel's own ways: closing
- * with ×, Escape or a click on the map; a house rule going to HOUSE RULES; a note read; a formula
- * removed closing it; an example's panel read but not changed.
+ * with ×, Escape or a click on the map; a house rule going to HOUSE RULES; a note written, pinned
+ * and removed (5b5), and shown read only in FORMS; a formula removed closing it; an example's panel
+ * read but not changed.
  */
 
 beforeAll(() => standInsForReactFlow());
@@ -200,11 +201,62 @@ describe('the panel', () => {
     expect(onGoTo).toHaveBeenCalledWith('house_rules');
   });
 
-  it('a note is read in the panel', async () => {
-    openMap();
+  it('a note is written in the panel, its typing one step to undo', async () => {
+    const map = openMap();
     const panel = await pick('note:n1');
-    expect(panel.textContent).toContain('Half level, rounded down.');
-    expect(within(panel).queryByRole('textbox')).toBeNull();
+    const box = within(panel).getByLabelText('Note') as HTMLTextAreaElement;
+    expect(box.value).toBe('Half level, rounded down.');
+    await userEvent.type(box, ' Min 1.');
+    expect(map.last().graph).toEqual({ notes: [{ id: 'n1', on: 'melee', text: 'Half level, rounded down. Min 1.' }] });
+    expect(screen.getByTestId('graph-node-note:n1').textContent).toContain('Min 1.');
+    expect(panel.textContent).toContain('NOTE · 32 / 1000');
+    box.blur();
+    await userEvent.keyboard('{Control>}z{/Control}');
+    expect(map.last().graph).toEqual(HEARTH.graph);
+  });
+
+  it('a note pinned to another node, or to nothing, from the panel', async () => {
+    const map = openMap();
+    const panel = await pick('note:n1');
+    const pin = within(panel).getByLabelText('Pinned to') as HTMLSelectElement;
+    expect(pin.value).toBe('melee');
+    expect([...pin.options].map((o) => o.textContent)).toEqual([
+      'NOTHING', 'STATS CHARACTER', 'STATS ABILITIES', 'STR MOD', 'MELEE ATTACK', 'TABLE ATTRIBUTE MOD', 'HOUSE RULE MAGIC',
+    ]);
+    await userEvent.selectOptions(pin, 'TABLE ATTRIBUTE MOD');
+    expect(map.last().graph).toEqual({ notes: [{ id: 'n1', on: 'table:attribute_mod', text: 'Half level, rounded down.' }] });
+    await userEvent.selectOptions(pin, 'NOTHING');
+    expect(map.last().graph).toEqual({ notes: [{ id: 'n1', text: 'Half level, rounded down.' }] });
+  });
+
+  it('a note removed from the panel, which closes', async () => {
+    const map = openMap();
+    const panel = await pick('note:n1');
+    await userEvent.click(within(panel).getByRole('button', { name: 'REMOVE NOTE' }));
+    expect(map.last().graph).toBeUndefined();
+    expect(screen.queryByTestId('graph-panel')).toBeNull();
+    expect(screen.queryByTestId('graph-node-note:n1')).toBeNull();
+  });
+
+  it('FORMS shows a note under what it is pinned to, read only, and EDIT IN GRAPH asks for the map on it', async () => {
+    const onOpenNote = vi.fn();
+    render(<StatsRulesPage definition={{ ...HEARTH, graph: { notes: [...HEARTH.graph!.notes as object[], { id: 'n2', on: 'abilities', text: 'Roll 3d6.' }, { id: 'n3', on: 'table:attribute_mod', text: 'Per the book.' }] } }}
+      edit={() => {}} api={api} onOpenNote={onOpenNote} />);
+    expect(screen.getByTestId('forms-note-n2').textContent).toContain('Roll 3d6.');
+    expect(screen.queryByTestId('forms-note-n1')).toBeNull();
+    await userEvent.click(screen.getByRole('tab', { name: 'FORMULAS' }));
+    const note = screen.getByTestId('forms-note-n1');
+    expect(note.textContent).toContain('Half level, rounded down.');
+    expect(within(note).queryByRole('textbox')).toBeNull();
+    await userEvent.click(within(note).getByRole('button', { name: 'EDIT IN GRAPH' }));
+    expect(onOpenNote).toHaveBeenCalledWith('note:n1');
+    await userEvent.click(screen.getByRole('tab', { name: 'TABLES' }));
+    expect(screen.getByTestId('forms-note-n3').textContent).toContain('Per the book.');
+  });
+
+  it('the map opened on a note has its panel open', async () => {
+    openMap(HEARTH, { startWith: 'note:n1' });
+    expect((within(await screen.findByTestId('graph-panel')).getByLabelText('Note') as HTMLTextAreaElement).value).toBe('Half level, rounded down.');
   });
 
   it('an example\'s panel is read, nothing in it changed, and still closes', async () => {

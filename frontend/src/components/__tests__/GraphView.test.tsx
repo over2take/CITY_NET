@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 
 import { GraphView } from '../GraphView';
 import type { Definition } from '../../sheets/systemsApi';
-import { graphOf, layoutOf } from '../../sheets/graphModel';
+import { graphOf, layoutOf, positionsOf } from '../../sheets/graphModel';
 import { lockControls } from '../../sheets/examples';
 import { standInsForReactFlow } from '../../test/reactFlow';
 
@@ -244,6 +244,51 @@ describe('+ ADD and Delete (5b4)', () => {
     fireEvent.keyDown(screen.getByTestId('graph-map'), { key: 'Delete' });
     expect(screen.getByRole('status').textContent).toBe('House rules are removed on HOUSE RULES, where removing one says what stays.');
     expect(last()).toEqual(HEARTH);
+  });
+});
+
+describe('notes (5b5)', () => {
+  it('+ ADD → NOTE pins a new one to the node picked, beside it, its panel open', async () => {
+    const { last } = open();
+    fireEvent.click(node('spell'));
+    await screen.findByTestId('graph-panel');
+    fireEvent.keyDown(screen.getByTestId('graph-map'), { key: 'a' });
+    await userEvent.type(screen.getByLabelText('Add a node: type to search'), 'note{Enter}');
+    const layout = last().graph as { notes: unknown[]; positions: Record<string, number[]> };
+    expect(layout.notes[1]).toEqual({ id: 'n2', on: 'spell', text: 'A note.' });
+    const spell = positionsOf(HEARTH, graphOf(HEARTH)).spell;
+    expect(layout.positions['note:n2']).toEqual([spell.x + 264 + 48, spell.y]);
+    expect(node('note:n2').textContent).toContain('A note.');
+    expect(screen.getByTestId('graph-panel').getAttribute('aria-label')).toBe('NOTE ON SPELL POWER');
+  });
+
+  it('with nothing picked, a note pinned to nothing', async () => {
+    const { last } = open();
+    await userEvent.click(screen.getByRole('button', { name: '+ ADD' }));
+    await userEvent.click(screen.getByRole('option', { name: /NOTE/ }));
+    expect((last().graph as { notes: unknown[] }).notes[1]).toEqual({ id: 'n2', text: 'A note.' });
+    expect(screen.getByTestId('graph-panel').getAttribute('aria-label')).toBe('NOTE NOT PINNED');
+  });
+
+  it('Delete removes the picked note and its place, and undoes', async () => {
+    const { last } = open();
+    fireEvent.click(node('note:n1'));
+    await screen.findByTestId('graph-panel');
+    fireEvent.keyDown(screen.getByTestId('graph-map'), { key: 'Delete' });
+    expect((last().graph as { notes?: unknown[] }).notes).toBeUndefined();
+    expect(screen.queryByTestId('graph-node-note:n1')).toBeNull();
+    expect(screen.getByRole('status').textContent).toBe('Removed the note. Undo brings it back.');
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(last()).toEqual(HEARTH);
+  });
+
+  it('a note\'s square dot can be dragged onto a node; an example\'s can\'t', () => {
+    open();
+    const dot = () => node('note:n1').querySelector('.react-flow__handle-left')!;
+    expect(dot().classList.contains('connectable')).toBe(true);
+    cleanup();
+    open(HEARTH, true);
+    expect(dot().classList.contains('connectable')).toBe(false);
   });
 });
 

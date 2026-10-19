@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import { addChoices, matching, withAdded, withRemoved } from '../graphAdds';
 import { graphOf } from '../graphModel';
+import { notesOf, withNewNote, withoutNote } from '../graphNotes';
 import { withNewFormula, withNewStat, withNewGroup, withNewTable, withoutFormula, withoutTable, withoutGroup } from '../statsRules';
 import type { Definition } from '../systemsApi';
 
@@ -24,10 +25,10 @@ const HEARTH: Definition = {
 const without = (def: Definition) => { const { graph: _g, ...rest } = def; return rest; };
 
 describe('what can be added', () => {
-  it('a formula, a stat in each group, a group and a table now; the rest saying when', () => {
+  it('a formula, a stat in each group, a group, a table and a note now; the rest saying when', () => {
     expect(addChoices(HEARTH).map((c) => `${c.label}${c.soon ? ` (${c.soon})` : ''}`)).toEqual([
       'FORMULA', 'STAT IN ABILITIES', 'STATS GROUP', 'TABLE',
-      'CONDITION (With editing conditions on the map)', 'NOTE (With notes on the map)', 'ROLL (Phase 6)', 'CHOICE · FEATURE (Phase 7)',
+      'CONDITION (With editing conditions on the map)', 'NOTE', 'ROLL (Phase 6)', 'CHOICE · FEATURE (Phase 7)',
     ]);
   });
 
@@ -55,6 +56,14 @@ describe('a node added', () => {
     expect(gr.node).toBe('new_group');
   });
 
+  it('a note, pinned to the node picked (never a note), placed where asked', () => {
+    expect(withAdded(HEARTH, 'note', { x: 72, y: 96 }, 'melee')).toEqual(withNewNote(HEARTH, { x: 72, y: 96 }, 'melee'));
+    expect(notesOf(withAdded(HEARTH, 'note', { x: 0, y: 0 }, 'melee')!.definition)[0].on).toBe('melee');
+    expect(notesOf(withAdded(HEARTH, 'note', { x: 0, y: 0 })!.definition)[0].on).toBeUndefined();
+    const one = withAdded(HEARTH, 'note', { x: 0, y: 0 })!;
+    expect(notesOf(withAdded(one.definition, 'note', { x: 0, y: 0 }, one.node)!.definition)[1].on).toBeUndefined();
+  });
+
   it('a stat as a row of its group, the group\'s list opened and left where it was', () => {
     const s = withAdded(HEARTH, 'stat:abilities', { x: 999, y: 999 })!;
     expect(s.definition).toEqual(withNewStat(HEARTH, 'abilities'));
@@ -62,11 +71,11 @@ describe('a node added', () => {
   });
 
   it('nothing for what can\'t be added yet, or a group that isn\'t there', () => {
-    for (const key of ['condition', 'note', 'roll', 'choice', 'stat:nowhere']) expect(withAdded(HEARTH, key, { x: 0, y: 0 })).toBeNull();
+    for (const key of ['condition', 'roll', 'choice', 'stat:nowhere']) expect(withAdded(HEARTH, key, { x: 0, y: 0 })).toBeNull();
   });
 
   it('every one taken by the server\'s check', () => {
-    for (const key of ['formula', 'table', 'group', 'stat:abilities']) {
+    for (const key of ['formula', 'table', 'group', 'stat:abilities', 'note']) {
       const a = withAdded(HEARTH, key, { x: 48, y: 48 })!;
       expect(checkDefinition(a.definition).problems.filter((p: { where: string }) => p.where.startsWith('graph'))).toEqual([]);
       expect(graphOf(a.definition).nodes.some((n) => n.id === a.node)).toBe(true);
@@ -81,6 +90,11 @@ describe('a node removed', () => {
     const group = withRemoved(HEARTH, 'abilities');
     expect(group.definition).toEqual(withoutGroup(HEARTH, 'abilities'));
     expect(group.message).toBe('Removed ABILITIES and its 1 stats. Undo brings them back.');
+  });
+
+  it('a note, with its place', () => {
+    const made = withNewNote(HEARTH, { x: 0, y: 0 }, 'melee')!;
+    expect(withRemoved(made.definition, made.node)).toEqual({ definition: withoutNote(made.definition, 'n1'), message: 'Removed the note. Undo brings it back.' });
   });
 
   it('a house rule says where it is removed, and nothing is changed', () => {
