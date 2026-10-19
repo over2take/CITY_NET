@@ -197,6 +197,56 @@ describe('undo and redo', () => {
   });
 });
 
+describe('+ ADD and Delete (5b4)', () => {
+  it('+ ADD searches what can be added, and adds a formula where the GM is looking, its panel open', async () => {
+    const { last } = open();
+    await userEvent.click(screen.getByRole('button', { name: '+ ADD' }));
+    const search = screen.getByRole('dialog', { name: 'Add a node' });
+    expect(within(search).getByRole('option', { name: /ROLL/ }).hasAttribute('disabled')).toBe(true);
+    await userEvent.type(within(search).getByLabelText('Add a node: type to search'), 'formula{Enter}');
+    expect(screen.queryByRole('dialog', { name: 'Add a node' })).toBeNull();
+    expect((last().derived as { id: string }[]).map((d) => d.id)).toContain('new_formula');
+    expect((last().graph as { positions: Record<string, unknown> }).positions.new_formula).toBeTruthy();
+    expect(node('new_formula')).toBeTruthy();
+    expect(screen.getByTestId('graph-panel').getAttribute('aria-label')).toBe('FORMULA NEW FORMULA');
+  });
+
+  it('A opens it from the map, not from a box being typed in; Escape closes it', async () => {
+    open();
+    fireEvent.keyDown(screen.getByTestId('graph-map'), { key: 'a' });
+    expect(screen.getByRole('dialog', { name: 'Add a node' })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Add a node' }), { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Add a node' })).toBeNull();
+    fireEvent.click(node('save'));
+    fireEvent.keyDown(within(await screen.findByTestId('graph-panel')).getByLabelText('Physical save formula'), { key: 'a' });
+    expect(screen.queryByRole('dialog', { name: 'Add a node' })).toBeNull();
+  });
+
+  it('a stat goes in the group picked, its list opened', async () => {
+    const { last } = open();
+    await userEvent.click(screen.getByRole('button', { name: '+ ADD' }));
+    await userEvent.click(screen.getByRole('option', { name: /STAT IN ABILITIES/ }));
+    expect((last().stats as { id: string; stats: { id: string }[] }[]).find((g) => g.id === 'abilities')!.stats.map((s) => s.id)).toEqual(['str', 'wit', 'new_stat']);
+    expect(screen.getByTestId('graph-panel').getAttribute('aria-label')).toBe('STATS ABILITIES');
+  });
+
+  it('Delete removes the picked node, as FORMS\' × does, and undoes; a house rule says where it goes', async () => {
+    const { last } = open();
+    fireEvent.click(node('odd'));
+    await screen.findByTestId('graph-panel');
+    fireEvent.keyDown(screen.getByTestId('graph-map'), { key: 'Delete' });
+    expect((last().derived as { id: string }[]).map((d) => d.id)).not.toContain('odd');
+    expect(screen.queryByTestId('graph-node-odd')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(last()).toEqual(HEARTH);
+    fireEvent.click(node('rule:magic'));
+    await screen.findByTestId('graph-panel');
+    fireEvent.keyDown(screen.getByTestId('graph-map'), { key: 'Delete' });
+    expect(screen.getByRole('status').textContent).toBe('House rules are removed on HOUSE RULES, where removing one says what stays.');
+    expect(last()).toEqual(HEARTH);
+  });
+});
+
 describe('an example, looked at', () => {
   it('folds and lays out nothing, and keeps zoom usable when the page is locked', () => {
     const { edits } = open(HEARTH, true);
@@ -204,6 +254,7 @@ describe('an example, looked at', () => {
     expect((screen.getByRole('button', { name: 'Fold SAVES' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole('button', { name: 'AUTO-LAYOUT' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '+ ADD' })).toBeNull();
     const bar = screen.getByRole('toolbar', { name: 'Map' });
     for (const name of ['Zoom in', 'Zoom out', 'FIT']) expect((within(bar).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false);
     expect(edits).toEqual([]);
