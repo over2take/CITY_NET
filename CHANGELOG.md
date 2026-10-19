@@ -90,6 +90,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Something added lands in clear space.** A node added from + ADD went exactly where you were
   looking, on top of whatever was there. It now goes to the nearest place a cell clear of every node
   and group, and nothing else on the map moves (a map never arranged used to be laid out again round it).
+- **PROBLEMS on the map (5b6b).** The map's bottom left corner counts the draft's problems (✕) and
+  warnings (!), the same check as the PROBLEMS page, and opens to the list in the names players see.
+  Click one to open its node and move the map to it; one on another page (WORDS, the sheet) goes to
+  PROBLEMS. A node with a problem is outlined red. One warning is the map's own: a formula your
+  customized character sheet leaves off that nothing reads either, so it would show nowhere.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

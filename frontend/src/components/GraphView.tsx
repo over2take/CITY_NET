@@ -18,6 +18,8 @@ import { emptyHistory, recorded, undone, redone, type History } from '../sheets/
 import { withWire, withoutWire, wireLabel } from '../sheets/graphEdits';
 import { addChoices, withAdded, withRemoved } from '../sheets/graphAdds';
 import { spotBeside } from '../sheets/graphNotes';
+import { mapProblems, type MapProblem } from '../sheets/graphProblems';
+import { GraphProblems } from './GraphProblems';
 import { GraphAddPalette } from './GraphAddPalette';
 
 // STATS & RULES with GRAPH on (5a3a; approved mockup docs/mockups/builder-graph.html, 2026-10-17,
@@ -38,6 +40,8 @@ interface Props {
   onGoTo?: (page: BuilderPage) => void;
   /** A node to open the panel on when the map opens: a note FORMS' EDIT IN GRAPH asked for (5b5). */
   startWith?: string;
+  /** The server's problems with the draft, as PROBLEMS lists them (5b6b). */
+  problems?: { where: string; message: string }[];
 }
 
 /**
@@ -413,7 +417,7 @@ function StatusLine({ graph, definition }: { graph: Graph; definition: Definitio
   );
 }
 
-function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith }: Props) {
+function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, problems }: Props) {
   const graph = useMemo(() => graphOf(definition), [definition]);
   const { preview, tried } = usePreviewValues(definition, api);
   // Every change made on the map or in its panel goes through here, so it can be undone.
@@ -452,6 +456,9 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith }
   /** A wire clicked: what it is, and where the click was in the map. */
   const [asked, setAsked] = useState<{ wire: string; x: number; y: number } | null>(null);
   const picked = selected ? graph.nodes.find((n) => n.id === selected) : undefined;
+  /** PROBLEMS on the map (5b6b), and the nodes with an error, drawn red. */
+  const listed = useMemo(() => mapProblems(definition, graph, problems ?? []), [definition, graph, problems]);
+  const broken = useMemo(() => new Set(listed.filter((p) => p.kind === 'error' && p.node).map((p) => p.node)), [listed]);
   const values: Values = useMemo(() => ({
     values: preview?.values ?? {},
     problems: preview?.problems ?? {},
@@ -501,11 +508,11 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith }
       out.push({
         id: n.id, type: n.kind, position: positions[n.id] ?? { x: 0, y: 0 }, width: n.width, height: n.height, measured: measured[n.id],
         hidden: folded.has(n.id), draggable: !readOnly, selectable: false, data: { node: n, values } satisfies NodeData,
-        style: n.id === picked?.id ? { outline: '2px solid var(--cyan)', outlineOffset: 3 } : undefined,
+        style: n.id === picked?.id ? { outline: '2px solid var(--cyan)', outlineOffset: 3 } : broken.has(n.id) ? { outline: '2px solid var(--danger)', outlineOffset: 3 } : undefined,
       });
     }
     return out;
-  }, [graph, positions, values, readOnly, fold, measured, picked]);
+  }, [graph, positions, values, readOnly, fold, measured, picked, broken]);
 
   const edges: Edge[] = useMemo(() => shownWires(graph).map((w) => ({
     id: w.id, source: w.source, target: w.target, sourceHandle: w.sourceHandle, targetHandle: w.targetHandle,
@@ -623,6 +630,13 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith }
     setSelected(r.node);
     keepInView(r.node);
   }, [definition, flow, mapEdit, picked, positions, keepInView, graph]);
+  /** A problem picked from PROBLEMS: its node opened and moved to (its folded group's box, if folded), or the PROBLEMS page. */
+  const goToProblem = useCallback((p: MapProblem) => {
+    if (!p.node) { onGoTo?.('problems'); return; }
+    setSelected(p.node);
+    const folded = graph.groups.find((g) => g.collapsed && g.members.includes(p.node!));
+    void flow.fitView({ nodes: [{ id: folded ? `group:${folded.id}` : p.node }], maxZoom: 1, padding: 0.4, duration: 300 });
+  }, [graph, flow, onGoTo]);
   /** The picked node removed, as FORMS' × does. */
   const remove = useCallback(() => {
     if (!picked) return;
@@ -698,6 +712,7 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith }
         <Toolbar edits={readOnly ? undefined : { onTidy: tidy, onUndo: undo, onRedo: redo, onAdd: () => setAdding(true), canUndo: history.past.length > 0, canRedo: history.future.length > 0 }} />
       </ReactFlow>
       <StatusLine graph={graph} definition={definition} />
+      <GraphProblems problems={listed} onPick={goToProblem} />
       {adding && !readOnly && <GraphAddPalette choices={addChoices(definition)} onAdd={add} onClose={() => setAdding(false)} />}
       {said && (
         <div role="status" key={said.at} style={{ position: 'absolute', top: 10, left: '50%', transform: 'translateX(-50%)', zIndex: 6, maxWidth: '60%', padding: '6px 12px',
