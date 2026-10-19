@@ -3,7 +3,7 @@ import path from 'path';
 import { signInAsGm, openBuilder, builderPage, gmToken, asGm } from './helpers';
 
 // Reference pictures of the graph view, to look at by eye before a PR that changes how it looks
-// (5a3a): the CWN example as the map opens, fitted, with a node's panel open (5a3b2), a note added (5b5), and in each theme. Not a check, so it runs
+// (5a3a): the CWN example as the map opens, fitted, with a node's panel open (5a3b2), a note added (5b5), a condition added (5b6a), and in each theme. Not a check, so it runs
 // only when asked:
 //
 //   GRAPH_SHOTS=1 npx playwright test tests/graph-shots.spec.ts
@@ -46,6 +46,15 @@ test('the graph view, for looking at', async ({ page, request }, info) => {
   await page.getByTestId('graph-panel').getByLabel('Note').fill('The book rounds this down. Check with the table before a big fight.');
   await page.waitForTimeout(800);
   await page.screenshot({ path: path.join(SHOTS, 'graph-cwn-note.png') });
+  await page.keyboard.press('Escape');
+  // A condition (5b6a): IF, THEN and ELSE in its panel.
+  await page.keyboard.press('a');
+  await page.getByLabel('Add a node: type to search').fill('condition');
+  await page.keyboard.press('Enter');
+  await page.getByTestId('graph-panel').getByLabel('New condition if').fill('@level > 2');
+  await page.getByTestId('graph-panel').getByLabel('New condition then').fill('@str_mod + 1');
+  await page.waitForTimeout(1200);
+  await page.screenshot({ path: path.join(SHOTS, 'graph-cwn-condition.png') });
   await page.keyboard.press('Escape');
   for (const theme of THEMES) {
     await page.evaluate((t) => {

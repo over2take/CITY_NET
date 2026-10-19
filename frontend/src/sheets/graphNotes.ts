@@ -7,7 +7,7 @@
 import type { Definition } from './systemsApi';
 import { statGroups, formulaList, tableList } from './statsRules';
 import { houseRuleList } from './houseRules';
-import { graphOf, withPositions, heightOf, GRID, SIZE, type Graph, type Point, type Positions } from './graphModel';
+import { graphOf, withPositions, heightOf, takenBoxes, clearOf, GRID, SIZE, type Graph, type Point, type Positions } from './graphModel';
 
 export interface Note { id: string; on?: string; text: string }
 
@@ -56,7 +56,7 @@ export const withNewNote = (def: Definition, at: Point, on?: string): { definiti
 
 /**
  * Where a new note goes beside node `id`: just to its right, where its line is short, moved up or
- * down a cell at a time to the nearest place that covers no node (a cell clear all round), with
+ * down a cell at a time to the nearest place that covers no node or group (a cell clear all round), with
  * room for it to grow to four lines as it is written.
  */
 export const spotBeside = (graph: Graph, positions: Positions, id: string): Point | null => {
@@ -66,10 +66,8 @@ export const spotBeside = (graph: Graph, positions: Positions, id: string): Poin
   const width = SIZE.noteWidth;
   const height = heightOf({ kind: 'note', inputs: [], text: 'x'.repeat(ROOM_LINES * 30) });
   const x = at.x + node.width + GRID * 2;
-  const clear = (y: number) => graph.nodes.every((n) => {
-    const p = positions[n.id];
-    return !p || x + width + GRID <= p.x || p.x + n.width + GRID <= x || y + height + GRID <= p.y || p.y + n.height + GRID <= y;
-  });
+  const taken = takenBoxes(graph, positions);
+  const clear = (y: number) => clearOf(taken, { x, y }, { width, height });
   for (let k = 0; k <= 200; k += 1) {
     for (const y of k ? [at.y + k * GRID, at.y - k * GRID] : [at.y]) if (clear(y)) return { x, y };
   }

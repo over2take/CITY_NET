@@ -73,7 +73,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   WAY IN, each number changeable: that rewrites the formula's text, as typing it in FORMS would.
 - **Add and remove on the map (5b4).** + ADD, or A on the map, searches what can be added: a formula, a
   stat in a group you pick, a stats group or a table, placed where you are looking with its panel open
-  to name it. Conditions, rolls and choices show greyed, saying when they come. Delete removes
+  to name it. Rolls and choices show greyed, saying when they come. Delete removes
   the node picked. Each is the same edit as FORMS' own + and × buttons, and undoes.
 - **Notes on the map (5b5).** + ADD → NOTE makes a note for you, pinned with a dashed line to the
   node you have picked and put in clear space beside it. Its panel is where you write it (up to 1000
@@ -81,6 +81,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   its square dot onto another node to pin it there, or cut its line to unpin it. Players never see
   notes. FORMS shows each one, read only, under the stats group, formula or table it's pinned to,
   with EDIT IN GRAPH to open the map on it. Notes travel in a shared system file.
+- **Conditions written in FORMS and on the map (5b6a).** A condition (IF something THEN one number
+  ELSE another) was shown but couldn't be changed. Now it has three boxes, IF, THEN and ELSE, in
+  FORMULAS and in its panel on the map, with INSERT in each, and + CONDITION (or + ADD → CONDITION)
+  makes one. A wire dragged into a condition opens its panel to add the name to IF and say how it
+  compares; cutting one takes the name out of THEN or ELSE, never out of IF's comparison. A formula
+  read only by a condition, or by a house rule's formula, now says so under "used by".
+- **Something added lands in clear space.** A node added from + ADD went exactly where you were
+  looking, on top of whatever was there. It now goes to the nearest place a cell clear of every node
+  and group, and nothing else on the map moves (a map never arranged used to be laid out again round it).
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the
