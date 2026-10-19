@@ -61,6 +61,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   too), take back what was done on the map and in a node's panel: a move, a fold, AUTO-LAYOUT (now one
   click), a change typed in the panel (one step for the typing, not one a key). A box being typed in
   keeps its own undo.
+- **Wires drawn and cut on the map (5b2).** Drag from a stat's or formula's dot onto a formula and
+  `+ @name` goes on the end of its formula; from a house rule, the formula gets one to use WITH that
+  rule. Click a wire and CUT takes the name out of the formula where a whole formula is left (one
+  name of a BEST keeps the others); where it isn't (a name inside `floor(...)`), the formula's panel
+  opens to change it by hand. A name already read, a formula reading itself and a loop are refused,
+  each saying why. Every one is the formula's own text, the same as typing it in FORMS, and undoes.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

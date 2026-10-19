@@ -152,6 +152,68 @@ test('a node edited in its panel is the same system in FORMS, and the map follow
   await expect(page.getByTestId('value-melee')).toHaveText('5');
 });
 
+/** A point on a wire's own line, where a person would click it (a trace's box is mostly empty). */
+const onWire = (page: Page, id: string) => page.locator(`[data-testid="rf__edge-${id}"] .react-flow__edge-path`).evaluate((p) => {
+  const path = p as SVGPathElement;
+  // Just before its input: wires from one dot run together at first, each turns into its own lane at the end.
+  const at = path.getPointAtLength(Math.max(0, path.getTotalLength() - 14));
+  const m = path.getScreenCTM()!;
+  return { x: at.x * m.a + at.y * m.c + m.e, y: at.x * m.b + at.y * m.d + m.f };
+});
+
+test("wires drawn and cut on the map are the formula's own text, and undo", async ({ page, request }, info) => {
+  const name = `Wired Map ${info.retry + 1}`;
+  const token = await gmToken(request);
+  await asGm(request, token, 'post', '/api/systems', { definition: HEARTH(name) });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'graph' });
+  await signInAsGm(page);
+  await openSystem(page, name);
+  await toGraph(page);
+  await page.getByRole('button', { name: 'FIT', exact: true }).click();
+  const map = page.getByTestId('graph-view');
+  await expect(map.locator('.react-flow__edge')).toHaveCount(WIRES);
+
+  // Drawn: DEX MOD's dot dragged onto MELEE, anywhere on it.
+  const from = (await map.getByTestId('graph-node-abilities').locator('[data-handleid="out:dex_mod"]').boundingBox())!;
+  const onto = (await map.getByTestId('graph-node-melee').boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(onto.x + onto.width / 2, onto.y + onto.height / 2, { steps: 12 });
+  await page.mouse.up();
+  await expect(map.getByRole('status')).toHaveText('MELEE ATTACK: added + DEX MOD.');
+  await expect(map.locator('.react-flow__edge')).toHaveCount(WIRES + 1);
+  await expect(map.getByTestId('graph-node-melee')).toContainText('+ DEX MOD');
+
+  // Undone, and done again.
+  await page.keyboard.press('Control+z');
+  await expect(map.locator('.react-flow__edge')).toHaveCount(WIRES);
+  await page.keyboard.press('Control+y');
+  await expect(map.locator('.react-flow__edge')).toHaveCount(WIRES + 1);
+
+  // Cut: STR MOD's wire into MELEE, asked first.
+  const strWire = await onWire(page, 'abilities:out:str_mod>melee:b:@str_mod');
+  await page.mouse.click(strWire.x, strWire.y);
+  const ask = page.getByRole('dialog', { name: 'Cut this wire?' });
+  await expect(ask).toContainText('STR MOD into MELEE ATTACK');
+  await ask.getByRole('button', { name: 'CUT' }).click();
+  await expect(map.getByRole('status')).toHaveText('MELEE ATTACK: took out STR MOD.');
+  await expect(map.locator('.react-flow__edge')).toHaveCount(WIRES);
+
+  // LEVEL is inside floor(): not cut, the panel opened on the formula to change by hand.
+  const lvlWire = await onWire(page, 'character:out:lvl>melee:b:@lvl');
+  await page.mouse.click(lvlWire.x, lvlWire.y);
+  await page.getByRole('dialog', { name: 'Cut this wire?' }).getByRole('button', { name: 'CUT' }).click();
+  await expect(map.getByRole('status')).toContainText('LEVEL is part of a bigger piece');
+  await expect(page.getByTestId('graph-panel')).toHaveAttribute('aria-label', 'FORMULA MELEE ATTACK');
+
+  // FORMS: the formula as the wires left it.
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'FORMS' }).click();
+  await page.getByRole('tab', { name: 'FORMULAS' }).click();
+  await expect(page.getByLabel('Melee attack formula')).toHaveValue('floor(@lvl / 2) + @dex_mod');
+});
+
 test('a busy system lays out to be read: dots on their rows, every wire drawn, nothing overlapping, a readable zoom', async ({ page, request }, info) => {
   const name = `Busy Map ${info.retry + 1}`;
   const token = await gmToken(request);
