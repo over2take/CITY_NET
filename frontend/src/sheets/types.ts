@@ -28,6 +28,9 @@ export interface SheetOption { value: string; label: string }
 export type SheetLinkSource =
   | 'token_hp' | 'token_hp_max' | 'bank_balance' | 'token_ac' | 'token_ac_ranged';
 
+/** One of a custom system's rolls, as a sheet offers it (backend runtime.js renderOf rolls). */
+export interface CustomFieldRoll { id: string; label: string; changes: { id: string; label: string; cost?: { from: string; amount: number } }[] }
+
 export interface SheetField {
   id: string;
   label: string;
@@ -104,6 +107,11 @@ export interface SheetField {
   addLabel?: string;
   /** Hint that this field is rollable (Phase 2 wires the actual roll). */
   roll?: { formula: string; label: string };
+  /**
+   * A custom system's rolls this field has a die button for (6b2a), each with the changes a player
+   * may pick; how each rolls stays on the server. The first is what the button rolls.
+   */
+  customRolls?: CustomFieldRoll[];
   /** Linked field: the value lives in another system and is overlaid by the
    *  server at read time (never stored in the sheet's JSON).
    *  - token_hp / token_hp_max: the player's rhombus health

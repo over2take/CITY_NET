@@ -249,3 +249,25 @@ describe('TEST ROLL, the builder route (6b1a)', () => {
     expect((await post({ definition: DRAFT, rollId: 'skill' }, PLAYER)).status).toBe(403);
   });
 });
+
+describe('the rolls players\' browsers get (6b2a)', () => {
+  const { renderOf } = runtime;
+
+  it('each roll\'s name, the fields with a die button for it, and its changes with their costs; never how it rolls', () => {
+    const rolls = renderOf('sys_hearthhearthhear', HEARTH).rolls;
+    expect(rolls).toEqual([
+      { id: 'skill', label: 'Skill check', fields: ['fight', 'lore'], changes: [{ id: 'forward', label: 'Forward' }, { id: 'push', label: 'Push', cost: { from: 'stress', amount: 2 } }] },
+      { id: 'check', label: 'Ability check', fields: ['str', 'wit'], changes: [{ id: 'advantage', label: 'Advantage' }, { id: 'disadvantage', label: 'Disadvantage' }] },
+      { id: 'saving', label: 'Save', fields: ['save'], changes: [] },
+      { id: 'brawl', label: 'Brawl', fields: ['fight'], changes: [] },
+    ]);
+    const sent = JSON.stringify(rolls);
+    for (const secret of ['dice', 'add', 'against', 'bands', 'natural', 'extra', '@this']) expect(sent, secret).not.toContain(secret);
+  });
+
+  it('a roll with no name is offered by its id; a system without rolls offers none', () => {
+    expect(renderOf('sys_x', { ...HEARTH, rolls: [{ id: 'quick', dice: [{ count: '1', sides: 6 }], by: ['str'] }] }).rolls)
+      .toEqual([{ id: 'quick', label: 'quick', fields: ['str'], changes: [] }]);
+    expect(renderOf('sys_x', { format: 1, name: 'Bare' }).rolls).toEqual([]);
+  });
+});

@@ -127,6 +127,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   choice's name, the dice it adds (kept highest for advantage, lowest for disadvantage, or simply
   joining the pool), what it adds to the total, and what it costs from which stat. All five steps of
   a roll are now made in the builder.
+- **A custom system's rolls on the character sheet (6b2a).** Each stat or formula a roll is rolled by
+  now has a ROLL button on the sheet, for players and for NPCs. A click rolls it on the server from the
+  sheet as saved, into the roll log and dice tray like any roll. Choosing between rolls, and picking
+  advantage or a push first, comes next.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the
