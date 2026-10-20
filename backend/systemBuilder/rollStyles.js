@@ -36,7 +36,9 @@
 // be only the roll's first die's (`first`). A change adds dice to the first kind (keeping the
 // highest or lowest as many as there were before, so ADVANTAGE turns 1d20 into 2d20 keep the
 // highest) or adds to the total; ADVANTAGE and DISADVANTAGE together cancel, die for die. What a
-// change costs is reported for the table to take (6b3), never taken here.
+// change costs is reported for the table to take (tableRolls.js, 6b3a), never taken here: taken from
+// a stat (a Fate point spent), or with `adds` added to it (Blades' push adds 2 Stress; the user's
+// pick, 2026-10-20).
 //
 // Dice counts, ADD and the target are formula text in the same language as a system's formulas
 // (expression.js), worked out by the caller's `value(text)` for the character rolling, so a roll
@@ -249,7 +251,8 @@ const checkRoll = (roll, where = 'roll', isFunction = () => false) => {
     if (c.cost !== undefined) {
       if (!isPlainObject(c.cost)) bad(`${at}, cost`, 'Must say what it costs');
       else {
-        keysOf(`${at}, cost`, c.cost, ['from', 'amount'], 'a cost');
+        keysOf(`${at}, cost`, c.cost, ['from', 'amount', 'adds'], 'a cost');
+        if (c.cost.adds !== undefined && typeof c.cost.adds !== 'boolean') bad(`${at}, cost, adds`, 'Must be yes or no');
         if (typeof c.cost.from !== 'string' || !NAME.test(c.cost.from)) bad(`${at}, cost, from`, 'The id of the stat it is taken from');
         if (!Number.isInteger(c.cost.amount) || c.cost.amount < 1 || c.cost.amount > LIMITS.cost) bad(`${at}, cost, amount`, `1 to ${LIMITS.cost}`);
       }
@@ -393,7 +396,7 @@ const makeRoll = (roll, value, rng, chosen = []) => {
     natural: nat ? { label: nat.label, ...(nat.critical ? { critical: nat.critical } : {}) } : null,
     matches: matched, glitch, effects, critical, ...(zeroed ? { zero: true } : {}),
     changes: picked.map((c) => c.label),
-    costs: picked.filter((c) => c.cost).map((c) => ({ from: c.cost.from, amount: c.cost.amount })),
+    costs: picked.filter((c) => c.cost).map((c) => ({ from: c.cost.from, amount: c.cost.amount, ...(c.cost.adds ? { adds: true } : {}) })),
   };
 };
 
@@ -463,7 +466,7 @@ const PRESETS = {
       dice: [{ count: '@this', sides: 6 }], read: 'highest', zero: { count: 2, read: 'lowest' },
       matches: [{ face: 6, count: 2, label: 'Critical', critical: 'success' }],
       bands: [{ upTo: 3, label: 'Bad outcome' }, { upTo: 5, label: 'Partial success' }, { label: 'Full success' }],
-      changes: [{ id: 'push', label: 'Push yourself', extra: { dice: 1 }, cost: { from: 'stress', amount: 2 } }],
+      changes: [{ id: 'push', label: 'Push yourself', extra: { dice: 1 }, cost: { from: 'stress', amount: 2, adds: true } }],
     },
   },
   vampire: {

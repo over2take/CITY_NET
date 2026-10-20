@@ -1981,7 +1981,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         gap: '6px', paddingRight: '18px', scrollbarGutter: 'stable',
       }}>
         {choosing && onRoll && (
-          <RollChooser key={choosing.id} field={choosing} onCancel={() => setChoosing(null)}
+          <RollChooser key={choosing.id} field={choosing} data={data} onCancel={() => setChoosing(null)}
             onRoll={(pick) => { rollNow(choosing.id, pick); setChoosing(null); }} />
         )}
         {tabHasRolls && (

@@ -135,6 +135,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   ADVANTAGE, its ROLL button asks first: which roll, which choices, then ROLL. Anything else still
   rolls on the first click. A choice that costs something (2 Stress) shows its cost and is off until
   the table can take it, which comes next.
+- **Choices that cost something (6b3a).** A cost now either takes from a stat (a Fate point spent) or
+  adds to one (Blades' push adds 2 Stress), picked in step 5 of a roll as TAKES or ADDS. Rolling with
+  it changes the sheet, and the roll log says so: "(Push: +2 STRESS)". The chooser shows where the
+  stat stands ("YOU HAVE 4", or "3 OF 9" for one that adds), and a choice the sheet can't pay is off:
+  too little to take, or past the stat's highest. The server checks again before rolling. The Blades
+  in the Dark preset's push now adds Stress, as the game does.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

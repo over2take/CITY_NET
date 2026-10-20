@@ -368,11 +368,14 @@ function ChangesStep({ definition, edit, roll }: { definition: Definition; edit:
             <Switch label="COSTS" on={!!c.cost} disabled={!stats.length && !c.cost} onFlip={() => set(i, { cost: c.cost ? null : { from: stats[0].id, amount: 1 } })} />
             {c.cost && (
               <>
+                <select aria-label={`Change ${i + 1}: which way`} value={c.cost.adds ? 'adds' : 'takes'} style={field} onChange={(e) => set(i, { cost: { from: c.cost!.from, amount: c.cost!.amount, ...(e.target.value === 'adds' ? { adds: true } : {}) } })}>
+                  <option value="takes">TAKES</option><option value="adds">ADDS</option>
+                </select>
                 <WholeBox label={`Change ${i + 1}: costs how many`} value={c.cost.amount} width={52} onWhole={(n) => set(i, { cost: { ...c.cost!, amount: n } })} />
                 <select aria-label={`Change ${i + 1}: costs what`} value={c.cost.from} style={field} onChange={(e) => set(i, { cost: { ...c.cost!, from: e.target.value } })}>
                   {[...stats, ...(stats.some((st) => st.id === c.cost!.from) ? [] : [{ id: c.cost.from, label: c.cost.from.toUpperCase() }])].map((st) => <option key={st.id} value={st.id}>{st.label}</option>)}
                 </select>
-                <span style={{ opacity: 0.7, fontSize: 11 }}>TAKEN FROM THE SHEET WHEN ROLLED</span>
+                <span style={{ opacity: 0.7, fontSize: 11 }}>{c.cost.adds ? 'ADDED TO IT WHEN ROLLED, NEVER PAST ITS HIGHEST (BLADES\' STRESS)' : 'TAKEN FROM IT WHEN ROLLED, NEVER BELOW 0 (A FATE POINT)'}</span>
               </>
             )}
             {!stats.length && !c.cost && <span style={{ opacity: 0.6, fontSize: 11 }}>A COST IS TAKEN FROM A STAT: ADD ONE ON STATS (STRESS)</span>}

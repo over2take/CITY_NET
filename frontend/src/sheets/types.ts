@@ -32,7 +32,11 @@ export type SheetLinkSource =
 export interface RollPick { rollId: string; changes: string[] }
 
 /** One of a custom system's rolls, as a sheet offers it (backend runtime.js renderOf rolls). */
-export interface CustomFieldRoll { id: string; label: string; changes: { id: string; label: string; cost?: { from: string; amount: number } }[] }
+export interface CustomFieldRoll {
+  id: string; label: string;
+  /** A change's cost (6b3a): the stat and its name, how much, taken or (`adds`) added, and the stat's highest when added to. */
+  changes: { id: string; label: string; cost?: { from: string; amount: number; label?: string; adds?: boolean; max?: number } }[];
+}
 
 export interface SheetField {
   id: string;

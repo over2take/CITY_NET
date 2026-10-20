@@ -1562,7 +1562,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         // on the stored sheet with the server's secure dice, into the same log and tray.
         const custom = customSystems.definitionOf(system);
         if (custom) {
-          rollSheetOf(info, payload, system, ({ row, forName }) => {
+          rollSheetOf(info, payload, system, ({ row, forName, updated }) => {
             let data;
             try { data = JSON.parse(row.data || '{}'); } catch { return; }
             const made = tableRolls.rollField({
@@ -1572,6 +1572,15 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               rng: cryptoRng, who: identity.displayName(info.userName), forName,
             });
             if (!made.ok) return;
+            // What the changes picked cost (6b3a): the stat changed on the sheet as it is now, as
+            // CP:R's Luck is spent, and every window showing it told.
+            if (made.spends.length) {
+              patchSheet(
+                db, row.id,
+                (d) => Object.fromEntries(made.spends.map((s) => [s.from, (Number.isFinite(Number(d[s.from])) ? Number(d[s.from]) : 0) + s.by])),
+                () => io.emit('sheetUpdated', updated)
+              );
+            }
             const color = typeof payload.color === 'string' ? payload.color : '#00ff00';
             const broadcastData = {
               userName: identity.displayName(info.userName),

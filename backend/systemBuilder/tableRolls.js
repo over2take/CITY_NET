@@ -7,7 +7,9 @@
 // roll's formula text, @this is the value rolled; @this_mod its modifier, from the formula its stats
 // list shows as MOD (one reading only it through a table: mod(@str)); a skill's @tie is the ability
 // it is tied to, @tie_mod that ability's modifier; any other @name is the sheet's value, 0 when it
-// has none. Changes that cost something are refused here until the table takes the cost (6b3).
+// has none. A change that costs something (6b3a) is paid from the sheet as stored: taken from a stat,
+// refused when it hasn't enough; or added to one, refused past its highest. The socket changes the
+// stat once the roll is made.
 
 const { makeRoll, FATE } = require('./rollStyles');
 const { parse, evaluate } = require('./expression');
@@ -120,13 +122,28 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
   const roll = given ?? (rollId === undefined || rollId === null ? options[0] : options.find((r) => r.id === rollId));
   if (!roll) return { ok: false, error: 'That field has no such roll' };
   const picks = Array.isArray(chosen) ? chosen.filter((c) => typeof c === 'string') : [];
-  const costly = (roll.changes ?? []).filter((c) => picks.includes(c.id) && c.cost);
-  if (costly.length && !tryCosts) return { ok: false, error: `${costly[0].label} costs something, which the table can't take yet` };
+  // What the changes picked cost, checked against the sheet as stored; a test pays nothing.
+  const spends = [];
+  for (const c of (roll.changes ?? []).filter((x) => picks.includes(x.id) && x.cost)) {
+    const { from, amount, adds } = c.cost;
+    const stat = statOf(definition, from);
+    const name = (stat?.label || from).toUpperCase();
+    const now = Number.isFinite(Number(data[from])) ? Number(data[from]) : 0;
+    if (!tryCosts) {
+      if (adds && Number.isFinite(stat?.max) && now + amount > stat.max) return { ok: false, error: `${c.label} adds ${amount} ${name}, past its highest (${now} of ${stat.max})` };
+      if (!adds && now < amount) return { ok: false, error: `${c.label} costs ${amount} ${name}, and there ${now === 1 ? 'is' : 'are'} only ${now}` };
+    }
+    spends.push({ from, by: adds ? amount : -amount, label: c.label, words: `${c.label}: ${adds ? '+' : '−'}${amount} ${name}` });
+  }
 
   const result = makeRoll(roll, valueOf(definition, fieldsFor(definition, data, fieldId), data), rng, picks);
   const label = roll.label || roll.id;
   const what = typeof fieldId === 'string' ? (statOf(definition, fieldId)?.label || formulaOf(definition, fieldId)?.label || fieldId) : null;
-  const { working, tags, changes } = describe(result);
+  const described = describe(result);
+  const { working, tags } = described;
+  // A change that cost something says what it cost.
+  const costWords = new Map(spends.map((s) => [s.label, s.words]));
+  const changes = result.changes.length ? ` (${result.changes.map((l) => costWords.get(l) ?? l).join(', ')})` : '';
   const tray = trayOf(result);
   return {
     ok: true,
@@ -138,6 +155,7 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
     total: result.total,
     glitch: !!result.glitch,
     criticalGlitch: !!result.glitch && result.critical === 'failure',
+    spends: spends.map(({ from, by }) => ({ from, by })),
   };
 };
 
