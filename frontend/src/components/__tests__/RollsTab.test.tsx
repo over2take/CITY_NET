@@ -213,3 +213,70 @@ describe('editing steps 1 to 3 (6b1b1)', () => {
     expect(rollsOf(last())[0].bands).toEqual([{ upTo: 6, label: 'Miss' }, { label: 'Hit' }]);
   });
 });
+
+describe('editing step 4, special results (6b1b2)', () => {
+  const special = () => within(screen.getByTestId('roll-skill')).getByRole('region', { name: 'SPECIAL RESULTS' });
+  const part = (name: RegExp) => within(special()).getByRole('group', { name });
+
+  it('exploding switched on, on a face, once; off again', async () => {
+    const { last } = open();
+    await toRolls();
+    await userEvent.click(within(part(/EXPLODING/)).getByRole('switch', { name: /ROLLS ANOTHER/ }));
+    expect(rollsOf(last())[0].explode).toEqual({});
+    await userEvent.type(within(part(/EXPLODING/)).getByLabelText('Explodes on'), '5');
+    await userEvent.click(within(part(/EXPLODING/)).getByRole('switch', { name: 'ONLY ONCE' }));
+    expect(rollsOf(last())[0].explode).toEqual({ on: 5, once: true });
+    await userEvent.clear(within(part(/EXPLODING/)).getByLabelText('Explodes on'));
+    expect(rollsOf(last())[0].explode).toEqual({ once: true });
+    await userEvent.click(within(part(/EXPLODING/)).getByRole('switch', { name: /ROLLS ANOTHER/ }));
+    expect('explode' in rollsOf(last())[0]).toBe(false);
+  });
+
+  it('a natural and a match added and changed; a match on any face', async () => {
+    const { last } = open();
+    await toRolls();
+    await userEvent.click(within(part(/NATURALS/)).getByRole('button', { name: '+ NATURAL' }));
+    expect(rollsOf(last())[0].natural).toEqual([{ face: 6, label: 'Critical', critical: 'success' }]);
+    await userEvent.selectOptions(within(part(/NATURALS/)).getByLabelText('Natural 1: critical'), 'NOT A CRITICAL');
+    await userEvent.clear(within(part(/NATURALS/)).getByLabelText('Natural 1: words'));
+    await userEvent.type(within(part(/NATURALS/)).getByLabelText('Natural 1: words'), 'Boxcars');
+    const face = within(part(/NATURALS/)).getByLabelText('Natural 1: face');
+    await userEvent.clear(face);
+    await userEvent.type(face, '12');
+    expect(rollsOf(last())[0].natural).toEqual([{ face: 12, label: 'Boxcars' }]);
+    await userEvent.click(within(part(/MATCHES/)).getByRole('button', { name: '+ MATCH' }));
+    await userEvent.clear(within(part(/MATCHES/)).getByLabelText('Match 1: face'));
+    await userEvent.type(within(part(/MATCHES/)).getByLabelText('Match 1: adds'), '1');
+    expect(rollsOf(last())[0].matches).toEqual([{ count: 2, label: 'Critical', critical: 'success', adds: 1 }]);
+    await userEvent.click(within(part(/MATCHES/)).getByRole('button', { name: 'Remove match 1' }));
+    expect('matches' in rollsOf(last())[0]).toBe(false);
+  });
+
+  it('cancelling only while counting; a glitch; the zero-dice rule', async () => {
+    const { last } = open({ ...HEARTH, rolls: [{ id: 'skill', label: 'Pool', ...PRESETS.sr6.roll, by: ['skills'] }] });
+    await toRolls();
+    await userEvent.click(within(part(/CANCELLING/)).getByRole('switch', { name: 'EACH DIE SHOWING' }));
+    expect(rollsOf(last())[0].cancel).toEqual({ face: 1 });
+    const share = within(part(/GLITCH/)).getByLabelText('Glitch share, percent');
+    await userEvent.clear(share);
+    await userEvent.type(share, '25');
+    expect((rollsOf(last())[0].glitch as { share: number }).share).toBe(0.25);
+    await userEvent.click(within(part(/NO DICE/)).getByRole('switch', { name: /ROLL SOME ANYWAY/ }));
+    await userEvent.selectOptions(within(part(/NO DICE/)).getByLabelText('Kept with none'), 'HIGHEST');
+    expect(rollsOf(last())[0].zero).toEqual({ count: 2, read: 'highest' });
+    // Reading as a sum takes cancelling away, and its switch with it.
+    await userEvent.click(within(within(screen.getByTestId('roll-skill')).getByRole('region', { name: 'READ THE DICE' })).getByRole('button', { name: 'SUM' }));
+    expect('cancel' in rollsOf(last())[0]).toBe(false);
+    expect(within(special()).queryByRole('group', { name: /CANCELLING/ })).toBeNull();
+  });
+
+  it('a named kind\'s effect, only once a kind of dice is named', async () => {
+    const { last } = open();
+    await toRolls();
+    expect(part(/NAMED DICE/).textContent).toContain('NAME A KIND OF DICE IN STEP 1');
+    await userEvent.type(within(within(screen.getByTestId('roll-skill')).getByRole('region', { name: 'DICE' })).getByLabelText('Dice 1: name'), 'Hope');
+    await userEvent.click(within(part(/NAMED DICE/)).getByRole('button', { name: '+ EFFECT' }));
+    await userEvent.selectOptions(within(part(/NAMED DICE/)).getByLabelText('Effect 1: when'), 'ON ANY ROLL');
+    expect(rollsOf(last())[0].effects).toEqual([{ name: 'Hope', face: 6, when: 'any', label: 'Effect' }]);
+  });
+});

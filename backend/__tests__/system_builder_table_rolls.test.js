@@ -171,11 +171,16 @@ describe('rolling at the table, through the socket', () => {
 
   it('rolls another of the field\'s rolls, with changes, and ignores what it can\'t roll', async () => {
     const kes = await connect('kes');
+    // One at a time: each roll waits on its own database reads, so two sent together can come
+    // back in either order.
     kes.handlers.requestSheetRoll({ fieldId: 'fight', rollId: 'brawl' });
+    await untilValue(() => rolled(kes).length, (n) => n >= 1, { label: 'the brawl' });
     kes.handlers.requestSheetRoll({ fieldId: 'lore', changes: ['push'] });
     kes.handlers.requestSheetRoll({ fieldId: 'name' });
+    await drain(db);
+    expect(rolled(kes)).toHaveLength(1);
     kes.handlers.requestSheetRoll({ fieldId: 'lore', changes: ['forward'] });
-    await untilValue(() => rolled(kes).length, (n) => n >= 2, { label: 'two rolls' });
+    await untilValue(() => rolled(kes).length, (n) => n >= 2, { label: 'the skill check' });
     await drain(db);
     expect(rolled(kes).map((r) => r.data.historyString.replace(/\[.*$/, ''))).toEqual(['Kestrel rolled Brawl (Fight) ', 'Kestrel rolled Skill check (Lore) (Forward) ']);
     // The sheet's stress is untouched: nothing costing was rolled.

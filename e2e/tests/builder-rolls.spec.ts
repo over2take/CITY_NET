@@ -82,14 +82,20 @@ test('a roll\'s dice, reading, adding and bands edited, and TEST ROLL rolling it
   await roll.getByRole('region', { name: 'ADD AND COMPARE' }).getByRole('button', { name: '+ BANDS' }).click();
   await roll.getByLabel('Band 1: up to').fill('8');
   await roll.getByLabel('Band 2: words').fill('Strong hit');
+  // Step 4: sixes explode, once; a natural 18 is named.
+  const special = roll.getByRole('region', { name: 'SPECIAL RESULTS' });
+  await special.getByRole('group', { name: /EXPLODING/ }).getByRole('switch', { name: /ROLLS ANOTHER/ }).click();
+  await special.getByRole('switch', { name: 'ONLY ONCE' }).click();
+  await special.getByRole('button', { name: '+ NATURAL' }).click();
+  await special.getByLabel('Natural 1: face').fill('18');
+  await special.getByLabel('Natural 1: words').fill('Perfect');
 
   // TEST ROLL rolls it as it now stands: three dice, one not counted, on the bands.
   const test_ = page.getByTestId('test-roll');
   await test_.getByRole('button', { name: 'TEST ROLL ▸' }).click();
   await expect(test_.getByTestId('test-outcome')).toHaveText(/^(MISS|STRONG HIT)$/);
-  await expect(test_.getByTestId('test-dice').locator('span')).toHaveCount(3);
-  // Three dice, exactly one not counted (shown in brackets), wherever it fell.
-  await expect(test_.getByTestId('test-working')).toHaveText(/^\[[\d() ]+ = \d+ \+ 2 = \d+\] — (MISS|STRONG HIT)$/);
-  expect(((await test_.getByTestId('test-working').textContent()) ?? '').split(' = ')[0].match(/\(\d\)/g)).toHaveLength(1);
+  // Three dice, or four when a six explodes (once); those not counted in brackets.
+  await expect(test_.getByTestId('test-working')).toHaveText(/^\[[\d() ]+ = \d+ \+ 2 = \d+\] — (MISS|STRONG HIT)( · PERFECT)?$/);
+  expect([3, 4]).toContain(await test_.getByTestId('test-dice').locator('span').count());
   if (process.env.GRAPH_SHOTS) await page.screenshot({ path: path.join(SHOTS, 'builder-rolls-editing.png'), fullPage: true });
 });

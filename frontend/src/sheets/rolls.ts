@@ -4,8 +4,8 @@
 // makes them (tableRolls.js, and POST /api/systems/test-roll for TEST ROLL).
 //
 // A new roll starts from a preset and takes its id from its first name, kept after; its five steps
-// can be replaced by another preset's, or changed one by one (6b1b: the dice, how they are read,
-// what is added, a target and the bands here). ROLLED BY lists the stats, stats groups and formulas
+// can be replaced by another preset's, or changed one by one (6b1b1: the dice, how they are read,
+// what is added, a target and the bands; 6b1b2: the special results). ROLLED BY lists the stats, stats groups and formulas
 // whose die button on the sheet rolls it. Each change keeps a roll the server takes: switching how
 // the dice are read drops what only the old way used, and the last band always catches the rest.
 
@@ -258,6 +258,103 @@ export const withRollBands = (def: Definition, id: string, change: { start: true
       } : b));
     }
     return { ...r, bands };
+  });
+
+// ─── SPECIAL RESULTS (6b1b2) ───────────────────────────────────────────────
+
+/** The highest face of a roll's first kind of dice (1 for Fate dice), what new special results start on. */
+const topFace = (r: Roll): number => {
+  const sides = r.dice[0]?.sides ?? 6;
+  return sides === 'F' ? 1 : sides;
+};
+type ExplodePatch = { on?: number | null; once?: boolean; first?: boolean; low?: number | null };
+
+/**
+ * Exploding turned on (the highest face, again and again), changed, or off (null). `on` and `low`
+ * take null to go back to the highest face and to no die taken away; a die is only taken away from
+ * a sum.
+ */
+export const withRollExplode = (def: Definition, id: string, patch: ExplodePatch | null): Definition =>
+  changed(def, id, (r) => {
+    const next: Roll = { ...r };
+    if (patch === null) { delete next.explode; return next; }
+    const x: NonNullable<Roll['explode']> = { ...(r.explode ?? {}) };
+    if (patch.on === null) delete x.on; else if (patch.on !== undefined) x.on = patch.on;
+    if (patch.low === null) delete x.low; else if (patch.low !== undefined && (r.read ?? 'sum') === 'sum') x.low = patch.low;
+    for (const key of ['once', 'first'] as const) {
+      if (patch[key] === false) delete x[key]; else if (patch[key]) x[key] = true;
+    }
+    next.explode = x;
+    return next;
+  });
+
+type Natural = NonNullable<Roll['natural']>[number];
+type Match = NonNullable<Roll['matches']>[number];
+type Effect = NonNullable<Roll['effects']>[number];
+type ListOf = { natural: Natural; matches: Match; effects: Effect };
+
+/**
+ * A natural, a match or a named die's effect added (each starting on the roll's highest face, an
+ * effect on its first named kind), one changed, or one taken away; an empty list goes. At most ten
+ * of each (backend LIMITS.naturals); an effect needs a named kind of dice.
+ */
+export const withRollList = <K extends keyof ListOf>(def: Definition, id: string, key: K, change: { add: true } | { remove: number } | { set: number; patch: Partial<ListOf[K]> }): Definition =>
+  changed(def, id, (r) => {
+    let list = [...((r[key] ?? []) as ListOf[K][])];
+    if ('add' in change) {
+      if (list.length >= 10) return r;
+      const face = topFace(r);
+      const named = r.dice.find((d) => d.name);
+      if (key === 'natural') list.push({ face, label: 'Critical', critical: 'success' } as ListOf[K]);
+      else if (key === 'matches') list.push({ face, count: 2, label: 'Critical', critical: 'success' } as ListOf[K]);
+      else {
+        if (!named) return r;
+        list.push({ name: named.name!, face: named.sides === 'F' ? 1 : named.sides, when: 'critical', label: 'Effect' } as ListOf[K]);
+      }
+    } else if ('remove' in change) {
+      list = list.filter((_, i) => i !== change.remove);
+    } else {
+      list = list.map((item, i) => {
+        if (i !== change.set) return item;
+        const next = { ...item, ...change.patch } as Record<string, unknown>;
+        // Left out, not stored empty: a match on any face, no critical, nothing added. Words stay
+        // as typed, empty too, for the server to say they can't be blank.
+        for (const [k, v] of Object.entries(change.patch)) if (v === undefined || v === null) delete next[k];
+        if (typeof next.label === 'string') next.label = (next.label as string).slice(0, 40);
+        return next as unknown as ListOf[K];
+      });
+    }
+    const next: Roll = { ...r };
+    if (list.length) (next as unknown as Record<string, unknown>)[key] = list; else delete next[key];
+    return next;
+  });
+
+/** Cancelling on (each 1 takes a success away), on another face, or off; only counted successes are cancelled. */
+export const withRollCancel = (def: Definition, id: string, face: number | null): Definition =>
+  changed(def, id, (r) => {
+    const next: Roll = { ...r };
+    if (face === null || r.read !== 'count') delete next.cancel; else next.cancel = { face };
+    return next;
+  });
+
+/** A glitch on (1s on half the dice), changed, or off. The worse one's words left blank go. */
+export const withRollGlitch = (def: Definition, id: string, patch: Partial<NonNullable<Roll['glitch']>> | null): Definition =>
+  changed(def, id, (r) => {
+    const next: Roll = { ...r };
+    if (patch === null) { delete next.glitch; return next; }
+    const g = { ...(r.glitch ?? { face: 1, share: 0.5, label: 'Glitch' }), ...patch };
+    if (typeof g.label === 'string') g.label = g.label.slice(0, 40);
+    if (g.none !== undefined) { g.none = g.none.slice(0, 40); if (!g.none.trim()) delete g.none; }
+    next.glitch = g;
+    return next;
+  });
+
+/** The zero-dice rule on (roll 2, keep the lowest), changed, or off. */
+export const withRollZero = (def: Definition, id: string, patch: Partial<NonNullable<Roll['zero']>> | null): Definition =>
+  changed(def, id, (r) => {
+    const next: Roll = { ...r };
+    if (patch === null) delete next.zero; else next.zero = { ...(r.zero ?? { count: 2, read: 'lowest' }), ...patch };
+    return next;
   });
 
 /** What a roll can be ROLLED BY: the stats groups, then each stat, then the formulas. */
