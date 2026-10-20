@@ -17,6 +17,7 @@ const { STANDARD: STANDARD_CONDITIONS, ICONS } = require('../../systemBuilder/co
 const { STANDARD: STANDARD_RESTS, reachOf } = require('../../systemBuilder/rests');
 const { starterSheet, effectiveSheet, fieldsOf } = require('../../systemBuilder/sheet');
 const { npcSheetOf } = require('../../systemBuilder/npc');
+const { PRESETS } = require('../../systemBuilder/rollStyles');
 
 /** A small, fast generator with a seed (mulberry32): the same seed, the same numbers. */
 const randomFrom = (seed) => {
@@ -274,6 +275,16 @@ const randomSystem = (seed, { parts = true } = {}) => {
     if (foldable.length && r.chance(0.5)) graph.collapsed = r.some(foldable, 0.5);
     if (notes.length) graph.notes = notes;
     def.graph = graph;
+  }
+
+  // ROLLS (6a2a): for some systems, each from a preset, rolled by stats, groups and formulas it
+  // has; last, so every seed's system is otherwise as before.
+  if (r.chance(0.5)) {
+    const rollables = [...statIds, ...groups.map((g) => g.id), ...derived.map((d) => d.id)];
+    def.rolls = Array.from({ length: r.int(1, 4) }, (_, i) => {
+      const key = r.pick(Object.keys(PRESETS));
+      return { id: `roll${i + 1}`, label: r.word(2).slice(0, 40), ...JSON.parse(JSON.stringify(PRESETS[key].roll)), by: r.some(rollables, 0.3) };
+    });
   }
   return def;
 };
