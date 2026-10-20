@@ -7,7 +7,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
-  graphOf, positionsOf, layoutOf, withPositions, withCollapsed, groupBoxOf, shownWires, exprHeight, noteHeight, SIZE, GRID,
+  graphOf, positionsOf, layoutOf, withPositions, withCollapsed, groupBoxOf, shownWires, relatedTo, exprHeight, noteHeight, SIZE, GRID,
   type Graph, type GraphGroup, type GraphNode, type GraphInput, type GraphWire, type Positions, type Point, type Source,
 } from '../sheets/graphModel';
 import { sampleOf } from '../sheets/statsRules';
@@ -351,6 +351,10 @@ const EDGE_STYLE: Record<string, React.CSSProperties> = {
   note: { stroke: 'var(--text)', strokeWidth: 1, strokeDasharray: '6 4', opacity: 0.6 },
 };
 
+/** Hover highlighting (5c1): what isn't part of the node hovered, and a wire that is. */
+const FADED: React.CSSProperties = { opacity: 0.16, transition: 'opacity 0.12s' };
+const HOT: React.CSSProperties = { stroke: 'var(--cyan)', strokeWidth: 2.4, opacity: 1 };
+
 const snap = (v: number) => Math.round(v / GRID) * GRID;
 
 /**
@@ -492,6 +496,20 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
   }, [said]);
   /** A wire clicked: what it is, and where the click was in the map. */
   const [asked, setAsked] = useState<{ wire: string; x: number; y: number } | null>(null);
+  /**
+   * The node the pointer is over (5c1), and what it is wired to however far along: lit, the rest
+   * faded. A folded group stands for its members. Not while a node is being dragged.
+   */
+  const [hovered, setHovered] = useState<string | null>(null);
+  const dragging = useRef(false);
+  const lit = useMemo(() => {
+    if (!hovered) return null;
+    const group = hovered.startsWith('group:') ? graph.groups.find((g) => `group:${g.id}` === hovered) : undefined;
+    const from = group ? group.members : [hovered];
+    const all = new Set<string>();
+    for (const id of from) for (const r of relatedTo(graph, id)) all.add(r);
+    return all.size ? all : null;
+  }, [hovered, graph]);
   const picked = selected ? graph.nodes.find((n) => n.id === selected) : undefined;
   /** PROBLEMS on the map (5b6b), and the nodes with an error, drawn red. */
   const listed = useMemo(() => mapProblems(definition, graph, problems ?? []), [definition, graph, problems]);
@@ -539,7 +557,8 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
       out.push({
         id: `group:${g.id}`, type: g.collapsed ? 'folded' : 'groupBox', position: { x: box.x, y: box.y },
         width: box.width, height: box.height, measured: measured[`group:${g.id}`], zIndex: g.collapsed ? 0 : -1, selectable: false, draggable: !readOnly,
-        dragHandle: '.graph-group-head', style: g.collapsed ? undefined : { pointerEvents: 'none' },
+        dragHandle: '.graph-group-head',
+        style: { ...(g.collapsed ? {} : { pointerEvents: 'none' as const }), ...(lit && g.collapsed && !g.members.some((m) => lit.has(m)) ? FADED : {}) },
         data: { group: g, count: box.members.length, wiresOut: box.wiresOut, onFold: () => fold(g), readOnly } satisfies BoxData,
       });
     }
@@ -547,11 +566,14 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
       out.push({
         id: n.id, type: n.kind, position: positions[n.id] ?? { x: 0, y: 0 }, width: n.width, height: n.height, measured: measured[n.id],
         hidden: folded.has(n.id), draggable: !readOnly, selectable: false, data: { node: n, values } satisfies NodeData,
-        style: n.id === picked?.id ? { outline: '2px solid var(--cyan)', outlineOffset: 3 } : broken.has(n.id) ? { outline: '2px solid var(--danger)', outlineOffset: 3 } : undefined,
+        style: {
+          ...(n.id === picked?.id ? { outline: '2px solid var(--cyan)', outlineOffset: 3 } : broken.has(n.id) ? { outline: '2px solid var(--danger)', outlineOffset: 3 } : {}),
+          ...(lit && !lit.has(n.id) ? FADED : {}),
+        },
       });
     }
     return out;
-  }, [graph, positions, values, readOnly, fold, measured, picked, broken]);
+  }, [graph, positions, values, readOnly, fold, measured, picked, broken, lit]);
 
   /**
    * A wire whose formula isn't the one in use, drawn faint: one into a WITH-rule formula, until TRY ON
@@ -567,8 +589,13 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
     id: w.id, source: w.source, target: w.target, sourceHandle: w.sourceHandle, targetHandle: w.targetHandle,
     type: w.kind === 'note' ? 'straight' : 'wire', selectable: false, focusable: false,
     data: { lane: Math.max(0, graph.nodes.find((n) => n.id === w.to)?.inputs.findIndex((i) => i.key === w.input) ?? 0), modifier: w.modifier },
-    style: { ...EDGE_STYLE[w.kind], ...(unused(w) ? { strokeDasharray: '5 4', opacity: 0.4 } : {}) },
-  })), [graph, unused]);
+    style: {
+      ...EDGE_STYLE[w.kind], ...(unused(w) ? { strokeDasharray: '5 4', opacity: 0.4 } : {}),
+      // Lit while hovering: a wire between two lit nodes, cyan and bold; any other, faded.
+      // One into a formula not in use stays dashed, at half strength.
+      ...(lit ? (lit.has(w.from) && lit.has(w.to) ? (w.kind === 'note' ? { opacity: 1 } : { ...HOT, ...(unused(w) ? { opacity: 0.5 } : {}) }) : FADED) : {}),
+    },
+  })), [graph, unused, lit]);
 
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     const sizes = changes.filter((c): c is Extract<NodeChange, { type: 'dimensions' }> => c.type === 'dimensions' && !!c.dimensions);
@@ -714,6 +741,7 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
   }, [readOnly, undo, redo, remove, picked]);
 
   const onNodeDragStop = useCallback(() => {
+    dragging.current = false;
     grabbed.current = null;
     const moves = latest.current;
     latest.current = {};
@@ -735,7 +763,9 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
       <div data-testid="graph-map" style={{ position: 'relative', flex: 1, minWidth: 0, height: '100%' }}>
       <ReactFlow
         nodes={nodes} edges={edges} nodeTypes={NODE_TYPES} edgeTypes={EDGE_TYPES}
-        onNodesChange={onNodesChange} onNodeDragStop={onNodeDragStop}
+        onNodesChange={onNodesChange} onNodeDragStop={onNodeDragStop} onNodeDragStart={() => { dragging.current = true; setHovered(null); }}
+        onNodeMouseEnter={(_, n) => { if (!dragging.current) setHovered(n.id); }}
+        onNodeMouseLeave={() => { if (!dragging.current) setHovered(null); }}
         onNodeClick={(_, n) => { if (!n.id.startsWith('group:')) { setSelected(n.id); keepInView(n.id); } }}
         onPaneClick={() => { setSelected(null); setAsked(null); }}
         nodesConnectable={!readOnly} onConnectEnd={onConnectEnd}

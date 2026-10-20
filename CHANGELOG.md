@@ -100,6 +100,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   use their WITH-rule formula (marked IN USE), their usual one and its wires go faint, and the line
   along the bottom says TRYING. It is never saved and never changes the game, so it works on an
   example too. The GM still switches rules for the table in the GAME tab.
+- **Hover to see what is wired to what (5c1).** Point at a node on the map and everything it reads,
+  however far back, and everything that reads it, however far on, stays lit with their wires in cyan;
+  the rest fades. Formulas that only share an input with it fade too, so where a number comes from
+  is plain on a busy map, and a wire is easier to pick out before clicking it.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

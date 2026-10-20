@@ -553,3 +553,33 @@ export const shownWires = (graph: Graph): ShownWire[] => {
   }
   return out;
 };
+
+// ─── WHAT A NODE IS PART OF ────────────────────────────────────────────────
+
+/**
+ * Everything a node is wired to however far along (5c1; approved mockup builder-graph, "hover a
+ * node to light what feeds it and what it feeds"): what it reads, what those read, and so on up;
+ * what reads it, and so on down; and the notes pinned to any of those. Siblings that only share an
+ * input aren't part of it. A note's own line leads nowhere, so a note lights itself and its node.
+ */
+export const relatedTo = (graph: Graph, id: string): Set<string> => {
+  const wires = graph.wires.filter((w) => w.kind !== 'note');
+  const walk = (next: (w: GraphWire, at: Set<string>) => string | null) => {
+    const seen = new Set([id]);
+    for (let grew = true; grew;) {
+      grew = false;
+      for (const w of wires) {
+        const add = next(w, seen);
+        if (add && !seen.has(add)) { seen.add(add); grew = true; }
+      }
+    }
+    return seen;
+  };
+  const up = walk((w, at) => (at.has(w.to) ? w.from : null));
+  const down = walk((w, at) => (at.has(w.from) ? w.to : null));
+  const all = new Set([...up, ...down]);
+  const note = graph.nodes.find((n) => n.id === id && n.kind === 'note');
+  if (note?.on) all.add(note.on);
+  for (const n of graph.nodes) if (n.kind === 'note' && n.on && all.has(n.on)) all.add(n.id);
+  return all;
+};

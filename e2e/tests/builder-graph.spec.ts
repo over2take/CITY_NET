@@ -397,6 +397,7 @@ test("TRY ON THE MAP swaps a house rule's formulas in for the map's numbers only
 
   // On: DEX MOD 0 + LEVEL 3, by the server's engine; said along the bottom.
   await sw.click();
+  await page.mouse.move(5, 5);
   await expect(sw).toHaveAttribute('aria-checked', 'true');
   await expect(melee.locator('[data-value]')).toHaveText('3');
   await expect(melee.locator('[data-in-use]')).toHaveText('IN USE');
@@ -411,6 +412,31 @@ test("TRY ON THE MAP swaps a house rule's formulas in for the map's numbers only
   await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'GRAPH' }).click();
   await expect(sw).toHaveAttribute('aria-checked', 'false');
   await expect(melee.locator('[data-value]')).toHaveText('2');
+});
+
+test('hovering a node lights what it reads and what reads it, its wires cyan, and fades the rest', async ({ page, request }, info) => {
+  const name = `Hover Map ${info.retry + 1}`;
+  const token = await gmToken(request);
+  await asGm(request, token, 'post', '/api/systems', { definition: HEARTH(name) });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'graph' });
+  await signInAsGm(page);
+  await openSystem(page, name);
+  await toGraph(page);
+  const map = page.getByTestId('graph-view');
+  const opacity = (id: string) => map.locator(`.react-flow__node[data-id="${id}"]`).evaluate((el) => (el as HTMLElement).style.opacity);
+  const wire = (id: string) => map.getByTestId(`rf__edge-${id}`).locator('.react-flow__edge-path').evaluate((p) => ({ stroke: (p as SVGPathElement).style.stroke, opacity: (p as SVGPathElement).style.opacity }));
+
+  // MELEE reads STR MOD and LEVEL; the save reads them too, but only shares them, so it fades.
+  await map.getByTestId('graph-node-melee').hover();
+  await expect.poll(() => opacity('save')).toBe('0.16');
+  for (const id of ['melee', 'abilities', 'character', 'table:attribute_mod']) expect(await opacity(id), id).toBe('');
+  expect(await wire('abilities:out:str_mod>melee:b:@str_mod')).toEqual({ stroke: 'var(--cyan)', opacity: '1' });
+  expect((await wire('character:out:lvl>save:b:@lvl')).opacity).toBe('0.16');
+
+  // The pointer away: everything back.
+  await page.mouse.move(5, 5);
+  await expect.poll(() => opacity('save')).toBe('');
+  expect((await wire('abilities:out:str_mod>melee:b:@str_mod')).stroke).not.toBe('var(--cyan)');
 });
 
 test('a note pinned to the node picked, written, dragged to another, unpinned, and read in FORMS', async ({ page, request }, info) => {

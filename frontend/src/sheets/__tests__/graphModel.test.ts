@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
   referencesIn, graphOf, heightOf, exprHeight, columnsOf, layoutOf, positionsOf, savedPositions, withPositions, withCollapsed,
-  groupBoxOf, shownWires, foldedHeight, clearSpot, clearOf, takenBoxes, GRID, REACH, SIZE, type Graph, type GraphNode,
+  groupBoxOf, shownWires, foldedHeight, clearSpot, clearOf, takenBoxes, relatedTo, GRID, REACH, SIZE, type Graph, type GraphNode,
 } from '../graphModel';
 import type { Definition } from '../systemsApi';
 
@@ -431,5 +431,42 @@ describe('room for something new (5b6a)', () => {
     // On its own, far from anything: where it is, itself not in the way.
     const alone = { ...places, can_cast: { x: 9600, y: 9600 } };
     expect(clearSpot(g, alone, alone.can_cast, node(g, 'can_cast'), 'can_cast')).toEqual(alone.can_cast);
+  });
+});
+
+describe('what a node is part of, for hover highlighting (5c1)', () => {
+  const g = graphOf(HEARTH);
+  const sorted = (s: Set<string>) => [...s].sort();
+
+  it('what it reads however far up, and its notes; not what only shares an input', () => {
+    expect(sorted(relatedTo(g, 'melee'))).toEqual(['abilities', 'character', 'melee', 'note:n1', 'skills', 'table:attribute_mod']);
+  });
+
+  it('what reads it however far down, and the house rule swapping it', () => {
+    expect(sorted(relatedTo(g, 'spell'))).toEqual(['abilities', 'can_cast', 'character', 'rule:magic', 'spell', 'table:attribute_mod']);
+    expect(sorted(relatedTo(g, 'rule:magic'))).toEqual(['can_cast', 'rule:magic', 'spell']);
+  });
+
+  it('a note lights itself and its node; one pinned to nothing, itself', () => {
+    expect(sorted(relatedTo(g, 'note:n1'))).toEqual(['melee', 'note:n1']);
+    const loose = graphOf({ ...HEARTH, graph: { notes: [{ id: 'n2', text: 'x' }] } });
+    expect(sorted(relatedTo(loose, 'note:n2'))).toEqual(['note:n2']);
+    // Its line isn't a wire: a note on SPELL doesn't light what reads SPELL.
+    const onSpell = graphOf({ ...HEARTH, graph: { notes: [{ id: 'n3', on: 'spell', text: 'x' }] } });
+    expect(sorted(relatedTo(onSpell, 'note:n3'))).toEqual(['note:n3', 'spell']);
+  });
+
+  it('in every example and random system: holds itself, and only nodes the map has, and is the same both ways', () => {
+    for (const def of [...examples, ...randoms.slice(0, 20)]) {
+      const graph = graphOf(def);
+      const ids = new Set(graph.nodes.map((n) => n.id));
+      for (const n of graph.nodes.slice(0, 8)) {
+        const r = relatedTo(graph, n.id);
+        expect(r.has(n.id)).toBe(true);
+        for (const x of r) expect(ids.has(x), `${def.name} ${n.id} ${x}`).toBe(true);
+        // What is lit from a node it reads or that reads it lights that node back.
+        for (const w of graph.wires.filter((x) => x.kind !== 'note' && x.from === n.id)) expect(relatedTo(graph, w.to).has(n.id), `${def.name} ${w.id}`).toBe(true);
+      }
+    }
   });
 });

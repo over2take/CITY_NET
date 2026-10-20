@@ -34,6 +34,11 @@ test('the graph view, for looking at', async ({ page, request }, info) => {
   await page.getByRole('button', { name: 'FIT', exact: true }).click();
   await page.waitForTimeout(600);
   await page.screenshot({ path: path.join(SHOTS, 'graph-cwn-fit.png') });
+  // Hover (5c1): the physical save, what it reads and what reads it lit, the rest faded.
+  await page.getByTestId('graph-node-save_physical').hover();
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(SHOTS, 'graph-cwn-hover.png') });
+  await page.mouse.move(5, 5);
   // A node's panel: the same boxes as FORMS, beside the map.
   await page.getByTestId('graph-node-save_physical').click();
   await page.getByTestId('graph-panel').waitFor();
