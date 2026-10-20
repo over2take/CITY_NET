@@ -120,6 +120,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Rolls of a system's own, the engine (6a1).** The first piece of Phase 6 (roll styles): the server can
+  now roll what a GM describes, with dice of any size, Fate dice and named dice like Hunger, read as a
+  sum, the highest or lowest kept, or successes counted, with a target or bands and exploding dice.
+  Nothing uses it yet; the builder's ROLLS tab and the sheet's roll buttons come next.
+
 - **A shared system file installs on a builder from before the map.** A .citysys file now carries
   the graph view's layout beside the system rather than inside it. A builder from before the map
   reads only the system, so it installs and publishes the file as it always did, its map laid out
