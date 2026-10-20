@@ -13,7 +13,7 @@ import {
 import { sampleOf } from '../sheets/statsRules';
 import { usePreviewValues } from '../hooks/usePreviewValues';
 import type { BuilderPage } from '../sheets/builderSession';
-import { GraphPanel } from './GraphPanel';
+import { GraphPanel, GroupPanel } from './GraphPanel';
 import { emptyHistory, recorded, undone, redone, type History } from '../sheets/editHistory';
 import { withWire, withoutWire, wireLabel } from '../sheets/graphEdits';
 import { addChoices, withAdded, withRemoved } from '../sheets/graphAdds';
@@ -313,7 +313,7 @@ function GroupTitle({ data }: { data: BoxData }) {
   const g = data.group;
   return (
     <div className="graph-group-head" style={{ height: 22, padding: '0 8px', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, letterSpacing: 2, color: 'var(--green)', cursor: data.readOnly ? 'default' : 'grab', pointerEvents: 'all' }}>
-      <button type="button" className="nodrag" aria-label={`${g.collapsed ? 'Open' : 'Fold'} ${g.label}`} aria-expanded={!g.collapsed} disabled={data.readOnly} onClick={data.onFold}
+      <button type="button" className="nodrag" aria-label={`${g.collapsed ? 'Open' : 'Fold'} ${g.label}`} aria-expanded={!g.collapsed} disabled={data.readOnly} onClick={(e) => { e.stopPropagation(); data.onFold(); }}
         style={{ background: 'none', border: '1px solid color-mix(in srgb, var(--green) 50%, transparent)', color: 'var(--green)', fontFamily: 'monospace', fontSize: 10, width: 18, height: 16, padding: 0, cursor: 'pointer' }}>
         {g.collapsed ? '▸' : '▾'}
       </button>
@@ -511,6 +511,8 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
     return all.size ? all : null;
   }, [hovered, graph]);
   const picked = selected ? graph.nodes.find((n) => n.id === selected) : undefined;
+  /** One of the map's own groups, picked by its title bar (5c2). */
+  const pickedGroup = selected?.startsWith('group:') ? graph.groups.find((g) => `group:${g.id}` === selected) : undefined;
   /** PROBLEMS on the map (5b6b), and the nodes with an error, drawn red. */
   const listed = useMemo(() => mapProblems(definition, graph, problems ?? []), [definition, graph, problems]);
   const broken = useMemo(() => new Set(listed.filter((p) => p.kind === 'error' && p.node).map((p) => p.node)), [listed]);
@@ -558,7 +560,10 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
         id: `group:${g.id}`, type: g.collapsed ? 'folded' : 'groupBox', position: { x: box.x, y: box.y },
         width: box.width, height: box.height, measured: measured[`group:${g.id}`], zIndex: g.collapsed ? 0 : -1, selectable: false, draggable: !readOnly,
         dragHandle: '.graph-group-head',
-        style: { ...(g.collapsed ? {} : { pointerEvents: 'none' as const }), ...(lit && g.collapsed && !g.members.some((m) => lit.has(m)) ? FADED : {}) },
+        style: {
+          ...(g.collapsed ? {} : { pointerEvents: 'none' as const }), ...(lit && g.collapsed && !g.members.some((m) => lit.has(m)) ? FADED : {}),
+          ...(pickedGroup?.id === g.id ? { outline: '2px solid var(--cyan)', outlineOffset: 3 } : {}),
+        },
         data: { group: g, count: box.members.length, wiresOut: box.wiresOut, onFold: () => fold(g), readOnly } satisfies BoxData,
       });
     }
@@ -573,7 +578,7 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
       });
     }
     return out;
-  }, [graph, positions, values, readOnly, fold, measured, picked, broken, lit]);
+  }, [graph, positions, values, readOnly, fold, measured, picked, broken, lit, pickedGroup]);
 
   /**
    * A wire whose formula isn't the one in use, drawn faint: one into a WITH-rule formula, until TRY ON
@@ -641,6 +646,10 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
     const start = startWith ? graph.nodes.find((n) => n.id === startWith) : undefined;
     if (start) {
       void flow.fitView({ nodes: [{ id: start.id }, ...(start.on ? [{ id: start.on }] : [])], padding: 0.3, maxZoom: 1 });
+      return;
+    }
+    if (startWith?.startsWith('group:') && shown.some((n) => n.id === startWith)) {
+      void flow.fitView({ nodes: [{ id: startWith }], padding: 0.3, maxZoom: 1 });
       return;
     }
     const bounds = flow.getNodesBounds(shown);
@@ -766,7 +775,7 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
         onNodesChange={onNodesChange} onNodeDragStop={onNodeDragStop} onNodeDragStart={() => { dragging.current = true; setHovered(null); }}
         onNodeMouseEnter={(_, n) => { if (!dragging.current) setHovered(n.id); }}
         onNodeMouseLeave={() => { if (!dragging.current) setHovered(null); }}
-        onNodeClick={(_, n) => { if (!n.id.startsWith('group:')) { setSelected(n.id); keepInView(n.id); } }}
+        onNodeClick={(_, n) => { setSelected(n.id); keepInView(n.id); }}
         onPaneClick={() => { setSelected(null); setAsked(null); }}
         nodesConnectable={!readOnly} onConnectEnd={onConnectEnd}
         connectionLineStyle={{ stroke: 'var(--cyan)', strokeWidth: 2, strokeDasharray: '4 3' }}
@@ -816,6 +825,7 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
         <GraphPanel definition={definition} edit={mapEdit} node={picked} preview={preview} tried={tried} trying={tryingSet}
           onClose={() => setSelected(null)} onGoTo={onGoTo} />
       )}
+      {pickedGroup && <GroupPanel definition={definition} edit={mapEdit} group={pickedGroup} onClose={() => setSelected(null)} />}
     </div>
   );
 }

@@ -104,6 +104,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   however far back, and everything that reads it, however far on, stays lit with their wires in cyan;
   the rest fades. Formulas that only share an input with it fade too, so where a number comes from
   is plain on a busy map, and a wire is easier to pick out before clicking it.
+- **Groups of your own on the map (5c2).** A formula's panel has a MAP GROUP choice: none, one of
+  your groups, or + NEW GROUP. A group's title bar opens its own panel, to name it, take formulas out
+  of it, or UNGROUP it (the formulas stay). Groups fold like the stats groups do. Only the map has
+  them: FORMS shows a formula's group under it, read only, with EDIT IN GRAPH.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

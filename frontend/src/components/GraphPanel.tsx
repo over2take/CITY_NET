@@ -4,7 +4,8 @@ import type { BuilderPage } from '../sheets/builderSession';
 import { statGroups, allStats, tableList, formulaList, withoutFormula, withFormula, withAlternative } from '../sheets/statsRules';
 import { modifiersIn, withModifierNumber } from '../sheets/modifiers';
 import { houseRuleList } from '../sheets/houseRules';
-import type { GraphNode } from '../sheets/graphModel';
+import type { GraphNode, GraphGroup } from '../sheets/graphModel';
+import { mapGroupsOf, groupOf, withFormulaInGroup, withMapGroupLabel, withoutMapGroup, GROUP_NAME_MAX, GROUPS_MAX } from '../sheets/graphGroups';
 import { notesOf, pinChoices, withNoteText, withNotePinned, withoutNote, NOTE_MAX } from '../sheets/graphNotes';
 import type { Tried } from '../hooks/usePreviewValues';
 import { useFormulaInsert } from '../hooks/useFormulaInsert';
@@ -105,6 +106,72 @@ function NoteForm({ definition, edit, node }: { definition: Definition; edit: (n
   );
 }
 
+/** The map group a formula is in (5c2): none, one of the map's own, or a new one. Only the map has these. */
+function MapGroupField({ definition, edit, id }: { definition: Definition; edit: (next: Definition) => void; id: string }) {
+  const groups = mapGroupsOf(definition).filter((g) => g.members.length);
+  const now = groupOf(definition, id)?.id ?? '';
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={small}>MAP GROUP · ONLY THE MAP HAS THESE</span>
+      <select aria-label="Map group" value={now} style={{ ...field, width: '100%' }}
+        onChange={(e) => { const r = withFormulaInGroup(definition, id, e.target.value === 'new' ? 'new' : e.target.value || null); if (r) edit(r.definition); }}>
+        <option value="">NONE</option>
+        {groups.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+        {groups.length < GROUPS_MAX && <option value="new">+ NEW GROUP</option>}
+      </select>
+    </label>
+  );
+}
+
+/** A panel's frame: what it is and its name along the top with ×, Escape closing it, its boxes below. */
+function PanelFrame({ kind, title, onClose, children }: { kind: string; title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <aside data-testid="graph-panel" aria-label={`${kind} ${title}`}
+      onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}
+      // textAlign: the page around the builder centres text; the panel reads from the left, as FORMS does.
+      style={{ width: 460, flexShrink: 0, boxSizing: 'border-box', borderLeft: '1px solid var(--green)', background: 'var(--black)', display: 'flex', flexDirection: 'column', minHeight: 0, fontFamily: 'monospace', textAlign: 'left' }}>
+      <div style={{ height: 40, flexShrink: 0, padding: '0 8px 0 14px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--dark-green)' }}>
+        <span style={{ fontSize: 10, letterSpacing: 1, color: 'var(--cyan)' }}>{kind}</span>
+        <b style={{ flex: 1, minWidth: 0, color: 'var(--green)', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</b>
+        <button type="button" className="utility-btn" style={btn} aria-label="Close the panel" data-browse onClick={onClose}>×</button>
+      </div>
+      <div className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, fontSize: 12 }}>
+        {children}
+      </div>
+    </aside>
+  );
+}
+
+/**
+ * One of the map's own groups (5c2), opened from its title bar: its name, the formulas in it (each
+ * taken out with ×), and UNGROUP, which leaves the formulas where they are.
+ */
+export function GroupPanel({ definition, edit, group, onClose }: { definition: Definition; edit: (next: Definition) => void; group: GraphGroup; onClose: () => void }) {
+  const name = (id: string) => (formulaList(definition).find((f) => f.id === id)?.label || id).toUpperCase();
+  const stored = mapGroupsOf(definition).find((g) => g.id === group.id);
+  return (
+    <PanelFrame kind="MAP GROUP" title={group.label} onClose={onClose}>
+      <p style={{ ...why, margin: 0, fontSize: 11 }}>Only the map has its own groups: FORMS shows this one under each formula in it. Put a formula in from its own panel.</p>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <span style={small}>NAME</span>
+        <input type="text" aria-label="Group name" maxLength={GROUP_NAME_MAX} value={stored?.label ?? group.label} style={{ ...field, width: '100%' }}
+          onChange={(e) => edit(withMapGroupLabel(definition, group.id, e.target.value))} />
+      </label>
+      <span style={small}>FORMULAS IN IT · {group.members.length}</span>
+      <ul aria-label="Formulas in the group" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {group.members.map((m) => (
+          <li key={m} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+            <span style={{ flex: 1, minWidth: 0 }}>{name(m)}</span>
+            <button type="button" className="utility-btn" style={btn} aria-label={`Take ${name(m)} out`}
+              onClick={() => { const r = withFormulaInGroup(definition, m, null); if (r) edit(r.definition); }}>×</button>
+          </li>
+        ))}
+      </ul>
+      <div><button type="button" className="utility-btn" style={btn} onClick={() => edit(withoutMapGroup(definition, group.id))}>UNGROUP</button></div>
+    </PanelFrame>
+  );
+}
+
 /** A formula as FORMULAS shows it, laid out down the panel: name, text, = value, alternative. */
 function FormulaForm({ definition, edit, id, preview, tried, insert, trying }: Omit<Props, 'node' | 'onClose' | 'onGoTo'> & { id: string; insert: ReturnType<typeof useFormulaInsert> }) {
   const f = formulaList(definition).find((x) => x.id === id);
@@ -149,6 +216,7 @@ export function GraphPanel({ definition, edit, node, preview, tried, onClose, on
     body = (
       <>
         <FormulaForm definition={definition} edit={edit} id={node.id} preview={preview} tried={tried} insert={insert} trying={trying} />
+        <MapGroupField definition={definition} edit={edit} id={node.id} />
         <div><button type="button" className="utility-btn" style={btn} onClick={() => edit(withoutFormula(definition, node.id))}>REMOVE {node.kind === 'condition' ? 'CONDITION' : 'FORMULA'}</button></div>
       </>
     );
@@ -171,16 +239,7 @@ export function GraphPanel({ definition, edit, node, preview, tried, onClose, on
   }
 
   return (
-    <aside data-testid="graph-panel" aria-label={`${KIND[node.kind]} ${title}`}
-      onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } }}
-      // textAlign: the page around the builder centres text; the panel reads from the left, as FORMS does.
-      style={{ width: 460, flexShrink: 0, boxSizing: 'border-box', borderLeft: '1px solid var(--green)', background: 'var(--black)', display: 'flex', flexDirection: 'column', minHeight: 0, fontFamily: 'monospace', textAlign: 'left' }}>
-      <div style={{ height: 40, flexShrink: 0, padding: '0 8px 0 14px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid var(--dark-green)' }}>
-        <span style={{ fontSize: 10, letterSpacing: 1, color: 'var(--cyan)' }}>{KIND[node.kind]}</span>
-        <b style={{ flex: 1, minWidth: 0, color: 'var(--green)', fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</b>
-        <button type="button" className="utility-btn" style={btn} aria-label="Close the panel" data-browse onClick={onClose}>×</button>
-      </div>
-      <div className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, fontSize: 12 }}>
+    <PanelFrame kind={KIND[node.kind]} title={title} onClose={onClose}>
         {node.kind !== 'note' && <p style={{ ...why, margin: 0, fontSize: 11 }}>The same boxes as FORMS: a change here is a change there.</p>}
         {body}
         {formulaIds.length > 0 && (
@@ -188,7 +247,6 @@ export function GraphPanel({ definition, edit, node, preview, tried, onClose, on
             <InsertChips definition={definition} active={insert.active} onInsert={insert.insert} />
           </div>
         )}
-      </div>
-    </aside>
+    </PanelFrame>
   );
 }

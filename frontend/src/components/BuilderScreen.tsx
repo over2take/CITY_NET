@@ -543,7 +543,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
             )}
             {ready && page === 'words' && <WordsPage definition={definition!} edit={edit} />}
             {ready && page === 'features' && <FeaturesPage definition={definition!} edit={edit} api={api} />}
-            {ready && page === 'rules' && !graphOn && <StatsRulesPage definition={definition!} edit={edit} api={api} onOpenNote={(node) => pickRulesView('graph', node)} />}
+            {ready && page === 'rules' && !graphOn && <StatsRulesPage definition={definition!} edit={edit} api={api} onEditInGraph={(node) => pickRulesView('graph', node)} />}
             {graphOn && (
               <React.Suspense fallback={<p style={{ opacity: 0.7, padding: 24 }}>LOADING THE MAP…</p>}>
                 <GraphView definition={definition!} edit={edit} api={api} readOnly={looking} startWith={graphStart} problems={problems} onGoTo={(p) => { setPage(p); setStatus(null); }} />

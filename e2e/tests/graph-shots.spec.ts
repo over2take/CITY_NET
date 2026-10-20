@@ -34,6 +34,22 @@ test('the graph view, for looking at', async ({ page, request }, info) => {
   await page.getByRole('button', { name: 'FIT', exact: true }).click();
   await page.waitForTimeout(600);
   await page.screenshot({ path: path.join(SHOTS, 'graph-cwn-fit.png') });
+  // A group of your own (5c2): the saves into one, named, its panel open.
+  for (const id of ['save_physical', 'save_evasion', 'save_mental']) {
+    await page.getByTestId(`graph-node-${id}`).click();
+    const pick = page.getByTestId('graph-panel').getByLabel('Map group');
+    await pick.selectOption({ label: id === 'save_physical' ? '+ NEW GROUP' : 'SAVES' });
+    if (id === 'save_physical') {
+      await page.keyboard.press('Escape');
+      await page.getByTestId('graph-group-group_1').locator('.graph-group-head').click({ position: { x: 120, y: 10 } });
+      await page.getByTestId('graph-panel').getByLabel('Group name').fill('SAVES');
+    }
+    await page.keyboard.press('Escape');
+  }
+  await page.getByTestId('graph-group-group_1').locator('.graph-group-head').click({ position: { x: 120, y: 10 } });
+  await page.waitForTimeout(800);
+  await page.screenshot({ path: path.join(SHOTS, 'graph-cwn-group.png') });
+  await page.keyboard.press('Escape');
   // Hover (5c1): the physical save, what it reads and what reads it lit, the rest faded.
   await page.getByTestId('graph-node-save_physical').hover();
   await page.waitForTimeout(400);
