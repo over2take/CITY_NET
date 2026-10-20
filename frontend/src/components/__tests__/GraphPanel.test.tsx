@@ -262,9 +262,9 @@ describe('the panel', () => {
   });
 
   it('FORMS shows a note under what it is pinned to, read only, and EDIT IN GRAPH asks for the map on it', async () => {
-    const onOpenNote = vi.fn();
+    const onEditInGraph = vi.fn();
     render(<StatsRulesPage definition={{ ...HEARTH, graph: { notes: [...HEARTH.graph!.notes as object[], { id: 'n2', on: 'abilities', text: 'Roll 3d6.' }, { id: 'n3', on: 'table:attribute_mod', text: 'Per the book.' }] } }}
-      edit={() => {}} api={api} onOpenNote={onOpenNote} />);
+      edit={() => {}} api={api} onEditInGraph={onEditInGraph} />);
     expect(screen.getByTestId('forms-note-n2').textContent).toContain('Roll 3d6.');
     expect(screen.queryByTestId('forms-note-n1')).toBeNull();
     await userEvent.click(screen.getByRole('tab', { name: 'FORMULAS' }));
@@ -272,9 +272,20 @@ describe('the panel', () => {
     expect(note.textContent).toContain('Half level, rounded down.');
     expect(within(note).queryByRole('textbox')).toBeNull();
     await userEvent.click(within(note).getByRole('button', { name: 'EDIT IN GRAPH' }));
-    expect(onOpenNote).toHaveBeenCalledWith('note:n1');
+    expect(onEditInGraph).toHaveBeenCalledWith('note:n1');
     await userEvent.click(screen.getByRole('tab', { name: 'TABLES' }));
     expect(screen.getByTestId('forms-note-n3').textContent).toContain('Per the book.');
+  });
+
+  it('FORMS shows a formula\'s map group read only, and EDIT IN GRAPH asks for the map on the group (5c2)', async () => {
+    const onEditInGraph = vi.fn();
+    render(<StatsRulesPage definition={{ ...HEARTH, graph: { groups: [{ id: 'attacks', label: 'ATTACKS', members: ['melee'] }] } }} edit={() => {}} api={api} onEditInGraph={onEditInGraph} />);
+    await userEvent.click(screen.getByRole('tab', { name: 'FORMULAS' }));
+    expect(screen.getByTestId('forms-group-melee').textContent).toContain('MAP GROUPATTACKS');
+    expect(screen.queryByTestId('forms-group-str_mod')).toBeNull();
+    expect(within(screen.getByTestId('forms-group-melee')).queryByRole('textbox')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit ATTACKS in graph' }));
+    expect(onEditInGraph).toHaveBeenCalledWith('group:attacks');
   });
 
   it('the map opened on a note has its panel open', async () => {

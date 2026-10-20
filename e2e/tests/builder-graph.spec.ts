@@ -439,6 +439,45 @@ test('hovering a node lights what it reads and what reads it, its wires cyan, an
   expect((await wire('abilities:out:str_mod>melee:b:@str_mod')).stroke).not.toBe('var(--cyan)');
 });
 
+test("the map's own groups: a formula grouped from its panel, the group named from its title bar, shown in FORMS, ungrouped", async ({ page, request }, info) => {
+  const name = `Grouped Map ${info.retry + 1}`;
+  const token = await gmToken(request);
+  await asGm(request, token, 'post', '/api/systems', { definition: HEARTH(name) });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'graph' });
+  await signInAsGm(page);
+  await openSystem(page, name);
+  await toGraph(page);
+  const map = page.getByTestId('graph-view');
+  const panel = page.getByTestId('graph-panel');
+
+  // The save into a new group: a box round it with NEW GROUP on its title bar.
+  await map.getByTestId('graph-node-save').click();
+  await panel.getByLabel('Map group').selectOption({ label: '+ NEW GROUP' });
+  const group = map.getByTestId('graph-group-group_1');
+  await expect(group).toContainText('NEW GROUP');
+
+  // Its title bar opens its panel: named there, the title bar follows.
+  await page.keyboard.press('Escape');
+  await group.locator('.graph-group-head').click({ position: { x: 120, y: 10 } });
+  await expect(panel).toHaveAttribute('aria-label', 'MAP GROUP NEW GROUP');
+  await panel.getByLabel('Group name').fill('DEFENCE');
+  await expect(group).toContainText('DEFENCE');
+
+  // FORMS: read only under the formula, and EDIT IN GRAPH back to the group's panel.
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  await page.getByRole('group', { name: 'View' }).getByRole('button', { name: 'FORMS' }).click();
+  await page.getByRole('tab', { name: 'FORMULAS' }).click();
+  await expect(page.getByTestId('forms-group-save')).toContainText('DEFENCE');
+  await page.getByRole('button', { name: 'Edit DEFENCE in graph' }).click();
+  await expect(panel).toHaveAttribute('aria-label', 'MAP GROUP DEFENCE');
+
+  // Ungrouped: the box goes, the save stays.
+  await panel.getByRole('button', { name: 'UNGROUP' }).click();
+  await expect(group).toHaveCount(0);
+  await expect(map.getByTestId('graph-node-save')).toBeVisible();
+});
+
 test('a note pinned to the node picked, written, dragged to another, unpinned, and read in FORMS', async ({ page, request }, info) => {
   const name = `Noted Map ${info.retry + 1}`;
   const token = await gmToken(request);

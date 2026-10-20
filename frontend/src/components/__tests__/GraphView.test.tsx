@@ -449,3 +449,46 @@ describe('hover highlighting (5c1)', () => {
     expect(wrap('odd').style.opacity).toBe('0.16');
   });
 });
+
+describe('the map\'s own groups (5c2)', () => {
+  const groups = (def: Definition) => (def.graph as { groups?: unknown[] }).groups;
+
+  it('a formula put in a group from its panel, or a new one', async () => {
+    const { last } = open();
+    fireEvent.click(node('spell'));
+    const pick = within(await screen.findByTestId('graph-panel')).getByLabelText('Map group') as HTMLSelectElement;
+    expect(pick.value).toBe('');
+    expect([...pick.options].map((o) => o.textContent)).toEqual(['NONE', 'SAVES', '+ NEW GROUP']);
+    await userEvent.selectOptions(pick, 'SAVES');
+    expect(groups(last())).toEqual([{ id: 'saves', label: 'SAVES', members: ['save', 'odd', 'spell'] }]);
+    await userEvent.selectOptions(within(screen.getByTestId('graph-panel')).getByLabelText('Map group'), '+ NEW GROUP');
+    expect(groups(last())).toEqual([{ id: 'saves', label: 'SAVES', members: ['save', 'odd'] }, { id: 'group_1', label: 'NEW GROUP', members: ['spell'] }]);
+    expect(screen.getByTestId('graph-group-group_1')).toBeTruthy();
+  });
+
+  it('its title bar opens its panel: renamed, a formula taken out, ungrouped; folding doesn\'t open it', async () => {
+    const { last } = open();
+    fireEvent.click(within(screen.getByTestId('graph-group-saves')).getByRole('button', { name: 'Fold SAVES' }));
+    expect(screen.queryByTestId('graph-panel')).toBeNull();
+    fireEvent.click(within(screen.getByTestId('graph-group-saves')).getByRole('button', { name: 'Open SAVES' }));
+    fireEvent.click(screen.getByTestId('graph-group-saves').querySelector('.graph-group-head')!);
+    const panel = await screen.findByTestId('graph-panel');
+    expect(panel.getAttribute('aria-label')).toBe('MAP GROUP SAVES');
+    const name = within(panel).getByLabelText('Group name');
+    await userEvent.clear(name);
+    await userEvent.type(name, 'DEFENCE');
+    expect(groups(last())).toEqual([{ id: 'saves', label: 'DEFENCE', members: ['save', 'odd'] }]);
+    await userEvent.click(within(panel).getByRole('button', { name: 'Take ODD out' }));
+    expect(groups(last())).toEqual([{ id: 'saves', label: 'DEFENCE', members: ['save'] }]);
+    await userEvent.click(within(screen.getByTestId('graph-panel')).getByRole('button', { name: 'UNGROUP' }));
+    expect(groups(last())).toBeUndefined();
+    expect(screen.queryByTestId('graph-group-saves')).toBeNull();
+    expect(screen.queryByTestId('graph-panel')).toBeNull();
+    expect(node('save')).toBeTruthy();
+  });
+
+  it('the map opened on a group, from FORMS, has its panel open', async () => {
+    render(<div style={{ width: 1200, height: 800 }}><GraphView definition={HEARTH} edit={() => {}} api={api} startWith="group:saves" /></div>);
+    expect((await screen.findByTestId('graph-panel')).getAttribute('aria-label')).toBe('MAP GROUP SAVES');
+  });
+});
