@@ -17,7 +17,8 @@ import { statGroups, formulaList } from './statsRules';
 export type Sides = number | 'F';
 export interface RollDice { count: string; sides: Sides; name?: string }
 export interface RollBand { upTo?: number; label: string }
-export interface RollChange { id: string; label: string; extra?: { dice: number; keep?: 'highest' | 'lowest' }; add?: string; cost?: { from: string; amount: number } }
+/** A change a player picks before rolling; its cost taken from a stat, or with `adds` added to it (6b3a). */
+export interface RollChange { id: string; label: string; extra?: { dice: number; keep?: 'highest' | 'lowest' }; add?: string; cost?: { from: string; amount: number; adds?: boolean } }
 export interface Roll {
   id: string; label?: string;
   dice: RollDice[]; read?: 'sum' | 'highest' | 'lowest' | 'count'; keep?: string; at?: number;
@@ -61,7 +62,7 @@ export const PRESETS: Record<string, { label: string; roll: Omit<Roll, 'id'> }> 
       dice: [{ count: '@this', sides: 6 }], read: 'highest', zero: { count: 2, read: 'lowest' },
       matches: [{ face: 6, count: 2, label: 'Critical', critical: 'success' }],
       bands: [{ upTo: 3, label: 'Bad outcome' }, { upTo: 5, label: 'Partial success' }, { label: 'Full success' }],
-      changes: [{ id: 'push', label: 'Push yourself', extra: { dice: 1 }, cost: { from: 'stress', amount: 2 } }],
+      changes: [{ id: 'push', label: 'Push yourself', extra: { dice: 1 }, cost: { from: 'stress', amount: 2, adds: true } }],
     },
   },
   vampire: {
@@ -366,8 +367,8 @@ export type ChangePatch = {
   extra?: { dice: number; keep?: 'highest' | 'lowest' } | null;
   /** Formula text added to the total, or null for nothing. */
   add?: string | null;
-  /** What it costs, or null for nothing. */
-  cost?: { from: string; amount: number } | null;
+  /** What it costs, taken from a stat or (`adds`) added to it, or null for nothing. */
+  cost?: { from: string; amount: number; adds?: boolean } | null;
 };
 
 /**
@@ -391,7 +392,7 @@ export const withRollChange = (def: Definition, id: string, change: { add: true 
         if (p.label !== undefined) next.label = p.label.slice(0, 40);
         if (p.extra === null) delete next.extra; else if (p.extra) next.extra = { dice: Math.max(1, Math.min(10, p.extra.dice)), ...(p.extra.keep ? { keep: p.extra.keep } : {}) };
         if (p.add === null) delete next.add; else if (p.add !== undefined) next.add = p.add;
-        if (p.cost === null) delete next.cost; else if (p.cost) next.cost = { from: p.cost.from, amount: Math.max(1, Math.min(100, p.cost.amount)) };
+        if (p.cost === null) delete next.cost; else if (p.cost) next.cost = { from: p.cost.from, amount: Math.max(1, Math.min(100, p.cost.amount)), ...(p.cost.adds ? { adds: true } : {}) };
         if (next.extra === undefined && next.add === undefined) next.add = '1';
         return next;
       });
@@ -464,6 +465,6 @@ export const stepsOf = (r: Roll) => ({
     upper(c.label),
     ...(c.extra ? [`+${c.extra.dice} ${c.extra.dice === 1 ? 'DIE' : 'DICE'}${c.extra.keep ? `, KEEP THE ${upper(c.extra.keep)}` : ''}`] : []),
     ...(c.add ? [`+ ${c.add}`] : []),
-    ...(c.cost ? [`COSTS ${c.cost.amount} ${upper(c.cost.from)}`] : []),
+    ...(c.cost ? [c.cost.adds ? `ADDS ${c.cost.amount} ${upper(c.cost.from)}` : `COSTS ${c.cost.amount} ${upper(c.cost.from)}`] : []),
   ].join(' · ')),
 });

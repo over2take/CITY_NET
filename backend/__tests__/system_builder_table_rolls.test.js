@@ -92,10 +92,32 @@ describe('a field rolled', () => {
     expect(roll({ fieldId: 'name' }).ok).toBe(false);
   });
 
-  it('takes changes picked that cost nothing, and refuses one that costs something for now', () => {
+  it('takes changes picked, and ones it hasn\'t ignored', () => {
     expect(roll({ fieldId: 'lore', chosen: ['forward'] }).historyText).toBe('Kestrel rolled Skill check (Lore) (Forward) [4 5 = 9 + 4 = 13] — FULL');
-    expect(roll({ fieldId: 'lore', chosen: ['push'] })).toEqual({ ok: false, error: "Push costs something, which the table can't take yet" });
     expect(roll({ fieldId: 'lore', chosen: ['nonsense', 7] }).ok).toBe(true);
+  });
+
+  it('pays what a change costs from the sheet as stored (6b3a): taken, said in the log, refused when short', () => {
+    const paid = roll({ fieldId: 'lore', chosen: ['push'] });
+    expect(paid.spends).toEqual([{ from: 'stress', by: -2 }]);
+    expect(paid.historyText).toMatch(/^Kestrel rolled Skill check \(Lore\) \(Push: −2 STRESS\) \[/);
+    expect(roll({ fieldId: 'lore', chosen: ['push'], data: { ...SHEET, stress: 1 } })).toEqual({ ok: false, error: 'Push costs 2 STRESS, and there is only 1' });
+    expect(roll({ fieldId: 'lore', chosen: ['push'], data: { ...SHEET, stress: 0 } }).error).toBe('Push costs 2 STRESS, and there are only 0');
+    expect(roll({ fieldId: 'lore', chosen: ['forward'] }).spends).toEqual([]);
+  });
+
+  it('adds what a change costs to a stat, refused past its highest, the stat named as players see it', () => {
+    // Named Strain here, so the log and refusals show the name players see, not the id.
+    const blades = { ...HEARTH, stats: [...HEARTH.stats, { id: 'track', label: 'Track', stats: [{ id: 'stress', label: 'Strain', min: 0, max: 9 }] }],
+      rolls: [{ id: 'act', label: 'Action', ...PRESETS.blades.roll, by: ['fight'] }] };
+    const push = (stress) => rollField({ definition: blades, data: { ...SHEET, stress }, fieldId: 'fight', chosen: ['push'], rng: d(6, 4, 5, 6), who: 'K' });
+    expect(push(4).spends).toEqual([{ from: 'stress', by: 2 }]);
+    expect(push(4).historyText).toMatch(/\(Push yourself: \+2 STRAIN\)/);
+    expect(push(7).ok).toBe(true);
+    expect(push(8)).toEqual({ ok: false, error: 'Push yourself adds 2 STRAIN, past its highest (8 of 9)' });
+    // A test roll pays nothing and is refused nothing.
+    const tried = rollField({ definition: blades, data: { ...SHEET, stress: 9 }, fieldId: 'fight', chosen: ['push'], rng: d(6, 4), who: 'K', tryCosts: true });
+    expect(tried.ok).toBe(true);
   });
 
   it('names a target met or missed, a natural, an NPC rolled for, and kept and dropped dice', () => {
@@ -175,7 +197,6 @@ describe('rolling at the table, through the socket', () => {
     // back in either order.
     kes.handlers.requestSheetRoll({ fieldId: 'fight', rollId: 'brawl' });
     await untilValue(() => rolled(kes).length, (n) => n >= 1, { label: 'the brawl' });
-    kes.handlers.requestSheetRoll({ fieldId: 'lore', changes: ['push'] });
     kes.handlers.requestSheetRoll({ fieldId: 'name' });
     await drain(db);
     expect(rolled(kes)).toHaveLength(1);
@@ -183,8 +204,24 @@ describe('rolling at the table, through the socket', () => {
     await untilValue(() => rolled(kes).length, (n) => n >= 2, { label: 'the skill check' });
     await drain(db);
     expect(rolled(kes).map((r) => r.data.historyString.replace(/\[.*$/, ''))).toEqual(['Kestrel rolled Brawl (Fight) ', 'Kestrel rolled Skill check (Lore) (Forward) ']);
-    // The sheet's stress is untouched: nothing costing was rolled.
-    expect(JSON.parse((await get(db, "SELECT data FROM character_sheets WHERE username = 'kes'")).data).stress).toBe(4);
+    // Nothing costing was rolled: the sheet's Stress is as it was.
+    const stress = async () => JSON.parse((await get(db, "SELECT data FROM character_sheets WHERE username = 'kes'")).data).stress;
+    expect(await stress()).toBe(4);
+    // PUSH costs 2 Stress (6b3a): paid from the sheet once the roll is made, and every window told.
+    kes.handlers.requestSheetRoll({ fieldId: 'lore', changes: ['push'] });
+    await untilValue(() => rolled(kes).length, (n) => n >= 3, { label: 'the push' });
+    await drain(db);
+    expect(rolled(kes)[2].data.historyString).toMatch(/^Kestrel rolled Skill check \(Lore\) \(Push: −2 STRESS\) \[/);
+    expect(await stress()).toBe(2);
+    expect(kes.emitted.some((e) => e.event === 'sheetUpdated')).toBe(true);
+    // Twice more: the first paid down to 0, the second refused, nothing rolled or taken.
+    kes.handlers.requestSheetRoll({ fieldId: 'lore', changes: ['push'] });
+    await untilValue(() => rolled(kes).length, (n) => n >= 4, { label: 'the second push' });
+    await drain(db);
+    kes.handlers.requestSheetRoll({ fieldId: 'lore', changes: ['push'] });
+    await drain(db);
+    expect(rolled(kes)).toHaveLength(4);
+    expect(await stress()).toBe(0);
   });
 });
 
@@ -256,7 +293,7 @@ describe('the rolls players\' browsers get (6b2a)', () => {
   it('each roll\'s name, the fields with a die button for it, and its changes with their costs; never how it rolls', () => {
     const rolls = renderOf('sys_hearthhearthhear', HEARTH).rolls;
     expect(rolls).toEqual([
-      { id: 'skill', label: 'Skill check', fields: ['fight', 'lore'], changes: [{ id: 'forward', label: 'Forward' }, { id: 'push', label: 'Push', cost: { from: 'stress', amount: 2 } }] },
+      { id: 'skill', label: 'Skill check', fields: ['fight', 'lore'], changes: [{ id: 'forward', label: 'Forward' }, { id: 'push', label: 'Push', cost: { from: 'stress', amount: 2, label: 'stress' } }] },
       { id: 'check', label: 'Ability check', fields: ['str', 'wit'], changes: [{ id: 'advantage', label: 'Advantage' }, { id: 'disadvantage', label: 'Disadvantage' }] },
       { id: 'saving', label: 'Save', fields: ['save'], changes: [] },
       { id: 'brawl', label: 'Brawl', fields: ['fight'], changes: [] },
@@ -269,5 +306,19 @@ describe('the rolls players\' browsers get (6b2a)', () => {
     expect(renderOf('sys_x', { ...HEARTH, rolls: [{ id: 'quick', dice: [{ count: '1', sides: 6 }], by: ['str'] }] }).rolls)
       .toEqual([{ id: 'quick', label: 'quick', fields: ['str'], changes: [] }]);
     expect(renderOf('sys_x', { format: 1, name: 'Bare' }).rolls).toEqual([]);
+  });
+});
+
+describe('what a cost shows on the sheet (6b3a)', () => {
+  it('the stat\'s name, how much, which way, and its highest when added to', () => {
+    const def = { ...HEARTH, stats: [...HEARTH.stats, { id: 'track', label: 'Track', stats: [{ id: 'stress', label: 'Stress', min: 0, max: 9 }, { id: 'luck', label: 'Luck' }] }],
+      rolls: [{ id: 'act', label: 'Action', dice: [{ count: '1', sides: 6 }], by: ['fight'], changes: [
+        { id: 'push', label: 'Push', extra: { dice: 1 }, cost: { from: 'stress', amount: 2, adds: true } },
+        { id: 'lucky', label: 'Lucky', add: '1', cost: { from: 'luck', amount: 1 } },
+      ] }] };
+    expect(runtime.renderOf('sys_x', def).rolls[0].changes).toEqual([
+      { id: 'push', label: 'Push', cost: { from: 'stress', amount: 2, label: 'Stress', adds: true, max: 9 } },
+      { id: 'lucky', label: 'Lucky', cost: { from: 'luck', amount: 1, label: 'Luck' } },
+    ]);
   });
 });

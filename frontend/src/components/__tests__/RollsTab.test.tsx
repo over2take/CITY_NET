@@ -300,6 +300,13 @@ describe('editing step 5, changes (6b1b3)', () => {
     await userEvent.clear(amount);
     await userEvent.type(amount, '2');
     expect(rollsOf(last())[0].changes).toEqual([{ id: 'forward', label: 'Push', extra: { dice: 1, keep: 'highest' }, cost: { from: 'lore', amount: 2 } }]);
+    // TAKES or ADDS (6b3a): Blades' push adds to Stress.
+    expect(within(first).getByText(/TAKEN FROM IT WHEN ROLLED/)).toBeTruthy();
+    await userEvent.selectOptions(within(first).getByLabelText('Change 1: which way'), 'ADDS');
+    expect(rollsOf(last())[0].changes).toEqual([{ id: 'forward', label: 'Push', extra: { dice: 1, keep: 'highest' }, cost: { from: 'lore', amount: 2, adds: true } }]);
+    expect(within(first).getByText(/ADDED TO IT WHEN ROLLED/)).toBeTruthy();
+    await userEvent.selectOptions(within(first).getByLabelText('Change 1: which way'), 'TAKES');
+    expect(rollsOf(last())[0].changes[0].cost).toEqual({ from: 'lore', amount: 2 });
   });
 
   it('a new change added, and taken away; with none, it rolls on the first click', async () => {

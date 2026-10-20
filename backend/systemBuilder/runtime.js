@@ -142,9 +142,22 @@ const renderOf = (id, definition, on = new Set()) => ({
     id: r.id,
     label: typeof r.label === 'string' && r.label.trim() ? r.label : r.id,
     fields: fieldsRolledBy(definition, r),
-    changes: (Array.isArray(r.changes) ? r.changes : []).map((c) => ({ id: c.id, label: c.label, ...(c.cost ? { cost: { from: c.cost.from, amount: c.cost.amount } } : {}) })),
+    changes: (Array.isArray(r.changes) ? r.changes : []).map((c) => ({ id: c.id, label: c.label, ...(c.cost ? { cost: costShown(definition, c.cost) } : {}) })),
   })),
 });
+
+/**
+ * What a change costs, as a sheet shows it (6b3a): the stat, its name, how much, which way, and the
+ * stat's highest when it is added to, so the chooser can say what can't be paid before asking.
+ */
+const costShown = (definition, cost) => {
+  const stat = (Array.isArray(definition.stats) ? definition.stats : []).flatMap((g) => (g && Array.isArray(g.stats) ? g.stats : []))
+    .find((s) => s && s.id === cost.from);
+  return {
+    from: cost.from, amount: cost.amount, label: (stat && stat.label) || cost.from,
+    ...(cost.adds ? { adds: true, ...(stat && Number.isFinite(stat.max) ? { max: stat.max } : {}) } : {}),
+  };
+};
 
 /** A published system, held as the game runs it: its house rules applied, by the table's `chosen` (rule -> on). */
 const put = (id, publishedText, version, chosen = {}) => {

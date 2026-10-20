@@ -315,6 +315,9 @@ describe('changes picked before rolling (6a1c)', () => {
     expect(said([{ id: 'a', label: 'A', extra: { dice: 1, keep: 'middle' } }])).toEqual(['roll c, change 1, extra, keep: Keep the highest or the lowest']);
     expect(said([{ id: 'a', label: 'A', add: '1', cost: { from: 'Luck Points', amount: 1 } }])).toEqual(['roll c, change 1, cost, from: The id of the stat it is taken from']);
     expect(said([{ id: 'a', label: 'A', add: '1', cost: { from: 'luck', amount: 0 } }])).toEqual(['roll c, change 1, cost, amount: 1 to 100']);
+    // A cost takes, or with adds adds (6b3a).
+    expect(said([{ id: 'a', label: 'A', add: '1', cost: { from: 'stress', amount: 2, adds: true } }])).toEqual([]);
+    expect(said([{ id: 'a', label: 'A', add: '1', cost: { from: 'stress', amount: 2, adds: 'yes' } }])).toEqual(['roll c, change 1, cost, adds: Must be yes or no']);
     expect(said([{ id: 'a', label: 'A', add: '1 +' }])[0]).toMatch(/^roll c, change 1, add: /);
   });
 });
@@ -389,7 +392,8 @@ describe('the presets (6a1c)', () => {
     expect([dnd.dice, dnd.total, dnd.critical]).toEqual([20, 23, 'success']);
     expect(makeRoll({ id: 'p', ...PRESETS.pbta.roll }, valueFor({ this: 1 }), d(6, 4, 4)).band).toBe('Success at a cost');
     const blades = makeRoll({ id: 'b', ...PRESETS.blades.roll }, valueFor({ this: 2 }), d(6, 6, 2, 6), ['push']);
-    expect([blades.band, blades.critical, blades.costs]).toEqual(['Full success', 'success', [{ from: 'stress', amount: 2 }]]);
+    // Blades' push adds 2 Stress (the user's pick, 2026-10-20: a cost takes or adds).
+    expect([blades.band, blades.critical, blades.costs]).toEqual(['Full success', 'success', [{ from: 'stress', amount: 2, adds: true }]]);
     const vamp = makeRoll({ id: 'v', ...PRESETS.vampire.roll }, valueFor({ this: 3, tie: 2, hunger: 2 }), d(10, 10, 4, 7, 10, 1));
     expect([vamp.groups.map((g) => g.faces.length), vamp.dice, vamp.effects]).toEqual([[3, 2], 5, ['Messy critical']]);
     const fate = makeRoll({ id: 'f', ...PRESETS.fate.roll }, valueFor({ this: 2 }), showing([1, FATE], [1, FATE], [0, FATE], [-1, FATE]), ['invoke']);

@@ -116,7 +116,7 @@ describe('a roll\'s five steps in words', () => {
     expect(pbta.bands).toEqual([['6−', 'MISS'], ['7–9', 'SUCCESS AT A COST'], ['10+', 'FULL SUCCESS']]);
     expect([pbta.add, pbta.against, pbta.changes]).toEqual(['@this', null, ['FORWARD +1 · + 1']]);
     const blades = stepsOf({ id: 'b', ...PRESETS.blades.roll });
-    expect([blades.read, blades.special, blades.changes]).toEqual(['KEEP HIGHEST 1', ['2 × 6 · CRITICAL', 'NO DICE · ROLL 2, KEEP THE LOWEST'], ['PUSH YOURSELF · +1 DIE · COSTS 2 STRESS']]);
+    expect([blades.read, blades.special, blades.changes]).toEqual(['KEEP HIGHEST 1', ['2 × 6 · CRITICAL', 'NO DICE · ROLL 2, KEEP THE LOWEST'], ['PUSH YOURSELF · +1 DIE · ADDS 2 STRESS']]);
     expect(stepsOf({ id: 'c', ...PRESETS.cpr.roll }).special[0]).toBe('EXPLODES ON 10, ONCE · 1 TAKES ONE AWAY · FIRST DIE ONLY');
     expect(stepsOf({ id: 's', ...PRESETS.sr6.roll }).special).toEqual(['1s ON 50% OF THE DICE · GLITCH (CRITICAL GLITCH WITH NO SUCCESS)']);
     expect(stepsOf({ id: 'f', ...PRESETS.fate.roll }).bands.slice(0, 4)).toEqual([['−2 OR LESS', 'TERRIBLE'], ['−1', 'POOR'], ['0', 'MEDIOCRE'], ['1', 'AVERAGE']]);
@@ -313,6 +313,10 @@ describe('the changes picked before rolling, changed (6b1b3)', () => {
     const { definition, id } = withNewRoll(HEARTH, 'pbta')!;
     let def = withRollChange(definition, id, { set: 0, patch: { label: 'Push', extra: { dice: 1, keep: 'highest' }, add: null, cost: { from: 'str', amount: 2 } } });
     expect(only(def).changes).toEqual([{ id: 'forward', label: 'Push', extra: { dice: 1, keep: 'highest' }, cost: { from: 'str', amount: 2 } }]);
+    // A cost that adds keeps it (6b3a); one that takes says nothing of it.
+    expect(only(withRollChange(def, id, { set: 0, patch: { cost: { from: 'str', amount: 2, adds: true } } })).changes![0].cost).toEqual({ from: 'str', amount: 2, adds: true });
+    expect(only(withRollChange(def, id, { set: 0, patch: { cost: { from: 'str', amount: 2, adds: false } } })).changes![0].cost).toEqual({ from: 'str', amount: 2 });
+    expect(stepsOf(only(withRollChange(def, id, { set: 0, patch: { cost: { from: 'str', amount: 2, adds: true } } }))).changes).toEqual(['PUSH · +1 DIE, KEEP THE HIGHEST · ADDS 2 STR']);
     expect(problems(def)).toEqual([]);
     def = withRollChange(def, id, { set: 0, patch: { extra: { dice: 40 }, cost: { from: 'str', amount: 0 } } });
     expect(only(def).changes![0]).toEqual({ id: 'forward', label: 'Push', extra: { dice: 10 }, cost: { from: 'str', amount: 1 } });

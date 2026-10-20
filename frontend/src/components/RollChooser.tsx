@@ -4,16 +4,31 @@ import type { SheetField, RollPick } from '../sheets/types';
 // The chooser by a custom system's sheet (6b2b; approved mockup docs/mockups/builder-rolls.html,
 // 2026-10-19: "a roll with changes asks first; one without rolls straight away"). Opened by a die
 // button whose field has more than one roll, or a roll with changes: which roll, the changes picked
-// (a change that costs something shows what it costs, and waits for the table to take costs), then
-// ROLL or CANCEL. It remembers nothing between rolls; how a roll rolls is the server's.
+// (one that costs something says what, and what the sheet has: a cost the sheet can't pay is off,
+// 6b3a), then ROLL or CANCEL. It remembers nothing between rolls; how a roll rolls, and paying for
+// it, are the server's.
 
 interface Props {
   field: SheetField;
+  /** The sheet as it is, for what a cost would take or add. */
+  data: Record<string, unknown>;
   onRoll: (pick: RollPick) => void;
   onCancel: () => void;
 }
 
-export function RollChooser({ field, onRoll, onCancel }: Props) {
+/** What a cost says, and whether the sheet can pay it: what it has, and for one that adds, its highest. */
+const costOf = (cost: NonNullable<NonNullable<SheetField['customRolls']>[number]['changes'][number]['cost']>, data: Record<string, unknown>) => {
+  const n = Number(data[cost.from]);
+  const has = Number.isFinite(n) ? n : 0;
+  const name = (cost.label || cost.from).toUpperCase();
+  if (cost.adds) {
+    const over = cost.max !== undefined && has + cost.amount > cost.max;
+    return { words: `ADDS ${cost.amount} ${name} · ${has}${cost.max !== undefined ? ` OF ${cost.max}` : ''}`, can: !over };
+  }
+  return { words: `COSTS ${cost.amount} ${name} · YOU HAVE ${has}`, can: has >= cost.amount };
+};
+
+export function RollChooser({ field, data, onRoll, onCancel }: Props) {
   const rolls = field.customRolls ?? [];
   const [rollId, setRollId] = useState(rolls[0]?.id ?? '');
   const [changes, setChanges] = useState<string[]>([]);
@@ -39,14 +54,15 @@ export function RollChooser({ field, onRoll, onCancel }: Props) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {roll.changes.map((c) => {
             const on = changes.includes(c.id);
-            const costs = !!c.cost;
+            const cost = c.cost ? costOf(c.cost, data) : null;
+            const off = !!cost && !cost.can;
             return (
-              <button key={c.id} type="button" role="switch" aria-checked={on} disabled={costs}
-                title={costs ? 'The table takes what a change costs in the next update' : undefined}
+              <button key={c.id} type="button" role="switch" aria-checked={on} disabled={off}
+                title={off ? (c.cost!.adds ? 'That would take it past its highest' : 'There is not enough to pay it') : undefined}
                 onClick={() => setChanges(on ? changes.filter((x) => x !== c.id) : [...changes, c.id])}
-                style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: 'var(--cyan)', fontFamily: 'inherit', fontSize: '0.62rem', letterSpacing: 1, cursor: costs ? 'default' : 'pointer', opacity: costs ? 0.5 : 1, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                <span aria-hidden style={{ width: 18, height: 9, borderRadius: 5, border: '1px solid var(--cyan)', background: on ? 'var(--cyan)' : 'none', flexShrink: 0 }} />
-                {c.label.toUpperCase()}{c.cost ? ` · COSTS ${c.cost.amount} ${c.cost.from.toUpperCase()}, NOT YET` : ''}
+                style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: off ? 'var(--danger)' : 'var(--cyan)', fontFamily: 'inherit', fontSize: '0.62rem', letterSpacing: 1, cursor: off ? 'default' : 'pointer', opacity: off ? 0.6 : 1, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                <span aria-hidden style={{ width: 18, height: 9, borderRadius: 5, border: '1px solid currentColor', background: on ? 'currentColor' : 'none', flexShrink: 0 }} />
+                {c.label.toUpperCase()}{cost ? ` · ${cost.words}` : ''}
               </button>
             );
           })}
