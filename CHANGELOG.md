@@ -135,6 +135,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   stats groups or formulas roll it, checked like everything else in it. A shared system file carries
   them beside the system, so a builder from before rolls still installs the file (checked with the dev
   branch's own reader); installed here, they come back with it.
+- **A custom system's rolls at the table (6a2b).** The server now rolls a custom system's own rolls
+  from a character's stored sheet, reading the stat rolled, its modifier, and a skill's ability and its
+  modifier, on the secure dice, into the same roll log and dice tray as every roll (named dice and Fate
+  dice shown as themselves). The sheet's die buttons come next; a change that costs something waits
+  until the table can take the cost.
 
 - **A shared system file installs on a builder from before the map.** A .citysys file now carries
   the graph view's layout beside the system rather than inside it. A builder from before the map

@@ -22,6 +22,7 @@ const { parseTokenConditions } = require('../tokens/conditions');
 const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
+const tableRolls = require('../systemBuilder/tableRolls');
 const { healthView } = require('../systemBuilder/healthView');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
@@ -1557,6 +1558,44 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (!payload || typeof payload.fieldId !== 'string') return;
       getGameSystem((err, system) => {
         if (err) return;
+        // A custom system's own rolls (6a2b): the roll its ROLLED BY gives the field, worked out
+        // on the stored sheet with the server's secure dice, into the same log and tray.
+        const custom = customSystems.definitionOf(system);
+        if (custom) {
+          rollSheetOf(info, payload, system, ({ row, forName }) => {
+            let data;
+            try { data = JSON.parse(row.data || '{}'); } catch { return; }
+            const made = tableRolls.rollField({
+              definition: custom, data, fieldId: payload.fieldId,
+              rollId: typeof payload.rollId === 'string' ? payload.rollId : undefined,
+              chosen: Array.isArray(payload.changes) ? payload.changes.slice(0, 20) : [],
+              rng: cryptoRng, who: identity.displayName(info.userName), forName,
+            });
+            if (!made.ok) return;
+            const color = typeof payload.color === 'string' ? payload.color : '#00ff00';
+            const broadcastData = {
+              userName: identity.displayName(info.userName),
+              account: info.userName,
+              results: made.results,
+              diceSides: made.diceSides,
+              modifiers: made.result.add !== 0 ? [made.result.add] : [],
+              color,
+              total: made.total,
+              historyString: made.historyText,
+              glitch: made.glitch,
+              criticalGlitch: made.criticalGlitch,
+            };
+            db.run(
+              'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
+              [info.userName, made.total, JSON.stringify(made.results), color, made.historyText],
+              (err3) => {
+                if (err3) console.error('Error saving sheet roll:', err3);
+                io.emit('diceRollBroadcast', broadcastData);
+              }
+            );
+          });
+          return;
+        }
         const rollDef = sheetRolls.getRoll(system, payload.fieldId);
         if (!rollDef) return;
         db.get(`SELECT value FROM global_settings WHERE key = 'luck_negates_fumble'`, (lnErr, lnRow) => {
