@@ -4,18 +4,18 @@ import {
   PRESETS, SIDES, rollList, rollables, stepsOf, fieldsRolledBy,
   withNewRoll, withRollPreset, withRollLabel, withRolledBy, withoutRoll,
   withRollDice, withRollDiceAdded, withRollDiceRemoved, withRollRead, withRollAdd, withRollAgainst, withRollBands,
-  withRollExplode, withRollList, withRollCancel, withRollGlitch, withRollZero,
-  type Roll, type Sides,
+  withRollExplode, withRollList, withRollCancel, withRollGlitch, withRollZero, withRollChange, costables,
+  type Roll, type Sides, type ChangePatch,
 } from '../sheets/rolls';
 import { small, why, btn, field } from './statsRulesStyles';
 
 // STATS & RULES' ROLLS tab (Phase 6, 6b1a; approved mockup docs/mockups/builder-rolls.html,
 // 2026-10-19, on the builder design's Dice page): the system's rolls on the left; the one picked in
 // the middle, its name, the preset it started from, its five steps and what it is ROLLED BY; TEST
-// ROLL on the right, made by the server's own engine for the sample character. Steps 1 to 4 (the
-// dice, how they are read, what is added, a target and the bands (6b1b1); the special results
-// (6b1b2)) are edited in place; changes show in words until 6b1b3. Every change goes through
-// sheets/rolls.ts and the builder's `edit`.
+// ROLL on the right, made by the server's own engine for the sample character. All five steps are
+// edited in place: the dice, how they are read, what is added, a target and the bands (6b1b1); the
+// special results (6b1b2); the changes a player picks before rolling (6b1b3). Every change goes
+// through sheets/rolls.ts and the builder's `edit`.
 
 interface Props {
   definition: Definition;
@@ -325,10 +325,68 @@ function SpecialStep({ definition, edit, roll }: { definition: Definition; edit:
   );
 }
 
+/**
+ * Step 5: the changes a player picks before rolling (asked in a chooser by the sheet): each one's
+ * words, the dice it adds and which it keeps, what it adds to the total, and what it costs.
+ */
+function ChangesStep({ definition, edit, roll }: { definition: Definition; edit: (next: Definition) => void; roll: Roll }) {
+  const id = roll.id;
+  const stats = costables(definition);
+  const set = (i: number, patch: ChangePatch) => edit(withRollChange(definition, id, { set: i, patch }));
+  const changes = roll.changes ?? [];
+  return (
+    <>
+      {!changes.length && <None text="NONE · ROLLS ON THE FIRST CLICK" />}
+      {changes.map((c, i) => (
+        <div key={c.id} role="group" aria-label={`Change ${i + 1}`} style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 6, borderTop: i ? '1px solid color-mix(in srgb, var(--dark-green) 60%, transparent)' : 0 }}>
+          <div style={row}>
+            <span style={{ color: 'var(--cyan)' }}>◆</span>
+            <input type="text" aria-label={`Change ${i + 1}: words`} maxLength={40} value={c.label} style={{ ...field, flex: 1, minWidth: 120 }} onChange={(e) => set(i, { label: e.target.value })} />
+            <span style={{ opacity: 0.6, fontSize: 11 }}>{c.id}</span>
+            <button type="button" className="utility-btn" style={xBtn} aria-label={`Remove change ${i + 1}`} onClick={() => edit(withRollChange(definition, id, { remove: i }))}>×</button>
+          </div>
+          <div style={row}>
+            <Switch label="+ DICE" on={!!c.extra} onFlip={() => set(i, { extra: c.extra ? null : { dice: 1 } })} />
+            {c.extra && (
+              <>
+                <WholeBox label={`Change ${i + 1}: extra dice`} value={c.extra.dice} width={52} onWhole={(n) => set(i, { extra: { ...c.extra!, dice: n } })} />
+                <select aria-label={`Change ${i + 1}: kept`} value={c.extra.keep ?? ''} style={field} onChange={(e) => set(i, { extra: { dice: c.extra!.dice, ...(e.target.value ? { keep: e.target.value as 'highest' | 'lowest' } : {}) } })}>
+                  <option value="">JOINING THE DICE</option>
+                  <option value="highest">KEEPING THE HIGHEST (ADVANTAGE)</option>
+                  <option value="lowest">KEEPING THE LOWEST (DISADVANTAGE)</option>
+                </select>
+              </>
+            )}
+          </div>
+          <div style={row}>
+            <Switch label="+ TO THE TOTAL" on={c.add !== undefined} onFlip={() => set(i, { add: c.add !== undefined ? null : '1' })} />
+            {c.add !== undefined && (
+              <input type="text" aria-label={`Change ${i + 1}: adds`} maxLength={1000} value={c.add} style={{ ...field, flex: 1, minWidth: 100 }} onChange={(e) => set(i, { add: e.target.value })} />
+            )}
+          </div>
+          <div style={row}>
+            <Switch label="COSTS" on={!!c.cost} disabled={!stats.length && !c.cost} onFlip={() => set(i, { cost: c.cost ? null : { from: stats[0].id, amount: 1 } })} />
+            {c.cost && (
+              <>
+                <WholeBox label={`Change ${i + 1}: costs how many`} value={c.cost.amount} width={52} onWhole={(n) => set(i, { cost: { ...c.cost!, amount: n } })} />
+                <select aria-label={`Change ${i + 1}: costs what`} value={c.cost.from} style={field} onChange={(e) => set(i, { cost: { ...c.cost!, from: e.target.value } })}>
+                  {[...stats, ...(stats.some((st) => st.id === c.cost!.from) ? [] : [{ id: c.cost.from, label: c.cost.from.toUpperCase() }])].map((st) => <option key={st.id} value={st.id}>{st.label}</option>)}
+                </select>
+                <span style={{ opacity: 0.7, fontSize: 11 }}>TAKEN FROM THE SHEET WHEN ROLLED</span>
+              </>
+            )}
+            {!stats.length && !c.cost && <span style={{ opacity: 0.6, fontSize: 11 }}>A COST IS TAKEN FROM A STAT: ADD ONE ON STATS (STRESS)</span>}
+          </div>
+        </div>
+      ))}
+      <div><button type="button" className="utility-btn" style={btn} disabled={changes.length >= 10} onClick={() => edit(withRollChange(definition, id, { add: true }))}>+ CHANGE</button></div>
+    </>
+  );
+}
+
 /** The roll picked: its name, its preset, its five steps, ROLLED BY and REMOVE. */
 function RollEditor({ definition, edit, roll, onRemoved }: Props & { roll: Roll; onRemoved: () => void }) {
   const [replacing, setReplacing] = useState<string | null>(null);
-  const steps = stepsOf(roll);
   const choices = rollables(definition);
   const by = new Set(roll.by ?? []);
   const kinds: [string, 'group' | 'stat' | 'formula'][] = [['STATS GROUPS', 'group'], ['STATS', 'stat'], ['FORMULAS', 'formula']];
@@ -356,8 +414,7 @@ function RollEditor({ definition, edit, roll, onRemoved }: Props & { roll: Roll;
       <Step n={2} title="READ THE DICE"><ReadStep definition={definition} edit={edit} roll={roll} /></Step>
       <Step n={3} title="ADD AND COMPARE"><CompareStep definition={definition} edit={edit} roll={roll} /></Step>
       <Step n={4} title="SPECIAL RESULTS"><SpecialStep definition={definition} edit={edit} roll={roll} /></Step>
-      <Step n={5} title="CHANGE A ROLL" note="ASKED BEFORE ROLLING">{steps.changes.length ? steps.changes.map((c) => <span key={c}>◆ {c}</span>) : <None text="NONE · ROLLS ON THE FIRST CLICK" />}</Step>
-      <p style={{ ...why, margin: 0, fontSize: 11 }}>Changes are edited here next. Until then, start a roll from the preset that has the ones you want.</p>
+      <Step n={5} title="CHANGE A ROLL" note="ASKED BEFORE ROLLING"><ChangesStep definition={definition} edit={edit} roll={roll} /></Step>
       <section aria-label="Rolled by" style={{ border: '1px solid var(--dark-green)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10, letterSpacing: 2, color: 'var(--green)' }}>
           <span>ROLLED BY</span><span style={{ color: 'var(--cyan)', letterSpacing: 1 }}>EACH GETS A DIE BUTTON ON THE SHEET</span>

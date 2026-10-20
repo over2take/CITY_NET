@@ -123,6 +123,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   which face, only once, the first die only, a face that takes one away), naturals, matches (a pair
   of 10s adding successes), cancelling, a glitch, a named kind of dice's own effects, and the rule
   for rolling with no dice.
+- **Edit what a player can pick before rolling (6b1b3).** Step 5 of a roll is now edited too: each
+  choice's name, the dice it adds (kept highest for advantage, lowest for disadvantage, or simply
+  joining the pool), what it adds to the total, and what it costs from which stat. All five steps of
+  a roll are now made in the builder.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

@@ -10,7 +10,7 @@ import { createRequire } from 'module';
 import {
   PRESETS, rollList, withNewRoll, withRollPreset, withRollLabel, withRolledBy, withoutRoll, rollables, fieldsRolledBy, stepsOf,
   withRollDice, withRollDiceAdded, withRollDiceRemoved, withRollRead, withRollAdd, withRollAgainst, withRollBands,
-  withRollExplode, withRollList, withRollCancel, withRollGlitch, withRollZero,
+  withRollExplode, withRollList, withRollCancel, withRollGlitch, withRollZero, withRollChange, costables,
 } from '../rolls';
 import type { Definition } from '../systemsApi';
 
@@ -291,5 +291,48 @@ describe('words left empty (6b1b2)', () => {
     expect(rollList(def)[0].natural![0]).toEqual({ face: 20, label: '', critical: 'success' });
     expect(stepsOf(rollList(def)[0]).special[0]).toBe('NATURAL 20 · ');
     expect(problems(def)).toEqual(['roll d_d_check, natural 1, label: Words of up to 40 characters']);
+  });
+});
+
+describe('the changes picked before rolling, changed (6b1b3)', () => {
+  const only = (def: Definition) => rollList(def)[0];
+
+  it('a new one adds 1, its id from its first name and never taken; ten at most', () => {
+    const { definition, id } = withNewRoll(HEARTH, 'pbta')!;
+    let def = withRollChange(definition, id, { add: true });
+    expect(only(def).changes).toEqual([{ id: 'forward', label: 'Forward +1', add: '1' }, { id: 'bonus', label: 'Bonus', add: '1' }]);
+    def = withRollChange(def, id, { add: true });
+    expect(only(def).changes![2].id).toBe('bonus_2');
+    expect(problems(def)).toEqual([]);
+    let full = def;
+    for (let i = 0; i < 12; i += 1) full = withRollChange(full, id, { add: true });
+    expect(only(full).changes).toHaveLength(10);
+  });
+
+  it('changed: its words, extra dice and which are kept, what it adds, what it costs; its id kept', () => {
+    const { definition, id } = withNewRoll(HEARTH, 'pbta')!;
+    let def = withRollChange(definition, id, { set: 0, patch: { label: 'Push', extra: { dice: 1, keep: 'highest' }, add: null, cost: { from: 'str', amount: 2 } } });
+    expect(only(def).changes).toEqual([{ id: 'forward', label: 'Push', extra: { dice: 1, keep: 'highest' }, cost: { from: 'str', amount: 2 } }]);
+    expect(problems(def)).toEqual([]);
+    def = withRollChange(def, id, { set: 0, patch: { extra: { dice: 40 }, cost: { from: 'str', amount: 0 } } });
+    expect(only(def).changes![0]).toEqual({ id: 'forward', label: 'Push', extra: { dice: 10 }, cost: { from: 'str', amount: 1 } });
+    def = withRollChange(def, id, { set: 0, patch: { cost: null, label: 'x'.repeat(60) } });
+    expect(only(def).changes![0]).toEqual({ id: 'forward', label: 'x'.repeat(40), extra: { dice: 10 } });
+  });
+
+  it('never does nothing: taking away its last effect leaves it adding 1', () => {
+    const { definition, id } = withNewRoll(HEARTH, 'dnd')!;
+    const def = withRollChange(definition, id, { set: 0, patch: { extra: null } });
+    expect(only(def).changes![0]).toEqual({ id: 'advantage', label: 'Advantage', add: '1' });
+    expect(problems(def)).toEqual([]);
+  });
+
+  it('taken away, the last taking the list with it', () => {
+    const { definition, id } = withNewRoll(HEARTH, 'pbta')!;
+    expect('changes' in only(withRollChange(definition, id, { remove: 0 }))).toBe(false);
+  });
+
+  it('can cost any stat, in players\' names', () => {
+    expect(costables(HEARTH)).toEqual([{ id: 'str', label: 'STRENGTH' }, { id: 'fight', label: 'FIGHT' }, { id: 'lore', label: 'LORE' }]);
   });
 });

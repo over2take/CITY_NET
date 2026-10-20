@@ -67,7 +67,8 @@ describe('the ROLLS tab', () => {
     const compare = within(roll).getByRole('region', { name: 'ADD AND COMPARE' });
     expect((within(compare).getByLabelText('Add') as HTMLInputElement).value).toBe('@this');
     expect([(within(compare).getByLabelText('Band 2: up to') as HTMLInputElement).value, (within(compare).getByLabelText('Band 2: words') as HTMLInputElement).value]).toEqual(['9', 'Success at a cost']);
-    expect(within(roll).getByRole('region', { name: 'CHANGE A ROLL' }).textContent).toContain('FORWARD +1 · + 1');
+    const changes = within(roll).getByRole('region', { name: 'CHANGE A ROLL' });
+    expect([(within(changes).getByLabelText('Change 1: words') as HTMLInputElement).value, (within(changes).getByLabelText('Change 1: adds') as HTMLInputElement).value]).toEqual(['Forward +1', '1']);
     const by = within(roll).getByRole('region', { name: 'Rolled by' });
     expect(within(by).getByRole('button', { name: 'SKILLS' }).getAttribute('aria-pressed')).toBe('true');
     expect(within(by).getByRole('button', { name: 'STRENGTH' }).getAttribute('aria-pressed')).toBe('false');
@@ -278,5 +279,47 @@ describe('editing step 4, special results (6b1b2)', () => {
     await userEvent.click(within(part(/NAMED DICE/)).getByRole('button', { name: '+ EFFECT' }));
     await userEvent.selectOptions(within(part(/NAMED DICE/)).getByLabelText('Effect 1: when'), 'ON ANY ROLL');
     expect(rollsOf(last())[0].effects).toEqual([{ name: 'Hope', face: 6, when: 'any', label: 'Effect' }]);
+  });
+});
+
+describe('editing step 5, changes (6b1b3)', () => {
+  const step = () => within(screen.getByTestId('roll-skill')).getByRole('region', { name: 'CHANGE A ROLL' });
+
+  it('a change\'s words, extra dice kept highest, what it adds, and what it costs', async () => {
+    const { last } = open();
+    await toRolls();
+    const first = within(step()).getByRole('group', { name: 'Change 1' });
+    await userEvent.clear(within(first).getByLabelText('Change 1: words'));
+    await userEvent.type(within(first).getByLabelText('Change 1: words'), 'Push');
+    await userEvent.click(within(first).getByRole('switch', { name: '+ DICE' }));
+    await userEvent.selectOptions(within(first).getByLabelText('Change 1: kept'), 'KEEPING THE HIGHEST (ADVANTAGE)');
+    await userEvent.click(within(first).getByRole('switch', { name: '+ TO THE TOTAL' }));
+    await userEvent.click(within(first).getByRole('switch', { name: 'COSTS' }));
+    await userEvent.selectOptions(within(first).getByLabelText('Change 1: costs what'), 'LORE');
+    const amount = within(first).getByLabelText('Change 1: costs how many');
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '2');
+    expect(rollsOf(last())[0].changes).toEqual([{ id: 'forward', label: 'Push', extra: { dice: 1, keep: 'highest' }, cost: { from: 'lore', amount: 2 } }]);
+  });
+
+  it('a new change added, and taken away; with none, it rolls on the first click', async () => {
+    const { last } = open();
+    await toRolls();
+    await userEvent.click(within(step()).getByRole('button', { name: '+ CHANGE' }));
+    expect((rollsOf(last())[0].changes as unknown[]).length).toBe(2);
+    await userEvent.click(within(step()).getByRole('button', { name: 'Remove change 2' }));
+    await userEvent.click(within(step()).getByRole('button', { name: 'Remove change 1' }));
+    expect('changes' in rollsOf(last())[0]).toBe(false);
+    expect(step().textContent).toContain('NONE · ROLLS ON THE FIRST CLICK');
+    // TEST ROLL offers no switches with no changes.
+    expect(within(screen.getByTestId('test-roll')).queryByRole('switch')).toBeNull();
+  });
+
+  it('a cost needs a stat to take it from', async () => {
+    open({ ...HEARTH, stats: [], rolls: [{ id: 'skill', label: 'Skill check', ...PRESETS.pbta.roll }] });
+    await toRolls();
+    const first = within(step()).getByRole('group', { name: 'Change 1' });
+    expect((within(first).getByRole('switch', { name: 'COSTS' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(first.textContent).toContain('A COST IS TAKEN FROM A STAT');
   });
 });
