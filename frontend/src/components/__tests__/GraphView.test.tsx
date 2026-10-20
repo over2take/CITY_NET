@@ -425,3 +425,27 @@ describe('TRY ON THE MAP (5b6c)', () => {
     expect(edits).toEqual([]);
   });
 });
+
+describe('hover highlighting (5c1)', () => {
+  const wrap = (id: string) => node(id).closest('.react-flow__node') as HTMLElement;
+
+  it('lights what the node hovered is wired to, fades the rest, and lets go when the pointer leaves', () => {
+    open();
+    expect(wrap('odd').style.opacity).toBe('');
+    fireEvent.mouseEnter(wrap('save'));
+    // The save reads LEVEL and the two modifiers on ABILITIES; its note is pinned to it.
+    for (const id of ['save', 'character', 'abilities', 'note:n1']) expect(wrap(id).style.opacity, id).toBe('');
+    for (const id of ['odd', 'spell', 'rule:magic']) expect(wrap(id).style.opacity, id).toBe('0.16');
+    fireEvent.mouseLeave(wrap('save'));
+    for (const id of ['odd', 'spell', 'save']) expect(wrap(id).style.opacity, id).toBe('');
+  });
+
+  it('keeps a picked node\'s outline while faded', async () => {
+    open();
+    fireEvent.click(node('odd'));
+    await screen.findByTestId('graph-panel');
+    fireEvent.mouseEnter(wrap('spell'));
+    expect(wrap('odd').style.outline).toBe('2px solid var(--cyan)');
+    expect(wrap('odd').style.opacity).toBe('0.16');
+  });
+});
