@@ -110,6 +110,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   them: FORMS shows a formula's group under it, read only, with EDIT IN GRAPH.
 - **LINE UP a group (5c3).** A group's panel has LINE UP: its formulas stack in one column in the
   order they stand, left edges even, a cell apart, starting where the top one is. Undo takes it back.
+- **ROLLS in the System Builder (6b1a).** STATS & RULES has a fourth tab, ROLLS: make a roll from a
+  preset (D&D, PbtA, Blades, Vampire, Fate, CWN, CP:R, SR6), name it, and pick the stats, stats groups
+  or formulas it is rolled by. Its five steps show in words, and TEST ROLL rolls it on the server for
+  the sample character, showing the dice kept and dropped and what it came to. Editing each step comes
+  next; the sheet's die buttons after that.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

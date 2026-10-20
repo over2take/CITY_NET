@@ -35,6 +35,23 @@ export type TriedBox =
   | { value: number | string; dice: { count: number; sides: number; rolls: number[] }[] }
   | { blank: true }
   | { error: string };
+/** A roll made by TEST ROLL (backend tableRolls.js rollField, rollStyles.js makeRoll). */
+export interface TestedRoll {
+  /** The field it was rolled for, and every field it is rolled by. */
+  field: string | null;
+  fields: string[];
+  result: {
+    groups: { name?: string; sides: number | 'F'; faces: { value: number; kept: boolean; extra?: boolean; minus?: boolean }[] }[];
+    dice: number; add: number; total: number; target: number | null; success: boolean | null; band: string | null;
+    natural: { label: string; critical?: 'success' | 'failure' } | null;
+    matches: { label: string; sets: number; critical?: 'success' | 'failure' }[];
+    glitch: string | null; effects: string[]; critical: 'success' | 'failure' | null;
+    changes: string[]; costs: { from: string; amount: number }[]; zero?: true;
+  };
+  historyText: string;
+  total: number;
+}
+
 /** A tier worked out for a level (tierRolls.js rollTier). */
 export interface TriedTier { level: number; hp: TriedBox; defense: TriedBox; values: Record<string, TriedBox> }
 
@@ -114,6 +131,13 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      */
     previewValues: (definition: Definition) =>
       call<{ values: Record<string, number>; problems: Problem[] }>(fetcher, token, '/api/systems/preview-values', 'POST', { definition }),
+    /**
+     * TEST ROLL (6b1a): one of a draft's rolls made for its sample character by the table's own
+     * engine, for `fieldId` or the first field it is rolled by, with the changes picked. Changes
+     * nothing, logs nothing.
+     */
+    testRoll: (definition: Definition, rollId: string, fieldId?: string | null, changes: string[] = []) =>
+      call<TestedRoll>(fetcher, token, '/api/systems/test-roll', 'POST', { definition, rollId, fieldId: fieldId ?? undefined, changes }),
     /**
      * A draft's sheet as it would be drawn (its own or the starter, without the parts it turned
      * off), and the starter sheet CUSTOMIZE copies, without saving (CHARACTER SHEET).

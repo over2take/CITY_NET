@@ -11,6 +11,8 @@ const { buildCustomTemplate } = require('../sheets/pdfTemplate');
 const runtime = require('../systemBuilder/runtime');
 const { checkDefinition } = require('../systemBuilder/definition');
 const { previewDerived } = require('../systemBuilder/derived');
+const tableRolls = require('../systemBuilder/tableRolls');
+const { cryptoRng } = require('../utils/random');
 const { effectiveSheet, starterSheet, fieldsOf } = require('../systemBuilder/sheet');
 const { npcSheetOf, LIMITS: NPC_LIMITS } = require('../systemBuilder/npc');
 const { rollTier } = require('../systemBuilder/tierRolls');
@@ -273,6 +275,35 @@ module.exports = (db, io = null) => {
     if (checked.fatal) return res.status(400).json({ error: checked.fatal });
     const samples = definition.samples && typeof definition.samples === 'object' && !Array.isArray(definition.samples) ? definition.samples : {};
     res.json(previewDerived({ lookups: definition.lookups, derived: definition.derived }, samples));
+  });
+
+  /**
+   * TEST ROLL (6b1a; approved mockup docs/mockups/builder-rolls.html): one of a draft's rolls, unsaved
+   * changes and all, made for its sample character (its samples, and its formulas worked out on
+   * them) by the table's own engine on the secure dice, for the field asked or the first it is
+   * rolled by. A roll with problems is refused with the first; changes that cost something are
+   * tried, since nothing is taken. Changes nothing, logs nothing.
+   */
+  router.post('/test-roll', gm, (req, res) => {
+    const { definition, rollId, fieldId, changes } = req.body || {};
+    const checked = checkDefinition(definition);
+    if (checked.fatal) return res.status(400).json({ error: checked.fatal });
+    const roll = Array.isArray(definition.rolls) ? definition.rolls.find((r) => r && typeof r === 'object' && r.id === rollId) : null;
+    if (!roll || typeof rollId !== 'string') return res.status(400).json({ error: 'No such roll' });
+    const own = checked.problems.find((p) => p.where === `roll ${rollId}` || p.where.startsWith(`roll ${rollId},`));
+    if (own) return res.status(400).json({ error: `${own.where}: ${own.message}` });
+    const samples = definition.samples && typeof definition.samples === 'object' && !Array.isArray(definition.samples) ? definition.samples : {};
+    const { values } = previewDerived({ lookups: definition.lookups, derived: definition.derived }, samples);
+    // The field: the one asked, if the roll is rolled by it; else the first it is rolled by (a
+    // group's first stat); else none, @this reading 0.
+    const fields = tableRolls.fieldsRolledBy(definition, roll);
+    const field = typeof fieldId === 'string' && fields.includes(fieldId) ? fieldId : fields[0] ?? null;
+    const made = tableRolls.rollField({
+      definition, data: { ...samples, ...values }, fieldId: field, roll,
+      chosen: Array.isArray(changes) ? changes.slice(0, 20) : [], rng: cryptoRng, who: 'The sample', tryCosts: true,
+    });
+    if (!made.ok) return res.status(400).json({ error: made.error });
+    res.json({ field, fields, result: made.result, historyText: made.historyText, total: made.total });
   });
 
   /**

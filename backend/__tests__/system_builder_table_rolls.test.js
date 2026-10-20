@@ -182,3 +182,65 @@ describe('rolling at the table, through the socket', () => {
     expect(JSON.parse((await get(db, "SELECT data FROM character_sheets WHERE username = 'kes'")).data).stress).toBe(4);
   });
 });
+
+describe('TEST ROLL, the builder route (6b1a)', () => {
+  const express_ = require_('express');
+  const request_ = require_('supertest');
+  const jwt_ = require_('jsonwebtoken');
+  const { elevatedUsers } = require_('../middleware/auth');
+  const systemsRoute = require_('../routes/systems.js');
+  const GM = jwt_.sign({ id: 1, username: 'gm', role: 'admin', isTemporary: false }, 'test-secret');
+  const EDITOR = jwt_.sign({ username: 'ghost', isTemporary: true }, 'test-secret');
+  const PLAYER = jwt_.sign({ username: 'vex', role: 'player' }, 'test-secret');
+  let app;
+  beforeEach(async () => {
+    elevatedUsers.add('ghost');
+    const db = await makeTestDb();
+    app = express_();
+    app.use(express_.json());
+    app.use('/api/systems', systemsRoute(db));
+  });
+  const post = (body, token = GM) => request_(app).post('/api/systems/test-roll').set({ Authorization: `Bearer ${token}` }).send(body);
+  const DRAFT = { ...HEARTH, samples: { str: 16, wit: 9, fight: 2, lore: 3, stress: 4 } };
+
+  it('rolls a draft\'s roll for its sample, its formulas worked out on it, on the first field it is rolled by', async () => {
+    const res = await post({ definition: DRAFT, rollId: 'skill' });
+    expect(res.status).toBe(200);
+    expect(res.body.field).toBe('fight');
+    expect(res.body.fields).toEqual(['fight', 'lore']);
+    // Fight 2 and Strength 16's modifier +1, worked out from the sample, not stored anywhere.
+    expect(res.body.result.add).toBe(3);
+    expect(res.body.total).toBe(res.body.result.dice + 3);
+    expect(res.body.historyText).toMatch(/^The sample rolled Skill check \(Fight\) \[/);
+  });
+
+  it('rolls for the field asked, with changes, even ones that cost something', async () => {
+    const res = await post({ definition: DRAFT, rollId: 'skill', fieldId: 'lore', changes: ['push', 'forward'] });
+    expect(res.status).toBe(200);
+    expect(res.body.field).toBe('lore');
+    expect(res.body.result.add).toBe(4);
+    expect(res.body.result.groups[0].faces).toHaveLength(3);
+    expect(res.body.result.costs).toEqual([{ from: 'stress', amount: 2 }]);
+    // A field the roll isn't rolled by falls back to its first.
+    expect((await post({ definition: DRAFT, rollId: 'skill', fieldId: 'str' })).body.field).toBe('fight');
+  });
+
+  it('tests a roll rolled by nothing yet, reading 0 for @this', async () => {
+    const res = await post({ definition: { ...DRAFT, rolls: [{ id: 'loose', label: 'Loose', dice: [{ count: '1', sides: 6 }], add: '@this + 1' }] }, rollId: 'loose' });
+    expect(res.status).toBe(200);
+    expect([res.body.field, res.body.fields, res.body.result.add]).toEqual([null, [], 1]);
+    expect(res.body.historyText).toMatch(/^The sample rolled Loose \[/);
+  });
+
+  it('refuses a roll with problems, one it hasn\'t, and what isn\'t a system', async () => {
+    const broken = await post({ definition: { ...DRAFT, rolls: [{ ...HEARTH.rolls[0], read: 'average' }] }, rollId: 'skill' });
+    expect([broken.status, broken.body]).toEqual([400, { error: 'roll skill, read: Sum, highest, lowest or count' }]);
+    expect((await post({ definition: DRAFT, rollId: 'nope' })).body).toEqual({ error: 'No such roll' });
+    expect((await post({ definition: 'nope', rollId: 'skill' })).status).toBe(400);
+  });
+
+  it('is the main admin\'s, as every builder route is: never an editor\'s or a player\'s', async () => {
+    expect((await post({ definition: DRAFT, rollId: 'skill' }, EDITOR)).status).toBe(403);
+    expect((await post({ definition: DRAFT, rollId: 'skill' }, PLAYER)).status).toBe(403);
+  });
+});

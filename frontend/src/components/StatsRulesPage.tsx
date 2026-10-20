@@ -4,6 +4,7 @@ import {
   statGroups, withNewGroup, tableList, withNewTable, formulaList, withNewFormula, withNewCondition, withoutFormula,
 } from '../sheets/statsRules';
 import { notesOn } from '../sheets/graphNotes';
+import { RollsTab } from './RollsTab';
 import { groupOf } from '../sheets/graphGroups';
 import { useFormulaInsert } from '../hooks/useFormulaInsert';
 import { usePreviewValues } from '../hooks/usePreviewValues';
@@ -31,7 +32,7 @@ interface Props {
   onEditInGraph?: (node: string) => void;
 }
 
-type Tab = 'stats' | 'formulas' | 'tables';
+type Tab = 'stats' | 'formulas' | 'tables' | 'rolls';
 
 export { PREVIEW_DELAY_MS } from '../hooks/usePreviewValues';
 
@@ -161,7 +162,7 @@ function FormulasTab({ definition, edit, api, onEditInGraph }: Props) {
 
 export function StatsRulesPage({ definition, edit, api, onEditInGraph }: Props) {
   const [tab, setTab] = useState<Tab>('stats');
-  const tabs: [Tab, string][] = [['stats', 'STATS'], ['formulas', 'FORMULAS'], ['tables', 'TABLES']];
+  const tabs: [Tab, string][] = [['stats', 'STATS'], ['formulas', 'FORMULAS'], ['tables', 'TABLES'], ['rolls', 'ROLLS']];
   return (
     <div style={{ maxWidth: 1000 }}>
       <div role="tablist" aria-label="Stats and rules" style={{ display: 'flex', borderBottom: '1px solid var(--dark-green)', marginBottom: 14 }}>
@@ -172,6 +173,7 @@ export function StatsRulesPage({ definition, edit, api, onEditInGraph }: Props) 
       {tab === 'stats' && <StatsTab definition={definition} edit={edit} onEditInGraph={onEditInGraph} />}
       {tab === 'formulas' && <FormulasTab definition={definition} edit={edit} api={api} onEditInGraph={onEditInGraph} />}
       {tab === 'tables' && <TablesTab definition={definition} edit={edit} onEditInGraph={onEditInGraph} />}
+      {tab === 'rolls' && <RollsTab definition={definition} edit={edit} api={api} />}
     </div>
   );
 }
