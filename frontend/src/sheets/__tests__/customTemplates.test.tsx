@@ -190,7 +190,7 @@ describe('a custom system\'s rolls on its sheet (6b2a)', () => {
     expect(roll).toHaveLength(2);
     // MOD has one roll and no changes, so it rolls on the first click (MIGHT asks first: 6b2b).
     fireEvent.click(roll[1]);
-    expect(onRoll).toHaveBeenCalledWith('might_mod', undefined, undefined, undefined);
+    expect(onRoll).toHaveBeenCalledWith('might_mod', undefined, undefined);
     expect(screen.queryByRole('button', { name: /Roll ARMOR/ })).toBeNull();
   });
 });
@@ -213,7 +213,7 @@ describe('the chooser by the sheet (6b2b)', () => {
   it('a field with one roll and no changes rolls on the first click, asking nothing', () => {
     const onRoll = draw();
     fireEvent.click(screen.getByRole('button', { name: 'Roll Plain' }));
-    expect(onRoll).toHaveBeenCalledWith('armor', undefined, undefined, undefined);
+    expect(onRoll).toHaveBeenCalledWith('armor', undefined, undefined);
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 

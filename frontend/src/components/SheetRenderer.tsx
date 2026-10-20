@@ -1835,7 +1835,10 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
   const [choosing, setChoosing] = useState<SheetField | null>(null);
   const rollNow = (fieldId: string, pick?: RollPick) => {
     if (!onRoll) return;
-    onRoll(fieldId, armedLuck > 0 ? armedLuck : undefined, armedNegate || undefined, pick);
+    // A pick only when the chooser made one, so every other roll calls onRoll as it always has.
+    const luck = armedLuck > 0 ? armedLuck : undefined;
+    if (pick) onRoll(fieldId, luck, armedNegate || undefined, pick);
+    else onRoll(fieldId, luck, armedNegate || undefined);
     setArmedLuck(0);
     setArmedNegate(false);
   };
