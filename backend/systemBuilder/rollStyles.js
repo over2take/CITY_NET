@@ -2,8 +2,10 @@
 // docs/mockups/builder-rolls.html, 2026-10-19, on the builder design's Dice page). Pure, no I/O.
 //
 // A roll is the five steps the builder shows: the core of them (6a1), the special results (6a1b:
-// matches, glitches, cancelling ones, named dice's own effects, the zero-dice rule); the changes a
-// player picks before rolling (advantage, a push) and the presets are 6a1c.
+// matches, glitches, cancelling ones, named dice's own effects, the zero-dice rule) and the changes
+// a player picks before rolling (6a1c: advantage, a push, a bonus, with what each costs), and the
+// presets the builder starts a roll from. A target asked for at the table (a DC) and rerolls made
+// after seeing the dice come with the sheet's chooser (6b).
 //
 //   {
 //     id: 'skill', label: 'Skill check',
@@ -22,7 +24,15 @@
 //     glitch:  { face: 1, share: 0.5, label: 'Glitch', none: 'Critical glitch' },             SR6
 //     effects: [{ name: 'Hunger', face: 10, when: 'critical', label: 'Messy critical' }],     a named die's own
 //     zero:    { count: 2, read: 'lowest' },       no dice to roll: roll these and keep one     Blades
+//     changes: [{ id: 'push', label: 'Push', extra: { dice: 1, keep: 'highest' }, cost: { from: 'stress', amount: 2 } },
+//               { id: 'invoke', label: 'Invoke', add: '2', cost: { from: 'fate_points', amount: 1 } }],   5 CHANGE
 //   }
+//
+// Exploding can also take one away (`low`: CP:R's natural 1 rolls another d10 and subtracts it) and
+// be only the roll's first die's (`first`). A change adds dice to the first kind (keeping the
+// highest or lowest as many as there were before, so ADVANTAGE turns 1d20 into 2d20 keep the
+// highest) or adds to the total; ADVANTAGE and DISADVANTAGE together cancel, die for die. What a
+// change costs is reported for the table to take (6b3), never taken here.
 //
 // Dice counts, ADD and the target are formula text in the same language as a system's formulas
 // (expression.js), worked out by the caller's `value(text)` for the character rolling, so a roll
@@ -49,15 +59,19 @@ const LIMITS = {
   explosions: 20,
   /** Bands in one roll. */
   bands: 20,
-  /** Naturals in one roll; matches and effects too. */
+  /** Naturals in one roll; matches, effects and changes too. */
   naturals: 10,
+  /** Extra dice one change may add. */
+  extra: 10,
+  /** The most a change may cost. */
+  cost: 100,
   label: 40,
 };
 
 /** A Fate die: −1, 0 or +1. */
 const FATE = 'F';
 const READS = ['sum', 'highest', 'lowest', 'count'];
-const ROLL_KEYS = new Set(['id', 'label', 'dice', 'read', 'keep', 'at', 'add', 'against', 'under', 'bands', 'explode', 'natural', 'matches', 'cancel', 'glitch', 'effects', 'zero']);
+const ROLL_KEYS = new Set(['id', 'label', 'dice', 'read', 'keep', 'at', 'add', 'against', 'under', 'bands', 'explode', 'natural', 'matches', 'cancel', 'glitch', 'effects', 'zero', 'changes']);
 const WHEN = ['critical', 'success', 'failure', 'any'];
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -135,9 +149,14 @@ const checkRoll = (roll, where = 'roll', isFunction = () => false) => {
     const x = roll.explode;
     if (!isPlainObject(x)) bad('explode', 'Must say which face explodes');
     else {
-      for (const key of Object.keys(x)) if (!['on', 'once'].includes(key)) bad(`explode, ${key}`, 'Not part of exploding');
+      for (const key of Object.keys(x)) if (!['on', 'once', 'low', 'first'].includes(key)) bad(`explode, ${key}`, 'Not part of exploding');
       if (x.on !== undefined && !Number.isInteger(x.on)) bad('explode, on', 'Must be a face, a whole number');
       if (x.once !== undefined && typeof x.once !== 'boolean') bad('explode, once', 'Must be yes or no');
+      if (x.first !== undefined && typeof x.first !== 'boolean') bad('explode, first', 'Must be yes or no');
+      if (x.low !== undefined) {
+        if (!Number.isInteger(x.low)) bad('explode, low', 'Must be a face, a whole number');
+        else if (read !== 'sum') bad('explode, low', 'Only a sum can take a die away');
+      }
     }
   }
 
@@ -157,17 +176,17 @@ const checkRoll = (roll, where = 'roll', isFunction = () => false) => {
   }
   const words = (at, text) => { if (typeof text !== 'string' || !text.trim() || text.length > LIMITS.label) bad(at, `Words of up to ${LIMITS.label} characters`); };
   const keysOf = (at, o, keys, what) => { for (const key of Object.keys(o)) if (!keys.includes(key)) bad(`${at}, ${key}`, `Not part of ${what}`); };
-  const list = (key, what, each) => {
+  const list = (key, what, one, each) => {
     if (roll[key] === undefined) return;
     if (!Array.isArray(roll[key])) { bad(key, `A list of ${what}`); return; }
     if (roll[key].length > LIMITS.naturals) bad(key, `At most ${LIMITS.naturals}`);
     roll[key].slice(0, LIMITS.naturals).forEach((o, i) => {
-      const at = `${key.replace(/es$|s$/, '')} ${i + 1}`;
+      const at = `${one} ${i + 1}`;
       if (!isPlainObject(o)) { bad(at, `Must be one of the ${what}`); return; }
       each(at, o);
     });
   };
-  list('matches', 'matches', (at, m) => {
+  list('matches', 'matches', 'match', (at, m) => {
     keysOf(at, m, ['face', 'count', 'adds', 'label', 'critical'], 'a match');
     if (m.face !== undefined && !Number.isInteger(m.face)) bad(`${at}, face`, 'Must be a whole number, or left out for any face');
     if (!Number.isInteger(m.count) || m.count < 2 || m.count > LIMITS.dice) bad(`${at}, count`, 'How many dice match: 2 or more');
@@ -195,12 +214,38 @@ const checkRoll = (roll, where = 'roll', isFunction = () => false) => {
     }
   }
   const names = new Set((Array.isArray(roll.dice) ? roll.dice : []).map((g) => (isPlainObject(g) ? g.name : undefined)).filter(Boolean));
-  list('effects', 'effects', (at, e) => {
+  list('effects', 'effects', 'effect', (at, e) => {
     keysOf(at, e, ['name', 'face', 'when', 'label'], 'an effect');
     if (typeof e.name !== 'string' || !names.has(e.name)) bad(`${at}, name`, 'Must be one of this roll\'s named dice');
     if (!Number.isInteger(e.face)) bad(`${at}, face`, 'Must be a whole number');
     if (!WHEN.includes(e.when)) bad(`${at}, when`, 'On a critical, a success, a failure or any roll');
     words(`${at}, label`, e.label);
+  });
+  const changeIds = new Set();
+  list('changes', 'changes', 'change', (at, c) => {
+    keysOf(at, c, ['id', 'label', 'extra', 'add', 'cost'], 'a change');
+    if (typeof c.id !== 'string' || !NAME.test(c.id)) bad(at, 'Ids use lowercase letters, digits and _, starting with a letter');
+    else if (changeIds.has(c.id)) bad(at, 'Defined twice');
+    else changeIds.add(c.id);
+    words(`${at}, label`, c.label);
+    if (c.extra === undefined && c.add === undefined) bad(at, 'Adds dice, or adds to the total');
+    if (c.extra !== undefined) {
+      if (!isPlainObject(c.extra)) bad(`${at}, extra`, 'Must say how many dice');
+      else {
+        keysOf(`${at}, extra`, c.extra, ['dice', 'keep'], 'extra dice');
+        if (!Number.isInteger(c.extra.dice) || c.extra.dice < 1 || c.extra.dice > LIMITS.extra) bad(`${at}, extra, dice`, `1 to ${LIMITS.extra} dice`);
+        if (c.extra.keep !== undefined && c.extra.keep !== 'highest' && c.extra.keep !== 'lowest') bad(`${at}, extra, keep`, 'Keep the highest or the lowest');
+      }
+    }
+    if (c.add !== undefined) formula(`${at}, add`, c.add);
+    if (c.cost !== undefined) {
+      if (!isPlainObject(c.cost)) bad(`${at}, cost`, 'Must say what it costs');
+      else {
+        keysOf(`${at}, cost`, c.cost, ['from', 'amount'], 'a cost');
+        if (typeof c.cost.from !== 'string' || !NAME.test(c.cost.from)) bad(`${at}, cost, from`, 'The id of the stat it is taken from');
+        if (!Number.isInteger(c.cost.amount) || c.cost.amount < 1 || c.cost.amount > LIMITS.cost) bad(`${at}, cost, amount`, `1 to ${LIMITS.cost}`);
+      }
+    }
   });
   if (roll.zero !== undefined) {
     const z = roll.zero;
@@ -217,35 +262,64 @@ const checkRoll = (roll, where = 'roll', isFunction = () => false) => {
 /**
  * A roll made: each kind of dice with its faces (kept or not, and whether an explode added it),
  * what the dice come to as read (`dice`), what is added, the total, the target and whether it was
- * met, the band the total lands in, and a natural the dice showed. The roll is assumed checked
- * (checkRoll); `value(text)` works formula text out for the character rolling, `rng` gives [0, 1).
+ * met, the band the total lands in, a natural the dice showed, matches, a glitch and named dice's
+ * effects, and the changes picked with what they cost. The roll is assumed checked (checkRoll);
+ * `value(text)` works formula text out for the character rolling, `rng` gives [0, 1), `chosen`
+ * names the changes the player picked (any it doesn't have are left out).
  */
-const makeRoll = (roll, value, rng) => {
+const makeRoll = (roll, value, rng, chosen = []) => {
+  const picked = (roll.changes ?? []).filter((c) => chosen.includes(c.id));
+  let read = roll.read ?? 'sum';
+  let keepText = roll.keep;
+
+  // How many of each kind, then the picked changes' extra dice on the first kind: kept highest
+  // and kept lowest cancel die for die, and what is left of them turns a sum into keeping as many
+  // dice as there were.
   let left = LIMITS.dice;
+  const kinds = roll.dice.slice(0, LIMITS.groups);
+  const counts = kinds.map((g) => { const n = whole(value(g.count), 0, left); left -= n; return n; });
+  const before = counts.reduce((a, b) => a + b, 0);
+  const by = (keep) => picked.filter((c) => c.extra && (c.extra.keep ?? null) === keep).reduce((n, c) => n + c.extra.dice, 0);
+  const net = by('highest') - by('lowest');
+  const added = whole(by(null) + Math.abs(net), 0, left);
+  if (kinds.length) counts[0] += added;
+  if (net !== 0 && read === 'sum') {
+    read = net > 0 ? 'highest' : 'lowest';
+    keepText = String(before);
+  }
+
   let extra = LIMITS.explosions;
-  const groups = roll.dice.slice(0, LIMITS.groups).map((g) => {
-    const count = whole(value(g.count), 0, left);
-    left -= count;
+  let firstDone = false;
+  const x = roll.explode;
+  const groups = kinds.map((g, k) => {
     const faces = [];
-    for (let i = 0; i < count; i += 1) {
+    for (let i = 0; i < counts[k]; i += 1) {
       let v = rollDie(g.sides, rng);
       faces.push({ value: v, kept: true });
+      // Only the roll's first die explodes, with `first`.
+      const may = !!x && (!x.first || !firstDone);
+      firstDone = true;
+      if (!may) continue;
       // A die showing the explode face rolls another of its kind, added in; again on the new
-      // one unless only `once`, up to the most explosions a roll may have.
-      const on = roll.explode ? (roll.explode.on ?? highestFace(g.sides)) : null;
-      while (on !== null && v === on && extra > 0) {
+      // one unless only `once`, up to the most explosions a roll may have. One showing the
+      // `low` face rolls another, taken away, once.
+      const on = x.on ?? highestFace(g.sides);
+      if (x.low !== undefined && v === x.low && v !== on && extra > 0) {
+        extra -= 1;
+        faces.push({ value: rollDie(g.sides, rng), kept: true, extra: true, minus: true });
+        continue;
+      }
+      while (v === on && extra > 0) {
         extra -= 1;
         v = rollDie(g.sides, rng);
         faces.push({ value: v, kept: true, extra: true });
-        if (roll.explode.once) break;
+        if (x.once) break;
       }
     }
     return { ...(g.name ? { name: g.name } : {}), sides: g.sides, faces };
   });
 
   // No dice to roll: the zero-dice rule rolls its own, of the first kind's size, and keeps one.
-  let read = roll.read ?? 'sum';
-  let keepText = roll.keep;
   let zeroed = false;
   if (roll.zero && groups.every((g) => !g.faces.length) && groups.length) {
     zeroed = true;
@@ -268,9 +342,11 @@ const makeRoll = (roll, value, rng) => {
     for (const f of all) f.kept = keep.has(f);
     dice = order.slice(0, n).reduce((s, f) => s + f.value, 0);
   } else {
-    dice = all.reduce((s, f) => s + f.value, 0);
+    dice = all.reduce((s, f) => s + (f.minus ? -f.value : f.value), 0);
   }
-  const shown = dice;
+  // What the dice show before anything is added: an explode's extra dice too are left out of a
+  // sum's natural (CP:R's natural 10 is the d10's own, whatever it adds).
+  const shown = read === 'sum' ? all.filter((f) => !f.extra).reduce((s, f) => s + f.value, 0) : dice;
 
   // Matches: full sets of dice showing one face, each set adding to what the dice come to. None
   // from the zero-dice rule's dice, a desperate roll (Blades: no critical with zero dice).
@@ -287,7 +363,7 @@ const makeRoll = (roll, value, rng) => {
   const glitchFaces = roll.glitch ? all.filter((f) => f.value === roll.glitch.face).length : 0;
   const glitched = !!roll.glitch && all.length > 0 && glitchFaces >= Math.ceil(all.length * roll.glitch.share);
 
-  const add = roll.add !== undefined ? value(roll.add) : 0;
+  const add = (roll.add !== undefined ? value(roll.add) : 0) + picked.reduce((n, c) => n + (c.add !== undefined ? value(c.add) : 0), 0);
   const total = dice + add;
   const target = roll.against !== undefined ? value(roll.against) : null;
   const success = target === null ? null : roll.under ? total <= target : total >= target;
@@ -308,7 +384,83 @@ const makeRoll = (roll, value, rng) => {
     groups, dice, add, total, target, success, band,
     natural: nat ? { label: nat.label, ...(nat.critical ? { critical: nat.critical } : {}) } : null,
     matches: matched, glitch, effects, critical, ...(zeroed ? { zero: true } : {}),
+    changes: picked.map((c) => c.label),
+    costs: picked.filter((c) => c.cost).map((c) => ({ from: c.cost.from, amount: c.cost.amount })),
   };
 };
 
-module.exports = { checkRoll, makeRoll, rollDie, LIMITS, FATE, READS };
+/**
+ * The rolls the builder starts from (the picker's presets, approved mockup builder-rolls): the
+ * five steps filled in for how each game rolls, to change from there. They read the stat being
+ * rolled as @this, its modifier as @this_mod, and a skill's ability as @tie and @tie_mod; a target
+ * asked for at the table (a DC, a difficulty) comes with the sheet's chooser, so none is set here.
+ * Mechanics from general knowledge, no book text. CWN, CP:R and SR6 are held to the app's own code
+ * for those games (sheets/rollEngine.js) by a test rolling both with the same dice.
+ */
+const PRESETS = {
+  dnd: {
+    label: 'D&D check',
+    roll: {
+      dice: [{ count: '1', sides: 20 }], add: '@this_mod',
+      natural: [{ face: 20, label: 'Natural 20', critical: 'success' }, { face: 1, label: 'Natural 1', critical: 'failure' }],
+      changes: [{ id: 'advantage', label: 'Advantage', extra: { dice: 1, keep: 'highest' } }, { id: 'disadvantage', label: 'Disadvantage', extra: { dice: 1, keep: 'lowest' } }],
+    },
+  },
+  pbta: {
+    label: 'PbtA move',
+    roll: {
+      dice: [{ count: '2', sides: 6 }], add: '@this',
+      bands: [{ upTo: 6, label: 'Miss' }, { upTo: 9, label: 'Success at a cost' }, { label: 'Full success' }],
+      changes: [{ id: 'forward', label: 'Forward +1', add: '1' }],
+    },
+  },
+  blades: {
+    label: 'Blades action',
+    roll: {
+      dice: [{ count: '@this', sides: 6 }], read: 'highest', zero: { count: 2, read: 'lowest' },
+      matches: [{ face: 6, count: 2, label: 'Critical', critical: 'success' }],
+      bands: [{ upTo: 3, label: 'Bad outcome' }, { upTo: 5, label: 'Partial success' }, { label: 'Full success' }],
+      changes: [{ id: 'push', label: 'Push yourself', extra: { dice: 1 }, cost: { from: 'stress', amount: 2 } }],
+    },
+  },
+  vampire: {
+    label: 'Vampire pool',
+    roll: {
+      dice: [{ count: 'max(0, @this + @tie - @hunger)', sides: 10 }, { count: 'min(@hunger, @this + @tie)', sides: 10, name: 'Hunger' }],
+      read: 'count', at: 6,
+      matches: [{ face: 10, count: 2, adds: 2, label: 'Critical', critical: 'success' }],
+      effects: [{ name: 'Hunger', face: 10, when: 'critical', label: 'Messy critical' }, { name: 'Hunger', face: 1, when: 'failure', label: 'Bestial failure' }],
+    },
+  },
+  fate: {
+    label: 'Fate check',
+    roll: {
+      dice: [{ count: '4', sides: FATE }], add: '@this',
+      bands: [
+        { upTo: -2, label: 'Terrible' }, { upTo: -1, label: 'Poor' }, { upTo: 0, label: 'Mediocre' }, { upTo: 1, label: 'Average' },
+        { upTo: 2, label: 'Fair' }, { upTo: 3, label: 'Good' }, { upTo: 4, label: 'Great' }, { upTo: 5, label: 'Superb' },
+        { upTo: 6, label: 'Fantastic' }, { upTo: 7, label: 'Epic' }, { label: 'Legendary' },
+      ],
+      changes: [{ id: 'invoke', label: 'Invoke an aspect', add: '2', cost: { from: 'fate_points', amount: 1 } }],
+    },
+  },
+  cwn_skill: { label: 'CWN skill check', roll: { dice: [{ count: '2', sides: 6 }], add: '@this + @tie_mod' } },
+  cwn_save: { label: 'CWN save', roll: { dice: [{ count: '1', sides: 20 }], against: '@this' } },
+  cpr: {
+    label: 'CP:R check',
+    roll: {
+      dice: [{ count: '1', sides: 10 }], add: '@this + @tie',
+      explode: { on: 10, low: 1, once: true, first: true },
+      natural: [{ face: 10, label: 'Critical success', critical: 'success' }, { face: 1, label: 'Critical failure', critical: 'failure' }],
+    },
+  },
+  sr6: {
+    label: 'SR6 pool',
+    roll: {
+      dice: [{ count: 'max(1, @this + @tie)', sides: 6 }], read: 'count', at: 5,
+      glitch: { face: 1, share: 0.5, label: 'Glitch', none: 'Critical glitch' },
+    },
+  },
+};
+
+module.exports = { checkRoll, makeRoll, rollDie, PRESETS, LIMITS, FATE, READS };

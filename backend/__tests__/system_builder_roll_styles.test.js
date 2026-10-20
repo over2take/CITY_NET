@@ -276,3 +276,123 @@ describe('special results (6a1b)', () => {
     expect(said({ zero: { count: 2, read: 'sum' } })).toEqual(['roll v, zero, read: Keep the highest or the lowest']);
   });
 });
+
+describe('changes picked before rolling (6a1c)', () => {
+  const d20 = { id: 'check', dice: [{ count: '1', sides: 20 }], add: '2',
+    changes: [{ id: 'advantage', label: 'Advantage', extra: { dice: 1, keep: 'highest' } }, { id: 'disadvantage', label: 'Disadvantage', extra: { dice: 1, keep: 'lowest' } }] };
+
+  it('advantage turns one d20 into two, keeping the higher; disadvantage the lower; both cancel', () => {
+    const adv = makeRoll(d20, valueFor(), d(20, 4, 17), ['advantage']);
+    expect([faces(adv), adv.dice, adv.total, adv.changes]).toEqual([['4x', '17'], 17, 19, ['Advantage']]);
+    const dis = makeRoll(d20, valueFor(), d(20, 4, 17), ['disadvantage']);
+    expect([faces(dis), dis.dice]).toEqual([['4', '17x'], 4]);
+    const both = makeRoll(d20, valueFor(), d(20, 9), ['advantage', 'disadvantage']);
+    expect([faces(both), both.dice, both.changes]).toEqual([['9'], 9, ['Advantage', 'Disadvantage']]);
+    expect(faces(makeRoll(d20, valueFor(), d(20, 9), []))).toEqual(['9']);
+    // A change the roll doesn't have is left out.
+    expect(makeRoll(d20, valueFor(), d(20, 9), ['luck']).changes).toEqual([]);
+  });
+
+  it('keeps as many dice as there were: 2d6 pushed to 3d6 keeps the best two', () => {
+    const pbta = { id: 'm', dice: [{ count: '2', sides: 6 }], changes: [{ id: 'push', label: 'Push', extra: { dice: 1, keep: 'highest' }, cost: { from: 'stress', amount: 2 } }] };
+    const r = makeRoll(pbta, valueFor(), d(6, 2, 5, 4), ['push']);
+    expect([faces(r), r.dice, r.costs]).toEqual([['2x', '5', '4'], 9, [{ from: 'stress', amount: 2 }]]);
+  });
+
+  it('extra dice with nothing kept differently just join the pool; a bonus adds to the total', () => {
+    const blades = { id: 'b', dice: [{ count: '1', sides: 6 }], read: 'highest', changes: [{ id: 'push', label: 'Push', extra: { dice: 1 } }, { id: 'bonus', label: 'Bonus', add: '@this' }] };
+    const r = makeRoll(blades, valueFor({ this: 3 }), d(6, 2, 5), ['push', 'bonus']);
+    expect([faces(r), r.dice, r.add, r.total, r.costs]).toEqual([['2x', '5'], 5, 3, 8, []]);
+  });
+
+  it('says what is wrong with a change', () => {
+    const base = { id: 'c', dice: [{ count: '1', sides: 20 }] };
+    const said = (changes) => checkRoll({ ...base, changes }, 'roll c').map((p) => `${p.where}: ${p.message}`);
+    expect(said([{ id: 'a', label: 'A', extra: { dice: 1, keep: 'highest' }, cost: { from: 'luck', amount: 1 } }, { id: 'b', label: 'B', add: '2' }])).toEqual([]);
+    expect(said([{ id: 'a', label: 'A' }])).toEqual(['roll c, change 1: Adds dice, or adds to the total']);
+    expect(said([{ id: 'a', label: 'A', add: '1' }, { id: 'a', label: 'B', add: '1' }])).toEqual(['roll c, change 2: Defined twice']);
+    expect(said([{ id: 'a', label: 'A', extra: { dice: 11 } }])).toEqual(['roll c, change 1, extra, dice: 1 to 10 dice']);
+    expect(said([{ id: 'a', label: 'A', extra: { dice: 1, keep: 'middle' } }])).toEqual(['roll c, change 1, extra, keep: Keep the highest or the lowest']);
+    expect(said([{ id: 'a', label: 'A', add: '1', cost: { from: 'Luck Points', amount: 1 } }])).toEqual(['roll c, change 1, cost, from: The id of the stat it is taken from']);
+    expect(said([{ id: 'a', label: 'A', add: '1', cost: { from: 'luck', amount: 0 } }])).toEqual(['roll c, change 1, cost, amount: 1 to 100']);
+    expect(said([{ id: 'a', label: 'A', add: '1 +' }])[0]).toMatch(/^roll c, change 1, add: /);
+  });
+});
+
+describe('exploding that takes away, and only the first die (6a1c)', () => {
+  const cpr = { id: 'cpr', dice: [{ count: '1', sides: 10 }], explode: { on: 10, low: 1, once: true, first: true },
+    natural: [{ face: 10, label: 'Crit', critical: 'success' }, { face: 1, label: 'Fumble', critical: 'failure' }] };
+
+  it('a natural 10 adds a d10 once; a natural 1 takes one away; the natural is the first die', () => {
+    const up = makeRoll(cpr, valueFor(), d(10, 10, 10));
+    expect([faces(up), up.dice, up.natural.label]).toEqual([['10', '10!'], 20, 'Crit']);
+    const down = makeRoll(cpr, valueFor(), d(10, 1, 7));
+    expect([down.dice, down.natural.label, down.groups[0].faces[1].minus]).toEqual([-6, 'Fumble', true]);
+  });
+
+  it('only the roll\'s first die explodes, with first', () => {
+    const two = { ...cpr, dice: [{ count: '2', sides: 10 }] };
+    expect(faces(makeRoll(two, valueFor(), d(10, 4, 10)))).toEqual(['4', '10']);
+    expect(faces(makeRoll({ ...two, explode: { on: 10 } }, valueFor(), d(10, 4, 10, 3)))).toEqual(['4', '10', '3!']);
+  });
+
+  it('only a sum can take a die away', () => {
+    expect(checkRoll({ id: 'x', dice: [{ count: '2', sides: 6 }], read: 'count', at: 5, explode: { low: 1 } }, 'roll x').map((p) => p.message)).toEqual(['Only a sum can take a die away']);
+  });
+});
+
+describe('the presets (6a1c)', () => {
+  const { PRESETS } = require_('../systemBuilder/rollStyles');
+  const rollEngine = require_('../sheets/rollEngine');
+
+  it('every preset is a roll the builder can check without a problem', () => {
+    expect(Object.keys(PRESETS)).toEqual(['dnd', 'pbta', 'blades', 'vampire', 'fate', 'cwn_skill', 'cwn_save', 'cpr', 'sr6']);
+    for (const [key, p] of Object.entries(PRESETS)) expect(checkRoll({ id: key, ...p.roll }, key, () => false), key).toEqual([]);
+  });
+
+  /** The same dice for both: a seeded list of numbers, handed out in turn. */
+  const seeded = (seed) => { let x = seed; return () => { x = (x * 1103515245 + 12345) % 2147483648; return x / 2147483648; }; };
+
+  it('CP:R checks come out as the app\'s own CP:R code rolls them, on the same dice', () => {
+    for (let seed = 1; seed <= 400; seed += 1) {
+      const data = { ref: 6, athletics: 4 };
+      const old = rollEngine.executeRoll(rollEngine.resolveFormula('1d10 + @ref + @athletics', data), 'explode10', seeded(seed));
+      const now = makeRoll({ id: 'cpr', ...PRESETS.cpr.roll }, valueFor({ this: 4, tie: 6 }), seeded(seed));
+      expect([now.total, now.critical], `seed ${seed}`).toEqual([old.total, old.critical]);
+    }
+  });
+
+  it('SR6 pools come out as the app\'s own SR6 code rolls them: hits, glitches, critical glitches', () => {
+    let glitches = 0;
+    for (let seed = 1; seed <= 400; seed += 1) {
+      const data = { agility: (seed % 5), firearms: (seed % 3) };
+      const old = rollEngine.executeRoll(rollEngine.resolveFormula('pool:@agility+@firearms', data, { allowNoDice: true }), 'pool', seeded(seed));
+      const now = makeRoll({ id: 'sr6', ...PRESETS.sr6.roll }, valueFor({ this: data.firearms, tie: data.agility }), seeded(seed));
+      expect([now.dice, now.glitch !== null, now.critical], `seed ${seed}`).toEqual([old.hits, old.glitch, old.critical]);
+      if (old.glitch) glitches += 1;
+    }
+    expect(glitches).toBeGreaterThan(10);
+  });
+
+  it('CWN skill checks and saves come out as the app\'s own CWN code rolls them', () => {
+    for (let seed = 1; seed <= 200; seed += 1) {
+      const skill = rollEngine.executeRoll(rollEngine.resolveFormula('2d6 + @shoot + @dex_mod', { shoot: 2, dex_mod: 1 }), 'sum', seeded(seed));
+      expect(makeRoll({ id: 's', ...PRESETS.cwn_skill.roll }, valueFor({ this: 2, tie_mod: 1 }), seeded(seed)).total, `seed ${seed}`).toBe(skill.total);
+      const save = rollEngine.executeRoll(rollEngine.resolveFormula('1d20', {}), 'sum', seeded(seed));
+      const now = makeRoll({ id: 'v', ...PRESETS.cwn_save.roll }, valueFor({ this: 14 }), seeded(seed));
+      expect([now.total, now.success], `seed ${seed}`).toEqual([save.total, save.total >= 14]);
+    }
+  });
+
+  it('the others roll as their games do', () => {
+    const dnd = makeRoll({ id: 'd', ...PRESETS.dnd.roll }, valueFor({ this_mod: 3 }), d(20, 20, 5), ['advantage']);
+    expect([dnd.dice, dnd.total, dnd.critical]).toEqual([20, 23, 'success']);
+    expect(makeRoll({ id: 'p', ...PRESETS.pbta.roll }, valueFor({ this: 1 }), d(6, 4, 4)).band).toBe('Success at a cost');
+    const blades = makeRoll({ id: 'b', ...PRESETS.blades.roll }, valueFor({ this: 2 }), d(6, 6, 2, 6), ['push']);
+    expect([blades.band, blades.critical, blades.costs]).toEqual(['Full success', 'success', [{ from: 'stress', amount: 2 }]]);
+    const vamp = makeRoll({ id: 'v', ...PRESETS.vampire.roll }, valueFor({ this: 3, tie: 2, hunger: 2 }), d(10, 10, 4, 7, 10, 1));
+    expect([vamp.groups.map((g) => g.faces.length), vamp.dice, vamp.effects]).toEqual([[3, 2], 5, ['Messy critical']]);
+    const fate = makeRoll({ id: 'f', ...PRESETS.fate.roll }, valueFor({ this: 2 }), showing([1, FATE], [1, FATE], [0, FATE], [-1, FATE]), ['invoke']);
+    expect([fate.total, fate.band]).toEqual([5, 'Superb']);
+  });
+});

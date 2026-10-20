@@ -127,6 +127,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Special results for those rolls (6a1b).** Matched dice (a pair of 10s, doubles), ones that cancel
   successes, glitches, a named die's own effect (a Hunger 10 in a critical is messy), and the rule for
   rolling with no dice (roll two, keep the lowest, never a critical).
+- **Choices before rolling, and the presets (6a1c).** Advantage and disadvantage (cancelling each
+  other), a push for more dice, a bonus to the total, each with what it costs; and the rolls the builder
+  will start from: D&D, PbtA, Blades, Vampire, Fate, CWN, CP:R and SR6. The CWN, CP:R and SR6 presets
+  roll exactly as the app's own code for those games does, checked with the same dice.
 
 - **A shared system file installs on a builder from before the map.** A .citysys file now carries
   the graph view's layout beside the system rather than inside it. A builder from before the map
