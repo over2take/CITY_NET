@@ -492,3 +492,16 @@ describe('the map\'s own groups (5c2)', () => {
     expect((await screen.findByTestId('graph-panel')).getAttribute('aria-label')).toBe('MAP GROUP SAVES');
   });
 });
+
+describe('LINE UP (5c3)', () => {
+  it('stacks a group\'s formulas in one column from its panel, and undoes', async () => {
+    const { last } = open();
+    fireEvent.click(screen.getByTestId('graph-group-saves').querySelector('.graph-group-head')!);
+    await userEvent.click(within(await screen.findByTestId('graph-panel')).getByRole('button', { name: 'LINE UP' }));
+    const places = (last().graph as { positions: Record<string, [number, number]> }).positions;
+    expect(places.save[0]).toBe(places.odd[0]);
+    expect(places.odd[1]).toBeGreaterThan(places.save[1]);
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(last()).toEqual(HEARTH);
+  });
+});

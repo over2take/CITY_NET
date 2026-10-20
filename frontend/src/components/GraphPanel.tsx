@@ -4,8 +4,8 @@ import type { BuilderPage } from '../sheets/builderSession';
 import { statGroups, allStats, tableList, formulaList, withoutFormula, withFormula, withAlternative } from '../sheets/statsRules';
 import { modifiersIn, withModifierNumber } from '../sheets/modifiers';
 import { houseRuleList } from '../sheets/houseRules';
-import type { GraphNode, GraphGroup } from '../sheets/graphModel';
-import { mapGroupsOf, groupOf, withFormulaInGroup, withMapGroupLabel, withoutMapGroup, GROUP_NAME_MAX, GROUPS_MAX } from '../sheets/graphGroups';
+import { withPositions, type Graph, type GraphNode, type GraphGroup, type Positions } from '../sheets/graphModel';
+import { mapGroupsOf, groupOf, withFormulaInGroup, withMapGroupLabel, withoutMapGroup, lineUp, GROUP_NAME_MAX, GROUPS_MAX } from '../sheets/graphGroups';
 import { notesOf, pinChoices, withNoteText, withNotePinned, withoutNote, NOTE_MAX } from '../sheets/graphNotes';
 import type { Tried } from '../hooks/usePreviewValues';
 import { useFormulaInsert } from '../hooks/useFormulaInsert';
@@ -144,9 +144,12 @@ function PanelFrame({ kind, title, onClose, children }: { kind: string; title: s
 
 /**
  * One of the map's own groups (5c2), opened from its title bar: its name, the formulas in it (each
- * taken out with ×), and UNGROUP, which leaves the formulas where they are.
+ * taken out with ×), LINE UP (5c3), which stacks them in one column, and UNGROUP, which leaves the
+ * formulas where they are.
  */
-export function GroupPanel({ definition, edit, group, onClose }: { definition: Definition; edit: (next: Definition) => void; group: GraphGroup; onClose: () => void }) {
+export function GroupPanel({ definition, edit, group, onClose, graph, positions }: {
+  definition: Definition; edit: (next: Definition) => void; group: GraphGroup; onClose: () => void; graph: Graph; positions: Positions;
+}) {
   const name = (id: string) => (formulaList(definition).find((f) => f.id === id)?.label || id).toUpperCase();
   const stored = mapGroupsOf(definition).find((g) => g.id === group.id);
   return (
@@ -167,7 +170,11 @@ export function GroupPanel({ definition, edit, group, onClose }: { definition: D
           </li>
         ))}
       </ul>
-      <div><button type="button" className="utility-btn" style={btn} onClick={() => edit(withoutMapGroup(definition, group.id))}>UNGROUP</button></div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="button" className="utility-btn" style={btn} title="Stack them in one column, left edges even, a cell apart"
+          onClick={() => edit(withPositions(definition, graph, lineUp(graph, positions, group.id)))}>LINE UP</button>
+        <button type="button" className="utility-btn" style={btn} onClick={() => edit(withoutMapGroup(definition, group.id))}>UNGROUP</button>
+      </div>
     </PanelFrame>
   );
 }

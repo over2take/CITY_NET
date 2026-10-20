@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { mapGroupsOf, groupOf, withFormulaInGroup, withMapGroupLabel, withoutMapGroup, GROUP_NAME_MAX, GROUPS_MAX } from '../graphGroups';
+import { mapGroupsOf, groupOf, withFormulaInGroup, withMapGroupLabel, withoutMapGroup, lineUp, GROUP_NAME_MAX, GROUPS_MAX } from '../graphGroups';
 import { graphOf } from '../graphModel';
 import type { Definition } from '../systemsApi';
 
@@ -82,5 +82,38 @@ describe('the map\'s own groups', () => {
     const gone = withoutMapGroup(one, 'group_1');
     expect(gone).toEqual(HEARTH);
     expect(graphOf(gone).nodes.filter((n) => n.kind === 'formula').map((n) => n.id)).toEqual(['melee', 'shoot', 'save']);
+  });
+});
+
+describe('a group lined up (5c3)', () => {
+  const grouped = put(put(put(HEARTH, 'melee', 'new').definition, 'shoot', 'group_1').definition, 'save', 'group_1').definition;
+  const g = graphOf(grouped);
+  const height = (id: string) => g.nodes.find((n) => n.id === id)!.height;
+
+  it('stacked in the order they stand, left edges on the leftmost, a cell apart from the top one down', () => {
+    const scattered = { melee: { x: 480, y: 240 }, shoot: { x: 96, y: 720 }, save: { x: 720, y: 96 } };
+    const lined = lineUp(g, scattered, 'group_1');
+    // SAVE was highest, then MELEE, then SHOOT.
+    expect(lined.save).toEqual({ x: 96, y: 96 });
+    expect(lined.melee).toEqual({ x: 96, y: Math.ceil((96 + height('save') + 24) / 24) * 24 });
+    expect(lined.shoot).toEqual({ x: 96, y: Math.ceil((lined.melee.y + height('melee') + 24) / 24) * 24 });
+    // Same height: left to right.
+    const level = lineUp(g, { melee: { x: 480, y: 96 }, shoot: { x: 240, y: 96 }, save: { x: 720, y: 96 } }, 'group_1');
+    expect([level.shoot.y, level.melee.y, level.save.y]).toEqual([...[level.shoot.y, level.melee.y, level.save.y]].sort((a, b) => a - b));
+    expect(level.shoot.y).toBe(96);
+  });
+
+  it('nothing in them overlapping, and only its members moved, on every grid cell', () => {
+    const scattered = { melee: { x: 480, y: 240 }, shoot: { x: 96, y: 720 }, save: { x: 720, y: 96 } };
+    const lined = lineUp(g, scattered, 'group_1');
+    expect(Object.keys(lined).sort()).toEqual(['melee', 'save', 'shoot']);
+    const ys = Object.entries(lined).sort(([, a], [, b]) => a.y - b.y);
+    for (let i = 1; i < ys.length; i += 1) expect(ys[i][1].y).toBeGreaterThanOrEqual(ys[i - 1][1].y + height(ys[i - 1][0]) + 24);
+    for (const p of Object.values(lined)) expect([p.x % 24, p.y % 24]).toEqual([0, 0]);
+  });
+
+  it('nothing for a group that isn\'t there', () => {
+    expect(lineUp(g, {}, 'group_1')).toEqual({});
+    expect(lineUp(g, { melee: { x: 0, y: 0 } }, 'no_such')).toEqual({});
   });
 });

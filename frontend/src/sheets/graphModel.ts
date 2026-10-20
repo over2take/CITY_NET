@@ -334,7 +334,8 @@ export const graphOf = (def: Definition): Graph => {
 export interface Point { x: number; y: number }
 export type Positions = Record<string, Point>;
 
-const snapUp = (v: number) => Math.ceil(v / GRID) * GRID;
+/** Up to the next whole cell. */
+export const snapUp = (v: number) => Math.ceil(v / GRID) * GRID;
 const snap = (v: number) => Math.round(v / GRID) * GRID;
 const clamp = (v: number) => Math.max(-REACH, Math.min(REACH, v));
 const STEP = SIZE.width + SIZE.columnGap;
