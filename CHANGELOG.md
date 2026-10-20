@@ -115,6 +115,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   or formulas it is rolled by. Its five steps show in words, and TEST ROLL rolls it on the server for
   the sample character, showing the dice kept and dropped and what it came to. Editing each step comes
   next; the sheet's die buttons after that.
+- **Edit a roll's dice, reading and result (6b1b1).** In the ROLLS tab, steps 1 to 3 are now boxes:
+  each kind of dice (how many, the size including Fate dice, a name like Hunger), how they are read
+  (sum, keep the highest or lowest so many, count successes at a face), what is added, a target with
+  rolling under, and the bands the total is read on. TEST ROLL rolls it as it now stands.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

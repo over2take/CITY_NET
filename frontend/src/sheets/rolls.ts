@@ -4,8 +4,10 @@
 // makes them (tableRolls.js, and POST /api/systems/test-roll for TEST ROLL).
 //
 // A new roll starts from a preset and takes its id from its first name, kept after; its five steps
-// can be replaced by another preset's. ROLLED BY lists the stats, stats groups and formulas whose die
-// button on the sheet rolls it.
+// can be replaced by another preset's, or changed one by one (6b1b: the dice, how they are read,
+// what is added, a target and the bands here). ROLLED BY lists the stats, stats groups and formulas
+// whose die button on the sheet rolls it. Each change keeps a roll the server takes: switching how
+// the dice are read drops what only the old way used, and the last band always catches the rest.
 
 import type { Definition } from './systemsApi';
 import { idFor } from './setup';
@@ -147,6 +149,116 @@ export const withRolledBy = (def: Definition, id: string, target: string, on: bo
 
 /** A roll removed. */
 export const withoutRoll = (def: Definition, id: string): Definition => withRolls(def, rollList(def).filter((r) => r.id !== id));
+
+// ─── THE STEPS, ONE BY ONE (6b1b) ───────────────────────────────────────────
+
+/** The die sizes the picker offers; any other 2 to 100 can still be typed (backend LIMITS.sides). */
+export const SIDES: Sides[] = [2, 3, 4, 6, 8, 10, 12, 20, 100, 'F'];
+
+/** One kind of dice changed: how many (formula text), its size, its name (blank for none). */
+export const withRollDice = (def: Definition, id: string, index: number, patch: { count?: string; sides?: Sides; name?: string }): Definition =>
+  changed(def, id, (r) => ({
+    ...r,
+    dice: r.dice.map((d, i) => {
+      if (i !== index) return d;
+      const next: RollDice = { ...d, ...(patch.count !== undefined ? { count: patch.count } : {}), ...(patch.sides !== undefined ? { sides: patch.sides } : {}) };
+      if (patch.name !== undefined) {
+        if (patch.name.trim()) next.name = patch.name.slice(0, 40); else delete next.name;
+      }
+      return next;
+    }),
+  }));
+
+/** Another kind of dice, one d6 to start; at most six kinds (backend LIMITS.groups). */
+export const withRollDiceAdded = (def: Definition, id: string): Definition =>
+  changed(def, id, (r) => (r.dice.length >= 6 ? r : { ...r, dice: [...r.dice, { count: '1', sides: 6 }] }));
+
+/**
+ * A kind of dice taken away; a roll keeps at least one. A named die's effects go with it, since
+ * they would name dice the roll no longer has.
+ */
+export const withRollDiceRemoved = (def: Definition, id: string, index: number): Definition =>
+  changed(def, id, (r) => {
+    if (r.dice.length <= 1 || !r.dice[index]) return r;
+    const gone = r.dice[index].name;
+    const next: Roll = { ...r, dice: r.dice.filter((_, i) => i !== index) };
+    if (gone && !next.dice.some((d) => d.name === gone) && next.effects) {
+      next.effects = next.effects.filter((e) => e.name !== gone);
+      if (!next.effects.length) delete next.effects;
+    }
+    return next;
+  });
+
+/**
+ * How the dice are read: summed, the highest or lowest kept (how many, formula text, 1 unless
+ * said), or successes counted at a face (5 unless said). What only another way used goes: a keep
+ * count, a success face, cancelling, and a die taken away (only a sum can).
+ */
+export const withRollRead = (def: Definition, id: string, read: 'sum' | 'highest' | 'lowest' | 'count', opts: { keep?: string; at?: number } = {}): Definition =>
+  changed(def, id, (r) => {
+    const next: Roll = { ...r };
+    if (read === 'sum') delete next.read; else next.read = read;
+    if (read === 'highest' || read === 'lowest') {
+      const keep = opts.keep ?? r.keep;
+      if (keep !== undefined && keep !== '1') next.keep = keep; else delete next.keep;
+    } else delete next.keep;
+    if (read === 'count') next.at = opts.at ?? r.at ?? 5;
+    else { delete next.at; delete next.cancel; }
+    if (read !== 'sum' && next.explode?.low !== undefined) {
+      next.explode = { ...next.explode };
+      delete next.explode.low;
+    }
+    return next;
+  });
+
+/** What is added to the dice (formula text); blank for nothing. */
+export const withRollAdd = (def: Definition, id: string, text: string): Definition =>
+  changed(def, id, (r) => {
+    const next: Roll = { ...r, add: text };
+    if (!text.trim()) delete next.add;
+    return next;
+  });
+
+/** A target to meet (formula text), at or over it, or at or under with `under`; blank for none. */
+export const withRollAgainst = (def: Definition, id: string, text: string, under?: boolean): Definition =>
+  changed(def, id, (r) => {
+    const next: Roll = { ...r, against: text };
+    if (under !== undefined) next.under = under;
+    if (!next.under) delete next.under;
+    if (!text.trim()) { delete next.against; delete next.under; }
+    return next;
+  });
+
+/**
+ * The bands, as a table's (statsRules.ts withBands): bands to start, one under the last that
+ * catches the rest, one taken away (never that last one), one's top or words changed, or none.
+ */
+export const withRollBands = (def: Definition, id: string, change: { start: true } | { add: true } | { remove: number } | { set: number; upTo?: number; label?: string } | { none: true }): Definition =>
+  changed(def, id, (r) => {
+    let bands = [...(r.bands ?? [])];
+    if ('none' in change) {
+      const next: Roll = { ...r };
+      delete next.bands;
+      return next;
+    }
+    if ('start' in change) {
+      if (bands.length) return r;
+      bands = [{ upTo: 6, label: 'Miss' }, { label: 'Hit' }];
+    } else if ('add' in change) {
+      if (bands.length >= 20) return r;
+      const closed = bands.filter((b) => b.upTo !== undefined);
+      const upTo = closed.length ? closed[closed.length - 1].upTo! + 1 : 0;
+      bands.splice(Math.max(0, bands.length - 1), 0, { upTo, label: 'New band' });
+    } else if ('remove' in change) {
+      if (change.remove >= bands.length - 1) return r;
+      bands = bands.filter((_, i) => i !== change.remove);
+    } else {
+      bands = bands.map((b, i) => (i === change.set ? {
+        ...b, ...(change.upTo !== undefined && i < bands.length - 1 ? { upTo: change.upTo } : {}), ...(change.label !== undefined ? { label: change.label.slice(0, 40) } : {}),
+      } : b));
+    }
+    return { ...r, bands };
+  });
 
 /** What a roll can be ROLLED BY: the stats groups, then each stat, then the formulas. */
 export const rollables = (def: Definition): { id: string; label: string; kind: 'group' | 'stat' | 'formula' }[] => [
