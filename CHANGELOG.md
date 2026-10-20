@@ -119,6 +119,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   each kind of dice (how many, the size including Fate dice, a name like Hunger), how they are read
   (sum, keep the highest or lowest so many, count successes at a face), what is added, a target with
   rolling under, and the bands the total is read on. TEST ROLL rolls it as it now stands.
+- **Edit a roll's special results (6b1b2).** Step 4 of a roll is now edited too: exploding dice (on
+  which face, only once, the first die only, a face that takes one away), naturals, matches (a pair
+  of 10s adding successes), cancelling, a glitch, a named kind of dice's own effects, and the rule
+  for rolling with no dice.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

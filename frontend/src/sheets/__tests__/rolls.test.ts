@@ -10,6 +10,7 @@ import { createRequire } from 'module';
 import {
   PRESETS, rollList, withNewRoll, withRollPreset, withRollLabel, withRolledBy, withoutRoll, rollables, fieldsRolledBy, stepsOf,
   withRollDice, withRollDiceAdded, withRollDiceRemoved, withRollRead, withRollAdd, withRollAgainst, withRollBands,
+  withRollExplode, withRollList, withRollCancel, withRollGlitch, withRollZero,
 } from '../rolls';
 import type { Definition } from '../systemsApi';
 
@@ -211,5 +212,84 @@ describe('the steps changed one by one (6b1b1)', () => {
     expect(withRollBands(def, 'pbta_move', { remove: 2 })).toEqual(def);
     expect(only(withRollBands(def, 'pbta_move', { remove: 0 })).bands).toEqual([{ upTo: 9, label: 'Cost' }, { label: 'Full' }]);
     expect(only(withRollBands(def, 'pbta_move', { start: true }))).toEqual(only(def));
+  });
+});
+
+describe('the special results changed (6b1b2)', () => {
+  const base = (preset = 'pbta') => { const r = withNewRoll(HEARTH, preset)!; return { def: r.definition, id: r.id }; };
+  const only = (def: Definition) => rollList(def)[0];
+
+  it('exploding: on, on another face, once, first die only, a die taken away from a sum, off', () => {
+    const { def: d0, id } = base();
+    let def = withRollExplode(d0, id, {});
+    expect(only(def).explode).toEqual({});
+    def = withRollExplode(def, id, { on: 5, once: true, first: true, low: 1 });
+    expect(only(def).explode).toEqual({ on: 5, low: 1, once: true, first: true });
+    expect(problems(def)).toEqual([]);
+    def = withRollExplode(def, id, { on: null, low: null, once: false });
+    expect(only(def).explode).toEqual({ first: true });
+    // Only a sum can take a die away.
+    const kept = withRollRead(def, id, 'highest');
+    expect(only(withRollExplode(kept, id, { low: 1 })).explode).toEqual({ first: true });
+    expect('explode' in only(withRollExplode(def, id, null))).toBe(false);
+  });
+
+  it('naturals, matches and effects: added on the highest face, changed, taken away; ten at most', () => {
+    const { def: d0, id } = base('dnd');
+    let def = withRollList(d0, id, 'natural', { add: true });
+    expect(only(def).natural![2]).toEqual({ face: 20, label: 'Critical', critical: 'success' });
+    def = withRollList(def, id, 'natural', { set: 2, patch: { face: 19, label: 'Keen', critical: undefined } });
+    expect(only(def).natural![2]).toEqual({ face: 19, label: 'Keen' });
+    def = withRollList(def, id, 'matches', { add: true });
+    expect(only(def).matches).toEqual([{ face: 20, count: 2, label: 'Critical', critical: 'success' }]);
+    def = withRollList(def, id, 'matches', { set: 0, patch: { face: undefined, adds: 3 } });
+    expect(only(def).matches).toEqual([{ count: 2, label: 'Critical', critical: 'success', adds: 3 }]);
+    expect(problems(def)).toEqual([]);
+    def = withRollList(def, id, 'matches', { remove: 0 });
+    expect('matches' in only(def)).toBe(false);
+    let full = def;
+    for (let i = 0; i < 12; i += 1) full = withRollList(full, id, 'natural', { add: true });
+    expect(only(full).natural).toHaveLength(10);
+    expect(only(withRollList(def, id, 'natural', { set: 0, patch: { label: 'x'.repeat(60) } })).natural![0].label).toHaveLength(40);
+  });
+
+  it('an effect needs a named kind of dice, and starts on it', () => {
+    const { def, id } = base();
+    expect(withRollList(def, id, 'effects', { add: true })).toEqual(def);
+    const named = withRollDice(def, id, 0, { name: 'Rage', sides: 8 });
+    const withEffect = withRollList(named, id, 'effects', { add: true });
+    expect(only(withEffect).effects).toEqual([{ name: 'Rage', face: 8, when: 'critical', label: 'Effect' }]);
+    expect(problems(withEffect)).toEqual([]);
+  });
+
+  it('cancelling only while counting; a glitch and the zero-dice rule on, changed and off', () => {
+    const { def: d0, id } = base('sr6');
+    let def = withRollCancel(d0, id, 1);
+    expect(only(def).cancel).toEqual({ face: 1 });
+    expect('cancel' in only(withRollCancel(withRollRead(def, id, 'sum'), id, 1))).toBe(false);
+    def = withRollCancel(def, id, null);
+    expect('cancel' in only(def)).toBe(false);
+    def = withRollGlitch(def, id, { share: 0.25, none: '  ' });
+    expect(only(def).glitch).toEqual({ face: 1, share: 0.25, label: 'Glitch' });
+    def = withRollGlitch(def, id, null);
+    expect('glitch' in only(def)).toBe(false);
+    def = withRollGlitch(def, id, {});
+    expect(only(def).glitch).toEqual({ face: 1, share: 0.5, label: 'Glitch' });
+    def = withRollZero(def, id, {});
+    expect(only(def).zero).toEqual({ count: 2, read: 'lowest' });
+    def = withRollZero(def, id, { read: 'highest', count: 3 });
+    expect(only(def).zero).toEqual({ count: 3, read: 'highest' });
+    expect(problems(def)).toEqual([]);
+    expect('zero' in only(withRollZero(def, id, null))).toBe(false);
+  });
+});
+
+describe('words left empty (6b1b2)', () => {
+  it('stay, empty, for the server to say they can\'t be blank; the steps still read', () => {
+    const { definition, id } = withNewRoll(HEARTH, 'dnd')!;
+    const def = withRollList(definition, id, 'natural', { set: 0, patch: { label: '' } });
+    expect(rollList(def)[0].natural![0]).toEqual({ face: 20, label: '', critical: 'success' });
+    expect(stepsOf(rollList(def)[0]).special[0]).toBe('NATURAL 20 · ');
+    expect(problems(def)).toEqual(['roll d_d_check, natural 1, label: Words of up to 40 characters']);
   });
 });
