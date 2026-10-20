@@ -124,6 +124,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   now roll what a GM describes, with dice of any size, Fate dice and named dice like Hunger, read as a
   sum, the highest or lowest kept, or successes counted, with a target or bands and exploding dice.
   Nothing uses it yet; the builder's ROLLS tab and the sheet's roll buttons come next.
+- **Special results for those rolls (6a1b).** Matched dice (a pair of 10s, doubles), ones that cancel
+  successes, glitches, a named die's own effect (a Hunger 10 in a critical is messy), and the rule for
+  rolling with no dice (roll two, keep the lowest, never a critical).
 
 - **A shared system file installs on a builder from before the map.** A .citysys file now carries
   the graph view's layout beside the system rather than inside it. A builder from before the map

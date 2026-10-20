@@ -182,3 +182,97 @@ describe('a roll checked', () => {
     expect(said({ ...ok, __proto__: { polluted: true } })).toEqual([]);
   });
 });
+
+describe('special results (6a1b)', () => {
+  it('a match: dice showing one face, each full set adding to the dice, named, maybe a critical', () => {
+    const vampire = { id: 'v', dice: [{ count: '5', sides: 10 }], read: 'count', at: 6, matches: [{ face: 10, count: 2, adds: 2, label: 'Critical', critical: 'success' }] };
+    // 10, 10, 10, 7, 2: four successes from the dice, one full pair adds two more.
+    const r = makeRoll(vampire, valueFor(), d(10, 10, 10, 10, 7, 2));
+    expect(r.dice).toBe(6);
+    expect(r.matches).toEqual([{ label: 'Critical', sets: 1, critical: 'success' }]);
+    expect(r.critical).toBe('success');
+    expect(makeRoll(vampire, valueFor(), d(10, 10, 9, 8, 7, 2)).matches).toEqual([]);
+    // Any face, with none named: doubles.
+    const doubles = { id: 'dbl', dice: [{ count: '2', sides: 12 }], matches: [{ count: 2, label: 'Doubles' }] };
+    expect(makeRoll(doubles, valueFor(), d(12, 5, 5)).matches).toEqual([{ label: 'Doubles', sets: 1 }]);
+    expect(makeRoll(doubles, valueFor(), d(12, 5, 6)).matches).toEqual([]);
+    expect(makeRoll(doubles, valueFor(), d(12, 5, 6)).critical).toBeNull();
+  });
+
+  it('a natural is read before a match adds anything', () => {
+    const roll = { id: 'n', dice: [{ count: '2', sides: 6 }], read: 'count', at: 6, matches: [{ face: 6, count: 2, adds: 3, label: 'Big' }], natural: [{ face: 2, label: 'Two sixes' }] };
+    const r = makeRoll(roll, valueFor(), d(6, 6, 6));
+    expect(r.dice).toBe(5);
+    expect(r.natural).toEqual({ label: 'Two sixes' });
+  });
+
+  it('cancelling: each die showing the face takes a success away, down to none', () => {
+    const old = { id: 'o', dice: [{ count: '4', sides: 10 }], read: 'count', at: 7, cancel: { face: 1 } };
+    expect(makeRoll(old, valueFor(), d(10, 8, 9, 1, 4)).dice).toBe(1);
+    expect(makeRoll(old, valueFor(), d(10, 8, 1, 1, 1)).dice).toBe(0);
+  });
+
+  it('a glitch: the face on its share of the dice or more; with nothing succeeding, the worse one', () => {
+    const sr6 = { id: 's', dice: [{ count: '@pool', sides: 6 }], read: 'count', at: 5, glitch: { face: 1, share: 0.5, label: 'Glitch', none: 'Critical glitch' } };
+    // Four dice: two 1s is half, a glitch; with a 5 it still succeeded once.
+    const one = makeRoll(sr6, valueFor({ pool: 4 }), d(6, 1, 1, 5, 3));
+    expect([one.dice, one.glitch, one.critical]).toEqual([1, 'Glitch', null]);
+    const none = makeRoll(sr6, valueFor({ pool: 4 }), d(6, 1, 1, 2, 3));
+    expect([none.dice, none.glitch, none.critical]).toEqual([0, 'Critical glitch', 'failure']);
+    // Five dice: three 1s are needed, the half rounded up.
+    expect(makeRoll(sr6, valueFor({ pool: 5 }), d(6, 1, 1, 5, 5, 3)).glitch).toBeNull();
+    expect(makeRoll(sr6, valueFor({ pool: 5 }), d(6, 1, 1, 1, 5, 3)).glitch).toBe('Glitch');
+    expect(makeRoll(sr6, valueFor({ pool: 0 }), d(6, 1)).glitch).toBeNull();
+  });
+
+  it("a named die's own effect: its face on a critical, a success, a failure or any roll", () => {
+    const vampire = {
+      id: 'v', dice: [{ count: '2', sides: 10 }, { count: '2', sides: 10, name: 'Hunger' }], read: 'count', at: 6, against: '3',
+      matches: [{ face: 10, count: 2, adds: 2, label: 'Critical', critical: 'success' }],
+      effects: [{ name: 'Hunger', face: 10, when: 'critical', label: 'Messy critical' }, { name: 'Hunger', face: 1, when: 'failure', label: 'Bestial failure' }, { name: 'Hunger', face: 9, when: 'any', label: 'Nine' }],
+    };
+    // A regular 10 and a Hunger 10 make a pair: a critical with a Hunger 10, messy.
+    expect(makeRoll(vampire, valueFor(), d(10, 10, 3, 10, 2)).effects).toEqual(['Messy critical']);
+    // A lone Hunger 10 is no critical, so not messy.
+    expect(makeRoll(vampire, valueFor(), d(10, 3, 4, 10, 2)).effects).toEqual([]);
+    // A pair of regular 10s: a critical, but no Hunger 10, so clean.
+    expect(makeRoll(vampire, valueFor(), d(10, 10, 10, 4, 2)).effects).toEqual([]);
+    // One success against three, with a Hunger 1: bestial.
+    const fail = makeRoll(vampire, valueFor(), d(10, 7, 3, 1, 2));
+    expect([fail.success, fail.effects]).toEqual([false, ['Bestial failure']]);
+    // A regular 1 isn't a Hunger die.
+    expect(makeRoll(vampire, valueFor(), d(10, 1, 3, 4, 2)).effects).toEqual([]);
+    expect(makeRoll(vampire, valueFor(), d(10, 1, 3, 9, 2)).effects).toEqual(['Nine']);
+  });
+
+  it('the zero-dice rule: no dice to roll, so roll its own and keep the one asked, never a critical', () => {
+    const blades = {
+      id: 'b', dice: [{ count: '@this', sides: 6 }], read: 'highest', zero: { count: 2, read: 'lowest' },
+      matches: [{ face: 6, count: 2, label: 'Critical', critical: 'success' }],
+      bands: [{ upTo: 3, label: 'Bad' }, { upTo: 5, label: 'Partial' }, { label: 'Success' }],
+    };
+    const zero = makeRoll(blades, valueFor({ this: 0 }), d(6, 5, 2));
+    expect([zero.zero, zero.dice, zero.band, faces(zero)]).toEqual([true, 2, 'Bad', ['5x', '2']]);
+    expect(makeRoll(blades, valueFor({ this: 0 }), d(6, 6, 6)).critical).toBeNull();
+    const two = makeRoll(blades, valueFor({ this: 2 }), d(6, 6, 6));
+    expect(two.zero).toBeUndefined();
+    expect([two.critical, two.band]).toEqual(['success', 'Success']);
+  });
+
+  it("says what is wrong with each, in the builder's words", () => {
+    const base = { id: 'v', dice: [{ count: '4', sides: 10, name: 'Hunger' }], read: 'count', at: 6 };
+    const said = (extra) => checkRoll({ ...base, ...extra }, 'roll v').map((p) => `${p.where}: ${p.message}`);
+    expect(said({ matches: [{ face: 10, count: 2, adds: 2, label: 'Crit', critical: 'success' }], cancel: { face: 1 }, glitch: { face: 1, share: 0.5, label: 'Glitch', none: 'Crit glitch' }, effects: [{ name: 'Hunger', face: 1, when: 'failure', label: 'Bestial' }], zero: { count: 2, read: 'lowest' } })).toEqual([]);
+    expect(said({ matches: [{ face: 10, count: 1, label: 'X' }] })).toEqual(['roll v, match 1, count: How many dice match: 2 or more']);
+    expect(said({ matches: [{ face: 'ten', count: 2, label: 'X' }] })).toEqual(['roll v, match 1, face: Must be a whole number, or left out for any face']);
+    expect(said({ matches: [{ count: 2, label: 'X', extra: 1 }] })).toEqual(['roll v, match 1, extra: Not part of a match']);
+    expect(said({ matches: 'pairs' })).toEqual(['roll v, matches: A list of matches']);
+    expect(said({ read: 'sum', at: undefined, cancel: { face: 1 } })).toEqual(['roll v, cancel: Only counted successes can be cancelled']);
+    expect(said({ glitch: { face: 1, share: 2, label: 'G' } })).toEqual(['roll v, glitch, share: A share of the dice, over 0 and up to 1']);
+    expect(said({ glitch: { face: 1, share: 0.5 } })).toEqual(['roll v, glitch, label: Words of up to 40 characters']);
+    expect(said({ effects: [{ name: 'Rage', face: 1, when: 'failure', label: 'X' }] })).toEqual(["roll v, effect 1, name: Must be one of this roll's named dice"]);
+    expect(said({ effects: [{ name: 'Hunger', face: 1, when: 'sometimes', label: 'X' }] })).toEqual(['roll v, effect 1, when: On a critical, a success, a failure or any roll']);
+    expect(said({ zero: { count: 0, read: 'lowest' } })).toEqual(['roll v, zero, count: How many dice: 1 to 10']);
+    expect(said({ zero: { count: 2, read: 'sum' } })).toEqual(['roll v, zero, read: Keep the highest or the lowest']);
+  });
+});
