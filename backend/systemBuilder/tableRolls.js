@@ -26,6 +26,16 @@ const rollsFor = (def, fieldId) => {
     && (r.by.includes(fieldId) || (group && r.by.includes(group.id))));
 };
 
+/** The fields a roll is ROLLED BY, in its order: a stats group as its stats, a stat or formula as itself. */
+const fieldsRolledBy = (def, roll) => {
+  const out = [];
+  for (const id of Array.isArray(roll && roll.by) ? roll.by : []) {
+    const group = groupsOf(def).find((g) => g.id === id);
+    for (const f of group ? group.stats.filter(isPlainObject).map((s) => s.id) : [id]) if (typeof f === 'string' && !out.includes(f)) out.push(f);
+  }
+  return out;
+};
+
 /** The formula that is a stat's modifier: one reading only that stat through a table, `mod(@str)`. */
 const modifierOf = (def, statId) => {
   const tables = new Set(isPlainObject(def.lookups) ? Object.keys(def.lookups) : []);
@@ -43,7 +53,7 @@ const modifierOf = (def, statId) => {
 const fieldsFor = (def, data, fieldId) => {
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
   const mod = (id) => { const m = id ? modifierOf(def, id) : null; return m ? num(data[m]) : 0; };
-  const tie = statOf(def, fieldId)?.tie;
+  const tie = typeof fieldId === 'string' ? statOf(def, fieldId)?.tie : undefined;
   const own = { this: num(data[fieldId]), this_mod: mod(fieldId), tie: tie ? num(data[tie]) : 0, tie_mod: mod(tie) };
   const has = (o, name) => Object.prototype.hasOwnProperty.call(o, name);
   return (name) => (has(own, name) ? own[name] : num(has(data, name) ? data[name] : 0));
@@ -99,28 +109,30 @@ const trayOf = (result) => {
 
 /**
  * Roll a field of a custom system's sheet. `rollId` picks one of the field's rolls (the first if
- * not given); `chosen` the changes picked. Returns { ok: true, roll, result, historyText, results,
+ * not given); `chosen` the changes picked. The builder's TEST ROLL (6b1a) hands in `roll` itself,
+ * which needn't be ROLLED BY anything yet, with no field or any, and `tryCosts` for changes that
+ * cost something, since a test takes nothing. Returns { ok: true, roll, result, historyText, results,
  * diceSides, total, glitch, criticalGlitch } or { ok: false, error } (nothing rolled).
  */
-const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, forName }) => {
-  if (!isPlainObject(definition) || typeof fieldId !== 'string') return { ok: false, error: 'Nothing to roll' };
-  const options = rollsFor(definition, fieldId);
-  const roll = rollId === undefined || rollId === null ? options[0] : options.find((r) => r.id === rollId);
+const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, forName, roll: given, tryCosts = false }) => {
+  if (!isPlainObject(definition) || (!given && typeof fieldId !== 'string')) return { ok: false, error: 'Nothing to roll' };
+  const options = given ? [given] : rollsFor(definition, fieldId);
+  const roll = given ?? (rollId === undefined || rollId === null ? options[0] : options.find((r) => r.id === rollId));
   if (!roll) return { ok: false, error: 'That field has no such roll' };
   const picks = Array.isArray(chosen) ? chosen.filter((c) => typeof c === 'string') : [];
   const costly = (roll.changes ?? []).filter((c) => picks.includes(c.id) && c.cost);
-  if (costly.length) return { ok: false, error: `${costly[0].label} costs something, which the table can't take yet` };
+  if (costly.length && !tryCosts) return { ok: false, error: `${costly[0].label} costs something, which the table can't take yet` };
 
   const result = makeRoll(roll, valueOf(definition, fieldsFor(definition, data, fieldId), data), rng, picks);
   const label = roll.label || roll.id;
-  const what = statOf(definition, fieldId)?.label || formulaOf(definition, fieldId)?.label || fieldId;
+  const what = typeof fieldId === 'string' ? (statOf(definition, fieldId)?.label || formulaOf(definition, fieldId)?.label || fieldId) : null;
   const { working, tags, changes } = describe(result);
   const tray = trayOf(result);
   return {
     ok: true,
     roll: roll.id,
     result,
-    historyText: `${who} rolled ${label} (${what})${forName ? ` for ${forName}` : ''}${changes} [${working}]${tags}`,
+    historyText: `${who} rolled ${label}${what ? ` (${what})` : ''}${forName ? ` for ${forName}` : ''}${changes} [${working}]${tags}`,
     results: tray.results,
     diceSides: tray.diceSides,
     total: result.total,
@@ -129,4 +141,4 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
   };
 };
 
-module.exports = { rollsFor, modifierOf, fieldsFor, rollField, describe };
+module.exports = { rollsFor, fieldsRolledBy, modifierOf, fieldsFor, rollField, describe };
