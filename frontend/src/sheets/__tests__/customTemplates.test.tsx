@@ -160,3 +160,36 @@ describe('drawn by the ordinary renderer', () => {
     expect(onFieldChange).toHaveBeenCalled();
   });
 });
+
+describe('a custom system\'s rolls on its sheet (6b2a)', () => {
+  const ROLLING: CustomRender = {
+    ...VAULT,
+    rolls: [
+      { id: 'check', label: 'Might check', fields: ['might', 'might_mod'], changes: [] },
+      { id: 'push', label: 'Pushed check', fields: ['might'], changes: [{ id: 'push', label: 'Push', cost: { from: 'stress', amount: 2 } }] },
+    ],
+  };
+  const field = (t: ReturnType<typeof templateFromRender>, id: string) => t.sections.flatMap((s) => s.fields).find((f) => f.id === id)!;
+
+  it('gives each field a roll is rolled by its die button, with every roll it has; the others none', () => {
+    const t = templateFromRender(ROLLING);
+    expect(field(t, 'might').roll).toEqual({ formula: '', label: 'Might check' });
+    expect(field(t, 'might').customRolls).toEqual([
+      { id: 'check', label: 'Might check', changes: [] },
+      { id: 'push', label: 'Pushed check', changes: [{ id: 'push', label: 'Push', cost: { from: 'stress', amount: 2 } }] },
+    ]);
+    expect(field(t, 'might_mod').customRolls!.map((r) => r.id)).toEqual(['check']);
+    expect(field(t, 'armor').roll).toBeUndefined();
+    expect(field(templateFromRender(VAULT), 'might').roll).toBeUndefined();
+  });
+
+  it('draws ROLL by a rolled field, which asks for that field\'s roll', () => {
+    const onRoll = vi.fn();
+    render(<SheetRenderer template={templateFromRender(ROLLING)} data={{ might: 14 }} onFieldChange={() => {}} onRoll={onRoll} />);
+    const roll = screen.getAllByRole('button', { name: 'Roll Might check' });
+    expect(roll).toHaveLength(2);
+    fireEvent.click(roll[0]);
+    expect(onRoll).toHaveBeenCalledWith('might', undefined, undefined);
+    expect(screen.queryByRole('button', { name: /Roll ARMOR/ })).toBeNull();
+  });
+});

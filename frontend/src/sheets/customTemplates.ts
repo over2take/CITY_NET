@@ -8,7 +8,7 @@
 
 import { useEffect, useReducer } from 'react';
 import type { Currency } from './currencies';
-import type { SheetTemplate, SheetSection, SheetField, SheetFieldType, SheetLinkSource, SectionLayout, CustomBank } from './types';
+import type { SheetTemplate, SheetSection, SheetField, SheetFieldType, SheetLinkSource, SectionLayout, CustomBank, CustomFieldRoll } from './types';
 
 export interface CustomRenderField {
   id: string;
@@ -59,6 +59,8 @@ export interface CustomRender {
   npc?: { sheet: CustomRenderSheet | null; tiers: { id: string; label: string }[] };
   /** Its house rules, each with whether the table has it on (backend runtime.js, 4j). */
   house_rules?: import('./types').HouseRuleState[];
+  /** Its own rolls (6b2a): each one's name, the fields with a die button for it, and its changes. */
+  rolls?: (CustomFieldRoll & { fields: string[] })[];
 }
 
 /** Fired on window when a custom template has been loaded, so the app can redraw. */
@@ -71,9 +73,19 @@ const pending = new Map<string, Promise<SheetTemplate | null>>();
 export const isCustomSystem = (id: string | null | undefined): id is string =>
   typeof id === 'string' && /^sys_[0-9a-f]{16}$/.test(id);
 
+/** The rolls each field has a die button for, by field (6b2a). */
+const rollsByField = (rolls: CustomRender['rolls']): Map<string, CustomFieldRoll[]> => {
+  const out = new Map<string, CustomFieldRoll[]>();
+  for (const r of rolls ?? []) {
+    for (const f of r.fields) out.set(f, [...(out.get(f) ?? []), { id: r.id, label: r.label, changes: r.changes }]);
+  }
+  return out;
+};
+
 /** One layout as a template. Derived values read-only; only armor writes through to the token,
- *  as on the built-in sheets - HP and cash change on the token and in the bank. */
-const layoutTemplate = (id: string, name: string, sheet: CustomRenderSheet | undefined, derived: Set<string>): SheetTemplate => {
+ *  as on the built-in sheets - HP and cash change on the token and in the bank. A field a roll is
+ *  rolled by gets a die button (`roll`), the server making the roll (6b2a). */
+const layoutTemplate = (id: string, name: string, sheet: CustomRenderSheet | undefined, derived: Set<string>, rolls: Map<string, CustomFieldRoll[]> = new Map()): SheetTemplate => {
   const sections: SheetSection[] = (sheet?.sections || []).map((s) => ({
     id: s.id,
     label: s.label,
@@ -94,6 +106,7 @@ const layoutTemplate = (id: string, name: string, sheet: CustomRenderSheet | und
       ...(f.source ? { source: f.source, ...(f.source === 'token_ac' ? { sourceWritable: true } : {}) } : {}),
       ...(derived.has(f.id) ? { derived: true as const } : {}),
       ...(f.edit === 'gm' ? { gmOnly: true as const } : {}),
+      ...(rolls.has(f.id) ? { roll: { formula: '', label: rolls.get(f.id)![0].label }, customRolls: rolls.get(f.id)! } : {}),
     })),
   }));
   const header = sheet?.header;
@@ -109,10 +122,11 @@ const layoutTemplate = (id: string, name: string, sheet: CustomRenderSheet | und
 /** A render copy as a template, with the NPC layout and tiers when the system has them. */
 export const templateFromRender = (render: CustomRender): SheetTemplate => {
   const derived = new Set(render.derived || []);
+  const rolls = rollsByField(render.rolls);
   const tiers = render.npc?.tiers?.length ? { npcTiers: render.npc.tiers } : {};
   const npcSheet = render.npc?.sheet;
   return {
-    ...layoutTemplate(render.id, render.name, render.sheet, derived),
+    ...layoutTemplate(render.id, render.name, render.sheet, derived, rolls),
     ...(render.words ? { words: render.words } : {}),
     ...(render.parts ? { parts: render.parts } : {}),
     ...(render.buildings ? { buildings: render.buildings } : {}),
@@ -121,7 +135,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.distance ? { distance: render.distance } : {}),
     ...(render.house_rules?.length ? { houseRules: render.house_rules } : {}),
     ...tiers,
-    ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived), ...tiers } } : {}),
+    ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived, rolls), ...tiers } } : {}),
   };
 };
 

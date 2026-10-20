@@ -14,6 +14,7 @@
 // section or condition waiting on a rule that is off is hidden from every answer at once.
 
 const { compileSystem } = require('./derived');
+const { fieldsRolledBy } = require('./tableRolls');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf, LIMITS: NPC_LIMITS } = require('./npc');
 const { rollTier } = require('./tierRolls');
@@ -134,6 +135,15 @@ const renderOf = (id, definition, on = new Set()) => ({
     tiers: tiersWhenOn(definition).map((t) => ({ id: t.id, label: t.label })),
   },
   house_rules: houseRuleList(definition, on),
+  // Its own rolls (6b2a), only what a sheet needs to offer them: each one's name, the fields with a
+  // die button for it, and the changes a player may pick with what they cost. How it rolls stays
+  // on the server (tableRolls.js), as its formulas do.
+  rolls: (Array.isArray(definition.rolls) ? definition.rolls : []).filter((r) => r && typeof r === 'object' && typeof r.id === 'string').map((r) => ({
+    id: r.id,
+    label: typeof r.label === 'string' && r.label.trim() ? r.label : r.id,
+    fields: fieldsRolledBy(definition, r),
+    changes: (Array.isArray(r.changes) ? r.changes : []).map((c) => ({ id: c.id, label: c.label, ...(c.cost ? { cost: { from: c.cost.from, amount: c.cost.amount } } : {}) })),
+  })),
 });
 
 /** A published system, held as the game runs it: its house rules applied, by the table's `chosen` (rule -> on). */
