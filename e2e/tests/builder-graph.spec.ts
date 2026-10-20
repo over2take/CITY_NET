@@ -472,6 +472,19 @@ test("the map's own groups: a formula grouped from its panel, the group named fr
   await page.getByRole('button', { name: 'Edit DEFENCE in graph' }).click();
   await expect(panel).toHaveAttribute('aria-label', 'MAP GROUP DEFENCE');
 
+  // MELEE joins it, from its own column; LINE UP stacks the two, left edges even, MELEE under the save or above it.
+  await page.keyboard.press('Escape');
+  await map.getByTestId('graph-node-melee').click();
+  await panel.getByLabel('Map group').selectOption({ label: 'DEFENCE' });
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'FIT', exact: true }).click();
+  await group.locator('.graph-group-head').click({ position: { x: 120, y: 10 } });
+  await panel.getByRole('button', { name: 'LINE UP' }).click();
+  const box = async (id: string) => (await map.getByTestId(`graph-node-${id}`).boundingBox())!;
+  await expect.poll(async () => Math.round((await box('melee')).x - (await box('save')).x)).toBe(0);
+  const [a, b] = [await box('save'), await box('melee')].sort((p, q) => p.y - q.y);
+  expect(b.y).toBeGreaterThan(a.y + a.height);
+
   // Ungrouped: the box goes, the save stays.
   await panel.getByRole('button', { name: 'UNGROUP' }).click();
   await expect(group).toHaveCount(0);

@@ -825,7 +825,7 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
         <GraphPanel definition={definition} edit={mapEdit} node={picked} preview={preview} tried={tried} trying={tryingSet}
           onClose={() => setSelected(null)} onGoTo={onGoTo} />
       )}
-      {pickedGroup && <GroupPanel definition={definition} edit={mapEdit} group={pickedGroup} onClose={() => setSelected(null)} />}
+      {pickedGroup && <GroupPanel definition={definition} edit={mapEdit} group={pickedGroup} onClose={() => setSelected(null)} graph={graph} positions={positions} />}
     </div>
   );
 }

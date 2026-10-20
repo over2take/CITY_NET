@@ -6,6 +6,7 @@
 
 import type { Definition } from './systemsApi';
 import { formulaList } from './statsRules';
+import { snapUp, GRID, type Graph, type GraphNode, type Positions } from './graphModel';
 
 export interface MapGroup { id: string; label: string; members: string[] }
 
@@ -75,3 +76,27 @@ export const withMapGroupLabel = (def: Definition, id: string, label: string): D
 
 /** A group taken apart: its formulas stay where they are, in no group. */
 export const withoutMapGroup = (def: Definition, id: string): Definition => withGroups(def, mapGroupsOf(def).filter((g) => g.id !== id));
+
+/**
+ * A group lined up (5c3; the user's pick, 2026-10-19: "line up a group"): its formulas stacked in
+ * one column in the order they stand now (top to bottom, then left to right), their left edges on
+ * the leftmost one's, the first where the top one is, each a cell below the last. Only its members
+ * move; undo takes it back.
+ */
+export const lineUp = (graph: Graph, positions: Positions, groupId: string): Positions => {
+  const g = graph.groups.find((x) => x.id === groupId);
+  if (!g) return {};
+  const members = g.members
+    .map((id) => graph.nodes.find((n) => n.id === id))
+    .filter((n): n is GraphNode => !!n && !!positions[n.id])
+    .sort((a, b) => positions[a.id].y - positions[b.id].y || positions[a.id].x - positions[b.id].x);
+  if (!members.length) return {};
+  const x = Math.min(...members.map((n) => positions[n.id].x));
+  let y = positions[members[0].id].y;
+  const out: Positions = {};
+  for (const n of members) {
+    out[n.id] = { x, y };
+    y = snapUp(y + n.height + GRID);
+  }
+  return out;
+};
