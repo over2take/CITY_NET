@@ -4,13 +4,15 @@
 //     "citysys": 1,
 //     "manifest": { "name", "author", "version", "builder", "license", "origin", "exported" },
 //     "definition": { ...the system, format 1 (definition.js) },
-//     "graph": { ...the map's layout, when it has one (graph.js) }
+//     "graph": { ...the map's layout, when it has one (graph.js) },
+//     "rolls": [ ...the system's own rolls, when it has some (rollStyles.js) ]
 //   }
 //
-// The map's layout travels beside the system, not in it (2026-10-18): a builder from before the
-// map reads only "manifest" and "definition", so a file from here installs and publishes there,
-// its map laid out afresh. Here, installing puts it back in the definition, where it is checked
-// with the rest; a file with the layout inside its definition is read too.
+// The map's layout and the rolls travel beside the system, not in it (2026-10-18, rolls 6a2a): a
+// builder from before them reads only "manifest" and "definition", so a file from here installs and
+// publishes there, its map laid out afresh and without the rolls it can't make. Here, installing
+// puts them back in the definition, where they are checked with the rest; a file with them inside
+// its definition is read too.
 //
 // Plain JSON, pretty-printed, so a system can be read, diffed and kept on GitHub. The plan's
 // zip form, a folder of images beside the JSON, arrives when a system can hold images; until
@@ -42,6 +44,9 @@ const appVersion = () => {
 /** A stable fingerprint of a definition as stored. */
 const hashOf = (text) => crypto.createHash('sha256').update(String(text)).digest('hex');
 
+/** The sections a file carries beside its definition, for builders from before them. */
+const BESIDE = ['graph', 'rolls'];
+
 /** A file name from a system's name: lowercase, dashes, never empty. */
 const fileNameFor = (name) => {
   // Accents come off their letters (Ä to A) rather than turning into dashes.
@@ -52,7 +57,7 @@ const fileNameFor = (name) => {
 
 /** The file for a system's published definition. */
 const buildFile = ({ definition: whole, version, origin }) => {
-  const { graph, ...definition } = whole;
+  const { graph, rolls, ...definition } = whole;
   return {
     citysys: FILE_FORMAT,
     manifest: {
@@ -66,6 +71,7 @@ const buildFile = ({ definition: whole, version, origin }) => {
     },
     definition,
     ...(graph !== undefined ? { graph } : {}),
+    ...(rolls !== undefined ? { rolls } : {}),
   };
 };
 
@@ -96,9 +102,10 @@ const readFile = (text) => {
     origin: m.origin,
   };
 
-  // The layout beside the system goes back into it, to be checked like the rest of it.
-  const definition = 'graph' in parsed && !('graph' in parsed.definition)
-    ? { ...parsed.definition, graph: parsed.graph } : parsed.definition;
+  // What travels beside the system goes back into it, to be checked like the rest of it; the
+  // definition's own copy wins where a file has both.
+  const definition = { ...parsed.definition };
+  for (const key of BESIDE) if (key in parsed && !(key in parsed.definition)) definition[key] = parsed[key];
   const checked = checkDefinition(definition);
   if (checked.fatal) return { fatal: checked.fatal };
   return { file: { manifest, definition }, problems: checked.problems };

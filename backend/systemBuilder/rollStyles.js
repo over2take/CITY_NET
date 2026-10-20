@@ -7,6 +7,10 @@
 // presets the builder starts a roll from. A target asked for at the table (a DC) and rerolls made
 // after seeing the dice come with the sheet's chooser (6b).
 //
+// A system's rolls are its `rolls` section (6a2a): a list of these, each with `by` (ROLLED BY: the
+// stats, stats groups and formulas whose die button on the sheet rolls it), checked by checkRolls
+// with the rest of the system.
+//
 //   {
 //     id: 'skill', label: 'Skill check',
 //     dice:    [{ count: '2', sides: 6 }, { count: '@hunger', sides: 10, name: 'Hunger' }],   // 1 DICE
@@ -65,13 +69,17 @@ const LIMITS = {
   extra: 10,
   /** The most a change may cost. */
   cost: 100,
+  /** Rolls in one system. */
+  rolls: 60,
+  /** What one roll may be rolled by. */
+  by: 200,
   label: 40,
 };
 
 /** A Fate die: −1, 0 or +1. */
 const FATE = 'F';
 const READS = ['sum', 'highest', 'lowest', 'count'];
-const ROLL_KEYS = new Set(['id', 'label', 'dice', 'read', 'keep', 'at', 'add', 'against', 'under', 'bands', 'explode', 'natural', 'matches', 'cancel', 'glitch', 'effects', 'zero', 'changes']);
+const ROLL_KEYS = new Set(['id', 'label', 'dice', 'read', 'keep', 'at', 'add', 'against', 'under', 'bands', 'explode', 'natural', 'matches', 'cancel', 'glitch', 'effects', 'zero', 'changes', 'by']);
 const WHEN = ['critical', 'success', 'failure', 'any'];
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -390,6 +398,41 @@ const makeRoll = (roll, value, rng, chosen = []) => {
 };
 
 /**
+ * A system's `rolls` section checked (6a2a), its problems added to `problems`: a list of rolls with
+ * different ids, each a roll checkRoll passes (the system's tables callable in its formula text),
+ * each rolled by stats, stats groups or formulas the system has.
+ */
+const checkRolls = (definition, problems) => {
+  const rolls = definition.rolls;
+  if (rolls === undefined) return;
+  if (!Array.isArray(rolls)) { problems.push({ where: 'rolls', message: 'Must be a list of rolls' }); return; }
+  if (rolls.length > LIMITS.rolls) problems.push({ where: 'rolls', message: `At most ${LIMITS.rolls} rolls` });
+  const tables = new Set(isPlainObject(definition.lookups) ? Object.keys(definition.lookups) : []);
+  const groups = Array.isArray(definition.stats) ? definition.stats.filter(isPlainObject) : [];
+  const owned = new Set([
+    ...groups.map((g) => g.id),
+    ...groups.flatMap((g) => (Array.isArray(g.stats) ? g.stats.filter(isPlainObject).map((st) => st.id) : [])),
+    ...(Array.isArray(definition.derived) ? definition.derived.filter(isPlainObject).map((d) => d.id) : []),
+  ].filter((id) => typeof id === 'string'));
+  const ids = new Set();
+  rolls.slice(0, LIMITS.rolls).forEach((roll, i) => {
+    const where = isPlainObject(roll) && typeof roll.id === 'string' && NAME.test(roll.id) ? `roll ${roll.id}` : `roll ${i + 1}`;
+    problems.push(...checkRoll(roll, where, (name) => tables.has(name)));
+    if (!isPlainObject(roll)) return;
+    if (typeof roll.id === 'string') {
+      if (ids.has(roll.id)) problems.push({ where, message: 'Defined twice' });
+      ids.add(roll.id);
+    }
+    if (roll.by === undefined) return;
+    if (!Array.isArray(roll.by)) { problems.push({ where: `${where}, by`, message: 'A list of stats, stats groups and formulas' }); return; }
+    if (roll.by.length > LIMITS.by) problems.push({ where: `${where}, by`, message: `At most ${LIMITS.by}` });
+    for (const id of roll.by.slice(0, LIMITS.by)) {
+      if (typeof id !== 'string' || !owned.has(id)) problems.push({ where: `${where}, by`, message: `${typeof id === 'string' ? id : 'That'} is not one of this system's stats, stats groups or formulas` });
+    }
+  });
+};
+
+/**
  * The rolls the builder starts from (the picker's presets, approved mockup builder-rolls): the
  * five steps filled in for how each game rolls, to change from there. They read the stat being
  * rolled as @this, its modifier as @this_mod, and a skill's ability as @tie and @tie_mod; a target
@@ -463,4 +506,4 @@ const PRESETS = {
   },
 };
 
-module.exports = { checkRoll, makeRoll, rollDie, PRESETS, LIMITS, FATE, READS };
+module.exports = { checkRoll, checkRolls, makeRoll, rollDie, PRESETS, LIMITS, FATE, READS };

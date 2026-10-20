@@ -52,6 +52,7 @@ const { checkConditions } = require('./conditions');
 const { checkRests, restIdsOf } = require('./rests');
 const { checkHouseRules } = require('./houseRules');
 const { checkGraph } = require('./graph');
+const { checkRolls } = require('./rollStyles');
 
 const FORMAT = 1;
 
@@ -67,7 +68,7 @@ const LIMITS = {
   word: 40,
 };
 
-const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules', 'graph']);
+const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules', 'graph', 'rolls']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -177,6 +178,7 @@ const checkDefinition = (definition) => {
   checkRests(definition, problems);
   checkHouseRules(definition, problems);
   checkGraph(definition, problems);
+  checkRolls(definition, problems);
   return { problems };
 };
 

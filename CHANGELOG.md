@@ -131,6 +131,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   other), a push for more dice, a bonus to the total, each with what it costs; and the rolls the builder
   will start from: D&D, PbtA, Blades, Vampire, Fate, CWN, CP:R and SR6. The CWN, CP:R and SR6 presets
   roll exactly as the app's own code for those games does, checked with the same dice.
+- **Rolls are part of a system (6a2a).** A system can now hold its own rolls, each saying which stats,
+  stats groups or formulas roll it, checked like everything else in it. A shared system file carries
+  them beside the system, so a builder from before rolls still installs the file (checked with the dev
+  branch's own reader); installed here, they come back with it.
 
 - **A shared system file installs on a builder from before the map.** A .citysys file now carries
   the graph view's layout beside the system rather than inside it. A builder from before the map
