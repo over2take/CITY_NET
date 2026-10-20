@@ -5,7 +5,8 @@
 //
 // A new roll starts from a preset and takes its id from its first name, kept after; its five steps
 // can be replaced by another preset's, or changed one by one (6b1b1: the dice, how they are read,
-// what is added, a target and the bands; 6b1b2: the special results). ROLLED BY lists the stats, stats groups and formulas
+// what is added, a target and the bands; 6b1b2: the special results; 6b1b3: the changes a player
+// picks before rolling). ROLLED BY lists the stats, stats groups and formulas
 // whose die button on the sheet rolls it. Each change keeps a roll the server takes: switching how
 // the dice are read drops what only the old way used, and the last band always catches the rest.
 
@@ -356,6 +357,53 @@ export const withRollZero = (def: Definition, id: string, patch: Partial<NonNull
     if (patch === null) delete next.zero; else next.zero = { ...(r.zero ?? { count: 2, read: 'lowest' }), ...patch };
     return next;
   });
+
+// ─── CHANGES (6b1b3) ───────────────────────────────────────────────────────
+
+export type ChangePatch = {
+  label?: string;
+  /** Extra dice, or null for none. */
+  extra?: { dice: number; keep?: 'highest' | 'lowest' } | null;
+  /** Formula text added to the total, or null for nothing. */
+  add?: string | null;
+  /** What it costs, or null for nothing. */
+  cost?: { from: string; amount: number } | null;
+};
+
+/**
+ * A change a player picks before rolling: a new one (a bonus of 1, its id from its first name, kept
+ * after), one changed, or one taken away. Ten at most (backend LIMITS.naturals). A change keeps at
+ * least one thing it does: taking away its last leaves it adding 1.
+ */
+export const withRollChange = (def: Definition, id: string, change: { add: true } | { remove: number } | { set: number; patch: ChangePatch }): Definition =>
+  changed(def, id, (r) => {
+    let list = [...(r.changes ?? [])];
+    if ('add' in change) {
+      if (list.length >= 10) return r;
+      list.push({ id: idFor('Bonus', list.map((c) => c.id)), label: 'Bonus', add: '1' });
+    } else if ('remove' in change) {
+      list = list.filter((_, i) => i !== change.remove);
+    } else {
+      const p = change.patch;
+      list = list.map((c, i) => {
+        if (i !== change.set) return c;
+        const next: RollChange = { ...c };
+        if (p.label !== undefined) next.label = p.label.slice(0, 40);
+        if (p.extra === null) delete next.extra; else if (p.extra) next.extra = { dice: Math.max(1, Math.min(10, p.extra.dice)), ...(p.extra.keep ? { keep: p.extra.keep } : {}) };
+        if (p.add === null) delete next.add; else if (p.add !== undefined) next.add = p.add;
+        if (p.cost === null) delete next.cost; else if (p.cost) next.cost = { from: p.cost.from, amount: Math.max(1, Math.min(100, p.cost.amount)) };
+        if (next.extra === undefined && next.add === undefined) next.add = '1';
+        return next;
+      });
+    }
+    const next: Roll = { ...r };
+    if (list.length) next.changes = list; else delete next.changes;
+    return next;
+  });
+
+/** What a change can cost: each stat, by id, in players' names. */
+export const costables = (def: Definition): { id: string; label: string }[] =>
+  statGroups(def).flatMap((g) => g.stats).map((st) => ({ id: st.id, label: (st.label || st.id).toUpperCase() }));
 
 /** What a roll can be ROLLED BY: the stats groups, then each stat, then the formulas. */
 export const rollables = (def: Definition): { id: string; label: string; kind: 'group' | 'stat' | 'formula' }[] => [
