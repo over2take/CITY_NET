@@ -131,6 +131,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   now has a ROLL button on the sheet, for players and for NPCs. A click rolls it on the server from the
   sheet as saved, into the roll log and dice tray like any roll. Choosing between rolls, and picking
   advantage or a push first, comes next.
+- **Pick before rolling (6b2b).** Where a stat has more than one roll, or a roll offers choices like
+  ADVANTAGE, its ROLL button asks first: which roll, which choices, then ROLL. Anything else still
+  rolls on the first click. A choice that costs something (2 Stress) shows its cost and is off until
+  the table can take it, which comes next.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

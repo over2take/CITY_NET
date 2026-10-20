@@ -28,6 +28,9 @@ export interface SheetOption { value: string; label: string }
 export type SheetLinkSource =
   | 'token_hp' | 'token_hp_max' | 'bank_balance' | 'token_ac' | 'token_ac_ranged';
 
+/** Which of a field's rolls, and the changes picked, from the chooser by the sheet (6b2b). */
+export interface RollPick { rollId: string; changes: string[] }
+
 /** One of a custom system's rolls, as a sheet offers it (backend runtime.js renderOf rolls). */
 export interface CustomFieldRoll { id: string; label: string; changes: { id: string; label: string; cost?: { from: string; amount: number } }[] }
 

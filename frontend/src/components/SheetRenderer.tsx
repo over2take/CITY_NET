@@ -13,6 +13,8 @@ import {
 } from '../sheets/cyberwareEffects';
 import React, { useState, useEffect, useMemo } from 'react';
 import type { SheetTemplate, SheetSection, SheetField, SheetData, SheetFieldValue } from '../sheets';
+import type { RollPick } from '../sheets/types';
+import { RollChooser } from './RollChooser';
 import { wordFor, asLabel } from '../sheets/words';
 import { TvPortrait } from './TvPortrait';
 import { xpProgress, describeXp } from '../sheets/cwnAdvancement';
@@ -62,8 +64,9 @@ interface SheetRendererProps {
   onOpenLink?: (source: NonNullable<SheetField['source']>) => void;
   /** Roll a rollable field. The server resolves the formula against the
    *  stored sheet - the client only names the field. luck = declared LUCK
-   *  spend for this roll (armed on the sheet, consumed server-side). */
-  onRoll?: (fieldId: string, luck?: number, negateFumble?: boolean) => void;
+   *  spend for this roll (armed on the sheet, consumed server-side). `pick` is a custom system's
+   *  roll and changes, from the chooser (6b2b). */
+  onRoll?: (fieldId: string, luck?: number, negateFumble?: boolean, pick?: RollPick) => void;
   /** House-rule gate: show the 1-LUCK fumble shield control. Off = a natural
    *  1 always fumbles and the button is hidden. */
   allowFumbleShield?: boolean;
@@ -1828,11 +1831,23 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
   const effectiveAllowFumbleShield = allowFumbleShield && template.allowFumbleShield !== false;
   const [armedLuck, setArmedLuck] = useState(0);
   const [armedNegate, setArmedNegate] = useState(false);
+  // A custom system's field with more than one roll, or a roll with changes, asks first (6b2b).
+  const [choosing, setChoosing] = useState<SheetField | null>(null);
+  const rollNow = (fieldId: string, pick?: RollPick) => {
+    if (!onRoll) return;
+    // A pick only when the chooser made one, so every other roll calls onRoll as it always has.
+    const luck = armedLuck > 0 ? armedLuck : undefined;
+    if (pick) onRoll(fieldId, luck, armedNegate || undefined, pick);
+    else onRoll(fieldId, luck, armedNegate || undefined);
+    setArmedLuck(0);
+    setArmedNegate(false);
+  };
   const handleRoll = onRoll
     ? (fieldId: string) => {
-        onRoll(fieldId, armedLuck > 0 ? armedLuck : undefined, armedNegate || undefined);
-        setArmedLuck(0);
-        setArmedNegate(false);
+        const field = template.sections.flatMap((s) => s.fields).find((f) => f.id === fieldId);
+        const rolls = field?.customRolls ?? [];
+        if (field && (rolls.length > 1 || rolls.some((r) => r.changes.length))) setChoosing(field);
+        else rollNow(fieldId);
       }
     : undefined;
   const [closedSections, setClosedSections] = useState<Set<string>>(new Set());
@@ -1965,6 +1980,10 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         flex: 1, overflowY: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column',
         gap: '6px', paddingRight: '18px', scrollbarGutter: 'stable',
       }}>
+        {choosing && onRoll && (
+          <RollChooser key={choosing.id} field={choosing} onCancel={() => setChoosing(null)}
+            onRoll={(pick) => { rollNow(choosing.id, pick); setChoosing(null); }} />
+        )}
         {tabHasRolls && (
           <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px', fontSize: '0.6rem', opacity: 0.55, letterSpacing: '1px' }}>
             {onRoll ? <>click <DiceIcon size={11} /> to roll</> : <>rolls land in the dice tray</>}
