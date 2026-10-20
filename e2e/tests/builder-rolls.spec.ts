@@ -63,3 +63,33 @@ test('a roll made from a preset, rolled by a group, kept, and test rolled on the
   await expect(page.getByTestId('roll-pbta_move').getByLabel('Roll name')).toHaveValue('Skill check');
   await expect(page.getByTestId('roll-pbta_move').getByRole('region', { name: 'Rolled by' }).getByRole('button', { name: 'SKILLS' })).toHaveAttribute('aria-pressed', 'true');
 });
+
+test('a roll\'s dice, reading, adding and bands edited, and TEST ROLL rolling it as edited', async ({ page, request }, info) => {
+  const name = `Editing Hearth ${info.retry + 1}`;
+  const token = await gmToken(request);
+  await asGm(request, token, 'post', '/api/systems', { definition: { ...HEARTH(name), rolls: [{ id: 'skill', label: 'Skill check', dice: [{ count: '2', sides: 6 }], add: '@this', by: ['skills'] }] } });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'forms' });
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await signInAsGm(page);
+  await openSystem(page, name);
+  await page.getByRole('tab', { name: 'ROLLS' }).click();
+  const roll = page.getByTestId('roll-skill');
+
+  // 3d6, keep the highest two, + @this, read on two bands.
+  await roll.getByLabel('Dice 1: how many').fill('3');
+  await roll.getByRole('region', { name: 'READ THE DICE' }).getByRole('button', { name: 'KEEP HIGHEST' }).click();
+  await roll.getByLabel('How many dice are kept').fill('2');
+  await roll.getByRole('region', { name: 'ADD AND COMPARE' }).getByRole('button', { name: '+ BANDS' }).click();
+  await roll.getByLabel('Band 1: up to').fill('8');
+  await roll.getByLabel('Band 2: words').fill('Strong hit');
+
+  // TEST ROLL rolls it as it now stands: three dice, one not counted, on the bands.
+  const test_ = page.getByTestId('test-roll');
+  await test_.getByRole('button', { name: 'TEST ROLL ▸' }).click();
+  await expect(test_.getByTestId('test-outcome')).toHaveText(/^(MISS|STRONG HIT)$/);
+  await expect(test_.getByTestId('test-dice').locator('span')).toHaveCount(3);
+  // Three dice, exactly one not counted (shown in brackets), wherever it fell.
+  await expect(test_.getByTestId('test-working')).toHaveText(/^\[[\d() ]+ = \d+ \+ 2 = \d+\] — (MISS|STRONG HIT)$/);
+  expect(((await test_.getByTestId('test-working').textContent()) ?? '').split(' = ')[0].match(/\(\d\)/g)).toHaveLength(1);
+  if (process.env.GRAPH_SHOTS) await page.screenshot({ path: path.join(SHOTS, 'builder-rolls-editing.png'), fullPage: true });
+});

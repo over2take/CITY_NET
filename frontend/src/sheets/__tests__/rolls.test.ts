@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
   PRESETS, rollList, withNewRoll, withRollPreset, withRollLabel, withRolledBy, withoutRoll, rollables, fieldsRolledBy, stepsOf,
+  withRollDice, withRollDiceAdded, withRollDiceRemoved, withRollRead, withRollAdd, withRollAgainst, withRollBands,
 } from '../rolls';
 import type { Definition } from '../systemsApi';
 
@@ -127,5 +128,88 @@ describe('a roll\'s five steps in words', () => {
     expect(stepsOf({ id: 'u', dice: [{ count: '1', sides: 100 }], against: '@this', under: true }).against).toBe('@this · AT OR UNDER SUCCEEDS');
     expect(stepsOf({ id: 'd', ...PRESETS.dnd.roll }).changes).toEqual(['ADVANTAGE · +1 DIE, KEEP THE HIGHEST', 'DISADVANTAGE · +1 DIE, KEEP THE LOWEST']);
     expect(stepsOf({ id: 'f', dice: [{ count: '4', sides: 'F' }] }).dice).toEqual(['4 × dF']);
+  });
+});
+
+describe('the steps changed one by one (6b1b1)', () => {
+  const base = () => withNewRoll(HEARTH, 'pbta')!.definition;
+  const only = (def: Definition) => rollList(def)[0];
+
+  it('the dice: how many, the size, a name, another kind, one taken away (never the last)', () => {
+    let def = withRollDice(base(), 'pbta_move', 0, { count: '@this', sides: 10, name: 'Hunger' });
+    expect(only(def).dice).toEqual([{ count: '@this', sides: 10, name: 'Hunger' }]);
+    def = withRollDice(def, 'pbta_move', 0, { name: '  ' });
+    expect(only(def).dice).toEqual([{ count: '@this', sides: 10 }]);
+    def = withRollDice(def, 'pbta_move', 0, { sides: 'F' });
+    expect(only(def).dice[0].sides).toBe('F');
+    def = withRollDiceAdded(def, 'pbta_move');
+    expect(only(def).dice).toEqual([{ count: '@this', sides: 'F' }, { count: '1', sides: 6 }]);
+    expect(problems(def)).toEqual([]);
+    def = withRollDiceRemoved(def, 'pbta_move', 0);
+    expect(only(def).dice).toEqual([{ count: '1', sides: 6 }]);
+    expect(withRollDiceRemoved(def, 'pbta_move', 0)).toEqual(def);
+    let full = def;
+    for (let i = 0; i < 9; i += 1) full = withRollDiceAdded(full, 'pbta_move');
+    expect(only(full).dice).toHaveLength(6);
+  });
+
+  it('a named kind taken away takes its effects with it', () => {
+    const def = withNewRoll(HEARTH, 'vampire')!.definition;
+    const gone = withRollDiceRemoved(def, 'vampire_pool', 1);
+    expect('effects' in only(gone)).toBe(false);
+    expect(problems(gone)).toEqual([]);
+  });
+
+  it('how the dice are read, dropping what only the old way used', () => {
+    let def = withRollRead(base(), 'pbta_move', 'highest', { keep: '2' });
+    expect([only(def).read, only(def).keep]).toEqual(['highest', '2']);
+    def = withRollRead(def, 'pbta_move', 'lowest');
+    expect([only(def).read, only(def).keep]).toEqual(['lowest', '2']);
+    def = withRollRead(def, 'pbta_move', 'highest', { keep: '1' });
+    expect('keep' in only(def)).toBe(false);
+    def = withRollRead(def, 'pbta_move', 'count');
+    expect([only(def).read, only(def).at, 'keep' in only(def)]).toEqual(['count', 5, false]);
+    def = withRollRead(def, 'pbta_move', 'count', { at: 6 });
+    expect(only(def).at).toBe(6);
+    expect(problems(def)).toEqual([]);
+    def = withRollRead(def, 'pbta_move', 'sum');
+    expect(['read', 'at', 'keep'].map((k) => k in only(def))).toEqual([false, false, false]);
+    // Cancelling and a die taken away only belong to counting and to a sum.
+    const sr6 = withRollRead({ ...withNewRoll(HEARTH, 'sr6')!.definition }, 'sr6_pool', 'count');
+    const withCancel: Definition = { ...sr6, rolls: [{ ...only(sr6), cancel: { face: 1 } }] };
+    expect('cancel' in only(withRollRead(withCancel, 'sr6_pool', 'highest'))).toBe(false);
+    const cpr = withRollRead(withNewRoll(HEARTH, 'cpr')!.definition, 'cp_r_check', 'highest');
+    expect(only(cpr).explode).toEqual({ on: 10, once: true, first: true });
+    expect(problems(cpr)).toEqual([]);
+  });
+
+  it('what is added, and a target met over or under, blank for none', () => {
+    let def = withRollAdd(base(), 'pbta_move', '@this + 2');
+    expect(only(def).add).toBe('@this + 2');
+    def = withRollAdd(def, 'pbta_move', ' ');
+    expect('add' in only(def)).toBe(false);
+    def = withRollAgainst(def, 'pbta_move', '@this', true);
+    expect([only(def).against, only(def).under]).toEqual(['@this', true]);
+    expect(problems(def)).toEqual([]);
+    def = withRollAgainst(def, 'pbta_move', '@this', false);
+    expect('under' in only(def)).toBe(false);
+    def = withRollAgainst(withRollAgainst(def, 'pbta_move', '13', true), 'pbta_move', '');
+    expect(['against', 'under'].map((k) => k in only(def))).toEqual([false, false]);
+  });
+
+  it('the bands, as a table\'s: started, one added under the last, changed, taken away (never the last), none', () => {
+    let def = withRollBands(base(), 'pbta_move', { none: true });
+    expect('bands' in only(def)).toBe(false);
+    def = withRollBands(def, 'pbta_move', { start: true });
+    expect(only(def).bands).toEqual([{ upTo: 6, label: 'Miss' }, { label: 'Hit' }]);
+    def = withRollBands(def, 'pbta_move', { add: true });
+    expect(only(def).bands).toEqual([{ upTo: 6, label: 'Miss' }, { upTo: 7, label: 'New band' }, { label: 'Hit' }]);
+    def = withRollBands(def, 'pbta_move', { set: 1, upTo: 9, label: 'Cost' });
+    def = withRollBands(def, 'pbta_move', { set: 2, upTo: 99, label: 'Full' });
+    expect(only(def).bands).toEqual([{ upTo: 6, label: 'Miss' }, { upTo: 9, label: 'Cost' }, { label: 'Full' }]);
+    expect(problems(def)).toEqual([]);
+    expect(withRollBands(def, 'pbta_move', { remove: 2 })).toEqual(def);
+    expect(only(withRollBands(def, 'pbta_move', { remove: 0 })).bands).toEqual([{ upTo: 9, label: 'Cost' }, { label: 'Full' }]);
+    expect(only(withRollBands(def, 'pbta_move', { start: true }))).toEqual(only(def));
   });
 });

@@ -61,9 +61,12 @@ describe('the ROLLS tab', () => {
     expect(within(screen.getByRole('navigation', { name: 'Rolls' })).getByRole('button', { name: /SKILL CHECK/ }).getAttribute('aria-current')).toBe('true');
     const roll = screen.getByTestId('roll-skill');
     expect((within(roll).getByLabelText('Roll name') as HTMLInputElement).value).toBe('Skill check');
-    expect(within(roll).getByRole('region', { name: 'DICE' }).textContent).toContain('2 × d6');
-    expect(within(roll).getByRole('region', { name: 'READ THE DICE' }).textContent).toContain('SUM');
-    expect(within(roll).getByRole('region', { name: 'ADD AND COMPARE' }).textContent).toContain('7–9SUCCESS AT A COST');
+    const dice = within(roll).getByRole('region', { name: 'DICE' });
+    expect([(within(dice).getByLabelText('Dice 1: how many') as HTMLInputElement).value, (within(dice).getByLabelText('Dice 1: size') as HTMLSelectElement).value]).toEqual(['2', '6']);
+    expect(within(within(roll).getByRole('region', { name: 'READ THE DICE' })).getByRole('button', { name: 'SUM' }).getAttribute('aria-pressed')).toBe('true');
+    const compare = within(roll).getByRole('region', { name: 'ADD AND COMPARE' });
+    expect((within(compare).getByLabelText('Add') as HTMLInputElement).value).toBe('@this');
+    expect([(within(compare).getByLabelText('Band 2: up to') as HTMLInputElement).value, (within(compare).getByLabelText('Band 2: words') as HTMLInputElement).value]).toEqual(['9', 'Success at a cost']);
     expect(within(roll).getByRole('region', { name: 'CHANGE A ROLL' }).textContent).toContain('FORWARD +1 · + 1');
     const by = within(roll).getByRole('region', { name: 'Rolled by' });
     expect(within(by).getByRole('button', { name: 'SKILLS' }).getAttribute('aria-pressed')).toBe('true');
@@ -143,5 +146,70 @@ describe('TEST ROLL', () => {
     testRoll.mockResolvedValueOnce({ ok: false, error: 'roll act, read: Sum, highest, lowest or count' } as never);
     await userEvent.click(within(test).getByRole('button', { name: 'TEST ROLL ▸' }));
     expect((await within(test).findByRole('alert')).textContent).toBe('roll act, read: Sum, highest, lowest or count');
+  });
+});
+
+describe('editing steps 1 to 3 (6b1b1)', () => {
+  it('the dice: how many, the size, a name, another kind and one taken away', async () => {
+    const { last } = open();
+    await toRolls();
+    const dice = within(screen.getByTestId('roll-skill')).getByRole('region', { name: 'DICE' });
+    const count = within(dice).getByLabelText('Dice 1: how many');
+    await userEvent.clear(count);
+    await userEvent.type(count, '@this');
+    await userEvent.selectOptions(within(dice).getByLabelText('Dice 1: size'), 'd10');
+    await userEvent.type(within(dice).getByLabelText('Dice 1: name'), 'Hunger');
+    expect(rollsOf(last())[0].dice).toEqual([{ count: '@this', sides: 10, name: 'Hunger' }]);
+    expect((within(dice).getByRole('button', { name: 'Remove dice 1' }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(within(dice).getByRole('button', { name: '+ ADD DICE' }));
+    expect(rollsOf(last())[0].dice).toEqual([{ count: '@this', sides: 10, name: 'Hunger' }, { count: '1', sides: 6 }]);
+    await userEvent.click(within(dice).getByRole('button', { name: 'Remove dice 1' }));
+    expect(rollsOf(last())[0].dice).toEqual([{ count: '1', sides: 6 }]);
+  });
+
+  it('how the dice are read: keeping as many as typed, or counting successes at a face', async () => {
+    const { last } = open();
+    await toRolls();
+    const read = within(screen.getByTestId('roll-skill')).getByRole('region', { name: 'READ THE DICE' });
+    await userEvent.click(within(read).getByRole('button', { name: 'KEEP HIGHEST' }));
+    expect(within(read).getByRole('button', { name: 'KEEP HIGHEST' }).getAttribute('aria-pressed')).toBe('true');
+    const keep = within(read).getByLabelText('How many dice are kept');
+    await userEvent.clear(keep);
+    await userEvent.type(keep, '2');
+    expect([rollsOf(last())[0].read, rollsOf(last())[0].keep]).toEqual(['highest', '2']);
+    await userEvent.click(within(read).getByRole('button', { name: 'COUNT SUCCESSES' }));
+    const at = within(read).getByLabelText('A success starts at');
+    await userEvent.clear(at);
+    await userEvent.type(at, '6');
+    expect([rollsOf(last())[0].read, rollsOf(last())[0].at, 'keep' in rollsOf(last())[0]]).toEqual(['count', 6, false]);
+  });
+
+  it('what is added, a target with rolling under, and the bands', async () => {
+    const { last } = open();
+    await toRolls();
+    const compare = within(screen.getByTestId('roll-skill')).getByRole('region', { name: 'ADD AND COMPARE' });
+    const add = within(compare).getByLabelText('Add');
+    await userEvent.clear(add);
+    await userEvent.type(add, '@this + 1');
+    expect(rollsOf(last())[0].add).toBe('@this + 1');
+    const under = within(compare).getByRole('switch', { name: /ROLL UNDER/ }) as HTMLButtonElement;
+    expect(under.disabled).toBe(true);
+    await userEvent.type(within(compare).getByLabelText('Against'), '@this');
+    await userEvent.click(under);
+    expect([rollsOf(last())[0].against, rollsOf(last())[0].under]).toEqual(['@this', true]);
+    const bands = within(compare).getByTestId('bands');
+    const top = within(bands).getByLabelText('Band 1: up to');
+    await userEvent.clear(top);
+    await userEvent.type(top, '5');
+    await userEvent.clear(within(bands).getByLabelText('Band 3: words'));
+    await userEvent.type(within(bands).getByLabelText('Band 3: words'), 'Strong hit');
+    expect(rollsOf(last())[0].bands).toEqual([{ upTo: 5, label: 'Miss' }, { upTo: 9, label: 'Success at a cost' }, { label: 'Strong hit' }]);
+    expect(bands.textContent).toContain('ABOVE9');
+    await userEvent.click(within(bands).getByRole('button', { name: 'Remove band 2' }));
+    expect(rollsOf(last())[0].bands).toEqual([{ upTo: 5, label: 'Miss' }, { label: 'Strong hit' }]);
+    await userEvent.click(within(bands).getByRole('button', { name: 'NO BANDS' }));
+    expect('bands' in rollsOf(last())[0]).toBe(false);
+    await userEvent.click(within(compare).getByRole('button', { name: '+ BANDS' }));
+    expect(rollsOf(last())[0].bands).toEqual([{ upTo: 6, label: 'Miss' }, { label: 'Hit' }]);
   });
 });
