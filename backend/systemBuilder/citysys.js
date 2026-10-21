@@ -5,10 +5,11 @@
 //     "manifest": { "name", "author", "version", "builder", "license", "origin", "exported" },
 //     "definition": { ...the system, format 1 (definition.js) },
 //     "graph": { ...the map's layout, when it has one (graph.js) },
-//     "rolls": [ ...the system's own rolls, when it has some (rollStyles.js) ]
+//     "rolls": [ ...the system's own rolls, when it has some (rollStyles.js) ],
+//     "symbols": [ ... ], "dice": [ ...its own dice and their symbols (diceFaces.js, 6c1a) ]
 //   }
 //
-// The map's layout and the rolls travel beside the system, not in it (2026-10-18, rolls 6a2a): a
+// The map's layout, the rolls and the dice travel beside the system, not in it (2026-10-18, rolls 6a2a): a
 // builder from before them reads only "manifest" and "definition", so a file from here installs and
 // publishes there, its map laid out afresh and without the rolls it can't make. Here, installing
 // puts them back in the definition, where they are checked with the rest; a file with them inside
@@ -45,7 +46,7 @@ const appVersion = () => {
 const hashOf = (text) => crypto.createHash('sha256').update(String(text)).digest('hex');
 
 /** The sections a file carries beside its definition, for builders from before them. */
-const BESIDE = ['graph', 'rolls'];
+const BESIDE = ['graph', 'rolls', 'symbols', 'dice'];
 
 /** A file name from a system's name: lowercase, dashes, never empty. */
 const fileNameFor = (name) => {
@@ -57,7 +58,9 @@ const fileNameFor = (name) => {
 
 /** The file for a system's published definition. */
 const buildFile = ({ definition: whole, version, origin }) => {
-  const { graph, rolls, ...definition } = whole;
+  const definition = { ...whole };
+  const beside = {};
+  for (const key of BESIDE) if (key in definition) { if (definition[key] !== undefined) beside[key] = definition[key]; delete definition[key]; }
   return {
     citysys: FILE_FORMAT,
     manifest: {
@@ -70,8 +73,7 @@ const buildFile = ({ definition: whole, version, origin }) => {
       exported: new Date().toISOString(),
     },
     definition,
-    ...(graph !== undefined ? { graph } : {}),
-    ...(rolls !== undefined ? { rolls } : {}),
+    ...beside,
   };
 };
 
