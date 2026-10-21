@@ -37,6 +37,10 @@ describe('the server\'s problems, on the map', () => {
   it('each tied to the node that shows what it is about, in players\' names', () => {
     expect(on('derived melee, formula', 'No stat or formula called @nowhere')).toEqual({ kind: 'error', text: 'MELEE ATTACK: No stat or formula called @nowhere', node: 'melee' });
     expect(on('derived melee')).toMatchObject({ node: 'melee' });
+    // A roll's (6b4a), on its ROLL node.
+    const rolling = { ...HEARTH, rolls: [{ id: 'skill', label: 'Skill check', dice: [{ count: '2', sides: 6 }] }] };
+    expect(mapProblems(rolling, graphOf(rolling), [{ where: 'roll skill, by 1', message: 'Wrong' }])[0]).toEqual({ kind: 'error', text: 'ROLL SKILL CHECK: Wrong', node: 'roll:skill' });
+    expect(mapProblems(rolling, graphOf(rolling), [{ where: 'roll nope', message: 'Wrong' }])[0].node).toBeNull();
     expect(on('derived melee, alternative, formula')).toMatchObject({ node: 'melee', text: 'MELEE ATTACK: Wrong' });
     // A modifier shown as a column of its stats list, and a stat as a row of it.
     expect(on('derived str_mod, formula')).toEqual({ kind: 'error', text: 'STR MOD: Wrong', node: 'abilities' });

@@ -11,7 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
   referencesIn, graphOf, heightOf, exprHeight, columnsOf, layoutOf, positionsOf, savedPositions, withPositions, withCollapsed,
-  groupBoxOf, shownWires, foldedHeight, clearSpot, clearOf, takenBoxes, relatedTo, GRID, REACH, SIZE, type Graph, type GraphNode,
+  groupBoxOf, shownWires, foldedHeight, clearSpot, clearOf, takenBoxes, relatedTo, rollText, GRID, REACH, SIZE, type Graph, type GraphNode,
 } from '../graphModel';
 import type { Definition } from '../systemsApi';
 
@@ -412,8 +412,10 @@ describe('room for something new (5b6a)', () => {
         const far = Math.hypot(spot.x - at.x, spot.y - at.y) / GRID;
         expect(far, `${def.name} ${n.id}`).toBeGreaterThan(0);
         const reach = Math.ceil(far);
+        const cells = ((spot.x - at.x) / GRID) ** 2 + ((spot.y - at.y) / GRID) ** 2;
         for (let dx = -reach; dx <= reach; dx += 1) for (let dy = -reach; dy <= reach; dy += 1) {
-          if (Math.hypot(dx, dy) < far) expect(clearOf(taken, { x: at.x + dx * GRID, y: at.y + dy * GRID }, size), `${def.name} ${n.id} ${dx},${dy}`).toBe(false);
+          // In whole cells squared, exact: Math.hypot can put the spot found a hair nearer than itself.
+          if (dx * dx + dy * dy < cells) expect(clearOf(taken, { x: at.x + dx * GRID, y: at.y + dy * GRID }, size), `${def.name} ${n.id} ${dx},${dy}`).toBe(false);
         }
       }
     }
@@ -468,5 +470,68 @@ describe('what a node is part of, for hover highlighting (5c1)', () => {
         for (const w of graph.wires.filter((x) => x.kind !== 'note' && x.from === n.id)) expect(relatedTo(graph, w.to).has(n.id), `${def.name} ${w.id}`).toBe(true);
       }
     }
+  });
+});
+
+describe('a roll on the map (6b4a)', () => {
+  const ROLLING: Definition = {
+    ...HEARTH,
+    rolls: [
+      { id: 'skill', label: 'Skill check', dice: [{ count: '2', sides: 6 }], add: '@this + @tie_mod + floor(@lvl / 2)',
+        bands: [{ upTo: 6, label: 'Miss' }, { upTo: 9, label: 'Cost' }, { label: 'Hit' }],
+        changes: [{ id: 'fwd', label: 'Forward', add: '@wit_mod' }, { id: 'push', label: 'Push', extra: { dice: 1 }, cost: { from: 'lvl', amount: 1 } }], by: ['skills'] },
+      { id: 'save', label: 'Save', dice: [{ count: '1', sides: 20 }], against: '@this', under: true, by: ['melee'] },
+      { id: 'pool', label: 'Pool', dice: [{ count: '@this + @hunger', sides: 10, name: 'Hunger' }], read: 'count', at: 6, by: ['str', 'gone'] },
+      { id: 'fate', label: 'Fate', dice: [{ count: '4', sides: 'F' }], read: 'highest', keep: '2' },
+    ],
+  };
+  const g = graphOf(ROLLING);
+  const rows = (id: string) => node(g, id).inputs.map((i) => `${i.key} ${i.kind} ${i.label} · ${i.about ?? i.where ?? ''}${i.missing ? ' MISSING' : ''}`);
+
+  it('one ROLL node a roll: what it is rolled by, then what its dice and adding read, @this and the rest rows of their own', () => {
+    expect(g.nodes.filter((n) => n.kind === 'roll').map((n) => n.id)).toEqual(['roll:skill', 'roll:save', 'roll:pool', 'roll:fate']);
+    expect(node(g, 'roll:skill')).toMatchObject({ label: 'SKILL CHECK', text: '2d6 + @this + @tie_mod + floor(LEVEL / 2)', roll: { outcome: '10+ · 7–9 · 6−', changes: ['FORWARD', 'PUSH ◆'] } });
+    expect(rows('roll:skill')).toEqual([
+      'by:skills value SKILLS · ROLLED BY · EACH STAT',
+      'b:@this field @this · THE STAT ROLLED',
+      "b:@tie_mod field @tie_mod · ITS ABILITY'S MODIFIER",
+      'b:@lvl value LEVEL · CHARACTER',
+      // FORWARD's +WIT MOD: read by a change, wired in all the same.
+      'b:@wit_mod value WIT MOD · ABILITIES',
+    ]);
+    expect(rows('roll:pool')).toEqual([
+      'by:str value STRENGTH · ROLLED BY', 'by:gone value GONE · ROLLED BY · NOT HERE MISSING',
+      'b:@this field @this · THE STAT ROLLED', 'b:@hunger field @hunger ·  MISSING',
+    ]);
+    expect(node(g, 'roll:pool').inputs.find((i) => i.key === 'b:@hunger')).toMatchObject({ known: false });
+    expect(node(g, 'roll:save')).toMatchObject({ text: '1d20 UNDER @this', roll: { outcome: 'AT OR UNDER THE TARGET', changes: [] } });
+    expect(node(g, 'roll:pool').roll!.outcome).toBe('SUCCESSES');
+    expect(node(g, 'roll:fate')).toMatchObject({ text: '4dF KEEP HIGHEST 2', inputs: [], roll: { outcome: 'THE TOTAL' } });
+  });
+
+  it('wired from what rolls it, a whole stats group from its list\'s own dot, and from what it reads', () => {
+    expect(wiresInto(g, 'roll:skill')).toEqual(['skills out value', 'character out:lvl value', 'abilities out:wit_mod value']);
+    expect(wiresInto(g, 'roll:save')).toEqual(['melee out value']);
+    expect(wiresInto(g, 'roll:pool')).toEqual(['abilities out:str value']);
+    expect(g.wires.filter((w) => w.from.startsWith('roll:'))).toEqual([]);
+  });
+
+  it('as tall as a formula with as many rows, right of everything it reads, and its place kept', () => {
+    const n = node(g, 'roll:skill');
+    expect(n.height).toBe(heightOf({ ...n, kind: 'formula' }));
+    const col = columnsOf(g);
+    expect(col['roll:skill']).toBeGreaterThan(Math.max(col.skills, col.character, col.abilities));
+    expect(col['roll:save']).toBeGreaterThan(col.melee);
+    // Saved with the draft as any node's, which the server takes.
+    const moved = withPositions(ROLLING, g, { 'roll:skill': { x: 4800, y: 4800 } });
+    expect(positionsOf(moved, graphOf(moved))['roll:skill']).toEqual({ x: 4800, y: 4800 });
+    expect(problems(moved).filter((p: string) => p.startsWith('graph'))).toEqual([]);
+  });
+
+  it('its dice in a line: counts worked out in brackets, Fate dice, a named kind, keeping and the target', () => {
+    expect(rollText({ id: 'a', dice: [{ count: '2', sides: 6 }, { count: '1', sides: 6, name: 'Hope' }] })).toBe('2d6 + 1d6 HOPE');
+    expect(rollText({ id: 'a', dice: [{ count: ' 3 ', sides: 'F' }], read: 'lowest' })).toBe('3dF KEEP LOWEST 1');
+    expect(rollText({ id: 'a', dice: [{ count: '@this', sides: 10 }], read: 'count', at: 8, add: '1', against: '3' })).toBe('(@this)d10 COUNT 8+ + 1 VS 3');
+    expect(rollText({ id: 'a', dice: [] })).toBe('NO DICE');
   });
 });

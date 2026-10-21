@@ -113,6 +113,9 @@ describe('a node removed', () => {
   it('is the edit FORMS\' × makes', () => {
     expect(withRemoved(HEARTH, 'melee').definition).toEqual(withoutFormula(HEARTH, 'melee'));
     expect(withRemoved(HEARTH, 'table:mod').definition).toEqual(withoutTable(HEARTH, 'mod'));
+    // A roll (6b4a), as REMOVE ROLL on the ROLLS tab.
+    const rolling = { ...HEARTH, rolls: [{ id: 'skill', label: 'Skill check', dice: [{ count: '2', sides: 6 }] }, { id: 'other', dice: [{ count: '1', sides: 6 }] }] };
+    expect(withRemoved(rolling, 'roll:skill')).toEqual({ definition: { ...HEARTH, rolls: [{ id: 'other', dice: [{ count: '1', sides: 6 }] }] }, message: 'Removed the roll SKILL CHECK. Its die buttons go from the sheet; undo brings it back.' });
     const group = withRemoved(HEARTH, 'abilities');
     expect(group.definition).toEqual(withoutGroup(HEARTH, 'abilities'));
     expect(group.message).toBe('Removed ABILITIES and its 1 stats. Undo brings them back.');
