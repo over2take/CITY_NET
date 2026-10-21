@@ -8,6 +8,15 @@ const SECURE_MODE = process.env.SECURE_MODE === 'true';
 const SECRET = process.env.JWT_SECRET;
 const SALT_ROUNDS = 10;
 
+/** Letters and digits a GM can read out to a player without mixing them up: no 0/O, no 1/I/L. */
+const TEMP_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+/**
+ * A temporary password from RESET: eight characters from the operating system's secure random
+ * source. It used to come from the browser-grade random numbers, which can be predicted and are
+ * not meant for secrets.
+ */
+const tempPassword = () => Array.from({ length: 8 }, () => TEMP_ALPHABET[crypto.randomInt(TEMP_ALPHABET.length)]).join('');
+
 // In-memory store for pending password reset requests (short-lived, 15 min TTL)
 const pendingResets = new Map(); // requestId -> { username, status, resetToken, expiresAt }
 
@@ -238,7 +247,7 @@ module.exports = (db, io) => {
   // Admin: reset a player's password to a random temp password
   router.post('/admin/players/:username/reset', authenticate, async (req, res) => {
     const { username } = req.params;
-    const tempPass = Math.random().toString(36).slice(2, 10).toUpperCase();
+    const tempPass = tempPassword();
     const password_hash = await bcrypt.hash(tempPass, SALT_ROUNDS);
 
     db.run(

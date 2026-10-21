@@ -305,6 +305,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Security
 
+- **Temporary passwords that can't be guessed.** RESET in the GM's player list now makes the
+  temporary password from the server's secure random source. It came from the browser-grade random
+  numbers, which can be worked out from others made around the same time. It is still eight
+  characters, now without the ones easy to mix up when read out (0 and O, 1, I and L).
 - **Only you can change your own token.** Anyone, signed in or not, could change any player's
   token with a request of their own: knock another player's HP to 0, mark their injuries, move
   their token or even make it someone else's. The GM and granted editors still change any token;
