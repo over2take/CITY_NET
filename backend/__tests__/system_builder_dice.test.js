@@ -44,8 +44,8 @@ describe('a system\'s symbols', () => {
   it('say what is wrong with one, by its id or place', () => {
     expect(said(withSymbol({ mark: 'XYZ' }))).toEqual(['symbol hit, mark: A mark of one or 2 characters']);
     expect(said(withSymbol({ mark: ' ' }))).toEqual(['symbol hit, mark: A mark of one or 2 characters']);
-    expect(said(withSymbol({ mark: undefined }))).toEqual(['symbol hit, mark: Needs a mark or an icon, to show on the dice']);
-    expect(said(withSymbol({ icon: 'unicorn' }, 4))).toEqual(['symbol skull, icon: One of the drawn icons']);
+    expect(said(withSymbol({ mark: undefined }))).toEqual(['symbol hit, mark: Needs a mark, an icon or a drawing, to show on the dice']);
+    expect(said(withSymbol({ icon: 'unicorn' }, 4))).toEqual(['symbol skull, icon: One of the drawn icons, or an uploaded one']);
     expect(said(withSymbol({ name: '' }))).toEqual([`symbol hit, name: A name of up to ${LIMITS.name} characters`]);
     // MISS, CRIT and the GOOD die's faces, which named it, say so too.
     expect(said(withSymbol({ id: 'Hit Points' }))).toEqual([
@@ -71,6 +71,23 @@ describe('a system\'s symbols', () => {
     expect(said(withSymbol({ cancels: 'hit' }, 2))).toEqual(['symbol edge, cancels: Hit already cancels another symbol']);
     // SKULL counting as CRIT, which already counts as HIT.
     expect(said(withSymbol({ also: 'crit' }, 4))).toEqual(['symbol skull, also: Crit already counts as another symbol']);
+  });
+
+  it('look like a picture instead (6c2b1): an uploaded icon, or a 16 by 16 drawing kept in the system', () => {
+    const SKULL = ['07e0', '1ff8', '3ffc', '3ffc', '73ce', '6186', '6186', '73ce', '3e7c', '1ff8', '0ff0', '0db0', '0db0', '07e0', '0000', '0000'];
+    const upload = `/uploads/condition_icons/${'a'.repeat(64)}.png`;
+    expect(said(withSymbol({ icon: upload }, 4))).toEqual([]);
+    // A drawing needs no mark: the log writes the name's first letter.
+    expect(said(withSymbol({ icon: undefined, drawn: SKULL }, 4))).toEqual([]);
+    expect(said(withSymbol({ drawn: SKULL }, 4))).toEqual(['symbol skull, drawn: An icon or a drawing, not both']);
+    expect(said(withSymbol({ icon: '/uploads/elsewhere/x.png' }, 4))).toEqual(['symbol skull, icon: One of the drawn icons, or an uploaded one']);
+    for (const drawn of [SKULL.slice(1), [...SKULL.slice(1), 'FFFF'], [...SKULL.slice(1), '0fff0'], 'skull']) {
+      expect(said(withSymbol({ icon: undefined, drawn }, 4)), JSON.stringify(drawn)).toEqual(['symbol skull, drawn: A drawing of 16 rows, each 4 hex digits']);
+    }
+    expect(symbolsOf(withSymbol({ icon: undefined, drawn: SKULL }, 4))[4]).toEqual({ id: 'skull', name: 'Skull', drawn: SKULL });
+    expect(symbolsOf(withSymbol({ icon: upload }, 4))[4]).toEqual({ id: 'skull', name: 'Skull', icon: upload });
+    // Both stored: the icon is what shows.
+    expect(symbolsOf(withSymbol({ drawn: SKULL }, 4))[4]).toEqual({ id: 'skull', name: 'Skull', icon: 'skull' });
   });
 
   it('read whole for the rolls, anything broken left out', () => {

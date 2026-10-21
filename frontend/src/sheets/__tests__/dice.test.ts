@@ -3,6 +3,7 @@ import { createRequire } from 'module';
 import {
   LIMITS, DICE_PRESETS, symbolList, dieList, withDicePreset, withNewDie, withDieName, withDieColor, withFaceCount, withFace,
   withoutDie, withNewSymbol, withSymbol, alsoChoices, withoutSymbol, withTableDie, faceText, faceWords,
+  BLANK_DRAWN, drawnAt, withSquare, drawnSquares, withSymbolLook,
 } from '../dice';
 import type { Definition } from '../systemsApi';
 
@@ -134,6 +135,43 @@ describe('a symbol', () => {
     expect([sym(gone, 'miss').cancels, sym(gone, 'crit').also]).toEqual([undefined, undefined]);
     expect(die(gone, 'good').faces).toEqual([{}, {}, {}, { s: ['edge'] }, { s: ['edge', 'edge'] }, { s: ['edge'] }]);
     expect(problems(gone)).toEqual([]);
+  });
+});
+
+describe('a symbol\'s look (6c2b1)', () => {
+  const base = made(withDicePreset(BLANK, 'worded'));
+  const SKULL = ['07e0', '1ff8', '3ffc', '3ffc', '73ce', '6186', '6186', '73ce', '3e7c', '1ff8', '0ff0', '0db0', '0db0', '07e0', '0000', '0000'];
+  const upload = `/uploads/condition_icons/${'b'.repeat(64)}.webp`;
+
+  it('its mark, an icon (drawn or uploaded) or a drawing, one picture at a time, the mark kept for the log', () => {
+    const drawn = withSymbolLook(base, 'skull', { drawn: SKULL });
+    expect(sym(drawn, 'skull')).toEqual({ id: 'skull', name: 'Skull', mark: '☠', drawn: SKULL });
+    const icon = withSymbolLook(drawn, 'skull', { icon: upload });
+    expect(sym(icon, 'skull')).toEqual({ id: 'skull', name: 'Skull', mark: '☠', icon: upload });
+    expect(sym(withSymbolLook(icon, 'skull', { mark: true }), 'skull')).toEqual({ id: 'skull', name: 'Skull', mark: '☠' });
+    for (const def of [drawn, icon, withSymbolLook(base, 'skull', { icon: 'star' })]) expect(problems(def)).toEqual([]);
+    // A symbol with no mark gets one from its name, so the log has something to write.
+    const unmarked = { ...base, symbols: [{ id: 'skull', name: 'skull', icon: 'star' }] };
+    expect(sym(withSymbolLook(unmarked, 'skull', { drawn: SKULL }), 'skull').mark).toBe('S');
+  });
+
+  it('drawn on the pad a square at a time, stored as the server takes it', () => {
+    let d = BLANK_DRAWN;
+    expect(problems(withSymbolLook(base, 'skull', { drawn: d }))).toEqual([]);
+    d = withSquare(d, 0, 0, true);
+    d = withSquare(d, 15, 15, true);
+    d = withSquare(d, 7, 3, true);
+    expect([d[0], d[3], d[15]]).toEqual(['8000', '0100', '0001']);
+    expect([drawnAt(d, 0, 0), drawnAt(d, 1, 0), drawnAt(d, 15, 15)]).toEqual([true, false, true]);
+    expect(drawnSquares(d)).toEqual([[0, 0], [7, 3], [15, 15]]);
+    expect(withSquare(d, 0, 0, false)[0]).toBe('0000');
+    expect(withSquare(d, 16, 0, true)).toEqual(d);
+    expect(drawnSquares(SKULL).length).toBe(SKULL.reduce((n, row) => n + [...parseInt(row, 16).toString(2)].filter((b) => b === '1').length, 0));
+    // Any strokes at all make a drawing the server takes.
+    let seed = 3;
+    for (let i = 0; i < 300; i += 1) { seed = (seed * 69069 + 1) % 4294967296; d = withSquare(d, seed % 16, (seed >> 4) % 16, !!(seed & 256)); }
+    expect(backend.isDrawn(d)).toBe(true);
+    expect(problems(withSymbolLook(base, 'skull', { drawn: d }))).toEqual([]);
   });
 });
 

@@ -171,6 +171,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **A symbol's look (6c2b1).** A dice symbol can now look like a picture instead of its mark: one of
+  the drawn icons, an uploaded image (as condition icons are), or a 16 by 16 drawing made in the app,
+  kept in the system so it travels in a shared file. The log still writes the mark. The DICE tab,
+  with its drawing pad, comes next.
 - **The DICE tab's workings (6c2a).** Behind the coming DICE tab: making, changing and removing a
   system's own dice and symbols (each edit checked against the server's own rules), three presets
   to start from, copying one of the table's CUSTOM_DIE.EXE dice into a system (its words becoming
