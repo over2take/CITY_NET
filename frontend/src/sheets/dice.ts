@@ -16,7 +16,8 @@ type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
-export interface DieSymbol { id: string; name: string; mark?: string; icon?: string; cancels?: string; also?: string }
+/** A symbol: its name, its mark (what the log writes), what it cancels and counts as, and maybe a picture: an icon (drawn or uploaded) or a drawing. */
+export interface DieSymbol { id: string; name: string; mark?: string; icon?: string; drawn?: string[]; cancels?: string; also?: string }
 export interface DieFace { n?: number; s?: string[] }
 export interface OwnDie { id: string; name: string; color?: 'theme' | 'danger'; faces: DieFace[] }
 
@@ -198,6 +199,41 @@ export const withoutSymbol = (def: Definition, id: string): Definition => {
   }));
   return withDice(withSymbols(def, symbols), dice);
 };
+
+// ─── A SYMBOL'S LOOK (6c2b1, decision 10) ───────────────────────────────────
+
+/** A drawing nothing has been drawn on: 16 rows of 16 empty squares, as stored (4 hex digits a row). */
+export const BLANK_DRAWN: string[] = Array.from({ length: 16 }, () => '0000');
+
+/** Whether square (x, y) of a drawing is drawn: the row's highest bit is its first square. */
+export const drawnAt = (drawn: string[], x: number, y: number): boolean => ((parseInt(drawn[y] ?? '0', 16) >> (15 - x)) & 1) === 1;
+
+/** A drawing with square (x, y) drawn or rubbed out. */
+export const withSquare = (drawn: string[], x: number, y: number, on: boolean): string[] => drawn.map((row, i) => {
+  if (i !== y || x < 0 || x > 15) return row;
+  const bits = parseInt(row, 16);
+  const next = on ? bits | (1 << (15 - x)) : bits & ~(1 << (15 - x));
+  return next.toString(16).padStart(4, '0');
+});
+
+/** The squares drawn, for drawing them: [x, y] each. */
+export const drawnSquares = (drawn: string[]): [number, number][] =>
+  drawn.flatMap((_, y) => Array.from({ length: 16 }, (__, x) => x).filter((x) => drawnAt(drawn, x, y)).map((x): [number, number] => [x, y]));
+
+/**
+ * What a symbol looks like on the dice: its mark; one of the drawn icons or an upload; or a drawing.
+ * One picture at a time. The mark is kept for the log (made from the name's first letter if there is none).
+ */
+export const withSymbolLook = (def: Definition, id: string, look: { mark: true } | { icon: string } | { drawn: string[] }): Definition => withSymbols(def, symbolList(def).map((s) => {
+  if (s.id !== id) return s;
+  const next: DieSymbol = { ...s };
+  delete next.icon;
+  delete next.drawn;
+  if (!next.mark) next.mark = [...(s.name || '?')][0].toUpperCase();
+  if ('icon' in look) next.icon = look.icon;
+  if ('drawn' in look) next.drawn = look.drawn.slice(0, 16);
+  return next;
+}));
 
 // ─── THE TABLE'S DICE ───────────────────────────────────────────────────────
 

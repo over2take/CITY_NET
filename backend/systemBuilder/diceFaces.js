@@ -13,17 +13,23 @@
 //   ],
 //
 // A face is a number (`n`, with its sign), any symbols (`s`, each as many times as it shows), both,
-// or neither (blank). A symbol has a name, a mark of a character or two (or one of the condition
-// icons), what it cancels and what it also counts as. Decided with the user the same day: a system
+// or neither (blank). A symbol has a name, a mark of a character or two, what it cancels and what
+// it also counts as, and may look like a picture instead of its mark (6c2b1, decision 10): one of
+// the condition icons or an upload (`icon`, as a condition's), or a 16 by 16 drawing made on the
+// DICE tab's pad (`drawn`, 16 rows of 4 hex digits, kept in the system so it travels in its file).
+// The log is words: it writes the mark, or the name's first letter. Decided with the user the same day: a system
 // keeps its own dice, carried in its file (citysys.js, beside the system); the table's dice from
 // CUSTOM_DIE.EXE stay as they are, for every game. Rolling them is 6c1b.
 //
 // Pure: the definition's checks read it, and the rolls will.
 
-const { ICONS } = require('./conditions');
+const { isIcon } = require('./conditions');
 
 const NAME = /^[a-z][a-z0-9_]{0,39}$/;
 const LIMITS = { symbols: 12, dice: 20, name: 20, mark: 2, faces: 100, perFace: 6, number: 999 };
+/** A drawing: 16 rows of 16 squares, each row 4 hex digits (the first square the highest bit). */
+const DRAWN_ROW = /^[0-9a-f]{4}$/;
+const isDrawn = (rows) => Array.isArray(rows) && rows.length === 16 && rows.every((r) => typeof r === 'string' && DRAWN_ROW.test(r));
 const COLORS = ['theme', 'danger'];
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -43,14 +49,16 @@ const checkDice = (definition, problems) => {
       symbols.forEach((s, i) => {
         const where = `symbol ${isPlainObject(s) && typeof s.id === 'string' ? s.id : i + 1}`;
         if (!isPlainObject(s)) { bad(where, 'Must be a symbol'); return; }
-        for (const key of Object.keys(s)) if (!['id', 'name', 'mark', 'icon', 'cancels', 'also'].includes(key)) bad(`${where}, ${key}`, 'Not part of a symbol');
+        for (const key of Object.keys(s)) if (!['id', 'name', 'mark', 'icon', 'drawn', 'cancels', 'also'].includes(key)) bad(`${where}, ${key}`, 'Not part of a symbol');
         if (typeof s.id !== 'string' || !NAME.test(s.id)) bad(where, 'Ids use lowercase letters, digits and _, starting with a letter');
         else if (ids.has(s.id)) bad(where, 'Defined twice');
         else ids.set(s.id, s);
         if (typeof s.name !== 'string' || !s.name.trim() || s.name.length > LIMITS.name) bad(`${where}, name`, `A name of up to ${LIMITS.name} characters`);
-        if (s.icon !== undefined && !ICONS.includes(s.icon)) bad(`${where}, icon`, 'One of the drawn icons');
+        if (s.icon !== undefined && !isIcon(s.icon)) bad(`${where}, icon`, 'One of the drawn icons, or an uploaded one');
+        if (s.drawn !== undefined && !isDrawn(s.drawn)) bad(`${where}, drawn`, 'A drawing of 16 rows, each 4 hex digits');
+        if (s.icon !== undefined && s.drawn !== undefined) bad(`${where}, drawn`, 'An icon or a drawing, not both');
         if (s.mark !== undefined && (typeof s.mark !== 'string' || !s.mark.trim() || shown(s.mark) > LIMITS.mark)) bad(`${where}, mark`, `A mark of one or ${LIMITS.mark} characters`);
-        if (s.mark === undefined && s.icon === undefined) bad(`${where}, mark`, 'Needs a mark or an icon, to show on the dice');
+        if (s.mark === undefined && s.icon === undefined && s.drawn === undefined) bad(`${where}, mark`, 'Needs a mark, an icon or a drawing, to show on the dice');
       });
       // What one cancels or counts as is another symbol, read once all are known.
       for (const s of ids.values()) {
@@ -101,7 +109,7 @@ const checkDice = (definition, problems) => {
 const symbolsOf = (definition) => (Array.isArray(definition && definition.symbols) ? definition.symbols : [])
   .filter((s) => isPlainObject(s) && typeof s.id === 'string' && NAME.test(s.id) && typeof s.name === 'string')
   .slice(0, LIMITS.symbols)
-  .map((s) => ({ id: s.id, name: s.name, ...(typeof s.mark === 'string' ? { mark: s.mark } : {}), ...(ICONS.includes(s.icon) ? { icon: s.icon } : {}),
+  .map((s) => ({ id: s.id, name: s.name, ...(typeof s.mark === 'string' ? { mark: s.mark } : {}), ...(isIcon(s.icon) ? { icon: s.icon } : {}), ...(isDrawn(s.drawn) && !isIcon(s.icon) ? { drawn: [...s.drawn] } : {}),
     ...(typeof s.cancels === 'string' ? { cancels: s.cancels } : {}), ...(typeof s.also === 'string' ? { also: s.also } : {}) }));
 
 /** The system's dice, each whole: its faces with a number or null and the symbols each shows. */
@@ -116,4 +124,4 @@ const diceOf = (definition) => (Array.isArray(definition && definition.dice) ? d
     })),
   }));
 
-module.exports = { LIMITS, COLORS, checkDice, symbolsOf, diceOf };
+module.exports = { LIMITS, COLORS, isDrawn, checkDice, symbolsOf, diceOf };
