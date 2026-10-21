@@ -9,6 +9,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Picking another roll on the ROLLS tab.** The roll's editor and its TEST ROLL panel could get
+  mixed up when another roll was picked, showing two editors at once. Each now keeps to itself.
 - **A system file can't stop the server.** A formula calling `constructor(1)` or `toString(1)`
   passed every check and could be published, and then each save of a sheet in that system threw
   where nothing caught it, stopping the server. Those names are now refused like any other unknown
@@ -43,6 +45,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **The DICE tab (6c2b2).** STATS & RULES has a DICE tab, between TABLES and ROLLS, for a system's own
+  dice. Start from a preset (Fate's dF, a GOOD / GREAT / BAD set of symbol dice, a d6 with a word on
+  a face), make a plain d6, or copy one of the dice you made with CUSTOM_DIE.EXE (its words become
+  symbols). Give each face a number, symbols, both, or nothing. Each symbol has a name and a mark,
+  can cancel another (a HIT against a MISS) or count as another too, and can look like its mark,
+  one of the drawn icons, an uploaded picture, or a picture you draw yourself on a 16 by 16 pad,
+  which is kept in the system and travels with it. TEST throws a handful on the server. Rolls use
+  these dice next.
 - **STATS & RULES as a map (System Builder, 5a3a).** FORMS / GRAPH in the top bar shows the same
   system as nodes and wires, read left to right: a stats group is one node with a row per stat (and
   the modifier a table gives each, so ATTRIBUTES lists STR 16 +1), each formula reads its inputs by

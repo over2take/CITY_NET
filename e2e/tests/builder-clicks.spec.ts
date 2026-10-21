@@ -55,9 +55,19 @@ test('every control in the builder takes a click, on every page', async ({ page 
     missed[p] = await unreachable(page);
     if (p === 'STATS & RULES') {
       // Each of its tabs, not only the first.
-      for (const tab of ['FORMULAS', 'TABLES', 'ROLLS']) {
+      for (const tab of ['FORMULAS', 'TABLES', 'DICE', 'ROLLS']) {
         await page.getByRole('tab', { name: tab, exact: true }).click();
         missed[`${p} · ${tab}`] = await unreachable(page);
+        if (tab === 'DICE') {
+          // Dice made from a preset, and a symbol's drawing pad and icons open (6c2b2).
+          await page.getByRole('group', { name: 'New dice from a preset' }).getByRole('button', { name: 'GOOD / GREAT / BAD' }).click();
+          const hit = page.getByRole('group', { name: 'Symbol Hit' });
+          await hit.getByRole('group', { name: 'Hit: look' }).getByRole('button', { name: 'DRAW' }).click();
+          await expect(hit.getByRole('group', { name: 'Drawing of Hit' })).toBeVisible();
+          missed[`${p} · DICE · A DIE AND THE PAD`] = await unreachable(page);
+          await hit.getByRole('group', { name: 'Hit: look' }).getByRole('button', { name: 'ICON' }).click();
+          missed[`${p} · DICE · ICONS`] = await unreachable(page);
+        }
       }
       // ROLLS shows one roll at a time: two made from presets, so all five steps and TEST ROLL
       // have something in them. Blades' push with its cost (TAKES or ADDS); Vampire's Hunger dice
