@@ -16,6 +16,7 @@ const HEARTH = (name: string) => ({
     { id: 'skills', label: 'Skills', stats: [{ id: 'fight', label: 'Fight', tie: 'str', min: 0, max: 4 }, { id: 'lore', label: 'Lore', min: 0, max: 4 }] },
   ],
   samples: { str: 16, fight: 2, lore: 3 },
+  conditions: { hurt: { name: 'Hurt', short: 'HURT', modifiers: [{ target: 'all_rolls', amount: -1 }] } },
 });
 
 const openSystem = async (page: Page, name: string) => {
@@ -52,6 +53,11 @@ test('a roll made from a preset, rolled by a group, kept, and test rolled on the
   await expect(test_.getByTestId('test-outcome')).toHaveText(/^(MISS|SUCCESS AT A COST|FULL SUCCESS)$/);
   await expect(test_.getByTestId('test-working')).toHaveText(/^\[\d \d = \d+ \+ 4 = \d+\] — /);
   await expect(test_.getByTestId('test-dice').locator('span')).toHaveCount(2);
+
+  // Under HURT (6b3c), as a character with it on their token rolls: one less, named in the working.
+  await test_.getByRole('switch', { name: 'HURT · ALL ROLLS −1' }).click();
+  await test_.getByRole('button', { name: 'TEST ROLL ▸' }).click();
+  await expect(test_.getByTestId('test-working')).toHaveText(/^\[\d \d = \d+ \+ 4 - 1 \(HURT\) = \d+\] — /);
   if (process.env.GRAPH_SHOTS) await page.screenshot({ path: path.join(SHOTS, 'builder-rolls-tab.png') });
 
   // Kept: after a reload, the roll is there as it was left.

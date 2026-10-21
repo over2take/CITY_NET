@@ -19,6 +19,7 @@ afterEach(() => cleanup());
 
 const req = createRequire(import.meta.url);
 const tableRolls = req('../../../../backend/systemBuilder/tableRolls.js');
+const serverConditions = req('../../../../backend/systemBuilder/conditions.js');
 
 const HEARTH: Definition = {
   format: 1,
@@ -32,12 +33,13 @@ const HEARTH: Definition = {
   rolls: [{ id: 'skill', label: 'Skill check', ...PRESETS.pbta.roll, by: ['skills'] }],
 };
 
-/** The server's engine on dice that show 4 then 5, as the route would roll for the sample. */
-const testRoll = vi.fn(async (definition: Definition, rollId: string, fieldId?: string | null, changes: string[] = []) => {
+/** The server's engine on dice that show 4 then 5, as the route would roll for the sample, under the conditions asked. */
+const testRoll = vi.fn(async (definition: Definition, rollId: string, fieldId?: string | null, changes: string[] = [], conditions: string[] = []) => {
   const roll = (definition.rolls as { id: string }[]).find((r) => r.id === rollId);
   const faces = [4, 5, 2];
   let i = 0;
-  const made = tableRolls.rollField({ definition, data: definition.samples, fieldId: fieldId ?? null, roll, chosen: changes, rng: () => (faces[i++ % 3] - 0.5) / 6, who: 'The sample', tryCosts: true });
+  const made = tableRolls.rollField({ definition, data: definition.samples, fieldId: fieldId ?? null, roll, chosen: changes, rng: () => (faces[i++ % 3] - 0.5) / 6, who: 'The sample', tryCosts: true,
+    conditions: serverConditions.conditionsOf(definition).filter((c: { id: string }) => conditions.includes(c.id)) });
   return { ok: true as const, value: { field: fieldId ?? null, fields: [], result: made.result, historyText: made.historyText, total: made.total } };
 });
 const api = { previewValues: vi.fn(async () => ({ ok: true as const, value: { values: {}, problems: [] } })), testRoll } as never;
@@ -131,7 +133,7 @@ describe('TEST ROLL', () => {
     await userEvent.click(within(test).getByRole('switch', { name: 'FORWARD +1' }));
     await userEvent.click(within(test).getByRole('button', { name: 'TEST ROLL ▸' }));
     await waitFor(() => expect(within(test).getByTestId('test-outcome').textContent).toBe('FULL SUCCESS'));
-    expect(testRoll).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'Hearth' }), 'skill', 'lore', ['forward']);
+    expect(testRoll).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'Hearth' }), 'skill', 'lore', ['forward'], []);
     expect(within(test).getByTestId('test-dice').textContent).toBe('45');
     // 4 + 5 = 9, LORE 3 and FORWARD 1.
     expect(within(test).getByTestId('test-working').textContent).toBe('[4 5 = 9 + 4 = 13] — FULL SUCCESS');
@@ -143,10 +145,50 @@ describe('TEST ROLL', () => {
     const test = screen.getByTestId('test-roll');
     await userEvent.click(within(test).getByRole('switch', { name: 'PUSH YOURSELF' }));
     await userEvent.click(within(test).getByRole('button', { name: 'TEST ROLL ▸' }));
-    await waitFor(() => expect(within(test).getByText('At the table this costs 2 STRESS.')).toBeTruthy());
+    // Blades' push adds to Stress (6b3a); a cost that takes says so.
+    await waitFor(() => expect(within(test).getByText('At the table this adds 2 STRESS.')).toBeTruthy());
     testRoll.mockResolvedValueOnce({ ok: false, error: 'roll act, read: Sum, highest, lowest or count' } as never);
     await userEvent.click(within(test).getByRole('button', { name: 'TEST ROLL ▸' }));
     expect((await within(test).findByRole('alert')).textContent).toBe('roll act, read: Sum, highest, lowest or count');
+  });
+
+  it('says a cost that takes as costing', async () => {
+    open({ ...HEARTH, rolls: [{ id: 'f', label: 'Fate', ...PRESETS.fate.roll, by: ['fight'] }] });
+    await toRolls();
+    const test = screen.getByTestId('test-roll');
+    await userEvent.click(within(test).getByRole('switch', { name: 'INVOKE AN ASPECT' }));
+    await userEvent.click(within(test).getByRole('button', { name: 'TEST ROLL ▸' }));
+    await waitFor(() => expect(within(test).getByText('At the table this costs 1 FATE_POINTS.')).toBeTruthy());
+  });
+
+  it('tries the roll under a condition that changes every roll, as the table would (6b3b)', async () => {
+    const hurt: Definition = { ...HEARTH, conditions: {
+      hurt: { name: 'Hurt', short: 'HURT', modifiers: [{ target: 'all_rolls', amount: -1 }] },
+      blessed: { name: 'Blessed', modifiers: [{ target: 'all_rolls', amount: 1 }, { target: 'all_rolls', amount: 1 }] },
+      poisoned: { modifiers: [{ target: 'str', amount: -2 }] },
+    } };
+    open(hurt);
+    await toRolls();
+    const test = screen.getByTestId('test-roll');
+    // Only those on all rolls, each with what it comes to; Poisoned changes one stat, not the roll.
+    const under = within(test).getByRole('group', { name: 'Conditions on the sample' });
+    expect(within(under).getAllByRole('switch').map((s) => s.textContent)).toEqual(['HURT · ALL ROLLS −1', 'BLESSED · ALL ROLLS +2']);
+    await userEvent.click(within(under).getByRole('switch', { name: 'HURT · ALL ROLLS −1' }));
+    expect(within(under).getByRole('switch', { name: 'HURT · ALL ROLLS −1' }).getAttribute('aria-checked')).toBe('true');
+    await userEvent.click(within(test).getByRole('button', { name: 'TEST ROLL ▸' }));
+    expect(testRoll).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'Hearth' }), 'skill', 'fight', [], ['hurt']);
+    // 4 + 5 = 9, FIGHT 2, HURT -1: 10, a full success all the same.
+    await waitFor(() => expect(within(test).getByTestId('test-working').textContent).toBe('[4 5 = 9 + 2 - 1 (HURT) = 10] — FULL SUCCESS'));
+    // Off again, nothing is sent.
+    await userEvent.click(within(under).getByRole('switch', { name: 'HURT · ALL ROLLS −1' }));
+    await userEvent.click(within(test).getByRole('button', { name: 'TEST ROLL ▸' }));
+    expect(testRoll).toHaveBeenLastCalledWith(expect.anything(), 'skill', 'fight', [], []);
+  });
+
+  it('offers no condition switches when none changes every roll', async () => {
+    open();
+    await toRolls();
+    expect(within(screen.getByTestId('test-roll')).queryByRole('group', { name: 'Conditions on the sample' })).toBeNull();
   });
 });
 

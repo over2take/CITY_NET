@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
   STANDARD, LIMITS, conditionList, conditionsOf, conditionCount, withCondition, withNewCondition, withoutCondition,
-  modifierTargets, shortFrom,
+  modifierTargets, shortFrom, onAllRolls,
 } from '../conditions';
 import type { Definition } from '../systemsApi';
 
@@ -23,6 +23,32 @@ const H: Definition = {
 };
 const problems = (def: Definition) => checkDefinition(def).problems;
 const stored = (def: Definition) => def.conditions as Record<string, Record<string, unknown>> | undefined;
+
+describe('the conditions that change every roll (6b3b)', () => {
+  const tableRolls = require_('../../../../backend/systemBuilder/tableRolls.js');
+  const D: Definition = { ...H, conditions: {
+    poisoned: { modifiers: [{ target: 'all_rolls', amount: -1 }, { target: 'str', amount: -2 }] },
+    blinded: { on: false, modifiers: [{ target: 'all_rolls', amount: -4 }] },
+    hurt: { name: 'Hurt', short: 'HURT', modifiers: [{ target: 'all_rolls', amount: -1 }, { target: 'all_rolls', amount: -1 }] },
+    lucky: { name: 'Lucky', modifiers: [{ target: 'all_rolls', amount: 2 }, { target: 'all_rolls', amount: -2 }] },
+    weak: { name: 'Weak', modifiers: [{ target: 'save', amount: -1 }] },
+    // A 0 changes nothing, so it is no switch (the checks refuse one anyway).
+    still: { name: 'Still', modifiers: [{ target: 'all_rolls', amount: 0 }] },
+  } };
+
+  it('those the game offers with a modifier on all rolls, each with what they come to', () => {
+    expect(onAllRolls(D)).toEqual([{ id: 'poisoned', short: 'POISON', amount: -1 }, { id: 'hurt', short: 'HURT', amount: -2 }, { id: 'lucky', short: 'LUCKY', amount: 0 }]);
+    expect(onAllRolls(H)).toEqual([]);
+  });
+
+  it('adds up to what the server adds for each, the table\'s own engine', () => {
+    for (const c of server.conditionsOf(D)) {
+      const terms = tableRolls.termsOf([c]) as { amount: number }[];
+      const ours = onAllRolls(D).find((x) => x.id === c.id);
+      expect([!!ours, ours?.amount ?? 0]).toEqual([terms.length > 0, terms.reduce((n, t) => n + t.amount, 0)]);
+    }
+  });
+});
 
 describe('the standard set and what the game offers', () => {
   it('is the server\'s, condition for condition', () => {

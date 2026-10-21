@@ -146,6 +146,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   character with it on their token, players' and NPCs' alike. The roll log names it:
   "4 5 = 9 + 3 - 1 (HURT) = 11". It counts toward a target or band, so HURT can turn a hit into a
   cost. A modifier on one stat is still only shown, as before.
+- **TEST ROLL under a condition (6b3c).** In the builder's ROLLS tab, TEST ROLL now has a switch for
+  each condition that changes every roll ("HURT · ALL ROLLS −1"), to see a roll as a character with
+  it would. Its note on what a choice costs now says when the cost adds instead: "At the table this
+  adds 2 STRESS."
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

@@ -46,6 +46,10 @@ test('every control in the builder takes a click, on every page', async ({ page 
   await page.getByRole('tab', { name: /NEW$/ }).click();
   await page.locator('#systems-new-name').fill(`Clicks ${test.info().retry}`);
   await page.getByRole('button', { name: 'CREATE', exact: true }).click();
+  // A condition that changes every roll, so TEST ROLL shows its condition switches (6b3c) when
+  // ROLLS is swept: + MODIFIER gives the open condition ALL ROLLS -1.
+  await builderPage(page, 'CONDITIONS');
+  await page.getByRole('button', { name: '+ MODIFIER' }).click();
   for (const p of ['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
     await builderPage(page, p);
     missed[p] = await unreachable(page);
@@ -61,7 +65,7 @@ test('every control in the builder takes a click, on every page', async ({ page 
       for (const preset of ['BLADES ACTION', 'VAMPIRE POOL']) {
         if (preset !== 'BLADES ACTION') await page.getByRole('navigation', { name: 'Rolls' }).getByRole('button', { name: '+ ROLL' }).click();
         await page.getByRole('group', { name: 'New roll from a preset' }).getByRole('button', { name: preset }).click();
-        await expect(page.getByTestId('test-roll')).toBeVisible();
+        await expect(page.getByTestId('test-roll').getByRole('group', { name: 'Conditions on the sample' })).toBeVisible();
         missed[`${p} · ROLLS · ${preset}`] = await unreachable(page);
       }
       await page.getByRole('tab', { name: 'STATS', exact: true }).click();
