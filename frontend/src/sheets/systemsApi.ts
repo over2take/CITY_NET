@@ -8,6 +8,7 @@ import type { PublishPreview } from './versionPreview';
 import type { CustomRenderSheet } from './customTemplates';
 import type { GameCondition } from './tokenConditions';
 import type { TableEntry } from './tableConditions';
+import type { CustomDie } from '../types';
 
 type Problem = { where: string; message: string };
 
@@ -150,6 +151,8 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
     testRoll: (definition: Definition, rollId: string, fieldId?: string | null, changes: string[] = [], conditions: string[] = []) =>
       call<TestedRoll>(fetcher, token, '/api/systems/test-roll', 'POST', { definition, rollId, fieldId: fieldId ?? undefined, changes, conditions }),
     /** The DICE tab's TEST (6c2a): a handful of a draft's own die thrown on the server, its faces as the log writes them and its symbols counted. */
+    /** The table's dice from CUSTOM_DIE.EXE (routes/custom_dice.js), for COPY FROM THE TABLE'S DICE. */
+    tableDice: () => call<CustomDie[]>(fetcher, token, '/api/custom_dice'),
     testDice: (definition: Definition, dieId: string, count: number) =>
       call<TestedDice>(fetcher, token, '/api/systems/test-dice', 'POST', { definition, dieId, count }),
     /**

@@ -57,6 +57,14 @@ const toRolls = () => userEvent.click(screen.getByRole('tab', { name: 'ROLLS' })
 const rollsOf = (def: Definition) => def.rolls as Record<string, unknown>[];
 
 describe('the ROLLS tab', () => {
+  it('picking another roll shows that roll alone, with its own TEST ROLL (a key the two once shared)', async () => {
+    open({ ...HEARTH, rolls: [...(HEARTH.rolls as object[]), { id: 'save', label: 'Save', dice: [{ count: '1', sides: 20 }], by: ['save'] }] });
+    await toRolls();
+    await userEvent.click(within(screen.getByRole('navigation', { name: 'Rolls' })).getByRole('button', { name: /^SAVE/ }));
+    expect(screen.getAllByLabelText('Roll name').map((i) => (i as HTMLInputElement).value)).toEqual(['Save']);
+    expect(screen.getAllByTestId('test-roll')).toHaveLength(1);
+  });
+
   it('lists the rolls and shows the one picked: its name, its five steps in words, what it is rolled by', async () => {
     open();
     await toRolls();

@@ -571,9 +571,9 @@ export function RollsTab({ definition, edit, api }: Props) {
             {roll && <div><button type="button" className="utility-btn" style={btn} onClick={() => setAdding(false)}>CANCEL</button></div>}
           </div>
         ) : (
-          <RollEditor key={roll.id} definition={definition} edit={edit} roll={roll} onRemoved={() => setPicked(null)} />
+          <RollEditor key={`edit:${roll.id}`} definition={definition} edit={edit} roll={roll} onRemoved={() => setPicked(null)} />
         )}
-        {roll && !adding ? <TestRoll key={roll.id} definition={definition} api={api} roll={roll} /> : <span />}
+        {roll && !adding ? <TestRoll key={`test:${roll.id}`} definition={definition} api={api} roll={roll} /> : <span />}
       </div>
     </div>
   );
