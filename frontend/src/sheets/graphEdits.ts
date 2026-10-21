@@ -19,6 +19,7 @@ import { allStats, formulaList, withFormula, withAlternative, withCondition, isC
 import { houseRuleList } from './houseRules';
 import { referencesIn, type Graph, type GraphWire } from './graphModel';
 import { withNotePinned } from './graphNotes';
+import { rollList, rollables, withRolledBy } from './rolls';
 
 /** What a wire drawn or cut does: the system after it (null when nothing changes), what to say, and a node to open the panel on. */
 export interface WireEdit { definition: Definition | null; message: string; open?: string }
@@ -135,6 +136,17 @@ export const withoutName = (text: string, name: string): string | null => {
 /** A wire cut. */
 export const withoutWire = (def: Definition, graph: Graph, wire: GraphWire): WireEdit => {
   if (wire.kind === 'note') return { definition: withNotePinned(def, wire.value, null), message: 'Note unpinned. Drag its square dot onto a node to pin it again.' };
+  // Into a roll (6b4a): ROLLED BY is taken off; a name its dice or adding read is changed in the panel.
+  if (wire.to.startsWith('roll:')) {
+    const roll = rollList(def).find((r) => `roll:${r.id}` === wire.to);
+    if (!roll) return { definition: null, message: '' };
+    const label = upper(roll.label || roll.id);
+    if (wire.input.startsWith('by:')) {
+      const by = wire.input.slice(3);
+      return { definition: withRolledBy(def, roll.id, by, false), message: `${label} is no longer rolled by ${rollables(def).find((x) => x.id === by)?.label ?? upper(by)}.` };
+    }
+    return { definition: null, message: `${nameOf(def, wire.value)} is read inside ${label}: change it in the panel.`, open: wire.to };
+  }
   const f = formulaList(def).find((x) => x.id === wire.to);
   if (!f) return { definition: null, message: 'These modifiers are each a formula reading the table: change them in the panel.', open: wire.to };
   const label = upper(f.label || f.id);
@@ -165,7 +177,9 @@ export const withoutWire = (def: Definition, graph: Graph, wire: GraphWire): Wir
 /** What a wire is, in the names players see: "STR MOD into MELEE", for asking before it is cut. */
 export const wireLabel = (def: Definition, wire: GraphWire): string => {
   const f = formulaList(def).find((x) => x.id === wire.to);
-  const into = upper(f?.label || f?.id || wire.to.replace(/^[a-z]+:/, ''));
+  const roll = rollList(def).find((r) => `roll:${r.id}` === wire.to);
+  const into = upper(f?.label || f?.id || roll?.label || wire.to.replace(/^[a-z]+:/, ''));
+  if (roll && wire.input.startsWith('by:')) return `${into} rolled by ${rollables(def).find((x) => x.id === wire.value)?.label ?? upper(wire.value)}`;
   if (wire.kind === 'gate') return `${ruleName(def, wire.value)} swapping ${into}'s formula`;
   if (wire.kind === 'table') return `The table ${wire.value} into ${into}`;
   if (wire.kind === 'note') return `A note pinned to ${into}: cutting unpins it`;

@@ -29,7 +29,7 @@ export const nodeShowing = (graph: Graph, id: string): string | null => {
 
 /** What a problem is about, from the server's `where`: its node and its name, or null when not on the map. */
 const aboutOf = (def: Definition, graph: Graph, where: string): { node: string; name: string } | null => {
-  const m = /^(derived|stat|stats|samples|lookup|house rule) ([a-z][a-z0-9_]*)(?:,|$)/.exec(where);
+  const m = /^(derived|stat|stats|samples|lookup|house rule|roll) ([a-z][a-z0-9_]*)(?:,|$)/.exec(where);
   if (!m) return null;
   const [, what, id] = m;
   if (what === 'derived') {
@@ -41,10 +41,11 @@ const aboutOf = (def: Definition, graph: Graph, where: string): { node: string; 
     const node = nodeShowing(graph, id);
     return node ? { node, name: upper(allStats(def).find((s) => s.id === id)?.label || id) } : null;
   }
-  const node = what === 'stats' ? id : what === 'lookup' ? `table:${id}` : `rule:${id}`;
+  const node = what === 'stats' ? id : what === 'lookup' ? `table:${id}` : what === 'roll' ? `roll:${id}` : `rule:${id}`;
   const shown = graph.nodes.find((n) => n.id === node);
   if (!shown) return null;
   if (what === 'lookup') return { node, name: `TABLE ${upper(tableList(def).find((t) => t.id === id)?.label || id)}` };
+  if (what === 'roll') return { node, name: `ROLL ${shown.label}` };
   if (what === 'house rule') return { node, name: `HOUSE RULE ${upper(houseRuleList(def).find((r) => r.id === id)?.name || id)}` };
   return { node, name: `STATS ${shown.label}` };
 };

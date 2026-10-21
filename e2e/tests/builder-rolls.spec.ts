@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import path from 'path';
 import { signInAsGm, openBuilder, builderPage, gmToken, asGm } from './helpers';
 
-// STATS & RULES' ROLLS tab (6b1a; approved mockup docs/mockups/builder-rolls.html, 2026-10-19): a
+// STATS & RULES' ROLLS tab (6b1a, and a roll on GRAPH 6b4a; approved mockup docs/mockups/builder-rolls.html, 2026-10-19): a
 // roll made from a preset, given the stats it is rolled by, kept after a reload, and TEST ROLL
 // rolling it on the server for the sample character. With GRAPH_SHOTS=1, a picture of the tab goes
 // to docs/mockups/shots/ for looking at by eye.
@@ -104,4 +104,32 @@ test('a roll\'s dice, reading, adding and bands edited, and TEST ROLL rolling it
   await expect(test_.getByTestId('test-working')).toHaveText(/^\[[\d() ]+ = \d+ \+ 2 = \d+\] — (MISS|STRONG HIT)( · PERFECT)?$/);
   expect([3, 4]).toContain(await test_.getByTestId('test-dice').locator('span').count());
   if (process.env.GRAPH_SHOTS) await page.screenshot({ path: path.join(SHOTS, 'builder-rolls-editing.png'), fullPage: true });
+});
+
+test('a roll on GRAPH: its node wired from what rolls it, its panel the five steps', async ({ page, request }, info) => {
+  const name = `Mapped Hearth ${info.retry + 1}`;
+  const token = await gmToken(request);
+  await asGm(request, token, 'post', '/api/systems', { definition: { ...HEARTH(name), rolls: [{ id: 'skill', label: 'Skill check', dice: [{ count: '2', sides: 6 }], add: '@this', bands: [{ upTo: 6, label: 'Miss' }, { label: 'Hit' }], by: ['skills'] }] } });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'graph' });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signInAsGm(page);
+  await openSystem(page, name);
+  const map = page.getByTestId('graph-view');
+  const roll = map.getByTestId('graph-node-roll:skill');
+  await expect(roll).toBeVisible();
+  await expect(roll).toContainText('SKILL CHECK');
+  await expect(roll).toContainText('2d6 + @this');
+  await expect(roll).toContainText('7+ · 6−');
+  // One wire in, from the SKILLS list's own dot.
+  await expect(map.locator('[data-testid="graph-node-skills"] [data-handleid="out"]')).toBeVisible();
+  if (process.env.GRAPH_SHOTS) await page.screenshot({ path: path.join(SHOTS, 'builder-roll-node.png') });
+
+  // Its panel: the same five steps as the tab. Renamed there, renamed on the map.
+  await roll.click();
+  const panel = page.getByTestId('graph-panel');
+  await expect(panel).toHaveAttribute('aria-label', 'ROLL SKILL CHECK');
+  await panel.getByLabel('Roll name').fill('Feat');
+  await expect(roll).toContainText('FEAT');
+  await expect(panel.getByTestId('test-roll')).toBeVisible();
+  if (process.env.GRAPH_SHOTS) await page.screenshot({ path: path.join(SHOTS, 'builder-roll-panel.png') });
 });

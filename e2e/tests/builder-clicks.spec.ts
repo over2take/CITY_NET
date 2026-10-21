@@ -74,6 +74,11 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await view.getByRole('button', { name: 'GRAPH' }).click();
       await expect(page.getByTestId('graph-view')).toBeVisible();
       missed[`${p} · GRAPH`] = await unreachable(page);
+      // A roll's panel on the map (6b4a): the ROLLS tab's five steps and TEST ROLL, in the side panel.
+      await page.getByTestId('graph-node-roll:blades_action').click();
+      await expect(page.getByTestId('graph-panel').getByTestId('test-roll')).toBeVisible();
+      missed[`${p} · GRAPH · ROLL PANEL`] = await unreachable(page);
+      await page.keyboard.press('Escape');
       await view.getByRole('button', { name: 'FORMS' }).click();
     }
     if (p === 'NPCS') {

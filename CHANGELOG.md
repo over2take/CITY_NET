@@ -150,6 +150,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   each condition that changes every roll ("HURT · ALL ROLLS −1"), to see a roll as a character with
   it would. Its note on what a choice costs now says when the cost adds instead: "At the table this
   adds 2 STRESS."
+- **Rolls on the map (6b4a).** With GRAPH on, STATS & RULES now draws each roll as an amber ROLL node:
+  what it is rolled by wired in (a whole stats group from one dot on its list), what its dice and
+  adding read wired as a formula's are, the dice in a line ("2d6 + @this") and its bands. Click it
+  and its panel is the ROLLS tab's five steps with TEST ROLL; a change there is a change on the tab.
+  Cutting a ROLLED BY wire takes that stat off the roll; Delete removes the roll. Adding a roll from
+  + ADD comes next.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

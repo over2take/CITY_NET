@@ -69,11 +69,12 @@ describe('the graph section', () => {
       'graph wires: Not part of the map\'s layout',
       'graph positions: Must be a set of places',
     ]);
-    expect(graphProblems(withGraph({ positions: { str: [1.5, 0], dex: [0], 'Not An Id': [0, 0], 'note:': [0, 0], melee: [0, LIMITS.reach + 1], lvl: ['1', 2] } }))).toEqual([
+    expect(graphProblems(withGraph({ positions: { str: [1.5, 0], dex: [0], 'Not An Id': [0, 0], 'note:': [0, 0], 'roll:': [0, 0], 'roll:skill': [0, 0], melee: [0, LIMITS.reach + 1], lvl: ['1', 2] } }))).toEqual([
       `graph position str: Must be two whole numbers, each between -${LIMITS.reach} and ${LIMITS.reach}`,
       `graph position dex: Must be two whole numbers, each between -${LIMITS.reach} and ${LIMITS.reach}`,
       'graph position Not An Id: Not the name of a node',
       'graph position note:: Not the name of a node',
+      'graph position roll:: Not the name of a node',
       `graph position melee: Must be two whole numbers, each between -${LIMITS.reach} and ${LIMITS.reach}`,
       `graph position lvl: Must be two whole numbers, each between -${LIMITS.reach} and ${LIMITS.reach}`,
     ]);

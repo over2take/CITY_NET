@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { Definition } from '../sheets/systemsApi';
+import type { Definition, systemsApi } from '../sheets/systemsApi';
 import type { BuilderPage } from '../sheets/builderSession';
 import { statGroups, allStats, tableList, formulaList, withoutFormula, withFormula, withAlternative } from '../sheets/statsRules';
 import { modifiersIn, withModifierNumber } from '../sheets/modifiers';
@@ -11,6 +11,8 @@ import type { Tried } from '../hooks/usePreviewValues';
 import { useFormulaInsert } from '../hooks/useFormulaInsert';
 import { GroupSection, TableSection, FormulaName, FormulaBody, InsertChips } from './statsRulesFields';
 import { small, why, btn, field } from './statsRulesStyles';
+import { RollEditor, TestRoll } from './RollsTab';
+import { rollList } from '../sheets/rolls';
 
 // The graph view's node panel (5a3b2; approved mockup docs/mockups/builder-graph.html, 2026-10-17:
 // "the panel is the same form as FORMS"). The node picked on the map, edited with the very controls
@@ -29,9 +31,11 @@ interface Props {
   onGoTo?: (page: BuilderPage) => void;
   /** The house rules TRY ON THE MAP has on (5b6c), which the values here are worked out with. */
   trying?: Set<string>;
+  /** For a roll's TEST ROLL (6b4a). */
+  api?: ReturnType<typeof systemsApi>;
 }
 
-const KIND: Record<GraphNode['kind'], string> = { list: 'STATS', table: 'TABLE', formula: 'FORMULA', condition: 'CONDITION', rule: 'HOUSE RULE', note: 'NOTE' };
+const KIND: Record<GraphNode['kind'], string> = { list: 'STATS', table: 'TABLE', formula: 'FORMULA', condition: 'CONDITION', rule: 'HOUSE RULE', note: 'NOTE', roll: 'ROLL' };
 
 /**
  * ON THE WAY IN (5b3): the diamonds on a formula's wires, each number changeable, which rewrites
@@ -198,7 +202,7 @@ function FormulaForm({ definition, edit, id, preview, tried, insert, trying }: O
   );
 }
 
-export function GraphPanel({ definition, edit, node, preview, tried, onClose, onGoTo, trying }: Props) {
+export function GraphPanel({ definition, edit, node, preview, tried, onClose, onGoTo, trying, api }: Props) {
   const insert = useFormulaInsert(definition, edit);
   const formulaIds = node.kind === 'formula' || node.kind === 'condition' ? [node.id]
     : node.kind === 'list' ? (node.rows ?? []).map((r) => r.mod).filter((m): m is string => !!m) : [];
@@ -230,6 +234,15 @@ export function GraphPanel({ definition, edit, node, preview, tried, onClose, on
   } else if (node.kind === 'table') {
     const table = tableList(definition).find((t) => `table:${t.id}` === node.id);
     body = table && <TableSection definition={definition} edit={edit} table={table} />;
+  } else if (node.kind === 'roll') {
+    // The ROLLS tab's own five steps and TEST ROLL (6b4a; the mockup: "the panel is the same five steps as the tab").
+    const roll = rollList(definition).find((r) => `roll:${r.id}` === node.id);
+    body = roll && (
+      <>
+        <RollEditor definition={definition} edit={edit} roll={roll} onRemoved={onClose} />
+        <TestRoll key={roll.id} definition={definition} api={api} roll={roll} />
+      </>
+    );
   } else if (node.kind === 'rule') {
     const rule = houseRuleList(definition).find((r) => `rule:${r.id}` === node.id);
     body = rule && (

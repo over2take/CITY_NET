@@ -59,13 +59,13 @@ const openForms = (start: Definition = HEARTH) => harness((def, edit) => <StatsR
 const pick = async (id: string) => { fireEvent.click(screen.getByTestId(`graph-node-${id}`)); return screen.findByTestId('graph-panel'); };
 
 /** The same change made in FORMS (on `tab`) and in the panel (on node `node`): both systems out. */
-const both = async (tab: 'STATS' | 'FORMULAS' | 'TABLES', node: string, act: () => Promise<void>) => {
-  const forms = openForms();
+const both = async (tab: 'STATS' | 'FORMULAS' | 'TABLES' | 'ROLLS', node: string, act: () => Promise<void>, start: Definition = HEARTH) => {
+  const forms = openForms(start);
   await userEvent.click(screen.getByRole('tab', { name: tab }));
   await act();
   const fromForms = forms.last();
   forms.unmount();
-  const map = openMap();
+  const map = openMap(start);
   await pick(node);
   await act();
   const fromPanel = map.last();
@@ -301,5 +301,44 @@ describe('the panel', () => {
     await userEvent.click(within(panel).getByRole('button', { name: 'Close the panel' }));
     expect(screen.queryByTestId('graph-panel')).toBeNull();
     expect(edits).toEqual([]);
+  });
+});
+
+describe('a roll\'s panel (6b4a)', () => {
+  const ROLLING: Definition = {
+    ...HEARTH,
+    rolls: [{ id: 'check', label: 'Ability check', dice: [{ count: '1', sides: 20 }], add: '@this + @lvl', bands: [{ upTo: 9, label: 'Miss' }, { label: 'Hit' }],
+      changes: [{ id: 'adv', label: 'Advantage', extra: { dice: 1, keep: 'highest' } }], by: ['abilities'] }],
+  };
+
+  it('the node: ROLL, what rolls it, what it reads, its dice in a line and what it comes to', () => {
+    openMap(ROLLING);
+    const n = screen.getByTestId('graph-node-roll:check');
+    expect(n.textContent).toContain('ROLLABILITY CHECK');
+    expect(n.textContent).toContain('ABILITIESROLLED BY · EACH STAT');
+    expect(n.textContent).toContain('@thisTHE STAT ROLLED');
+    expect(n.textContent).toContain('1d20 + @this + LEVEL');
+    expect(n.textContent).toContain('10+ · 9−ADVANTAGE');
+  });
+
+  it('is the ROLLS tab\'s five steps: the same change made in either is the same system', async () => {
+    const rename = async () => {
+      const name = screen.getByLabelText('Roll name');
+      await userEvent.clear(name);
+      await userEvent.type(name, 'Feat of strength');
+    };
+    const { fromForms, fromPanel } = await both('ROLLS', 'roll:check', rename, ROLLING);
+    expect((fromPanel.rolls as { label: string }[])[0].label).toBe('Feat of strength');
+    expect(fromPanel).toEqual(fromForms);
+  });
+
+  it('with TEST ROLL, and REMOVE ROLL taking it off the map and closing the panel', async () => {
+    const map = openMap(ROLLING);
+    const panel = await pick('roll:check');
+    expect(within(panel).getByTestId('test-roll')).toBeTruthy();
+    await userEvent.click(within(panel).getByRole('button', { name: 'REMOVE ROLL' }));
+    expect(map.last().rolls ?? []).toEqual([]);
+    expect(screen.queryByTestId('graph-panel')).toBeNull();
+    expect(screen.queryByTestId('graph-node-roll:check')).toBeNull();
   });
 });

@@ -97,11 +97,11 @@ const inputTops = (n: GraphNode): Record<string, number> => {
   return out;
 };
 
-function Header({ kindTag, label, right, cyan }: { kindTag: string; label: string; right?: React.ReactNode; cyan?: boolean }) {
+function Header({ kindTag, label, right, tone = 'green' }: { kindTag: string; label: string; right?: React.ReactNode; tone?: 'green' | 'cyan' | 'warning' }) {
   return (
-    <div style={{ ...line, height: SIZE.header, gap: 8, padding: '0 8px', background: tint(16, cyan ? 'cyan' : 'green'), borderBottom: `1px solid color-mix(in srgb, var(--${cyan ? 'cyan' : 'green'}) 45%, transparent)` }}>
-      <span style={tag}>{kindTag}</span>
-      <b style={{ flex: 1, minWidth: 0, fontSize: 13, color: cyan ? 'var(--cyan)' : 'var(--green)', overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: 0.5 }}>{label}</b>
+    <div style={{ ...line, height: SIZE.header, gap: 8, padding: '0 8px', background: tint(16, tone), borderBottom: `1px solid color-mix(in srgb, var(--${tone}) 45%, transparent)` }}>
+      <span style={tone === 'warning' ? { ...tag, color: 'var(--warning)' } : tag}>{kindTag}</span>
+      <b style={{ flex: 1, minWidth: 0, fontSize: 13, color: tone === 'green' ? 'var(--green)' : `var(--${tone})`, overflow: 'hidden', textOverflow: 'ellipsis', letterSpacing: 0.5 }}>{label}</b>
       {right}
     </div>
   );
@@ -171,6 +171,8 @@ function ListNode({ data }: NodeProps<Node<NodeData>>) {
           </React.Fragment>
         );
       })}
+      {/* The whole group, for a roll it is ROLLED BY (6b4a): shown only while wired. */}
+      <Handle type="source" id="out" position={Position.Right} isConnectable={false} style={v.used.has(`${n.id}:out`) ? { ...dot('var(--warning)'), top: 14 } : { ...hidden, top: 14 }} />
       <Handle type="target" id="note" position={Position.Right} isConnectable={false} style={{ ...hidden, top: 14 }} />
     </div>
   );
@@ -218,7 +220,7 @@ function RuleNode({ data }: NodeProps<Node<NodeData>>) {
   const n = data.node;
   return (
     <div data-testid={`graph-node-${n.id}`} style={shell(n, { borderColor: 'var(--cyan)', outline: '1px solid var(--cyan)', outlineOffset: 2, background: tint(6, 'cyan') })}>
-      <Header kindTag="HOUSE RULE" label={n.label} cyan />
+      <Header kindTag="HOUSE RULE" label={n.label} tone="cyan" />
       {n.text && <Words text={n.text} color="var(--text)" />}
       <div style={{ ...line, height: SIZE.ruleRow, padding: '0 10px', ...dim, color: 'var(--cyan)', opacity: 1 }}>SWAPS THE FORMULAS WIRED TO IT</div>
       <TrySwitch rule={n.id.slice('rule:'.length)} values={data.values} />
@@ -245,12 +247,12 @@ function NoteNode({ data }: NodeProps<Node<NodeData>>) {
 /** One input's row: what players call it, where it comes from, and what it brings in. */
 function InputRow({ i, values, off }: { i: GraphInput; values: Values; off: boolean }) {
   const bad = i.missing && i.kind !== 'field';
-  const about = i.kind === 'combined'
+  const about = i.about ?? (i.kind === 'combined'
     ? `${i.from.map((s) => s.label).join(', ')} · ${i.label.startsWith('BEST') ? 'HIGHEST' : 'LOWEST'}`
     : i.kind === 'table' ? (i.missing ? 'NO SUCH TABLE' : 'TABLE')
       : i.kind === 'field' ? (i.known ? 'SHEET FIELD' : 'ON NO SHEET')
         : i.kind === 'engine' ? 'BUILT-IN'
-          : i.where ? `↗ ${i.where}` : '';
+          : i.where ? `↗ ${i.where}` : '');
   const v = i.kind === 'value' || i.kind === 'combined' ? incoming(i, values) : undefined;
   return (
     <div style={{ ...line, height: SIZE.row, padding: '0 10px 0 14px', gap: 8, opacity: off ? 0.45 : 1, color: bad ? 'var(--danger)' : undefined }}>
@@ -300,6 +302,36 @@ function FormulaNode({ data }: NodeProps<Node<NodeData>>) {
   );
 }
 
+/**
+ * A roll, as the builder's ROLLS mockup draws it (6b4a): what it is rolled by and what it reads, its
+ * dice in a line, and what its total is read as with the changes a player may pick. Nothing flows
+ * out of it on the map; at the table it is a die button by each stat it is rolled by.
+ */
+function RollNode({ data }: NodeProps<Node<NodeData>>) {
+  const n = data.node;
+  const problem = data.values.problems[n.id];
+  const tops = inputTops(n);
+  const dotColor = (i: GraphInput) => (i.from.length ? 'var(--green)' : i.missing ? 'var(--danger)' : 'color-mix(in srgb, var(--warning) 35%, transparent)');
+  return (
+    <div data-testid={`graph-node-${n.id}`} style={shell(n, {
+      borderColor: problem ? 'var(--danger)' : 'var(--warning)', background: tint(6, 'warning'),
+      boxShadow: `0 0 12px color-mix(in srgb, var(--${problem ? 'danger' : 'warning'}) 30%, transparent)`,
+    })}>
+      <Header kindTag="ROLL" label={n.label} tone="warning" />
+      {n.inputs.map((i) => <InputRow key={i.key} i={i} values={data.values} off={false} />)}
+      <Words text={n.text} color="var(--warning)" />
+      <div style={{ ...line, height: SIZE.result, padding: '0 10px', gap: 8, borderTop: '1px solid color-mix(in srgb, var(--warning) 20%, transparent)' }}>
+        <span title={n.roll?.outcome} style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', fontSize: 11 }}>{n.roll?.outcome}</span>
+        {n.roll?.changes.length ? <span title={n.roll.changes.join(', ')} style={{ ...tag, color: 'var(--warning)', maxWidth: '50%', overflow: 'hidden', textOverflow: 'ellipsis' }}>{n.roll.changes.join(' · ')}</span> : null}
+      </div>
+      {n.inputs.map((i) => (
+        <Handle key={i.key} type="target" id={i.key} position={Position.Left} isConnectable={false} style={{ ...dot(dotColor(i)), top: tops[i.key] }} />
+      ))}
+      <Ends out={false} />
+    </div>
+  );
+}
+
 /** A group open: a box around its members, under them, its title bar the only part that takes the pointer. */
 function GroupBox({ data, width, height }: NodeProps<Node<BoxData>>) {
   return (
@@ -340,7 +372,7 @@ function FoldedBox({ data, width, height }: NodeProps<Node<BoxData>>) {
 }
 
 const NODE_TYPES: NodeTypes = {
-  list: ListNode, table: TableNode, rule: RuleNode, note: NoteNode, formula: FormulaNode, condition: FormulaNode,
+  list: ListNode, table: TableNode, rule: RuleNode, note: NoteNode, formula: FormulaNode, condition: FormulaNode, roll: RollNode,
   groupBox: GroupBox, folded: FoldedBox,
 };
 
@@ -822,7 +854,7 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
       })()}
       </div>
       {picked && (
-        <GraphPanel definition={definition} edit={mapEdit} node={picked} preview={preview} tried={tried} trying={tryingSet}
+        <GraphPanel definition={definition} edit={mapEdit} node={picked} preview={preview} tried={tried} trying={tryingSet} api={api}
           onClose={() => setSelected(null)} onGoTo={onGoTo} />
       )}
       {pickedGroup && <GroupPanel definition={definition} edit={mapEdit} group={pickedGroup} onClose={() => setSelected(null)} graph={graph} positions={positions} />}

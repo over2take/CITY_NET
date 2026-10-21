@@ -11,6 +11,7 @@ import { createRequire } from 'module';
 import { withWire, withoutWire, withoutName, givenBy, reads, wireLabel } from '../graphEdits';
 import { graphOf, type Graph, type GraphWire } from '../graphModel';
 import { withFormula, withAlternative, formulaList } from '../statsRules';
+import { rollList } from '../rolls';
 import type { Definition } from '../systemsApi';
 
 const req = createRequire(import.meta.url);
@@ -219,6 +220,33 @@ describe('a wire named', () => {
   });
 });
 
+describe('a wire into a roll (6b4a)', () => {
+  const ROLLING: Definition = {
+    format: 1, name: 'Rolling',
+    stats: [{ id: 'skills', label: 'Skills', stats: [{ id: 'fight', label: 'Fight' }] }, { id: 'abilities', label: 'Abilities', stats: [{ id: 'str', label: 'Strength' }] }],
+    derived: [{ id: 'bonus', label: 'Bonus', formula: '1' }],
+    rolls: [{ id: 'skill', label: 'Skill check', dice: [{ count: '2', sides: 6 }], add: '@this + @bonus', by: ['skills', 'str'] }],
+  };
+  const g = graphOf(ROLLING);
+  const wire = (from: string) => g.wires.find((w) => w.to === 'roll:skill' && w.from === from && (from !== 'abilities' || w.input === 'by:str'))!;
+
+  it('cut from ROLLED BY: the roll is no longer rolled by it', () => {
+    const r = withoutWire(ROLLING, g, wire('skills'));
+    expect(r.definition!.rolls).toEqual([{ ...(ROLLING.rolls as object[])[0], by: ['str'] }]);
+    expect(r.message).toBe('SKILL CHECK is no longer rolled by SKILLS.');
+    expect(withoutWire(ROLLING, g, wire('abilities')).message).toBe('SKILL CHECK is no longer rolled by STRENGTH.');
+  });
+
+  it('cut from what its dice or adding read: changed in the panel, which opens', () => {
+    expect(withoutWire(ROLLING, g, wire('bonus'))).toEqual({ definition: null, message: 'BONUS is read inside SKILL CHECK: change it in the panel.', open: 'roll:skill' });
+  });
+
+  it('named as players see them, before it is cut', () => {
+    expect(wireLabel(ROLLING, wire('skills'))).toBe('SKILL CHECK rolled by SKILLS');
+    expect(wireLabel(ROLLING, wire('bonus'))).toBe('BONUS into SKILL CHECK');
+  });
+});
+
 describe('over every random system and example', () => {
   const systems = [
     ...Array.from({ length: 40 }, (_, i) => randomSystem(i + 1) as Definition),
@@ -229,6 +257,7 @@ describe('over every random system and example', () => {
     let cut = 0;
     let opened = 0;
     let unpinned = 0;
+    let unrolled = 0;
     for (const def of systems) {
       const graph = graphOf(def);
       const before = new Set(problems(def));
@@ -242,6 +271,18 @@ describe('over every random system and example', () => {
           continue;
         }
         if (!r.definition) { expect(r.open, `${w.id}`).toBeTruthy(); opened += 1; continue; }
+        if (w.to.startsWith('roll:')) {
+          // ROLLED BY cut (6b4a): that one roll is no longer rolled by it, and nothing else changes.
+          expect(w.input, w.id).toMatch(/^by:/);
+          expect(graphOf(r.definition).wires.some((x) => x.id === w.id), w.id).toBe(false);
+          const changed = rollList(r.definition).filter((x, i) => JSON.stringify(x) !== JSON.stringify(rollList(def)[i]));
+          expect(changed.map((x) => `roll:${x.id}`), w.id).toEqual([w.to]);
+          expect(changed[0].by ?? [], w.id).not.toContain(w.value);
+          expect({ ...r.definition, rolls: def.rolls }).toEqual(def);
+          expect(problems(r.definition).filter((p: string) => !before.has(p)), w.id).toEqual([]);
+          unrolled += 1;
+          continue;
+        }
         cut += 1;
         const after = graphOf(r.definition);
         expect(after.wires.some((x) => x.id === w.id), w.id).toBe(false);
@@ -254,6 +295,7 @@ describe('over every random system and example', () => {
     expect(cut).toBeGreaterThan(50);
     expect(opened).toBeGreaterThan(5);
     expect(unpinned).toBeGreaterThan(0);
+    expect(unrolled).toBeGreaterThan(5);
   });
 
   it('drawing a stat into a formula, then cutting it, gives the system back', () => {

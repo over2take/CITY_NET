@@ -389,7 +389,7 @@ function ChangesStep({ definition, edit, roll }: { definition: Definition; edit:
 }
 
 /** The roll picked: its name, its preset, its five steps, ROLLED BY and REMOVE. */
-function RollEditor({ definition, edit, roll, onRemoved }: Props & { roll: Roll; onRemoved: () => void }) {
+export function RollEditor({ definition, edit, roll, onRemoved }: Props & { roll: Roll; onRemoved: () => void }) {
   const [replacing, setReplacing] = useState<string | null>(null);
   const choices = rollables(definition);
   const by = new Set(roll.by ?? []);
@@ -460,7 +460,7 @@ const signedWord = (n: number) => (n < 0 ? `−${-n}` : `+${n}`);
  * TEST ROLL: the roll made by the server's engine for the sample character, for a field it is rolled
  * by, with changes picked, and under the conditions that change every roll (6b3b; the mockup's HURT).
  */
-function TestRoll({ definition, api, roll }: { definition: Definition; api?: ReturnType<typeof systemsApi>; roll: Roll }) {
+export function TestRoll({ definition, api, roll }: { definition: Definition; api?: ReturnType<typeof systemsApi>; roll: Roll }) {
   const fields = fieldsRolledBy(definition, roll);
   const names = new Map(rollables(definition).map((c) => [c.id, c.label]));
   const conditions = onAllRolls(definition);

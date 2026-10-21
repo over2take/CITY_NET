@@ -14,6 +14,11 @@
 // column on that list rather than a node of its own; a formula's inputs and text are in the names
 // players see, `max(@a, @b)` reading as BEST with a wire from each.
 //
+// A roll (6b4a; approved mockup docs/mockups/builder-rolls.html, 2026-10-19) is a ROLL node: what
+// it is ROLLED BY wired in (a whole stats group from its list's own dot), then every name its dice,
+// keeping, adding and target read, wired as a formula's are; @this and the rest of what the table
+// reads for the stat rolled are rows of their own, with no wire.
+//
 // The server works the values out (POST /api/systems/preview-values), as for FORMS. This only
 // needs to know what each formula reads, which referencesIn finds the way the server's
 // expression.js does (a test holds the two together).
@@ -22,6 +27,7 @@ import type { Definition } from './systemsApi';
 import { statGroups, formulaList, tableList, takenIds, FUNCTIONS } from './statsRules';
 import { houseRuleList, waitingOn } from './houseRules';
 import { modifierOn, type Modifier } from './modifiers';
+import { rollList, stepsOf, type Roll } from './rolls';
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -76,7 +82,7 @@ const MODIFIER = /^\s*([a-z][a-z0-9_]*)\(\s*@([a-z][a-z0-9_]*)\s*\)\s*$/;
 
 // ─── NODES, WIRES, GROUPS ──────────────────────────────────────────────────
 
-export type NodeKind = 'list' | 'table' | 'formula' | 'condition' | 'rule' | 'note';
+export type NodeKind = 'list' | 'table' | 'formula' | 'condition' | 'rule' | 'note' | 'roll';
 
 /** Where a value comes from on the map: the node, the dot on it, and what players call it. */
 export interface Source { value: string; label: string; node: string; handle: string }
@@ -102,6 +108,8 @@ export interface GraphInput {
   missing?: boolean;
   /** What the formula does to this one name on its way in (×6, ÷2↓): a diamond on its wire (5b3). */
   modifier?: Modifier;
+  /** What the row says it is, in place of where it comes from: a roll's ROLLED BY, its @this. */
+  about?: string;
 }
 
 /** A row of a list node: a stat, and its modifier when one table works one out for each. */
@@ -127,6 +135,8 @@ export interface GraphNode {
   also?: string[];
   /** A note's node. */
   on?: string;
+  /** A roll's last line: what its total is read as (its bands, a target), and the changes a player may pick, ◆ for one that costs. */
+  roll?: { outcome: string; changes: string[] };
   width: number;
   height: number;
 }
@@ -168,6 +178,17 @@ export const heightOf = (node: Pick<GraphNode, 'kind' | 'inputs' | 'alternative'
         + (node.alternative ? S.row + alt * S.row + expr(node.alternative.text) : 0) + S.pad + S.border;
     }
   }
+};
+
+/** What a roll's text reads for the stat rolled (tableRolls.js fieldsFor): rows of their own, never wired. */
+const OWN: Record<string, string> = { '@this': 'THE STAT ROLLED', '@this_mod': 'ITS MODIFIER', '@tie': 'ITS ABILITY', '@tie_mod': "ITS ABILITY'S MODIFIER" };
+
+/** A roll in a line, as the node kit's: `2d6 + @this + @tie_mod`, its keeping and target in words. */
+export const rollText = (r: Roll): string => {
+  const count = (c: string) => (/^\s*\d+\s*$/.test(String(c)) ? String(c).trim() : `(${String(c).trim()})`);
+  const dice = r.dice.map((d) => `${count(d.count)}${d.sides === 'F' ? 'dF' : `d${d.sides}`}${d.name ? ` ${upper(d.name)}` : ''}`).join(' + ') || 'NO DICE';
+  const keep = r.read === 'highest' ? ` KEEP HIGHEST ${r.keep ?? '1'}` : r.read === 'lowest' ? ` KEEP LOWEST ${r.keep ?? '1'}` : r.read === 'count' ? ` COUNT ${r.at}+` : '';
+  return `${dice}${keep}${r.add ? ` + ${r.add}` : ''}${r.against !== undefined ? ` ${r.under ? 'UNDER' : 'VS'} ${r.against}` : ''}`;
 };
 
 /** The system as the map draws it. */
@@ -312,6 +333,37 @@ export const graphOf = (def: Definition): Graph => {
     if (alternative && ruleIds.has(alternative.rule)) {
       wires.push({ id: `rule:${alternative.rule}>${d.id}:gate`, from: `rule:${alternative.rule}`, fromHandle: 'out', value: alternative.rule, to: d.id, input: 'gate', kind: 'gate', alt: true });
     }
+  }
+
+  // Rolls, after the formulas they read.
+  const groupIds = new Set(groups.map((g) => g.id));
+  for (const r of rollList(def)) {
+    const by = (Array.isArray(r.by) ? r.by : []).map((b): GraphInput => {
+      if (groupIds.has(b)) {
+        const g = groups.find((x) => x.id === b)!;
+        return { key: `by:${b}`, kind: 'value', label: upper(g.label || g.id), about: 'ROLLED BY · EACH STAT', from: [{ value: b, label: upper(g.label || g.id), node: b, handle: 'out' }], alt: false };
+      }
+      const src = at.get(b);
+      return src
+        ? { key: `by:${b}`, kind: 'value', label: src.label, about: 'ROLLED BY', from: [src], alt: false }
+        : { key: `by:${b}`, kind: 'value', label: upper(b), about: 'ROLLED BY · NOT HERE', from: [], alt: false, missing: true };
+    });
+    const main = rollText(r);
+    const shown = read(main, false);
+    // A change's ADD reads names too: wired in, though the node's words are the roll's own.
+    const reads = read([main, ...(r.changes ?? []).map((c) => c.add ?? '')].join(' + '), false).inputs
+      .map((i): GraphInput => (OWN[i.key.slice(2)] ? { key: i.key, kind: 'field', label: i.label, about: OWN[i.key.slice(2)], from: [], alt: false, known: true } : i));
+    const inputs = [...by, ...reads];
+    const steps = stepsOf(r);
+    push({
+      id: `roll:${r.id}`, kind: 'roll', label: upper(r.label || r.id), group: null, text: shown.text, inputs,
+      roll: {
+        outcome: steps.bands.length ? steps.bands.map(([when]) => when).reverse().join(' · ')
+          : r.against !== undefined ? (r.under ? 'AT OR UNDER THE TARGET' : 'AT OR OVER THE TARGET') : r.read === 'count' ? 'SUCCESSES' : 'THE TOTAL',
+        changes: (r.changes ?? []).map((c) => `${upper(c.label)}${c.cost ? ' ◆' : ''}`),
+      },
+    });
+    for (const i of inputs) wire(`roll:${r.id}`, i);
   }
 
   // Notes, pinned to the node that shows what they are pinned to (a stat's list).
