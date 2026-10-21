@@ -132,4 +132,25 @@ test('a roll on GRAPH: its node wired from what rolls it, its panel the five ste
   await expect(roll).toContainText('FEAT');
   await expect(panel.getByTestId('test-roll')).toBeVisible();
   if (process.env.GRAPH_SHOTS) await page.screenshot({ path: path.join(SHOTS, 'builder-roll-panel.png') });
+  await page.keyboard.press('Escape');
+
+  // + ADD → ROLL from a preset (6b4b): a Blades roll on the map, its panel open, rolled by nothing yet.
+  await page.getByRole('button', { name: '+ ADD', exact: true }).click();
+  await page.getByLabel('Add a node: type to search').fill('roll blades');
+  await page.keyboard.press('Enter');
+  const blades = map.getByTestId('graph-node-roll:blades_action');
+  await expect(blades).toBeVisible();
+  await expect(panel).toHaveAttribute('aria-label', 'ROLL BLADES ACTION');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'FIT', exact: true }).click();
+
+  // The SKILLS list's own dot dragged onto it: rolled by every skill.
+  const from = (await map.locator('[data-testid="graph-node-skills"] [data-handleid="out"]').boundingBox())!;
+  const onto = (await blades.boundingBox())!;
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(onto.x + onto.width / 2, onto.y + onto.height / 2, { steps: 12 });
+  await page.mouse.up();
+  await expect(map.getByRole('status')).toHaveText('BLADES ACTION is now rolled by SKILLS: a die button by each of its stats on the sheet.');
+  await expect(blades).toContainText('ROLLED BY · EACH STAT');
 });

@@ -156,6 +156,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   and its panel is the ROLLS tab's five steps with TEST ROLL; a change there is a change on the tab.
   Cutting a ROLLED BY wire takes that stat off the roll; Delete removes the roll. Adding a roll from
   + ADD comes next.
+- **Adding a roll on the map (6b4b).** + ADD (or A) on the GRAPH view now offers a roll from each
+  preset: pick ROLL · BLADES ACTION and the roll appears with its panel open, as the ROLLS tab's
+  preset buttons make it. Drag a stat's or formula's dot onto a ROLL node and the roll is rolled by
+  it; a stats list has a dot of its own at its top for the whole group, every stat in it getting a
+  die button on the sheet.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the

@@ -11,7 +11,7 @@ import {
 } from './statsRules';
 import { graphOf, withPositions, positionsOf, clearSpot, type Point } from './graphModel';
 import { withNewNote, withoutNote } from './graphNotes';
-import { withoutRoll } from './rolls';
+import { withoutRoll, withNewRoll, rollList, PRESETS } from './rolls';
 
 /** What can be added from the map now, and what is still to come. */
 export interface AddChoice { key: string; label: string; what: string; soon?: string; group?: string }
@@ -23,7 +23,8 @@ export const addChoices = (def: Definition): AddChoice[] => [
   { key: 'table', label: 'TABLE', what: 'A number in, a number out, by bands read top to bottom.' },
   { key: 'condition', label: 'CONDITION', what: 'IF something THEN one number ELSE another.' },
   { key: 'note', label: 'NOTE', what: 'Words for you, pinned to the node picked.' },
-  { key: 'roll', label: 'ROLL', what: 'A roll and its dice.', soon: 'Phase 6' },
+  // A roll from each preset (6b4b), then changed in its panel as on the ROLLS tab.
+  ...Object.entries(PRESETS).map(([k, p]): AddChoice => ({ key: `roll:${k}`, label: `ROLL · ${p.label.toUpperCase()}`, what: 'A roll and its dice, from this preset; change anything in its panel.' })),
   { key: 'choice', label: 'CHOICE · FEATURE', what: 'Classes, backgrounds and what they give.', soon: 'Phase 7' },
 ];
 
@@ -36,6 +37,10 @@ export const matching = (choices: AddChoice[], query: string): AddChoice[] => {
 /** Something new: the system with it, and its node (a stat's is its group's list), or null. */
 const made = (def: Definition, key: string, picked?: string): { definition: Definition; node: string } | null => {
   if (key === 'note') return withNewNote(def, { x: 0, y: 0 }, picked && !picked.startsWith('note:') ? picked : undefined);
+  if (key.startsWith('roll:')) {
+    const r = withNewRoll(def, key.slice('roll:'.length));
+    return r && rollList(r.definition).some((x) => x.id === r.id) ? { definition: r.definition, node: `roll:${r.id}` } : null;
+  }
   const ids = (d: Definition) => new Set([...allStats(d).map((s) => s.id), ...formulaList(d).map((f) => f.id), ...tableList(d).map((t) => `table:${t.id}`), ...statGroups(d).map((g) => `group:${g.id}`)]);
   const before = ids(def);
   let next: Definition;

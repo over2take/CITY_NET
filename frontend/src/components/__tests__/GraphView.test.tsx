@@ -204,13 +204,23 @@ describe('+ ADD and Delete (5b4)', () => {
     const { last } = open();
     await userEvent.click(screen.getByRole('button', { name: '+ ADD' }));
     const search = screen.getByRole('dialog', { name: 'Add a node' });
-    expect(within(search).getByRole('option', { name: /ROLL/ }).hasAttribute('disabled')).toBe(true);
+    expect(within(search).getByRole('option', { name: /CHOICE · FEATURE/ }).hasAttribute('disabled')).toBe(true);
     await userEvent.type(within(search).getByLabelText('Add a node: type to search'), 'formula{Enter}');
     expect(screen.queryByRole('dialog', { name: 'Add a node' })).toBeNull();
     expect((last().derived as { id: string }[]).map((d) => d.id)).toContain('new_formula');
     expect((last().graph as { positions: Record<string, unknown> }).positions.new_formula).toBeTruthy();
     expect(node('new_formula')).toBeTruthy();
     expect(screen.getByTestId('graph-panel').getAttribute('aria-label')).toBe('FORMULA NEW FORMULA');
+  });
+
+  it('+ ADD → ROLL from a preset (6b4b): the roll made, its ROLL node on the map and its panel open', async () => {
+    const { last } = open();
+    await userEvent.click(screen.getByRole('button', { name: '+ ADD' }));
+    const search = screen.getByRole('dialog', { name: 'Add a node' });
+    await userEvent.type(within(search).getByLabelText('Add a node: type to search'), 'roll pbta{Enter}');
+    expect((last().rolls as { id: string }[]).map((r) => r.id)).toEqual(['pbta_move']);
+    expect(node('roll:pbta_move')).toBeTruthy();
+    expect(screen.getByTestId('graph-panel').getAttribute('aria-label')).toBe('ROLL PBTA MOVE');
   });
 
   it('A opens it from the map, not from a box being typed in; Escape closes it', async () => {
