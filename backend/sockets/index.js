@@ -1089,7 +1089,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         const roll = rollEngine.executeRoll(
           rollEngine.resolveFormula(ram.RAM_FORMULA, {}),
           'sum',
-          Math.random,
+          cryptoRng,
         );
         // The attack panel targets a token. Whether that resolves to a person or to the
         // car they are sitting in is the resolver's call, not the client's.
@@ -1644,7 +1644,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               // Chrome, as its own labelled term rather than folded into the stat, so the
               // breakdown says where the bonus came from.
               resolved.modifiers.push(...cyberEffects.formulaModifiers(data, rollDef.formula, system));
-              outcome = rollEngine.executeRoll(resolved, rollDef.shape, Math.random, { noFumble });
+              outcome = rollEngine.executeRoll(resolved, rollDef.shape, cryptoRng, { noFumble });
               // The price of borrowed expertise. A natural 2 on a plug-augmented check is
               // an automatic failure "that no reroll ability can save", and the jack locks
               // up for the scene - so this overrides the total rather than modifying it,
@@ -1728,7 +1728,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             let outcome;
             try {
               const resolved = rollEngine.resolveFormula(formula, data, { allowNoDice: shape === 'pool' });
-              outcome = rollEngine.executeRoll(resolved, shape, Math.random);
+              outcome = rollEngine.executeRoll(resolved, shape, cryptoRng);
             } catch (e) {
               return;
             }
@@ -1777,7 +1777,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             let outcome;
             try {
               const resolved = rollEngine.resolveFormula(formula, data, { allowNoDice: true });
-              outcome = rollEngine.executeRoll(resolved, 'pool', Math.random);
+              outcome = rollEngine.executeRoll(resolved, 'pool', cryptoRng);
             } catch (e) { return; }
             const netDrain = Math.max(0, drainValue - outcome.hits);
             // Apply net drain to stun track, overflow into Physical
@@ -3041,7 +3041,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 const noFumble = spend.negate || (luckNegatesFumble && spend.bonus > 0);
                 const luck = spend.total;
                 let toHit;
-                try { toHit = sheetAttack.rollToHit(attackerData, weapon, aimed, Math.random, { luck: spend.bonus, noFumble, hp: attackerHp }); } catch (e) { return; }
+                try { toHit = sheetAttack.rollToHit(attackerData, weapon, aimed, cryptoRng, { luck: spend.bonus, noFumble, hp: attackerHp }); } catch (e) { return; }
                 const hit = toHit.total >= dv;
                 const critTag = toHit.critical === 'success' ? ' — CRITICAL!'
                   : toHit.critical === 'failure' ? ' — FUMBLE!' : '';

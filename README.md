@@ -465,7 +465,7 @@ CITY_NET/
 │   │   ├── tokenVitals.js      # The one-time start of per-system token health: each token's current values saved under every system it could be shown in (a player's sheet systems, or every system for enemies and friendlies, plus the running one), so switching shows what it showed before. Adds rows only; a marker so it runs once
 │   │   └── sanity_checks.js    # In-memory DB checks on boot
 │   ├── utils/
-│   │   └── random.js           # cryptoRng — uniform [0,1) from OS entropy (crypto.randomInt); default rng for every roll that decides an outcome
+│   │   └── random.js           # cryptoRng — uniform [0,1) from OS entropy (crypto.randomInt); default rng for every roll that decides an outcome, read at each call so a test can stand in for the dice
 │   └── __tests__/
 │       ├── helpers/
 │       │   ├── testDb.js               # In-memory SQLite factory for isolated test DBs
@@ -605,6 +605,7 @@ CITY_NET/
 │       ├── sheet_import.test.js        # Import pipeline (PDF form extraction, alias mapping, preview route)
 │       ├── rollEngine.test.js          # Roll formula engine
 │       ├── random.test.js              # cryptoRng range/uniqueness; roll engine and attack modules exercised without an injected rng
+│       ├── secure_dice.test.js         # Every file that rolls dice found, none naming Math.random, every default source of dice the secure one (null only for a preview that rolls nothing)
 │       ├── cwn_templates.test.js       # CWN template metadata (derived fields, AC linking, unset-stat neutrality)
 │       ├── cwn_attack.test.js          # CWN attack module (roll-to-hit, damage, trauma vs TT, shock, stabilize)
 │       ├── cwn_seating.test.js         # Seating and unseating: one seat one person, a seat the vehicle does not have refused, and only the occupant or the GM getting them out — checked over the socket, since hiding a button proves nothing
