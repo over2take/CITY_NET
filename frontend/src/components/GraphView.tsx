@@ -171,8 +171,9 @@ function ListNode({ data }: NodeProps<Node<NodeData>>) {
           </React.Fragment>
         );
       })}
-      {/* The whole group, for a roll it is ROLLED BY (6b4a): shown only while wired. */}
-      <Handle type="source" id="out" position={Position.Right} isConnectable={false} style={v.used.has(`${n.id}:out`) ? { ...dot('var(--warning)'), top: 14 } : { ...hidden, top: 14 }} />
+      {/* The whole group, for a roll it is ROLLED BY (6b4a): shown while wired, and faint to draw from (6b4b). */}
+      <Handle type="source" id="out" position={Position.Right} isConnectable={v.editable} title={v.editable ? 'Drag onto a roll: rolled by every stat in the group' : undefined}
+        style={v.used.has(`${n.id}:out`) ? { ...dot('var(--warning)'), top: 14 } : v.editable ? { ...dot('var(--warning)'), opacity: 0.35, top: 14, cursor: 'crosshair' } : { ...hidden, top: 14 }} />
       <Handle type="target" id="note" position={Position.Right} isConnectable={false} style={{ ...hidden, top: 14 }} />
     </div>
   );

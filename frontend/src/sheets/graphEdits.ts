@@ -25,7 +25,7 @@ import { rollList, rollables, withRolledBy } from './rolls';
 export interface WireEdit { definition: Definition | null; message: string; open?: string }
 
 type Dot = { node: string; handle: string };
-type Given = { kind: 'value' | 'table' | 'rule' | 'note'; id: string } | null;
+type Given = { kind: 'value' | 'table' | 'rule' | 'note' | 'group'; id: string } | null;
 
 const upper = (s: string) => s.toUpperCase();
 /** What players call a stat or formula. */
@@ -35,11 +35,12 @@ const nameOf = (def: Definition, id: string): string => upper(
 const ruleName = (def: Definition, id: string) => upper(houseRuleList(def).find((r) => r.id === id)?.name || id);
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-/** What flows from a dot on the map: a stat's or formula's value, a table, a house rule, a note to pin, or nothing to wire. */
+/** What flows from a dot on the map: a stat's or formula's value, a whole stats group (its list's own dot, for a roll), a table, a house rule, a note to pin, or nothing to wire. */
 export const givenBy = (graph: Graph, dot: Dot): Given => {
   const n = graph.nodes.find((x) => x.id === dot.node);
   if (!n) return null;
   if (n.kind === 'list' && dot.handle.startsWith('out:')) return { kind: 'value', id: dot.handle.slice(4) };
+  if (n.kind === 'list' && dot.handle === 'out') return { kind: 'group', id: n.id };
   if ((n.kind === 'formula' || n.kind === 'condition') && dot.handle === 'out') return { kind: 'value', id: n.id };
   if (n.kind === 'table' && dot.handle === 'out') return { kind: 'table', id: n.id.slice('table:'.length) };
   if (n.kind === 'rule' && dot.handle === 'out') return { kind: 'rule', id: n.id.slice('rule:'.length) };
@@ -75,6 +76,17 @@ export const withWire = (def: Definition, graph: Graph, from: Dot, to: string): 
   }
   if (!target) return { definition: null, message: 'Drop the wire on a formula.' };
   if (target.kind === 'list') return { definition: null, message: 'Players fill in stats, so nothing is wired into them. Drop the wire on a formula.' };
+  // Into a roll (6b4b): a stat, a formula or a whole stats group is something it is ROLLED BY.
+  if (target.kind === 'roll') {
+    const roll = rollList(def).find((r) => `roll:${r.id}` === to)!;
+    const label = upper(roll.label || roll.id);
+    if (given.kind === 'table') return { definition: null, message: `A roll reads a table in its dice or adding: type ${given.id}(@something) in ${label}'s panel.`, open: to };
+    if (given.kind === 'rule') return { definition: null, message: 'A house rule swaps formulas, not rolls.' };
+    const name = rollables(def).find((x) => x.id === given.id)?.label ?? upper(given.id);
+    if ((roll.by ?? []).includes(given.id)) return { definition: null, message: `${label} is already rolled by ${name}.` };
+    return { definition: withRolledBy(def, roll.id, given.id, true), message: `${label} is now rolled by ${name}: a die button by ${given.kind === 'group' ? 'each of its stats' : 'it'} on the sheet.` };
+  }
+  if (given.kind === 'group') return { definition: null, message: 'A whole stats group goes into a roll\'s ROLLED BY. A formula reads one stat at a time: draw from its row.' };
   if (target.kind !== 'formula' && target.kind !== 'condition') return { definition: null, message: 'Wires go into formulas.' };
   const f = formulaList(def).find((x) => x.id === to)!;
   const label = upper(f.label || f.id);

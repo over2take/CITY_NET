@@ -9,6 +9,7 @@ import { addChoices, matching, withAdded, withRemoved } from '../graphAdds';
 import { graphOf, positionsOf } from '../graphModel';
 import { notesOf, withNewNote, withoutNote } from '../graphNotes';
 import { withNewFormula, withNewCondition, withNewStat, withNewGroup, withNewTable, withoutFormula, withoutTable, withoutGroup } from '../statsRules';
+import { withNewRoll } from '../rolls';
 import type { Definition } from '../systemsApi';
 
 const req = createRequire(import.meta.url);
@@ -22,13 +23,16 @@ const HEARTH: Definition = {
   derived: [{ id: 'melee', label: 'Melee', formula: '@str + 1' }],
   house_rules: [{ id: 'magic', name: 'Magic' }],
 };
+const problems = (def: Definition) => checkDefinition(def).problems.map((p: { where: string; message: string }) => `${p.where}: ${p.message}`);
 const without = (def: Definition) => { const { graph: _g, ...rest } = def; return rest; };
 
 describe('what can be added', () => {
-  it('a formula, a stat in each group, a group, a table, a condition and a note now; the rest saying when', () => {
+  it('a formula, a stat in each group, a group, a table, a condition, a note and a roll from each preset now; the rest saying when', () => {
     expect(addChoices(HEARTH).map((c) => `${c.label}${c.soon ? ` (${c.soon})` : ''}`)).toEqual([
-      'FORMULA', 'STAT IN ABILITIES', 'STATS GROUP', 'TABLE',
-      'CONDITION', 'NOTE', 'ROLL (Phase 6)', 'CHOICE · FEATURE (Phase 7)',
+      'FORMULA', 'STAT IN ABILITIES', 'STATS GROUP', 'TABLE', 'CONDITION', 'NOTE',
+      'ROLL · D&D CHECK', 'ROLL · PBTA MOVE', 'ROLL · BLADES ACTION', 'ROLL · VAMPIRE POOL', 'ROLL · FATE CHECK',
+      'ROLL · CWN SKILL CHECK', 'ROLL · CWN SAVE', 'ROLL · CP:R CHECK', 'ROLL · SR6 POOL',
+      'CHOICE · FEATURE (Phase 7)',
     ]);
   });
 
@@ -36,7 +40,8 @@ describe('what can be added', () => {
     expect(matching(addChoices(HEARTH), 'stat').map((c) => c.key)).toEqual(['stat:abilities', 'group']);
     expect(matching(addChoices(HEARTH), 'stat abil').map((c) => c.key)).toEqual(['stat:abilities']);
     expect(matching(addChoices(HEARTH), 'bands').map((c) => c.key)).toEqual(['table']);
-    expect(matching(addChoices(HEARTH), '').length).toBe(8);
+    expect(matching(addChoices(HEARTH), '').length).toBe(16);
+    expect(matching(addChoices(HEARTH), 'roll vampire').map((c) => c.key)).toEqual(['roll:vampire']);
   });
 });
 
@@ -59,6 +64,15 @@ describe('a node added', () => {
     const gr = withAdded(HEARTH, 'group', { x: 24, y: 24 })!;
     expect(without(gr.definition)).toEqual(withNewGroup(HEARTH));
     expect(gr.node).toBe('new_group');
+
+    // A roll from a preset (6b4b), as the ROLLS tab's preset buttons make it, its ROLL node opened.
+    const r = withAdded(HEARTH, 'roll:pbta', { x: 240, y: 480 })!;
+    expect(without(r.definition)).toEqual(withNewRoll(HEARTH, 'pbta')!.definition);
+    expect(r.node).toBe('roll:pbta_move');
+    expect((r.definition.graph as { positions: Record<string, number[]> }).positions['roll:pbta_move']).toEqual([240, 480]);
+    expect(withAdded(r.definition, 'roll:pbta', { x: 0, y: 0 })!.node).toBe('roll:pbta_move_2');
+    expect(withAdded(HEARTH, 'roll:nonsense', { x: 0, y: 0 })).toBeNull();
+    expect(problems(r.definition)).toEqual([]);
   });
 
   it('where something already is, the nearest place clear of every node instead (5b6a)', () => {

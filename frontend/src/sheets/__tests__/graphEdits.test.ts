@@ -241,6 +241,30 @@ describe('a wire into a roll (6b4a)', () => {
     expect(withoutWire(ROLLING, g, wire('bonus'))).toEqual({ definition: null, message: 'BONUS is read inside SKILL CHECK: change it in the panel.', open: 'roll:skill' });
   });
 
+  it('drawn into it (6b4b): a stat, a formula or a whole group is something it is rolled by', () => {
+    const lone: Definition = { ...ROLLING, rolls: [{ ...(ROLLING.rolls as object[])[0], by: [] }] };
+    const lg = graphOf(lone);
+    const into = (node: string, handle: string, def = lone, graph = lg) => withWire(def, graph, { node, handle }, 'roll:skill');
+    expect(givenBy(lg, { node: 'skills', handle: 'out' })).toEqual({ kind: 'group', id: 'skills' });
+    const group = into('skills', 'out');
+    expect((group.definition!.rolls as { by: string[] }[])[0].by).toEqual(['skills']);
+    expect(group.message).toBe('SKILL CHECK is now rolled by SKILLS: a die button by each of its stats on the sheet.');
+    expect((into('abilities', 'out:str').definition!.rolls as { by: string[] }[])[0].by).toEqual(['str']);
+    expect(into('abilities', 'out:str').message).toBe('SKILL CHECK is now rolled by STRENGTH: a die button by it on the sheet.');
+    expect((into('bonus', 'out').definition!.rolls as { by: string[] }[])[0].by).toEqual(['bonus']);
+    // Drawn again, nothing changes.
+    expect(into('skills', 'out', ROLLING, g)).toEqual({ definition: null, message: 'SKILL CHECK is already rolled by SKILLS.' });
+    expect(problems(group.definition!)).toEqual([]);
+  });
+
+  it('a table or a house rule is no ROLLED BY, and a whole group goes only into a roll', () => {
+    const withTable: Definition = { ...ROLLING, lookups: { mod: { bands: [{ value: 0 }] } }, house_rules: [{ id: 'magic', name: 'Magic' }] };
+    const tg = graphOf(withTable);
+    expect(withWire(withTable, tg, { node: 'table:mod', handle: 'out' }, 'roll:skill')).toEqual({ definition: null, message: "A roll reads a table in its dice or adding: type mod(@something) in SKILL CHECK's panel.", open: 'roll:skill' });
+    expect(withWire(withTable, tg, { node: 'rule:magic', handle: 'out' }, 'roll:skill')).toEqual({ definition: null, message: 'A house rule swaps formulas, not rolls.' });
+    expect(withWire(ROLLING, g, { node: 'skills', handle: 'out' }, 'bonus')).toEqual({ definition: null, message: "A whole stats group goes into a roll's ROLLED BY. A formula reads one stat at a time: draw from its row." });
+  });
+
   it('named as players see them, before it is cut', () => {
     expect(wireLabel(ROLLING, wire('skills'))).toBe('SKILL CHECK rolled by SKILLS');
     expect(wireLabel(ROLLING, wire('bonus'))).toBe('BONUS into SKILL CHECK');
