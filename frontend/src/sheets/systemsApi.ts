@@ -46,7 +46,9 @@ export interface TestedRoll {
     natural: { label: string; critical?: 'success' | 'failure' } | null;
     matches: { label: string; sets: number; critical?: 'success' | 'failure' }[];
     glitch: string | null; effects: string[]; critical: 'success' | 'failure' | null;
-    changes: string[]; costs: { from: string; amount: number }[]; zero?: true;
+    changes: string[]; costs: { from: string; amount: number; adds?: true }[]; zero?: true;
+    /** Conditions' modifiers on all rolls, each added as its own term (6b3b). */
+    terms?: { label: string; amount: number }[];
   };
   historyText: string;
   total: number;
@@ -136,8 +138,8 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      * engine, for `fieldId` or the first field it is rolled by, with the changes picked. Changes
      * nothing, logs nothing.
      */
-    testRoll: (definition: Definition, rollId: string, fieldId?: string | null, changes: string[] = []) =>
-      call<TestedRoll>(fetcher, token, '/api/systems/test-roll', 'POST', { definition, rollId, fieldId: fieldId ?? undefined, changes }),
+    testRoll: (definition: Definition, rollId: string, fieldId?: string | null, changes: string[] = [], conditions: string[] = []) =>
+      call<TestedRoll>(fetcher, token, '/api/systems/test-roll', 'POST', { definition, rollId, fieldId: fieldId ?? undefined, changes, conditions }),
     /**
      * A draft's sheet as it would be drawn (its own or the starter, without the parts it turned
      * off), and the starter sheet CUSTOMIZE copies, without saving (CHARACTER SHEET).

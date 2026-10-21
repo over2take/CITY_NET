@@ -92,6 +92,16 @@ export const conditionsOf = (def: Definition): Condition[] => conditionList(def)
   .map(({ on, ...c }) => c)
   .slice(0, LIMITS.conditions);
 
+/**
+ * The conditions that change every roll (6b3b): those the game offers with a modifier on all rolls,
+ * each with what its modifiers on all rolls come to, for TEST ROLL's switches. As the server's
+ * tableRolls.termsOf reads them: whole numbers, never 0.
+ */
+export const onAllRolls = (def: Definition): { id: string; short: string; amount: number }[] => conditionsOf(def).flatMap((c) => {
+  const counted = c.modifiers.filter((m) => m.target === ALL_ROLLS && Number.isInteger(m.amount) && m.amount !== 0);
+  return counted.length ? [{ id: c.id, short: c.short, amount: counted.reduce((n, m) => n + m.amount, 0) }] : [];
+});
+
 /** How many conditions a system has, the standard ones included, against the limit of 60. */
 export const conditionCount = (def: Definition) => STANDARD.length + Object.keys(storedOf(def)).filter((id) => !standardOf(id)).length;
 

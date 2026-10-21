@@ -8,6 +8,7 @@ import {
   type Roll, type Sides, type ChangePatch,
 } from '../sheets/rolls';
 import { small, why, btn, field } from './statsRulesStyles';
+import { onAllRolls } from '../sheets/conditions';
 
 // STATS & RULES' ROLLS tab (Phase 6, 6b1a; approved mockup docs/mockups/builder-rolls.html,
 // 2026-10-19, on the builder design's Dice page): the system's rolls on the left; the one picked in
@@ -444,18 +445,35 @@ function RollEditor({ definition, edit, roll, onRemoved }: Props & { roll: Roll;
   );
 }
 
-/** TEST ROLL: the roll made by the server's engine for the sample character, for a field it is rolled by, with changes picked. */
+/** One of TEST ROLL's switches: a change picked, or a condition the sample is under. */
+const TestSwitch = ({ label, on, color, onFlip }: { label: string; on: boolean; color: string; onFlip: () => void }) => (
+  <button type="button" role="switch" aria-checked={on} onClick={onFlip}
+    style={{ background: 'none', border: 0, padding: 0, color, fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, cursor: 'pointer', display: 'inline-flex', gap: 5, alignItems: 'center' }}>
+    <span aria-hidden style={{ width: 20, height: 10, borderRadius: 5, border: `1px solid ${color}`, background: on ? color : 'none', boxSizing: 'border-box' }} />
+    {label}
+  </button>
+);
+
+const signedWord = (n: number) => (n < 0 ? `−${-n}` : `+${n}`);
+
+/**
+ * TEST ROLL: the roll made by the server's engine for the sample character, for a field it is rolled
+ * by, with changes picked, and under the conditions that change every roll (6b3b; the mockup's HURT).
+ */
 function TestRoll({ definition, api, roll }: { definition: Definition; api?: ReturnType<typeof systemsApi>; roll: Roll }) {
   const fields = fieldsRolledBy(definition, roll);
   const names = new Map(rollables(definition).map((c) => [c.id, c.label]));
+  const conditions = onAllRolls(definition);
   const [pickedField, setField] = useState<string>('');
   const [chosen, setChosen] = useState<string[]>([]);
+  const [under, setUnder] = useState<string[]>([]);
   const [shown, setShown] = useState<{ tested?: TestedRoll; error?: string; busy?: boolean }>({});
   const fieldNow = fields.includes(pickedField) ? pickedField : fields[0] ?? '';
   const run = async () => {
     if (!api) return;
     setShown({ busy: true });
-    const r = await api.testRoll(definition, roll.id, fieldNow || null, chosen.filter((c) => (roll.changes ?? []).some((x) => x.id === c)));
+    const r = await api.testRoll(definition, roll.id, fieldNow || null, chosen.filter((c) => (roll.changes ?? []).some((x) => x.id === c)),
+      under.filter((id) => conditions.some((c) => c.id === id)));
     setShown(r.ok ? { tested: r.value } : { error: r.error });
   };
   const res = shown.tested?.result;
@@ -476,13 +494,15 @@ function TestRoll({ definition, api, roll }: { definition: Definition; api?: Ret
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {(roll.changes ?? []).map((c) => {
             const on = chosen.includes(c.id);
-            return (
-              <button key={c.id} type="button" role="switch" aria-checked={on} onClick={() => setChosen(on ? chosen.filter((x) => x !== c.id) : [...chosen, c.id])}
-                style={{ background: 'none', border: 0, padding: 0, color: 'var(--cyan)', fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, cursor: 'pointer', display: 'inline-flex', gap: 5, alignItems: 'center' }}>
-                <span aria-hidden style={{ width: 20, height: 10, borderRadius: 5, border: '1px solid var(--cyan)', background: on ? 'var(--cyan)' : 'none', boxSizing: 'border-box' }} />
-                {c.label.toUpperCase()}
-              </button>
-            );
+            return <TestSwitch key={c.id} label={c.label.toUpperCase()} on={on} color="var(--cyan)" onFlip={() => setChosen(on ? chosen.filter((x) => x !== c.id) : [...chosen, c.id])} />;
+          })}
+        </div>
+      )}
+      {conditions.length > 0 && (
+        <div role="group" aria-label="Conditions on the sample" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {conditions.map((c) => {
+            const on = under.includes(c.id);
+            return <TestSwitch key={c.id} label={`${c.short} · ALL ROLLS ${signedWord(c.amount)}`} on={on} color="var(--warning)" onFlip={() => setUnder(on ? under.filter((x) => x !== c.id) : [...under, c.id])} />;
           })}
         </div>
       )}
@@ -503,7 +523,7 @@ function TestRoll({ definition, api, roll }: { definition: Definition; api?: Ret
           </div>
           <span data-testid="test-working" style={{ wordBreak: 'break-word' }}>{shown.tested!.historyText.replace(/^.*?\[/, '[')}</span>
           <b data-testid="test-outcome" style={{ fontSize: 16, letterSpacing: 2, color: tone }}>{outcome}</b>
-          {res.costs.length > 0 && <span style={{ ...why, fontSize: 11 }}>At the table this costs {res.costs.map((c) => `${c.amount} ${c.from.toUpperCase()}`).join(' and ')}.</span>}
+          {res.costs.length > 0 && <span style={{ ...why, fontSize: 11 }}>At the table this {res.costs.map((c) => `${c.adds ? 'adds' : 'costs'} ${c.amount} ${c.from.toUpperCase()}`).join(' and ')}.</span>}
         </>
       )}
       {shown.error && <span role="alert" style={{ color: 'var(--danger)', fontSize: 11 }}>{shown.error}</span>}
