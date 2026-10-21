@@ -171,6 +171,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **A system's own dice, the data (6c1a).** The first of the dice pieces (approved mockup, 2026-10-21):
+  a system can now hold its own symbols (HIT, MISS, a mark for each, what cancels what) and dice
+  whose faces show numbers, signs or symbols, checked like the rest of a shared file and carried
+  in it beside the system, so a build from before them still installs it (checked with the dev
+  build's own reader). Nothing uses them yet; rolling them, and the DICE tab, come next.
 - **Every roll on the server's secure dice (6d).** The built-in games' sheet rolls, NPC rolls, pool
   rolls, an attack's to-hit and a vehicle's ram now roll on the operating system's random source,
   as damage, initiative and a custom system's rolls already did. A test holds every file that rolls

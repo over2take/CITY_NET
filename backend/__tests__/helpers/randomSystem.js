@@ -286,6 +286,19 @@ const randomSystem = (seed, { parts = true } = {}) => {
       return { id: `roll${i + 1}`, label: r.word(2).slice(0, 40), ...JSON.parse(JSON.stringify(PRESETS[key].roll)), by: r.some(rollables, 0.3) };
     });
   }
+
+  // DICE (6c1a): for some systems, symbols and dice whose faces show numbers, symbols or nothing;
+  // last again, so every seed's system is otherwise as before.
+  if (r.chance(0.4)) {
+    const symbols = Array.from({ length: r.int(1, 6) }, (_, i) => ({ id: `sym${i + 1}`, name: r.word(1).slice(0, 20), mark: r.pick(['✶', '✕', '◆', '◇', '★', '☠', 'S', 'F']) }));
+    if (symbols.length >= 2 && r.chance(0.5)) { symbols[0].cancels = symbols[1].id; symbols[1].cancels = symbols[0].id; }
+    if (symbols.length >= 3 && r.chance(0.5)) symbols[2].also = symbols[0].id;
+    def.symbols = symbols;
+    def.dice = Array.from({ length: r.int(1, 4) }, (_, i) => ({
+      id: `die${i + 1}`, name: r.word(1).slice(0, 20), ...(r.chance(0.3) ? { color: 'danger' } : {}),
+      faces: Array.from({ length: r.int(2, 12) }, () => ({ ...(r.chance(0.5) ? { n: r.int(-3, 6) } : {}), ...(r.chance(0.6) ? { s: r.some(symbols.map((s) => s.id), 0.3) } : {}) })),
+    }));
+  }
   return def;
 };
 
