@@ -50,12 +50,33 @@ test('every control in the builder takes a click, on every page', async ({ page 
     await builderPage(page, p);
     missed[p] = await unreachable(page);
     if (p === 'STATS & RULES') {
+      // Each of its tabs, not only the first.
+      for (const tab of ['FORMULAS', 'TABLES', 'ROLLS']) {
+        await page.getByRole('tab', { name: tab, exact: true }).click();
+        missed[`${p} · ${tab}`] = await unreachable(page);
+      }
+      // ROLLS shows one roll at a time: two made from presets, so all five steps and TEST ROLL
+      // have something in them. Blades' push with its cost (TAKES or ADDS); Vampire's Hunger dice
+      // with their effects and glitch.
+      for (const preset of ['BLADES ACTION', 'VAMPIRE POOL']) {
+        if (preset !== 'BLADES ACTION') await page.getByRole('navigation', { name: 'Rolls' }).getByRole('button', { name: '+ ROLL' }).click();
+        await page.getByRole('group', { name: 'New roll from a preset' }).getByRole('button', { name: preset }).click();
+        await expect(page.getByTestId('test-roll')).toBeVisible();
+        missed[`${p} · ROLLS · ${preset}`] = await unreachable(page);
+      }
+      await page.getByRole('tab', { name: 'STATS', exact: true }).click();
       // And as a map (5a3a): the map's own controls, then back to FORMS, as the next journeys expect.
       const view = page.getByRole('group', { name: 'View' });
       await view.getByRole('button', { name: 'GRAPH' }).click();
       await expect(page.getByTestId('graph-view')).toBeVisible();
       missed[`${p} · GRAPH`] = await unreachable(page);
       await view.getByRole('button', { name: 'FORMS' }).click();
+    }
+    if (p === 'NPCS') {
+      // Its second tab, the tiers.
+      await page.getByRole('tab', { name: 'TIERS', exact: true }).click();
+      missed[`${p} · TIERS`] = await unreachable(page);
+      await page.getByRole('tab', { name: 'STAT BLOCK', exact: true }).click();
     }
   }
   expect(Object.fromEntries(Object.entries(missed).filter(([, v]) => v.length))).toEqual({});
