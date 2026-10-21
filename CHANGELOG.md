@@ -141,6 +141,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   stat stands ("YOU HAVE 4", or "3 OF 9" for one that adds), and a choice the sheet can't pay is off:
   too little to take, or past the stat's highest. The server checks again before rolling. The Blades
   in the Dark preset's push now adds Stress, as the game does.
+- **Conditions reach a custom system's rolls (6b3b).** A condition with a modifier on all rolls, set
+  in the builder since conditions arrived, now changes every roll of the system's own made by a
+  character with it on their token, players' and NPCs' alike. The roll log names it:
+  "4 5 = 9 + 3 - 1 (HURT) = 11". It counts toward a target or band, so HURT can turn a hit into a
+  cost. A modifier on one stat is still only shown, as before.
 
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the
