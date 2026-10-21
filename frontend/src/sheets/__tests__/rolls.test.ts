@@ -13,6 +13,7 @@ import {
   withRollExplode, withRollList, withRollCancel, withRollGlitch, withRollZero, withRollChange, costables,
 } from '../rolls';
 import type { Definition } from '../systemsApi';
+import { withDicePreset } from '../dice';
 
 const req = createRequire(import.meta.url);
 const { checkDefinition } = req('../../../../backend/systemBuilder/definition.js');
@@ -338,5 +339,42 @@ describe('the changes picked before rolling, changed (6b1b3)', () => {
 
   it('can cost any stat, in players\' names', () => {
     expect(costables(HEARTH)).toEqual([{ id: 'str', label: 'STRENGTH' }, { id: 'fight', label: 'FIGHT' }, { id: 'lore', label: 'LORE' }]);
+  });
+});
+
+describe('the system\'s own dice in a roll (6c3)', () => {
+  const OWN: Definition = { ...withDicePreset(HEARTH, 'narrative')!.definition };
+  const made = withNewRoll(OWN, 'pbta')!;
+  const id = made.id;
+  const only = (def: Definition) => (def.rolls as Roll[]).find((r) => r.id === id)!;
+
+  it('a kind of dice becomes one of them, its size and name going with it; a size picked again, back', () => {
+    const named = withRollDice(made.definition, id, 0, { name: 'Hope' });
+    const own = withRollDice(named, id, 0, { die: 'good' });
+    expect(only(own).dice[0]).toEqual({ count: '2', die: 'good' });
+    expect(only(withRollDice(own, id, 0, { sides: 8 })).dice[0]).toEqual({ count: '2', sides: 8 });
+    expect(problems(own)).toEqual([]);
+  });
+
+  it('read as the symbols, what is left of one or the numbers; another read lets the symbol go', () => {
+    const own = withRollDice(made.definition, id, 0, { die: 'good' });
+    const hits = withRollRead(own, id, 'symbols', { on: 'hit' });
+    expect([only(hits).read, only(hits).on]).toEqual(['symbols', 'hit']);
+    expect('on' in only(withRollRead(hits, id, 'symbols', { on: null }))).toBe(false);
+    expect(only(withRollRead(hits, id, 'symbols')).on).toBe('hit');
+    expect('on' in only(withRollRead(hits, id, 'sum'))).toBe(false);
+    expect(problems(hits)).toEqual([]);
+  });
+
+  it('in the tab\'s words: the die and the symbol by name', () => {
+    const own = withRollRead(withRollDice(made.definition, id, 0, { die: 'good' }), id, 'symbols', { on: 'hit' });
+    expect(stepsOf(only(own), own).dice).toEqual(['2 × GOOD']);
+    expect(stepsOf(only(own), own).read).toBe('COUNT THE SYMBOLS · HIT LEFT');
+    expect(stepsOf(only(withRollRead(own, id, 'symbols', { on: null })), own).read).toBe('COUNT THE SYMBOLS');
+    // Without the system, by id.
+    expect(stepsOf(only(own)).dice).toEqual(['2 × GOOD']);
+    // By the name it has now, not its id.
+    const renamed = { ...own, dice: (own.dice as { id: string; name: string }[]).map((d) => (d.id === 'good' ? { ...d, name: 'Boon' } : d)) };
+    expect(stepsOf(only(renamed), renamed).dice).toEqual(['2 × BOON']);
   });
 });

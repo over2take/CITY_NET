@@ -45,6 +45,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Rolls with the system's own dice (6c3).** On the ROLLS tab, the dice step now lists the system's
+  own dice (from the DICE tab) under the usual sizes. With one picked, the roll can COUNT THE
+  SYMBOLS: each pair cancels (a HIT against a MISS) and the roll reads what is left of the symbol
+  you choose, so AGAINST 1 means at least one HIT left. TEST ROLL shows each die as the face it
+  landed on, pictures and all. On the DICE tab, giving a numbered die more faces now numbers them
+  on: a d6 made a d13 gets faces 7 to 13.
 - **The DICE tab (6c2b2).** STATS & RULES has a DICE tab, between TABLES and ROLLS, for a system's own
   dice. Start from a preset (Fate's dF, a GOOD / GREAT / BAD set of symbol dice, a d6 with a word on
   a face), make a plain d6, or copy one of the dice you made with CUSTOM_DIE.EXE (its words become

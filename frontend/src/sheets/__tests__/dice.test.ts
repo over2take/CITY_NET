@@ -248,3 +248,16 @@ describe('over random edits', () => {
     }
   });
 });
+
+describe('more faces on a numbered die (6c3)', () => {
+  it('carry the numbering on where the faces are 1, 2, 3 in order; otherwise blank', () => {
+    const d6 = withNewDie(BLANK)!;
+    expect(die(withFaceCount(d6.definition, d6.id, 13), d6.id).faces.map((f) => f.n)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]);
+    expect(problems(withFaceCount(d6.definition, d6.id, 13))).toEqual([]);
+    // A face out of order, or with a symbol, and the new ones are blank.
+    const odd = withFace(d6.definition, d6.id, 2, { n: 9 });
+    expect(die(withFaceCount(odd, d6.id, 8), d6.id).faces.slice(6)).toEqual([{}, {}]);
+    const marked = withFace(withNewSymbol(d6.definition)!.definition, d6.id, 0, { s: ['new_symbol'] });
+    expect(die(withFaceCount(marked, d6.id, 7), d6.id).faces[6]).toEqual({});
+  });
+});

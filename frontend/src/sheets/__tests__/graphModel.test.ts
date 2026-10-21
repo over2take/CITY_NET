@@ -533,5 +533,8 @@ describe('a roll on the map (6b4a)', () => {
     expect(rollText({ id: 'a', dice: [{ count: ' 3 ', sides: 'F' }], read: 'lowest' })).toBe('3dF KEEP LOWEST 1');
     expect(rollText({ id: 'a', dice: [{ count: '@this', sides: 10 }], read: 'count', at: 8, add: '1', against: '3' })).toBe('(@this)d10 COUNT 8+ + 1 VS 3');
     expect(rollText({ id: 'a', dice: [] })).toBe('NO DICE');
+    // A system's own die by its name, counting the symbols (6c3).
+    const def = { format: 1, name: 'H', dice: [{ id: 'good', name: 'Good', faces: [{}, {}] }] };
+    expect(rollText({ id: 'a', dice: [{ count: '2', die: 'good' }, { count: '1', die: 'gone' }], read: 'symbols', on: 'hit' }, def)).toBe('2 GOOD + 1 GONE COUNT THE SYMBOLS');
   });
 });

@@ -8,6 +8,8 @@ import {
   type Roll, type Sides, type ChangePatch,
 } from '../sheets/rolls';
 import { small, why, btn, field } from './statsRulesStyles';
+import { dieList, symbolList } from '../sheets/dice';
+import { FaceShown } from './DrawPad';
 import { onAllRolls } from '../sheets/conditions';
 
 // STATS & RULES' ROLLS tab (Phase 6, 6b1a; approved mockup docs/mockups/builder-rolls.html,
@@ -75,18 +77,31 @@ function DiceStep({ definition, edit, roll }: { definition: Definition; edit: (n
   return (
     <>
       {roll.dice.map((d, i) => {
-        const sizes = SIDES.includes(d.sides) ? SIDES : [...SIDES, d.sides];
+        const sides = d.sides ?? 6;
+        const sizes = SIDES.includes(sides) ? SIDES : [...SIDES, sides];
+        const own = dieList(definition);
         return (
           <div key={i} data-testid={`dice-${i + 1}`} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto 96px minmax(0, 1fr) auto', gap: 6, alignItems: 'center', ...(d.name ? { borderLeft: '3px solid var(--danger)', paddingLeft: 6 } : {}) }}>
             <input type="text" aria-label={`Dice ${i + 1}: how many`} maxLength={1000} value={d.count} style={{ ...field, width: '100%' }}
               onChange={(e) => edit(withRollDice(definition, roll.id, i, { count: e.target.value }))} />
             <span>×</span>
-            <select aria-label={`Dice ${i + 1}: size`} value={String(d.sides)} style={{ ...field, width: '100%' }}
-              onChange={(e) => edit(withRollDice(definition, roll.id, i, { sides: e.target.value === 'F' ? 'F' : Number(e.target.value) }))}>
+            <select aria-label={`Dice ${i + 1}: size`} value={d.die !== undefined ? `die:${d.die}` : String(sides)} style={{ ...field, width: '100%' }}
+              onChange={(e) => edit(e.target.value.startsWith('die:')
+                ? withRollDice(definition, roll.id, i, { die: e.target.value.slice(4) })
+                : withRollDice(definition, roll.id, i, { sides: e.target.value === 'F' ? 'F' : Number(e.target.value) }))}>
               {sizes.map((sz) => <option key={sz} value={String(sz)}>{sideLabel(sz)}</option>)}
+              {/* The system's own dice (6c3), from the DICE tab; one no longer there still shows what it named. */}
+              {(own.length > 0 || d.die !== undefined) && (
+                <optgroup label="THE SYSTEM'S OWN">
+                  {own.map((o) => <option key={o.id} value={`die:${o.id}`}>{o.name.toUpperCase()}</option>)}
+                  {d.die !== undefined && !own.some((o) => o.id === d.die) && <option value={`die:${d.die}`}>{d.die.toUpperCase()} (GONE)</option>}
+                </optgroup>
+              )}
             </select>
-            <input type="text" aria-label={`Dice ${i + 1}: name`} maxLength={40} value={d.name ?? ''} placeholder="NAMED? (HUNGER)" style={{ ...field, width: '100%' }}
-              onChange={(e) => edit(withRollDice(definition, roll.id, i, { name: e.target.value }))} />
+            {d.die !== undefined
+              ? <span style={{ ...why, fontSize: 11 }}>ITS OWN FACES AND NAME</span>
+              : <input type="text" aria-label={`Dice ${i + 1}: name`} maxLength={40} value={d.name ?? ''} placeholder="NAMED? (HUNGER)" style={{ ...field, width: '100%' }}
+                onChange={(e) => edit(withRollDice(definition, roll.id, i, { name: e.target.value }))} />}
             <button type="button" className="utility-btn" style={xBtn} aria-label={`Remove dice ${i + 1}`} disabled={roll.dice.length <= 1}
               onClick={() => edit(withRollDiceRemoved(definition, roll.id, i))}>×</button>
           </div>
@@ -94,21 +109,24 @@ function DiceStep({ definition, edit, roll }: { definition: Definition; edit: (n
       })}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <button type="button" className="utility-btn" style={btn} disabled={roll.dice.length >= 6} onClick={() => edit(withRollDiceAdded(definition, roll.id))}>+ ADD DICE</button>
-        <span style={{ ...why, fontSize: 11 }}>How many can read the sheet: @this, @hunger. A named kind (Hunger) is shown apart and can have its own effects.</span>
+        <span style={{ ...why, fontSize: 11 }}>How many can read the sheet: @this, @hunger. A named kind (Hunger) is shown apart and can have its own effects. The system&apos;s own dice, from the DICE tab, are under the sizes.</span>
       </div>
     </>
   );
 }
 
-const READS: [NonNullable<Roll['read']>, string][] = [['sum', 'SUM'], ['highest', 'KEEP HIGHEST'], ['lowest', 'KEEP LOWEST'], ['count', 'COUNT SUCCESSES']];
+const READS: [NonNullable<Roll['read']>, string][] = [['sum', 'SUM'], ['highest', 'KEEP HIGHEST'], ['lowest', 'KEEP LOWEST'], ['count', 'COUNT SUCCESSES'], ['symbols', 'COUNT THE SYMBOLS']];
 
 /** Step 2: how the dice are read, with how many are kept or the face a success starts at. */
 function ReadStep({ definition, edit, roll }: { definition: Definition; edit: (next: Definition) => void; roll: Roll }) {
   const read = roll.read ?? 'sum';
+  // Counting the symbols reads the system's own dice: offered once the roll has one (6c3).
+  const ownDice = roll.dice.some((d) => d.die !== undefined);
+  const symbols = symbolList(definition);
   return (
     <>
       <div role="group" aria-label="Read the dice as" style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-        {READS.map(([k, label]) => (
+        {READS.filter(([k]) => k !== 'symbols' || ownDice || read === 'symbols').map(([k, label]) => (
           <button key={k} type="button" aria-pressed={read === k} onClick={() => edit(withRollRead(definition, roll.id, k))}
             style={{ background: read === k ? 'var(--green)' : 'none', color: read === k ? 'var(--black)' : 'var(--green)', border: '1px solid var(--dark-green)', fontFamily: 'monospace', fontSize: 11, padding: '2px 8px', cursor: 'pointer' }}>{label}</button>
         ))}
@@ -119,6 +137,16 @@ function ReadStep({ definition, edit, roll }: { definition: Definition; edit: (n
           <input type="text" aria-label="How many dice are kept" value={roll.keep ?? '1'} maxLength={1000} style={{ ...field, width: 120 }}
             onChange={(e) => edit(withRollRead(definition, roll.id, read, { keep: e.target.value }))} />
           <span style={{ opacity: 0.7 }}>{read === 'highest' ? 'HIGHEST' : 'LOWEST'}</span>
+        </label>
+      )}
+      {read === 'symbols' && (
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span>READ WHAT IS LEFT OF</span>
+          <select aria-label="Read what is left of" value={roll.on ?? ''} style={field} onChange={(e) => edit(withRollRead(definition, roll.id, 'symbols', { on: e.target.value || null }))}>
+            <option value="">NO SYMBOL: THE NUMBERS, SUMMED</option>
+            {symbols.map((s) => <option key={s.id} value={s.id}>{s.name.toUpperCase()}</option>)}
+          </select>
+          <span style={{ ...why, fontSize: 11 }}>Each pair cancels first (a HIT against a MISS). AGAINST 1 then means at least one left.</span>
         </label>
       )}
       {read === 'count' && (
@@ -511,11 +539,15 @@ export function TestRoll({ definition, api, roll }: { definition: Definition; ap
         <>
           <div data-testid="test-dice" style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
             {res.groups.flatMap((g, gi) => g.faces.map((f, fi) => {
-              const face = g.sides === 'F' ? (f.value > 0 ? '+' : f.value < 0 ? '−' : ' ') : `${f.minus ? '−' : ''}${f.value}`;
+              // A system's own die shows the face it landed on, its symbols' looks too (6c3).
+              const ownDie = g.die !== undefined ? dieList(definition).find((d) => d.id === g.die) : undefined;
+              const face = ownDie && f.face !== undefined && ownDie.faces[f.face]
+                ? <FaceShown die={ownDie} face={ownDie.faces[f.face]} symbols={symbolList(definition)} size={13} />
+                : g.sides === 'F' ? (f.value > 0 ? '+' : f.value < 0 ? '−' : ' ') : `${f.minus ? '−' : ''}${f.value}`;
               const color = g.name ? 'var(--danger)' : 'var(--green)';
               return (
                 <span key={`${gi}-${fi}`} title={`${g.name ?? (g.sides === 'F' ? 'dF' : `d${g.sides}`)}${f.kept ? '' : ', not counted'}${f.extra ? ', exploded' : ''}`}
-                  style={{ width: 30, height: 30, display: 'grid', placeItems: 'center', fontWeight: 'bold', border: `2px solid ${color}`, background: f.kept ? color : 'none', color: f.kept ? 'var(--black)' : color, opacity: f.kept ? 1 : 0.45 }}>
+                  style={{ minWidth: 30, height: 30, padding: '0 3px', boxSizing: 'border-box', display: 'grid', placeItems: 'center', fontWeight: 'bold', border: `2px solid ${color}`, background: f.kept ? color : 'none', color: f.kept ? 'var(--black)' : color, opacity: f.kept ? 1 : 0.45 }}>
                   {face}
                 </span>
               );
@@ -556,7 +588,7 @@ export function RollsTab({ definition, edit, api }: Props) {
             <button key={r.id} type="button" aria-current={r.id === roll?.id && !adding} onClick={() => { setPicked(r.id); setAdding(false); }}
               style={{ textAlign: 'left', background: r.id === roll?.id && !adding ? 'color-mix(in srgb, var(--green) 8%, transparent)' : 'none', border: `1px solid ${r.id === roll?.id && !adding ? 'var(--green)' : 'transparent'}`, color: 'var(--green)', fontFamily: 'monospace', fontSize: 12, padding: '5px 8px', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 2 }}>
               <span>{(r.label || r.id).toUpperCase()}</span>
-              <span style={{ fontSize: 10, opacity: 0.6 }}>{stepsOf(r).dice.join(' + ')}</span>
+              <span style={{ fontSize: 10, opacity: 0.6 }}>{stepsOf(r, definition).dice.join(' + ')}</span>
             </button>
           ))}
           <div><button type="button" className="utility-btn" style={btn} onClick={() => setAdding(true)}>+ ROLL</button></div>

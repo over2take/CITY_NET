@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { drawnAt, withSquare, drawnSquares, BLANK_DRAWN, type DieSymbol } from '../sheets/dice';
+import { drawnAt, withSquare, drawnSquares, BLANK_DRAWN, type DieSymbol, type OwnDie, type DieFace } from '../sheets/dice';
 import { ConditionIcon } from './ConditionIcon';
 
 // A dice symbol drawn (6c2b2; approved mockup docs/mockups/builder-dice.html, decision 10): the
@@ -20,6 +20,18 @@ export function SymbolLook({ symbol, size = 16 }: { symbol: DieSymbol; size?: nu
   if (symbol.drawn) return <Drawing drawn={symbol.drawn} size={size} />;
   if (symbol.icon) return <span style={{ display: 'inline-block', verticalAlign: '-0.15em' }}><ConditionIcon icon={symbol.icon} size={size} title={symbol.name} /></span>;
   return <span>{symbol.mark ?? [...symbol.name][0]?.toUpperCase() ?? '?'}</span>;
+}
+
+/** A face as the dice show it: its number (signed on a die with any below 0) and its symbols' looks, '·' for a blank. */
+export function FaceShown({ die, face, symbols, size = 15 }: { die: OwnDie; face: DieFace; symbols: DieSymbol[]; size?: number }) {
+  const signed = die.faces.some((f) => (f.n ?? 0) < 0);
+  const n = face.n === undefined ? '' : signed && face.n > 0 ? `+${face.n}` : String(face.n);
+  const looks = (face.s ?? []).map((id, i) => {
+    const s = symbols.find((x) => x.id === id);
+    return s ? <SymbolLook key={`${id}${i}`} symbol={s} size={size} /> : <span key={`${id}${i}`}>?</span>;
+  });
+  if (!n && !looks.length) return <span>·</span>;
+  return <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>{n}{looks}</span>;
 }
 
 interface Props {
