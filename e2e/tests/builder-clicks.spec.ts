@@ -72,6 +72,12 @@ test('every control in the builder takes a click, on every page', async ({ page 
       missed[`${p} · GRAPH`] = await unreachable(page);
       await view.getByRole('button', { name: 'FORMS' }).click();
     }
+    if (p === 'NPCS') {
+      // Its second tab, the tiers.
+      await page.getByRole('tab', { name: 'TIERS', exact: true }).click();
+      missed[`${p} · TIERS`] = await unreachable(page);
+      await page.getByRole('tab', { name: 'STAT BLOCK', exact: true }).click();
+    }
   }
   expect(Object.fromEntries(Object.entries(missed).filter(([, v]) => v.length))).toEqual({});
 });

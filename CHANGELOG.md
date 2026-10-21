@@ -173,7 +173,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   until the table can take the cost.
 - **The click check reaches STATS & RULES' other tabs.** The browser test that clicks every control in
   the builder now visits FORMULAS, TABLES and ROLLS too, not only STATS, with a Blades and a Vampire
-  roll made so every step of a roll is checked. Nothing changes in the app.
+  roll made so every step of a roll is checked, and NPCS' TIERS tab. Nothing changes in the app.
 
 - **A shared system file installs on a builder from before the map.** A .citysys file now carries
   the graph view's layout beside the system rather than inside it. A builder from before the map
