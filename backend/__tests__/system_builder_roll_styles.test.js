@@ -10,7 +10,7 @@ import { createRequire } from 'module';
  */
 
 const require_ = createRequire(import.meta.url);
-const { checkRoll, makeRoll, rollDie, LIMITS, FATE } = require_('../systemBuilder/rollStyles');
+const { checkRoll, checkRolls, makeRoll, rollDie, LIMITS, FATE } = require_('../systemBuilder/rollStyles');
 const { parse, evaluate } = require_('../systemBuilder/expression');
 const { cryptoRng } = require_('../utils/random');
 
@@ -155,7 +155,7 @@ describe('a roll checked', () => {
   });
 
   it('says what is wrong with reading, adding and comparing', () => {
-    expect(said({ ...ok, read: 'average' })).toEqual(['roll skill, read: Sum, highest, lowest or count']);
+    expect(said({ ...ok, read: 'average' })).toEqual(['roll skill, read: Sum, highest, lowest, count, or the symbols']);
     expect(said({ ...ok, keep: '1' })).toEqual(['roll skill, keep: Only keeping the highest or lowest dice keeps some']);
     expect(said({ ...ok, read: 'count' })).toEqual(['roll skill, at: Counting needs the face a success starts at']);
     expect(said({ ...ok, at: 6 })).toEqual(['roll skill, at: Only counting successes has a face they start at']);
@@ -412,5 +412,94 @@ describe('amounts from outside the roll (6b3b)', () => {
     // A natural is still the dice's own.
     const nat = makeRoll({ ...check, natural: [{ face: 20, label: 'Natural 20' }] }, valueFor(), d(20, 20), [], [{ label: 'HURT', amount: -1 }]);
     expect([nat.total, nat.natural]).toEqual([19, { label: 'Natural 20' }]);
+  });
+});
+
+describe('a system\'s own dice rolled (6c1b)', () => {
+  const SYMBOLS = [
+    { id: 'hit', name: 'Hit', mark: '✶', cancels: 'miss' }, { id: 'miss', name: 'Miss', mark: '✕', cancels: 'hit' },
+    { id: 'edge', name: 'Edge', mark: '◆', cancels: 'snag' }, { id: 'snag', name: 'Snag', mark: '◇', cancels: 'edge' },
+    { id: 'crit', name: 'Crit', mark: '★', also: 'hit' }, { id: 'skull', name: 'Skull', mark: '☠' },
+  ];
+  const n = (x) => ({ n: x, s: [] });
+  const s = (...ids) => ({ n: null, s: ids });
+  const DICE = [
+    { id: 'good', name: 'Good', color: 'theme', faces: [s(), s(), s('hit'), s('hit', 'edge'), s('edge', 'edge'), s('edge')] },
+    { id: 'bad', name: 'Bad', color: 'danger', faces: [s(), s('miss'), s('miss', 'snag'), s('crit')] },
+    { id: 'fate', name: 'dF', color: 'theme', faces: [n(1), n(1), n(0), n(0), n(-1), n(-1)] },
+    { id: 'skull', name: 'Skull die', color: 'theme', faces: [n(1), n(2), n(3), n(4), n(5), { n: null, s: ['skull'] }] },
+  ];
+  const own = { dice: DICE, symbols: SYMBOLS };
+  // A face of a die of its own, by its place (1 for the first): [place, how many faces].
+  const clash = { id: 'clash', dice: [{ count: '2', die: 'good' }, { count: '1', die: 'bad' }], read: 'symbols', on: 'hit', against: '1' };
+
+  it('counts the symbols on every face, cancels each pair one for one, and reads what is left of one', () => {
+    // GOOD shows HIT EDGE and HIT; BAD shows MISS: two HITs less one, the EDGE untouched.
+    const r = makeRoll(clash, valueFor(), showing([4, 6], [3, 6], [2, 4]), [], [], own);
+    expect(r.symbols).toEqual({ counted: { hit: 2, edge: 1, miss: 1 }, left: { hit: 1, edge: 1, miss: 0 } });
+    expect([r.dice, r.total, r.target, r.success]).toEqual([1, 1, 1, true]);
+    expect(r.groups[0]).toEqual({ die: 'good', name: 'Good', sides: 6, faces: [
+      { value: 0, face: 3, blank: true, symbols: ['hit', 'edge'], kept: true },
+      { value: 0, face: 2, blank: true, symbols: ['hit'], kept: true },
+    ] });
+    expect(r.groups[1]).toMatchObject({ die: 'bad', name: 'Bad', sides: 4 });
+    // MISS SNAG against one HIT and a blank: the HIT cancelled, the SNAG left with nothing to cancel it.
+    const lost = makeRoll(clash, valueFor(), showing([3, 6], [1, 6], [3, 4]), [], [], own);
+    expect([lost.symbols.left, lost.total, lost.success]).toEqual([{ hit: 0, miss: 0, snag: 1 }, 0, false]);
+  });
+
+  it('counts a CRIT as a HIT too, before cancelling, and reads bands on what is left', () => {
+    const banded = { ...clash, against: undefined, bands: [{ upTo: 0, label: 'Miss' }, { upTo: 1, label: 'Partial' }, { label: 'Full' }] };
+    const r = makeRoll(banded, valueFor(), showing([3, 6], [1, 6], [4, 4]), [], [], own);
+    expect(r.symbols).toEqual({ counted: { hit: 2, crit: 1 }, left: { hit: 2, crit: 1 } });
+    expect([r.total, r.band]).toEqual([2, 'Full']);
+  });
+
+  it('reads the faces\' numbers for every other rule: a sum of Fate dice, and changes add to the total', () => {
+    const fate = makeRoll({ id: 'f', dice: [{ count: '4', die: 'fate' }], add: '1' }, valueFor(), showing([1, 6], [3, 6], [5, 6], [2, 6]), [], [], own);
+    expect(fate.groups[0].signed).toBe(true);
+    expect(fate.groups[0].faces.map((f) => f.value)).toEqual([1, 0, -1, 1]);
+    expect([fate.dice, fate.total, 'symbols' in fate]).toEqual([1, 2, false]);
+    // COUNT THE SYMBOLS with nothing to read: the numbers, summed.
+    const plain = makeRoll({ id: 'p', dice: [{ count: '2', die: 'fate' }], read: 'symbols' }, valueFor(), showing([1, 6], [1, 6]), [], [], own);
+    expect([plain.total, plain.symbols]).toEqual([2, { counted: {}, left: {} }]);
+  });
+
+  it('keeps the highest by number, a dropped die\'s symbols not counted; a kept one\'s are, read any way', () => {
+    // SKULL (no number, 0) and a 3: the 3 kept, the SKULL dropped with it.
+    const high = makeRoll({ id: 'h', dice: [{ count: '2', die: 'skull' }], read: 'highest', keep: '1' }, valueFor(), showing([6, 6], [3, 6]), [], [], own);
+    expect([high.total, high.symbols]).toEqual([3, { counted: {}, left: {} }]);
+    const summed = makeRoll({ id: 's', dice: [{ count: '2', die: 'skull' }] }, valueFor(), showing([6, 6], [3, 6]), [], [], own);
+    expect([summed.total, summed.symbols]).toEqual([3, { counted: { skull: 1 }, left: { skull: 1 } }]);
+  });
+
+  it('explodes on its highest number, and a change adds dice of its kind', () => {
+    const boom = makeRoll({ id: 'b', dice: [{ count: '1', die: 'skull' }], explode: { once: true } }, valueFor(), showing([5, 6], [2, 6]), [], [], own);
+    expect(boom.groups[0].faces.map((f) => [f.value, !!f.extra])).toEqual([[5, false], [2, true]]);
+    const pushed = makeRoll({ ...clash, changes: [{ id: 'push', label: 'Push', extra: { dice: 1 } }] }, valueFor(), showing([3, 6], [3, 6], [3, 6], [1, 4]), ['push'], [], own);
+    expect(pushed.groups[0].faces).toHaveLength(3);
+    expect(pushed.total).toBe(3);
+  });
+
+  it('says what is wrong with a roll of them', () => {
+    const own2 = { dice: new Set(['good', 'bad']), symbols: new Set(['hit', 'miss']) };
+    const said = (roll) => checkRoll({ dice: [{ count: '2', die: 'good' }], ...roll, id: 'c' }, 'roll c', () => false, own2).map((p) => `${p.where}: ${p.message}`);
+    expect(said({ read: 'symbols', on: 'hit', against: '1' })).toEqual([]);
+    expect(said({ dice: [{ count: '1', die: 'great' }] })).toEqual(['roll c, dice 1, die: Not one of this system\'s dice']);
+    expect(said({ dice: [{ count: '1', die: 'good', sides: 6, name: 'Good' }] })).toEqual([
+      'roll c, dice 1, die: A die of the system\'s own has its own faces'.replace(', die:', ', sides:'),
+      'roll c, dice 1, name: A die of the system\'s own has its own name',
+    ]);
+    expect(said({ dice: [{ count: '2', sides: 6 }], read: 'symbols' })).toEqual(['roll c, read: Counting the symbols needs a die of the system\'s own']);
+    expect(said({ on: 'hit' })).toEqual(['roll c, on: Only counting the symbols reads one']);
+    expect(said({ read: 'symbols', on: 'edge' })).toEqual(['roll c, on: Not one of this system\'s symbols']);
+    expect(said({ read: 'average' })).toEqual(['roll c, read: Sum, highest, lowest, count, or the symbols']);
+    // A system's own: checked against its dice and symbols.
+    const def = { format: 1, name: 'H', symbols: SYMBOLS, dice: DICE.map((d) => ({ id: d.id, name: d.name, faces: d.faces.map((f) => ({ ...(f.n !== null ? { n: f.n } : {}), ...(f.s.length ? { s: f.s } : {}) })) })), rolls: [clash] };
+    const problems = [];
+    checkRolls(def, problems);
+    expect(problems).toEqual([]);
+    checkRolls({ ...def, rolls: [{ ...clash, on: 'luck' }] }, problems);
+    expect(problems.map((p) => p.where)).toEqual(['roll clash, on']);
   });
 });

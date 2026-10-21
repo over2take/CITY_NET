@@ -171,6 +171,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **A system's own dice, rolled (6c1b).** The server now rolls a system's own dice: a roll can use
+  them alongside dice of any size, and a new way to read them counts their symbols, cancels each
+  pair (a HIT against a MISS) and reads what is left: at least one HIT left succeeds. The log shows
+  each face's marks and what was left ("✶◆ Good ✶ Good ✕ Bad = 1 HIT, 1 EDGE"). Making the dice
+  on screen (the DICE tab) comes next.
 - **A system's own dice, the data (6c1a).** The first of the dice pieces (approved mockup, 2026-10-21):
   a system can now hold its own symbols (HIT, MISS, a mark for each, what cancels what) and dice
   whose faces show numbers, signs or symbols, checked like the rest of a shared file and carried

@@ -52,7 +52,7 @@ describe('the rolls section', () => {
   });
 
   it('says where a roll is wrong, by its id or its place in the list', () => {
-    expect(said(withRolls([{ ...skill, read: 'average' }]))).toEqual(['roll skill, read: Sum, highest, lowest or count']);
+    expect(said(withRolls([{ ...skill, read: 'average' }]))).toEqual(['roll skill, read: Sum, highest, lowest, count, or the symbols']);
     expect(said(withRolls([{ ...skill, id: 'Bad Id' }]))).toEqual(['roll 1: Ids use lowercase letters, digits and _, starting with a letter']);
     expect(said(withRolls([skill, { ...skill }]))).toEqual(['roll skill: Defined twice']);
     expect(said(withRolls([null]))).toEqual(['roll 1: Must be a roll']);
