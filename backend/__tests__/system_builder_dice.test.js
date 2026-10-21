@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { createRequire } from 'module';
 
 /**
@@ -148,5 +148,55 @@ describe('dice in a .citysys file', () => {
       expect(citysys.readFile(JSON.stringify(file(def))).file.definition, `seed ${seed}`).toEqual(def);
     }
     expect(withDice).toBeGreaterThan(10);
+  });
+});
+
+describe('TEST on the DICE tab, the builder route (6c2a)', () => {
+  const express_ = require_('express');
+  const request_ = require_('supertest');
+  const jwt_ = require_('jsonwebtoken');
+  const { makeTestDb } = require_('./helpers/testDb.js');
+  const systemsRoute = require_('../routes/systems.js');
+  process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
+  const GM = () => jwt_.sign({ id: 1, username: 'gm', role: 'admin', isTemporary: false }, process.env.JWT_SECRET);
+  const PLAYER = () => jwt_.sign({ username: 'vex', role: 'player' }, process.env.JWT_SECRET);
+  let app;
+  const post = (body, token = GM()) => request_(app).post('/api/systems/test-dice').set({ Authorization: `Bearer ${token}` }).send(body);
+
+  beforeEach(async () => {
+    const db = await makeTestDb();
+    app = express_();
+    app.use(express_.json());
+    app.use('/api/systems', systemsRoute(db));
+  });
+
+  it('throws a handful of a draft\'s own die, each face as the log writes it, its symbols counted and cancelled', async () => {
+    const res = await post({ definition: HEARTH, dieId: 'good', count: 5 });
+    expect(res.status).toBe(200);
+    expect(res.body.faces).toHaveLength(5);
+    for (const f of res.body.faces) expect(['·', '✶', '✶◆', '◆◆', '◆']).toContain(f);
+    expect(Object.keys(res.body.symbols)).toEqual(['counted', 'left']);
+    expect(res.body.historyText).toMatch(/^The test rolled Test \[/);
+    // Numbers come back signed on a die with any face below 0.
+    const fate = await post({ definition: HEARTH, dieId: 'fate', count: 20 });
+    for (const f of fate.body.faces) expect(['+1', '0', '-1']).toContain(f);
+    expect(fate.body.total).toBe(fate.body.faces.reduce((n, f) => n + Number(f), 0));
+  });
+
+  it('throws one to twenty, four when not asked', async () => {
+    expect((await post({ definition: HEARTH, dieId: 'good' })).body.faces).toHaveLength(4);
+    expect((await post({ definition: HEARTH, dieId: 'good', count: 99 })).body.faces).toHaveLength(20);
+    expect((await post({ definition: HEARTH, dieId: 'good', count: 0 })).body.faces).toHaveLength(1);
+  });
+
+  it('refuses a die it hasn\'t, dice with problems, and what isn\'t a system', async () => {
+    expect((await post({ definition: HEARTH, dieId: 'nope' })).body).toEqual({ error: 'No such die' });
+    const broken = await post({ definition: withDie({ faces: [{ s: ['luck'] }, {}] }), dieId: 'good' });
+    expect([broken.status, broken.body]).toEqual([400, { error: 'die good, face 1, symbol 1: Not one of this system\'s symbols' }]);
+    expect((await post({ definition: 'nope', dieId: 'good' })).status).toBe(400);
+  });
+
+  it('is the main admin\'s, as every builder route is', async () => {
+    expect((await post({ definition: HEARTH, dieId: 'good' }, PLAYER())).status).toBe(403);
   });
 });

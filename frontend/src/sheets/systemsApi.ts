@@ -36,6 +36,15 @@ export type TriedBox =
   | { blank: true }
   | { error: string };
 /** A roll made by TEST ROLL (backend tableRolls.js rollField, rollStyles.js makeRoll). */
+/** A handful of a system's own die thrown by TEST (backend routes/systems.js test-dice). */
+export interface TestedDice {
+  /** Each face as the log writes it: its number and its symbols' marks, '·' for a blank. */
+  faces: string[];
+  symbols: { counted: Record<string, number>; left: Record<string, number> };
+  total: number;
+  historyText: string;
+}
+
 export interface TestedRoll {
   /** The field it was rolled for, and every field it is rolled by. */
   field: string | null;
@@ -140,6 +149,9 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      */
     testRoll: (definition: Definition, rollId: string, fieldId?: string | null, changes: string[] = [], conditions: string[] = []) =>
       call<TestedRoll>(fetcher, token, '/api/systems/test-roll', 'POST', { definition, rollId, fieldId: fieldId ?? undefined, changes, conditions }),
+    /** The DICE tab's TEST (6c2a): a handful of a draft's own die thrown on the server, its faces as the log writes them and its symbols counted. */
+    testDice: (definition: Definition, dieId: string, count: number) =>
+      call<TestedDice>(fetcher, token, '/api/systems/test-dice', 'POST', { definition, dieId, count }),
     /**
      * A draft's sheet as it would be drawn (its own or the starter, without the parts it turned
      * off), and the starter sheet CUSTOMIZE copies, without saving (CHARACTER SHEET).

@@ -171,6 +171,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **The DICE tab's workings (6c2a).** Behind the coming DICE tab: making, changing and removing a
+  system's own dice and symbols (each edit checked against the server's own rules), three presets
+  to start from, copying one of the table's CUSTOM_DIE.EXE dice into a system (its words becoming
+  symbols), and a TEST that throws a handful on the server. Nothing to see until the tab itself.
 - **A system's own dice, rolled (6c1b).** The server now rolls a system's own dice: a roll can use
   them alongside dice of any size, and a new way to read them counts their symbols, cancels each
   pair (a HIT against a MISS) and reads what is left: at least one HIT left succeeds. The log shows
