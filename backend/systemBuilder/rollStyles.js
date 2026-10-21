@@ -80,8 +80,8 @@ const LIMITS = {
 
 /** A Fate die: −1, 0 or +1. */
 const FATE = 'F';
-const READS = ['sum', 'highest', 'lowest', 'count'];
-const ROLL_KEYS = new Set(['id', 'label', 'dice', 'read', 'keep', 'at', 'add', 'against', 'under', 'bands', 'explode', 'natural', 'matches', 'cancel', 'glitch', 'effects', 'zero', 'changes', 'by']);
+const READS = ['sum', 'highest', 'lowest', 'count', 'symbols'];
+const ROLL_KEYS = new Set(['id', 'label', 'dice', 'read', 'keep', 'at', 'on', 'add', 'against', 'under', 'bands', 'explode', 'natural', 'matches', 'cancel', 'glitch', 'effects', 'zero', 'changes', 'by']);
 const WHEN = ['critical', 'success', 'failure', 'any'];
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -95,9 +95,10 @@ const highestFace = (sides) => (sides === FATE ? 1 : sides);
 /**
  * What is wrong with a roll, in the builder's words: [{ where, message }], none when it can be
  * rolled. `isFunction(name)` says whether formula text may call a name (the built-ins always can,
- * and a system adds its lookup tables), as for a formula.
+ * and a system adds its lookup tables), as for a formula. `own` holds the ids of the system's own
+ * dice and symbols (diceFaces.js, 6c1b), which a roll may roll and count.
  */
-const checkRoll = (roll, where = 'roll', isFunction = () => false) => {
+const checkRoll = (roll, where = 'roll', isFunction = () => false, own = { dice: new Set(), symbols: new Set() }) => {
   const problems = [];
   const bad = (at, message) => problems.push({ where: at ? `${where}, ${at}` : where, message });
   if (!isPlainObject(roll)) { bad('', 'Must be a roll'); return problems; }
@@ -115,15 +116,27 @@ const checkRoll = (roll, where = 'roll', isFunction = () => false) => {
     roll.dice.slice(0, LIMITS.groups).forEach((g, i) => {
       const at = `dice ${i + 1}`;
       if (!isPlainObject(g)) { bad(at, 'Must say how many dice and what kind'); return; }
-      for (const key of Object.keys(g)) if (!['count', 'sides', 'name'].includes(key)) bad(`${at}, ${key}`, 'Not part of dice');
+      for (const key of Object.keys(g)) if (!['count', 'sides', 'name', 'die'].includes(key)) bad(`${at}, ${key}`, 'Not part of dice');
       formula(`${at}, count`, g.count);
+      if (g.die !== undefined) {
+        // One of the system's own dice brings its faces and its name.
+        if (!own.dice.has(g.die)) bad(`${at}, die`, 'Not one of this system\'s dice');
+        if (g.sides !== undefined) bad(`${at}, sides`, 'A die of the system\'s own has its own faces');
+        if (g.name !== undefined) bad(`${at}, name`, 'A die of the system\'s own has its own name');
+        return;
+      }
       if (!isSides(g.sides)) bad(`${at}, sides`, `A die of 2 to ${LIMITS.sides} sides, or F for a Fate die`);
       if (g.name !== undefined && (typeof g.name !== 'string' || !g.name.trim() || g.name.length > LIMITS.label)) bad(`${at}, name`, `Words of up to ${LIMITS.label} characters`);
     });
   }
 
   const read = roll.read ?? 'sum';
-  if (!READS.includes(read)) bad('read', 'Sum, highest, lowest or count');
+  if (!READS.includes(read)) bad('read', 'Sum, highest, lowest, count, or the symbols');
+  if (read === 'symbols' && Array.isArray(roll.dice) && !roll.dice.some((g) => isPlainObject(g) && g.die !== undefined)) bad('read', 'Counting the symbols needs a die of the system\'s own');
+  if (roll.on !== undefined) {
+    if (read !== 'symbols') bad('on', 'Only counting the symbols reads one');
+    else if (typeof roll.on !== 'string' || !own.symbols.has(roll.on)) bad('on', 'Not one of this system\'s symbols');
+  }
   if (roll.keep !== undefined) {
     if (read !== 'highest' && read !== 'lowest') bad('keep', 'Only keeping the highest or lowest dice keeps some');
     else formula('keep', roll.keep);
@@ -271,6 +284,24 @@ const checkRoll = (roll, where = 'roll', isFunction = () => false) => {
 };
 
 /**
+ * Symbols counted (6c1b): each on every face given, one that also counts as another counted as that
+ * too (CRIT as a HIT), then each cancelling pair taken away one for one. { counted, left }, by id.
+ */
+const tallyOf = (faces, symbols) => {
+  const also = new Map(symbols.filter((s) => s.also).map((s) => [s.id, s.also]));
+  const counted = {};
+  const add = (id) => { counted[id] = (counted[id] ?? 0) + 1; };
+  for (const f of faces) for (const s of f.symbols ?? []) { add(s); if (also.has(s)) add(also.get(s)); }
+  const left = { ...counted };
+  for (const s of symbols) {
+    if (!s.cancels) continue;
+    const c = Math.min(left[s.id] ?? 0, left[s.cancels] ?? 0);
+    if (c) { left[s.id] -= c; left[s.cancels] -= c; }
+  }
+  return { counted, left };
+};
+
+/**
  * A roll made: each kind of dice with its faces (kept or not, and whether an explode added it),
  * what the dice come to as read (`dice`), what is added, the total, the target and whether it was
  * met, the band the total lands in, a natural the dice showed, matches, a glitch and named dice's
@@ -280,7 +311,7 @@ const checkRoll = (roll, where = 'roll', isFunction = () => false) => {
  * outside the roll, each with its label, added to the total before it is judged: a condition's
  * modifier on all rolls, HURT -1 (6b3b).
  */
-const makeRoll = (roll, value, rng, chosen = [], terms = []) => {
+const makeRoll = (roll, value, rng, chosen = [], terms = [], own = {}) => {
   const picked = (roll.changes ?? []).filter((c) => chosen.includes(c.id));
   let read = roll.read ?? 'sum';
   let keepText = roll.keep;
@@ -301,14 +332,27 @@ const makeRoll = (roll, value, rng, chosen = [], terms = []) => {
     keepText = String(before);
   }
 
+  // A die of the system's own (6c1b) lands on one of its faces: its number (0 when it has none) is
+  // what every rule reads, and its symbols are counted.
+  const dieOf = kinds.map((g) => (g.die !== undefined ? (own.dice ?? []).find((d) => d.id === g.die) : undefined));
+  const throwOf = (k) => {
+    const die = dieOf[k];
+    if (!die) return { value: rollDie(kinds[k].sides, rng) };
+    const i = Math.floor(rng() * die.faces.length);
+    const f = die.faces[i];
+    return { value: f.n ?? 0, face: i, ...(f.n === null ? { blank: true } : {}), ...(f.s.length ? { symbols: [...f.s] } : {}) };
+  };
+  const topOf = (k) => (dieOf[k] ? Math.max(...dieOf[k].faces.map((f) => f.n ?? 0)) : highestFace(kinds[k].sides));
+
   let extra = LIMITS.explosions;
   let firstDone = false;
   const x = roll.explode;
   const groups = kinds.map((g, k) => {
     const faces = [];
     for (let i = 0; i < counts[k]; i += 1) {
-      let v = rollDie(g.sides, rng);
-      faces.push({ value: v, kept: true });
+      const thrown = throwOf(k);
+      let v = thrown.value;
+      faces.push({ ...thrown, kept: true });
       // Only the roll's first die explodes, with `first`.
       const may = !!x && (!x.first || !firstDone);
       firstDone = true;
@@ -316,27 +360,31 @@ const makeRoll = (roll, value, rng, chosen = [], terms = []) => {
       // A die showing the explode face rolls another of its kind, added in; again on the new
       // one unless only `once`, up to the most explosions a roll may have. One showing the
       // `low` face rolls another, taken away, once.
-      const on = x.on ?? highestFace(g.sides);
+      const on = x.on ?? topOf(k);
       if (x.low !== undefined && v === x.low && v !== on && extra > 0) {
         extra -= 1;
-        faces.push({ value: rollDie(g.sides, rng), kept: true, extra: true, minus: true });
+        faces.push({ ...throwOf(k), kept: true, extra: true, minus: true });
         continue;
       }
       while (v === on && extra > 0) {
         extra -= 1;
-        v = rollDie(g.sides, rng);
-        faces.push({ value: v, kept: true, extra: true });
+        const again = throwOf(k);
+        v = again.value;
+        faces.push({ ...again, kept: true, extra: true });
         if (x.once) break;
       }
     }
-    return { ...(g.name ? { name: g.name } : {}), sides: g.sides, faces };
+    const die = dieOf[k];
+    // A die of its own goes by its name, signed when any face is below 0 (Fate's −1).
+    const named = die ? { die: die.id, name: die.name, ...(die.faces.some((f) => (f.n ?? 0) < 0) ? { signed: true } : {}) } : g.name ? { name: g.name } : {};
+    return { ...named, sides: die ? die.faces.length : g.sides, faces };
   });
 
   // No dice to roll: the zero-dice rule rolls its own, of the first kind's size, and keeps one.
   let zeroed = false;
   if (roll.zero && groups.every((g) => !g.faces.length) && groups.length) {
     zeroed = true;
-    for (let i = 0; i < roll.zero.count; i += 1) groups[0].faces.push({ value: rollDie(groups[0].sides, rng), kept: true });
+    for (let i = 0; i < roll.zero.count; i += 1) groups[0].faces.push({ ...throwOf(0), kept: true });
     read = roll.zero.read;
     keepText = '1';
   }
@@ -357,6 +405,11 @@ const makeRoll = (roll, value, rng, chosen = [], terms = []) => {
   } else {
     dice = all.reduce((s, f) => s + (f.minus ? -f.value : f.value), 0);
   }
+  // The symbols on the dice kept, each pair cancelled; COUNT THE SYMBOLS reads what is left of `on`
+  // (no `on`: the faces' numbers, as a sum).
+  const symbols = read === 'symbols' || all.some((f) => f.symbols) ? tallyOf(all.filter((f) => f.kept), own.symbols ?? []) : null;
+  if (read === 'symbols' && roll.on !== undefined) dice = symbols.left[roll.on] ?? 0;
+
   // What the dice show before anything is added: an explode's extra dice too are left out of a
   // sum's natural (CP:R's natural 10 is the d10's own, whatever it adds).
   const shown = read === 'sum' ? all.filter((f) => !f.extra).reduce((s, f) => s + f.value, 0) : dice;
@@ -396,7 +449,7 @@ const makeRoll = (roll, value, rng, chosen = [], terms = []) => {
   return {
     groups, dice, add, ...(terms.length ? { terms: terms.map((t) => ({ label: t.label, amount: t.amount })) } : {}), total, target, success, band,
     natural: nat ? { label: nat.label, ...(nat.critical ? { critical: nat.critical } : {}) } : null,
-    matches: matched, glitch, effects, critical, ...(zeroed ? { zero: true } : {}),
+    matches: matched, glitch, effects, critical, ...(zeroed ? { zero: true } : {}), ...(symbols ? { symbols } : {}),
     changes: picked.map((c) => c.label),
     costs: picked.filter((c) => c.cost).map((c) => ({ from: c.cost.from, amount: c.cost.amount, ...(c.cost.adds ? { adds: true } : {}) })),
   };
@@ -419,10 +472,14 @@ const checkRolls = (definition, problems) => {
     ...groups.flatMap((g) => (Array.isArray(g.stats) ? g.stats.filter(isPlainObject).map((st) => st.id) : [])),
     ...(Array.isArray(definition.derived) ? definition.derived.filter(isPlainObject).map((d) => d.id) : []),
   ].filter((id) => typeof id === 'string'));
+  const own = {
+    dice: new Set((Array.isArray(definition.dice) ? definition.dice : []).filter(isPlainObject).map((d) => d.id).filter((id) => typeof id === 'string')),
+    symbols: new Set((Array.isArray(definition.symbols) ? definition.symbols : []).filter(isPlainObject).map((s) => s.id).filter((id) => typeof id === 'string')),
+  };
   const ids = new Set();
   rolls.slice(0, LIMITS.rolls).forEach((roll, i) => {
     const where = isPlainObject(roll) && typeof roll.id === 'string' && NAME.test(roll.id) ? `roll ${roll.id}` : `roll ${i + 1}`;
-    problems.push(...checkRoll(roll, where, (name) => tables.has(name)));
+    problems.push(...checkRoll(roll, where, (name) => tables.has(name), own));
     if (!isPlainObject(roll)) return;
     if (typeof roll.id === 'string') {
       if (ids.has(roll.id)) problems.push({ where, message: 'Defined twice' });
@@ -511,4 +568,4 @@ const PRESETS = {
   },
 };
 
-module.exports = { checkRoll, checkRolls, makeRoll, rollDie, PRESETS, LIMITS, FATE, READS };
+module.exports = { checkRoll, checkRolls, makeRoll, tallyOf, rollDie, PRESETS, LIMITS, FATE, READS };

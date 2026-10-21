@@ -147,9 +147,9 @@ describe('TEST ROLL', () => {
     await userEvent.click(within(test).getByRole('button', { name: 'TEST ROLL ▸' }));
     // Blades' push adds to Stress (6b3a); a cost that takes says so.
     await waitFor(() => expect(within(test).getByText('At the table this adds 2 STRESS.')).toBeTruthy());
-    testRoll.mockResolvedValueOnce({ ok: false, error: 'roll act, read: Sum, highest, lowest or count' } as never);
+    testRoll.mockResolvedValueOnce({ ok: false, error: 'roll act, read: Sum, highest, lowest, count, or the symbols' } as never);
     await userEvent.click(within(test).getByRole('button', { name: 'TEST ROLL ▸' }));
-    expect((await within(test).findByRole('alert')).textContent).toBe('roll act, read: Sum, highest, lowest or count');
+    expect((await within(test).findByRole('alert')).textContent).toBe('roll act, read: Sum, highest, lowest, count, or the symbols');
   });
 
   it('says a cost that takes as costing', async () => {

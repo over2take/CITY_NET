@@ -17,6 +17,7 @@ const { parse, evaluate } = require('./expression');
 const { lookupIn } = require('./derived');
 const { ruleValue } = require('./rules');
 const { ALL_ROLLS } = require('./conditions');
+const { diceOf, symbolsOf } = require('./diceFaces');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const groupsOf = (def) => (Array.isArray(def.stats) ? def.stats.filter((g) => isPlainObject(g) && Array.isArray(g.stats)) : []);
@@ -79,16 +80,22 @@ const faceText = (f, sides) => (sides === FATE ? (f.value > 0 ? '+' : f.value < 
  * with a minus), what is added, the total, and what it came to: met or not, a band, a natural,
  * matches, a glitch, named dice's effects, the changes picked.
  */
-const describe = (result) => {
+const describe = (result, symbols = []) => {
+  const marks = new Map(symbols.map((s) => [s.id, s.mark ?? s.name.slice(0, 1).toUpperCase()]));
   const dice = result.groups.flatMap((g) => g.faces.map((f) => {
-    const t = faceText(f, g.sides);
+    const t = g.die ? ownFaceText(g, f, marks) : faceText(f, g.sides);
     return `${f.minus ? '-' : ''}${f.kept ? t : `(${t})`}${g.name ? ` ${g.name}` : ''}`;
   })).join(' ');
   // The dice's own value is said only when something is added to it; the total always. A
   // condition's term is named after its amount.
   const terms = (result.terms ?? []).map((t) => ` ${signed(t.amount)} (${t.label})`).join('');
   const added = `${result.add !== 0 ? ` ${signed(result.add)}` : ''}${terms}`;
-  const working = `${dice || 'no dice'}${added ? ` = ${result.dice}${added}` : ''} = ${result.total}`;
+  // Symbols counted say what is left of each (6c1b): COUNT THE SYMBOLS reads them as its outcome;
+  // any other read says them after its total.
+  const tally = result.symbols ? leftWords(result.symbols, symbols) : null;
+  const working = result.read === 'symbols'
+    ? `${dice || 'no dice'} = ${tally}${added ? ` · ${result.dice}${added} = ${result.total}` : ''}`
+    : `${dice || 'no dice'}${added ? ` = ${result.dice}${added}` : ''} = ${result.total}${tally ? ` · ${tally}` : ''}`;
   const said = [
     ...(result.target !== null ? [`vs ${result.target}: ${result.success ? 'SUCCESS' : 'FAILURE'}`] : []),
     ...(result.band ? [result.band.toUpperCase()] : []),
@@ -101,14 +108,30 @@ const describe = (result) => {
   return { working, tags: said.length ? ` — ${said.join(' · ')}` : '', changes };
 };
 
-/** The dice for the tray, by kind: a named kind under its name, Fate dice as dF, the rest by size. */
-const trayOf = (result) => {
+/** A face of a system's own die in the log: its number (signed on a die with any below 0) and the marks of its symbols. */
+const ownFaceText = (g, f, marks) => {
+  const n = f.blank ? '' : g.signed && f.value > 0 ? `+${f.value}` : String(f.value);
+  const m = (f.symbols ?? []).map((s) => marks.get(s) ?? s).join('');
+  return `${n}${m}` || '·';
+};
+
+/** What is left of each symbol, in the order the system lists them: "2 HIT, 1 EDGE", or "NOTHING LEFT". */
+const leftWords = (tally, symbols) => {
+  const order = [...symbols.map((s) => s.id), ...Object.keys(tally.left).filter((id) => !symbols.some((s) => s.id === id))];
+  const names = new Map(symbols.map((s) => [s.id, s.name.toUpperCase()]));
+  const said = order.filter((id) => (tally.left[id] ?? 0) > 0).map((id) => `${tally.left[id]} ${names.get(id) ?? id.toUpperCase()}`);
+  return said.length ? said.join(', ') : 'NOTHING LEFT';
+};
+
+/** The dice for the tray, by kind: a named kind under its name, Fate dice as dF, the rest by size; a system's own die by its name, its faces as the log writes them. */
+const trayOf = (result, symbols = []) => {
   const results = {};
   const diceSides = {};
   for (const g of result.groups) {
     if (!g.faces.length) continue;
     const key = g.name ?? (g.sides === FATE ? 'dF' : String(g.sides));
-    results[key] = [...(results[key] ?? []), ...g.faces.map((f) => f.value)];
+    const marks = new Map(symbols.map((s) => [s.id, s.mark ?? s.name.slice(0, 1).toUpperCase()]));
+    results[key] = [...(results[key] ?? []), ...g.faces.map((f) => (g.die ? ownFaceText(g, f, marks) : f.value))];
     if (g.name || g.sides === FATE) diceSides[key] = g.sides === FATE ? 6 : g.sides;
   }
   return { results, diceSides };
@@ -147,15 +170,16 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
     spends.push({ from, by: adds ? amount : -amount, label: c.label, words: `${c.label}: ${adds ? '+' : '−'}${amount} ${name}` });
   }
 
-  const result = makeRoll(roll, valueOf(definition, fieldsFor(definition, data, fieldId), data), rng, picks, termsOf(conditions));
+  const symbols = symbolsOf(definition);
+  const result = makeRoll(roll, valueOf(definition, fieldsFor(definition, data, fieldId), data), rng, picks, termsOf(conditions), { dice: diceOf(definition), symbols });
   const label = roll.label || roll.id;
   const what = typeof fieldId === 'string' ? (statOf(definition, fieldId)?.label || formulaOf(definition, fieldId)?.label || fieldId) : null;
-  const described = describe(result);
+  const described = describe({ ...result, read: roll.read ?? 'sum' }, symbols);
   const { working, tags } = described;
   // A change that cost something says what it cost.
   const costWords = new Map(spends.map((s) => [s.label, s.words]));
   const changes = result.changes.length ? ` (${result.changes.map((l) => costWords.get(l) ?? l).join(', ')})` : '';
-  const tray = trayOf(result);
+  const tray = trayOf(result, symbols);
   return {
     ok: true,
     roll: roll.id,

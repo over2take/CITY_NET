@@ -349,7 +349,7 @@ describe('TEST ROLL, the builder route (6b1a)', () => {
 
   it('refuses a roll with problems, one it hasn\'t, and what isn\'t a system', async () => {
     const broken = await post({ definition: { ...DRAFT, rolls: [{ ...HEARTH.rolls[0], read: 'average' }] }, rollId: 'skill' });
-    expect([broken.status, broken.body]).toEqual([400, { error: 'roll skill, read: Sum, highest, lowest or count' }]);
+    expect([broken.status, broken.body]).toEqual([400, { error: 'roll skill, read: Sum, highest, lowest, count, or the symbols' }]);
     expect((await post({ definition: DRAFT, rollId: 'nope' })).body).toEqual({ error: 'No such roll' });
     expect((await post({ definition: 'nope', rollId: 'skill' })).status).toBe(400);
   });
@@ -393,5 +393,40 @@ describe('what a cost shows on the sheet (6b3a)', () => {
       { id: 'push', label: 'Push', cost: { from: 'stress', amount: 2, label: 'Stress', adds: true, max: 9 } },
       { id: 'lucky', label: 'Lucky', cost: { from: 'luck', amount: 1, label: 'Luck' } },
     ]);
+  });
+});
+
+describe('a system\'s own dice at the table (6c1b)', () => {
+  const DICED = {
+    ...HEARTH,
+    symbols: [{ id: 'hit', name: 'Hit', mark: '✶', cancels: 'miss' }, { id: 'miss', name: 'Miss', mark: '✕', cancels: 'hit' }, { id: 'edge', name: 'Edge', icon: 'star' }],
+    dice: [
+      { id: 'good', name: 'Good', faces: [{}, { s: ['hit'] }, { s: ['hit', 'edge'] }] },
+      { id: 'bad', name: 'Bad', color: 'danger', faces: [{}, { s: ['miss'] }] },
+      { id: 'fate', name: 'dF', faces: [{ n: 1 }, { n: 0 }, { n: -1 }] },
+    ],
+    rolls: [
+      { id: 'clash', label: 'Clash', dice: [{ count: '@this', die: 'good' }, { count: '1', die: 'bad' }], read: 'symbols', on: 'hit', against: '1', by: ['fight'] },
+      { id: 'fated', label: 'Fated', dice: [{ count: '3', die: 'fate' }], add: '@this', by: ['lore'] },
+    ],
+  };
+  // A face by its place among a die's faces (1 for the first) out of how many.
+  const faces = (...plan) => { let i = 0; return () => { const [f, of] = plan[i++ % plan.length]; return (f - 1 + 0.5) / of; }; };
+
+  it('logs each face as its marks (or a letter for an icon), the symbols left, and what that comes to', () => {
+    // FIGHT 2: two GOOD dice (HIT EDGE, HIT) and a BAD (MISS).
+    const r = rollField({ definition: DICED, data: SHEET, fieldId: 'fight', rng: faces([3, 3], [2, 3], [2, 2]), who: 'K' });
+    expect(r.historyText).toBe('K rolled Clash (Fight) [✶E Good ✶ Good ✕ Bad = 1 HIT, 1 EDGE] — vs 1: SUCCESS');
+    expect(r.total).toBe(1);
+    // The tray gets them by name, each face as the log writes it.
+    expect([r.results, r.diceSides]).toEqual([{ Good: ['✶E', '✶'], Bad: ['✕'] }, { Good: 3, Bad: 2 }]);
+    const none = rollField({ definition: DICED, data: SHEET, fieldId: 'fight', rng: faces([1, 3], [2, 3], [2, 2]), who: 'K' });
+    expect(none.historyText).toBe('K rolled Clash (Fight) [· Good ✶ Good ✕ Bad = NOTHING LEFT] — vs 1: FAILURE');
+  });
+
+  it('a number with its sign on a die with any below 0, summed as any roll is', () => {
+    const r = rollField({ definition: DICED, data: SHEET, fieldId: 'lore', rng: faces([1, 3], [2, 3], [3, 3]), who: 'K' });
+    expect(r.historyText).toBe('K rolled Fated (Lore) [+1 dF 0 dF -1 dF = 0 + 3 = 3]');
+    expect(r.results).toEqual({ dF: ['+1', '0', '-1'] });
   });
 });
