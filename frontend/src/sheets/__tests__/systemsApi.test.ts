@@ -37,6 +37,7 @@ describe('the requests', () => {
         { definition: { format: 1, name: 'H' }, rollId: 'skill', fieldId: 'lore', changes: ['push'], conditions: ['hurt'] }],
       [(a) => a.testRoll({ format: 1, name: 'H' }, 'skill'), '/api/systems/test-roll', 'POST',
         { definition: { format: 1, name: 'H' }, rollId: 'skill', changes: [], conditions: [] }],
+      [(a) => a.testDice({ format: 1, name: 'H' }, 'good', 5), '/api/systems/test-dice', 'POST', { definition: { format: 1, name: 'H' }, dieId: 'good', count: 5 }],
       [(a) => a.create('Hearth'), '/api/systems', 'POST', { name: 'Hearth' }],
       [(a) => a.rename(ID, 'Emberhold'), `/api/systems/${ID}/name`, 'PUT', { name: 'Emberhold' }],
       [(a) => a.setHouseRules(ID, { magic: true }), `/api/systems/${ID}/house-rules`, 'PUT', { rules: { magic: true } }],

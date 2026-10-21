@@ -13,6 +13,7 @@ const { checkDefinition } = require('../systemBuilder/definition');
 const { previewDerived } = require('../systemBuilder/derived');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { conditionsOf } = require('../systemBuilder/conditions');
+const { diceOf } = require('../systemBuilder/diceFaces');
 const { cryptoRng } = require('../utils/random');
 const { effectiveSheet, starterSheet, fieldsOf } = require('../systemBuilder/sheet');
 const { npcSheetOf, LIMITS: NPC_LIMITS } = require('../systemBuilder/npc');
@@ -308,6 +309,29 @@ module.exports = (db, io = null) => {
     });
     if (!made.ok) return res.status(400).json({ error: made.error });
     res.json({ field, fields, result: made.result, historyText: made.historyText, total: made.total });
+  });
+
+  /**
+   * The DICE tab's TEST (6c2a; approved mockup docs/mockups/builder-dice.html): a handful of one of
+   * a draft's own dice thrown by the table's own engine on the secure dice, its symbols counted and
+   * cancelled as COUNT THE SYMBOLS reads them. A draft whose dice have problems is refused with the
+   * first. Changes nothing, logs nothing.
+   */
+  router.post('/test-dice', gm, (req, res) => {
+    const { definition, dieId, count } = req.body || {};
+    const checked = checkDefinition(definition);
+    if (checked.fatal) return res.status(400).json({ error: checked.fatal });
+    const die = typeof dieId === 'string' ? diceOf(definition).find((d) => d.id === dieId) : null;
+    if (!die) return res.status(400).json({ error: 'No such die' });
+    const own = checked.problems.find((p) => /^(symbol|die )/.test(p.where) || p.where === 'symbols' || p.where === 'dice');
+    if (own) return res.status(400).json({ error: `${own.where}: ${own.message}` });
+    const n = Number.isInteger(count) ? Math.max(1, Math.min(20, count)) : 4;
+    const made = tableRolls.rollField({
+      definition, data: {}, roll: { id: 'test', label: 'Test', dice: [{ count: String(n), die: die.id }], read: 'symbols' },
+      rng: cryptoRng, who: 'The test',
+    });
+    if (!made.ok) return res.status(400).json({ error: made.error });
+    res.json({ faces: made.results[die.name] ?? [], symbols: made.result.symbols, total: made.total, historyText: made.historyText });
   });
 
   /**
