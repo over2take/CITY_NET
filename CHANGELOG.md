@@ -171,6 +171,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Every roll on the server's secure dice (6d).** The built-in games' sheet rolls, NPC rolls, pool
+  rolls, an attack's to-hit and a vehicle's ram now roll on the operating system's random source,
+  as damage, initiative and a custom system's rolls already did. A test holds every file that rolls
+  to it, so none can go back. Nothing changes in how anything rolls.
 - **Rolls of a system's own, the engine (6a1).** The first piece of Phase 6 (roll styles): the server can
   now roll what a GM describes, with dice of any size, Fate dice and named dice like Hunger, read as a
   sum, the highest or lowest kept, or successes counted, with a target or bands and exploding dice.
