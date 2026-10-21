@@ -2,7 +2,8 @@
  * A custom system's rolls at the table (6a2b; approved mockup docs/mockups/builder-rolls.html,
  * 2026-10-19): a die button rolls what ROLLED BY gives the field, with @this, @this_mod, @tie and
  * @tie_mod read from the stored sheet, through the socket into the same log and dice tray as every
- * roll. A change that costs something is refused until the table can take the cost (6b3).
+ * roll. A change that costs something is paid from the sheet (6b3a); a condition on the character's
+ * token with a modifier on all rolls is added to every roll (6b3b).
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -15,7 +16,8 @@ process.env.JWT_SECRET = 'test-secret';
 process.env.DICE_ANIM_MS = '0';
 
 const require_ = createRequire(import.meta.url);
-const { rollsFor, modifierOf, fieldsFor, rollField, describe: describeRoll } = require_('../systemBuilder/tableRolls');
+const { rollsFor, modifierOf, fieldsFor, termsOf, rollField, describe: describeRoll } = require_('../systemBuilder/tableRolls');
+const { conditionsOf } = require_('../systemBuilder/conditions');
 const { PRESETS, FATE } = require_('../systemBuilder/rollStyles');
 const runtime = require_('../systemBuilder/runtime');
 const socketsFactory = (await import('../sockets/index.js')).default;
@@ -40,6 +42,11 @@ const HEARTH = {
     { id: 'saving', label: 'Save', dice: [{ count: '1', sides: 20 }], against: '@this', by: ['save'] },
     { id: 'brawl', label: 'Brawl', dice: [{ count: '1', sides: 6 }], add: '@this', by: ['fight'] },
   ],
+  // HURT -1 on all rolls; Poisoned's modifier is on Strength alone, not every roll.
+  conditions: {
+    hurt: { name: 'Hurt', short: 'HURT', modifiers: [{ target: 'all_rolls', amount: -1 }] },
+    poisoned: { modifiers: [{ target: 'str', amount: -2 }] },
+  },
 };
 const SHEET = { name: 'Kestrel', str: 16, wit: 9, fight: 2, lore: 3, str_mod: 1, wit_mod: 0, save: 15, stress: 4 };
 const d = (sides, ...faces) => { let i = 0; return () => (faces[i++ % faces.length] - 1 + 0.5) / sides; };
@@ -139,6 +146,31 @@ describe('a field rolled', () => {
     expect(f.historyText).toBe('K rolled Fate (Strength) [+ + + + = 4]');
   });
 
+  it('adds a condition\'s modifier on all rolls as its own named term, judged with it (6b3b)', () => {
+    const on = (...ids) => conditionsOf(HEARTH).filter((c) => ids.includes(c.id));
+    const hurt = roll({ fieldId: 'fight', conditions: on('hurt', 'poisoned') });
+    expect(hurt.historyText).toBe('Kestrel rolled Skill check (Fight) [4 5 = 9 + 3 - 1 (HURT) = 11] — FULL');
+    expect(hurt.total).toBe(11);
+    // Lands it a band lower: 4 + 2, + Lore 3 and Wits' 0, - 1 is 8, a Cost.
+    const low = rollField({ definition: HEARTH, data: SHEET, fieldId: 'lore', rng: d(6, 4, 2), who: 'K', conditions: on('hurt') });
+    expect(low.historyText).toBe('K rolled Skill check (Lore) [4 2 = 6 + 3 - 1 (HURT) = 8] — COST');
+    // With nothing else added, the dice's own value is still said.
+    expect(rollField({ definition: HEARTH, data: SHEET, fieldId: 'save', rng: d(20, 15), who: 'K', conditions: on('hurt') }).historyText)
+      .toBe('K rolled Save (Physical save) [15 = 15 - 1 (HURT) = 14] — vs 15: FAILURE');
+    expect(roll({ fieldId: 'fight', conditions: on('poisoned') }).historyText).toBe('Kestrel rolled Skill check (Fight) [4 5 = 9 + 3 = 12] — FULL');
+  });
+
+  it('reads only modifiers on all rolls, each named by the condition\'s short name, or its name', () => {
+    expect(termsOf([
+      { id: 'a', short: 'HURT', modifiers: [{ target: 'all_rolls', amount: -1 }, { target: 'str', amount: -2 }, { target: 'all_rolls', amount: 2 }] },
+      { id: 'b', name: 'Blessed', modifiers: [{ target: 'all_rolls', amount: 1 }] },
+      { id: 'c', modifiers: [{ target: 'all_rolls', amount: 1.5 }, { target: 'all_rolls', amount: 0 }, null] },
+      { id: 'd', modifiers: [{ target: 'all_rolls', amount: 3 }] },
+      'nonsense', null,
+    ])).toEqual([{ label: 'HURT', amount: -1 }, { label: 'HURT', amount: 2 }, { label: 'Blessed', amount: 1 }, { label: 'd', amount: 3 }]);
+    expect(termsOf(undefined)).toEqual([]);
+  });
+
   it('glitches tell the tray, as SR6\'s do', () => {
     const sr6 = { ...HEARTH, rolls: [{ id: 's', label: 'Pool', ...PRESETS.sr6.roll, by: ['fight'] }] };
     const r = rollField({ definition: sr6, data: { ...SHEET, fight: 1, str: 1 }, fieldId: 'fight', rng: d(6, 1, 1), who: 'K' });
@@ -151,19 +183,23 @@ describe('the log line on its own', () => {
     const said = describeRoll({ groups: [{ sides: 6, faces: [{ value: 6, kept: true }, { value: 3, kept: false }] }], dice: 6, add: -1, total: 5,
       target: 6, success: false, band: 'Partial', natural: { label: 'Six' }, matches: [{ label: 'Pair', sets: 1 }], glitch: 'Glitch', effects: ['Messy'], changes: ['Push'] });
     expect(said).toEqual({ working: '6 (3) = 6 - 1 = 5', tags: ' — vs 6: FAILURE · PARTIAL · SIX · PAIR · GLITCH · MESSY', changes: ' (Push)' });
+    const termed = { groups: [{ sides: 6, faces: [{ value: 6, kept: true }] }], dice: 6, add: 0, terms: [{ label: 'HURT', amount: -1 }, { label: 'BLESS', amount: 2 }], total: 7,
+      target: null, success: null, band: null, natural: null, matches: [], glitch: null, effects: [], changes: [] };
+    expect(describeRoll(termed).working).toBe('6 = 6 - 1 (HURT) + 2 (BLESS) = 7');
   });
 });
 
 describe('rolling at the table, through the socket', () => {
   let db;
-  const connect = async (who) => {
+  const GM = jwt.sign({ id: 1, username: 'gm', role: 'admin', isTemporary: false }, 'test-secret');
+  const connect = async (who, { admin = false } = {}) => {
     const emitted = [];
     let connection;
     const io = { on: (e, cb) => { if (e === 'connection') connection = cb; }, emit: (event, data) => emitted.push({ event, data }), to: () => ({ emit: () => {} }) };
     socketsFactory(io, db, { elevatedUsers: new Set(), emitUpdate: vi.fn(), recordAction: vi.fn() });
     const handlers = {};
     connection({ id: `s-${who}-${Math.random()}`, on: (e, fn) => { handlers[e] = fn; }, emit: () => {}, broadcast: { emit: () => {} }, use: () => {}, join: () => {}, disconnect: () => {} });
-    handlers.identify(who);
+    handlers.identify(admin ? { userName: who, isAdmin: true, token: GM } : who);
     await drain(db);
     return { handlers, emitted };
   };
@@ -223,6 +259,34 @@ describe('rolling at the table, through the socket', () => {
     expect(rolled(kes)).toHaveLength(4);
     expect(await stress()).toBe(0);
   });
+
+  it('adds the conditions on the roller\'s token, and on an NPC\'s rolled for (6b3b)', async () => {
+    await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, conditions) VALUES ('Kes', 0, 0, 0, 'rhombus', 'kes', '[{"id":"hurt"},{"id":"poisoned"}]')`);
+    const kes = await connect('kes');
+    kes.handlers.requestSheetRoll({ fieldId: 'fight', rollId: 'brawl' });
+    const roll = await untilValue(() => rolled(kes)[0], Boolean, { label: 'a roll' });
+    expect(roll.data.historyString).toMatch(/^Kestrel rolled Brawl \(Fight\) \[\d = \d \+ 2 - 1 \(HURT\) = \d+\]$/);
+    expect(roll.data.total).toBe(roll.data.results['6'][0] + 1);
+    expect(roll.data.modifiers).toEqual([2, -1]);
+
+    // An NPC's token: the GM rolls for it, with its own conditions.
+    const npc = (await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('npc', 'sys_hearthhearthhear', ?, 1)`, [JSON.stringify({ ...SHEET, name: 'Rex' })])).lastID;
+    const loc = (await run(db, `INSERT INTO locations (name, x, y, z, shape, conditions) VALUES ('Rex', 0, 0, 0, 'enemy_rhombus', '[{"id":"hurt"}]')`)).lastID;
+    await run(db, 'INSERT INTO npc_sheet_links (location_id, sheet_id) VALUES (?, ?)', [loc, npc]);
+    const gm = await connect('gm', { admin: true });
+    gm.handlers.requestSheetRoll({ fieldId: 'fight', rollId: 'brawl', location_id: loc });
+    await drain(db);
+    const forRex = rolled(gm).find((r) => / for Rex /.test(r.data.historyString));
+    expect(forRex?.data.historyString).toMatch(/\+ 2 - 1 \(HURT\) = /);
+  });
+
+  it('adds none for a roller with no token, or a condition the game no longer has', async () => {
+    await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, conditions) VALUES ('Kes', 0, 0, 0, 'rhombus', 'kes', '[{"id":"gone"}]')`);
+    const kes = await connect('kes');
+    kes.handlers.requestSheetRoll({ fieldId: 'fight', rollId: 'brawl' });
+    const roll = await untilValue(() => rolled(kes)[0], Boolean, { label: 'a roll' });
+    expect(roll.data.historyString).toMatch(/^Kestrel rolled Brawl \(Fight\) \[\d = \d \+ 2 = \d+\]$/);
+  });
 });
 
 describe('TEST ROLL, the builder route (6b1a)', () => {
@@ -265,6 +329,15 @@ describe('TEST ROLL, the builder route (6b1a)', () => {
     expect(res.body.result.costs).toEqual([{ from: 'stress', amount: 2 }]);
     // A field the roll isn't rolled by falls back to its first.
     expect((await post({ definition: DRAFT, rollId: 'skill', fieldId: 'str' })).body.field).toBe('fight');
+  });
+
+  it('tries it under the draft\'s conditions asked for, by id (6b3b)', async () => {
+    const res = await post({ definition: DRAFT, rollId: 'brawl', conditions: ['hurt', 'poisoned', 'nope'] });
+    expect(res.body.result.terms).toEqual([{ label: 'HURT', amount: -1 }]);
+    expect(res.body.total).toBe(res.body.result.dice + 2 - 1);
+    expect(res.body.historyText).toMatch(/ - 1 \(HURT\) = /);
+    expect((await post({ definition: DRAFT, rollId: 'brawl', conditions: 'hurt' })).body.result.terms).toBeUndefined();
+    expect((await post({ definition: DRAFT, rollId: 'brawl', conditions: [] })).body.result.terms).toBeUndefined();
   });
 
   it('tests a roll rolled by nothing yet, reading 0 for @this', async () => {

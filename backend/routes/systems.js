@@ -12,6 +12,7 @@ const runtime = require('../systemBuilder/runtime');
 const { checkDefinition } = require('../systemBuilder/definition');
 const { previewDerived } = require('../systemBuilder/derived');
 const tableRolls = require('../systemBuilder/tableRolls');
+const { conditionsOf } = require('../systemBuilder/conditions');
 const { cryptoRng } = require('../utils/random');
 const { effectiveSheet, starterSheet, fieldsOf } = require('../systemBuilder/sheet');
 const { npcSheetOf, LIMITS: NPC_LIMITS } = require('../systemBuilder/npc');
@@ -282,10 +283,11 @@ module.exports = (db, io = null) => {
    * changes and all, made for its sample character (its samples, and its formulas worked out on
    * them) by the table's own engine on the secure dice, for the field asked or the first it is
    * rolled by. A roll with problems is refused with the first; changes that cost something are
-   * tried, since nothing is taken. Changes nothing, logs nothing.
+   * tried, since nothing is taken; `conditions` names the draft's conditions to try it under (6b3b).
+   * Changes nothing, logs nothing.
    */
   router.post('/test-roll', gm, (req, res) => {
-    const { definition, rollId, fieldId, changes } = req.body || {};
+    const { definition, rollId, fieldId, changes, conditions } = req.body || {};
     const checked = checkDefinition(definition);
     if (checked.fatal) return res.status(400).json({ error: checked.fatal });
     const roll = Array.isArray(definition.rolls) ? definition.rolls.find((r) => r && typeof r === 'object' && r.id === rollId) : null;
@@ -301,6 +303,8 @@ module.exports = (db, io = null) => {
     const made = tableRolls.rollField({
       definition, data: { ...samples, ...values }, fieldId: field, roll,
       chosen: Array.isArray(changes) ? changes.slice(0, 20) : [], rng: cryptoRng, who: 'The sample', tryCosts: true,
+      // The draft's conditions the sample is tried under (6b3b), by id.
+      conditions: Array.isArray(conditions) ? conditionsOf(definition).filter((c) => conditions.includes(c.id)) : [],
     });
     if (!made.ok) return res.status(400).json({ error: made.error });
     res.json({ field, fields, result: made.result, historyText: made.historyText, total: made.total });

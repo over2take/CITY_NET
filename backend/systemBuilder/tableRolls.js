@@ -9,12 +9,14 @@
 // it is tied to, @tie_mod that ability's modifier; any other @name is the sheet's value, 0 when it
 // has none. A change that costs something (6b3a) is paid from the sheet as stored: taken from a stat,
 // refused when it hasn't enough; or added to one, refused past its highest. The socket changes the
-// stat once the roll is made.
+// stat once the roll is made. A condition on the character with a modifier on all rolls (4e1a,
+// waiting for this phase) is added to every roll as its own term, named: "+ 4 - 1 (HURT)" (6b3b).
 
 const { makeRoll, FATE } = require('./rollStyles');
 const { parse, evaluate } = require('./expression');
 const { lookupIn } = require('./derived');
 const { ruleValue } = require('./rules');
+const { ALL_ROLLS } = require('./conditions');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const groupsOf = (def) => (Array.isArray(def.stats) ? def.stats.filter((g) => isPlainObject(g) && Array.isArray(g.stats)) : []);
@@ -82,8 +84,11 @@ const describe = (result) => {
     const t = faceText(f, g.sides);
     return `${f.minus ? '-' : ''}${f.kept ? t : `(${t})`}${g.name ? ` ${g.name}` : ''}`;
   })).join(' ');
-  // The dice's own value is said only when something is added to it; the total always.
-  const working = `${dice || 'no dice'}${result.add !== 0 ? ` = ${result.dice} ${signed(result.add)}` : ''} = ${result.total}`;
+  // The dice's own value is said only when something is added to it; the total always. A
+  // condition's term is named after its amount.
+  const terms = (result.terms ?? []).map((t) => ` ${signed(t.amount)} (${t.label})`).join('');
+  const added = `${result.add !== 0 ? ` ${signed(result.add)}` : ''}${terms}`;
+  const working = `${dice || 'no dice'}${added ? ` = ${result.dice}${added}` : ''} = ${result.total}`;
   const said = [
     ...(result.target !== null ? [`vs ${result.target}: ${result.success ? 'SUCCESS' : 'FAILURE'}`] : []),
     ...(result.band ? [result.band.toUpperCase()] : []),
@@ -113,10 +118,16 @@ const trayOf = (result) => {
  * Roll a field of a custom system's sheet. `rollId` picks one of the field's rolls (the first if
  * not given); `chosen` the changes picked. The builder's TEST ROLL (6b1a) hands in `roll` itself,
  * which needn't be ROLLED BY anything yet, with no field or any, and `tryCosts` for changes that
- * cost something, since a test takes nothing. Returns { ok: true, roll, result, historyText, results,
+ * cost something, since a test takes nothing. `conditions` are those on the character, whole as
+ * conditionsOf gives them; each modifier on all rolls is added to the roll. Returns { ok: true, roll, result, historyText, results,
  * diceSides, total, glitch, criticalGlitch } or { ok: false, error } (nothing rolled).
  */
-const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, forName, roll: given, tryCosts = false }) => {
+/** A condition's modifiers on all rolls, each a term named by its short name: HURT -1. */
+const termsOf = (conditions) => (Array.isArray(conditions) ? conditions : []).flatMap((c) => (isPlainObject(c) && Array.isArray(c.modifiers) ? c.modifiers : [])
+  .filter((m) => isPlainObject(m) && m.target === ALL_ROLLS && Number.isInteger(m.amount) && m.amount !== 0)
+  .map((m) => ({ label: c.short || c.name || c.id, amount: m.amount })));
+
+const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, forName, roll: given, tryCosts = false, conditions = [] }) => {
   if (!isPlainObject(definition) || (!given && typeof fieldId !== 'string')) return { ok: false, error: 'Nothing to roll' };
   const options = given ? [given] : rollsFor(definition, fieldId);
   const roll = given ?? (rollId === undefined || rollId === null ? options[0] : options.find((r) => r.id === rollId));
@@ -136,7 +147,7 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
     spends.push({ from, by: adds ? amount : -amount, label: c.label, words: `${c.label}: ${adds ? '+' : '−'}${amount} ${name}` });
   }
 
-  const result = makeRoll(roll, valueOf(definition, fieldsFor(definition, data, fieldId), data), rng, picks);
+  const result = makeRoll(roll, valueOf(definition, fieldsFor(definition, data, fieldId), data), rng, picks, termsOf(conditions));
   const label = roll.label || roll.id;
   const what = typeof fieldId === 'string' ? (statOf(definition, fieldId)?.label || formulaOf(definition, fieldId)?.label || fieldId) : null;
   const described = describe(result);
@@ -159,4 +170,4 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
   };
 };
 
-module.exports = { rollsFor, fieldsRolledBy, modifierOf, fieldsFor, rollField, describe };
+module.exports = { rollsFor, fieldsRolledBy, modifierOf, fieldsFor, termsOf, rollField, describe };

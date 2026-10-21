@@ -276,9 +276,11 @@ const checkRoll = (roll, where = 'roll', isFunction = () => false) => {
  * met, the band the total lands in, a natural the dice showed, matches, a glitch and named dice's
  * effects, and the changes picked with what they cost. The roll is assumed checked (checkRoll);
  * `value(text)` works formula text out for the character rolling, `rng` gives [0, 1), `chosen`
- * names the changes the player picked (any it doesn't have are left out).
+ * names the changes the player picked (any it doesn't have are left out). `terms` are amounts from
+ * outside the roll, each with its label, added to the total before it is judged: a condition's
+ * modifier on all rolls, HURT -1 (6b3b).
  */
-const makeRoll = (roll, value, rng, chosen = []) => {
+const makeRoll = (roll, value, rng, chosen = [], terms = []) => {
   const picked = (roll.changes ?? []).filter((c) => chosen.includes(c.id));
   let read = roll.read ?? 'sum';
   let keepText = roll.keep;
@@ -375,7 +377,7 @@ const makeRoll = (roll, value, rng, chosen = []) => {
   const glitched = !!roll.glitch && all.length > 0 && glitchFaces >= Math.ceil(all.length * roll.glitch.share);
 
   const add = (roll.add !== undefined ? value(roll.add) : 0) + picked.reduce((n, c) => n + (c.add !== undefined ? value(c.add) : 0), 0);
-  const total = dice + add;
+  const total = dice + add + terms.reduce((n, t) => n + t.amount, 0);
   const target = roll.against !== undefined ? value(roll.against) : null;
   const success = target === null ? null : roll.under ? total <= target : total >= target;
   const band = roll.bands ? (roll.bands.find((b) => b.upTo === undefined || total <= b.upTo)?.label ?? null) : null;
@@ -392,7 +394,7 @@ const makeRoll = (roll, value, rng, chosen = []) => {
     return true;
   }).map((e) => e.label);
   return {
-    groups, dice, add, total, target, success, band,
+    groups, dice, add, ...(terms.length ? { terms: terms.map((t) => ({ label: t.label, amount: t.amount })) } : {}), total, target, success, band,
     natural: nat ? { label: nat.label, ...(nat.critical ? { critical: nat.critical } : {}) } : null,
     matches: matched, glitch, effects, critical, ...(zeroed ? { zero: true } : {}),
     changes: picked.map((c) => c.label),

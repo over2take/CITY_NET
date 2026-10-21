@@ -400,3 +400,17 @@ describe('the presets (6a1c)', () => {
     expect([fate.total, fate.band]).toEqual([5, 'Superb']);
   });
 });
+
+describe('amounts from outside the roll (6b3b)', () => {
+  it('adds each to the total before it is judged, named, and says nothing of them when there are none', () => {
+    const check = { id: 'check', dice: [{ count: '1', sides: 20 }], add: '@this_mod', against: '13', bands: [{ upTo: 12, label: 'Low' }, { label: 'High' }] };
+    const hurt = makeRoll(check, valueFor({ this_mod: 2 }), d(20, 11), [], [{ label: 'HURT', amount: -1 }, { label: 'BLESS', amount: 3 }]);
+    expect(hurt).toMatchObject({ dice: 11, add: 2, terms: [{ label: 'HURT', amount: -1 }, { label: 'BLESS', amount: 3 }], total: 15, success: true, band: 'High' });
+    const missed = makeRoll(check, valueFor({ this_mod: 2 }), d(20, 11), [], [{ label: 'HURT', amount: -1 }]);
+    expect([missed.total, missed.success, missed.band]).toEqual([12, false, 'Low']);
+    expect('terms' in makeRoll(check, valueFor({ this_mod: 2 }), d(20, 11))).toBe(false);
+    // A natural is still the dice's own.
+    const nat = makeRoll({ ...check, natural: [{ face: 20, label: 'Natural 20' }] }, valueFor(), d(20, 20), [], [{ label: 'HURT', amount: -1 }]);
+    expect([nat.total, nat.natural]).toEqual([19, { label: 'Natural 20' }]);
+  });
+});

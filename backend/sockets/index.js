@@ -1524,22 +1524,24 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
      * as an unknown roll always was. `hp` is the token's current HP, for the wound penalties;
      * `forName` names the NPC in the log ("Ash rolled Shoot for Rex"); `updated` is what tells open
      * windows the sheet changed (LUCK spent, a jack locked); `tokenId` is the NPC's token, where an
-     * attack from it starts (null for the roller's own token).
+     * attack from it starts (null for the roller's own token); `conditions` the token's, as stored
+     * (none without a token).
      */
     const rollSheetOf = (info, payload, system, cb) => {
       if (payload.location_id === undefined || payload.location_id === null) {
         db.get(`SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`, [info.userName, system], (e, row) => {
           if (e || !row) return;
-          db.get(`SELECT hp_current FROM locations WHERE shape = 'rhombus' AND owner = ?
+          db.get(`SELECT hp_current, conditions FROM locations WHERE shape = 'rhombus' AND owner = ?
                   ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`, [info.userName], (e2, hpRow) => {
-            cb({ row, hp: !e2 && hpRow ? hpRow.hp_current : null, forName: null, updated: { username: info.userName, system }, tokenId: null });
+            cb({ row, hp: !e2 && hpRow ? hpRow.hp_current : null, forName: null, updated: { username: info.userName, system }, tokenId: null,
+              conditions: !e2 && hpRow ? parseTokenConditions(hpRow.conditions) : [] });
           });
         });
         return;
       }
       // A token with no NPC sheet linked for this system (a player's, or none at all) is ignored
       // below, as is one the roller may not roll for.
-      db.get(`SELECT id, name, shape, owner, controllers, hp_current FROM locations WHERE id = ?`, [payload.location_id], (e, loc) => {
+      db.get(`SELECT id, name, shape, owner, controllers, hp_current, conditions FROM locations WHERE id = ?`, [payload.location_id], (e, loc) => {
         if (e || !loc) return;
         if (!isAdminSocket(socket) && !tokenAccess.controls(loc, info.userName)) return;
         db.get(`SELECT cs.id, cs.data FROM npc_sheet_links l JOIN character_sheets cs ON cs.id = l.sheet_id
@@ -1547,7 +1549,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           if (e2 || !row) return;
           let name = loc.name;
           try { name = JSON.parse(row.data || '{}').name || loc.name; } catch { /* the token's name */ }
-          cb({ row, hp: loc.hp_current, forName: name || 'an NPC', updated: { npc_id: row.id, system }, tokenId: loc.id });
+          cb({ row, hp: loc.hp_current, forName: name || 'an NPC', updated: { npc_id: row.id, system }, tokenId: loc.id, conditions: parseTokenConditions(loc.conditions) });
         });
       });
     };
@@ -1562,14 +1564,17 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         // on the stored sheet with the server's secure dice, into the same log and tray.
         const custom = customSystems.definitionOf(system);
         if (custom) {
-          rollSheetOf(info, payload, system, ({ row, forName, updated }) => {
+          rollSheetOf(info, payload, system, ({ row, forName, updated, conditions }) => {
             let data;
             try { data = JSON.parse(row.data || '{}'); } catch { return; }
+            // The token's conditions as the game runs them (6b3b): HURT -1 on all rolls.
+            const on = new Set(conditions.map((c) => c.id));
             const made = tableRolls.rollField({
               definition: custom, data, fieldId: payload.fieldId,
               rollId: typeof payload.rollId === 'string' ? payload.rollId : undefined,
               chosen: Array.isArray(payload.changes) ? payload.changes.slice(0, 20) : [],
               rng: cryptoRng, who: identity.displayName(info.userName), forName,
+              conditions: customSystems.conditionsIn(system).filter((c) => on.has(c.id)),
             });
             if (!made.ok) return;
             // What the changes picked cost (6b3a): the stat changed on the sheet as it is now, as
@@ -1587,7 +1592,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               account: info.userName,
               results: made.results,
               diceSides: made.diceSides,
-              modifiers: made.result.add !== 0 ? [made.result.add] : [],
+              modifiers: [...(made.result.add !== 0 ? [made.result.add] : []), ...(made.result.terms ?? []).map((t) => t.amount)],
               color,
               total: made.total,
               historyString: made.historyText,
