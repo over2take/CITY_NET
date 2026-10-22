@@ -49,6 +49,21 @@ const HEARTH = {
   },
 };
 const SHEET = { name: 'Kestrel', str: 16, wit: 9, fight: 2, lore: 3, str_mod: 1, wit_mod: 0, save: 15, stress: 4 };
+
+/** HEARTH with dice of its own (6c1b): GOOD and BAD with symbols that cancel, and Fate dice. */
+const DICED = {
+  ...HEARTH,
+  symbols: [{ id: 'hit', name: 'Hit', mark: '✶', cancels: 'miss' }, { id: 'miss', name: 'Miss', mark: '✕', cancels: 'hit' }, { id: 'edge', name: 'Edge', icon: 'star' }],
+  dice: [
+    { id: 'good', name: 'Good', faces: [{}, { s: ['hit'] }, { s: ['hit', 'edge'] }] },
+    { id: 'bad', name: 'Bad', color: 'danger', faces: [{}, { s: ['miss'] }] },
+    { id: 'fate', name: 'dF', faces: [{ n: 1 }, { n: 0 }, { n: -1 }] },
+  ],
+  rolls: [
+    { id: 'clash', label: 'Clash', dice: [{ count: '@this', die: 'good' }, { count: '1', die: 'bad' }], read: 'symbols', on: 'hit', against: '1', by: ['fight'] },
+    { id: 'fated', label: 'Fated', dice: [{ count: '3', die: 'fate' }], add: '@this', by: ['lore'] },
+  ],
+};
 const d = (sides, ...faces) => { let i = 0; return () => (faces[i++ % faces.length] - 1 + 0.5) / sides; };
 
 describe('which rolls a field rolls', () => {
@@ -215,6 +230,19 @@ describe('rolling at the table, through the socket', () => {
     await new Promise((resolve) => runtime.load(db, resolve));
     await run(db, `INSERT INTO global_settings (key, value) VALUES ('game_system', 'sys_hearthhearthhear')`);
     await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('kes', 'sys_hearthhearthhear', ?, 0)`, [JSON.stringify(SHEET)]);
+  });
+
+  it('sends a roll of the system\'s own dice with the faces each landed on, for the tray (6c4b1)', async () => {
+    const def = JSON.stringify(DICED);
+    await run(db, 'UPDATE custom_systems SET draft = ?, published = ? WHERE id = ?', [def, def, 'sys_hearthhearthhear']);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    const kes = await connect('kes');
+    kes.handlers.requestSheetRoll({ fieldId: 'fight' });
+    const roll = await untilValue(() => rolled(kes)[0], Boolean, { label: 'a roll' });
+    const { results, throw: thrown } = roll.data;
+    expect(thrown.dice.map((d) => [d.key, d.sides, d.color])).toEqual([['Good', 3, undefined], ['Bad', 2, 'danger']]);
+    for (const d of thrown.dice) expect(d.landed.map((i) => d.faces[i].text), d.key).toEqual(results[d.key]);
+    expect(thrown.symbols.map((s) => s.id)).toEqual(['hit', 'miss', 'edge']);
   });
 
   it('rolls a custom system\'s skill from the stored sheet, into the log and the tray', async () => {
@@ -397,19 +425,6 @@ describe('what a cost shows on the sheet (6b3a)', () => {
 });
 
 describe('a system\'s own dice at the table (6c1b)', () => {
-  const DICED = {
-    ...HEARTH,
-    symbols: [{ id: 'hit', name: 'Hit', mark: '✶', cancels: 'miss' }, { id: 'miss', name: 'Miss', mark: '✕', cancels: 'hit' }, { id: 'edge', name: 'Edge', icon: 'star' }],
-    dice: [
-      { id: 'good', name: 'Good', faces: [{}, { s: ['hit'] }, { s: ['hit', 'edge'] }] },
-      { id: 'bad', name: 'Bad', color: 'danger', faces: [{}, { s: ['miss'] }] },
-      { id: 'fate', name: 'dF', faces: [{ n: 1 }, { n: 0 }, { n: -1 }] },
-    ],
-    rolls: [
-      { id: 'clash', label: 'Clash', dice: [{ count: '@this', die: 'good' }, { count: '1', die: 'bad' }], read: 'symbols', on: 'hit', against: '1', by: ['fight'] },
-      { id: 'fated', label: 'Fated', dice: [{ count: '3', die: 'fate' }], add: '@this', by: ['lore'] },
-    ],
-  };
   // A face by its place among a die's faces (1 for the first) out of how many.
   const faces = (...plan) => { let i = 0; return () => { const [f, of] = plan[i++ % plan.length]; return (f - 1 + 0.5) / of; }; };
 

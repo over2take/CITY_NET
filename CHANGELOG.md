@@ -204,6 +204,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Every roll says how its dice landed (6c4b1).** Each roll sent to the dice tray now carries the
+  face every die landed on, the faces themselves for dice that aren't numbered 1 to n (Fate dice,
+  the table's CUSTOM_DIE.EXE dice, a system's own dice and the looks of their symbols), and one
+  random seed for the tumble. Nothing on screen changes yet: the new 3D tray will use it so the dice
+  land on the server's result and everyone watching sees the same throw. A test holds every roll
+  the server sends to it.
 - **A symbol's look (6c2b1).** A dice symbol can now look like a picture instead of its mark: one of
   the drawn icons, an uploaded image (as condition icons are), or a 16 by 16 drawing made in the app,
   kept in the system so it travels in a shared file. The log still writes the mark. The DICE tab,

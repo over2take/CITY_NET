@@ -118,6 +118,12 @@ const ownFaceText = (g, f, marks) => {
   return `${n}${m}` || '·';
 };
 
+/** The marks the log writes for each symbol: its own, or its name's first letter. */
+const marksOf = (symbols) => new Map(symbols.map((s) => [s.id, s.mark ?? s.name.slice(0, 1).toUpperCase()]));
+
+/** One of a die's faces (diceOf's `{ n, s }`) as the log writes it, `g` saying if the die is signed. */
+const dieFaceText = (g, f, marks) => ownFaceText(g, { value: f.n ?? 0, ...(f.n === null ? { blank: true } : {}), ...(f.s.length ? { symbols: f.s } : {}) }, marks);
+
 /** What is left of each symbol, in the order the system lists them: "2 HIT, 1 EDGE", or "NOTHING LEFT". */
 const leftWords = (tally, symbols) => {
   const order = [...symbols.map((s) => s.id), ...Object.keys(tally.left).filter((id) => !symbols.some((s) => s.id === id))];
@@ -131,13 +137,12 @@ const leftWords = (tally, symbols) => {
  * them, read-only (the DICE tab edits them), as a game's built-in dice are offered.
  */
 const menuDiceOf = (definition) => {
-  const symbols = symbolsOf(definition);
-  const marks = new Map(symbols.map((s) => [s.id, s.mark ?? s.name.slice(0, 1).toUpperCase()]));
+  const marks = marksOf(symbolsOf(definition));
   return diceOf(definition).map((d) => {
     const g = { die: d.id, ...(d.faces.some((f) => (f.n ?? 0) < 0) ? { signed: true } : {}) };
     return {
       id: `own:${d.id}`, name: d.name, sides: d.faces.length, locked: true, ...(d.color === 'danger' ? { color: 'danger' } : {}),
-      faces: d.faces.map((f) => ({ value: ownFaceText(g, { value: f.n ?? 0, ...(f.n === null ? { blank: true } : {}), ...(f.s.length ? { symbols: f.s } : {}) }, marks) })),
+      faces: d.faces.map((f) => ({ value: dieFaceText(g, f, marks) })),
     };
   });
 };
@@ -157,18 +162,35 @@ const rollMenuDice = ({ definition, dieId, count, rng, who }) => {
   });
 };
 
-/** The dice for the tray, by kind: a named kind under its name, Fate dice as dF, the rest by size; a system's own die by its name, its faces as the log writes them. */
-const trayOf = (result, symbols = []) => {
+/**
+ * The dice for the tray, by kind: a named kind under its name, Fate dice as dF, the rest by size; a
+ * system's own die by its name, its faces as the log writes them. `own` is what utils/diceThrow
+ * can't tell from those (6c4b1): each own die's every face and the one each landed on, and the
+ * looks of the symbols they show.
+ */
+const trayOf = (result, symbols = [], dice = []) => {
   const results = {};
   const diceSides = {};
+  const kinds = {};
+  const marks = marksOf(symbols);
   for (const g of result.groups) {
     if (!g.faces.length) continue;
     const key = g.name ?? (g.sides === FATE ? 'dF' : String(g.sides));
-    const marks = new Map(symbols.map((s) => [s.id, s.mark ?? s.name.slice(0, 1).toUpperCase()]));
     results[key] = [...(results[key] ?? []), ...g.faces.map((f) => (g.die ? ownFaceText(g, f, marks) : f.value))];
     if (g.name || g.sides === FATE) diceSides[key] = g.sides === FATE ? 6 : g.sides;
+    const die = g.die ? dice.find((d) => d.id === g.die) : null;
+    if (!die) continue;
+    const kind = kinds[key] ?? (kinds[key] = {
+      faces: die.faces.map((f) => ({ text: dieFaceText(g, f, marks), ...(f.n !== null ? { n: f.n } : {}), ...(f.s.length ? { s: f.s } : {}) })),
+      landed: [],
+      ...(die.color === 'danger' ? { color: 'danger' } : {}),
+    });
+    kind.landed.push(...g.faces.map((f) => f.face));
   }
-  return { results, diceSides };
+  const shown = new Set(Object.values(kinds).flatMap((k) => k.faces.flatMap((f) => f.s ?? [])));
+  const looks = symbols.filter((s) => shown.has(s.id))
+    .map((s) => ({ id: s.id, mark: marks.get(s.id), ...(s.drawn ? { drawn: s.drawn } : {}), ...(s.icon ? { icon: s.icon } : {}) }));
+  return { results, diceSides, own: { kinds, symbols: looks } };
 };
 
 /**
@@ -177,7 +199,7 @@ const trayOf = (result, symbols = []) => {
  * which needn't be ROLLED BY anything yet, with no field or any, and `tryCosts` for changes that
  * cost something, since a test takes nothing. `conditions` are those on the character, whole as
  * conditionsOf gives them; each modifier on all rolls is added to the roll. Returns { ok: true, roll, result, historyText, results,
- * diceSides, total, glitch, criticalGlitch } or { ok: false, error } (nothing rolled).
+ * diceSides, own (the tray's own dice, 6c4b1), total, glitch, criticalGlitch } or { ok: false, error } (nothing rolled).
  */
 /** A condition's modifiers on all rolls, each a term named by its short name: HURT -1. */
 const termsOf = (conditions) => (Array.isArray(conditions) ? conditions : []).flatMap((c) => (isPlainObject(c) && Array.isArray(c.modifiers) ? c.modifiers : [])
@@ -213,7 +235,7 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
   // A change that cost something says what it cost.
   const costWords = new Map(spends.map((s) => [s.label, s.words]));
   const changes = result.changes.length ? ` (${result.changes.map((l) => costWords.get(l) ?? l).join(', ')})` : '';
-  const tray = trayOf(result, symbols);
+  const tray = trayOf(result, symbols, diceOf(definition));
   return {
     ok: true,
     roll: roll.id,
@@ -221,6 +243,7 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
     historyText: `${who} rolled ${label}${what ? ` (${what})` : ''}${forName ? ` for ${forName}` : ''}${changes} [${working}]${tags}`,
     results: tray.results,
     diceSides: tray.diceSides,
+    own: tray.own,
     total: result.total,
     glitch: !!result.glitch,
     criticalGlitch: !!result.glitch && result.critical === 'failure',

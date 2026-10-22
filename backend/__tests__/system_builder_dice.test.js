@@ -268,6 +268,10 @@ describe('a system\'s own dice in the dice menu (6c4a)', () => {
     expect(good.data.historyString).toMatch(/^kes rolled 3×Good \[\S+ \S+ \S+ = (.+|NOTHING LEFT)\]$/);
     expect(good.data.results.Good).toHaveLength(3);
     for (const f of good.data.results.Good) expect(['·', '✶', '✶◆', '◆◆', '◆']).toContain(f);
+    // The tray lands each on the face it rolled (6c4b1).
+    const [kind] = good.data.throw.dice;
+    expect(kind.landed.map((i) => kind.faces[i].text)).toEqual(good.data.results.Good);
+    expect(good.data.throw.symbols.map((s) => s.id)).toEqual(['hit', 'edge']);
 
     // Numbers only: summed, as any roll is.
     handlers.requestCustomDiceRoll({ userName: 'kes', dieId: 'own:fate', count: 4, color: '#00ff00' });

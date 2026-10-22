@@ -116,6 +116,18 @@ describe('requestCustomDiceRoll — GM dice', () => {
     expect(rolls(emitted)[0].data.diceSides).toEqual({ punk: 4 });
   });
 
+  it('lands each die on the face it rolled, every face sent for the tray (6c4b1)', async () => {
+    const id = await insertDie('punk', 4, WORD_FACES);
+    const { handlers, emitted } = boot(db);
+    handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: id, count: 20, color: '#0f0' });
+    await waitForRolls(emitted);
+
+    const { results, throw: thrown } = rolls(emitted)[0].data;
+    const [kind] = thrown.dice;
+    expect([kind.key, kind.sides, kind.faces.map((f) => f.text)]).toEqual(['punk', 4, WORD_FACES.map((f) => f.value)]);
+    expect(kind.landed.map((i) => kind.faces[i].text)).toEqual(results.punk);
+  });
+
   it('only ever returns faces the die actually has', async () => {
     const id = await insertDie('punk', 4, WORD_FACES);
     const { handlers, emitted } = boot(db);
@@ -225,6 +237,15 @@ describe('requestCustomDiceRoll — built-in dice', () => {
     const { total } = rolls(emitted)[0].data;
     expect(total).toBeGreaterThanOrEqual(-4);
     expect(total).toBeLessThanOrEqual(4);
+  });
+
+  it('lands dF on a face showing what it rolled (6c4b1)', async () => {
+    const { handlers, emitted } = boot(db);
+    handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: 'builtin:fate_df', count: 8, color: '#0f0' });
+    await waitForRolls(emitted);
+
+    const { results, throw: thrown } = rolls(emitted)[0].data;
+    expect(thrown.dice[0].landed.map((i) => thrown.dice[0].faces[i].text)).toEqual(results.dF);
   });
 
   it('reports 6 sides for dF', async () => {
