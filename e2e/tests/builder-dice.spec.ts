@@ -47,15 +47,19 @@ test('dice made from a preset, a face changed, a symbol drawn, thrown on the ser
   await page.getByLabel('Add a symbol to face 1').selectOption({ label: 'HIT' });
   await expect(faces.getByRole('button', { name: 'Face 1: +2 HIT' })).toBeVisible();
 
-  // HIT drawn on the pad: a stroke across a row.
+  // HIT drawn on the pad: a stroke across a row, along the line marking the pad's middle (which
+  // the squares under it still take).
   const hit = page.getByRole('group', { name: 'Symbol Hit' });
   await hit.getByRole('group', { name: 'Hit: look' }).getByRole('button', { name: 'DRAW' }).click();
   const pad = hit.getByRole('group', { name: 'Drawing of Hit' });
   const first = (await pad.getByRole('button', { name: 'Square 3, 8' }).boundingBox())!;
   const last = (await pad.getByRole('button', { name: 'Square 14, 8' }).boundingBox())!;
-  await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2);
+  const across = (await pad.getByTestId('pad-middle').nth(1).boundingBox())!;
+  expect(across.y).toBeLessThan(first.y + first.height);
+  const y = first.y + first.height - 0.25;
+  await page.mouse.move(first.x + first.width / 2, y);
   await page.mouse.down();
-  await page.mouse.move(last.x + last.width / 2, last.y + last.height / 2, { steps: 14 });
+  await page.mouse.move(last.x + last.width / 2, y, { steps: 14 });
   await page.mouse.up();
   await expect(pad.getByRole('button', { name: /^Square \d+, 8$/, pressed: true })).toHaveCount(12);
   await expect(hit.getByLabel('Hit on the dice').locator('rect')).toHaveCount(12);

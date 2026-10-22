@@ -62,10 +62,14 @@ export function DrawPad({ drawn, onChange, name }: Props) {
   }, [onChange]);
   const paint = (x: number, y: number) => setRows((r) => withSquare(r, x, y, ink));
   const cell = 14;
+  // The pad's middle, across and down, to center a drawing by: over the squares, not in their way.
+  const middle = { position: 'absolute', background: 'color-mix(in srgb, var(--green) 45%, transparent)', pointerEvents: 'none' } as const;
   return (
     <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' }}>
       <div role="group" aria-label={`Drawing of ${name}`} onPointerLeave={() => { if (painting.current) { painting.current = false; onChange(latest.current); } }}
-        style={{ display: 'grid', gridTemplateColumns: `repeat(16, ${cell}px)`, border: '1px solid var(--green)', background: 'var(--black)', touchAction: 'none', userSelect: 'none', width: 'max-content' }}>
+        style={{ position: 'relative', display: 'grid', gridTemplateColumns: `repeat(16, ${cell}px)`, border: '1px solid var(--green)', background: 'var(--black)', touchAction: 'none', userSelect: 'none', width: 'max-content' }}>
+        <span aria-hidden data-testid="pad-middle" style={{ ...middle, left: 8 * cell - 0.5, top: 0, bottom: 0, width: 1 }} />
+        <span aria-hidden data-testid="pad-middle" style={{ ...middle, top: 8 * cell - 0.5, left: 0, right: 0, height: 1 }} />
         {Array.from({ length: 256 }, (_, i) => {
           const x = i % 16; const y = Math.floor(i / 16); const on = drawnAt(rows, x, y);
           return (
