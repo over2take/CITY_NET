@@ -197,8 +197,10 @@ export interface CustomDie {
   name: string;
   sides: number;
   faces: CustomDieFace[];
-  /** True for system dice, which ship in code and cannot be edited or deleted. */
+  /** True for system dice, which ship in code and cannot be edited or deleted; a custom system's own too (6c4a). */
   locked?: boolean;
+  /** A custom system's die drawn in the danger color (a bad die). */
+  color?: 'danger';
 }
 
 // ─── UI State ─────────────────────────────────────────────────────────────────

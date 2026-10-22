@@ -837,6 +837,24 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           });
       };
 
+      // A running custom system's own die (6c4a): rolled by the table's engine from the published
+      // system, its symbols counted, into the same log and tray.
+      if (typeof dieId === 'string' && dieId.startsWith('own:')) {
+        getGameSystem((err, system) => {
+          const definition = err ? null : customSystems.definitionOf(system);
+          if (!definition) return;
+          const made = tableRolls.rollMenuDice({ definition, dieId: dieId.slice(4), count: c, rng: cryptoRng, who: identity.displayName(userName) });
+          if (!made || !made.ok) return;
+          const broadcastData = { userName: identity.displayName(userName), account: userName, results: made.results, diceSides: made.diceSides, modifiers: [], color, total: made.total, historyString: made.historyText };
+          db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
+            [userName, made.total, JSON.stringify(made.results), color, made.historyText], (err2) => {
+              if (err2) console.error('Error saving system dice roll:', err2);
+              io.emit('diceRollBroadcast', broadcastData);
+            });
+        });
+        return;
+      }
+
       // Built-ins resolve from code; GM dice from the DB. Either way the
       // definition comes from the server, never from the client, so a player
       // cannot roll a die that does not exist or forge its face values.

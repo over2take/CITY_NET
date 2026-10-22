@@ -965,37 +965,38 @@ export function DiceMenu({ userName, token, writeToken, locations = [], socketRe
           </div>
         ))}
 
-        {/* Custom dice */}
-        {customDice.length > 0 && (
-          <div style={{ borderTop: '1px solid #1a3a1a', marginTop: '6px', paddingTop: '6px' }}>
-            {customDice.map(die => (
-              <div key={die.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'color-mix(in srgb, var(--black) 50%, transparent)', padding: '5px 10px', marginBottom: '5px', borderRadius: '4px', border: '1px solid #1a4a2a' }}>
+        {/* This game's dice (a built-in game's, or a custom system's own, 6c4a), then the table's from CUSTOM_DIE.EXE. */}
+        {([[customDice.filter(d => d.locked), "THIS GAME'S DICE"], [customDice.filter(d => !d.locked), "THE TABLE'S DICE"]] as const).map(([dice, heading]) => dice.length > 0 && (
+          <div key={heading} role="group" aria-label={heading} style={{ borderTop: '1px solid var(--dark-green)', marginTop: '6px', paddingTop: '6px' }}>
+            <div style={{ fontSize: '0.6rem', letterSpacing: 2, opacity: 0.75, marginBottom: '4px' }}>{heading}</div>
+            {dice.map(die => (
+              <div key={die.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'color-mix(in srgb, var(--black) 50%, transparent)', padding: '5px 10px', marginBottom: '5px', borderRadius: '4px', border: '1px solid var(--dark-green)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                  <span style={{ fontWeight: 'bold', color: 'var(--cyan)', whiteSpace: 'nowrap' }}>{die.name}</span>
+                  <span style={{ fontWeight: 'bold', color: die.color === 'danger' ? 'var(--danger)' : 'var(--cyan)', whiteSpace: 'nowrap' }}>{die.name}</span>
                   {isAdmin && !die.locked && (
                     <>
                       <button
                         onClick={() => onOpenCustomDieBuilder?.(die)}
-                        style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: '0 2px', fontSize: '0.8rem', lineHeight: 1, flexShrink: 0 }}
-                        title="Edit die"
+                        style={{ background: 'none', border: 'none', color: 'var(--text)', opacity: 0.6, cursor: 'pointer', padding: '0 2px', fontSize: '0.8rem', lineHeight: 1, flexShrink: 0 }}
+                        title="Edit die" aria-label={`Edit ${die.name}`}
                       >⚙</button>
                       <button
                         onClick={() => onDeleteCustomDie?.(die.id)}
-                        style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', padding: '0 2px', fontSize: '0.7rem', lineHeight: 1, flexShrink: 0 }}
-                        title="Delete die"
+                        style={{ background: 'none', border: 'none', color: 'var(--danger)', opacity: 0.6, cursor: 'pointer', padding: '0 2px', fontSize: '0.7rem', lineHeight: 1, flexShrink: 0 }}
+                        title="Delete die" aria-label={`Delete ${die.name}`}
                       >✕</button>
                     </>
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <button className="upload-btn" style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleSubCustom(die.id)}>-</button>
+                  <button className="upload-btn" aria-label={`One less ${die.name}`} style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleSubCustom(die.id)}>-</button>
                   <span style={{ width: '20px', textAlign: 'center' }}>{customCounts[die.id] || 0}</span>
-                  <button className="upload-btn" style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleAddCustom(die.id)}>+</button>
+                  <button className="upload-btn" aria-label={`One more ${die.name}`} style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleAddCustom(die.id)}>+</button>
                 </div>
               </div>
             ))}
           </div>
-        )}
+        ))}
 
         {isAdmin && (
           <button

@@ -82,9 +82,12 @@ const faceText = (f, sides) => (sides === FATE ? (f.value > 0 ? '+' : f.value < 
  */
 const describe = (result, symbols = []) => {
   const marks = new Map(symbols.map((s) => [s.id, s.mark ?? s.name.slice(0, 1).toUpperCase()]));
+  // A named kind's name follows each face only where the roll mixes kinds (✶ Good ✕ Bad); with one
+  // kind it is already said ("rolled 3×dF"), so the faces stand alone.
+  const mixed = result.groups.filter((g) => g.faces.length).length > 1;
   const dice = result.groups.flatMap((g) => g.faces.map((f) => {
     const t = g.die ? ownFaceText(g, f, marks) : faceText(f, g.sides);
-    return `${f.minus ? '-' : ''}${f.kept ? t : `(${t})`}${g.name ? ` ${g.name}` : ''}`;
+    return `${f.minus ? '-' : ''}${f.kept ? t : `(${t})`}${g.name && mixed ? ` ${g.name}` : ''}`;
   })).join(' ');
   // The dice's own value is said only when something is added to it; the total always. A
   // condition's term is named after its amount.
@@ -121,6 +124,37 @@ const leftWords = (tally, symbols) => {
   const names = new Map(symbols.map((s) => [s.id, s.name.toUpperCase()]));
   const said = order.filter((id) => (tally.left[id] ?? 0) > 0).map((id) => `${tally.left[id]} ${names.get(id) ?? id.toUpperCase()}`);
   return said.length ? said.join(', ') : 'NOTHING LEFT';
+};
+
+/**
+ * A system's own dice for the dice menu (6c4a): each by an `own:` id, its faces as the log writes
+ * them, read-only (the DICE tab edits them), as a game's built-in dice are offered.
+ */
+const menuDiceOf = (definition) => {
+  const symbols = symbolsOf(definition);
+  const marks = new Map(symbols.map((s) => [s.id, s.mark ?? s.name.slice(0, 1).toUpperCase()]));
+  return diceOf(definition).map((d) => {
+    const g = { die: d.id, ...(d.faces.some((f) => (f.n ?? 0) < 0) ? { signed: true } : {}) };
+    return {
+      id: `own:${d.id}`, name: d.name, sides: d.faces.length, locked: true, ...(d.color === 'danger' ? { color: 'danger' } : {}),
+      faces: d.faces.map((f) => ({ value: ownFaceText(g, { value: f.n ?? 0, ...(f.n === null ? { blank: true } : {}), ...(f.s.length ? { symbols: f.s } : {}) }, marks) })),
+    };
+  });
+};
+
+/**
+ * A handful of one of a system's own dice from the dice menu (6c4a), rolled as a roll of them is:
+ * symbols counted and cancelled where its faces show any, the numbers summed where they don't.
+ * Null when the system has no such die.
+ */
+const rollMenuDice = ({ definition, dieId, count, rng, who }) => {
+  const die = diceOf(definition).find((d) => d.id === dieId);
+  if (!die) return null;
+  const symbolic = die.faces.some((f) => f.s.length);
+  return rollField({
+    definition, data: {}, rng, who,
+    roll: { id: 'menu', label: `${count}×${die.name}`, dice: [{ count: String(count), die: die.id }], ...(symbolic ? { read: 'symbols' } : {}) },
+  });
 };
 
 /** The dice for the tray, by kind: a named kind under its name, Fate dice as dF, the rest by size; a system's own die by its name, its faces as the log writes them. */
@@ -194,4 +228,4 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
   };
 };
 
-module.exports = { rollsFor, fieldsRolledBy, modifierOf, fieldsFor, termsOf, rollField, describe };
+module.exports = { rollsFor, fieldsRolledBy, modifierOf, fieldsFor, termsOf, rollField, describe, menuDiceOf, rollMenuDice };

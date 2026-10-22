@@ -109,6 +109,9 @@ describe('the DICE tab', () => {
     // Only what counts as nothing more is offered: never CRIT, which counts as HIT.
     const snag = screen.getByRole('group', { name: 'Symbol Snag' });
     expect([...(within(snag).getByLabelText('Snag: also counts as') as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['NOTHING', 'HIT', 'MISS', 'EDGE']);
+    // CRIT's own, HIT, offered once though it is both a choice and what CRIT counts as now.
+    const crit = screen.getByRole('group', { name: 'Symbol Crit' });
+    expect([...(within(crit).getByLabelText('Crit: also counts as') as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['NOTHING', 'HIT', 'MISS', 'EDGE', 'SNAG']);
     await userEvent.selectOptions(within(snag).getByLabelText('Snag: also counts as'), 'MISS');
     expect(symbolList(last()).find((s) => s.id === 'snag')!.also).toBe('miss');
     await userEvent.clear(within(snag).getByLabelText('Snag: mark'));
@@ -132,6 +135,9 @@ describe('the DICE tab', () => {
     // DRAW: an empty pad, squares drawn a key press at a time (a pointer drags in the browser journey).
     await userEvent.click(within(look()).getByRole('button', { name: 'DRAW' }));
     const pad = within(hit()).getByRole('group', { name: 'Drawing of Hit' });
+    // Lines through its middle, down and across, that a press goes through to the squares.
+    const middles = within(pad).getAllByTestId('pad-middle');
+    expect(middles.map((m) => [m.style.left, m.style.top, m.style.width, m.style.height, m.style.pointerEvents])).toEqual([['111.5px', '0px', '1px', '', 'none'], ['0px', '111.5px', '', '1px', 'none']]);
     fireEvent.click(within(pad).getByRole('button', { name: 'Square 1, 1' }));
     fireEvent.click(within(pad).getByRole('button', { name: 'Square 16, 2' }));
     expect(symbolList(last())[0].drawn!.slice(0, 3)).toEqual(['8000', '0001', '0000']);

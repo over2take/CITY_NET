@@ -51,6 +51,12 @@ test('dice made from a preset, a face changed, a symbol drawn, thrown on the ser
   const hit = page.getByRole('group', { name: 'Symbol Hit' });
   await hit.getByRole('group', { name: 'Hit: look' }).getByRole('button', { name: 'DRAW' }).click();
   const pad = hit.getByRole('group', { name: 'Drawing of Hit' });
+  // The lines through the pad's middle lie over squares, which still take a press there.
+  await pad.scrollIntoViewIfNeeded();
+  expect(await pad.getByTestId('pad-middle').evaluateAll((lines) => lines.map((l) => {
+    const r = l.getBoundingClientRect();
+    return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 4)?.getAttribute('aria-label') ?? null;
+  }))).toEqual([expect.stringMatching(/^Square (8|9), \d+$/), expect.stringMatching(/^Square \d+, (8|9)$/)]);
   const first = (await pad.getByRole('button', { name: 'Square 3, 8' }).boundingBox())!;
   const last = (await pad.getByRole('button', { name: 'Square 14, 8' }).boundingBox())!;
   await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2);
@@ -82,7 +88,7 @@ test('dice made from a preset, a face changed, a symbol drawn, thrown on the ser
   await page.getByLabel('Read what is left of').selectOption({ label: 'HIT' });
   const testRoll = page.getByTestId('test-roll');
   await testRoll.getByRole('button', { name: 'TEST ROLL ▸' }).click();
-  await expect(testRoll.getByTestId('test-working')).toHaveText(/ Good .*= ((\d+ (HIT|EDGE|MISS|SNAG|CRIT)(, )?)+|NOTHING LEFT)\]/);
+  await expect(testRoll.getByTestId('test-working')).toHaveText(/^\[\S+ \S+ = ((\d+ (HIT|EDGE|MISS|SNAG|CRIT)(, )?)+|NOTHING LEFT)\]/);
   await page.getByRole('tab', { name: 'DICE', exact: true }).click();
 
   // Kept: after a reload, the dice and the drawing are as they were left.

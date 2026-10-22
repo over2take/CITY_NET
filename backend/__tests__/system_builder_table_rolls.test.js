@@ -426,7 +426,7 @@ describe('a system\'s own dice at the table (6c1b)', () => {
 
   it('a number with its sign on a die with any below 0, summed as any roll is', () => {
     const r = rollField({ definition: DICED, data: SHEET, fieldId: 'lore', rng: faces([1, 3], [2, 3], [3, 3]), who: 'K' });
-    expect(r.historyText).toBe('K rolled Fated (Lore) [+1 dF 0 dF -1 dF = 0 + 3 = 3]');
+    expect(r.historyText).toBe('K rolled Fated (Lore) [+1 0 -1 = 0 + 3 = 3]');
     expect(r.results).toEqual({ dF: ['+1', '0', '-1'] });
   });
 });
