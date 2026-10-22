@@ -204,6 +204,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **The new dice tray's dice and throw, worked out (6c4b2a).** The shapes for a die of any size,
+  what is printed on each face, and a whole throw worked out from the roll's seed: dice tossed in,
+  bouncing off the floor, each other and the tray's walls, and rolling to rest with the server's
+  face up. The walls are now the edges of the tray as it is shown, less each die's size, so a die
+  can no longer bounce past the window's edge as the old tray let it. Every screen works out the
+  same throw. Nothing on screen changes yet: the tray draws it next.
 - **Every roll says how its dice landed (6c4b1).** Each roll sent to the dice tray now carries the
   face every die landed on, the faces themselves for dice that aren't numbered 1 to n (Fate dice,
   the table's CUSTOM_DIE.EXE dice, a system's own dice and the looks of their symbols), and one
