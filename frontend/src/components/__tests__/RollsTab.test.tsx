@@ -420,6 +420,6 @@ describe('the system\'s own dice in a roll (6c3)', () => {
     await userEvent.click(within(test).getByRole('button', { name: 'TEST ROLL ▸' }));
     // The mock's dice land on GOOD's 4th face (HIT EDGE) then its 5th (EDGE EDGE).
     await waitFor(() => expect(within(test).getByTestId('test-dice').textContent).toBe('✶◆◆◆'));
-    expect(within(test).getByTestId('test-working').textContent).toBe('[✶◆ Good ◆◆ Good = 1 HIT, 3 EDGE] — vs 1: SUCCESS');
+    expect(within(test).getByTestId('test-working').textContent).toBe('[✶◆ ◆◆ = 1 HIT, 3 EDGE] — vs 1: SUCCESS');
   });
 });

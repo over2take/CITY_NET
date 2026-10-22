@@ -131,7 +131,7 @@ test("a running system's own dice in the dice menu, rolled by the server, their 
   await page.getByRole('button', { name: /ROLL DICE/ }).click();
   await expect.poll(() => broadcasts.length, { timeout: 15_000 }).toBeGreaterThan(0);
   // The Good dice and the Bad die, each face as the log writes it; what is left once they cancel.
-  expect(broadcasts.map((b) => b.historyString).join('\n')).toMatch(/rolled 2×Good \[\S+ Good \S+ Good = .+\]/);
-  expect(broadcasts.map((b) => b.historyString).join('\n')).toMatch(/rolled 1×Bad \[\S+ Bad = .+\]/);
+  expect(broadcasts.map((b) => b.historyString).join('\n')).toMatch(/rolled 2×Good \[\S+ \S+ = .+\]/);
+  expect(broadcasts.map((b) => b.historyString).join('\n')).toMatch(/rolled 1×Bad \[\S+ = .+\]/);
   await context.close();
 });

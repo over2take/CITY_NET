@@ -265,7 +265,7 @@ describe('a system\'s own dice in the dice menu (6c4a)', () => {
 
     handlers.requestCustomDiceRoll({ userName: 'kes', dieId: 'own:good', count: 3, color: '#00ff00' });
     const good = await untilValue(() => rolled()[0], Boolean, { label: 'the GOOD dice' });
-    expect(good.data.historyString).toMatch(/^kes rolled 3×Good \[\S+ Good \S+ Good \S+ Good = (.+|NOTHING LEFT)\]$/);
+    expect(good.data.historyString).toMatch(/^kes rolled 3×Good \[\S+ \S+ \S+ = (.+|NOTHING LEFT)\]$/);
     expect(good.data.results.Good).toHaveLength(3);
     for (const f of good.data.results.Good) expect(['·', '✶', '✶◆', '◆◆', '◆']).toContain(f);
 
@@ -273,7 +273,7 @@ describe('a system\'s own dice in the dice menu (6c4a)', () => {
     handlers.requestCustomDiceRoll({ userName: 'kes', dieId: 'own:fate', count: 4, color: '#00ff00' });
     const fate = await untilValue(() => rolled()[1], Boolean, { label: 'the Fate dice' });
     expect(fate.data.total).toBe(fate.data.results.dF.reduce((n, f) => n + Number(f), 0));
-    expect(fate.data.historyString).toMatch(/^kes rolled 4×dF \[(\S+ dF ){4}= -?\d+\]$/);
+    expect(fate.data.historyString).toMatch(/^kes rolled 4×dF \[(\S+ ){4}= -?\d+\]$/);
 
     // A die the system doesn't have rolls nothing.
     handlers.requestCustomDiceRoll({ userName: 'kes', dieId: 'own:nope', count: 1, color: '#00ff00' });
@@ -289,11 +289,11 @@ describe('rolled from the dice menu, exactly (6c4a)', () => {
 
   it('counts the symbols of a die that shows any, and sums one that shows numbers only', () => {
     expect(rollMenuDice({ definition: HEARTH, dieId: 'good', count: 2, rng: faces([4, 6], [3, 6]), who: 'K' }).historyText)
-      .toBe('K rolled 2×Good [✶◆ Good ✶ Good = 2 HIT, 1 EDGE]');
+      .toBe('K rolled 2×Good [✶◆ ✶ = 2 HIT, 1 EDGE]');
     expect(rollMenuDice({ definition: HEARTH, dieId: 'bad', count: 1, rng: faces([2, 4]), who: 'K' }).historyText)
-      .toBe('K rolled 1×Bad [✕ Bad = 1 MISS]');
+      .toBe('K rolled 1×Bad [✕ = 1 MISS]');
     const fate = rollMenuDice({ definition: HEARTH, dieId: 'fate', count: 3, rng: faces([1, 6], [3, 6], [5, 6]), who: 'K' });
-    expect([fate.historyText, fate.total]).toEqual(['K rolled 3×dF [+1 dF 0 dF -1 dF = 0]', 0]);
+    expect([fate.historyText, fate.total]).toEqual(['K rolled 3×dF [+1 0 -1 = 0]', 0]);
     expect(rollMenuDice({ definition: HEARTH, dieId: 'nope', count: 1, rng: faces([1, 6]), who: 'K' })).toBeNull();
   });
 });

@@ -82,7 +82,7 @@ test('dice made from a preset, a face changed, a symbol drawn, thrown on the ser
   await page.getByLabel('Read what is left of').selectOption({ label: 'HIT' });
   const testRoll = page.getByTestId('test-roll');
   await testRoll.getByRole('button', { name: 'TEST ROLL ▸' }).click();
-  await expect(testRoll.getByTestId('test-working')).toHaveText(/ Good .*= ((\d+ (HIT|EDGE|MISS|SNAG|CRIT)(, )?)+|NOTHING LEFT)\]/);
+  await expect(testRoll.getByTestId('test-working')).toHaveText(/^\[\S+ \S+ = ((\d+ (HIT|EDGE|MISS|SNAG|CRIT)(, )?)+|NOTHING LEFT)\]/);
   await page.getByRole('tab', { name: 'DICE', exact: true }).click();
 
   // Kept: after a reload, the dice and the drawing are as they were left.

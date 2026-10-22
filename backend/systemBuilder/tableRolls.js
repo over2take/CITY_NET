@@ -82,9 +82,12 @@ const faceText = (f, sides) => (sides === FATE ? (f.value > 0 ? '+' : f.value < 
  */
 const describe = (result, symbols = []) => {
   const marks = new Map(symbols.map((s) => [s.id, s.mark ?? s.name.slice(0, 1).toUpperCase()]));
+  // A named kind's name follows each face only where the roll mixes kinds (✶ Good ✕ Bad); with one
+  // kind it is already said ("rolled 3×dF"), so the faces stand alone.
+  const mixed = result.groups.filter((g) => g.faces.length).length > 1;
   const dice = result.groups.flatMap((g) => g.faces.map((f) => {
     const t = g.die ? ownFaceText(g, f, marks) : faceText(f, g.sides);
-    return `${f.minus ? '-' : ''}${f.kept ? t : `(${t})`}${g.name ? ` ${g.name}` : ''}`;
+    return `${f.minus ? '-' : ''}${f.kept ? t : `(${t})`}${g.name && mixed ? ` ${g.name}` : ''}`;
   })).join(' ');
   // The dice's own value is said only when something is added to it; the total always. A
   // condition's term is named after its amount.
