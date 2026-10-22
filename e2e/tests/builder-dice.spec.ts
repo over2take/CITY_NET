@@ -74,6 +74,17 @@ test('dice made from a preset, a face changed, a symbol drawn, thrown on the ser
   await expect(page.getByLabel('Die name', { exact: true })).toHaveValue(bone);
   await expect(page.getByRole('group', { name: 'Symbol Skull' })).toBeVisible();
 
+  // ROLLS (6c3): a roll of two GOOD dice, reading what is left of HIT, at least one to succeed.
+  await page.getByRole('tab', { name: 'ROLLS', exact: true }).click();
+  await page.getByRole('group', { name: 'New roll from a preset' }).getByRole('button', { name: 'PBTA MOVE' }).click();
+  await page.getByLabel('Dice 1: size').selectOption({ label: 'GOOD' });
+  await page.getByRole('group', { name: 'Read the dice as' }).getByRole('button', { name: 'COUNT THE SYMBOLS' }).click();
+  await page.getByLabel('Read what is left of').selectOption({ label: 'HIT' });
+  const testRoll = page.getByTestId('test-roll');
+  await testRoll.getByRole('button', { name: 'TEST ROLL ▸' }).click();
+  await expect(testRoll.getByTestId('test-working')).toHaveText(/ Good .*= ((\d+ (HIT|EDGE|MISS|SNAG|CRIT)(, )?)+|NOTHING LEFT)\]/);
+  await page.getByRole('tab', { name: 'DICE', exact: true }).click();
+
   // Kept: after a reload, the dice and the drawing are as they were left.
   await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
   await page.reload();

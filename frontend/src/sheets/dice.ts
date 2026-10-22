@@ -109,10 +109,16 @@ export const withDieColor = (def: Definition, id: string, danger: boolean): Defi
   return next;
 });
 
-/** How many faces: more are added blank, fewer cut from the end; 2 to 100. */
+/**
+ * How many faces, 2 to 100, fewer cut from the end. More carry the numbering on where the faces so
+ * far are 1, 2, 3 in order with nothing else on them (a d6 made a d13 gets 7 to 13); otherwise
+ * they are added blank.
+ */
 export const withFaceCount = (def: Definition, id: string, count: number): Definition => changedDie(def, id, (d) => {
   const n = Math.max(2, Math.min(LIMITS.faces, Math.trunc(count)));
-  return { ...d, faces: n <= d.faces.length ? d.faces.slice(0, n) : [...d.faces, ...Array.from({ length: n - d.faces.length }, () => ({}))] };
+  if (n <= d.faces.length) return { ...d, faces: d.faces.slice(0, n) };
+  const numbered = d.faces.every((f, i) => f.n === i + 1 && !(f.s ?? []).length);
+  return { ...d, faces: [...d.faces, ...Array.from({ length: n - d.faces.length }, (_, k): DieFace => (numbered ? { n: d.faces.length + k + 1 } : {}))] };
 });
 
 /** One face changed: its number (null for none) and its symbols, up to six. */

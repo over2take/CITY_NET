@@ -15,13 +15,14 @@ import { idFor } from './setup';
 import { statGroups, formulaList } from './statsRules';
 
 export type Sides = number | 'F';
-export interface RollDice { count: string; sides: Sides; name?: string }
+/** A kind of dice: how many, and its size and name, or one of the system's own dice (`die`, 6c3), which brings both. */
+export interface RollDice { count: string; sides?: Sides; name?: string; die?: string }
 export interface RollBand { upTo?: number; label: string }
 /** A change a player picks before rolling; its cost taken from a stat, or with `adds` added to it (6b3a). */
 export interface RollChange { id: string; label: string; extra?: { dice: number; keep?: 'highest' | 'lowest' }; add?: string; cost?: { from: string; amount: number; adds?: boolean } }
 export interface Roll {
   id: string; label?: string;
-  dice: RollDice[]; read?: 'sum' | 'highest' | 'lowest' | 'count'; keep?: string; at?: number;
+  dice: RollDice[]; read?: 'sum' | 'highest' | 'lowest' | 'count' | 'symbols'; keep?: string; at?: number; on?: string;
   add?: string; against?: string; under?: boolean; bands?: RollBand[];
   explode?: { on?: number; once?: boolean; low?: number; first?: boolean };
   natural?: { face: number; label: string; critical?: 'success' | 'failure' }[];
@@ -157,13 +158,23 @@ export const withoutRoll = (def: Definition, id: string): Definition => withRoll
 /** The die sizes the picker offers; any other 2 to 100 can still be typed (backend LIMITS.sides). */
 export const SIDES: Sides[] = [2, 3, 4, 6, 8, 10, 12, 20, 100, 'F'];
 
-/** One kind of dice changed: how many (formula text), its size, its name (blank for none). */
-export const withRollDice = (def: Definition, id: string, index: number, patch: { count?: string; sides?: Sides; name?: string }): Definition =>
+/**
+ * One kind of dice changed: how many (formula text), its size, its name (blank for none), or one of
+ * the system's own dice (6c3), which has its own faces and name, so a size or name goes with it.
+ */
+export const withRollDice = (def: Definition, id: string, index: number, patch: { count?: string; sides?: Sides; name?: string; die?: string }): Definition =>
   changed(def, id, (r) => ({
     ...r,
     dice: r.dice.map((d, i) => {
       if (i !== index) return d;
       const next: RollDice = { ...d, ...(patch.count !== undefined ? { count: patch.count } : {}), ...(patch.sides !== undefined ? { sides: patch.sides } : {}) };
+      if (patch.sides !== undefined) delete next.die;
+      if (patch.die !== undefined) {
+        next.die = patch.die;
+        delete next.sides;
+        delete next.name;
+        return next;
+      }
       if (patch.name !== undefined) {
         if (patch.name.trim()) next.name = patch.name.slice(0, 40); else delete next.name;
       }
@@ -193,12 +204,17 @@ export const withRollDiceRemoved = (def: Definition, id: string, index: number):
 
 /**
  * How the dice are read: summed, the highest or lowest kept (how many, formula text, 1 unless
- * said), or successes counted at a face (5 unless said). What only another way used goes: a keep
- * count, a success face, cancelling, and a die taken away (only a sum can).
+ * said), successes counted at a face (5 unless said), or the symbols counted (6c3), reading what is
+ * left of one (null: the numbers). What only another way used goes: a keep count, a success face,
+ * cancelling, the symbol read, and a die taken away (only a sum can).
  */
-export const withRollRead = (def: Definition, id: string, read: 'sum' | 'highest' | 'lowest' | 'count', opts: { keep?: string; at?: number } = {}): Definition =>
+export const withRollRead = (def: Definition, id: string, read: 'sum' | 'highest' | 'lowest' | 'count' | 'symbols', opts: { keep?: string; at?: number; on?: string | null } = {}): Definition =>
   changed(def, id, (r) => {
     const next: Roll = { ...r };
+    if (read === 'symbols') {
+      const on = opts.on === undefined ? r.on : opts.on;
+      if (on) next.on = on; else delete next.on;
+    } else delete next.on;
     if (read === 'sum') delete next.read; else next.read = read;
     if (read === 'highest' || read === 'lowest') {
       const keep = opts.keep ?? r.keep;
@@ -423,7 +439,15 @@ export const fieldsRolledBy = (def: Definition, r: Roll): string[] => {
   return out;
 };
 
-const die = (sides: Sides) => (sides === 'F' ? 'dF' : `d${sides}`);
+const die = (sides: Sides | undefined) => (sides === 'F' ? 'dF' : `d${sides ?? '?'}`);
+/** A kind of dice in words: its size, or the system's own die by name. */
+const diceName = (d: RollDice, def?: Definition) => {
+  if (d.die === undefined) return die(d.sides);
+  const own = Array.isArray(def?.dice) ? (def!.dice as { id?: string; name?: string }[]).find((x) => x && x.id === d.die) : undefined;
+  return upper(own?.name ?? d.die);
+};
+/** A symbol's name, for what a roll reads. */
+const symbolName = (id: string, def?: Definition) => upper((Array.isArray(def?.symbols) ? (def!.symbols as { id?: string; name?: string }[]).find((x) => x && x.id === id)?.name : undefined) ?? id);
 const upper = (s: string) => s.toUpperCase();
 const signed = (n: number) => (n >= 0 ? `+${n}` : `−${-n}`);
 
@@ -444,11 +468,11 @@ const bandWhen = (bands: RollBand[], i: number): string => {
   return from + 1 < 0 ? `${num(from + 1)} TO ${num(b.upTo)}` : `${from + 1}–${b.upTo}`;
 };
 
-/** A roll's five steps in the tab's words (6b1a shows them; 6b1b edits them). */
-export const stepsOf = (r: Roll) => ({
-  dice: r.dice.map((d) => `${d.count} × ${die(d.sides)}${d.name ? ` · ${upper(d.name)}` : ''}`),
+/** A roll's five steps in the tab's words (6b1a shows them; 6b1b edits them); the system's own dice and symbols by name (6c3). */
+export const stepsOf = (r: Roll, def?: Definition) => ({
+  dice: r.dice.map((d) => `${d.count} × ${diceName(d, def)}${d.name ? ` · ${upper(d.name)}` : ''}`),
   read: r.read === 'highest' ? `KEEP HIGHEST ${r.keep ?? '1'}` : r.read === 'lowest' ? `KEEP LOWEST ${r.keep ?? '1'}`
-    : r.read === 'count' ? `COUNT AT ${r.at}+` : 'SUM',
+    : r.read === 'count' ? `COUNT AT ${r.at}+` : r.read === 'symbols' ? `COUNT THE SYMBOLS${r.on ? ` · ${symbolName(r.on, def)} LEFT` : ''}` : 'SUM',
   add: r.add ?? null,
   against: r.against !== undefined ? `${r.against} · ${r.under ? 'AT OR UNDER SUCCEEDS' : 'AT OR OVER SUCCEEDS'}` : null,
   bands: (r.bands ?? []).map((b, i, all) => [bandWhen(all, i), upper(b.label)] as [string, string]),

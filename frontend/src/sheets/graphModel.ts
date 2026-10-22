@@ -184,10 +184,12 @@ export const heightOf = (node: Pick<GraphNode, 'kind' | 'inputs' | 'alternative'
 const OWN: Record<string, string> = { '@this': 'THE STAT ROLLED', '@this_mod': 'ITS MODIFIER', '@tie': 'ITS ABILITY', '@tie_mod': "ITS ABILITY'S MODIFIER" };
 
 /** A roll in a line, as the node kit's: `2d6 + @this + @tie_mod`, its keeping and target in words. */
-export const rollText = (r: Roll): string => {
+export const rollText = (r: Roll, def?: Definition): string => {
   const count = (c: string) => (/^\s*\d+\s*$/.test(String(c)) ? String(c).trim() : `(${String(c).trim()})`);
-  const dice = r.dice.map((d) => `${count(d.count)}${d.sides === 'F' ? 'dF' : `d${d.sides}`}${d.name ? ` ${upper(d.name)}` : ''}`).join(' + ') || 'NO DICE';
-  const keep = r.read === 'highest' ? ` KEEP HIGHEST ${r.keep ?? '1'}` : r.read === 'lowest' ? ` KEEP LOWEST ${r.keep ?? '1'}` : r.read === 'count' ? ` COUNT ${r.at}+` : '';
+  // The system's own die by its name (6c3): 2 GOOD.
+  const ownName = (id: string) => upper((Array.isArray(def?.dice) ? (def!.dice as { id?: string; name?: string }[]).find((x) => x && x.id === id)?.name : undefined) ?? id);
+  const dice = r.dice.map((d) => (d.die !== undefined ? `${count(d.count)} ${ownName(d.die)}` : `${count(d.count)}${d.sides === 'F' ? 'dF' : `d${d.sides}`}${d.name ? ` ${upper(d.name)}` : ''}`)).join(' + ') || 'NO DICE';
+  const keep = r.read === 'highest' ? ` KEEP HIGHEST ${r.keep ?? '1'}` : r.read === 'lowest' ? ` KEEP LOWEST ${r.keep ?? '1'}` : r.read === 'count' ? ` COUNT ${r.at}+` : r.read === 'symbols' ? ' COUNT THE SYMBOLS' : '';
   return `${dice}${keep}${r.add ? ` + ${r.add}` : ''}${r.against !== undefined ? ` ${r.under ? 'UNDER' : 'VS'} ${r.against}` : ''}`;
 };
 
@@ -348,18 +350,18 @@ export const graphOf = (def: Definition): Graph => {
         ? { key: `by:${b}`, kind: 'value', label: src.label, about: 'ROLLED BY', from: [src], alt: false }
         : { key: `by:${b}`, kind: 'value', label: upper(b), about: 'ROLLED BY · NOT HERE', from: [], alt: false, missing: true };
     });
-    const main = rollText(r);
+    const main = rollText(r, def);
     const shown = read(main, false);
     // A change's ADD reads names too: wired in, though the node's words are the roll's own.
     const reads = read([main, ...(r.changes ?? []).map((c) => c.add ?? '')].join(' + '), false).inputs
       .map((i): GraphInput => (OWN[i.key.slice(2)] ? { key: i.key, kind: 'field', label: i.label, about: OWN[i.key.slice(2)], from: [], alt: false, known: true } : i));
     const inputs = [...by, ...reads];
-    const steps = stepsOf(r);
+    const steps = stepsOf(r, def);
     push({
       id: `roll:${r.id}`, kind: 'roll', label: upper(r.label || r.id), group: null, text: shown.text, inputs,
       roll: {
         outcome: steps.bands.length ? steps.bands.map(([when]) => when).reverse().join(' · ')
-          : r.against !== undefined ? (r.under ? 'AT OR UNDER THE TARGET' : 'AT OR OVER THE TARGET') : r.read === 'count' ? 'SUCCESSES' : 'THE TOTAL',
+          : r.against !== undefined ? (r.under ? 'AT OR UNDER THE TARGET' : 'AT OR OVER THE TARGET') : r.read === 'count' ? 'SUCCESSES' : r.read === 'symbols' ? 'THE SYMBOLS LEFT' : 'THE TOTAL',
         changes: (r.changes ?? []).map((c) => `${upper(c.label)}${c.cost ? ' ◆' : ''}`),
       },
     });

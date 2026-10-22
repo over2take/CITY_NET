@@ -51,7 +51,8 @@ export interface TestedRoll {
   field: string | null;
   fields: string[];
   result: {
-    groups: { name?: string; sides: number | 'F'; faces: { value: number; kept: boolean; extra?: boolean; minus?: boolean }[] }[];
+    /** A kind of dice: a system's own die (`die`) has its faces' places and symbols (6c3). */
+    groups: { name?: string; die?: string; signed?: true; sides: number | 'F'; faces: { value: number; kept: boolean; extra?: boolean; minus?: boolean; face?: number; blank?: true; symbols?: string[] }[] }[];
     dice: number; add: number; total: number; target: number | null; success: boolean | null; band: string | null;
     natural: { label: string; critical?: 'success' | 'failure' } | null;
     matches: { label: string; sets: number; critical?: 'success' | 'failure' }[];
@@ -59,6 +60,8 @@ export interface TestedRoll {
     changes: string[]; costs: { from: string; amount: number; adds?: true }[]; zero?: true;
     /** Conditions' modifiers on all rolls, each added as its own term (6b3b). */
     terms?: { label: string; amount: number }[];
+    /** The symbols counted and what is left of each, when the roll's dice show any (6c3). */
+    symbols?: { counted: Record<string, number>; left: Record<string, number> };
   };
   historyText: string;
   total: number;

@@ -4,10 +4,10 @@ import type { CustomDie } from '../types';
 import {
   DICE_PRESETS, LIMITS, symbolList, dieList, withDicePreset, withNewDie, withDieName, withDieColor, withFaceCount, withFace, withoutDie,
   withNewSymbol, withSymbol, alsoChoices, withoutSymbol, withSymbolLook, withTableDie, faceWords, BLANK_DRAWN,
-  type OwnDie, type DieFace, type DieSymbol,
+  type OwnDie, type DieSymbol,
 } from '../sheets/dice';
 import { small, why, btn, field } from './statsRulesStyles';
-import { DrawPad, SymbolLook } from './DrawPad';
+import { DrawPad, SymbolLook, FaceShown } from './DrawPad';
 import { ConditionIconPicker } from './ConditionIconPicker';
 
 // STATS & RULES' DICE tab (6c2b2; approved mockup docs/mockups/builder-dice.html, 2026-10-21): the
@@ -28,18 +28,6 @@ const section: React.CSSProperties = { border: '1px solid var(--dark-green)', pa
 /** A symbol's row: its look, name, mark, what it cancels, what it also counts as, and ×. */
 const SYMBOL_COLUMNS = '30px minmax(0, 1.2fr) 52px minmax(0, 1fr) minmax(0, 1fr) auto';
 const heading: React.CSSProperties = { ...small, color: 'var(--green)', opacity: 1, display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' };
-
-/** A face as the dice show it: its number and its symbols' looks, '·' for a blank. */
-function FaceShown({ die, face, symbols, size = 15 }: { die: OwnDie; face: DieFace; symbols: DieSymbol[]; size?: number }) {
-  const signed = die.faces.some((f) => (f.n ?? 0) < 0);
-  const n = face.n === undefined ? '' : signed && face.n > 0 ? `+${face.n}` : String(face.n);
-  const looks = (face.s ?? []).map((id, i) => {
-    const s = symbols.find((x) => x.id === id);
-    return s ? <SymbolLook key={`${id}${i}`} symbol={s} size={size} /> : <span key={`${id}${i}`}>?</span>;
-  });
-  if (!n && !looks.length) return <span>·</span>;
-  return <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>{n}{looks}</span>;
-}
 
 /** A whole number typed in a box, kept on leaving it (blank allowed where `blank` says what it means). */
 function NumberBox({ label, value, onNumber, width = 60, blank }: { label: string; value: number | undefined; onNumber: (n: number | null) => void; width?: number; blank?: string }) {

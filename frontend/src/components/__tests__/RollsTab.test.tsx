@@ -6,6 +6,7 @@ import { createRequire } from 'module';
 
 import { StatsRulesPage } from '../StatsRulesPage';
 import type { Definition } from '../../sheets/systemsApi';
+import { withDicePreset } from '../../sheets/dice';
 import { PRESETS } from '../../sheets/rolls';
 
 /**
@@ -19,6 +20,8 @@ afterEach(() => cleanup());
 
 const req = createRequire(import.meta.url);
 const tableRolls = req('../../../../backend/systemBuilder/tableRolls.js');
+const { checkDefinition } = req('../../../../backend/systemBuilder/definition.js');
+const problems = (def: Definition) => checkDefinition(def).problems.map((p: { where: string; message: string }) => `${p.where}: ${p.message}`);
 const serverConditions = req('../../../../backend/systemBuilder/conditions.js');
 
 const HEARTH: Definition = {
@@ -378,5 +381,45 @@ describe('editing step 5, changes (6b1b3)', () => {
     const first = within(step()).getByRole('group', { name: 'Change 1' });
     expect((within(first).getByRole('switch', { name: 'COSTS' }) as HTMLButtonElement).disabled).toBe(true);
     expect(first.textContent).toContain('A COST IS TAKEN FROM A STAT');
+  });
+});
+
+describe('the system\'s own dice in a roll (6c3)', () => {
+  const OWN = withDicePreset(HEARTH, 'narrative')!.definition;
+
+  it('step 1 offers them after the sizes; one picked takes its own faces and name', async () => {
+    const { last } = open(OWN);
+    await toRolls();
+    const size = screen.getByLabelText('Dice 1: size') as HTMLSelectElement;
+    expect([...size.querySelectorAll('optgroup option')].map((o) => o.textContent)).toEqual(['GOOD', 'GREAT', 'BAD']);
+    await userEvent.selectOptions(size, 'GOOD');
+    expect(rollsOf(last())[0].dice).toEqual([{ count: '2', die: 'good' }]);
+    expect(screen.queryByLabelText('Dice 1: name')).toBeNull();
+    expect(screen.getByText('ITS OWN FACES AND NAME')).toBeTruthy();
+    await userEvent.selectOptions(size, 'd8');
+    expect(rollsOf(last())[0].dice).toEqual([{ count: '2', sides: 8 }]);
+  });
+
+  it('step 2 offers COUNT THE SYMBOLS once the roll has one of them, and what is left of which symbol', async () => {
+    const { last } = open(OWN);
+    await toRolls();
+    const reads = () => within(screen.getByRole('group', { name: 'Read the dice as' })).getAllByRole('button').map((b) => b.textContent);
+    expect(reads()).not.toContain('COUNT THE SYMBOLS');
+    await userEvent.selectOptions(screen.getByLabelText('Dice 1: size'), 'GOOD');
+    await userEvent.click(within(screen.getByRole('group', { name: 'Read the dice as' })).getByRole('button', { name: 'COUNT THE SYMBOLS' }));
+    await userEvent.selectOptions(screen.getByLabelText('Read what is left of'), 'HIT');
+    expect([rollsOf(last())[0].read, rollsOf(last())[0].on]).toEqual(['symbols', 'hit']);
+    expect(problems(last())).toEqual([]);
+  });
+
+  it('TEST ROLL shows each of them as the face it landed on', async () => {
+    const own = { ...OWN, rolls: [{ id: 'clash', label: 'Clash', dice: [{ count: '2', die: 'good' }], read: 'symbols', on: 'hit', against: '1', by: ['skills'] }] };
+    open(own as Definition);
+    await toRolls();
+    const test = screen.getByTestId('test-roll');
+    await userEvent.click(within(test).getByRole('button', { name: 'TEST ROLL ▸' }));
+    // The mock's dice land on GOOD's 4th face (HIT EDGE) then its 5th (EDGE EDGE).
+    await waitFor(() => expect(within(test).getByTestId('test-dice').textContent).toBe('✶◆◆◆'));
+    expect(within(test).getByTestId('test-working').textContent).toBe('[✶◆ Good ◆◆ Good = 1 HIT, 3 EDGE] — vs 1: SUCCESS');
   });
 });
