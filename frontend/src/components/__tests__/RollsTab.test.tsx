@@ -8,6 +8,7 @@ import { StatsRulesPage } from '../StatsRulesPage';
 import type { Definition } from '../../sheets/systemsApi';
 import { withDicePreset } from '../../sheets/dice';
 import { PRESETS } from '../../sheets/rolls';
+import { HINTS } from '../../sheets/builderHelp';
 
 /**
  * STATS & RULES' ROLLS tab (6b1a; approved mockup docs/mockups/builder-rolls.html, 2026-10-19): the
@@ -421,5 +422,27 @@ describe('the system\'s own dice in a roll (6c3)', () => {
     // The mock's dice land on GOOD's 4th face (HIT EDGE) then its 5th (EDGE EDGE).
     await waitFor(() => expect(within(test).getByTestId('test-dice').textContent).toBe('✶◆◆◆'));
     expect(within(test).getByTestId('test-working').textContent).toBe('[✶◆ ◆◆ = 1 HIT, 3 EDGE] — vs 1: SUCCESS');
+  });
+});
+
+describe('the "?"', () => {
+  it('explains every step, part and setting of a roll and TEST ROLL, each still named by its own words', async () => {
+    const seen = new Set<string | null>();
+    const look = () => screen.queryAllByRole('note').forEach((n) => seen.add(n.getAttribute('aria-label')));
+    open();
+    await toRolls();
+    look();
+    // CANCELLING shows only while counting successes, and a cost only on a change.
+    await userEvent.click(within(screen.getByRole('group', { name: 'Read the dice as' })).getByRole('button', { name: 'COUNT SUCCESSES' }));
+    await userEvent.click(screen.getByRole('button', { name: '+ CHANGE' }));
+    look();
+    const keys = Object.keys(HINTS).filter((k) => k.startsWith('rolls.')) as (keyof typeof HINTS)[];
+    expect(keys).toHaveLength(20);
+    for (const k of keys) expect(seen.has(HINTS[k]), k).toBe(true);
+    // The "?" stays out of what the steps, parts and boxes are called.
+    for (const name of ['DICE', 'READ THE DICE', 'ADD AND COMPARE', 'SPECIAL RESULTS', 'CHANGE A ROLL', 'Rolled by']) expect(screen.getByRole('region', { name }), name).toBeTruthy();
+    for (const name of ['EXPLODING', 'CANCELLING', 'GLITCH']) expect(screen.getByRole('group', { name }), name).toBeTruthy();
+    for (const name of ['Add', 'Against']) expect(screen.getByRole('textbox', { name }), name).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Roll it for' })).toBeTruthy();
   });
 });

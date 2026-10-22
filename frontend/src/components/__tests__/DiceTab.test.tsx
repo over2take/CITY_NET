@@ -6,6 +6,7 @@ import { createRequire } from 'module';
 import { StatsRulesPage } from '../StatsRulesPage';
 import type { Definition } from '../../sheets/systemsApi';
 import { dieList, symbolList, withDicePreset } from '../../sheets/dice';
+import { HINTS } from '../../sheets/builderHelp';
 
 /**
  * STATS & RULES' DICE tab (6c2b2). Approved mockup builder-dice (2026-10-21): the system's own
@@ -192,5 +193,22 @@ describe('the DICE tab', () => {
     await toDice();
     await userEvent.click(within(screen.getByRole('group', { name: 'New dice from a preset' })).getByRole('button', { name: 'GOOD / GREAT / BAD' }));
     expect(screen.getByRole('alert').textContent).toBe('There isn\'t room for those dice and their symbols.');
+  });
+});
+
+describe('the "?"', () => {
+  it('explains the list, the die, its faces, the symbols\' columns and TEST, the fields still named by their own words', async () => {
+    const seen = new Set<string | null>();
+    open(NARRATIVE);
+    await toDice();
+    screen.queryAllByRole('note').forEach((n) => seen.add(n.getAttribute('aria-label')));
+    const keys = Object.keys(HINTS).filter((k) => k.startsWith('dice.')) as (keyof typeof HINTS)[];
+    expect(keys).toHaveLength(12);
+    for (const k of keys) expect(seen.has(HINTS[k]), k).toBe(true);
+    // Each "?" once, though the symbols' columns head a row per symbol.
+    expect(screen.getAllByRole('note', { name: HINTS['dice.mark'] })).toHaveLength(1);
+    expect(screen.getByRole('textbox', { name: 'Die name' })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'Hit: mark' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: "COPY FROM THE TABLE'S DICE" })).toBeTruthy();
   });
 });

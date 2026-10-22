@@ -11,6 +11,8 @@ import { small, why, btn, field } from './statsRulesStyles';
 import { dieList, symbolList } from '../sheets/dice';
 import { FaceShown } from './DrawPad';
 import { onAllRolls } from '../sheets/conditions';
+import { FieldName, HelpHint } from './HelpHint';
+import { HINTS } from '../sheets/builderHelp';
 
 // STATS & RULES' ROLLS tab (Phase 6, 6b1a; approved mockup docs/mockups/builder-rolls.html,
 // 2026-10-19, on the builder design's Dice page): the system's rolls on the left; the one picked in
@@ -28,12 +30,12 @@ interface Props {
 
 const PRESET_KEYS = Object.keys(PRESETS);
 
-/** One of the five steps, numbered as the Dice design numbers them. */
-function Step({ n, title, note, children }: { n: number; title: string; note?: string; children: React.ReactNode }) {
+/** One of the five steps, numbered as the Dice design numbers them, with its "?". */
+function Step({ n, title, note, hint, children }: { n: number; title: string; note?: string; hint: string; children: React.ReactNode }) {
   return (
     <section aria-label={title} style={{ border: '1px solid var(--dark-green)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4, fontSize: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10, letterSpacing: 2, color: 'var(--green)' }}>
-        <span>{n} · {title}</span>{note && <span style={{ color: 'var(--cyan)', letterSpacing: 1 }}>{note}</span>}
+        <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }}>{n} · {title}<HelpHint text={hint} /></span>{note && <span style={{ color: 'var(--cyan)', letterSpacing: 1 }}>{note}</span>}
       </div>
       {children}
     </section>
@@ -165,13 +167,13 @@ function CompareStep({ definition, edit, roll }: { definition: Definition; edit:
   const bands = roll.bands ?? [];
   return (
     <>
-      <label style={{ display: 'grid', gridTemplateColumns: '72px minmax(0, 1fr)', gap: 6, alignItems: 'center' }}>
-        <span>ADD</span>
+      <div style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: 6, alignItems: 'center' }}>
+        <FieldName hint={HINTS['rolls.add']}>ADD</FieldName>
         <input type="text" aria-label="Add" maxLength={1000} value={roll.add ?? ''} placeholder="NOTHING · @this + @tie_mod" style={{ ...field, width: '100%' }}
           onChange={(e) => edit(withRollAdd(definition, roll.id, e.target.value))} />
-      </label>
-      <div style={{ display: 'grid', gridTemplateColumns: '72px minmax(0, 1fr)', gap: 6, alignItems: 'center' }}>
-        <span>AGAINST</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: 6, alignItems: 'center' }}>
+        <FieldName hint={HINTS['rolls.against']}>AGAINST</FieldName>
         <input type="text" aria-label="Against" maxLength={1000} value={roll.against ?? ''} placeholder="NOTHING · @this, 13" style={{ ...field, width: '100%' }}
           onChange={(e) => edit(withRollAgainst(definition, roll.id, e.target.value))} />
         <span />
@@ -182,7 +184,7 @@ function CompareStep({ definition, edit, roll }: { definition: Definition; edit:
       </div>
       {bands.length ? (
         <div data-testid="bands" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <span style={small}>BANDS · READ TOP TO BOTTOM, LIKE A TABLE: THE FIRST THE TOTAL ISN&apos;T ABOVE</span>
+          <FieldName hint={HINTS['rolls.bands']} style={small}>BANDS · READ TOP TO BOTTOM, LIKE A TABLE: THE FIRST THE TOTAL ISN&apos;T ABOVE</FieldName>
           {bands.map((b, i) => {
             const last = i === bands.length - 1;
             const below = i > 0 ? bands[i - 1].upTo : undefined;
@@ -203,17 +205,17 @@ function CompareStep({ definition, edit, roll }: { definition: Definition; edit:
           </div>
         </div>
       ) : (
-        <div><button type="button" className="utility-btn" style={btn} onClick={() => edit(withRollBands(definition, roll.id, { start: true }))}>+ BANDS</button> <span style={{ ...why, fontSize: 11 }}>Words for the total: 6− MISS, 7–9 A COST, 10+ A HIT.</span></div>
+        <div><button type="button" className="utility-btn" style={btn} onClick={() => edit(withRollBands(definition, roll.id, { start: true }))}>+ BANDS</button> <HelpHint text={HINTS['rolls.bands']} /> <span style={{ ...why, fontSize: 11 }}>Words for the total: 6− MISS, 7–9 A COST, 10+ A HIT.</span></div>
       )}
     </>
   );
 }
 
-/** One part of the special results: its name, and what it does when on. */
-function Part({ title, children }: { title: string; children: React.ReactNode }) {
+/** One part of the special results: its name and "?", and what it does when on. */
+function Part({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
   return (
     <div role="group" aria-label={title} style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingTop: 6, borderTop: '1px solid color-mix(in srgb, var(--dark-green) 60%, transparent)' }}>
-      <span style={small}>{title}</span>
+      <FieldName hint={hint} style={small}>{title}</FieldName>
       {children}
     </div>
   );
@@ -231,7 +233,7 @@ function SpecialStep({ definition, edit, roll }: { definition: Definition; edit:
   const list = <K extends 'natural' | 'matches' | 'effects'>(key: K, change: Parameters<typeof withRollList<K>>[3]) => edit(withRollList(definition, id, key, change));
   return (
     <>
-      <Part title="EXPLODING">
+      <Part title="EXPLODING" hint={HINTS['rolls.explode']}>
         <Switch label="A DIE ON ITS FACE ROLLS ANOTHER, ADDED" on={!!x} onFlip={() => edit(withRollExplode(definition, id, x ? null : {}))} />
         {x && (
           <>
@@ -255,7 +257,7 @@ function SpecialStep({ definition, edit, roll }: { definition: Definition; edit:
         )}
       </Part>
 
-      <Part title="NATURALS · WHAT THE DICE SHOW BEFORE ANYTHING IS ADDED">
+      <Part title="NATURALS · WHAT THE DICE SHOW BEFORE ANYTHING IS ADDED" hint={HINTS['rolls.natural']}>
         {(roll.natural ?? []).map((n, i) => (
           <div key={i} style={row}>
             <span>NATURAL</span>
@@ -270,7 +272,7 @@ function SpecialStep({ definition, edit, roll }: { definition: Definition; edit:
         <div><button type="button" className="utility-btn" style={btn} disabled={(roll.natural ?? []).length >= 10} onClick={() => list('natural', { add: true })}>+ NATURAL</button></div>
       </Part>
 
-      <Part title="MATCHES · DICE SHOWING THE SAME FACE">
+      <Part title="MATCHES · DICE SHOWING THE SAME FACE" hint={HINTS['rolls.matches']}>
         {(roll.matches ?? []).map((m, i) => (
           <div key={i} style={row}>
             <WholeBox label={`Match ${i + 1}: how many`} value={m.count} width={52} onWhole={(v) => list('matches', { set: i, patch: { count: v } })} />
@@ -289,7 +291,7 @@ function SpecialStep({ definition, edit, roll }: { definition: Definition; edit:
       </Part>
 
       {roll.read === 'count' && (
-        <Part title="CANCELLING">
+        <Part title="CANCELLING" hint={HINTS['rolls.cancel']}>
           <div style={row}>
             <Switch label="EACH DIE SHOWING" on={!!roll.cancel} onFlip={() => edit(withRollCancel(definition, id, roll.cancel ? null : 1))} />
             {roll.cancel && <WholeBox label="Cancels on" value={roll.cancel.face} width={52} onWhole={(v) => edit(withRollCancel(definition, id, v))} />}
@@ -298,7 +300,7 @@ function SpecialStep({ definition, edit, roll }: { definition: Definition; edit:
         </Part>
       )}
 
-      <Part title="GLITCH">
+      <Part title="GLITCH" hint={HINTS['rolls.glitch']}>
         <Switch label="TOO MANY OF ONE FACE IS A GLITCH (SR6)" on={!!roll.glitch} onFlip={() => edit(withRollGlitch(definition, id, roll.glitch ? null : {}))} />
         {roll.glitch && (
           <>
@@ -316,7 +318,7 @@ function SpecialStep({ definition, edit, roll }: { definition: Definition; edit:
         )}
       </Part>
 
-      <Part title="NAMED DICE · THEIR OWN EFFECTS">
+      <Part title="NAMED DICE · THEIR OWN EFFECTS" hint={HINTS['rolls.named']}>
         {!named.length ? <span style={{ opacity: 0.6 }}>NAME A KIND OF DICE IN STEP 1 (HUNGER) TO GIVE IT EFFECTS.</span> : (
           <>
             {(roll.effects ?? []).map((e, i) => (
@@ -337,7 +339,7 @@ function SpecialStep({ definition, edit, roll }: { definition: Definition; edit:
         )}
       </Part>
 
-      <Part title="NO DICE TO ROLL">
+      <Part title="NO DICE TO ROLL" hint={HINTS['rolls.zero']}>
         <Switch label="ROLL SOME ANYWAY AND KEEP ONE (BLADES), NEVER A CRITICAL" on={!!roll.zero} onFlip={() => edit(withRollZero(definition, id, roll.zero ? null : {}))} />
         {roll.zero && (
           <div style={row}>
@@ -395,6 +397,7 @@ function ChangesStep({ definition, edit, roll }: { definition: Definition; edit:
           </div>
           <div style={row}>
             <Switch label="COSTS" on={!!c.cost} disabled={!stats.length && !c.cost} onFlip={() => set(i, { cost: c.cost ? null : { from: stats[0].id, amount: 1 } })} />
+            <HelpHint text={HINTS['rolls.cost']} />
             {c.cost && (
               <>
                 <select aria-label={`Change ${i + 1}: which way`} value={c.cost.adds ? 'adds' : 'takes'} style={field} onChange={(e) => set(i, { cost: { from: c.cost!.from, amount: c.cost!.amount, ...(e.target.value === 'adds' ? { adds: true } : {}) } })}>
@@ -430,7 +433,7 @@ export function RollEditor({ definition, edit, roll, onRemoved }: Props & { roll
         <span style={{ opacity: 0.6, fontSize: 11 }}>{roll.id}</span>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-        <span style={small}>START FROM A PRESET · THEN CHANGE ANYTHING</span>
+        <FieldName hint={HINTS['rolls.preset']} style={small}>START FROM A PRESET · THEN CHANGE ANYTHING</FieldName>
         <div role="group" aria-label="Presets" style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
           {PRESET_KEYS.map((k) => <button key={k} type="button" className="utility-btn" style={btn} onClick={() => setReplacing(k)}>{PRESETS[k].label.toUpperCase()}</button>)}
         </div>
@@ -442,14 +445,14 @@ export function RollEditor({ definition, edit, roll, onRemoved }: Props & { roll
           </div>
         )}
       </div>
-      <Step n={1} title="DICE"><DiceStep definition={definition} edit={edit} roll={roll} /></Step>
-      <Step n={2} title="READ THE DICE"><ReadStep definition={definition} edit={edit} roll={roll} /></Step>
-      <Step n={3} title="ADD AND COMPARE"><CompareStep definition={definition} edit={edit} roll={roll} /></Step>
-      <Step n={4} title="SPECIAL RESULTS"><SpecialStep definition={definition} edit={edit} roll={roll} /></Step>
-      <Step n={5} title="CHANGE A ROLL" note="ASKED BEFORE ROLLING"><ChangesStep definition={definition} edit={edit} roll={roll} /></Step>
+      <Step n={1} hint={HINTS['rolls.dice']} title="DICE"><DiceStep definition={definition} edit={edit} roll={roll} /></Step>
+      <Step n={2} hint={HINTS['rolls.read']} title="READ THE DICE"><ReadStep definition={definition} edit={edit} roll={roll} /></Step>
+      <Step n={3} hint={HINTS['rolls.compare']} title="ADD AND COMPARE"><CompareStep definition={definition} edit={edit} roll={roll} /></Step>
+      <Step n={4} hint={HINTS['rolls.special']} title="SPECIAL RESULTS"><SpecialStep definition={definition} edit={edit} roll={roll} /></Step>
+      <Step n={5} hint={HINTS['rolls.changes']} title="CHANGE A ROLL" note="ASKED BEFORE ROLLING"><ChangesStep definition={definition} edit={edit} roll={roll} /></Step>
       <section aria-label="Rolled by" style={{ border: '1px solid var(--dark-green)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 10, letterSpacing: 2, color: 'var(--green)' }}>
-          <span>ROLLED BY</span><span style={{ color: 'var(--cyan)', letterSpacing: 1 }}>EACH GETS A DIE BUTTON ON THE SHEET</span>
+          <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }}>ROLLED BY<HelpHint text={HINTS['rolls.rolledBy']} /></span><span style={{ color: 'var(--cyan)', letterSpacing: 1 }}>EACH GETS A DIE BUTTON ON THE SHEET</span>
         </div>
         {kinds.map(([title, kind]) => {
           const these = choices.filter((c) => c.kind === kind);
@@ -509,14 +512,14 @@ export function TestRoll({ definition, api, roll }: { definition: Definition; ap
   const tone = !res ? '' : res.critical === 'success' ? 'var(--warning)' : res.critical === 'failure' || res.success === false ? 'var(--danger)' : 'var(--green)';
   return (
     <aside aria-label="Test roll" data-testid="test-roll" style={{ border: '1px solid var(--dark-green)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, fontSize: 12 }}>
-      <span style={{ ...small, color: 'var(--cyan)' }}>TEST ROLL · ON THE SAMPLE</span>
+      <FieldName hint={HINTS['rolls.test']} style={{ ...small, color: 'var(--cyan)' }}>TEST ROLL · ON THE SAMPLE</FieldName>
       {fields.length > 0 ? (
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <span style={small}>FOR</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <FieldName hint={HINTS['rolls.testFor']} style={small}>FOR</FieldName>
           <select aria-label="Roll it for" value={fieldNow} style={{ ...field, width: '100%' }} onChange={(e) => setField(e.target.value)}>
             {fields.map((f) => <option key={f} value={f}>{names.get(f) ?? f}</option>)}
           </select>
-        </label>
+        </div>
       ) : <span style={{ ...why, fontSize: 11 }}>Rolled by nothing yet, so @this reads 0.</span>}
       {(roll.changes ?? []).length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -595,7 +598,7 @@ export function RollsTab({ definition, edit, api }: Props) {
         </nav>
         {adding || !roll ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <span style={small}>A NEW ROLL · START FROM A PRESET, THEN CHANGE ANYTHING</span>
+            <FieldName hint={HINTS['rolls.preset']} style={small}>A NEW ROLL · START FROM A PRESET, THEN CHANGE ANYTHING</FieldName>
             <div role="group" aria-label="New roll from a preset" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {PRESET_KEYS.map((k) => <button key={k} type="button" className="utility-btn" style={btn} onClick={() => add(k)}>{PRESETS[k].label.toUpperCase()}</button>)}
             </div>
