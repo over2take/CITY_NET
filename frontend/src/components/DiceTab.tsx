@@ -77,7 +77,7 @@ function SymbolRow({ definition, edit, symbol, api, drawing, onDraw }: Props & {
         </select>
         <select aria-label={`${name}: also counts as`} value={symbol.also ?? ''} style={field} onChange={(e) => edit(withSymbol(definition, symbol.id, { also: e.target.value || null }))}>
           <option value="">NOTHING</option>
-          {[...alsoChoices(definition, symbol.id), ...symbols.filter((s) => s.id === symbol.also)].map((s) => <option key={s.id} value={s.id}>{s.name.toUpperCase()}</option>)}
+          {[...new Set([...alsoChoices(definition, symbol.id), ...symbols.filter((s) => s.id === symbol.also)])].map((s) => <option key={s.id} value={s.id}>{s.name.toUpperCase()}</option>)}
         </select>
         <button type="button" aria-label={`Remove ${name}`} className="utility-btn danger-btn" style={btn} onClick={() => edit(withoutSymbol(definition, symbol.id))}>×</button>
       </div>

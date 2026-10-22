@@ -109,6 +109,9 @@ describe('the DICE tab', () => {
     // Only what counts as nothing more is offered: never CRIT, which counts as HIT.
     const snag = screen.getByRole('group', { name: 'Symbol Snag' });
     expect([...(within(snag).getByLabelText('Snag: also counts as') as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['NOTHING', 'HIT', 'MISS', 'EDGE']);
+    // CRIT's own, HIT, offered once though it is both a choice and what CRIT counts as now.
+    const crit = screen.getByRole('group', { name: 'Symbol Crit' });
+    expect([...(within(crit).getByLabelText('Crit: also counts as') as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['NOTHING', 'HIT', 'MISS', 'EDGE', 'SNAG']);
     await userEvent.selectOptions(within(snag).getByLabelText('Snag: also counts as'), 'MISS');
     expect(symbolList(last()).find((s) => s.id === 'snag')!.also).toBe('miss');
     await userEvent.clear(within(snag).getByLabelText('Snag: mark'));

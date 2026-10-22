@@ -9,6 +9,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **A symbol's COUNTS AS list on the DICE tab.** A symbol that already counted as another (Crit as
+  Hit) listed that one twice. It is listed once now.
 - **Picking another roll on the ROLLS tab.** The roll's editor and its TEST ROLL panel could get
   mixed up when another roll was picked, showing two editors at once. Each now keeps to itself.
 - **A system file can't stop the server.** A formula calling `constructor(1)` or `toString(1)`
