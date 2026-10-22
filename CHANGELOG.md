@@ -47,6 +47,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Help on the DICE and ROLLS tabs.** Like every other builder page, both tabs now have a "?"
+  beside each setting: on DICE, the presets, COPY FROM THE TABLE'S DICE, a die's name, faces and
+  color, a face's number and symbols, the symbols' LOOK, MARK, CANCELS and COUNTS AS, and TEST; on
+  ROLLS, each of the five steps and each special result, ADD, AGAINST, the bands, a change's cost,
+  ROLLED BY and TEST ROLL. The HELP page's STATS & RULES topic and the tour now cover the dice and
+  rolls, and its DICE reference explains a game's own dice.
 - **A custom system's dice in the dice menu (6c4a).** While a custom system runs, its own dice (from
   the builder's DICE tab) appear in DICE_ROLLER under THIS GAME'S DICE, and the dice made with
   CUSTOM_DIE.EXE under THE TABLE'S DICE. Rolling them from the menu counts their symbols as a roll

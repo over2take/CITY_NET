@@ -9,6 +9,8 @@ import {
 import { small, why, btn, field } from './statsRulesStyles';
 import { DrawPad, SymbolLook, FaceShown } from './DrawPad';
 import { ConditionIconPicker } from './ConditionIconPicker';
+import { FieldName, HelpHint } from './HelpHint';
+import { HINTS } from '../sheets/builderHelp';
 
 // STATS & RULES' DICE tab (6c2b2; approved mockup docs/mockups/builder-dice.html, 2026-10-21): the
 // system's own dice, beside ROLLS. A list on the left (presets, + DIE, COPY FROM THE TABLE'S
@@ -26,7 +28,7 @@ interface Props {
 const mono: React.CSSProperties = { fontFamily: 'monospace' };
 const section: React.CSSProperties = { border: '1px solid var(--dark-green)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 };
 /** A symbol's row: its look, name, mark, what it cancels, what it also counts as, and ×. */
-const SYMBOL_COLUMNS = '30px minmax(0, 1.2fr) 52px minmax(0, 1fr) minmax(0, 1fr) auto';
+const SYMBOL_COLUMNS = '60px minmax(0, 1.2fr) 58px minmax(0, 1fr) minmax(0, 1fr) auto';
 const heading: React.CSSProperties = { ...small, color: 'var(--green)', opacity: 1, display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' };
 
 /** A whole number typed in a box, kept on leaving it (blank allowed where `blank` says what it means). */
@@ -122,9 +124,9 @@ function DieEditor({ definition, edit, api, die, onRemoved }: Props & { die: Own
       <section aria-label="The die" style={section}>
         <div style={heading}><span>THE DIE</span><span style={{ color: 'var(--cyan)' }}>ITS NAME IN THE MENU AND THE LOG</span></div>
         <div style={{ display: 'grid', gridTemplateColumns: '80px minmax(0, 1fr)', gap: '6px 10px', alignItems: 'center', fontSize: 12 }}>
-          <span style={small}>NAME</span><input aria-label="Die name" value={die.name} maxLength={LIMITS.name} style={field} onChange={(e) => edit(withDieName(definition, die.id, e.target.value))} />
-          <span style={small}>FACES</span><NumberBox label="How many faces" value={die.faces.length} onNumber={(n) => { if (n !== null) edit(withFaceCount(definition, die.id, n)); }} />
-          <span style={small}>COLOR</span>
+          <FieldName hint={HINTS['dice.name']} style={small}>NAME</FieldName><input aria-label="Die name" value={die.name} maxLength={LIMITS.name} style={field} onChange={(e) => edit(withDieName(definition, die.id, e.target.value))} />
+          <FieldName hint={HINTS['dice.faces']} style={small}>FACES</FieldName><NumberBox label="How many faces" value={die.faces.length} onNumber={(n) => { if (n !== null) edit(withFaceCount(definition, die.id, n)); }} />
+          <FieldName hint={HINTS['dice.color']} style={small}>COLOR</FieldName>
           <div role="group" aria-label="Die color" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {([[false, 'THE THEME\'S'], [true, 'DANGER (A BAD DIE)']] as const).map(([danger, label]) => (
               <button key={label} type="button" aria-pressed={(die.color === 'danger') === danger} className="utility-btn" onClick={() => edit(withDieColor(definition, die.id, danger))}
@@ -150,12 +152,12 @@ function DieEditor({ definition, edit, api, die, onRemoved }: Props & { die: Own
       <section aria-label={`Face ${at + 1} shows`} style={section}>
         <div style={heading}><span>FACE {at + 1} SHOWS</span></div>
         <div style={{ display: 'grid', gridTemplateColumns: '80px minmax(0, 1fr)', gap: '6px 10px', alignItems: 'center', fontSize: 12 }}>
-          <span style={small}>NUMBER</span>
+          <FieldName hint={HINTS['dice.number']} style={small}>NUMBER</FieldName>
           <span style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <NumberBox key={`${die.id}:${at}`} label={`Face ${at + 1} number`} value={face.n} blank="none" onNumber={(n) => edit(withFace(definition, die.id, at, { n }))} />
             <span style={{ ...why, fontSize: 11 }}>+1 and -1 keep their sign; blank for none</span>
           </span>
-          <span style={small}>SYMBOLS</span>
+          <FieldName hint={HINTS['dice.symbols']} style={small}>SYMBOLS</FieldName>
           <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
             {(face.s ?? []).map((id, i) => {
               const s = symbols.find((x) => x.id === id);
@@ -179,8 +181,14 @@ function DieEditor({ definition, edit, api, die, onRemoved }: Props & { die: Own
       <section aria-label="Symbols" style={section}>
         <div style={heading}><span>THE SYSTEM&apos;S SYMBOLS</span><span style={{ color: 'var(--cyan)' }}>SHARED BY ALL ITS DICE · UP TO {LIMITS.symbols}</span></div>
         {symbols.length > 0 && (
-          <div aria-hidden style={{ display: 'grid', gridTemplateColumns: SYMBOL_COLUMNS, gap: 6, ...small }}>
-            <span>LOOK</span><span>NAME</span><span>MARK</span><span>CANCELS</span><span>COUNTS AS</span><span />
+          // The words are only a heading over each row's own named fields; the "?"s are read.
+          <div style={{ display: 'grid', gridTemplateColumns: SYMBOL_COLUMNS, gap: 6, ...small }}>
+            <FieldName hint={HINTS['dice.look']}><span aria-hidden>LOOK</span></FieldName>
+            <span aria-hidden>NAME</span>
+            <FieldName hint={HINTS['dice.mark']}><span aria-hidden>MARK</span></FieldName>
+            <FieldName hint={HINTS['dice.cancels']}><span aria-hidden>CANCELS</span></FieldName>
+            <FieldName hint={HINTS['dice.countsAs']}><span aria-hidden>COUNTS AS</span></FieldName>
+            <span />
           </div>
         )}
         {symbols.map((s) => (
@@ -210,7 +218,7 @@ function TestDice({ definition, api, die }: { definition: Definition; api?: Retu
   const color = die.color === 'danger' ? 'var(--danger)' : 'var(--green)';
   return (
     <aside aria-label="Test the die" data-testid="test-dice" style={{ border: '1px solid var(--dark-green)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0, fontSize: 12 }}>
-      <span style={{ ...small, color: 'var(--cyan)' }}>TEST · THROW SOME</span>
+      <FieldName hint={HINTS['dice.test']} style={{ ...small, color: 'var(--cyan)' }}>TEST · THROW SOME</FieldName>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
         <NumberBox label="How many to throw" value={count} width={50} onNumber={(n) => { if (n !== null) setCount(Math.max(1, Math.min(20, n))); }} />
         <span>× {die.name.toUpperCase()}</span>
@@ -266,8 +274,13 @@ export function DiceTab({ definition, edit, api }: Props) {
           ))}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
             <button type="button" className="utility-btn" style={btn} onClick={() => added(withNewDie(definition), `A system has at most ${LIMITS.dice} dice.`)}>+ DIE</button>
-            {api && <button type="button" className="utility-btn" style={btn} onClick={openCopy}>COPY FROM THE TABLE&apos;S DICE</button>}
-            <span style={small}>FROM A PRESET</span>
+            {api && (
+              <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                <button type="button" className="utility-btn" style={{ ...btn, flex: 1 }} onClick={openCopy}>COPY FROM THE TABLE&apos;S DICE</button>
+                <HelpHint text={HINTS['dice.copy']} />
+              </span>
+            )}
+            <FieldName hint={HINTS['dice.preset']} style={small}>FROM A PRESET</FieldName>
             <div role="group" aria-label="New dice from a preset" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {Object.entries(DICE_PRESETS).map(([k, p]) => (
                 <button key={k} type="button" className="utility-btn" style={btn} onClick={() => added(withDicePreset(definition, k), 'There isn\'t room for those dice and their symbols.')}>{p.label.toUpperCase()}</button>
