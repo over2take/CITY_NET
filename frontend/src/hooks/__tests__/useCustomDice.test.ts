@@ -222,3 +222,15 @@ describe('useCustomDice — mutations', () => {
     expect(result.current.error).toBeNull();
   });
 });
+
+describe('useCustomDice — a custom system\'s own dice (6c4a)', () => {
+  it("fetches the game's dice again when its published copy loads again, not another system's", async () => {
+    routeFetch([], [SYSTEM_DIE]);
+    renderHook(() => useCustomDice('tok', 'sys_x'));
+    const calls = () => mockFetch.mock.calls.filter(c => c[0] === '/api/system_dice/sys_x').length;
+    await waitFor(() => expect(calls()).toBe(1));
+    act(() => { window.dispatchEvent(new CustomEvent('citynet:custom-template-loaded', { detail: { id: 'sys_other' } })); });
+    act(() => { window.dispatchEvent(new CustomEvent('citynet:custom-template-loaded', { detail: { id: 'sys_x' } })); });
+    await waitFor(() => expect(calls()).toBe(2));
+  });
+});

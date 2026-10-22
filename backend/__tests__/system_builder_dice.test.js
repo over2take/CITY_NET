@@ -217,3 +217,83 @@ describe('TEST on the DICE tab, the builder route (6c2a)', () => {
     expect((await post({ definition: HEARTH, dieId: 'good' }, PLAYER())).status).toBe(403);
   });
 });
+
+describe('a system\'s own dice in the dice menu (6c4a)', () => {
+  const express_ = require_('express');
+  const request_ = require_('supertest');
+  const runtime = require_('../systemBuilder/runtime');
+  const systemDiceRoute = require_('../routes/system_dice.js');
+  const { makeTestDb, run } = require_('./helpers/testDb.js');
+  const { drain, untilValue } = require_('./helpers/until.js');
+  const ID = 'sys_dicedicedicedice';
+  let db;
+  let socketsFactory;
+
+  beforeEach(async () => {
+    db = await makeTestDb();
+    await run(db, `CREATE TABLE IF NOT EXISTS dice_rolls (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, total INTEGER, results TEXT, color TEXT, historyString TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+    const def = JSON.stringify(HEARTH);
+    await run(db, 'INSERT INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 1)', [ID, 'Hearth', def, def]);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    await run(db, `INSERT INTO global_settings (key, value) VALUES ('game_system', ?)`, [ID]);
+    socketsFactory = (await import('../sockets/index.js')).default;
+  });
+
+  it('are listed with a game\'s dice, read-only, each face as the log writes it', async () => {
+    const app = express_();
+    app.use('/api/system_dice', systemDiceRoute());
+    const res = await request_(app).get(`/api/system_dice/${ID}`);
+    expect(res.body.map((d) => [d.id, d.name, d.sides, d.locked])).toEqual([['own:good', 'Good', 6, true], ['own:bad', 'Bad', 4, true], ['own:fate', 'dF', 6, true], ['own:skull_d6', 'Skull die', 6, true]]);
+    expect(res.body[0].faces.map((f) => f.value)).toEqual(['·', '·', '✶', '✶◆', '◆◆', '◆']);
+    expect(res.body[2].faces.map((f) => f.value)).toEqual(['+1', '+1', '0', '0', '-1', '-1']);
+    expect(res.body[1].color).toBe('danger');
+    // A built-in game, or one never published, has none of its own.
+    expect((await request_(app).get('/api/system_dice/cwn')).body).toEqual([]);
+    expect((await request_(app).get('/api/system_dice/sys_nothingnothingno')).body).toEqual([]);
+  });
+
+  it('roll from the menu as a roll of them does: symbols counted and cancelled, numbers summed', async () => {
+    const emitted = [];
+    let connection;
+    const io = { on: (e, cb) => { if (e === 'connection') connection = cb; }, emit: (event, data) => emitted.push({ event, data }), to: () => ({ emit: () => {} }) };
+    socketsFactory(io, db, { elevatedUsers: new Set(), emitUpdate: () => {}, recordAction: () => {} });
+    const handlers = {};
+    connection({ id: `s-${Math.random()}`, on: (e, fn) => { handlers[e] = fn; }, emit: () => {}, broadcast: { emit: () => {} }, use: () => {}, join: () => {}, disconnect: () => {} });
+    handlers.identify('kes');
+    await drain(db);
+    const rolled = () => emitted.filter((e) => e.event === 'diceRollBroadcast');
+
+    handlers.requestCustomDiceRoll({ userName: 'kes', dieId: 'own:good', count: 3, color: '#00ff00' });
+    const good = await untilValue(() => rolled()[0], Boolean, { label: 'the GOOD dice' });
+    expect(good.data.historyString).toMatch(/^kes rolled 3×Good \[\S+ Good \S+ Good \S+ Good = (.+|NOTHING LEFT)\]$/);
+    expect(good.data.results.Good).toHaveLength(3);
+    for (const f of good.data.results.Good) expect(['·', '✶', '✶◆', '◆◆', '◆']).toContain(f);
+
+    // Numbers only: summed, as any roll is.
+    handlers.requestCustomDiceRoll({ userName: 'kes', dieId: 'own:fate', count: 4, color: '#00ff00' });
+    const fate = await untilValue(() => rolled()[1], Boolean, { label: 'the Fate dice' });
+    expect(fate.data.total).toBe(fate.data.results.dF.reduce((n, f) => n + Number(f), 0));
+    expect(fate.data.historyString).toMatch(/^kes rolled 4×dF \[(\S+ dF ){4}= -?\d+\]$/);
+
+    // A die the system doesn't have rolls nothing.
+    handlers.requestCustomDiceRoll({ userName: 'kes', dieId: 'own:nope', count: 1, color: '#00ff00' });
+    await drain(db);
+    expect(rolled()).toHaveLength(2);
+  });
+});
+
+describe('rolled from the dice menu, exactly (6c4a)', () => {
+  const { rollMenuDice } = require_('../systemBuilder/tableRolls');
+  // A face by its place among a die's faces (1 for the first) out of how many.
+  const faces = (...plan) => { let i = 0; return () => { const [f, of] = plan[i++ % plan.length]; return (f - 1 + 0.5) / of; }; };
+
+  it('counts the symbols of a die that shows any, and sums one that shows numbers only', () => {
+    expect(rollMenuDice({ definition: HEARTH, dieId: 'good', count: 2, rng: faces([4, 6], [3, 6]), who: 'K' }).historyText)
+      .toBe('K rolled 2×Good [✶◆ Good ✶ Good = 2 HIT, 1 EDGE]');
+    expect(rollMenuDice({ definition: HEARTH, dieId: 'bad', count: 1, rng: faces([2, 4]), who: 'K' }).historyText)
+      .toBe('K rolled 1×Bad [✕ Bad = 1 MISS]');
+    const fate = rollMenuDice({ definition: HEARTH, dieId: 'fate', count: 3, rng: faces([1, 6], [3, 6], [5, 6]), who: 'K' });
+    expect([fate.historyText, fate.total]).toEqual(['K rolled 3×dF [+1 dF 0 dF -1 dF = 0]', 0]);
+    expect(rollMenuDice({ definition: HEARTH, dieId: 'nope', count: 1, rng: faces([1, 6]), who: 'K' })).toBeNull();
+  });
+});

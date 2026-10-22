@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import type { CustomDie } from '../types';
+import { CUSTOM_TEMPLATE_EVENT } from '../sheets/customTemplates';
 
 /** Payload for creating or updating a die — everything except the server-assigned id. */
 export type CustomDieDraft = Omit<CustomDie, 'id'>;
@@ -29,8 +30,15 @@ export function useCustomDice(token?: string, gameSystem?: string) {
     fetchDice();
   }, [fetchDice]);
 
-  // Built-in dice for the active system. Refetched when the GM switches
-  // systems, which arrives over the gameSystemChanged socket event.
+  // Built-in dice for the active system, and a custom system's own (6c4a). Refetched when the GM
+  // switches systems, which arrives over the gameSystemChanged socket event, and when the running
+  // system's published copy is loaded again (a new version may have new dice).
+  const [published, setPublished] = useState(0);
+  useEffect(() => {
+    const onLoaded = (e: Event) => { if ((e as CustomEvent<{ id?: string }>).detail?.id === gameSystem) setPublished((n) => n + 1); };
+    window.addEventListener(CUSTOM_TEMPLATE_EVENT, onLoaded);
+    return () => window.removeEventListener(CUSTOM_TEMPLATE_EVENT, onLoaded);
+  }, [gameSystem]);
   useEffect(() => {
     if (!gameSystem) {
       setSystemDice([]);
@@ -48,7 +56,7 @@ export function useCustomDice(token?: string, gameSystem?: string) {
       }
     })();
     return () => { cancelled = true; };
-  }, [gameSystem]);
+  }, [gameSystem, published]);
 
   // System dice sort first so the roller reads built-ins then GM additions.
   const customDice = useMemo(() => [...systemDice, ...gmDice], [systemDice, gmDice]);

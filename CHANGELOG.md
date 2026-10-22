@@ -45,6 +45,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **A custom system's dice in the dice menu (6c4a).** While a custom system runs, its own dice (from
+  the builder's DICE tab) appear in DICE_ROLLER under THIS GAME'S DICE, and the dice made with
+  CUSTOM_DIE.EXE under THE TABLE'S DICE. Rolling them from the menu counts their symbols as a roll
+  does: "Kestrel rolled 2×Good [✶ Good ✶✶ Good = 3 HIT]". The list follows a new version when the
+  system is published again. The menu's dice rows now take the theme's colors.
 - **Rolls with the system's own dice (6c3).** On the ROLLS tab, the dice step now lists the system's
   own dice (from the DICE tab) under the usual sizes. With one picked, the roll can COUNT THE
   SYMBOLS: each pair cancels (a HIT against a MISS) and the roll reads what is left of the symbol

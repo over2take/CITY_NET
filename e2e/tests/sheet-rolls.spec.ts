@@ -101,3 +101,37 @@ test('a player rolls a custom system\'s rolls from their sheet, picking first wh
   expect(broadcasts).toHaveLength(3);
   await context.close();
 });
+
+test("a running system's own dice in the dice menu, rolled by the server, their symbols counted (6c4a)", async ({ browser, request }, info) => {
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const player = { username: `e2e_menu${again}`, password: 'e2e-player-password' };
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    ...definition(`Dicemenu${again}`),
+    symbols: [{ id: 'hit', name: 'Hit', mark: '✶', cancels: 'miss' }, { id: 'miss', name: 'Miss', mark: '✕', cancels: 'hit' }],
+    dice: [{ id: 'good', name: 'Good', faces: [{}, { s: ['hit'] }, { s: ['hit', 'hit'] }] }, { id: 'bad', name: 'Bad', color: 'danger', faces: [{}, { s: ['miss'] }] }],
+  });
+  await approvedPlayer(request, gm, player);
+
+  const context = await browser.newContext({ baseURL: info.project.use.baseURL });
+  const page = await context.newPage();
+  const broadcasts: { historyString: string; results: Record<string, string[]> }[] = [];
+  page.on('websocket', (ws) => ws.on('framereceived', (f) => {
+    const m = /^42\["diceRollBroadcast",(.*)\]$/s.exec(String(f.payload));
+    if (m) broadcasts.push(JSON.parse(m[1]));
+  }));
+  await signInAsPlayer(page, player);
+  await page.getByRole('button', { name: 'DICE_ROLLER', exact: true }).click();
+  const game = page.getByRole('group', { name: "THIS GAME'S DICE" });
+  await expect(game).toContainText('Good');
+  await expect(game).toContainText('Bad');
+  await game.getByRole('button', { name: 'One more Good' }).click();
+  await game.getByRole('button', { name: 'One more Good' }).click();
+  await game.getByRole('button', { name: 'One more Bad' }).click();
+  await page.getByRole('button', { name: /ROLL DICE/ }).click();
+  await expect.poll(() => broadcasts.length, { timeout: 15_000 }).toBeGreaterThan(0);
+  // The Good dice and the Bad die, each face as the log writes it; what is left once they cancel.
+  expect(broadcasts.map((b) => b.historyString).join('\n')).toMatch(/rolled 2×Good \[\S+ Good \S+ Good = .+\]/);
+  expect(broadcasts.map((b) => b.historyString).join('\n')).toMatch(/rolled 1×Bad \[\S+ Bad = .+\]/);
+  await context.close();
+});
