@@ -1,4 +1,5 @@
 const { cryptoRng } = require('../utils/random');
+const { withThrow } = require('../utils/diceThrow');
 const customSystems = require('../systemBuilder/runtime');
 const { tickCombat } = require('../tokens/conditions');
 
@@ -322,11 +323,11 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
               db.run(
                 `INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)`,
                 ['NPC SIDE', score, JSON.stringify(results), '#00ff00', historyString],
-                () => io.emit('diceRollBroadcast', {
+                () => io.emit('diceRollBroadcast', withThrow({
                   userName: 'NPC SIDE', account: 'NPC SIDE',
                   results, modifiers: [], color: '#00ff00',
                   total: score, historyString,
-                })
+                }))
               );
             }
           );
@@ -590,7 +591,7 @@ function logRoll(io, db, combatant, system) {
   db.run(
     `INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)`,
     [combatant.name, combatant.score, resultsJson, '#00ff00', historyString],
-    () => io.emit('diceRollBroadcast', {
+    () => io.emit('diceRollBroadcast', withThrow({
       userName: combatant.name,
       account: combatant.name,
       results,
@@ -598,7 +599,7 @@ function logRoll(io, db, combatant, system) {
       color: '#00ff00',
       total: combatant.score,
       historyString,
-    })
+    }))
   );
 }
 

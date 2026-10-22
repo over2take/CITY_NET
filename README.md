@@ -466,6 +466,7 @@ CITY_NET/
 │   │   ├── tokenVitals.js      # The one-time start of per-system token health: each token's current values saved under every system it could be shown in (a player's sheet systems, or every system for enemies and friendlies, plus the running one), so switching shows what it showed before. Adds rows only; a marker so it runs once
 │   │   └── sanity_checks.js    # In-memory DB checks on boot
 │   ├── utils/
+│   │   ├── diceThrow.js        # The tray's throw (6c4b1): withThrow adds to every roll broadcast a seed for the tumble and, kind by kind, the die's size, its faces where they aren't 1 to n (Fate dice, the table's and a system's own), the face each landed on and the looks of the symbols shown
 │   │   └── random.js           # cryptoRng — uniform [0,1) from OS entropy (crypto.randomInt); default rng for every roll that decides an outcome, read at each call so a test can stand in for the dice
 │   └── __tests__/
 │       ├── helpers/
@@ -607,6 +608,7 @@ CITY_NET/
 │       ├── sheet_import.test.js        # Import pipeline (PDF form extraction, alias mapping, preview route)
 │       ├── rollEngine.test.js          # Roll formula engine
 │       ├── random.test.js              # cryptoRng range/uniqueness; roll engine and attack modules exercised without an injected rng
+│       ├── dice_throw.test.js          # The throw: plain dice landing on the face they show, one secure seed a roll, a score kept to its die, Fate dice and given faces; every roll broadcast in the backend going out through withThrow; a system's own dice with every face, where each landed and their symbols' looks; a plain roll through the socket
 │       ├── secure_dice.test.js         # Every file that rolls dice found, none naming Math.random, every default source of dice the secure one (null only for a preview that rolls nothing)
 │       ├── cwn_templates.test.js       # CWN template metadata (derived fields, AC linking, unset-stat neutrality)
 │       ├── cwn_attack.test.js          # CWN attack module (roll-to-hit, damage, trauma vs TT, shock, stabilize)

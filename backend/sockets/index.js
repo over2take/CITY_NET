@@ -4,6 +4,7 @@ const bank = require('../bank/accounts');
 const bankCurrencies = require('../bank/currencies');
 const moneyRules = require('../bank/moneyRules');
 const { cryptoRng } = require('../utils/random');
+const { withThrow } = require('../utils/diceThrow');
 const { registerInitiativeHandlers } = require('./initiative');
 const sheetTemplates = require('../sheets/templates');
 const { mutateSheet, mutateSheetForUser, patchSheet } = require('../sheets/mutate');
@@ -766,7 +767,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
         [userName, grandTotal, JSON.stringify(results), color, finalString], (err) => {
           if (err) console.error('Error saving dice roll:', err);
-          io.emit('diceRollBroadcast', broadcastData);
+          io.emit('diceRollBroadcast', withThrow(broadcastData));
 
           // If this player had a pending attack, resolve it.
           const attack = pendingAttacks.get(socket.id);
@@ -811,9 +812,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (!Array.isArray(faces) || faces.length === 0) return;
 
         const rolledFaces = [];
+        const landed = [];
         for (let i = 0; i < c; i++) {
           const idx = Math.floor(cryptoRng() * faces.length);
           rolledFaces.push(faces[idx].value);
+          landed.push(idx);
         }
 
         // Only sum when every rolled face is a number; mixed or symbolic dice
@@ -833,7 +836,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
           [userName, total, JSON.stringify(results), color, historyString], (err2) => {
             if (err2) console.error('Error saving custom dice roll:', err2);
-            io.emit('diceRollBroadcast', broadcastData);
+            io.emit('diceRollBroadcast', withThrow(broadcastData, { kinds: { [name]: { faces: faces.map((f) => ({ text: String(f.value) })), landed } } }));
           });
       };
 
@@ -849,7 +852,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
             [userName, made.total, JSON.stringify(made.results), color, made.historyText], (err2) => {
               if (err2) console.error('Error saving system dice roll:', err2);
-              io.emit('diceRollBroadcast', broadcastData);
+              io.emit('diceRollBroadcast', withThrow(broadcastData, made.own));
             });
         });
         return;
@@ -1139,10 +1142,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
             [info.userName, out.damage, JSON.stringify(roll.rolls), '#ff4444', history],
             () => {
-              io.emit('diceRollBroadcast', {
+              io.emit('diceRollBroadcast', withThrow({
                 username: info.userName, total: out.damage, results: roll.rolls,
                 color: '#ff4444', historyString: history,
-              });
+              }));
               afterSeatingChange([out.rammer.owner, payload.owner, targetUsername], system);
             }
           );
@@ -1622,7 +1625,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               [info.userName, made.total, JSON.stringify(made.results), color, made.historyText],
               (err3) => {
                 if (err3) console.error('Error saving sheet roll:', err3);
-                io.emit('diceRollBroadcast', broadcastData);
+                io.emit('diceRollBroadcast', withThrow(broadcastData, made.own));
               }
             );
           });
@@ -1720,7 +1723,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               [info.userName, outcome.total, JSON.stringify(outcome.rolls), color, historyString],
               (err3) => {
                 if (err3) console.error('Error saving sheet roll:', err3);
-                io.emit('diceRollBroadcast', broadcastData);
+                io.emit('diceRollBroadcast', withThrow(broadcastData));
               }
             );
         });
@@ -1765,7 +1768,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             db.run(
               'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
               [info.userName, outcome.total, JSON.stringify(outcome.rolls), '#00ff00', historyString],
-              () => io.emit('diceRollBroadcast', broadcastData)
+              () => io.emit('diceRollBroadcast', withThrow(broadcastData))
             );
         });
       });
@@ -1839,7 +1842,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
                   [info.userName, outcome.hits, JSON.stringify(outcome.rolls), '#ffcc00', historyString],
                   () => {
-                    io.emit('diceRollBroadcast', broadcastData);
+                    io.emit('diceRollBroadcast', withThrow(broadcastData));
                     io.emit('sheetUpdated', { username: info.userName });
                     if (stunOverflow > 0) {
                       db.run(
@@ -2593,7 +2596,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       db.run(
         'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
         [userName, outcome.total, JSON.stringify(outcome.rolls), color, historyString],
-        () => { io.emit('diceRollBroadcast', broadcastData); if (cb) cb(); }
+        () => { io.emit('diceRollBroadcast', withThrow(broadcastData)); if (cb) cb(); }
       );
     };
 
