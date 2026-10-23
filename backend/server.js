@@ -8,6 +8,10 @@ if (missingVars.length > 0) {
   console.warn('   See backend/.env.example for defaults or run: docker cp citynet-backend:/app/.env.example ./backend/.env.example.new');
 }
 
+// A manual install runs on its machine's own Node: say so if that one lacks the October 2026 fixes.
+const nodeWarning = require('./utils/nodeVersion').securityWarning(process.version);
+if (nodeWarning) console.warn(`⚠️  ${nodeWarning}`);
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -43,7 +47,8 @@ const uploadHeaders = require('./middleware/uploadHeaders').setUploadHeaders;
 
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { setHeaders: uploadHeaders }));
 app.use('/uploads/music', express.static(path.join(__dirname, 'uploads/music'), { setHeaders: uploadHeaders }));
-app.use(express.json({ limit: '2mb' }));
+// JSON bodies only as sent, never compressed: see middleware/jsonBody.js.
+app.use(require('./middleware/jsonBody').jsonBody('2mb'));
 
 // Routes
 app.use('/api/locations', require('./routes/locations')(db, io, helpers));
