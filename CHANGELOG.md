@@ -216,6 +216,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Backend tests run their database queries in order.** The test database was in sqlite's
+  parallel mode, where on a busy machine a query sent later can be answered first; tests that
+  waited a number of database rounds could then check too soon, and failed on CI only. It is
+  now serialized, so those waits mean what they say.
 - **Words for the dice tray's board (6c4d1).** A custom system's roll now tells the tray what the
   log says it came to (SUCCESS, FULL, NATURAL 20), and for symbol dice what is left (2 HIT · 1 EDGE,
   or NOTHING LEFT); the table's word dice send their faces (APPLE · PEACH). Nothing shows them yet:
