@@ -50,7 +50,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Solid dice in DICE_TRAY.EXE (6c4b2b).** The tray's see-through wireframes are now solid dice
   with every face printed, for every game: a coin for a d2, the usual shapes for d4 to d20, kites
   for any other even size and a long prism for an odd one (a d13). They are thrown in from the
-  tray's edge, tumbling over and over, and spread out across it. Each die lands with the face the
+  tray's edge, tumbling over and over, and spread out across it, whatever the computer's own
+  animation setting. Each die lands with the face the
   server rolled on top (a d4 face down, its number on the faces it shows), and everyone watching sees
   the same throw. A system's own dice show their symbols, drawings and icons; a bad die is in the
   theme's danger color, the rest in the roller's color. Dice now stay inside the tray: the old one

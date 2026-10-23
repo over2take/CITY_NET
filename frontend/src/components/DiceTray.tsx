@@ -178,9 +178,6 @@ interface DiceSceneProps {
   latestRoll: TrayRoll | null;
 }
 
-/** Someone who asked for less motion sees the dice already landed. */
-const stillWanted = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-
 /**
  * The tray's dice (6c4b2b; approved mockup docs/mockups/builder-dice.html): solid, every face
  * printed, thrown as the server's seed says and landed on the faces it rolled (utils/trayThrow),
@@ -258,7 +255,8 @@ export function DiceScene({ latestRoll }: DiceSceneProps) {
       scene.add(group);
       return group;
     });
-    playing.current = { thrown, groups, start: performance.now() - (stillWanted() ? 1e7 : 0) };
+    // Every throw is played, whatever the computer's own motion setting: the throw is the tray.
+    playing.current = { thrown, groups, start: performance.now() };
     return () => {
       playing.current = null;
       for (const g of groups) scene.remove(g);

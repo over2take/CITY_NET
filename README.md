@@ -814,7 +814,7 @@ CITY_NET/
 │   │   │       ├── ChatWindow.test.tsx
 │   │   │       ├── CityDatabase.test.tsx
 │   │   │       ├── CursorPing.test.tsx
-│   │   │       ├── DiceTray.test.tsx            # The scoreboard, the window's listeners, history and queue; the tray one shape on every screen; a solid die per die rolled with every face printed inside the rim; each landed with the server's face on top; a bad die in the theme's danger color, the rest in the roller's, in every theme; the dice taken away after
+│   │   │       ├── DiceTray.test.tsx            # The scoreboard, the window's listeners, history and queue; the tray one shape on every screen; a solid die per die rolled with every face printed inside the rim; each landed with the server's face on top; a bad die in the theme's danger color, the rest in the roller's, in every theme; the throw played even with the computer's animation effects off; the dice taken away after
 │   │   │       ├── CyberwareWindow.test.tsx          # jsdom has no layout, so the wires cannot be tested — every rectangle is zero by zero. What is tested is everything deciding what gets drawn: rows landing in the right panel by type and side, imports showing unfiled, unpriced sorting last, and removing the row you clicked rather than the one at that index
 │   │   │       ├── CustomDieBuilder.test.tsx  # Create/edit modes, name-clash rules, face preservation, reload-on-target-switch regression
 │   │   │       ├── DraggableWindow.test.tsx

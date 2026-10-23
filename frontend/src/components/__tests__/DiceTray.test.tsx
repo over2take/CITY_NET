@@ -220,6 +220,26 @@ describe("the tray's dice", () => {
     }
   });
 
+  it('plays the throw even where the computer asks for less motion (Windows animation effects off)', () => {
+    const scene = stage();
+    const was = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ matches: q.includes('reduce'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as unknown as typeof window.matchMedia;
+    const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    try {
+      render(<DiceScene latestRoll={roll()} />);
+      act(() => { three.frame!(); });
+      const [die] = dice(scene);
+      const startedAt = die.position.clone();
+      now.mockReturnValue(1000 + 10_000);
+      act(() => { three.frame!(); });
+      // Thrown in from past the edge, so where it starts is far from where it lands.
+      expect(startedAt.distanceTo(die.position)).toBeGreaterThan(2);
+    } finally {
+      now.mockRestore();
+      window.matchMedia = was;
+    }
+  });
+
   it('takes its dice away when the roll is over', () => {
     const scene = stage();
     const { unmount } = render(<DiceScene latestRoll={roll()} />);
