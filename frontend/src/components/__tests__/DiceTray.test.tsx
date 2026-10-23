@@ -264,13 +264,13 @@ describe('ROLL or LANDED', () => {
   const fetchMock = vi.fn((..._args: unknown[]) => ok({ trayMotion: 'roll' }));
   beforeEach(() => { vi.stubGlobal('fetch', fetchMock); fetchMock.mockClear(); localStorage.clear(); });
 
-  it('sits in the title bar, starting on ROLL, and flips to LANDED, saved to whoever is signed in', async () => {
+  it('is an ANIMATION toggle in the title bar, on (the dice roll) to start, turned off (they land) and saved to whoever is signed in', async () => {
     render(<DiceTrayWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()} socketRef={makeSocketRef()} authToken="tok" />);
-    const flip = screen.getByRole('button', { name: /^Dice roll/ });
-    expect(flip.textContent).toBe('ROLL');
-    expect(flip.getAttribute('aria-pressed')).toBe('false');
-    await act(async () => { flip.click(); });
-    expect(screen.getByRole('button', { name: /^Dice shown landed/ }).textContent).toBe('LANDED');
+    const toggle = screen.getByRole('switch', { name: 'Animation' });
+    expect(toggle.textContent).toBe('ANIMATION');
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    await act(async () => { toggle.click(); });
+    expect(screen.getByRole('switch', { name: 'Animation' }).getAttribute('aria-checked')).toBe('false');
     const put = fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === 'PUT') as [string, RequestInit];
     expect([put[0], JSON.parse(put[1].body as string)]).toEqual(['/api/me/settings', { trayMotion: 'landed' }]);
   });

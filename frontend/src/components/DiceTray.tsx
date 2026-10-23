@@ -375,14 +375,19 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken }: D
     <>
     <button
       type="button"
+      role="switch"
       onClick={() => setMotion(motion === 'roll' ? 'landed' : 'roll')}
-      className="win95-close-btn"
-      aria-pressed={motion === 'landed'}
-      aria-label={motion === 'roll' ? 'Dice roll: show them landed instead' : 'Dice shown landed: roll them instead'}
-      title={motion === 'roll' ? 'DICE: ROLL (CLICK FOR LANDED)' : 'DICE: LANDED (CLICK FOR ROLL)'}
-      style={{ background: 'var(--black)', color: 'var(--green)', padding: '0 6px', height: '22px', width: 'auto', fontFamily: 'monospace', fontSize: '10px', letterSpacing: '1px', marginRight: '4px' }}
+      className="win95-title-toggle"
+      aria-checked={motion === 'roll'}
+      aria-label="Animation"
+      title={motion === 'roll' ? 'ANIMATION ON: THE DICE ROLL' : 'ANIMATION OFF: THE DICE LAND AT ONCE'}
+      style={{ background: 'var(--black)', color: 'var(--green)', padding: '0 6px', height: '22px', width: 'auto', fontFamily: 'monospace', fontSize: '10px', letterSpacing: '1px', marginRight: '4px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
     >
-      {motion === 'roll' ? 'ROLL' : 'LANDED'}
+      {/* A toggle: the knob to the right and the track lit when on. */}
+      <span aria-hidden style={{ position: 'relative', width: '20px', height: '10px', borderRadius: '5px', border: '1px solid var(--green)', boxSizing: 'border-box', background: motion === 'roll' ? 'var(--green)' : 'transparent', transition: 'background 0.15s' }}>
+        <span style={{ position: 'absolute', top: '1px', left: motion === 'roll' ? '11px' : '1px', width: '6px', height: '6px', borderRadius: '50%', background: motion === 'roll' ? 'var(--black)' : 'var(--green)', transition: 'left 0.15s' }} />
+      </span>
+      ANIMATION
     </button>
     <button
       onClick={() => setIsHistoryOpen(!isHistoryOpen)}

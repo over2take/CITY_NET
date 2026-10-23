@@ -216,10 +216,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
-- **ROLL or LANDED in DICE_TRAY.EXE (6c4b3b).** A switch in the tray's title bar: ROLL plays every
-  throw (the default), LANDED shows the dice already at rest and the total at once. It is kept on
-  your account, so it follows you to any computer you sign in on; someone not signed in keeps it
-  in their browser.
+- **An ANIMATION toggle in DICE_TRAY.EXE (6c4b3b).** In the tray's title bar: on (the default), every
+  throw rolls; off, the dice show already at rest and the total at once. It is kept on your
+  account, so it follows you to any computer you sign in on; someone not signed in keeps it in
+  their browser.
 - **Settings kept on your account (6c4b3a).** A player's or the GM's own settings can now be kept
   on their account, so they follow them to any computer they sign in on. The first is the dice
   tray's: whether throws roll or the dice are shown already landed, starting on roll. Everyone

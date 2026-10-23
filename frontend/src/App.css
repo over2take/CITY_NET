@@ -1025,6 +1025,18 @@ header {
   border-color: #ff0000;
 }
 
+/* A toggle in a window's title bar (DICE_TRAY.EXE's ANIMATION): framed like the close button,
+   without its red, which says "close". */
+.win95-title-toggle {
+  border: 1px solid var(--green);
+  cursor: pointer;
+}
+.win95-title-toggle:hover,
+.win95-title-toggle:focus-visible {
+  background: color-mix(in srgb, var(--green) 18%, var(--black)) !important;
+  outline: none;
+}
+
 .win95-content {
   position: relative;
   padding: 15px;
