@@ -65,7 +65,9 @@ describe('the tray as the camera sees it', () => {
   });
 });
 
-describe('a throw', () => {
+// Every test here works out whole throws by physics: a fraction of a second each on a desktop,
+// several times that on CI's runners, so the default five seconds is too short there.
+describe('a throw', { timeout: 60_000 }, () => {
   const camera = trayCamera();
   const thrown = throwDice(HANDFUL, 20261022, camera);
   const up = new THREE.Vector3(0, 1, 0);

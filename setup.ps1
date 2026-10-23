@@ -67,10 +67,25 @@ if (-not (Test-Path ".\docker-compose.yml")) {
 $hasDocker = $false
 try { docker --version | Out-Null; $hasDocker = $true } catch {}
 
+# A Node.js with the October 2026 security fixes: 22.23.4+, 24.22.1+, 26.12.1+, or any later line.
+function Test-NodeHasFixes([string]$version) {
+    if ($version -notmatch '^v?(\d+)\.(\d+)\.(\d+)') { return $false }
+    $v = [version]"$($Matches[1]).$($Matches[2]).$($Matches[3])"
+    $fixed = @{ 22 = [version]'22.23.4'; 24 = [version]'24.22.1'; 26 = [version]'26.12.1' }
+    if ($v.Major -ge 27) { return $true }
+    if (-not $fixed.ContainsKey($v.Major)) { return $false }
+    return $v -ge $fixed[$v.Major]
+}
+
 $hasNode = $false
 try {
-    $nodeMajor = [int]((node -v) -replace '^v' -split '\.')[0]
-    if ($nodeMajor -ge 18) { $hasNode = $true }
+    $nodeVersion = node -v
+    if (Test-NodeHasFixes $nodeVersion) {
+        $hasNode = $true
+    } else {
+        Write-Host "  Node.js $nodeVersion is installed but is missing the October 2026 security fixes." -ForegroundColor Yellow
+        Write-Host "  For a manual install, update it to 24.22.1 or newer (or 22.23.4+): https://nodejs.org/" -ForegroundColor Yellow
+    }
 } catch {}
 
 $mode = ""
@@ -91,10 +106,10 @@ if ($hasDocker -and $hasNode) {
         exit 1
     }
 } else {
-    Write-Host "  Neither Docker nor Node.js (v18+) was found." -ForegroundColor Red
+    Write-Host "  Neither Docker nor Node.js (24.22.1+ or 22.23.4+) was found." -ForegroundColor Red
     Write-Host "  Install one of them first, then re-run this script:" -ForegroundColor Yellow
     Write-Host "   - Docker Desktop (recommended): https://www.docker.com/products/docker-desktop/" -ForegroundColor Yellow
-    Write-Host "   - Node.js v18+:                 https://nodejs.org/" -ForegroundColor Yellow
+    Write-Host "   - Node.js 24.22.1+:             https://nodejs.org/" -ForegroundColor Yellow
     exit 1
 }
 Write-Host ""

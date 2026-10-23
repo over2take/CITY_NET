@@ -1,4 +1,5 @@
 const express = require('express');
+const { jsonBody } = require('../middleware/jsonBody');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -203,7 +204,7 @@ module.exports = (db, io, { emitUpdate }) => {
   });
 
   // Assign an image that is already on the server to this location/designation.
-  router.post('/use-existing', authenticate, express.json(), (req, res) => {
+  router.post('/use-existing', authenticate, jsonBody('100kb'), (req, res) => {
     if (req.user.isTemporary) return res.status(403).json({ error: 'Only main admin can manage battle maps' });
 
     const { designation, imageUrl } = req.body;

@@ -126,6 +126,10 @@ both files yourself, then run `docker compose pull && docker compose up -d`.
 
 ## Manual install (non-Docker)
 
+**From 1.14.10, a manual install needs Node.js 24.22.1 or newer (or 22.23.4+).** Older Node
+releases lack the October 2026 security fixes, and the server says so at start. Update Node
+first (https://nodejs.org/), then:
+
 ```bash
 git pull origin main
 cd frontend && npm install && npm run build

@@ -1,4 +1,5 @@
 const express = require('express');
+const { jsonBody } = require('../middleware/jsonBody');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -113,7 +114,7 @@ module.exports = (db, io, { emitUpdate }) => {
    * Not broadcast: nobody but the GM holds a copy, and telling every client that a
    * building changed would only make them all refetch a list the notes are not in.
    */
-  router.put('/gm-notes', authenticate, mainAdminOnly, express.json(), withLocation, (req, res) => {
+  router.put('/gm-notes', authenticate, mainAdminOnly, jsonBody('100kb'), withLocation, (req, res) => {
     const notes = req.body && typeof req.body.notes === 'string' ? req.body.notes : null;
     if (notes === null) return res.status(400).json({ error: 'notes must be text' });
     if (notes.length > gmNotes.MAX_LENGTH) {
