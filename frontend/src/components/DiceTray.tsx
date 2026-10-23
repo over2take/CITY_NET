@@ -7,7 +7,7 @@ import { ThemeContext } from '../theme/themes';
 import paperFillIcon from '../assets/lets-icons--paper-fill.svg';
 import paperLightIcon from '../assets/lets-icons--paper-light.svg';
 import type { DiceRoll } from '../types';
-import { diceOfRoll, throwDice, revealAfter, poseAt, printOrder, floorSeen, trayCamera, TRAY_VIEW, TRAY_ASPECT, type Throw, type RollThrow } from '../utils/trayThrow';
+import { diceOfRoll, throwDice, revealAfter, MOST_DICE, poseAt, printOrder, floorSeen, trayCamera, TRAY_VIEW, TRAY_ASPECT, type Throw, type RollThrow } from '../utils/trayThrow';
 import { labelTurn } from '../utils/diceShapes';
 import { labelParts, labelKey, paintLabel } from '../utils/dieLabels';
 import { useTrayMotion } from '../hooks/useTrayMotion';
@@ -221,7 +221,7 @@ export function DiceScene({ latestRoll, landed = false }: DiceSceneProps) {
     const owned: { dispose: () => void }[] = [];
     const ground = new THREE.Color(theme.background);
     const groups = thrown.dice.map((die) => {
-      const tone = new THREE.Color(die.spec.danger ? theme.danger : latestRoll.color);
+      const tone = new THREE.Color(die.spec.danger ? theme.danger : die.spec.color ?? latestRoll.color);
       const group = new THREE.Group();
       const body = new THREE.MeshStandardMaterial({ color: tone.clone().lerp(ground, 0.82), emissive: tone.clone().multiplyScalar(0.05), roughness: 0.55, metalness: 0.15, flatShading: true });
       const edges = new THREE.EdgesGeometry(die.shape.geometry, 12);
@@ -291,6 +291,20 @@ export function DiceScene({ latestRoll, landed = false }: DiceSceneProps) {
 
 // ─── DiceTrayWindow ───────────────────────────────────────────────────────────
 
+/** A roll as the server sends it to the tray (diceRollBroadcast). */
+interface RollBroadcast {
+  total: number;
+  results: Record<string, unknown>;
+  diceSides?: Record<string, number>;
+  throw?: RollThrow;
+  /** Rolls of one group land in one throw (6c4c, utils/diceThrow.js on the server). */
+  group?: string;
+  color: string;
+  historyString: string;
+  glitch?: boolean;
+  criticalGlitch?: boolean;
+}
+
 interface DiceTrayWindowProps {
   pos: { x: number; y: number };
   setPos: (pos: { x: number; y: number }) => void;
@@ -312,45 +326,57 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken }: D
   const [glitchState, setGlitchState] = useState<'none' | 'glitch' | 'critical'> ('none');
   const [isRolling, setIsRolling] = useState(false);
   const historyContainerRef = useRef<HTMLDivElement>(null);
-  // Rolls play one at a time: attacks broadcast to-hit and damage
-  // back-to-back, and without a queue the second wiped the first's dice
-  // mid-flight. Dice-less rolls (shock damage) show briefly, not for the
-  // full animation.
-  const rollQueue = useRef<any[]>([]);
+  // No queue (6c4c): a new roll cuts straight in, and the one it cut short goes into the record at
+  // once. Rolls the server puts in one group (one person's within a moment, as an attack's to-hit
+  // and damage) land in one throw together. Dice-less rolls (shock damage) show briefly.
+  const playing = useRef<{ group?: string; rolls: RollBroadcast[]; told: boolean } | null>(null);
   const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!socketRef.current) return;
     socketRef.current.emit('requestDiceHistory');
 
-    const playNext = () => {
-      const data = rollQueue.current.shift();
-      if (!data) { rollTimer.current = null; return; }
-      const hasDice = data.results && Object.keys(data.results).length > 0;
+    /** Rolls into the record, in the order they came. */
+    const record = (rolls: RollBroadcast[]) => setHistory(prev => {
+      setTimeout(() => { if (historyContainerRef.current) historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight; }, 50);
+      return [...prev, ...(rolls as unknown as DiceRoll[])];
+    });
+
+    /** Throw a group's dice, all its rolls' together, from its first roll's seed; tell its result as they stop. */
+    const play = (group: { rolls: RollBroadcast[]; told: boolean }) => {
+      if (rollTimer.current) clearTimeout(rollTimer.current);
+      const first = group.rolls[0];
+      const last = group.rolls[group.rolls.length - 1];
       // Worked out now, so the total is revealed as the last die stops, not after a set time.
-      const specs = hasDice ? diceOfRoll(data) : [];
-      const thrown = specs.length ? throwDice(specs, data.throw?.seed ?? 1, trayCamera()) : undefined;
-      setLatestRoll({ total: data.total, results: data.results, diceSides: data.diceSides, throw: data.throw, thrown, color: data.color, timestamp: Date.now() });
+      const specs = group.rolls.flatMap((r) => (r.results && Object.keys(r.results).length ? diceOfRoll(r).map((s) => ({ ...s, color: r.color })) : [])).slice(0, MOST_DICE);
+      const thrown = specs.length ? throwDice(specs, first.throw?.seed ?? 1, trayCamera()) : undefined;
+      setLatestRoll({ total: last.total, results: last.results, diceSides: last.diceSides, throw: first.throw, thrown, color: first.color, timestamp: Date.now() });
       setIsRolling(true);
       setDisplayRoll(null);
       setGlitchState('none');
       rollTimer.current = setTimeout(() => {
+        rollTimer.current = null;
         setIsRolling(false);
-        setDisplayRoll({ total: data.total, results: data.results, diceSides: data.diceSides, color: data.color, timestamp: Date.now() });
-        if (data.criticalGlitch) setGlitchState('critical');
-        else if (data.glitch) setGlitchState('glitch');
-        setHistory(prev => {
-          const newHistory = [...prev, data];
-          setTimeout(() => { if (historyContainerRef.current) historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight; }, 50);
-          return newHistory;
-        });
-        playNext();
+        setDisplayRoll({ total: last.total, results: last.results, diceSides: last.diceSides, color: last.color, timestamp: Date.now() });
+        if (group.rolls.some((r) => r.criticalGlitch)) setGlitchState('critical');
+        else if (group.rolls.some((r) => r.glitch)) setGlitchState('glitch');
+        group.told = true;
+        record(group.rolls);
       }, thrown && motionNow.current === 'roll' ? revealAfter(thrown) : 800);
     };
 
-    const handleBroadcast = (data: any) => {
-      rollQueue.current.push(data);
-      if (!rollTimer.current) playNext();
+    const handleBroadcast = (data: RollBroadcast) => {
+      const now = playing.current;
+      // The same group as the throw under way: thrown with it.
+      if (now && !now.told && data.group && now.group === data.group) {
+        now.rolls.push(data);
+        play(now);
+        return;
+      }
+      // Another: it cuts in, and what it cut short is told in the record at once.
+      if (now && !now.told) { now.told = true; record(now.rolls); }
+      playing.current = { group: data.group, rolls: [data], told: false };
+      play(playing.current);
     };
 
     const handleHistory = (data: any[]) => {
@@ -367,7 +393,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken }: D
       socket.off('diceRollHistory', handleHistory);
       if (rollTimer.current) clearTimeout(rollTimer.current);
       rollTimer.current = null;
-      rollQueue.current = [];
+      playing.current = null;
     };
   }, [socketRef.current]);
 
@@ -446,6 +472,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken }: D
         {isHistoryOpen && (
           <div
             ref={historyContainerRef}
+            data-testid="dice-history"
             style={{
               position: 'absolute', left: '-252px', top: 0, bottom: 0, width: '250px',
               boxSizing: 'border-box', border: '2px solid var(--green)',

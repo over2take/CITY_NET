@@ -109,31 +109,58 @@ describe('DiceTrayWindow', () => {
     expect(socketRef.current.emit).toHaveBeenCalledWith('requestDiceHistory');
   });
 
-  it('queues back-to-back broadcasts instead of replacing the roll mid-flight', async () => {
-    // Attacks broadcast to-hit + damage within milliseconds; both must play
-    // and land in history in order.
+  it('lets a new roll cut in, telling the one it cut short in the record at once (no queue, 6c4c)', async () => {
     const user = userEvent.setup();
     const socketRef = makeSocketRef();
     render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} />);
     await user.click(screen.getByTitle('TOGGLE_HISTORY'));
     const broadcast = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'diceRollBroadcast')[1];
-
     vi.useFakeTimers();
     try {
-      const toHit = { total: 15, results: { 20: [15] }, color: '#0f0', historyString: 'to-hit', throw: { seed: 11, dice: [{ key: '20', sides: 20, landed: [14] }] } };
-      const damage = { total: 7, results: { 6: [1] }, color: '#0f0', historyString: 'damage', throw: { seed: 12, dice: [{ key: '6', sides: 6, landed: [0] }] } };
-      // Each revealed as its own dice stop rolling (6c4b2b), not after a set time.
-      const first = revealAfter(throwDice(diceOfRoll(toHit), 11, trayCamera()));
-      const second = revealAfter(throwDice(diceOfRoll(damage), 12, trayCamera()));
+      const rook = { total: 15, results: { 20: [15] }, color: '#0f0', historyString: 'rook rolled', group: 'a', throw: { seed: 11, dice: [{ key: '20', sides: 20, landed: [14] }] } };
+      const kes = { total: 4, results: { 6: [4] }, color: '#f0f', historyString: 'kes rolled', group: 'b', throw: { seed: 12, dice: [{ key: '6', sides: 6, landed: [3] }] } };
+      act(() => { broadcast(rook); });
+      act(() => { vi.advanceTimersByTime(300); });
+      expect(screen.queryByText(/rook rolled/)).not.toBeInTheDocument();
+      // Kes's roll cuts in: Rook's is in the record at once, Kes's when its dice stop.
+      act(() => { broadcast(kes); });
+      expect(screen.getByText(/rook rolled/)).toBeInTheDocument();
+      expect(screen.queryByText(/kes rolled/)).not.toBeInTheDocument();
+      act(() => { vi.advanceTimersByTime(revealAfter(throwDice(diceOfRoll(kes), 12, trayCamera()))); });
+      expect(screen.getByText(/kes rolled/)).toBeInTheDocument();
+      // Each once, in the order they came.
+      const lines = screen.getAllByText(/rolled/).map((e) => e.textContent);
+      expect(lines.filter((l) => /rook/.test(l!))).toHaveLength(1);
+      expect(lines.findIndex((l) => /rook/.test(l!))).toBeLessThan(lines.findIndex((l) => /kes/.test(l!)));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("throws one group's rolls together, an attack's to-hit and damage, each die in its roller's color, and tells both as they stop", async () => {
+    const scene = new THREE.Scene();
+    three.current = { scene, camera: new THREE.PerspectiveCamera() };
+    const user = userEvent.setup();
+    const socketRef = makeSocketRef();
+    render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} />);
+    await user.click(screen.getByTitle('TOGGLE_HISTORY'));
+    const broadcast = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'diceRollBroadcast')[1];
+    vi.useFakeTimers();
+    try {
+      const toHit = { total: 15, results: { 20: [15] }, color: '#00ff00', historyString: 'to-hit', group: 'g', throw: { seed: 11, dice: [{ key: '20', sides: 20, landed: [14] }] } };
+      const damage = { total: 7, results: { 8: [7] }, color: '#ff00ff', historyString: 'damage', group: 'g', throw: { seed: 12, dice: [{ key: '8', sides: 8, landed: [6] }] } };
       act(() => { broadcast(toHit); broadcast(damage); });
-      // First roll animating; second waits in the queue
-      act(() => { vi.advanceTimersByTime(first - 50); });
+      // One throw: both dice, from the to-hit's seed, each in its own roll's color.
+      const dice = scene.children.filter((c): c is THREE.Group => c instanceof THREE.Group);
+      expect(dice).toHaveLength(2);
+      const edges = dice.map((g) => `#${((g.children.find((c) => c instanceof THREE.LineSegments) as THREE.LineSegments).material as THREE.LineBasicMaterial).color.getHexString()}`);
+      expect(edges).toEqual(['#00ff00', '#ff00ff']);
+      const together = throwDice([...diceOfRoll(toHit).map((s) => ({ ...s, color: toHit.color })), ...diceOfRoll(damage).map((s) => ({ ...s, color: damage.color }))], 11, trayCamera());
+      const when = revealAfter(together);
+      act(() => { vi.advanceTimersByTime(when - 50); });
       expect(screen.queryByText(/to-hit/)).not.toBeInTheDocument();
       act(() => { vi.advanceTimersByTime(50); });
       expect(screen.getByText(/to-hit/)).toBeInTheDocument();
-      expect(screen.queryByText(/damage/)).not.toBeInTheDocument();
-      // Second roll finishes its own throw
-      act(() => { vi.advanceTimersByTime(second); });
       expect(screen.getByText(/damage/)).toBeInTheDocument();
     } finally {
       vi.useRealTimers();

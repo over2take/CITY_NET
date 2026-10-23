@@ -43,7 +43,31 @@ const throwOf = ({ results, diceSides } = {}, { kinds = {}, symbols = [] } = {})
   ...(symbols.length ? { symbols } : {}),
 });
 
-/** A roll's broadcast with its throw: every diceRollBroadcast goes out through this. */
-const withThrow = (data, given) => ({ ...data, throw: throwOf(data, given) });
+/**
+ * Rolls that land in one throw (6c4c): one person's rolls sent within GROUP_MS of each other, such
+ * as an attack's to-hit and its damage, which the server sends a few milliseconds apart. Decided
+ * here, by the server's clock, so every screen groups them alike; a tray throws a group's dice
+ * together, and a roll of another group cuts in.
+ */
+const GROUP_MS = 400;
+const groups = new Map();
 
-module.exports = { throwOf, withThrow, FATE };
+/** The group of a roll by `account` at `now`: the one it continues, or a new one. */
+const groupOf = (account, now) => {
+  const last = groups.get(account);
+  if (last && now - last.at <= GROUP_MS) { last.at = now; return last.id; }
+  const id = crypto.randomBytes(6).toString('hex');
+  groups.set(account, { id, at: now });
+  // Forget anyone quiet for a minute, so the list stays as long as the table is.
+  for (const [who, g] of groups) if (now - g.at > 60000) groups.delete(who);
+  return id;
+};
+
+/** A roll's broadcast with its throw and its group: every diceRollBroadcast goes out through this. */
+const withThrow = (data, given, now = Date.now()) => ({
+  ...data,
+  throw: throwOf(data, given),
+  group: groupOf(String(data.account ?? data.userName ?? data.username ?? ''), now),
+});
+
+module.exports = { throwOf, withThrow, groupOf, GROUP_MS, FATE };
