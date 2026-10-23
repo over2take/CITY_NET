@@ -39,7 +39,7 @@ Built with React + Three.js · Node.js + SQLite · Socket.IO · Docker
 
 - **Install Git:** [Git install](https://git-scm.com/install/)
 - **Docker option:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) (recommended, easiest setup)
-- **Manual option:** [Node.js](https://nodejs.org/) v18 or newer
+- **Manual option:** [Node.js](https://nodejs.org/) 24.22.1 or newer (or 22.23.4+): older releases lack the October 2026 security fixes
 - A terminal (PowerShell, bash, etc.)
 
 ### 1. Clone the repo
@@ -344,6 +344,7 @@ CITY_NET/
 │   │   ├── auth.js             # Who a token belongs to, in one place. Every token is signed with the same secret, so a valid signature is not enough: `authenticate` admits the GM (role admin) or a granted editor, `authenticatePlayer` also admits a player's own login for their own sheet and portrait, `optionalAuthenticate` treats players as anonymous; `isMainAdmin` is what every admin socket event checks
 │   │   ├── uploadConstraints.js # What an upload may be and how to say so when it is not. One message shape naming the file, what was wrong and what would have worked — plus a handler for multer's own failures, since an oversized file previously reached Express's HTML error page and the client reported a JSON syntax error to the user
 │   │   ├── uploadHeaders.js    # What a browser may do with a file somebody uploaded. `/uploads` is served with no auth, so a sandbox CSP puts anything opened from it in an opaque origin and nosniff stops it being re-read as HTML — which is what lets the upload allowlists stay as wide as the file pickers
+│   │   ├── jsonBody.js         # The one JSON body reader for every route (1.14.10): refuses a compressed request body (br, gzip, deflate) with 415 rather than decompressing it, keeping Node's decoders out of reach of a request (the October 2026 Brotli flaw, CVE-2026-111497)
 │   │   └── rateLimit.js        # A sliding per-caller ceiling, for the one open route that spends our outbound requests on an anonymous caller's say-so. Bounded in memory, since the key is whoever is asking; evicts the least recently seen, so it forgives rather than blocks
 │   ├── routes/
 │   │   ├── admin.js            # Admin-only REST endpoints; undo covers locations, roads, signs; POST /update preflights and returns 409 naming what is missing, GET /update/status reports phase and a stable failure code and nothing anyone said to us — it is unauthenticated by necessity, so the compose output that used to ride along on it now stays in the log file, POST /check-update offers only genuine upgrades from the deployment's own channel; GET and PUT /update/channel read and switch it (primary admin; refused during an update, and with the line to set by hand where the app cannot), GET naming on a dev build the copy going back would use, POST /update/revert going back to stable (dev builds only, the steps by hand where it cannot); POST /water marks generated water so a regenerate can clear its own river without touching a lake the GM drew
@@ -462,6 +463,7 @@ CITY_NET/
 │   │   ├── tokenVitals.js      # The one-time start of per-system token health: each token's current values saved under every system it could be shown in (a player's sheet systems, or every system for enemies and friendlies, plus the running one), so switching shows what it showed before. Adds rows only; a marker so it runs once
 │   │   └── sanity_checks.js    # In-memory DB checks on boot
 │   ├── utils/
+│   │   ├── nodeVersion.js      # Whether the Node a server runs on has the October 2026 security fixes (22.23.4+, 24.22.1+, 26.12.1+, any later line); server.js warns at start on one without, as a manual install runs its machine's own Node
 │   │   └── random.js           # cryptoRng — uniform [0,1) from OS entropy (crypto.randomInt); default rng for every roll that decides an outcome
 │   └── __tests__/
 │       ├── helpers/
@@ -476,6 +478,7 @@ CITY_NET/
 │       ├── nginx_config.test.js        # The assumptions the app makes about the proxy every request arrives through, which no other test here touches — body ceiling at least the largest upload limit, X-Forwarded-For present, the socket able to upgrade, and every mounted path actually proxied. Two faults in one release lived exactly in that gap
 │       ├── upload_constraints.test.js  # The three questions a refusal has to answer, and the oversized upload that used to come back as HTML. Also asserts the frontend's copy of the cap still equals the server's, read from the source rather than restated
 │       ├── upload_headers.test.js      # Served through a real static mount rather than by calling the helper: a stored .html comes back sandboxed, an SVG likewise, and every file gets the headers rather than the ones something guessed were dangerous
+│       ├── node_security.test.js       # The October 2026 Node fixes: a JSON body read as sent and refused compressed (br, gzip, deflate), its size limit kept, no other body reader anywhere in the server; the Node versions with the fixes and the warning for one without; the Docker images and CI on Node 24 and the setup scripts asking for a fixed Node
 │       ├── outbound.test.js            # The one door: a host that is merely a suffix of an allowed one, plain http, a body past the cap abandoned rather than measured, a registry that answers and then stops talking, and a deadline still armed while the body arrives
 │       ├── rate_limit.test.js          # Time injected rather than waited for. Per caller rather than per house, a sliding window so the allowance cannot be spent twice across a boundary, and a bound on how many callers are remembered
 │       ├── updater.test.js             # Version ordering including X.Y.Z-dev, tag filtering per channel, preflight refusals, and an update that records its failures instead of returning silently; the next page is read from Docker Hub even when the payload names another host; the docker probe is asked once and its answer remembered; going back to stable holds the lock and reports its failure
@@ -1164,7 +1167,7 @@ CITY_NET/
 | Layer | Tech |
 |---|---|
 | Frontend | React 19, TypeScript, Three.js, @react-three/fiber, Vite |
-| Backend | Node.js, Express 5, SQLite3 |
+| Backend | Node.js 24, Express 5, SQLite3 |
 | Realtime | Socket.IO |
 | Auth | JWT (admin) + bcrypt (player accounts) |
 | Deployment | Docker, Nginx, GitHub Actions |
