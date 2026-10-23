@@ -5,6 +5,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.14.10] - 2026-10-22
+
+Node.js's October 2026 security fixes.
+
+### Security
+
+- **The server runs Node.js 24.** Node.js's security release of 21 October 2026 fixed ten flaws,
+  the worst an out-of-bounds write in its Brotli decoder that could let an attacker run code on the
+  server (CVE-2026-111497). The fixes came only for Node 22, 24 and 26; CITY_NET's server ran
+  Node 20, which is past its end and gets no more fixes. The server's image now runs Node 24
+  (24.22.1 or newer), as do the build and the tests. That also covers the replies to the server's
+  own requests (the in-app updater asking Docker Hub, and the sheet import), which Node decodes too.
+- **Compressed request bodies are refused.** The server used to decompress any request body
+  labelled as compressed, with that same decoder, from anyone who could reach it, signed in or
+  not. No browser compresses what it sends to CITY_NET, so the server now answers such a request
+  with 415 instead of decompressing it, whatever Node it runs on.
+- **Manual installs need a fixed Node.** `setup.sh` and `setup.ps1` now accept only Node.js
+  24.22.1+ or 22.23.4+ (they asked for 18 or newer), and the server says at start when the Node it
+  runs on lacks the fixes. No exploitation in the wild had been reported when this was released.
+
+PHP's flaws of the same week (PHP2Shell, CVE-2026-109618 and -109619) don't touch CITY_NET: nothing
+in it runs PHP.
+
+---
+
 ## [1.14.9] - 2026-10-15
 
 Dev builds reach installs set up before 1.8.1.

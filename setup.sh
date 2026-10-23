@@ -63,10 +63,29 @@ fi
 has_docker="n"
 command -v docker >/dev/null 2>&1 && has_docker="y"
 
+# A Node.js with the October 2026 security fixes: 22.23.4+, 24.22.1+, 26.12.1+, or any later line.
+node_has_fixes() {
+  v=$(node -v 2>/dev/null | sed 's/^v//')
+  maj=$(echo "$v" | cut -d. -f1); min=$(echo "$v" | cut -d. -f2); pat=$(echo "$v" | cut -d. -f3 | sed 's/[^0-9].*//')
+  case "$maj" in
+    22) need_min=23; need_pat=4 ;;
+    24) need_min=22; need_pat=1 ;;
+    26) need_min=12; need_pat=1 ;;
+    *) [ "${maj:-0}" -ge 27 ] 2>/dev/null && return 0; return 1 ;;
+  esac
+  [ "${min:-0}" -gt "$need_min" ] 2>/dev/null && return 0
+  [ "${min:-0}" -eq "$need_min" ] 2>/dev/null && [ "${pat:-0}" -ge "$need_pat" ] 2>/dev/null && return 0
+  return 1
+}
+
 has_node="n"
 if command -v node >/dev/null 2>&1; then
-  node_major=$(node -v 2>/dev/null | sed 's/^v//' | cut -d. -f1)
-  [ "${node_major:-0}" -ge 18 ] 2>/dev/null && has_node="y"
+  if node_has_fixes; then
+    has_node="y"
+  else
+    yellow "  Node.js $(node -v) is installed but is missing the October 2026 security fixes."
+    yellow "  For a manual install, update it to 24.22.1 or newer (or 22.23.4+): https://nodejs.org/"
+  fi
 fi
 
 mode=""
@@ -87,10 +106,10 @@ elif [ "$has_node" = "y" ]; then
     exit 1
   fi
 else
-  red "  Neither Docker nor Node.js (v18+) was found."
+  red "  Neither Docker nor Node.js (24.22.1+ or 22.23.4+) was found."
   yellow "  Install one of them first, then re-run this script:"
   yellow "   - Docker (recommended): https://docs.docker.com/get-docker/"
-  yellow "   - Node.js v18+:         https://nodejs.org/"
+  yellow "   - Node.js 24.22.1+:     https://nodejs.org/"
   exit 1
 fi
 echo ""
