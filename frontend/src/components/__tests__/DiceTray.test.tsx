@@ -27,7 +27,7 @@ vi.mock('../../assets/lets-icons--paper-light.svg', () => ({ default: 'paper-lig
 import * as THREE from 'three';
 import { DiceTrayWindow, DotMatrixScoreboard, DiceScene, type TrayRoll } from '../DiceTray';
 import { ThemeContext, THEMES } from '../../theme/themes';
-import { TRAY_ASPECT, floorSeen, trayCamera } from '../../utils/trayThrow';
+import { TRAY_ASPECT, floorSeen, trayCamera, throwDice, diceOfRoll, printedOn, revealAfter } from '../../utils/trayThrow';
 
 const makeSocketRef = () => ({ current: { emit: vi.fn(), on: vi.fn(), off: vi.fn() } });
 
@@ -120,16 +120,20 @@ describe('DiceTrayWindow', () => {
 
     vi.useFakeTimers();
     try {
-      act(() => {
-        broadcast({ total: 15, results: { 20: [15] }, color: '#0f0', historyString: 'to-hit' });
-        broadcast({ total: 7, results: { 6: [1] }, color: '#0f0', historyString: 'damage' });
-      });
+      const toHit = { total: 15, results: { 20: [15] }, color: '#0f0', historyString: 'to-hit', throw: { seed: 11, dice: [{ key: '20', sides: 20, landed: [14] }] } };
+      const damage = { total: 7, results: { 6: [1] }, color: '#0f0', historyString: 'damage', throw: { seed: 12, dice: [{ key: '6', sides: 6, landed: [0] }] } };
+      // Each revealed as its own dice stop rolling (6c4b2b), not after a set time.
+      const first = revealAfter(throwDice(diceOfRoll(toHit), 11, trayCamera()));
+      const second = revealAfter(throwDice(diceOfRoll(damage), 12, trayCamera()));
+      act(() => { broadcast(toHit); broadcast(damage); });
       // First roll animating; second waits in the queue
-      act(() => { vi.advanceTimersByTime(5000); });
+      act(() => { vi.advanceTimersByTime(first - 50); });
+      expect(screen.queryByText(/to-hit/)).not.toBeInTheDocument();
+      act(() => { vi.advanceTimersByTime(50); });
       expect(screen.getByText(/to-hit/)).toBeInTheDocument();
       expect(screen.queryByText(/damage/)).not.toBeInTheDocument();
-      // Second roll finishes its own animation
-      act(() => { vi.advanceTimersByTime(5000); });
+      // Second roll finishes its own throw
+      act(() => { vi.advanceTimersByTime(second); });
       expect(screen.getByText(/damage/)).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
@@ -196,11 +200,15 @@ describe("the tray's dice", () => {
     now.mockReturnValue(1000 + 10_000);
     act(() => { three.frame!(); });
     const [die] = dice(scene);
-    // The printed face that now points up is face 0, which carries what came up: 5.
+    // The printed face that now points up is the one the throw landed on top, which carries what came up: 5.
     const prints = die.children.filter((c): c is THREE.Mesh => c instanceof THREE.Mesh).slice(1);
-    const top = prints.find((m) => new THREE.Vector3(0, 0, 1).applyQuaternion(m.quaternion).applyQuaternion(die.quaternion).dot(up) > 0.999);
+    const top = prints.find((m) => new THREE.Vector3(0, 0, 1).applyQuaternion(m.quaternion).applyQuaternion(die.quaternion).dot(up) > 0.95);
     expect(top).toBeDefined();
-    expect(prints.indexOf(top!)).toBe(0);
+    const [thrown] = throwDice(diceOfRoll(roll()), 9, trayCamera()).dice;
+    expect(prints.indexOf(top!)).toBe(thrown.up);
+    expect(printedOn(thrown)[thrown.up]).toBe('5');
+    // ...and the print there shows the die's fifth face, the one the server rolled.
+    expect(top!.userData.face).toBe(4);
     now.mockRestore();
   });
 

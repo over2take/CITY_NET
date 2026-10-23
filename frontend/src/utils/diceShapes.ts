@@ -137,6 +137,24 @@ export const shapeOf = (n: number): DieShape => {
   return { ...made, radius: made.geometry.boundingSphere!.radius };
 };
 
+/** The most faces a die's solid has in the tray's physics; a bigger die is thrown as a stand-in. */
+export const MOST_SOLID_FACES = 24;
+
+/**
+ * The solid a die of `n` faces is thrown as: itself, or above MOST_SOLID_FACES a stand-in of the
+ * same family and size with fewer faces (kites at two points, or a long prism), since the physics'
+ * sums grow with every face. A d100 is near enough a squashed disc either way.
+ */
+export const solidShapeOf = (n: number): DieShape => {
+  const size = Math.max(2, Math.min(MOST_FACES, Math.round(n) || 6));
+  if (size <= MOST_SOLID_FACES) return shapeOf(size);
+  const made = size % 2 === 0
+    ? trapezohedron(MOST_SOLID_FACES / 2, Math.min(1.15, 0.85 + size / 400))
+    : prism(MOST_SOLID_FACES - 1, Math.min(0.8, 0.45 + size / 60));
+  made.geometry.computeBoundingSphere();
+  return { ...made, radius: made.geometry.boundingSphere!.radius };
+};
+
 /** How a label lies on a face: flat on it, its own up along the face. The tray prints with this. */
 export const labelTurn = (normal: THREE.Vector3) => new THREE.Quaternion().setFromUnitVectors(V(0, 0, 1), normal);
 
@@ -147,24 +165,17 @@ export const labelTurn = (normal: THREE.Vector3) => new THREE.Quaternion().setFr
 export const faceTexts = (texts: string[], top: number, shape: Pick<DieShape, 'faces' | 'down'>): string[] =>
   faceOrder(texts.length, top, shape).map((i) => (i < 0 ? '' : texts[i] ?? ''));
 
-/** The same as faceTexts, by place: which of the die's `count` faces each shape face prints, -1 for none. */
-export const faceOrder = (count: number, top: number, shape: Pick<DieShape, 'faces' | 'down'>): number[] => {
-  if (shape.down) return shape.faces.map((_, k) => (k === 0 ? -1 : top));
-  const others = Array.from({ length: count }, (_, k) => k).filter((k) => k !== top);
-  return shape.faces.map((_, k) => (k === 0 ? top : others.length ? others[(k - 1) % others.length] : -1));
-};
-
 /**
- * The turn a die rests at: face 0 up (down for a d4) and its words square to the camera, which
- * looks from +z, give or take `yaw` (a small turn so a row of dice doesn't look stamped out).
+ * The same as faceTexts, by place: which of the die's `count` faces each shape face prints, -1 for
+ * none, with what came up on shape face `up` (the one it lands on top, or under for a d4).
  */
-export const restingTurn = (shape: Pick<DieShape, 'faces' | 'down'>, yaw = 0) => {
-  const top = shape.faces[0];
-  const align = new THREE.Quaternion().setFromUnitVectors(top.normal, V(0, shape.down ? -1 : 1, 0));
-  const textUp = V(0, 1, 0).applyQuaternion(labelTurn(top.normal)).applyQuaternion(align);
-  const turn = new THREE.Quaternion().setFromAxisAngle(V(0, 1, 0), Math.PI - Math.atan2(textUp.x, textUp.z) + yaw);
-  return turn.multiply(align);
+export const faceOrder = (count: number, top: number, shape: Pick<DieShape, 'faces' | 'down'>, up = 0): number[] => {
+  if (shape.down) return shape.faces.map((_, k) => (k === up ? -1 : top));
+  const others = Array.from({ length: count }, (_, k) => k).filter((k) => k !== top);
+  const rest = shape.faces.map((_, k) => k).filter((k) => k !== up);
+  const order = shape.faces.map(() => -1);
+  order[up] = top;
+  rest.forEach((k, j) => { order[k] = others.length ? others[j % others.length] : -1; });
+  return order;
 };
 
-/** How high a die's middle rests above the floor: face 0's distance from it. */
-export const restingHeight = (shape: Pick<DieShape, 'faces'>) => shape.faces[0].normal.dot(shape.faces[0].center);

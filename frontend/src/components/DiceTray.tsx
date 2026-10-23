@@ -7,8 +7,8 @@ import { ThemeContext } from '../theme/themes';
 import paperFillIcon from '../assets/lets-icons--paper-fill.svg';
 import paperLightIcon from '../assets/lets-icons--paper-light.svg';
 import type { DiceRoll } from '../types';
-import { diceOfRoll, throwDice, poseAt, floorSeen, trayCamera, TRAY_VIEW, TRAY_ASPECT, type Throw, type RollThrow } from '../utils/trayThrow';
-import { faceOrder, labelTurn } from '../utils/diceShapes';
+import { diceOfRoll, throwDice, revealAfter, poseAt, printOrder, floorSeen, trayCamera, TRAY_VIEW, TRAY_ASPECT, type Throw, type RollThrow } from '../utils/trayThrow';
+import { labelTurn } from '../utils/diceShapes';
 import { labelParts, labelKey, paintLabel } from '../utils/dieLabels';
 
 // ─── DOT_MATRIX_3x5 ──────────────────────────────────────────────────────────
@@ -170,6 +170,8 @@ export interface TrayRoll {
   results: Record<string, unknown>;
   diceSides?: Record<string, number>;
   throw?: RollThrow;
+  /** The throw worked out (utils/trayThrow), once, when the roll came: the window reveals as it ends. */
+  thrown?: Throw;
   color: string;
   timestamp: number;
 }
@@ -180,7 +182,7 @@ interface DiceSceneProps {
 
 /**
  * The tray's dice (6c4b2b; approved mockup docs/mockups/builder-dice.html): solid, every face
- * printed, thrown as the server's seed says and landed on the faces it rolled (utils/trayThrow),
+ * printed, thrown by physics from the server's seed with the faces it rolled on top (utils/trayThrow),
  * inside a rim drawn where the walls are. A die takes the roller's color, or the theme's danger
  * color for a bad die; its body is that color sunk toward the theme's background.
  */
@@ -208,7 +210,7 @@ export function DiceScene({ latestRoll }: DiceSceneProps) {
 
   useEffect(() => {
     if (!latestRoll) return undefined;
-    const thrown = throwDice(diceOfRoll(latestRoll), latestRoll.throw?.seed ?? 1, trayCamera());
+    const thrown = latestRoll.thrown ?? throwDice(diceOfRoll(latestRoll), latestRoll.throw?.seed ?? 1, trayCamera());
     const symbols = new Map((latestRoll.throw?.symbols ?? []).map((s) => [s.id, s]));
     const textures = new Map<string, THREE.CanvasTexture>();
     const owned: { dispose: () => void }[] = [];
@@ -222,7 +224,7 @@ export function DiceScene({ latestRoll }: DiceSceneProps) {
       owned.push(die.shape.geometry, body, edges, edgeLine);
       group.add(new THREE.Mesh(die.shape.geometry, body), new THREE.LineSegments(edges, edgeLine));
       // Every face printed: what came up on the face that lands on top, the die's others round it.
-      const order = faceOrder(die.spec.texts.length, die.spec.top, die.shape);
+      const order = printOrder(die);
       const plane = new THREE.PlaneGeometry(die.shape.label, die.shape.label);
       owned.push(plane);
       die.shape.faces.forEach((spot, k) => {
@@ -244,7 +246,10 @@ export function DiceScene({ latestRoll }: DiceSceneProps) {
         const label = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false });
         owned.push(label);
         const print = new THREE.Mesh(plane, label);
+        print.userData.face = i; // which of the die's own faces it shows
+        // The top face's words turned on it to read from the camera.
         print.quaternion.copy(labelTurn(spot.normal));
+        if (k === die.up && die.twist) print.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), die.twist));
         print.position.copy(spot.center).addScaledVector(spot.normal, 0.012);
         group.add(print);
       });
@@ -311,7 +316,10 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
       const data = rollQueue.current.shift();
       if (!data) { rollTimer.current = null; return; }
       const hasDice = data.results && Object.keys(data.results).length > 0;
-      setLatestRoll({ total: data.total, results: data.results, diceSides: data.diceSides, throw: data.throw, color: data.color, timestamp: Date.now() });
+      // Worked out now, so the total is revealed as the last die stops, not after a set time.
+      const specs = hasDice ? diceOfRoll(data) : [];
+      const thrown = specs.length ? throwDice(specs, data.throw?.seed ?? 1, trayCamera()) : undefined;
+      setLatestRoll({ total: data.total, results: data.results, diceSides: data.diceSides, throw: data.throw, thrown, color: data.color, timestamp: Date.now() });
       setIsRolling(true);
       setDisplayRoll(null);
       setGlitchState('none');
@@ -326,7 +334,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
           return newHistory;
         });
         playNext();
-      }, hasDice ? 5000 : 800);
+      }, thrown ? revealAfter(thrown) : 800);
     };
 
     const handleBroadcast = (data: any) => {
