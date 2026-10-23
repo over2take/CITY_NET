@@ -133,9 +133,18 @@ test('no queue: one person\'s rolls a moment apart land as one throw, and a late
     await page.getByRole('button', { name: `One more d${sides}`, exact: true }).click();
     await page.getByRole('button', { name: /ROLL DICE/ }).click();
   };
-  // Two rolls straight after each other: the server puts them in one group.
-  await roll(6);
-  await roll(8);
+  // Two rolls straight after each other, as an attack's to-hit and damage go out: the server puts
+  // them in one group. Clicked from inside the page, a frame apart, since four of Playwright's own
+  // clicks can take longer than the group's 400 ms on a loaded runner.
+  const d6 = await page.getByRole('button', { name: 'One more d6', exact: true }).elementHandle();
+  const d8 = await page.getByRole('button', { name: 'One more d8', exact: true }).elementHandle();
+  const go = await page.getByRole('button', { name: /ROLL DICE/ }).elementHandle();
+  await page.evaluate(async (buttons) => {
+    for (const b of buttons) {
+      (b as HTMLElement).click();
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+  }, [d6, go, d8, go]);
   await expect.poll(() => broadcasts.length, { timeout: 15_000 }).toBe(2);
   expect(broadcasts[1].group).toBe(broadcasts[0].group);
   await expect(page.getByText('DICE_TRAY.EXE', { exact: true })).toBeVisible();
