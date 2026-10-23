@@ -64,10 +64,11 @@ const untilValue = async (read, check, opts = {}) =>
  * This does NOT wait for work scheduled off the database - a setTimeout inside a handler,
  * say. Nothing here does that, and `until` is the tool where something does.
  *
- * Nor is it a strict barrier: node-sqlite3 runs statements in parallel mode, so on a loaded
- * runner a round can come back before a handler's query does, more so while identify's
- * warm-up queries are still landing. Use it to show that NOTHING happens; where something
- * should arrive, wait for it with `until` (system_builder_parts_combat lost that bet on CI).
+ * It relies on the connection being serialized, as makeTestDb leaves it. In node-sqlite3's
+ * default parallel mode a round can be answered before a handler's query on a crowded runner,
+ * and tests built on that failed on CI only; a database made another way needs `db.serialize()`
+ * before drain means anything. Where a handler hops off the database (a timer, a file, crypto)
+ * before its next query, a round can still pass it: wait for the result with `until` there.
  */
 const drain = (db, rounds = 8) => new Promise((resolve, reject) => {
   let left = rounds;
