@@ -8,6 +8,7 @@ const { LIMITS, rejectFormat, uploadErrors } = require('../middleware/uploadCons
 const store = require('../systemBuilder/store');
 const citysys = require('../systemBuilder/citysys');
 const citysysZip = require('../systemBuilder/citysysZip');
+const { zipBody: readZipBody } = require('../middleware/jsonBody');
 const { previewPublish } = require('../systemBuilder/publishPreview');
 const { buildCustomTemplate } = require('../sheets/pdfTemplate');
 const runtime = require('../systemBuilder/runtime');
@@ -444,7 +445,7 @@ module.exports = (db, io = null) => {
 
   // The same for a zip of a system and its pictures (citysysZip.js), sent as its own bytes rather
   // than as JSON text; how to install it comes in the address (?mode=, ?replaceChanges=1).
-  const zipBody = express.raw({ type: 'application/zip', limit: citysysZip.LIMITS.zipBytes, inflate: false });
+  const zipBody = readZipBody(citysysZip.LIMITS.zipBytes);
   /** The zip's file and the pictures its system names, or null with the refusal already sent. */
   const readSent = (req, res) => {
     const read = citysysZip.readZip(req.body);

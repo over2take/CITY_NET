@@ -16,7 +16,7 @@ import { fileURLToPath } from 'url';
 const require_ = createRequire(import.meta.url);
 const express = require_('express');
 const request = require_('supertest');
-const { jsonBody } = require_('../middleware/jsonBody');
+const { jsonBody, zipBody } = require_('../middleware/jsonBody');
 const { hasSecurityFixes, securityWarning, FIXED } = require_('../utils/nodeVersion');
 
 const BACKEND = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -47,6 +47,24 @@ describe('a JSON body', () => {
     const big = JSON.stringify({ text: 'x'.repeat(200 * 1024) });
     expect((await request(app('100kb')).post('/echo').set('Content-Type', 'application/json').send(big)).status).toBe(413);
     expect((await request(app('2mb')).post('/echo').set('Content-Type', 'application/json').send(big)).status).toBe(200);
+  });
+
+  it('a zip too (a system and its pictures): read as sent, refused compressed, kept to its limit', async () => {
+    const zipApp = (limit) => {
+      const a = express();
+      a.post('/zip', zipBody(limit), (req, res) => res.json({ bytes: Buffer.isBuffer(req.body) ? req.body.length : null }));
+      return a;
+    };
+    const zipped = Buffer.from('PK\u0003\u0004 a zip as sent');
+    const res = await request(zipApp('1mb')).post('/zip').set('Content-Type', 'application/zip').send(zipped);
+    expect([res.status, res.body]).toEqual([200, { bytes: zipped.length }]);
+    for (const [encoding, squeeze] of [['br', zlib.brotliCompressSync], ['gzip', zlib.gzipSync], ['deflate', zlib.deflateSync]]) {
+      const squeezed = await request(zipApp('1mb')).post('/zip').set('Content-Type', 'application/zip').set('Content-Encoding', encoding).send(squeeze(zipped));
+      expect(squeezed.status, encoding).toBe(415);
+    }
+    expect((await request(zipApp('100kb')).post('/zip').set('Content-Type', 'application/zip').send(Buffer.alloc(200 * 1024))).status).toBe(413);
+    // Anything not sent as a zip is left unread.
+    expect((await request(zipApp('1mb')).post('/zip').set('Content-Type', 'application/json').send('{}')).body).toEqual({ bytes: null });
   });
 
   it('is read only by jsonBody, anywhere in the server, so no route can decompress one again', () => {
