@@ -107,6 +107,18 @@ frontend suites.
   named gives the retry a name of its own (`Hearthfall 2`).
 - The builder's rail widens over the page while the pointer is on it. Click it with `clickRail` (or
   `builderPage`), which moves the pointer back to the page after, as a person would.
+- CI's runner is several times slower than a desktop, so never bet on how long something takes:
+  wait for what you expect with `expect(...)` or `expect.poll`, not `waitForTimeout`.
+- Each Playwright click waits for its target to be ready, so a few of them can take longer than
+  half a second on CI. Where the server treats things done close together as one (rolls within
+  400 ms are one throw), do them from inside the page with `page.evaluate`, a frame apart, as the
+  dice tray's no-queue journey does.
+- A state flag isn't the end of an animation. The rail's `data-expanded` turns false as it starts
+  to narrow, and on CI the clicks sweep once measured the page under the rail still closing; so
+  `clickRail` also waits for `getAnimations()` on the rail to be empty. Do the same for anything
+  that slides or fades over the page before checking what's under it.
+- When a journey fails only on CI, the run's **e2e-report** download (bottom of the run's Summary
+  page) holds each failure's `trace.zip`; its screencast frames show the page at the failing step.
 - Put shared steps (signing in, opening the builder) in `tests/helpers.ts`.
 
 ## Files
