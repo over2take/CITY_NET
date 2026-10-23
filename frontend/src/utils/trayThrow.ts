@@ -25,8 +25,11 @@ export interface ThrowSymbol { id: string; mark: string; drawn?: string[]; icon?
 export interface ThrowKind { key: string; sides: number; landed: number[]; faces?: ThrowFace[]; color?: 'danger' }
 export interface RollThrow { seed: number; dice: ThrowKind[]; symbols?: ThrowSymbol[] }
 
-/** A die to throw: its size, every face's words, the face that came up, and its kind's color. */
-export interface DieSpec { key: string; sides: number; texts: string[]; faces?: ThrowFace[]; top: number; danger: boolean }
+/**
+ * A die to throw: its size, every face's words, the face that came up, and its kind's color; and
+ * the color of whoever rolled it, where one throw holds several rolls (6c4c).
+ */
+export interface DieSpec { key: string; sides: number; texts: string[]; faces?: ThrowFace[]; top: number; danger: boolean; color?: string }
 
 /** The most dice the tray throws at once; a bigger handful is still all in the log and the total. */
 export const MOST_DICE = 40;

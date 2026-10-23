@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createRequire } from 'module';
 import { makeTestDb, run } from './helpers/testDb.js';
-import { drain } from './helpers/until.js';
+import { drain, until } from './helpers/until.js';
 
 process.env.JWT_SECRET = 'test-secret';
 
@@ -32,8 +32,12 @@ beforeEach(async () => {
 });
 
 let nextSocket = 0;
-/** Whether the attacker is told an attack is under way, under `system`. */
-const attackStarts = async (system) => {
+/**
+ * Whether the attacker is told an attack is under way, under `system`. Where one should start,
+ * `expected` waits for it: drain is no strict barrier while identify's warm-up queries are still
+ * landing, and a loaded runner could read the answer before the target's lookup came back.
+ */
+const attackStarts = async (system, { expected = false } = {}) => {
   await run(db, `INSERT OR REPLACE INTO global_settings (key, value) VALUES ('game_system', ?)`, [system]);
   const sent = [];
   let connect;
@@ -45,8 +49,10 @@ const attackStarts = async (system) => {
   handlers.identify('JADE');
   await drain(db);
   handlers.initiateAttack({ targetId, attackType: 'ranged' });
-  await drain(db);
-  return sent.find((e) => e.event === 'attackPending')?.data ?? null;
+  const pending = () => sent.find((e) => e.event === 'attackPending')?.data ?? null;
+  if (expected) await until(pending, { label: `attackPending under ${system}` }).catch(() => {});
+  else await drain(db);
+  return pending();
 };
 
 describe('starting an attack', () => {
@@ -56,7 +62,7 @@ describe('starting an attack', () => {
 
   it('starts one as before under every built-in system and a custom one that kept combat', async () => {
     for (const system of [...BUILT_INS, KEPT]) {
-      expect(await attackStarts(system), system).toMatchObject({ targetId, attackType: 'ranged', ac: 14 });
+      expect(await attackStarts(system, { expected: true }), system).toMatchObject({ targetId, attackType: 'ranged', ac: 14 });
     }
   });
 });

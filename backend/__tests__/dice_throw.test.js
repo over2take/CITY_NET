@@ -149,3 +149,31 @@ describe('a roll of plain dice from the dice menu', () => {
     expect(thrown.dice.map((d) => [d.key, d.sides, d.landed])).toEqual([['6', 6, results[6].map((v) => v - 1)], ['20', 20, results[20].map((v) => v - 1)]]);
   });
 });
+
+describe('rolls that land in one throw (6c4c)', () => {
+  const { groupOf, GROUP_MS } = require_('../utils/diceThrow');
+
+  it('are one person\'s rolls within a moment of each other, as an attack\'s to-hit and damage', () => {
+    const toHit = withThrow({ account: 'kes', results: { 20: [15] } }, undefined, 1_000_000);
+    const damage = withThrow({ account: 'kes', results: { 8: [6] } }, undefined, 1_000_005);
+    expect(damage.group).toBe(toHit.group);
+    expect(typeof toHit.group).toBe('string');
+  });
+
+  it('keep going while the rolls keep coming, then start again after a pause', () => {
+    const a = groupOf('rook', 2_000_000);
+    expect(groupOf('rook', 2_000_000 + GROUP_MS)).toBe(a);
+    expect(groupOf('rook', 2_000_000 + 2 * GROUP_MS)).toBe(a);
+    expect(groupOf('rook', 2_000_000 + 3 * GROUP_MS + 1)).not.toBe(a);
+  });
+
+  it('are never two people\'s, even at the same moment', () => {
+    expect(groupOf('ann', 3_000_000)).not.toBe(groupOf('bob', 3_000_000));
+    // As every broadcast is sent: by who rolled, whichever name the roll carries.
+    const ann = withThrow({ account: 'ann2', results: { 6: [1] } }, undefined, 4_000_000);
+    expect(withThrow({ account: 'bob2', results: { 6: [2] } }, undefined, 4_000_001).group).not.toBe(ann.group);
+    expect(withThrow({ userName: 'ann2', results: { 6: [3] } }, undefined, 4_000_002).group).toBe(ann.group);
+    // A roll with no name still gets a group of its own.
+    expect(withThrow({ results: { 6: [1] } }, undefined, 3_000_000).group).toMatch(/^[0-9a-f]{12}$/);
+  });
+});

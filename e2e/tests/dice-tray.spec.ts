@@ -9,7 +9,7 @@ import { signInAsGm, signInAsPlayer, gmToken, runningSystem, approvedPlayer } fr
 
 const SHOTS = path.join(__dirname, '..', '..', 'docs', 'mockups', 'shots');
 
-type Broadcast = { historyString: string; results: Record<string, unknown[]>; throw?: { seed: number; dice: { key: string; sides: number; landed: number[]; faces?: { text: string }[]; color?: string }[] } };
+type Broadcast = { historyString: string; group?: string; results: Record<string, unknown[]>; throw?: { seed: number; dice: { key: string; sides: number; landed: number[]; faces?: { text: string }[]; color?: string }[] } };
 
 /** Every roll the server sends this page, as it sends it. */
 const listen = (page: Page) => {
@@ -123,4 +123,40 @@ test('the tray\'s ANIMATION toggle, kept on the account: turned off, still off a
   expect((await back).ok()).toBe(true);
   await expect(animation).toHaveAttribute('aria-checked', 'true');
   if (process.env.GRAPH_SHOTS) await page.getByText('DICE_TRAY.EXE', { exact: true }).locator('xpath=ancestor::*[3]').screenshot({ path: path.join(SHOTS, 'dice-tray-animation-toggle.png') });
+});
+
+test('no queue: one person\'s rolls a moment apart land as one throw, and a later roll cuts in with the earlier in the record at once (6c4c)', async ({ page }) => {
+  const broadcasts = listen(page);
+  await signInAsGm(page);
+  await page.getByRole('button', { name: 'DICE_ROLLER', exact: true }).click();
+  const roll = async (sides: number) => {
+    await page.getByRole('button', { name: `One more d${sides}`, exact: true }).click();
+    await page.getByRole('button', { name: /ROLL DICE/ }).click();
+  };
+  // Two rolls straight after each other, as an attack's to-hit and damage go out: the server puts
+  // them in one group. Clicked from inside the page, a frame apart, since four of Playwright's own
+  // clicks can take longer than the group's 400 ms on a loaded runner.
+  const d6 = await page.getByRole('button', { name: 'One more d6', exact: true }).elementHandle();
+  const d8 = await page.getByRole('button', { name: 'One more d8', exact: true }).elementHandle();
+  const go = await page.getByRole('button', { name: /ROLL DICE/ }).elementHandle();
+  await page.evaluate(async (buttons) => {
+    for (const b of buttons) {
+      (b as HTMLElement).click();
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+  }, [d6, go, d8, go]);
+  await expect.poll(() => broadcasts.length, { timeout: 15_000 }).toBe(2);
+  expect(broadcasts[1].group).toBe(broadcasts[0].group);
+  await expect(page.getByText('DICE_TRAY.EXE', { exact: true })).toBeVisible();
+  // A moment later, a roll of its own: it cuts in, and the two before are in the record at once,
+  // while its own dice are still in the air.
+  await page.waitForTimeout(700);
+  await roll(20);
+  await expect.poll(() => broadcasts.length, { timeout: 15_000 }).toBe(3);
+  expect(broadcasts[2].group).not.toBe(broadcasts[0].group);
+  await page.getByTitle('TOGGLE_HISTORY').click();
+  const said = (b: Broadcast) => b.historyString.replace(/^.*? rolled /, 'rolled ');
+  const record = page.getByTestId('dice-history').locator('> div').filter({ hasText: 'rolled' });
+  await expect.poll(async () => (await record.allTextContents()).slice(-2).map((l) => l.replace(/^.*?: /, ''))).toEqual([said(broadcasts[0]), said(broadcasts[1])]);
+  expect((await record.allTextContents()).some((l) => l.endsWith(said(broadcasts[2])) && l.includes('1d20'))).toBe(false);
 });

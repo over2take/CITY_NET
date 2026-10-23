@@ -216,6 +216,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **No waiting line in DICE_TRAY.EXE (6c4c).** A new roll no longer waits for the one before it to
+  finish: it cuts straight in, and the roll it cut short goes into the record at once, so nothing
+  is missed. One person's rolls made a moment apart, such as an attack's to-hit and damage, land in
+  one throw together, each die in its roller's color, and every screen groups them the same way.
 - **An ANIMATION toggle in DICE_TRAY.EXE (6c4b3b).** In the tray's title bar: on (the default), every
   throw rolls; off, the dice show already at rest and the total at once. It is kept on your
   account, so it follows you to any computer you sign in on; someone not signed in keeps it in
