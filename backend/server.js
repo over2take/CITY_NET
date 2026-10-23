@@ -66,6 +66,7 @@ app.use('/api/system_dice', require('./routes/system_dice')());
 app.use('/api/fonts', require('./routes/fonts')(db, io));
 app.use('/uploads/fonts', express.static(path.join(__dirname, 'uploads/fonts'), { setHeaders: uploadHeaders }));
 app.use('/api/player', require('./routes/player')(db, io));
+app.use('/api/me', require('./routes/me')(db));
 app.use('/api', require('./routes/admin')(db, io, helpers));
 app.use('/api/music', require('./routes/music')(db, io));
 app.use('/api/sheets', require('./routes/sheets')(db, io));

@@ -195,6 +195,13 @@ function makeTestDb() {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       )`);
+      db.run(`CREATE TABLE account_settings (
+        kind TEXT NOT NULL,
+        username TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        PRIMARY KEY (kind, username, key)
+      )`);
 
       db.run(`CREATE TABLE character_sheets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,

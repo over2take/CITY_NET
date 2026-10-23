@@ -216,6 +216,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Settings kept on your account (6c4b3a).** A player's or the GM's own settings can now be kept
+  on their account, so they follow them to any computer they sign in on. The first is the dice
+  tray's: whether throws roll or the dice are shown already landed, starting on roll. Everyone
+  signed in reads and changes only their own, and only settings the app knows, each with one of
+  its choices. Nothing on screen yet: the tray's switch for it comes next.
 - **The new dice tray's dice and throw, worked out (6c4b2a).** The shapes for a die of any size,
   what is printed on each face, and a whole throw worked out from the roll's seed: dice tossed in,
   bouncing off the floor, each other and the tray's walls, and rolling to rest with the server's
