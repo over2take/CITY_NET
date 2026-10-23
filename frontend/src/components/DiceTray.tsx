@@ -10,6 +10,7 @@ import type { DiceRoll } from '../types';
 import { diceOfRoll, throwDice, revealAfter, poseAt, printOrder, floorSeen, trayCamera, TRAY_VIEW, TRAY_ASPECT, type Throw, type RollThrow } from '../utils/trayThrow';
 import { labelTurn } from '../utils/diceShapes';
 import { labelParts, labelKey, paintLabel } from '../utils/dieLabels';
+import { useTrayMotion } from '../hooks/useTrayMotion';
 
 // ─── DOT_MATRIX_3x5 ──────────────────────────────────────────────────────────
 
@@ -178,6 +179,8 @@ export interface TrayRoll {
 
 interface DiceSceneProps {
   latestRoll: TrayRoll | null;
+  /** LANDED (6c4b3b): each throw shown already at rest. Read as a throw starts, so flipping it never replays one. */
+  landed?: boolean;
 }
 
 /**
@@ -186,8 +189,10 @@ interface DiceSceneProps {
  * inside a rim drawn where the walls are. A die takes the roller's color, or the theme's danger
  * color for a bad die; its body is that color sunk toward the theme's background.
  */
-export function DiceScene({ latestRoll }: DiceSceneProps) {
+export function DiceScene({ latestRoll, landed = false }: DiceSceneProps) {
   const { scene, camera } = useThree();
+  const landedNow = useRef(landed);
+  useEffect(() => { landedNow.current = landed; }, [landed]);
   const theme = useContext(ThemeContext);
   const playing = useRef<{ thrown: Throw; groups: THREE.Group[]; start: number } | null>(null);
 
@@ -261,7 +266,7 @@ export function DiceScene({ latestRoll }: DiceSceneProps) {
       return group;
     });
     // Every throw is played, whatever the computer's own motion setting: the throw is the tray.
-    playing.current = { thrown, groups, start: performance.now() };
+    playing.current = { thrown, groups, start: performance.now() - (landedNow.current ? 1e7 : 0) };
     return () => {
       playing.current = null;
       for (const g of groups) scene.remove(g);
@@ -291,9 +296,15 @@ interface DiceTrayWindowProps {
   setPos: (pos: { x: number; y: number }) => void;
   onClose: () => void;
   socketRef: React.MutableRefObject<any>;
+  /** Whoever is signed in, GM or player: their ROLL or LANDED is kept on their account (6c4b3b). */
+  authToken?: string | null;
 }
 
-export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWindowProps) {
+export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken }: DiceTrayWindowProps) {
+  const [motion, setMotion] = useTrayMotion(authToken);
+  // Read when a roll arrives, inside the socket handlers set up once.
+  const motionNow = useRef(motion);
+  useEffect(() => { motionNow.current = motion; }, [motion]);
   const [history, setHistory] = useState<DiceRoll[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [latestRoll, setLatestRoll] = useState<TrayRoll | null>(null);
@@ -334,7 +345,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
           return newHistory;
         });
         playNext();
-      }, thrown ? revealAfter(thrown) : 800);
+      }, thrown && motionNow.current === 'roll' ? revealAfter(thrown) : 800);
     };
 
     const handleBroadcast = (data: any) => {
@@ -361,6 +372,18 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
   }, [socketRef.current]);
 
   const titleControls = (
+    <>
+    <button
+      type="button"
+      onClick={() => setMotion(motion === 'roll' ? 'landed' : 'roll')}
+      className="win95-close-btn"
+      aria-pressed={motion === 'landed'}
+      aria-label={motion === 'roll' ? 'Dice roll: show them landed instead' : 'Dice shown landed: roll them instead'}
+      title={motion === 'roll' ? 'DICE: ROLL (CLICK FOR LANDED)' : 'DICE: LANDED (CLICK FOR ROLL)'}
+      style={{ background: 'var(--black)', color: 'var(--green)', padding: '0 6px', height: '22px', width: 'auto', fontFamily: 'monospace', fontSize: '10px', letterSpacing: '1px', marginRight: '4px' }}
+    >
+      {motion === 'roll' ? 'ROLL' : 'LANDED'}
+    </button>
     <button
       onClick={() => setIsHistoryOpen(!isHistoryOpen)}
       className="win95-close-btn"
@@ -369,6 +392,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
     >
       <img src={isHistoryOpen ? paperFillIcon : paperLightIcon} width="14" height="14" alt="Paper" style={{ filter: 'brightness(0) invert(1)' }} />
     </button>
+    </>
   );
 
   return (
@@ -410,7 +434,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
           <Canvas camera={{ position: [...TRAY_VIEW.position], fov: TRAY_VIEW.fov, near: 0.1, far: 100 }}>
             <ambientLight intensity={0.6} />
             <directionalLight position={[-3, 8, 5]} intensity={0.9} />
-            <DiceScene latestRoll={latestRoll} />
+            <DiceScene latestRoll={latestRoll} landed={motion === 'landed'} />
           </Canvas>
         </div>
 

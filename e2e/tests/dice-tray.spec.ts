@@ -95,3 +95,29 @@ test("a system's own dice in the tray: symbols drawn and marked, a bad die in th
   expect(broken).toEqual([]);
   await context.close();
 });
+
+test('the tray\'s ROLL or LANDED, kept on the account: flipped, still LANDED after a reload, back to ROLL (6c4b3b)', async ({ page }) => {
+  await signInAsGm(page);
+  const roll = async () => {
+    await page.getByRole('button', { name: 'DICE_ROLLER', exact: true }).click();
+    await page.getByRole('button', { name: 'One more d6', exact: true }).click();
+    await page.getByRole('button', { name: /ROLL DICE/ }).click();
+    await expect(page.getByText('DICE_TRAY.EXE', { exact: true })).toBeVisible();
+  };
+  await roll();
+  const saved = page.waitForResponse((r) => r.url().endsWith('/api/me/settings') && r.request().method() === 'PUT');
+  await page.getByRole('button', { name: /^Dice roll/ }).click();
+  expect((await saved).ok()).toBe(true);
+  await expect(page.getByRole('button', { name: /^Dice shown landed/ })).toHaveText('LANDED');
+  // Kept on the account, not just this page: a fresh sign-in finds it.
+  await page.evaluate(() => localStorage.removeItem('citynet_tray_motion'));
+  await page.reload();
+  await signInAsGm(page);
+  await roll();
+  await expect(page.getByRole('button', { name: /^Dice shown landed/ })).toHaveText('LANDED');
+  // Back to ROLL, as the other journeys expect.
+  const back = page.waitForResponse((r) => r.url().endsWith('/api/me/settings') && r.request().method() === 'PUT');
+  await page.getByRole('button', { name: /^Dice shown landed/ }).click();
+  expect((await back).ok()).toBe(true);
+  await expect(page.getByRole('button', { name: /^Dice roll/ })).toHaveText('ROLL');
+});
