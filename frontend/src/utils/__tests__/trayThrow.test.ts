@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { seeded, diceOfRoll, floorSeen, trayCamera, throwDice, throwLength, poseAt, printedOn, scaleFor, MOST_DICE, TRAY_ASPECT, type DieSpec } from '../trayThrow';
+import { seeded, diceOfRoll, floorSeen, wallsFor, trayCamera, throwDice, throwLength, poseAt, printedOn, scaleFor, MOST_DICE, TRAY_ASPECT, type DieSpec } from '../trayThrow';
 
 /**
  * A throw in the tray (6c4b2a; mockup builder-dice, decision 9): the server's dice tumbled in from
@@ -68,7 +68,8 @@ describe('the tray as the camera sees it', () => {
 describe('a throw', () => {
   const camera = trayCamera();
   const thrown = throwDice(HANDFUL, 20261022, camera);
-  const { walls } = floorSeen(camera, 0.6);
+  // The walls the throw keeps its dice to, at the size this handful is drawn.
+  const walls = wallsFor(camera, thrown.dice[0].scale);
 
   it('is the same from the same seed, on any screen, and another from another', () => {
     const again = throwDice(HANDFUL, 20261022, trayCamera());
@@ -76,25 +77,67 @@ describe('a throw', () => {
     expect(throwDice(HANDFUL, 7, camera).dice.map((x) => x.path)).not.toEqual(thrown.dice.map((x) => x.path));
   });
 
-  it('keeps every die wholly inside the tray as shown, the whole way', () => {
+  /** The path from the step a die is first wholly inside the walls; every die gets there. */
+  const once = (die: (typeof thrown.dice)[number]) => {
+    const r = die.shape.radius * die.scale;
+    const from = die.path.findIndex((p) => walls.every((w) => w.nx * p.x + w.nz * p.z <= w.c - r + 1e-9));
+    expect(from, `d${die.spec.sides}`).toBeGreaterThanOrEqual(0);
+    return die.path.slice(from);
+  };
+
+  it("throws every die in from beyond the tray's left edge, across the floor", () => {
     for (const die of thrown.dice) {
-      const r = die.shape.radius * die.scale;
-      for (const p of die.path.slice(1)) for (const w of walls) expect(w.nx * p.x + w.nz * p.z, `d${die.spec.sides}`).toBeLessThanOrEqual(w.c - r + 1e-6);
+      const start = new THREE.Vector3(die.path[0].x, die.path[0].y, die.path[0].z).project(camera);
+      const end = die.path[die.path.length - 1];
+      expect(start.x, `d${die.spec.sides}`).toBeLessThan(-0.6);
+      expect(end.x - die.path[0].x, `d${die.spec.sides}`).toBeGreaterThan(3 * die.scale);
     }
   });
 
-  it('keeps every die in the picture, its foot and its top, edge to edge, the whole way', () => {
+  it('keeps every die wholly inside the tray as shown, once it is in', () => {
+    for (const die of thrown.dice) {
+      const r = die.shape.radius * die.scale;
+      for (const p of once(die)) for (const w of walls) expect(w.nx * p.x + w.nz * p.z, `d${die.spec.sides}`).toBeLessThanOrEqual(w.c - r + 1e-6);
+    }
+  });
+
+  it('keeps every die in the picture once it is in, its foot and its top, edge to edge', () => {
     // The camera looks down at a slant: a die by the back wall shows its top highest, one by the
     // front its foot lowest. Both, a die's width either side, stay on the screen, to a pixel.
     for (const seed of [1, 20261022, 99]) {
       for (const die of throwDice(HANDFUL, seed, camera).dice) {
         const r = die.shape.radius * die.scale;
-        for (const p of die.path.slice(1)) {
+        const inFrom = die.path.findIndex((p) => [[p.x - r, 0, p.z], [p.x + r, 0, p.z], [p.x, 0, p.z + r], [p.x, 1.7 * die.scale, p.z - r]]
+          .every(([x, y, z]) => { const v = new THREE.Vector3(x, y, z).project(camera); return Math.abs(v.x) <= 1.002 && Math.abs(v.y) <= 1.002; }));
+        expect(inFrom, `d${die.spec.sides} seed ${seed}`).toBeGreaterThanOrEqual(0);
+        for (const p of die.path.slice(inFrom)) {
           for (const [x, y, z] of [[p.x - r, 0, p.z], [p.x + r, 0, p.z], [p.x, 0, p.z + r], [p.x, 1.7 * die.scale, p.z - r]]) {
             const v = new THREE.Vector3(x, y, z).project(camera);
             expect(Math.abs(v.x), `d${die.spec.sides} seed ${seed}`).toBeLessThanOrEqual(1.002);
             expect(Math.abs(v.y), `d${die.spec.sides} seed ${seed}`).toBeLessThanOrEqual(1.002);
           }
+        }
+      }
+    }
+  });
+
+  it('tumbles over and over on the way in, turning faster than it would just rolling', () => {
+    for (const die of thrown.dice) {
+      // How far it turns, as the tray draws it, against how far a die rolling that way would.
+      let turned = 0;
+      for (let s = 0; s < throwLength(thrown); s += 0.02) turned += poseAt(die, s).quaternion.angleTo(poseAt(die, s + 0.02).quaternion);
+      const rolling = die.path[die.path.length - 1].went / (die.shape.radius * die.scale);
+      expect(turned, `d${die.spec.sides}`).toBeGreaterThan(2 * Math.PI);
+      expect(turned / rolling, `d${die.spec.sides}`).toBeGreaterThan(2);
+    }
+  });
+
+  it('moves every die smoothly, step to step, never jumping into place', () => {
+    for (const seed of [1, 20261022, 99]) {
+      for (const die of throwDice(HANDFUL, seed, camera).dice) {
+        for (let k = 1; k < die.path.length; k += 1) {
+          const a = die.path[k - 1]; const b = die.path[k];
+          expect(Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z), `d${die.spec.sides} seed ${seed} step ${k}`).toBeLessThan(0.4);
         }
       }
     }
@@ -146,7 +189,7 @@ describe('a throw', () => {
     const lots = throwDice(Array.from({ length: MOST_DICE }, (_, i) => d(6, i % 6)), 5, camera);
     for (const die of lots.dice) {
       const p = die.path[die.path.length - 1];
-      for (const w of walls) expect(w.nx * p.x + w.nz * p.z).toBeLessThanOrEqual(w.c - die.shape.radius * die.scale + 1e-6);
+      for (const w of wallsFor(camera, die.scale)) expect(w.nx * p.x + w.nz * p.z).toBeLessThanOrEqual(w.c - die.shape.radius * die.scale + 1e-6);
     }
   });
 });

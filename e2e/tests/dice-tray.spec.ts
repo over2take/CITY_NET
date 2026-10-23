@@ -5,7 +5,7 @@ import { signInAsGm, signInAsPlayer, gmToken, runningSystem, approvedPlayer } fr
 // DICE_TRAY.EXE's new dice (6c4b2b; approved mockup docs/mockups/builder-dice.html): solid, every
 // face printed, landing on the faces the server rolled, inside the tray as it is shown (the old
 // tray's dice bounced past its edges). The tray throws what the server sends with each roll, its
-// `throw` (6c4b1). With GRAPH_SHOTS=1, pictures of a throw mid-air and landed go to docs/mockups/shots.
+// `throw` (6c4b1). With GRAPH_SHOTS=1, pictures of a throw early, mid-air and landed go to docs/mockups/shots.
 
 const SHOTS = path.join(__dirname, '..', '..', 'docs', 'mockups', 'shots');
 
@@ -26,9 +26,11 @@ const picture = async (page: Page, name: string) => {
   const floor = page.getByTestId('dice-tray-floor');
   await expect(floor.locator('canvas')).toBeVisible();
   if (!process.env.GRAPH_SHOTS) return;
-  await page.waitForTimeout(350);
+  await page.waitForTimeout(150);
+  await floor.screenshot({ path: path.join(SHOTS, `${name}-early.png`) });
+  await page.waitForTimeout(450);
   await floor.screenshot({ path: path.join(SHOTS, `${name}-mid.png`) });
-  await page.waitForTimeout(4200);
+  await page.waitForTimeout(3800);
   await floor.screenshot({ path: path.join(SHOTS, `${name}-landed.png`) });
 };
 

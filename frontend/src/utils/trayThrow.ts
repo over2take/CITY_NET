@@ -113,8 +113,9 @@ export interface ThrownDie {
   shape: DieShape;
   scale: number;
   final: THREE.Quaternion;
-  /** What the die rolls about on its way, and how far it went: it turns one radian a radius. */
+  /** What the die tumbles about on its way, and how fast: `spin` radians a radius it goes. */
   axis: THREE.Vector3;
+  spin: number;
   path: { x: number; y: number; z: number; went: number }[];
 }
 export interface Throw { dice: ThrownDie[]; steps: number }
@@ -125,7 +126,9 @@ export const scaleFor = (count: number, floorArea: number) => Math.max(0.45, Mat
 /** How high a die's top stands, at full size: the walls keep that in the picture too. */
 const TOPS = 1.7;
 /** How far a die thrown at `v` goes before it rests: its time in the air, then its roll along the floor. */
-const REACH = 1.09;
+const REACH = 1.31;
+/** How much faster a die turns than it would just rolling: it tumbles, over and over, as dice do. */
+const TUMBLE = 2.2;
 
 /** The floor a die may rest on: from the back, its left and right at the back and at the front. */
 interface Floor { back: number; front: number; backLeft: number; backRight: number; frontLeft: number; frontRight: number }
@@ -154,6 +157,12 @@ const spotsFor = (count: number, f: Floor, rand: () => number) => {
 };
 
 /**
+ * The tray's walls for dice drawn at `scale`: the picture's edges at the floor and at a die's top,
+ * so a die is held wholly in the picture, its foot and its top both.
+ */
+export const wallsFor = (camera: THREE.PerspectiveCamera, scale: number) => [...floorSeen(camera, 0).walls, ...floorSeen(camera, TOPS * scale).walls];
+
+/**
  * The whole throw: each die tossed in from the left wall toward a spot of its own on the floor,
  * with its speed and spin from the seed, bouncing on the floor, off the walls and off each other
  * until it rests, face up as it came. The walls keep a die wholly in the picture: its foot and its
@@ -166,7 +175,7 @@ export const throwDice = (specs: DieSpec[], seed: number, camera: THREE.Perspect
   const zs = floor.corners.map((p) => p.z);
   const area = (Math.max(...xs) - Math.min(...xs)) * (Math.max(...zs) - Math.min(...zs));
   const scale = scaleFor(specs.length, area);
-  const walls = [...floorSeen(camera, 0).walls, ...floorSeen(camera, TOPS * scale).walls];
+  const walls = wallsFor(camera, scale);
   // The floor every wall leaves, less a die's width, for the dice to come to rest on.
   const [bl, br, tr, tl] = floorSeen(camera, TOPS * scale).corners;
   const [nbl, nbr, ntr, ntl] = floorSeen(camera, 0).corners;
@@ -181,23 +190,29 @@ export const throwDice = (specs: DieSpec[], seed: number, camera: THREE.Perspect
     const shape = shapeOf(spec.sides);
     const r = shape.radius * scale;
     const rest = restingHeight(shape) * scale;
-    // Thrown at its spot from a throw's length short of it, from the left, a little up or down.
+    // Thrown in high from beyond the tray's left edge, level with its own spot give or take, at
+    // that spot; the walls hold it once it is in.
     const spot = spots[i];
-    let ux = 1; let uz = (rand() - 0.5) * 0.9;
-    const u = Math.sqrt(ux * ux + uz * uz); ux /= u; uz /= u;
-    const far = (2.6 + rand() * 1.2) * scale;
-    const x = spot.x - ux * far; const z = spot.z - uz * far;
+    const z = spot.z + (rand() - 0.5) * 2 * scale;
+    const edge = nbl.x + ((ntl.x - nbl.x) * (z - nbl.z)) / (ntl.z - nbl.z);
+    const x = edge - r - rand() * 1.5;
+    const dx = spot.x - x; const dz = spot.z - z;
+    const far = Math.sqrt(dx * dx + dz * dz);
     const speed = (far / REACH) * (0.95 + rand() * 0.1);
-    const vx = ux * speed; const vz = uz * speed;
+    const vx = (dx / far) * speed; const vz = (dz / far) * speed;
     const axis = new THREE.Vector3(vz, 0, -vx).normalize();
     return {
-      spec, shape, r, rest, axis,
+      spec, shape, r, rest, axis, spin: TUMBLE + rand(),
       final: restingTurn(shape, (rand() - 0.5) * 0.5),
-      p: { x, y: rest + 1.5 + rand() * 1.5, z }, v: { x: vx, y: 1 + rand() * 2, z: vz },
-      went: 0, still: false, path: [] as ThrownDie['path'],
+      p: { x, y: rest + 3 + rand() * 2, z }, v: { x: vx, y: rand() * 1.5, z: vz },
+      spot, speed, went: 0, still: false, inside: false, path: [] as ThrownDie['path'],
     };
   });
-  const keepIn = (b: (typeof bodies)[number]) => {
+  const keepIn = (b: (typeof bodies)[number], always = false) => {
+    if (!b.inside && !always) {
+      b.inside = walls.every((w) => w.nx * b.p.x + w.nz * b.p.z <= w.c - b.r);
+      if (!b.inside) return;
+    }
     for (const w of walls) {
       const over = w.nx * b.p.x + w.nz * b.p.z - (w.c - b.r);
       if (over <= 0) continue;
@@ -212,6 +227,12 @@ export const throwDice = (specs: DieSpec[], seed: number, camera: THREE.Perspect
     if (bodies.every((b) => b.still)) break;
     for (const b of bodies) {
       if (b.still) continue;
+      // Until it is in, a die keeps on at its spot: a knock on the way can't send it off elsewhere.
+      if (!b.inside) {
+        const dx = b.spot.x - b.p.x; const dz = b.spot.z - b.p.z;
+        const d = Math.sqrt(dx * dx + dz * dz) || 1;
+        b.v.x = (dx / d) * b.speed; b.v.z = (dz / d) * b.speed;
+      }
       b.v.y -= GRAVITY * STEP;
       const was = { x: b.p.x, z: b.p.z };
       b.p.x += b.v.x * STEP; b.p.y += b.v.y * STEP; b.p.z += b.v.z * STEP;
@@ -223,7 +244,7 @@ export const throwDice = (specs: DieSpec[], seed: number, camera: THREE.Perspect
       keepIn(b);
       const dx = b.p.x - was.x; const dz = b.p.z - was.z;
       b.went += Math.sqrt(dx * dx + dz * dz);
-      if (b.p.y === b.rest && b.v.y === 0 && b.v.x * b.v.x + b.v.z * b.v.z < 0.04) { b.v.x = 0; b.v.z = 0; b.still = true; }
+      if (b.inside && b.p.y === b.rest && b.v.y === 0 && b.v.x * b.v.x + b.v.z * b.v.z < 0.04) { b.v.x = 0; b.v.z = 0; b.still = true; }
     }
     // Dice knock each other apart; one at rest knocked hard enough moves again.
     for (let i = 0; i < bodies.length; i += 1) {
@@ -235,7 +256,8 @@ export const throwDice = (specs: DieSpec[], seed: number, camera: THREE.Perspect
         if (d2 >= near * near || d2 === 0) continue;
         const d = Math.sqrt(d2);
         const nx = dx / d; const nz = dz / d;
-        const push = (near - d) / 2;
+        // Eased apart, a little a step, so two that meet part rather than jump.
+        const push = Math.min((near - d) / 2, 0.06);
         a.p.x -= nx * push; a.p.z -= nz * push; b.p.x += nx * push; b.p.z += nz * push;
         keepIn(a); keepIn(b);
         const closing = (b.v.x - a.v.x) * nx + (b.v.z - a.v.z) * nz;
@@ -250,14 +272,15 @@ export const throwDice = (specs: DieSpec[], seed: number, camera: THREE.Perspect
     // A knock from one die can nudge another past a wall it was already held to.
     for (const b of bodies) keepIn(b);
   }
-  // Anything still moving when time runs out stops on the floor where it is.
+  // Anything still moving when time runs out stops on the floor where it is, inside the tray.
   for (const b of bodies) {
     const last = b.path[b.path.length - 1];
-    if (last.y !== b.rest) b.path.push({ x: last.x, y: b.rest, z: last.z, went: last.went });
+    keepIn(b, true);
+    if (last.y !== b.rest || last.x !== b.p.x || last.z !== b.p.z) b.path.push({ x: b.p.x, y: b.rest, z: b.p.z, went: last.went });
   }
   return {
     steps: Math.max(...bodies.map((b) => b.path.length), 1),
-    dice: bodies.map((b) => ({ spec: b.spec, shape: b.shape, scale, final: b.final, axis: b.axis, path: b.path })),
+    dice: bodies.map((b) => ({ spec: b.spec, shape: b.shape, scale, final: b.final, axis: b.axis, spin: b.spin, path: b.path })),
   };
 };
 
@@ -265,14 +288,14 @@ export const throwDice = (specs: DieSpec[], seed: number, camera: THREE.Perspect
 export const throwLength = (t: Throw) => (t.steps - 1) * STEP;
 
 /**
- * A die's place and turn `seconds` into the throw: rolled back from its resting turn by the
- * distance it has still to go, so it rolls as it moves and lands exactly face up.
+ * A die's place and turn `seconds` into the throw: turned back from its resting turn by the
+ * distance it has still to go, so it tumbles as it moves and lands exactly face up.
  */
 export const poseAt = (die: ThrownDie, seconds: number) => {
   const at = Math.max(0, Math.min(die.path.length - 1, Math.floor(seconds / STEP)));
   const p = die.path[at];
   const left = die.path[die.path.length - 1].went - p.went;
-  const turn = new THREE.Quaternion().setFromAxisAngle(die.axis, -left / (die.shape.radius * die.scale)).multiply(die.final);
+  const turn = new THREE.Quaternion().setFromAxisAngle(die.axis, (-left * die.spin) / (die.shape.radius * die.scale)).multiply(die.final);
   return { position: new THREE.Vector3(p.x, p.y, p.z), quaternion: turn };
 };
 
