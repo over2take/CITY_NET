@@ -47,6 +47,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Share a system with its uploaded images.** A system with pictures uploaded for it (a symbol's,
+  a condition's or a currency's icon) used to share only their addresses, so on another server they
+  showed as broken images. EXPORT in MY SYSTEMS now asks first: ticked, it saves a .zip of the
+  system and its images, each named for what it is, with a list of where each is used; unticked,
+  a .citysys without them, where each falls back cleanly (a symbol shows its mark or first letter,
+  a condition a drawn icon, a currency none). INSTALL A FILE takes the zip too. A zip is read with
+  care: nothing in it is unpacked but the system and its images, none past an icon's size, and only
+  images the system uses are kept. Drawn symbols always travelled with the system and still do.
+  (fflate, new to the app, reads and writes the zip.)
 - **Solid dice in DICE_TRAY.EXE (6c4b2b).** The tray's see-through wireframes are now solid dice
   with every face printed, for every game: a coin for a d2, the usual shapes for d4 to d20, kites
   for any other even size and a long prism for an odd one (a d13). They are thrown by real physics

@@ -119,6 +119,22 @@ const call = async <T>(fetcher: typeof fetch, token: string, url: string, method
   } catch {
     return { ok: false, error: UNREACHABLE, status: 0 };
   }
+  return answerOf<T>(res);
+};
+
+/** A zip sent as its own bytes (a system and its pictures, POST /api/systems/install/zip...). */
+const sendZip = async <T>(fetcher: typeof fetch, token: string, url: string, zip: Blob): Promise<Answer<T>> => {
+  let res: Response;
+  try {
+    res = await fetcher(url, { method: 'POST', headers: { 'Content-Type': 'application/zip', Authorization: `Bearer ${token}` }, body: zip });
+  } catch {
+    return { ok: false, error: UNREACHABLE, status: 0 };
+  }
+  return answerOf<T>(res);
+};
+
+/** What the server answered: its JSON, or its own words for a refusal. */
+const answerOf = async <T>(res: Response): Promise<Answer<T>> => {
   const json = await res.json().catch(() => null);
   if (res.ok) return { ok: true, value: json as T };
   return {
@@ -218,6 +234,10 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
     preview: (file: string) => call<InstallPreview>(fetcher, token, '/api/systems/install/preview', 'POST', { file }),
     install: (file: string, mode: InstallMode, replaceChanges = false) =>
       call<InstallResult>(fetcher, token, '/api/systems/install', 'POST', { file, mode, ...(replaceChanges ? { replaceChanges: true } : {}) }),
+    /** The same for a zip of a system and its pictures, sent as it is. */
+    previewZip: (zip: Blob) => sendZip<InstallPreview>(fetcher, token, '/api/systems/install/zip/preview', zip),
+    installZip: (zip: Blob, mode: InstallMode, replaceChanges = false) =>
+      sendZip<InstallResult>(fetcher, token, `/api/systems/install/zip?mode=${encodeURIComponent(mode)}${replaceChanges ? '&replaceChanges=1' : ''}`, zip),
     /**
      * A currency's or a condition's icon image (PNG, WebP or SVG, a quarter of a megabyte at most),
      * stored by the server under its content hash: the address the currency's or condition's
@@ -242,11 +262,14 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
       if (res.ok && json && typeof json.icon === 'string') return { ok: true, value: { icon: json.icon } };
       return { ok: false, status: res.status, error: json && typeof json.error === 'string' ? json.error : 'The icon could not be uploaded.' };
     },
-    /** A published system as its .citysys file: its name and text, for the window to save. */
-    exportFile: async (systemId: string): Promise<Answer<{ fileName: string; text: string }>> => {
+    /**
+     * A published system as a file to save, its name and contents: with `images`, a zip of it and
+     * its uploaded pictures when it has some; otherwise its .citysys without them.
+     */
+    exportFile: async (systemId: string, images = false): Promise<Answer<{ fileName: string; file: Blob }>> => {
       let res: Response;
       try {
-        res = await fetcher(`${id(systemId)}/export`, { headers: { Authorization: `Bearer ${token}` } });
+        res = await fetcher(`${id(systemId)}/export${images ? '?images=1' : ''}`, { headers: { Authorization: `Bearer ${token}` } });
       } catch {
         return { ok: false, error: UNREACHABLE, status: 0 };
       }
@@ -255,7 +278,7 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
         return { ok: false, status: res.status, error: json && typeof json.error === 'string' ? json.error : UNREACHABLE };
       }
       const named = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '');
-      return { ok: true, value: { fileName: named ? named[1] : 'system.citysys', text: await res.text() } };
+      return { ok: true, value: { fileName: named ? named[1] : 'system.citysys', file: await res.blob() } };
     },
     /**
      * The blank PDF form a draft would give players to fill in and upload through IMPORT (4h2c),

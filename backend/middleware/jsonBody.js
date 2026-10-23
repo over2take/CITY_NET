@@ -12,4 +12,12 @@ const express = require('express');
 /** Read a JSON body of up to `limit`, never a compressed one. */
 const jsonBody = (limit = '2mb') => express.json({ limit, inflate: false });
 
-module.exports = { jsonBody };
+/**
+ * Read a zip sent as its own bytes (a system and its pictures, routes/systems.js), up to `limit`,
+ * as a Buffer, and on the same terms: a zip is compressed inside, never as it is sent, so a body
+ * labelled br, gzip or deflate is refused rather than decompressed. Only bodies sent as
+ * application/zip; any other is left unread.
+ */
+const zipBody = (limit) => express.raw({ type: 'application/zip', limit, inflate: false });
+
+module.exports = { jsonBody, zipBody };

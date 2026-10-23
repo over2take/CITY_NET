@@ -17,6 +17,7 @@
 const crypto = require('crypto');
 const { checkDefinition, blankDefinition, LIMITS } = require('./definition');
 const citysys = require('./citysys');
+const citysysZip = require('./citysysZip');
 const { isIcon, BUILT_IN_ICONS } = require('./currencies');
 const { sameName, uniqueName } = require('./names');
 
@@ -73,6 +74,8 @@ const listSystems = (db, cb) => {
           description: textOf(draft, 'description'),
           author: textOf(draft, 'author'),
           characterCount: r.character_count,
+          // The uploaded pictures EXPORT can send with it: the published copy's, which is shared.
+          images: citysysZip.uploadsIn(parse(r.published)).length,
         };
       }));
     },
@@ -278,15 +281,26 @@ const duplicateSystem = (db, id, cb) => {
 
 // ─── Sharing as files ───────────────────────────────────────────────────────
 
-/** A published system as a file: { fileName, text }. A draft is not shared. */
-const exportSystem = (db, id, cb) => {
+/**
+ * A published system as a file to share. A draft is not shared. With `images`, a system with
+ * uploaded pictures comes as a zip of the file and them, { fileName, zip } (citysysZip.js);
+ * otherwise, or with none, the .citysys alone, { fileName, text }, any uploaded picture's address
+ * left out so it falls back cleanly where the picture isn't (decided with the user, 2026-10-23).
+ * `root` is where the pictures are kept, for tests.
+ */
+const exportSystem = (db, id, options, cb) => {
+  if (typeof options === 'function') { cb = options; options = {}; }
+  const { images = false, root } = options || {};
   if (!isCustomId(id)) return cb(fail(404, 'No such system'));
   db.get('SELECT published, version, origin FROM custom_systems WHERE id = ? AND deleted_at IS NULL', [id], (err, row) => {
     if (err) return cb(err);
     if (!row) return cb(fail(404, 'No such system'));
     const definition = parse(row.published);
     if (!definition) return cb(fail(409, 'Publish the system before sharing it'));
-    const file = citysys.buildFile({ definition, version: row.version, origin: row.origin || id });
+    const origin = row.origin || id;
+    const zipped = images ? citysysZip.buildZip({ definition, version: row.version, origin, ...(root ? { root } : {}) }) : null;
+    if (zipped) return cb(null, { fileName: zipped.fileName, zip: zipped.bytes });
+    const file = citysys.buildFile({ definition: citysysZip.withoutUploads(definition), version: row.version, origin });
     cb(null, { fileName: citysys.fileNameFor(definition.name), text: JSON.stringify(file, null, 2) });
   });
 };

@@ -253,4 +253,4 @@ const parseAmount = (currency, input) => {
   return { ok: true, amount: sign * (Number(digits) * 10 ** places + (places ? Number(frac) : 0)) };
 };
 
-module.exports = { checkCurrencies, currenciesOf, splitAmount, toBaseAmount, formatAmount, parseAmount, LIMITS, BUILT_IN_ICONS, isIcon };
+module.exports = { checkCurrencies, currenciesOf, splitAmount, toBaseAmount, formatAmount, parseAmount, LIMITS, BUILT_IN_ICONS, UPLOADED_ICON, isIcon };

@@ -104,7 +104,7 @@ const REFERENCE: HelpTopic[] = [
   { id: 'health', group: 'REFERENCE', title: 'HEALTH MODELS', body: HEALTH_MODELS.map((m) => `${m.label}: ${m.worksLike}. Like ${m.examples}.`) },
   { id: 'sharing', group: 'REFERENCE', title: 'SHARING AND VERSIONS', body: [
     'While you build, your work saves itself as a draft; SAVE saves it now. PUBLISH makes the draft the next version the game runs. From the second version on, PUBLISH first shows what will change for anyone playing, and nothing is ever deleted.',
-    'EXPORT in MY SYSTEMS saves a system as a .citysys file to share. Installing one shows what it holds first; a system already here can be updated or kept beside the new one.',
+    'EXPORT in MY SYSTEMS saves a system as a .citysys file to share, or as a .zip with the images uploaded for it. Installing either shows what it holds first; a system already here can be updated or kept beside the new one.',
   ] },
   { id: 'examples', group: 'REFERENCE', title: 'EXAMPLES', examples: true, body: [
     'The built-in games as systems you can look through, read-only, or copy to change: every page filled in by a real game.',

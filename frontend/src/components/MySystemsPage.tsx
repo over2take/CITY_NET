@@ -3,7 +3,7 @@ import { Badges, NewPanel, InstallPanel, small, why, btn, danger } from './Syste
 import type { systemsApi } from '../sheets/systemsApi';
 import type { BuilderPage } from '../sheets/builderSession';
 import {
-  badgesFor, versionLabel, lineFacts, NO_DESCRIPTION, deleteBlocked, exportBlocked,
+  badgesFor, versionLabel, lineFacts, NO_DESCRIPTION, deleteBlocked, exportBlocked, includeImagesLabel, exportNote,
   renamedMessage, duplicatedMessage, deletedMessage, SYSTEMS_CHANGED_EVENT, type LibrarySystem,
 } from '../sheets/systemsLibrary';
 
@@ -50,6 +50,8 @@ export function MySystemsPage({ api, openId, running, onOpen, onClose, say, onLo
   const [picked, setPicked] = useState<string | null>(openId);
   const [renaming, setRenaming] = useState<{ text: string; error: string | null } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  /** EXPORT's line, open for a system with uploaded images: whether to send them. */
+  const [exporting, setExporting] = useState<{ withImages: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [installed, setInstalled] = useState<{ id: string; message: string } | null>(null);
   const renameRef = useRef<HTMLInputElement>(null);
@@ -73,6 +75,7 @@ export function MySystemsPage({ api, openId, running, onOpen, onClose, say, onLo
     setPicked(id === picked ? null : id);
     setRenaming(null);
     setConfirmDelete(false);
+    setExporting(null);
   };
 
   const run = async <T,>(work: () => Promise<T>) => {
@@ -103,10 +106,11 @@ export function MySystemsPage({ api, openId, running, onOpen, onClose, say, onLo
     await changed();
   });
 
-  const exportFile = (s: LibrarySystem) => run(async () => {
-    const r = await api.exportFile(s.id);
+  const exportFile = (s: LibrarySystem, withImages: boolean) => run(async () => {
+    const r = await api.exportFile(s.id, withImages);
     if (!r.ok) { say(r.error, true); return; }
-    const url = URL.createObjectURL(new Blob([r.value.text], { type: 'application/json' }));
+    setExporting(null);
+    const url = URL.createObjectURL(r.value.file);
     const a = document.createElement('a');
     a.href = url;
     a.download = r.value.fileName;
@@ -171,17 +175,34 @@ export function MySystemsPage({ api, openId, running, onOpen, onClose, say, onLo
               </>
             : <button type="button" className="utility-btn active" style={btn} disabled={busy} onClick={() => onOpen(s.id, 'setup')}>OPEN</button>}
           <button type="button" className="utility-btn" style={btn} disabled={!!renaming || busy}
-            onClick={() => { setRenaming({ text: s.name, error: null }); setConfirmDelete(false); }}>RENAME</button>
+            onClick={() => { setRenaming({ text: s.name, error: null }); setConfirmDelete(false); setExporting(null); }}>RENAME</button>
           <button type="button" className="utility-btn" style={btn} disabled={busy} onClick={() => duplicate(s)}>DUPLICATE</button>
-          <button type="button" className="utility-btn" style={btn} disabled={!!exportWhy || busy}
-            title={exportWhy ?? 'Download it as a .citysys file'} onClick={() => exportFile(s)}>EXPORT .CITYSYS</button>
+          <button type="button" className="utility-btn" style={btn} disabled={!!exportWhy || !!exporting || busy}
+            title={exportWhy ?? (s.images ? 'Save it to share, with its uploaded images or without' : 'Download it as a .citysys file')}
+            onClick={() => {
+              if (!s.images) { exportFile(s, false); return; }
+              setExporting({ withImages: true }); setRenaming(null); setConfirmDelete(false);
+            }}>EXPORT</button>
           <button type="button" className="utility-btn" style={{ ...btn, ...danger }} disabled={!!deleteWhy || busy}
             title={deleteWhy ?? 'Hide it; installing its file brings it back'}
-            onClick={() => { setConfirmDelete(true); setRenaming(null); }}>DELETE</button>
+            onClick={() => { setConfirmDelete(true); setRenaming(null); setExporting(null); }}>DELETE</button>
         </div>
         {!isOpen && openId && <span style={why}>OPEN saves the one you have open first.</span>}
         {deleteWhy && <span style={why}>DELETE: {deleteWhy}</span>}
         {exportWhy && <span style={why}>EXPORT: {exportWhy}</span>}
+        {exporting && (
+          <div role="group" aria-label={`Export ${s.name}`} style={{ border: '1px solid var(--green)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11, letterSpacing: 1, cursor: 'pointer' }}>
+              <input type="checkbox" checked={exporting.withImages} onChange={(e) => setExporting({ withImages: e.target.checked })} />
+              {includeImagesLabel(s)}
+            </label>
+            <span style={why}>{exportNote(s, exporting.withImages)}</span>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button type="button" className="utility-btn active" style={btn} disabled={busy} onClick={() => exportFile(s, exporting.withImages)}>SAVE</button>
+              <button type="button" className="utility-btn" style={btn} onClick={() => setExporting(null)}>CANCEL</button>
+            </div>
+          </div>
+        )}
         {confirmDelete && (
           <div role="alertdialog" aria-label={`Delete ${s.name}`} style={{ border: '1px solid var(--danger)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 8, color: 'var(--danger)' }}>
             <b>DELETE {s.name.toUpperCase()}?</b>
