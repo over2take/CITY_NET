@@ -47,6 +47,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Solid dice in DICE_TRAY.EXE (6c4b2b).** The tray's see-through wireframes are now solid dice
+  with every face printed, for every game: a coin for a d2, the usual shapes for d4 to d20, kites
+  for any other even size and a long prism for an odd one (a d13). They are thrown by real physics
+  (cannon-es, new to the app): tossed in from the tray's edge, tumbling, bouncing off the walls and
+  each other and rolling to a stop, whatever the computer's own animation setting. The face that
+  ends on top shows what the server rolled (a d4 face down, its number on the faces it shows), and
+  everyone watching sees the same throw. The total shows as the last die stops, rather than after
+  a fixed five seconds. A system's own dice show their symbols, drawings and icons; a bad die is in the
+  theme's danger color, the rest in the roller's color. Dice now stay inside the tray: the old one
+  let them bounce past its edges. The dice menu's standard dice + and − buttons are now named for
+  screen readers ("One more d20").
+
 - **Help on the DICE and ROLLS tabs.** Like every other builder page, both tabs now have a "?"
   beside each setting: on DICE, the presets, COPY FROM THE TABLE'S DICE, a die's name, faces and
   color, a face's number and symbols, the symbols' LOOK, MARK, CANCELS and COUNTS AS, and TEST; on

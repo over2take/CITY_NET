@@ -13,20 +13,25 @@ vi.mock('../DraggableWindow', () => ({
   ),
 }));
 
+// A test can hand the scene a real three.js scene and camera (`three.current`) and step its frames.
+const three = vi.hoisted(() => ({ current: null as any, frame: null as null | (() => void) }));
 vi.mock('@react-three/fiber', () => ({
   Canvas: ({ children }: any) => <div data-testid="canvas">{children}</div>,
-  useThree: () => ({ scene: { children: [], add: vi.fn(), remove: vi.fn() }, camera: { lookAt: vi.fn(), position: {} } }),
-  useFrame: vi.fn(),
+  useThree: () => three.current ?? { scene: { children: [], add: vi.fn(), remove: vi.fn() }, camera: { lookAt: vi.fn(), position: { set: vi.fn() } } },
+  useFrame: (cb: () => void) => { three.frame = cb; },
 }));
 
 vi.mock('../../assets/lets-icons--paper-fill.svg', () => ({ default: 'paper-fill.svg' }));
 vi.mock('../../assets/lets-icons--paper-light.svg', () => ({ default: 'paper-light.svg' }));
 
-import { DiceTrayWindow, DotMatrixScoreboard, sidesForKey } from '../DiceTray';
+import * as THREE from 'three';
+import { DiceTrayWindow, DotMatrixScoreboard, DiceScene, type TrayRoll } from '../DiceTray';
+import { ThemeContext, THEMES } from '../../theme/themes';
+import { TRAY_ASPECT, floorSeen, trayCamera, throwDice, diceOfRoll, printedOn, revealAfter } from '../../utils/trayThrow';
 
 const makeSocketRef = () => ({ current: { emit: vi.fn(), on: vi.fn(), off: vi.fn() } });
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => { vi.clearAllMocks(); three.current = null; three.frame = null; });
 
 // ─── DotMatrixScoreboard ─────────────────────────────────────────────────────
 
@@ -115,16 +120,20 @@ describe('DiceTrayWindow', () => {
 
     vi.useFakeTimers();
     try {
-      act(() => {
-        broadcast({ total: 15, results: { 20: [15] }, color: '#0f0', historyString: 'to-hit' });
-        broadcast({ total: 7, results: { 6: [1] }, color: '#0f0', historyString: 'damage' });
-      });
+      const toHit = { total: 15, results: { 20: [15] }, color: '#0f0', historyString: 'to-hit', throw: { seed: 11, dice: [{ key: '20', sides: 20, landed: [14] }] } };
+      const damage = { total: 7, results: { 6: [1] }, color: '#0f0', historyString: 'damage', throw: { seed: 12, dice: [{ key: '6', sides: 6, landed: [0] }] } };
+      // Each revealed as its own dice stop rolling (6c4b2b), not after a set time.
+      const first = revealAfter(throwDice(diceOfRoll(toHit), 11, trayCamera()));
+      const second = revealAfter(throwDice(diceOfRoll(damage), 12, trayCamera()));
+      act(() => { broadcast(toHit); broadcast(damage); });
       // First roll animating; second waits in the queue
-      act(() => { vi.advanceTimersByTime(5000); });
+      act(() => { vi.advanceTimersByTime(first - 50); });
+      expect(screen.queryByText(/to-hit/)).not.toBeInTheDocument();
+      act(() => { vi.advanceTimersByTime(50); });
       expect(screen.getByText(/to-hit/)).toBeInTheDocument();
       expect(screen.queryByText(/damage/)).not.toBeInTheDocument();
-      // Second roll finishes its own animation
-      act(() => { vi.advanceTimersByTime(5000); });
+      // Second roll finishes its own throw
+      act(() => { vi.advanceTimersByTime(second); });
       expect(screen.getByText(/damage/)).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
@@ -151,43 +160,99 @@ describe('DiceTrayWindow', () => {
   });
 });
 
-// ─── sidesForKey ──────────────────────────────────────────────────────────────
+// ─── The tray's dice (6c4b2b) ─────────────────────────────────────────────────
 
-describe('sidesForKey', () => {
-  it('parses standard rolls, which key results by side count', () => {
-    expect(sidesForKey('6')).toBe(6);
-    expect(sidesForKey('20')).toBe(20);
-    expect(sidesForKey('100')).toBe(100);
+describe("the tray's dice", () => {
+  const roll = (more: Partial<TrayRoll> = {}): TrayRoll => ({ total: 5, results: { 6: [5] }, color: '#00ff00', timestamp: 1, throw: { seed: 9, dice: [{ key: '6', sides: 6, landed: [4] }] }, ...more });
+  const stage = () => {
+    const scene = new THREE.Scene();
+    three.current = { scene, camera: new THREE.PerspectiveCamera() };
+    return scene;
+  };
+  const dice = (scene: THREE.Scene) => scene.children.filter((c): c is THREE.Group => c instanceof THREE.Group);
+  const up = new THREE.Vector3(0, 1, 0);
+
+  it("draws the tray one shape on every screen, so the walls are everyone's", () => {
+    render(<DiceTrayWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()} socketRef={makeSocketRef()} />);
+    expect(parseFloat(screen.getByTestId('dice-tray-floor').style.aspectRatio)).toBe(TRAY_ASPECT);
   });
 
-  it('reads custom dice sides from diceSides, since their key is a name', () => {
-    expect(sidesForKey('punk', { punk: 4 })).toBe(4);
-    expect(sidesForKey('Fate', { Fate: 6 })).toBe(6);
+  it('puts a solid die in the tray for each die rolled, every face printed, inside a rim', () => {
+    const scene = stage();
+    render(<DiceScene latestRoll={roll({ results: { 6: [5], 20: [20] }, throw: { seed: 9, dice: [{ key: '6', sides: 6, landed: [4] }, { key: '20', sides: 20, landed: [19] }] } })} />);
+    const [d6, d20] = dice(scene);
+    expect(dice(scene)).toHaveLength(2);
+    // A body, its edges, and a print on every face.
+    expect(d6.children.filter((c) => c instanceof THREE.Mesh)).toHaveLength(1 + 6);
+    expect(d20.children.filter((c) => c instanceof THREE.Mesh)).toHaveLength(1 + 20);
+    expect(d6.children.some((c) => c instanceof THREE.LineSegments)).toBe(true);
+    // The rim lies inside the picture's edges.
+    const rim = scene.children.find((c): c is THREE.LineLoop => c instanceof THREE.LineLoop)!;
+    const { walls } = floorSeen(trayCamera(), 0);
+    const p = rim.geometry.getAttribute('position');
+    for (let i = 0; i < p.count; i += 1) for (const w of walls) expect(w.nx * p.getX(i) + w.nz * p.getZ(i)).toBeLessThan(w.c);
   });
 
-  it('falls back to d6 for a name with no diceSides entry rather than NaN', () => {
-    // Regression: parseInt('Fate') is NaN, which built SphereGeometry with NaN
-    // segments and rendered no dice at all.
-    expect(sidesForKey('Fate')).toBe(6);
-    expect(sidesForKey('punk', {})).toBe(6);
-    expect(sidesForKey('punk', { other: 4 })).toBe(6);
+  it('lands each die with the face the server rolled on top', () => {
+    const scene = stage();
+    const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    render(<DiceScene latestRoll={roll()} />);
+    now.mockReturnValue(1000 + 10_000);
+    act(() => { three.frame!(); });
+    const [die] = dice(scene);
+    // The printed face that now points up is the one the throw landed on top, which carries what came up: 5.
+    const prints = die.children.filter((c): c is THREE.Mesh => c instanceof THREE.Mesh).slice(1);
+    const top = prints.find((m) => new THREE.Vector3(0, 0, 1).applyQuaternion(m.quaternion).applyQuaternion(die.quaternion).dot(up) > 0.95);
+    expect(top).toBeDefined();
+    const [thrown] = throwDice(diceOfRoll(roll()), 9, trayCamera()).dice;
+    expect(prints.indexOf(top!)).toBe(thrown.up);
+    expect(printedOn(thrown)[thrown.up]).toBe('5');
+    // ...and the print there shows the die's fifth face, the one the server rolled.
+    expect(top!.userData.face).toBe(4);
+    now.mockRestore();
   });
 
-  it('never returns a non-finite value', () => {
-    for (const key of ['Fate', '', 'NaN', 'undefined', '???']) {
-      const s = sidesForKey(key);
-      expect(Number.isFinite(s)).toBe(true);
-      expect(s).toBeGreaterThanOrEqual(2);
+  it("colors a bad die the theme's danger color, the rest the roller's, each in any theme", () => {
+    for (const theme of Object.values(THEMES)) {
+      const scene = stage();
+      const { unmount } = render(
+        <ThemeContext.Provider value={theme}>
+          <DiceScene latestRoll={roll({ color: '#123456', results: { 6: [1], Bad: ['✕'] }, throw: { seed: 3, dice: [{ key: '6', sides: 6, landed: [0] }, { key: 'Bad', sides: 2, landed: [1], faces: [{ text: '·' }, { text: '✕' }], color: 'danger' }] } })} />
+        </ThemeContext.Provider>,
+      );
+      const edgeColor = (g: THREE.Group) => `#${((g.children.find((c) => c instanceof THREE.LineSegments) as THREE.LineSegments).material as THREE.LineBasicMaterial).color.getHexString()}`;
+      const [plain, bad] = dice(scene);
+      expect(edgeColor(plain), theme.id).toBe('#123456');
+      expect(edgeColor(bad), theme.id).toBe(`#${new THREE.Color(theme.danger).getHexString()}`);
+      unmount();
     }
   });
 
-  it('ignores a diceSides entry that is not a usable side count', () => {
-    expect(sidesForKey('6', { 6: NaN as any })).toBe(6);
-    expect(sidesForKey('8', { 8: 1 })).toBe(8);
-    expect(sidesForKey('punk', { punk: 0 })).toBe(6);
+  it('plays the throw even where the computer asks for less motion (Windows animation effects off)', () => {
+    const scene = stage();
+    const was = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ matches: q.includes('reduce'), media: q, addEventListener: vi.fn(), removeEventListener: vi.fn() })) as unknown as typeof window.matchMedia;
+    const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    try {
+      render(<DiceScene latestRoll={roll()} />);
+      act(() => { three.frame!(); });
+      const [die] = dice(scene);
+      const startedAt = die.position.clone();
+      now.mockReturnValue(1000 + 10_000);
+      act(() => { three.frame!(); });
+      // Thrown in from past the edge, so where it starts is far from where it lands.
+      expect(startedAt.distanceTo(die.position)).toBeGreaterThan(2);
+    } finally {
+      now.mockRestore();
+      window.matchMedia = was;
+    }
   });
 
-  it('prefers diceSides over the key when both are numeric', () => {
-    expect(sidesForKey('6', { 6: 20 })).toBe(20);
+  it('takes its dice away when the roll is over', () => {
+    const scene = stage();
+    const { unmount } = render(<DiceScene latestRoll={roll()} />);
+    expect(dice(scene)).toHaveLength(1);
+    unmount();
+    expect(scene.children).toEqual([]);
   });
 });

@@ -958,9 +958,9 @@ export function DiceMenu({ userName, token, writeToken, locations = [], socketRe
           <div key={sides} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'color-mix(in srgb, var(--black) 50%, transparent)', padding: '5px 10px', marginBottom: '5px', borderRadius: '4px', border: '1px solid var(--dark-green)' }}>
             <span style={{ fontWeight: 'bold', color: 'var(--cyan)', width: '40px' }}>d{sides}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <button className="upload-btn" style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleSubDice(sides)}>-</button>
+              <button className="upload-btn" aria-label={`One less d${sides}`} style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleSubDice(sides)}>-</button>
               <span style={{ width: '20px', textAlign: 'center' }}>{diceCounts[sides] || 0}</span>
-              <button className="upload-btn" style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleAddDice(sides)}>+</button>
+              <button className="upload-btn" aria-label={`One more d${sides}`} style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleAddDice(sides)}>+</button>
             </div>
           </div>
         ))}

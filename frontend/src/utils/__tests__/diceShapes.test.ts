@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
-import { shapeOf, facesFrom, faceTexts, restingTurn, restingHeight, labelTurn, MOST_FACES } from '../diceShapes';
+import { shapeOf, facesFrom, faceTexts, faceOrder, labelTurn, MOST_FACES } from '../diceShapes';
 
 /**
  * The tray's dice (6c4b2a; mockup builder-dice version 6): a solid for any number of faces, each a
@@ -8,7 +8,6 @@ import { shapeOf, facesFrom, faceTexts, restingTurn, restingHeight, labelTurn, M
  */
 
 const SIZES = [...Array.from({ length: 119 }, (_, i) => i + 2), 200, 999, 1000];
-const up = new THREE.Vector3(0, 1, 0);
 
 describe('a die of any size', () => {
   it('has as many faces to land on as its size, every one pointing out of the die and no two alike', () => {
@@ -48,28 +47,11 @@ describe('a die of any size', () => {
 });
 
 describe('a die landed', () => {
-  it('rests with face 0 up, a d4 with it down, its middle at face 0\'s height off the floor', () => {
-    for (const n of SIZES) {
-      const shape = shapeOf(n);
-      const turned = shape.faces[0].normal.clone().applyQuaternion(restingTurn(shape, 0.3));
-      expect(turned.dot(up), `d${n}`).toBeCloseTo(shape.down ? -1 : 1, 6);
-      expect(restingHeight(shape), `d${n}`).toBeGreaterThan(0);
-    }
-    expect(shapeOf(4).down).toBe(true);
+  it('lands a d4 face down, and no other size', () => {
     expect(SIZES.filter((n) => shapeOf(n).down)).toEqual([4]);
   });
 
-  it('turns face 0\'s words to read from the front, where the camera is', () => {
-    for (const n of [2, 6, 8, 10, 12, 13, 20, 100]) {
-      const shape = shapeOf(n);
-      const top = shape.faces[0];
-      // The words' own up, as printed on face 0 and turned with the die, points away from the camera.
-      const wordsUp = new THREE.Vector3(0, 1, 0).applyQuaternion(labelTurn(top.normal)).applyQuaternion(restingTurn(shape));
-      expect(wordsUp.z, `d${n}`).toBeLessThan(-0.99);
-    }
-  });
-
-  it('prints what came up on face 0 and the die\'s other faces round the rest; a d4 prints it on the three it shows', () => {
+  it("prints what came up on the face it landed on and the die's other faces round the rest; a d4 prints it on the three it shows", () => {
     const d6 = shapeOf(6);
     const printed = faceTexts(['1', '2', '3', '4', '5', '6'], 4, d6);
     expect(printed[0]).toBe('5');
@@ -78,5 +60,21 @@ describe('a die landed', () => {
     // Words for a die of more faces than it has words for are printed again round it.
     expect(faceTexts(['+1', '0', '-1'], 2, d6)).toEqual(['-1', '+1', '0', '+1', '0', '+1']);
     expect(faceTexts(['·'], 0, shapeOf(2))).toEqual(['·', '']);
+  });
+
+  it('puts what came up on whichever face it landed on, the rest each once round the others', () => {
+    for (const n of [2, 6, 13, 20, 100]) {
+      for (const up of [0, 1, n - 1]) {
+        const order = faceOrder(n, 3 % n, shapeOf(n), up);
+        expect(order[up], `d${n} on ${up}`).toBe(3 % n);
+        expect([...order].sort((x, y) => x - y), `d${n} on ${up}`).toEqual(Array.from({ length: n }, (_, i) => i));
+      }
+    }
+    // A d4 landed on face 2: that face, under it, is bare; the three it shows say what came up.
+    expect(faceOrder(4, 1, shapeOf(4), 2)).toEqual([1, 1, -1, 1]);
+  });
+
+  it("lays a face's words flat on it", () => {
+    for (const f of shapeOf(20).faces) expect(new THREE.Vector3(0, 0, 1).applyQuaternion(labelTurn(f.normal)).dot(f.normal)).toBeCloseTo(1, 6);
   });
 });
