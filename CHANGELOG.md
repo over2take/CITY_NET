@@ -216,6 +216,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Words for the dice tray's board (6c4d1).** A custom system's roll now tells the tray what the
+  log says it came to (SUCCESS, FULL, NATURAL 20), and for symbol dice what is left (2 HIT · 1 EDGE,
+  or NOTHING LEFT); the table's word dice send their faces (APPLE · PEACH). Nothing shows them yet:
+  the tray's new 16 by 2 board comes next.
 - **No waiting line in DICE_TRAY.EXE (6c4c).** A new roll no longer waits for the one before it to
   finish: it cuts straight in, and the roll it cut short goes into the record at once, so nothing
   is missed. One person's rolls made a moment apart, such as an attack's to-hit and damage, land in

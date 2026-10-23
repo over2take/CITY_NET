@@ -272,12 +272,16 @@ describe('a system\'s own dice in the dice menu (6c4a)', () => {
     const [kind] = good.data.throw.dice;
     expect(kind.landed.map((i) => kind.faces[i].text)).toEqual(good.data.results.Good);
     expect(good.data.throw.symbols.map((s) => s.id)).toEqual(['hit', 'edge']);
+    // The tray's board says what is left, as the log does (6c4d1).
+    const left = good.data.historyString.match(/ = (.+)\]$/)[1];
+    expect(good.data.board).toEqual({ words: left.split(', ').join(' · ') });
 
     // Numbers only: summed, as any roll is.
     handlers.requestCustomDiceRoll({ userName: 'kes', dieId: 'own:fate', count: 4, color: '#00ff00' });
     const fate = await untilValue(() => rolled()[1], Boolean, { label: 'the Fate dice' });
     expect(fate.data.total).toBe(fate.data.results.dF.reduce((n, f) => n + Number(f), 0));
     expect(fate.data.historyString).toMatch(/^kes rolled 4×dF \[(\S+ ){4}= -?\d+\]$/);
+    expect(fate.data).not.toHaveProperty('board');
 
     // A die the system doesn't have rolls nothing.
     handlers.requestCustomDiceRoll({ userName: 'kes', dieId: 'own:nope', count: 1, color: '#00ff00' });

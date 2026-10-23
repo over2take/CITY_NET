@@ -186,6 +186,13 @@ describe('a field rolled', () => {
     expect(termsOf(undefined)).toEqual([]);
   });
 
+  it('tells the tray\'s board what a roll came to, and nothing for a total alone (6c4d1)', () => {
+    expect(roll({ fieldId: 'fight' }).board).toEqual({ outcome: 'FULL' });
+    expect(rollField({ definition: HEARTH, data: SHEET, fieldId: 'save', rng: d(20, 17), who: 'K' }).board).toEqual({ outcome: 'vs 15: SUCCESS' });
+    expect(rollField({ definition: HEARTH, data: SHEET, fieldId: 'str', chosen: ['advantage'], rng: d(20, 20, 3), who: 'K' }).board).toEqual({ outcome: 'NATURAL 20' });
+    expect(roll({ fieldId: 'fight', rollId: 'brawl' }).board).toBeNull();
+  });
+
   it('glitches tell the tray, as SR6\'s do', () => {
     const sr6 = { ...HEARTH, rolls: [{ id: 's', label: 'Pool', ...PRESETS.sr6.roll, by: ['fight'] }] };
     const r = rollField({ definition: sr6, data: { ...SHEET, fight: 1, str: 1 }, fieldId: 'fight', rng: d(6, 1, 1), who: 'K' });
@@ -197,10 +204,12 @@ describe('the log line on its own', () => {
   it('says what came of a roll in the table\'s order', () => {
     const said = describeRoll({ groups: [{ sides: 6, faces: [{ value: 6, kept: true }, { value: 3, kept: false }] }], dice: 6, add: -1, total: 5,
       target: 6, success: false, band: 'Partial', natural: { label: 'Six' }, matches: [{ label: 'Pair', sets: 1 }], glitch: 'Glitch', effects: ['Messy'], changes: ['Push'] });
-    expect(said).toEqual({ working: '6 (3) = 6 - 1 = 5', tags: ' — vs 6: FAILURE · PARTIAL · SIX · PAIR · GLITCH · MESSY', changes: ' (Push)' });
+    expect(said).toEqual({ working: '6 (3) = 6 - 1 = 5', tags: ' — vs 6: FAILURE · PARTIAL · SIX · PAIR · GLITCH · MESSY', changes: ' (Push)',
+      board: { outcome: 'vs 6: FAILURE · PARTIAL · SIX · PAIR · GLITCH · MESSY' } });
     const termed = { groups: [{ sides: 6, faces: [{ value: 6, kept: true }] }], dice: 6, add: 0, terms: [{ label: 'HURT', amount: -1 }, { label: 'BLESS', amount: 2 }], total: 7,
       target: null, success: null, band: null, natural: null, matches: [], glitch: null, effects: [], changes: [] };
     expect(describeRoll(termed).working).toBe('6 = 6 - 1 (HURT) + 2 (BLESS) = 7');
+    expect(describeRoll(termed).board).toBeNull();
   });
 });
 
@@ -253,6 +262,8 @@ describe('rolling at the table, through the socket', () => {
     expect(roll.data.historyString).toMatch(/^Kestrel rolled Skill check \(Fight\) \[\d \d = \d+ \+ 3 = \d+\] — (MISS|COST|FULL)$/);
     expect(roll.data.total).toBe(roll.data.results['6'].reduce((a, b) => a + b, 0) + 3);
     expect((await get(db, 'SELECT total, historyString FROM dice_rolls')).historyString).toBe(roll.data.historyString);
+    // The tray's board is told what it came to, as the log ends (6c4d1).
+    expect(roll.data.board).toEqual({ outcome: roll.data.historyString.split(' — ')[1] });
   });
 
   it('rolls another of the field\'s rolls, with changes, and ignores what it can\'t roll', async () => {
@@ -437,6 +448,17 @@ describe('a system\'s own dice at the table (6c1b)', () => {
     expect([r.results, r.diceSides]).toEqual([{ Good: ['✶E', '✶'], Bad: ['✕'] }, { Good: 3, Bad: 2 }]);
     const none = rollField({ definition: DICED, data: SHEET, fieldId: 'fight', rng: faces([1, 3], [2, 3], [2, 2]), who: 'K' });
     expect(none.historyText).toBe('K rolled Clash (Fight) [· Good ✶ Good ✕ Bad = NOTHING LEFT] — vs 1: FAILURE');
+  });
+
+  it('tells the tray\'s board what is left and what it came to, in the log\'s words (6c4d1)', () => {
+    const r = rollField({ definition: DICED, data: SHEET, fieldId: 'fight', rng: faces([3, 3], [2, 3], [2, 2]), who: 'K' });
+    expect(r.board).toEqual({ words: '1 HIT · 1 EDGE', outcome: 'vs 1: SUCCESS' });
+    const none = rollField({ definition: DICED, data: SHEET, fieldId: 'fight', rng: faces([1, 3], [2, 3], [2, 2]), who: 'K' });
+    expect(none.board).toEqual({ words: 'NOTHING LEFT', outcome: 'vs 1: FAILURE' });
+    // A roll reading a sum says its total first, then what is left, as the log does after it.
+    const summed = rollField({ definition: DICED, data: SHEET, roll: { id: 's', label: 'S', dice: [{ count: '2', die: 'good' }] }, rng: faces([3, 3], [2, 3]), who: 'K' });
+    expect(summed.historyText).toMatch(/ = \d+ · 2 HIT, 1 EDGE\]$/);
+    expect(summed.board).toEqual({ words: `${summed.total} · 2 HIT · 1 EDGE` });
   });
 
   it('a number with its sign on a die with any below 0, summed as any roll is', () => {
