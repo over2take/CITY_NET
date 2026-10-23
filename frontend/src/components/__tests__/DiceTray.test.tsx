@@ -256,3 +256,54 @@ describe("the tray's dice", () => {
     expect(scene.children).toEqual([]);
   });
 });
+
+// ─── ROLL or LANDED (6c4b3b) ─────────────────────────────────────────────────
+
+describe('ROLL or LANDED', () => {
+  const ok = (body: unknown) => Promise.resolve({ ok: true, json: () => Promise.resolve(body) } as Response);
+  const fetchMock = vi.fn((..._args: unknown[]) => ok({ trayMotion: 'roll' }));
+  beforeEach(() => { vi.stubGlobal('fetch', fetchMock); fetchMock.mockClear(); localStorage.clear(); });
+
+  it('is an ANIMATION toggle in the title bar, on (the dice roll) to start, turned off (they land) and saved to whoever is signed in', async () => {
+    render(<DiceTrayWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()} socketRef={makeSocketRef()} authToken="tok" />);
+    const toggle = screen.getByRole('switch', { name: 'Animation' });
+    expect(toggle.textContent).toBe('ANIMATION');
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    await act(async () => { toggle.click(); });
+    expect(screen.getByRole('switch', { name: 'Animation' }).getAttribute('aria-checked')).toBe('false');
+    const put = fetchMock.mock.calls.find((c) => (c[1] as RequestInit | undefined)?.method === 'PUT') as [string, RequestInit];
+    expect([put[0], JSON.parse(put[1].body as string)]).toEqual(['/api/me/settings', { trayMotion: 'landed' }]);
+  });
+
+  it('shows a throw already at rest when LANDED', () => {
+    const scene = new THREE.Scene();
+    three.current = { scene, camera: new THREE.PerspectiveCamera() };
+    const now = vi.spyOn(performance, 'now').mockReturnValue(5000);
+    const latest: TrayRoll = { total: 5, results: { 6: [5] }, color: '#00ff00', timestamp: 1, throw: { seed: 9, dice: [{ key: '6', sides: 6, landed: [4] }] } };
+    render(<DiceScene latestRoll={latest} landed />);
+    act(() => { three.frame!(); });
+    const [die] = scene.children.filter((c): c is THREE.Group => c instanceof THREE.Group);
+    const [thrown] = throwDice(diceOfRoll(latest), 9, trayCamera()).dice;
+    const last = thrown.path[thrown.path.length - 1];
+    // The first frame is the last of the throw: no tumble at all.
+    expect(die.position.distanceTo(new THREE.Vector3(last.x, last.y, last.z))).toBeLessThan(1e-9);
+    now.mockRestore();
+  });
+
+  it('tells the result as soon as the dice are down, when LANDED', async () => {
+    localStorage.setItem('citynet_tray_motion', 'landed');
+    const user = userEvent.setup();
+    const socketRef = makeSocketRef();
+    render(<DiceTrayWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()} socketRef={socketRef} />);
+    await user.click(screen.getByTitle('TOGGLE_HISTORY'));
+    const broadcast = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'diceRollBroadcast')[1];
+    vi.useFakeTimers();
+    try {
+      act(() => { broadcast({ total: 15, results: { 20: [15] }, color: '#0f0', historyString: 'landed at once', throw: { seed: 11, dice: [{ key: '20', sides: 20, landed: [14] }] } }); });
+      act(() => { vi.advanceTimersByTime(800); });
+      expect(screen.getByText(/landed at once/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

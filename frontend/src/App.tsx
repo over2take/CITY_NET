@@ -2442,6 +2442,7 @@ function App() {
                     setPos={setDiceTrayPos} 
                     onClose={() => setIsDiceTrayOpen(false)}
                     socketRef={socketRef}
+                    authToken={token || playerToken}
                 />
             )}
             {(() => {
