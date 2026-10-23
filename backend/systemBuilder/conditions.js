@@ -165,4 +165,4 @@ const conditionsOf = (definition) => {
   return out.slice(0, LIMITS.conditions);
 };
 
-module.exports = { STANDARD, ICONS, ENDS, ALL_ROLLS, LIMITS, isIcon, checkConditions, conditionsOf };
+module.exports = { STANDARD, ICONS, ENDS, ALL_ROLLS, LIMITS, UPLOADED_ICON, isIcon, checkConditions, conditionsOf };

@@ -10,6 +10,10 @@ import {
 
 /** Larger than any system file can be (the server's limit is about half a megabyte). */
 export const MAX_FILE_BYTES = 1024 * 1024;
+/** A zip of a system and its pictures, as the server takes it (citysysZip.js LIMITS.zipBytes). */
+export const MAX_ZIP_BYTES = 16 * 1024 * 1024;
+/** A zip by its name or its type, as browsers name it. */
+const isZip = (f: File) => /\.zip$/i.test(f.name) || f.type === 'application/zip' || f.type === 'application/x-zip-compressed';
 
 export type Api = ReturnType<typeof systemsApi>;
 
@@ -200,9 +204,12 @@ export function NewPanel({ api, onMade, onLook }: { api: Api; onMade: (id: strin
   );
 }
 
-/** INSTALL: a .citysys file, previewed first, then installed the way the GM picks. */
+/**
+ * INSTALL: a .citysys file, or a zip of one and its uploaded pictures (EXPORT, 2026-10-23),
+ * previewed first, then installed the way the GM picks. A zip goes to the server as it is.
+ */
 export function InstallPanel({ api, onInstalled }: { api: Api; onInstalled: (id: string, message: string) => void }) {
-  const [file, setFile] = useState<{ name: string; text: string } | null>(null);
+  const [file, setFile] = useState<{ name: string; text: string; zip?: undefined } | { name: string; zip: Blob; text?: undefined } | null>(null);
   const [preview, setPreview] = useState<InstallPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<InstallAction | null>(null);
@@ -214,11 +221,16 @@ export function InstallPanel({ api, onInstalled }: { api: Api; onInstalled: (id:
     setPreview(null);
     setConfirming(null);
     setError(null);
-    if (chosen.size > MAX_FILE_BYTES) { setFile(null); setError(`${chosen.name} is over 1 MB, too large to be a system file.`); return; }
-    const text = await chosen.text();
-    setFile({ name: chosen.name, text });
+    const zip = isZip(chosen);
+    if (chosen.size > (zip ? MAX_ZIP_BYTES : MAX_FILE_BYTES)) {
+      setFile(null);
+      setError(zip ? `${chosen.name} is over 16 MB, too large to be a system and its images.` : `${chosen.name} is over 1 MB, too large to be a system file.`);
+      return;
+    }
+    const text = zip ? '' : await chosen.text();
+    setFile(zip ? { name: chosen.name, zip: chosen } : { name: chosen.name, text });
     setBusy(true);
-    const r = await api.preview(text);
+    const r = zip ? await api.previewZip(chosen) : await api.preview(text);
     setBusy(false);
     if (!r.ok) { setError(r.error); return; }
     setPreview(r.value);
@@ -227,7 +239,9 @@ export function InstallPanel({ api, onInstalled }: { api: Api; onInstalled: (id:
   const install = async (action: InstallAction) => {
     if (!file || !preview || busy) return;
     setBusy(true);
-    const r = await api.install(file.text, action.mode, action.replaceChanges === true);
+    const r = file.zip
+      ? await api.installZip(file.zip, action.mode, action.replaceChanges === true)
+      : await api.install(file.text, action.mode, action.replaceChanges === true);
     setBusy(false);
     setConfirming(null);
     if (!r.ok) { setError(r.error); return; }
@@ -251,10 +265,10 @@ export function InstallPanel({ api, onInstalled }: { api: Api; onInstalled: (id:
           background: dragging ? 'color-mix(in srgb, var(--green) 12%, transparent)' : 'none',
         }}
       >
-        {file ? `${file.name} · CHOOSE ANOTHER FILE` : 'CHOOSE A .CITYSYS FILE, OR DROP ONE HERE'}
+        {file ? `${file.name} · CHOOSE ANOTHER FILE` : 'CHOOSE A .CITYSYS OR .ZIP FILE, OR DROP ONE HERE'}
         <input
           type="file"
-          accept=".citysys,.json,application/json"
+          accept=".citysys,.json,.zip,application/json,application/zip"
           aria-label="System file"
           style={{ display: 'none' }}
           onChange={(e) => { read(e.target.files?.[0]); e.target.value = ''; }}

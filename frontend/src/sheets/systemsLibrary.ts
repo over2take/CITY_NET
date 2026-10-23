@@ -25,6 +25,8 @@ export interface LibrarySystem {
   author: string;
   /** Players' characters saved under it; NPCs aren't counted. */
   characterCount: number;
+  /** The pictures uploaded for its published copy, which EXPORT can send with it in a zip. */
+  images: number;
 }
 
 /**
@@ -95,6 +97,17 @@ export const deleteBlocked = (s: LibrarySystem, running: string | null, openInBu
 export const exportBlocked = (s: LibrarySystem): string | null =>
   (s.published ? null : 'Publish it before sharing it. Only a published system is shared.');
 
+// EXPORT for a system with uploaded pictures (decided with the user, 2026-10-23): a line opens
+// under the buttons to send them or not, ticked to send them. Drawn symbols travel either way.
+
+/** The box on EXPORT's line. */
+export const includeImagesLabel = (s: LibrarySystem) => `INCLUDE THE ${plural(s.images, 'UPLOADED IMAGE')}`;
+
+/** What EXPORT will save, with the images or without. */
+export const exportNote = (s: LibrarySystem, withImages: boolean): string => (withImages
+  ? `A .zip of the system and its ${plural(s.images, 'image').toLowerCase()}, which install with it on any server.`
+  : 'A .citysys without them: symbols show their mark or first letter instead, conditions a drawn icon, currencies none.');
+
 // ─── Installing a file ──────────────────────────────────────────────────────
 
 export type InstallMode = 'new' | 'update' | 'keep_both';
@@ -107,6 +120,8 @@ export interface InstallPreview {
   inside: {
     words: number; partsOff: number; currencies: number; derived: number; lookups: number;
     sheetFields: number; npcTiers: number; healthModel: string | null;
+    /** A zip's pictures that its system uses, which install with it. */
+    images?: number;
   };
   problems: { where: string; message: string }[];
   installed: { id: string; name: string; version: number; edited: boolean }[];
@@ -124,6 +139,7 @@ export const insideBadges = (inside: InstallPreview['inside']): string[] => {
     [inside.lookups, 'TABLE'],
     [inside.sheetFields, 'SHEET FIELD'],
     [inside.npcTiers, 'NPC TIER'],
+    [inside.images ?? 0, 'IMAGE'],
   ];
   const badges = counts.filter(([n]) => n > 0).map(([n, one, many]) => plural(n, one, many));
   if (inside.healthModel) badges.push(`HEALTH: ${inside.healthModel.toUpperCase()}`);
@@ -192,15 +208,17 @@ export const installPlan = (p: InstallPreview): InstallPlan => {
 };
 
 /** What the server answers after an install (POST /api/systems/install). */
-export interface InstallResult { id: string; name: string; published: boolean; restored?: boolean; problems: unknown[] }
+export interface InstallResult { id: string; name: string; published: boolean; restored?: boolean; problems: unknown[]; images?: number }
 
 /** The line under the preview after an install. `version` is the file's. */
 export const installedMessage = (r: InstallResult, mode: InstallMode, version: number): string => {
-  if (r.restored) return `${r.name} is back, with its characters.`;
-  if (mode === 'update') return `Updated ${r.name} to v${version}. Its characters, banks and tokens are untouched.`;
+  // A zip's pictures, stored with it.
+  const images = r.images ? ` Its ${plural(r.images, 'image').toLowerCase()} came with it.` : '';
+  if (r.restored) return `${r.name} is back, with its characters.${images}`;
+  if (mode === 'update') return `Updated ${r.name} to v${version}. Its characters, banks and tokens are untouched.${images}`;
   const draft = r.published ? '' : ` as a draft with ${plural(r.problems.length, 'problem').toLowerCase()} to fix`;
-  if (mode === 'keep_both') return `Installed a second copy, ${r.name}, beside the first${draft}.`;
-  return r.published ? `Installed ${r.name} v${version}. It's in the list and the game-system picker.` : `Installed ${r.name}${draft}.`;
+  if (mode === 'keep_both') return `Installed a second copy, ${r.name}, beside the first${draft}.${images}`;
+  return `${r.published ? `Installed ${r.name} v${version}. It's in the list and the game-system picker.` : `Installed ${r.name}${draft}.`}${images}`;
 };
 
 // ─── The other actions ──────────────────────────────────────────────────────

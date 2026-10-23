@@ -22,7 +22,7 @@ const COPY = 'sys_dddddddddddddddd';
 const row = (over: Partial<LibrarySystem>): LibrarySystem => ({
   id: HEARTH, name: 'Hearth', version: 3, updatedAt: '2026-10-06 14:10:00', publishedAt: '2026-10-06 14:10:00',
   published: true, unpublishedChanges: false, installed: false, problemCount: 0,
-  description: '', author: '', characterCount: 0, ...over,
+  description: '', author: '', characterCount: 0, images: 0, ...over,
 });
 const AT = changedFact('2026-10-06 14:10:00');
 
@@ -42,10 +42,11 @@ const PREVIEW: InstallPreview = {
 const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
   const method = init?.method ?? 'GET';
-  const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+  // A zip goes as its own bytes, not JSON.
+  const body = init?.body instanceof Blob ? init.body : init?.body ? JSON.parse(String(init.body)) : undefined;
   calls.push({ url, method, body });
   const json = (status: number, b: unknown, headers: Record<string, string> = {}) => ({
-    ok: status < 300, status, json: async () => b, text: async () => String(b), headers: { get: (k: string) => headers[k] ?? null },
+    ok: status < 300, status, json: async () => b, text: async () => String(b), blob: async () => new Blob([String(b)]), headers: { get: (k: string) => headers[k] ?? null },
   }) as unknown as Response;
   if (url === '/api/systems' && method === 'GET') return json(200, systems);
   const listed = /^\/api\/systems\/examples(\?kind=starter)?$/.exec(url);
@@ -59,13 +60,18 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
     return json(200, { id: COPY, problems: [] });
   }
   if (url === '/api/systems/install/preview') return json(200, PREVIEW);
+  if (url === '/api/systems/install/zip/preview') return json(200, { ...PREVIEW, inside: { ...PREVIEW.inside, images: 3 } });
+  if (url === '/api/systems/install/zip?mode=new') {
+    systems = [row({ id: COPY, name: 'Iron Sea', installed: true, images: 3 }), ...systems];
+    return json(200, { id: COPY, name: 'Iron Sea', published: true, problems: [], images: 3 });
+  }
   if (url === '/api/systems/install') {
     systems = [row({ id: COPY, name: 'Iron Sea', installed: true }), ...systems];
     return json(200, { id: COPY, name: 'Iron Sea', published: true, problems: [] });
   }
-  const m = /^\/api\/systems\/(sys_[0-9a-f]+)(\/[a-z]+)?$/.exec(url);
+  const m = /^\/api\/systems\/(sys_[0-9a-f]+)(\/[a-z]+)?(\?images=1)?$/.exec(url);
   if (m) {
-    const [, id, rest] = m;
+    const [, id, rest, images] = m;
     const s = systems.find((x) => x.id === id)!;
     if (rest === '/name') {
       if (renameAnswer) return json(renameAnswer.status, renameAnswer.body);
@@ -76,7 +82,7 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
       systems = [row({ id: COPY, name: `${s.name} copy`, published: false, version: 0 }), ...systems];
       return json(200, { id: COPY, name: `${s.name} copy` });
     }
-    if (rest === '/export') return json(200, '{"citysys":1}', { 'Content-Disposition': 'attachment; filename="neon-exchange.citysys"' });
+    if (rest === '/export') return json(200, images ? 'PK' : '{"citysys":1}', { 'Content-Disposition': `attachment; filename="neon-exchange.${images ? 'zip' : 'citysys'}"` });
     if (!rest && method === 'DELETE') { systems = systems.filter((x) => x.id !== id); return json(200, { deleted: true }); }
   }
   return json(404, { error: 'No such route' });
@@ -205,13 +211,57 @@ describe('RENAME, DUPLICATE, EXPORT, DELETE', () => {
     const { say } = open();
     await ready();
     await userEvent.click(header(NEON));
-    await userEvent.click(within(line(NEON)).getByText('EXPORT .CITYSYS'));
+    // No uploaded images: saved at once, as its .citysys, with no line to choose on.
+    await userEvent.click(within(line(NEON)).getByText('EXPORT'));
     await waitFor(() => expect(say).toHaveBeenCalledWith('Downloading neon-exchange.citysys (v1).'));
     expect((click.mock.instances[0] as unknown as HTMLAnchorElement).download).toBe('neon-exchange.citysys');
+    expect(calls.find((c) => c.url.includes('/export'))!.url).toBe(`/api/systems/${NEON}/export`);
+    expect(screen.queryByRole('group', { name: 'Export Neon Exchange' })).toBeNull();
     click.mockRestore();
     await userEvent.click(header(VAULT));
-    expect((within(line(VAULT)).getByText('EXPORT .CITYSYS') as HTMLButtonElement).disabled).toBe(true);
+    expect((within(line(VAULT)).getByText('EXPORT') as HTMLButtonElement).disabled).toBe(true);
     expect(within(line(VAULT)).getByText('EXPORT: Publish it before sharing it. Only a published system is shared.')).toBeTruthy();
+  });
+
+  it('EXPORT asks first for one with uploaded images: ticked, a zip with them; unticked, the .citysys without (2026-10-23)', async () => {
+    systems[1] = row({ id: NEON, name: 'Neon Exchange', version: 1, images: 3 });
+    URL.createObjectURL = vi.fn(() => 'blob:x');
+    URL.revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const { say } = open();
+    await ready();
+    await userEvent.click(header(NEON));
+    await userEvent.click(within(line(NEON)).getByText('EXPORT'));
+    const asking = screen.getByRole('group', { name: 'Export Neon Exchange' });
+    const box = within(asking).getByRole('checkbox', { name: 'INCLUDE THE 3 UPLOADED IMAGES' }) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    expect(within(asking).getByText('A .zip of the system and its 3 images, which install with it on any server.')).toBeTruthy();
+    // Nothing is saved until SAVE, and EXPORT waits while the line is open.
+    expect(calls.some((c) => c.url.includes('/export'))).toBe(false);
+    expect((within(line(NEON)).getByText('EXPORT') as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(within(asking).getByText('SAVE'));
+    await waitFor(() => expect(say).toHaveBeenCalledWith('Downloading neon-exchange.zip (v1).'));
+    expect(calls.filter((c) => c.url.includes('/export')).map((c) => c.url)).toEqual([`/api/systems/${NEON}/export?images=1`]);
+    expect((click.mock.instances[0] as unknown as HTMLAnchorElement).download).toBe('neon-exchange.zip');
+    expect(screen.queryByRole('group', { name: 'Export Neon Exchange' })).toBeNull();
+
+    // Unticked: the .citysys, saying what it falls back to.
+    await userEvent.click(within(line(NEON)).getByText('EXPORT'));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'INCLUDE THE 3 UPLOADED IMAGES' }));
+    expect(screen.getByText('A .citysys without them: symbols show their mark or first letter instead, conditions a drawn icon, currencies none.')).toBeTruthy();
+    await userEvent.click(within(screen.getByRole('group', { name: 'Export Neon Exchange' })).getByText('SAVE'));
+    await waitFor(() => expect(say).toHaveBeenCalledWith('Downloading neon-exchange.citysys (v1).'));
+    expect(calls.filter((c) => c.url.includes('/export')).map((c) => c.url)).toEqual([`/api/systems/${NEON}/export?images=1`, `/api/systems/${NEON}/export`]);
+
+    // CANCEL closes it, saving nothing; so does opening another line.
+    await userEvent.click(within(line(NEON)).getByText('EXPORT'));
+    await userEvent.click(within(screen.getByRole('group', { name: 'Export Neon Exchange' })).getByText('CANCEL'));
+    expect(screen.queryByRole('group', { name: 'Export Neon Exchange' })).toBeNull();
+    await userEvent.click(within(line(NEON)).getByText('EXPORT'));
+    await userEvent.click(within(line(NEON)).getByText('RENAME'));
+    expect(screen.queryByRole('group', { name: 'Export Neon Exchange' })).toBeNull();
+    expect(calls.filter((c) => c.url.includes('/export'))).toHaveLength(2);
+    click.mockRestore();
   });
 
   it('DELETE is off for the running system and the one open here, saying why', async () => {
@@ -292,6 +342,36 @@ describe('+ NEW and INSTALL A FILE', () => {
     // Back on the list, it is there.
     await userEvent.click(screen.getByRole('tab', { name: 'YOUR SYSTEMS · 4' }));
     expect(screen.getByTestId(`system-${COPY}`)).toBeTruthy();
+  });
+});
+
+describe('INSTALL A FILE with a zip (2026-10-23)', () => {
+  it('sends the zip as it is, shows its images in the cover, and says they came', async () => {
+    open();
+    await ready();
+    await userEvent.click(screen.getByRole('tab', { name: 'INSTALL A FILE' }));
+    expect(screen.getByText('CHOOSE A .CITYSYS OR .ZIP FILE, OR DROP ONE HERE')).toBeTruthy();
+    const zipped = new File([new Uint8Array([0x50, 0x4b, 3, 4])], 'iron-sea.zip', { type: 'application/zip' });
+    await userEvent.upload(screen.getByLabelText('System file'), zipped);
+    const cover = await screen.findByTestId('install-cover');
+    expect(within(cover).getByText('3 IMAGES')).toBeTruthy();
+    const preview = calls.find((c) => c.url === '/api/systems/install/zip/preview')!;
+    expect(preview.body).toBe(zipped);
+    expect(calls.some((c) => c.url === '/api/systems/install/preview')).toBe(false);
+    await userEvent.click(screen.getAllByRole('button', { name: 'INSTALL' })[0]);
+    expect(await screen.findByText('Installed Iron Sea v4. It\'s in the list and the game-system picker. Its 3 images came with it.')).toBeTruthy();
+    expect(calls.find((c) => c.url.startsWith('/api/systems/install/zip?'))!.body).toBe(zipped);
+  });
+
+  it('refuses a zip over 16 MB before sending it', async () => {
+    open();
+    await ready();
+    await userEvent.click(screen.getByRole('tab', { name: 'INSTALL A FILE' }));
+    const big = new File(['x'], 'huge.zip', { type: 'application/zip' });
+    Object.defineProperty(big, 'size', { value: 16 * 1024 * 1024 + 1 });
+    await userEvent.upload(screen.getByLabelText('System file'), big);
+    expect(await screen.findByText('huge.zip is over 16 MB, too large to be a system and its images.')).toBeTruthy();
+    expect(calls.some((c) => c.url.includes('/install'))).toBe(false);
   });
 });
 

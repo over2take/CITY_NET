@@ -6,6 +6,8 @@ const multer = require('multer');
 const { authenticate, optionalAuthenticate, requireMainAdmin } = require('../middleware/auth');
 const { LIMITS, rejectFormat, uploadErrors } = require('../middleware/uploadConstraints');
 const store = require('../systemBuilder/store');
+const citysys = require('../systemBuilder/citysys');
+const citysysZip = require('../systemBuilder/citysysZip');
 const { previewPublish } = require('../systemBuilder/publishPreview');
 const { buildCustomTemplate } = require('../sheets/pdfTemplate');
 const runtime = require('../systemBuilder/runtime');
@@ -257,13 +259,14 @@ module.exports = (db, io = null) => {
 
   // ─── Sharing as files (systemBuilder/citysys.js) ────────────────────────────
 
-  // A published system as a .citysys file to download.
+  // A published system to download: with ?images=1 and pictures uploaded for it, a zip of its file
+  // and them; otherwise its .citysys, the pictures' addresses left out (store.exportSystem).
   router.get('/:id/export', gm, (req, res) => {
-    store.exportSystem(db, req.params.id, (err, file) => {
+    store.exportSystem(db, req.params.id, { images: req.query.images === '1' }, (err, file) => {
       if (err) return answer(res, err);
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Content-Type', file.zip ? 'application/zip' : 'application/json; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
-      res.send(file.text);
+      res.send(file.zip || file.text);
     });
   });
 
@@ -410,22 +413,54 @@ module.exports = (db, io = null) => {
     store.previewInstall(db, req.body && req.body.file, (err, preview) => answer(res, err, preview));
   });
 
-  // `replaceChanges: true` only after the GM was warned that changes made here would go.
-  router.post('/install', gm, (req, res) => {
-    const { file, mode, replaceChanges } = req.body || {};
-    store.installSystem(db, { text: file, mode, replaceChanges }, (err, installed) => {
+  /** Install a file's text, then (once it is in) its pictures, and answer. */
+  const install = (res, { text, mode, replaceChanges, images = [] }) => {
+    store.installSystem(db, { text, mode, replaceChanges }, (err, installed) => {
       if (err) return res.status(err.status || 500).json({
         error: err.status ? err.message : 'Could not reach the systems store',
         ...(err.problems ? { problems: err.problems } : {}),
         ...(err.installed ? { installed: err.installed } : {}),
         ...(err.changed ? { changed: true } : {}),
       });
+      try {
+        citysysZip.storeImages(images);
+      } catch (e) {
+        console.error('[systems] pictures', e.message);
+        return res.status(500).json({ error: 'The system installed, but its pictures could not be stored' });
+      }
       // An update or a system brought back may be one a browser already has: it fetches it again.
       runtime.refresh(db, installed.id, () => {
         if (io) io.emit('customSystemChanged', { id: installed.id });
-        answer(res, null, installed);
+        answer(res, null, { ...installed, images: images.length });
       });
     });
+  };
+
+  // `replaceChanges: true` only after the GM was warned that changes made here would go.
+  router.post('/install', gm, (req, res) => {
+    const { file, mode, replaceChanges } = req.body || {};
+    install(res, { text: file, mode, replaceChanges });
+  });
+
+  // The same for a zip of a system and its pictures (citysysZip.js), sent as its own bytes rather
+  // than as JSON text; how to install it comes in the address (?mode=, ?replaceChanges=1).
+  const zipBody = express.raw({ type: 'application/zip', limit: citysysZip.LIMITS.zipBytes, inflate: false });
+  /** The zip's file and the pictures its system names, or null with the refusal already sent. */
+  const readSent = (req, res) => {
+    const read = citysysZip.readZip(req.body);
+    if (read.fatal) { res.status(400).json({ error: read.fatal }); return null; }
+    const file = citysys.readFile(read.text);
+    return { text: read.text, images: file.fatal ? [] : citysysZip.imagesFor(file.file.definition, read.images) };
+  };
+  router.post('/install/zip/preview', gm, zipBody, (req, res) => {
+    const sent = readSent(req, res);
+    if (!sent) return;
+    store.previewInstall(db, sent.text, (err, preview) => answer(res, err, preview && { ...preview, inside: { ...preview.inside, images: sent.images.length } }));
+  });
+  router.post('/install/zip', gm, zipBody, (req, res) => {
+    const sent = readSent(req, res);
+    if (!sent) return;
+    install(res, { text: sent.text, mode: req.query.mode, replaceChanges: req.query.replaceChanges === '1', images: sent.images });
   });
 
   router.delete('/:id', gm, (req, res) => {
