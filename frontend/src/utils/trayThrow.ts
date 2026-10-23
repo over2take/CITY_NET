@@ -86,11 +86,14 @@ export const floorSeen = (camera: THREE.PerspectiveCamera, y: number) => {
  */
 export const TRAY_ASPECT = 5 / 4;
 
-/** The tray's camera, looking down at the floor at a slant from in front. */
+/** Where the tray's camera is and what it looks at: down at the floor at a slant, from in front. */
+export const TRAY_VIEW = { fov: 34, position: [0, 11, 7.5] as const, target: [0, 0, 0.3] as const };
+
+/** The tray's camera, as TRAY_VIEW says. */
 export const trayCamera = (aspect = TRAY_ASPECT) => {
-  const camera = new THREE.PerspectiveCamera(34, aspect, 0.1, 100);
-  camera.position.set(0, 11, 7.5);
-  camera.lookAt(0, 0, 0.3);
+  const camera = new THREE.PerspectiveCamera(TRAY_VIEW.fov, aspect, 0.1, 100);
+  camera.position.set(...TRAY_VIEW.position);
+  camera.lookAt(...TRAY_VIEW.target);
   return camera;
 };
 
@@ -119,9 +122,42 @@ export interface Throw { dice: ThrownDie[]; steps: number }
 /** How much smaller dice are drawn when many share the tray, so a handful still fits on the floor. */
 export const scaleFor = (count: number, floorArea: number) => Math.max(0.45, Math.min(1, Math.sqrt((floorArea * 0.22) / Math.max(1, count) / (Math.PI * 1.1 * 1.1))));
 
+/** How high a die's top stands, at full size: the walls keep that in the picture too. */
+const TOPS = 1.7;
+/** How far a die thrown at `v` goes before it rests: its time in the air, then its roll along the floor. */
+const REACH = 1.09;
+
+/** The floor a die may rest on: from the back, its left and right at the back and at the front. */
+interface Floor { back: number; front: number; backLeft: number; backRight: number; frontLeft: number; frontRight: number }
+
+/** A place on that floor, `u` from its left to its right and `v` from its back to its front, each 0 to 1. */
+const onFloor = (f: Floor, u: number, v: number) => {
+  const left = f.backLeft + (f.frontLeft - f.backLeft) * v;
+  const right = f.backRight + (f.frontRight - f.backRight) * v;
+  return { x: left + (right - left) * u, z: f.back + (f.front - f.back) * v };
+};
+
 /**
- * The whole throw: each die tossed in from the left with its own speed and spin from the seed,
- * bouncing on the floor, off the walls and off each other until it rests, face up as it came.
+ * Where each die comes to rest, spread over the floor: one to a cell of a grid as near square as
+ * the floor, the cells dealt out by the seed, each spot shaken within its cell. The floor is wider
+ * at the back, as the camera sees it, and the cells widen with it.
+ */
+const spotsFor = (count: number, f: Floor, rand: () => number) => {
+  const w = (f.backRight - f.backLeft + f.frontRight - f.frontLeft) / 2; const h = f.front - f.back;
+  const cols = Math.max(1, Math.ceil(Math.sqrt((count * w) / h)));
+  const rows = Math.max(1, Math.ceil(count / cols));
+  const cells = Array.from({ length: cols * rows }, (_, k) => k);
+  for (let k = cells.length - 1; k > 0; k -= 1) { const j = Math.floor(rand() * (k + 1)); [cells[k], cells[j]] = [cells[j], cells[k]]; }
+  return cells.slice(0, count).map((k) => onFloor(f,
+    ((k % cols) + 0.5 + (rand() - 0.5) * 0.6) / cols,
+    (Math.floor(k / cols) + 0.5 + (rand() - 0.5) * 0.6) / rows));
+};
+
+/**
+ * The whole throw: each die tossed in from the left wall toward a spot of its own on the floor,
+ * with its speed and spin from the seed, bouncing on the floor, off the walls and off each other
+ * until it rests, face up as it came. The walls keep a die wholly in the picture: its foot and its
+ * top both, since the camera looks down at a slant and a die's top shows higher than its middle.
  */
 export const throwDice = (specs: DieSpec[], seed: number, camera: THREE.PerspectiveCamera): Throw => {
   const rand = seeded(seed);
@@ -130,28 +166,39 @@ export const throwDice = (specs: DieSpec[], seed: number, camera: THREE.Perspect
   const zs = floor.corners.map((p) => p.z);
   const area = (Math.max(...xs) - Math.min(...xs)) * (Math.max(...zs) - Math.min(...zs));
   const scale = scaleFor(specs.length, area);
+  const walls = [...floorSeen(camera, 0).walls, ...floorSeen(camera, TOPS * scale).walls];
+  // The floor every wall leaves, less a die's width, for the dice to come to rest on.
+  const [bl, br, tr, tl] = floorSeen(camera, TOPS * scale).corners;
+  const [nbl, nbr, ntr, ntl] = floorSeen(camera, 0).corners;
+  const margin = 1.25 * scale;
+  const rests: Floor = {
+    back: Math.max(tl.z, tr.z, ntl.z, ntr.z) + margin, front: Math.min(bl.z, br.z, nbl.z, nbr.z) - margin,
+    backLeft: Math.max(tl.x, ntl.x) + margin, backRight: Math.min(tr.x, ntr.x) - margin,
+    frontLeft: Math.max(bl.x, nbl.x) + margin, frontRight: Math.min(br.x, nbr.x) - margin,
+  };
+  const spots = spotsFor(specs.length, rests, rand);
   const bodies = specs.map((spec, i) => {
     const shape = shapeOf(spec.sides);
     const r = shape.radius * scale;
     const rest = restingHeight(shape) * scale;
-    // In at the left wall, spread across its height, moving right and in toward the middle.
-    const left = Math.min(...xs) + r * 1.2;
-    const z = floor.mid.z + (Math.max(...zs) - Math.min(...zs)) * 0.7 * (((i + 0.5) / specs.length) - 0.5) + (rand() - 0.5) * 0.6;
-    const speed = 9 + rand() * 6;
-    let vx = 0.8 + rand() * 0.4;
-    let vz = (floor.mid.z - z) * 0.08 + (rand() - 0.5) * 0.8;
-    const len = Math.sqrt(vx * vx + vz * vz);
-    vx = (vx / len) * speed; vz = (vz / len) * speed;
+    // Thrown at its spot from a throw's length short of it, from the left, a little up or down.
+    const spot = spots[i];
+    let ux = 1; let uz = (rand() - 0.5) * 0.9;
+    const u = Math.sqrt(ux * ux + uz * uz); ux /= u; uz /= u;
+    const far = (2.6 + rand() * 1.2) * scale;
+    const x = spot.x - ux * far; const z = spot.z - uz * far;
+    const speed = (far / REACH) * (0.95 + rand() * 0.1);
+    const vx = ux * speed; const vz = uz * speed;
     const axis = new THREE.Vector3(vz, 0, -vx).normalize();
     return {
       spec, shape, r, rest, axis,
       final: restingTurn(shape, (rand() - 0.5) * 0.5),
-      p: { x: left, y: rest + 1.5 + rand() * 1.5, z }, v: { x: vx, y: 1 + rand() * 2, z: vz },
+      p: { x, y: rest + 1.5 + rand() * 1.5, z }, v: { x: vx, y: 1 + rand() * 2, z: vz },
       went: 0, still: false, path: [] as ThrownDie['path'],
     };
   });
   const keepIn = (b: (typeof bodies)[number]) => {
-    for (const w of floor.walls) {
+    for (const w of walls) {
       const over = w.nx * b.p.x + w.nz * b.p.z - (w.c - b.r);
       if (over <= 0) continue;
       b.p.x -= over * w.nx; b.p.z -= over * w.nz;

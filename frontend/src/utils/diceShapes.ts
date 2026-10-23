@@ -144,11 +144,14 @@ export const labelTurn = (normal: THREE.Vector3) => new THREE.Quaternion().setFr
  * The words on each of a shape's faces: what came up on face 0, the die's other faces round the
  * rest, in order. A die that lands face down (a d4) prints what came up on every face but face 0.
  */
-export const faceTexts = (texts: string[], top: number, shape: Pick<DieShape, 'faces' | 'down'>): string[] => {
-  const up = texts[top] ?? '';
-  if (shape.down) return shape.faces.map((_, k) => (k === 0 ? '' : up));
-  const others = texts.filter((_, k) => k !== top);
-  return shape.faces.map((_, k) => (k === 0 ? up : others.length ? others[(k - 1) % others.length] : ''));
+export const faceTexts = (texts: string[], top: number, shape: Pick<DieShape, 'faces' | 'down'>): string[] =>
+  faceOrder(texts.length, top, shape).map((i) => (i < 0 ? '' : texts[i] ?? ''));
+
+/** The same as faceTexts, by place: which of the die's `count` faces each shape face prints, -1 for none. */
+export const faceOrder = (count: number, top: number, shape: Pick<DieShape, 'faces' | 'down'>): number[] => {
+  if (shape.down) return shape.faces.map((_, k) => (k === 0 ? -1 : top));
+  const others = Array.from({ length: count }, (_, k) => k).filter((k) => k !== top);
+  return shape.faces.map((_, k) => (k === 0 ? top : others.length ? others[(k - 1) % others.length] : -1));
 };
 
 /**

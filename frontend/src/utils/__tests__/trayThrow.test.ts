@@ -83,6 +83,32 @@ describe('a throw', () => {
     }
   });
 
+  it('keeps every die in the picture, its foot and its top, edge to edge, the whole way', () => {
+    // The camera looks down at a slant: a die by the back wall shows its top highest, one by the
+    // front its foot lowest. Both, a die's width either side, stay on the screen, to a pixel.
+    for (const seed of [1, 20261022, 99]) {
+      for (const die of throwDice(HANDFUL, seed, camera).dice) {
+        const r = die.shape.radius * die.scale;
+        for (const p of die.path.slice(1)) {
+          for (const [x, y, z] of [[p.x - r, 0, p.z], [p.x + r, 0, p.z], [p.x, 0, p.z + r], [p.x, 1.7 * die.scale, p.z - r]]) {
+            const v = new THREE.Vector3(x, y, z).project(camera);
+            expect(Math.abs(v.x), `d${die.spec.sides} seed ${seed}`).toBeLessThanOrEqual(1.002);
+            expect(Math.abs(v.y), `d${die.spec.sides} seed ${seed}`).toBeLessThanOrEqual(1.002);
+          }
+        }
+      }
+    }
+  });
+
+  it('spreads the dice over the tray rather than piling them in a corner', () => {
+    // Measured as they are seen: how much of the picture's width and height the dice cover.
+    for (const seed of [1, 20261022, 99]) {
+      const seen = throwDice(HANDFUL, seed, camera).dice.map((die) => { const p = die.path[die.path.length - 1]; return new THREE.Vector3(p.x, p.y, p.z).project(camera); });
+      expect(Math.max(...seen.map((v) => v.x)) - Math.min(...seen.map((v) => v.x)), `seed ${seed}`).toBeGreaterThan(1);
+      expect(Math.max(...seen.map((v) => v.y)) - Math.min(...seen.map((v) => v.y)), `seed ${seed}`).toBeGreaterThan(0.8);
+    }
+  });
+
   it('lands every die on the floor, at rest, with what came up on top', () => {
     for (const die of thrown.dice) {
       const end = poseAt(die, throwLength(thrown) + 1);

@@ -7,6 +7,9 @@ import { ThemeContext } from '../theme/themes';
 import paperFillIcon from '../assets/lets-icons--paper-fill.svg';
 import paperLightIcon from '../assets/lets-icons--paper-light.svg';
 import type { DiceRoll } from '../types';
+import { diceOfRoll, throwDice, poseAt, floorSeen, trayCamera, TRAY_VIEW, TRAY_ASPECT, type Throw, type RollThrow } from '../utils/trayThrow';
+import { faceOrder, labelTurn } from '../utils/diceShapes';
+import { labelParts, labelKey, paintLabel } from '../utils/dieLabels';
 
 // ─── DOT_MATRIX_3x5 ──────────────────────────────────────────────────────────
 
@@ -161,151 +164,118 @@ export function DotMatrixScoreboard({ value, timestamp, isRolling }: DotMatrixSc
 
 // ─── DiceScene ───────────────────────────────────────────────────────────────
 
-interface DiceSceneProps {
-  latestRoll: { total: number; results: any; diceSides?: Record<string, number>; color: string; timestamp: number } | null;
+/** A roll as the tray plays it: the server's dice and its throw (6c4b1), and who rolled's color. */
+export interface TrayRoll {
+  total: number;
+  results: Record<string, unknown>;
+  diceSides?: Record<string, number>;
+  throw?: RollThrow;
+  color: string;
+  timestamp: number;
 }
 
-/**
- * Side count for a results key. Standard rolls key by side count ('6'); custom
- * dice key by name ('Fate') and carry their shape in `diceSides`. Falls back to
- * a d6 so an unrecognised key still renders something rather than building
- * geometry from NaN.
- */
-export const sidesForKey = (key: string, diceSides?: Record<string, number>): number => {
-  const explicit = diceSides?.[key];
-  if (Number.isFinite(explicit) && (explicit as number) >= 2) return explicit as number;
-  const parsed = parseInt(key);
-  return Number.isFinite(parsed) && parsed >= 2 ? parsed : 6;
-};
+interface DiceSceneProps {
+  latestRoll: TrayRoll | null;
+}
 
+/** Someone who asked for less motion sees the dice already landed. */
+const stillWanted = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * The tray's dice (6c4b2b; approved mockup docs/mockups/builder-dice.html): solid, every face
+ * printed, thrown as the server's seed says and landed on the faces it rolled (utils/trayThrow),
+ * inside a rim drawn where the walls are. A die takes the roller's color, or the theme's danger
+ * color for a bad die; its body is that color sunk toward the theme's background.
+ */
 export function DiceScene({ latestRoll }: DiceSceneProps) {
   const { scene, camera } = useThree();
+  const theme = useContext(ThemeContext);
+  const playing = useRef<{ thrown: Throw; groups: THREE.Group[]; start: number } | null>(null);
 
   useEffect(() => {
-    camera.lookAt(0, 0, 0);
-    const diceObjects: THREE.Mesh[] = [];
-    if (latestRoll && latestRoll.results) {
-      const material = new THREE.MeshBasicMaterial({ color: latestRoll.color, wireframe: true });
-      let xOffset = -2.5;
-      for (const [key, rolls] of Object.entries(latestRoll.results)) {
-        const s = sidesForKey(key, latestRoll.diceSides);
-        let geometry: THREE.BufferGeometry;
-        switch (s) {
-          case 4: geometry = new THREE.TetrahedronGeometry(1); break;
-          case 6: geometry = new THREE.BoxGeometry(1.2, 1.2, 1.2); break;
-          case 8: geometry = new THREE.OctahedronGeometry(1); break;
-          case 12: geometry = new THREE.DodecahedronGeometry(1); break;
-          case 20: geometry = new THREE.IcosahedronGeometry(1); break;
-          // Segments are capped: a 999-sided die would otherwise build a
-          // ~500x500 sphere per die and stall the tab.
-          default: {
-            const seg = Math.min(32, Math.max(3, Math.round(s / 2)));
-            geometry = new THREE.SphereGeometry(1, seg, seg);
-            break;
-          }
+    camera.position.set(...TRAY_VIEW.position);
+    camera.lookAt(...TRAY_VIEW.target);
+  }, [camera]);
+
+  // The rim of the tray, just inside the edges of the picture, where the walls keep the dice.
+  useEffect(() => {
+    const { corners, mid } = floorSeen(trayCamera(), 0);
+    const points = corners.map((p) => {
+      const toMid = new THREE.Vector2(mid.x - p.x, mid.z - p.z).normalize().multiplyScalar(0.25);
+      return new THREE.Vector3(p.x + toMid.x, 0, p.z + toMid.y);
+    });
+    const rim = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: theme.primary, transparent: true, opacity: 0.45 }));
+    scene.add(rim);
+    return () => { scene.remove(rim); rim.geometry.dispose(); (rim.material as THREE.Material).dispose(); };
+  }, [scene, theme.primary]);
+
+  useEffect(() => {
+    if (!latestRoll) return undefined;
+    const thrown = throwDice(diceOfRoll(latestRoll), latestRoll.throw?.seed ?? 1, trayCamera());
+    const symbols = new Map((latestRoll.throw?.symbols ?? []).map((s) => [s.id, s]));
+    const textures = new Map<string, THREE.CanvasTexture>();
+    const owned: { dispose: () => void }[] = [];
+    const ground = new THREE.Color(theme.background);
+    const groups = thrown.dice.map((die) => {
+      const tone = new THREE.Color(die.spec.danger ? theme.danger : latestRoll.color);
+      const group = new THREE.Group();
+      const body = new THREE.MeshStandardMaterial({ color: tone.clone().lerp(ground, 0.82), emissive: tone.clone().multiplyScalar(0.05), roughness: 0.55, metalness: 0.15, flatShading: true });
+      const edges = new THREE.EdgesGeometry(die.shape.geometry, 12);
+      const edgeLine = new THREE.LineBasicMaterial({ color: tone });
+      owned.push(die.shape.geometry, body, edges, edgeLine);
+      group.add(new THREE.Mesh(die.shape.geometry, body), new THREE.LineSegments(edges, edgeLine));
+      // Every face printed: what came up on the face that lands on top, the die's others round it.
+      const order = faceOrder(die.spec.texts.length, die.spec.top, die.shape);
+      const plane = new THREE.PlaneGeometry(die.shape.label, die.shape.label);
+      owned.push(plane);
+      die.shape.faces.forEach((spot, k) => {
+        const i = order[k];
+        if (i < 0) return;
+        const parts = labelParts(die.spec.faces?.[i] ?? { text: die.spec.texts[i] ?? '' }, symbols);
+        if (!parts.length) return;
+        const color = `#${tone.getHexString()}`;
+        const key = labelKey(parts, color);
+        let texture = textures.get(key);
+        if (!texture) {
+          const canvas = document.createElement('canvas');
+          texture = new THREE.CanvasTexture(canvas);
+          const made = texture;
+          paintLabel(canvas, parts, color, () => { made.needsUpdate = true; });
+          texture.anisotropy = 4;
+          textures.set(key, texture);
         }
-        (Array.isArray(rolls) ? rolls as number[] : [rolls as number]).forEach(val => {
-          const mesh = new THREE.Mesh(geometry, material);
-          mesh.position.set(xOffset + (Math.random() - 0.5), (Math.random() - 0.5), 2 + Math.random() * 2);
-          mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-          let typeFriction = 0.88;
-          let rotMult = 1.5;
-          if (s === 2) { typeFriction = 0.60; rotMult = 0.2; }
-          else if (s === 4) { typeFriction = 0.70; rotMult = 0.5; }
-          else if (s === 6) { typeFriction = 0.80; rotMult = 0.8; }
-          else if (s === 8) { typeFriction = 0.84; rotMult = 1.0; }
-          else if (s === 10 || s === 100) { typeFriction = 0.86; rotMult = 1.2; }
-          else if (s === 12) { typeFriction = 0.88; rotMult = 1.3; }
-          else if (s === 20) { typeFriction = 0.90; rotMult = 1.5; }
-          const speed = 15 + Math.random() * 10;
-          const angle = Math.random() * Math.PI * 2;
-          mesh.userData = {
-            velocity: new THREE.Vector3(Math.cos(angle) * speed, Math.sin(angle) * speed, 10 + Math.random() * 10),
-            stopped: false, typeFriction, rotMult,
-          };
-          scene.add(mesh);
-          diceObjects.push(mesh);
-          xOffset += 1.5;
-          if (xOffset > 2.5) xOffset = -2.5;
-        });
-      }
-    }
+        const label = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false });
+        owned.push(label);
+        const print = new THREE.Mesh(plane, label);
+        print.quaternion.copy(labelTurn(spot.normal));
+        print.position.copy(spot.center).addScaledVector(spot.normal, 0.012);
+        group.add(print);
+      });
+      group.scale.setScalar(die.scale);
+      const pose = poseAt(die, 0);
+      group.position.copy(pose.position);
+      group.quaternion.copy(pose.quaternion);
+      scene.add(group);
+      return group;
+    });
+    playing.current = { thrown, groups, start: performance.now() - (stillWanted() ? 1e7 : 0) };
     return () => {
-      diceObjects.forEach(d => { scene.remove(d); d.geometry.dispose(); });
-      if (diceObjects.length > 0 && diceObjects[0].material) (diceObjects[0].material as THREE.Material).dispose();
+      playing.current = null;
+      for (const g of groups) scene.remove(g);
+      for (const o of owned) o.dispose();
+      for (const t of textures.values()) t.dispose();
     };
-  }, [latestRoll, scene]);
+  }, [latestRoll, scene, theme.background, theme.danger]);
 
-  useFrame((state, delta) => {
-    const dt = Math.min(delta, 0.1);
-    const bounds = { minX: -5.4, maxX: 5.4, minY: -3.2, maxY: 3.2 };
-    const restitution = 0.8;
-    const gravity = 60;
-    const diceList: THREE.Mesh[] = [];
-
-    scene.children.forEach(c => {
-      if (c.userData.velocity !== undefined) diceList.push(c as THREE.Mesh);
+  useFrame(() => {
+    const p = playing.current;
+    if (!p) return;
+    const seconds = (performance.now() - p.start) / 1000;
+    p.thrown.dice.forEach((die, i) => {
+      const pose = poseAt(die, seconds);
+      p.groups[i].position.copy(pose.position);
+      p.groups[i].quaternion.copy(pose.quaternion);
     });
-
-    diceList.forEach(c => {
-      if (c.userData.stopped) return;
-      c.userData.velocity.z -= gravity * dt;
-      if (c.position.z <= 0) {
-        const drag = c.userData.typeFriction || 0.88;
-        c.userData.velocity.x *= drag;
-        c.userData.velocity.y *= drag;
-      }
-      c.position.addScaledVector(c.userData.velocity, dt);
-      if (c.position.z <= 0) {
-        c.position.z = 0;
-        if (c.userData.velocity.z < -2.0) {
-          c.userData.velocity.z *= -restitution;
-          const veer = Math.abs(c.userData.velocity.z) * 0.2;
-          c.userData.velocity.x += (Math.random() - 0.5) * veer;
-          c.userData.velocity.y += (Math.random() - 0.5) * veer;
-        } else {
-          c.userData.velocity.z = 0;
-        }
-      }
-      if (c.position.x < bounds.minX) { c.position.x = bounds.minX; c.userData.velocity.x *= -restitution; }
-      if (c.position.x > bounds.maxX) { c.position.x = bounds.maxX; c.userData.velocity.x *= -restitution; }
-      if (c.position.y < bounds.minY) { c.position.y = bounds.minY; c.userData.velocity.y *= -restitution; }
-      if (c.position.y > bounds.maxY) { c.position.y = bounds.maxY; c.userData.velocity.y *= -restitution; }
-      const speedSq = c.userData.velocity.lengthSq();
-      if (speedSq < 0.2 && c.position.z === 0) { c.userData.stopped = true; return; }
-      const speed = Math.sqrt(speedSq);
-      const rotAxis = new THREE.Vector3(-c.userData.velocity.y, c.userData.velocity.x, c.userData.velocity.z).normalize();
-      if (rotAxis.lengthSq() > 0.1) c.rotateOnWorldAxis(rotAxis, speed * dt * (c.userData.rotMult || 1.5));
-    });
-
-    for (let i = 0; i < diceList.length; i++) {
-      for (let j = i + 1; j < diceList.length; j++) {
-        const c1 = diceList[i];
-        const c2 = diceList[j];
-        const dx = c2.position.x - c1.position.x;
-        const dy = c2.position.y - c1.position.y;
-        const dz = c2.position.z - c1.position.z;
-        const distSq = dx * dx + dy * dy + dz * dz;
-        const minDist = 2.0;
-        if (distSq < minDist * minDist && distSq > 0) {
-          const dist = Math.sqrt(distSq);
-          const overlap = minDist - dist;
-          const nx = dx / dist, ny = dy / dist, nz = dz / dist;
-          c1.position.x -= nx * overlap * 0.5; c1.position.y -= ny * overlap * 0.5; c1.position.z -= nz * overlap * 0.5;
-          c2.position.x += nx * overlap * 0.5; c2.position.y += ny * overlap * 0.5; c2.position.z += nz * overlap * 0.5;
-          const v1 = c1.userData.velocity, v2 = c2.userData.velocity;
-          const velAlongNormal = (v2.x - v1.x) * nx + (v2.y - v1.y) * ny + (v2.z - v1.z) * nz;
-          if (velAlongNormal < 0) {
-            const jImpulse = -(1 + 0.7) * velAlongNormal / 2;
-            const ix = nx * jImpulse, iy = ny * jImpulse, iz = nz * jImpulse;
-            v1.x -= ix; v1.y -= iy; v1.z -= iz;
-            v2.x += ix; v2.y += iy; v2.z += iz;
-            if (c1.userData.stopped && v1.lengthSq() > 0.5) c1.userData.stopped = false;
-            if (c2.userData.stopped && v2.lengthSq() > 0.5) c2.userData.stopped = false;
-          }
-        }
-      }
-    }
   });
 
   return null;
@@ -323,8 +293,8 @@ interface DiceTrayWindowProps {
 export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWindowProps) {
   const [history, setHistory] = useState<DiceRoll[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [latestRoll, setLatestRoll] = useState<{ total: number; results: any; diceSides?: Record<string, number>; color: string; timestamp: number } | null>(null);
-  const [displayRoll, setDisplayRoll] = useState<{ total: number; results: any; diceSides?: Record<string, number>; color: string; timestamp: number } | null>(null);
+  const [latestRoll, setLatestRoll] = useState<TrayRoll | null>(null);
+  const [displayRoll, setDisplayRoll] = useState<TrayRoll | null>(null);
   const [glitchState, setGlitchState] = useState<'none' | 'glitch' | 'critical'> ('none');
   const [isRolling, setIsRolling] = useState(false);
   const historyContainerRef = useRef<HTMLDivElement>(null);
@@ -343,7 +313,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
       const data = rollQueue.current.shift();
       if (!data) { rollTimer.current = null; return; }
       const hasDice = data.results && Object.keys(data.results).length > 0;
-      setLatestRoll({ total: data.total, results: data.results, diceSides: data.diceSides, color: data.color, timestamp: Date.now() });
+      setLatestRoll({ total: data.total, results: data.results, diceSides: data.diceSides, throw: data.throw, color: data.color, timestamp: Date.now() });
       setIsRolling(true);
       setDisplayRoll(null);
       setGlitchState('none');
@@ -429,9 +399,11 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
           )}
         </div>
 
-        <div style={{ height: '320px', width: '100%', position: 'relative' }}>
-          <Canvas camera={{ position: [0, 0, 13], fov: 35, near: 0.1, far: 100 }}>
-            <ambientLight intensity={1} />
+        {/* One shape on every screen (TRAY_ASPECT), so the walls, and the throw, are everyone's. */}
+        <div data-testid="dice-tray-floor" style={{ width: '100%', aspectRatio: String(TRAY_ASPECT), position: 'relative' }}>
+          <Canvas camera={{ position: [...TRAY_VIEW.position], fov: TRAY_VIEW.fov, near: 0.1, far: 100 }}>
+            <ambientLight intensity={0.6} />
+            <directionalLight position={[-3, 8, 5]} intensity={0.9} />
             <DiceScene latestRoll={latestRoll} />
           </Canvas>
         </div>
