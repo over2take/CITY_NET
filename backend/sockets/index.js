@@ -831,7 +831,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         // are, so the tray is told the shape to render via `diceSides`.
         const results = { [name]: rolledFaces };
         const diceSides = { [name]: faces.length };
-        const broadcastData = { userName: identity.displayName(userName), account: userName, results, diceSides, modifiers: [], color, total, historyString };
+        // Faces that aren't all numbers are what the tray's board says (6c4d1): APPLE · PEACH.
+        const board = allNumeric ? null : { words: rolledFaces.map((v) => String(v).toUpperCase()).join(' · ') };
+        const broadcastData = { userName: identity.displayName(userName), account: userName, results, diceSides, modifiers: [], color, total, historyString, ...(board ? { board } : {}) };
 
         db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
           [userName, total, JSON.stringify(results), color, historyString], (err2) => {
@@ -848,7 +850,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           if (!definition) return;
           const made = tableRolls.rollMenuDice({ definition, dieId: dieId.slice(4), count: c, rng: cryptoRng, who: identity.displayName(userName) });
           if (!made || !made.ok) return;
-          const broadcastData = { userName: identity.displayName(userName), account: userName, results: made.results, diceSides: made.diceSides, modifiers: [], color, total: made.total, historyString: made.historyText };
+          const broadcastData = { userName: identity.displayName(userName), account: userName, results: made.results, diceSides: made.diceSides, modifiers: [], color, total: made.total, historyString: made.historyText, ...(made.board ? { board: made.board } : {}) };
           db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
             [userName, made.total, JSON.stringify(made.results), color, made.historyText], (err2) => {
               if (err2) console.error('Error saving system dice roll:', err2);
@@ -1619,6 +1621,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               historyString: made.historyText,
               glitch: made.glitch,
               criticalGlitch: made.criticalGlitch,
+              ...(made.board ? { board: made.board } : {}),
             };
             db.run(
               'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',

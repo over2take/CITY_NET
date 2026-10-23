@@ -108,7 +108,19 @@ const describe = (result, symbols = []) => {
     ...result.effects.map((e) => e.toUpperCase()),
   ];
   const changes = result.changes.length ? ` (${result.changes.join(', ')})` : '';
-  return { working, tags: said.length ? ` — ${said.join(' · ')}` : '', changes };
+  return { working, tags: said.length ? ` — ${said.join(' · ')}` : '', changes, board: boardOf(result, symbols, said) };
+};
+
+/**
+ * What the tray's board says for a roll (6c4d1), in the log's words: what is left of the symbols
+ * where it counts them (the total first where it reads a sum), and what it came to. Null where it
+ * says nothing more than its total, which the board shows as it is.
+ */
+const boardOf = (result, symbols, said) => {
+  const left = result.symbols ? leftList(result.symbols, symbols).join(' · ') || NOTHING_LEFT : null;
+  const words = left && (result.read === 'symbols' ? left : `${result.total} · ${left}`);
+  if (!words && !said.length) return null;
+  return { ...(words ? { words } : {}), ...(said.length ? { outcome: said.join(' · ') } : {}) };
 };
 
 /** A face of a system's own die in the log: its number (signed on a die with any below 0) and the marks of its symbols. */
@@ -124,13 +136,17 @@ const marksOf = (symbols) => new Map(symbols.map((s) => [s.id, s.mark ?? s.name.
 /** One of a die's faces (diceOf's `{ n, s }`) as the log writes it, `g` saying if the die is signed. */
 const dieFaceText = (g, f, marks) => ownFaceText(g, { value: f.n ?? 0, ...(f.n === null ? { blank: true } : {}), ...(f.s.length ? { symbols: f.s } : {}) }, marks);
 
-/** What is left of each symbol, in the order the system lists them: "2 HIT, 1 EDGE", or "NOTHING LEFT". */
-const leftWords = (tally, symbols) => {
+const NOTHING_LEFT = 'NOTHING LEFT';
+
+/** What is left of each symbol, in the order the system lists them: ['2 HIT', '1 EDGE'], or none. */
+const leftList = (tally, symbols) => {
   const order = [...symbols.map((s) => s.id), ...Object.keys(tally.left).filter((id) => !symbols.some((s) => s.id === id))];
   const names = new Map(symbols.map((s) => [s.id, s.name.toUpperCase()]));
-  const said = order.filter((id) => (tally.left[id] ?? 0) > 0).map((id) => `${tally.left[id]} ${names.get(id) ?? id.toUpperCase()}`);
-  return said.length ? said.join(', ') : 'NOTHING LEFT';
+  return order.filter((id) => (tally.left[id] ?? 0) > 0).map((id) => `${tally.left[id]} ${names.get(id) ?? id.toUpperCase()}`);
 };
+
+/** The same as the log writes it: "2 HIT, 1 EDGE", or "NOTHING LEFT". */
+const leftWords = (tally, symbols) => leftList(tally, symbols).join(', ') || NOTHING_LEFT;
 
 /**
  * A system's own dice for the dice menu (6c4a): each by an `own:` id, its faces as the log writes
@@ -199,7 +215,8 @@ const trayOf = (result, symbols = [], dice = []) => {
  * which needn't be ROLLED BY anything yet, with no field or any, and `tryCosts` for changes that
  * cost something, since a test takes nothing. `conditions` are those on the character, whole as
  * conditionsOf gives them; each modifier on all rolls is added to the roll. Returns { ok: true, roll, result, historyText, results,
- * diceSides, own (the tray's own dice, 6c4b1), total, glitch, criticalGlitch } or { ok: false, error } (nothing rolled).
+ * diceSides, own (the tray's own dice, 6c4b1), board (its words for the tray's board or null, 6c4d1), total, glitch,
+ * criticalGlitch } or { ok: false, error } (nothing rolled).
  */
 /** A condition's modifiers on all rolls, each a term named by its short name: HURT -1. */
 const termsOf = (conditions) => (Array.isArray(conditions) ? conditions : []).flatMap((c) => (isPlainObject(c) && Array.isArray(c.modifiers) ? c.modifiers : [])
@@ -231,7 +248,7 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
   const label = roll.label || roll.id;
   const what = typeof fieldId === 'string' ? (statOf(definition, fieldId)?.label || formulaOf(definition, fieldId)?.label || fieldId) : null;
   const described = describe({ ...result, read: roll.read ?? 'sum' }, symbols);
-  const { working, tags } = described;
+  const { working, tags, board } = described;
   // A change that cost something says what it cost.
   const costWords = new Map(spends.map((s) => [s.label, s.words]));
   const changes = result.changes.length ? ` (${result.changes.map((l) => costWords.get(l) ?? l).join(', ')})` : '';
@@ -244,6 +261,7 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
     results: tray.results,
     diceSides: tray.diceSides,
     own: tray.own,
+    board,
     total: result.total,
     glitch: !!result.glitch,
     criticalGlitch: !!result.glitch && result.critical === 'failure',

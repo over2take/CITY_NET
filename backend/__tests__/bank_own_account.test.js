@@ -15,7 +15,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { makeTestDb, get, run } from './helpers/testDb.js';
-import { drain } from './helpers/until.js';
+import { drain, untilValue } from './helpers/until.js';
 
 process.env.JWT_SECRET = 'test-secret';
 
@@ -61,34 +61,37 @@ const identified = async (name = 'GHOST') => {
 const bank = async (username) =>
   get(db, `SELECT balance, debt FROM bank_accounts WHERE username = ? AND system = COALESCE((SELECT value FROM global_settings WHERE key = 'game_system'), 'generic')`, [username]);
 
+/**
+ * The account once a change has landed on it. drain is no strict barrier (helpers/until.js), and
+ * on CI's slower runner a balance was read before the withdrawal reached it; so where something
+ * should change, wait for it, and drain only where nothing should.
+ */
+const landed = (username, check) => untilValue(() => bank(username), check, { label: `${username}'s account to change` });
+
 describe('what these handlers still do, unchanged', () => {
   it('withdraws from the caller\'s own balance', async () => {
     const { handlers } = await identified('GHOST');
     handlers['withdrawFunds']({ username: 'GHOST', amount: 250 });
-    await drain(db);
-    expect((await bank('GHOST')).balance).toBe(750);
+    expect((await landed('GHOST', (a) => a.balance !== 1000)).balance).toBe(750);
   });
 
   it('borrows onto the caller\'s own debt', async () => {
     const { handlers } = await identified('GHOST');
     handlers['borrowFunds']({ username: 'GHOST', amount: 300 });
-    await drain(db);
-    expect((await bank('GHOST')).debt).toBe(800);
+    expect((await landed('GHOST', (a) => a.debt !== 500)).debt).toBe(800);
   });
 
   it('pays debt down from the caller\'s own balance', async () => {
     const { handlers } = await identified('GHOST');
     handlers['payDebt']({ username: 'GHOST', amount: 200 });
-    await drain(db);
-    expect(await bank('GHOST')).toMatchObject({ balance: 800, debt: 300 });
+    expect(await landed('GHOST', (a) => a.debt !== 500)).toMatchObject({ balance: 800, debt: 300 });
   });
 
   it('still clamps a payment to what is owed and what is held', async () => {
     // The existing rule: you cannot overpay a debt, or pay with money you do not have.
     const { handlers } = await identified('GHOST');
     handlers['payDebt']({ username: 'GHOST', amount: 999999 });
-    await drain(db);
-    expect(await bank('GHOST')).toMatchObject({ balance: 500, debt: 0 });
+    expect(await landed('GHOST', (a) => a.debt !== 500)).toMatchObject({ balance: 500, debt: 0 });
   });
 
   it('still ignores a nonsense amount', async () => {
@@ -105,18 +108,17 @@ describe('whose account it is', () => {
   it('will not withdraw from someone else by naming them', async () => {
     const { handlers } = await identified('GHOST');
     handlers['withdrawFunds']({ username: 'VICTIM', amount: 5000 });
-    await drain(db);
-
-    expect((await bank('VICTIM')).balance).toBe(8000);
     // The message named VICTIM, so the money came out of GHOST - the sender's own
     // account - rather than nobody's. Ignoring the field beats honouring it.
-    expect((await bank('GHOST')).balance).toBe(1000 - 5000);
+    expect((await landed('GHOST', (a) => a.balance !== 1000)).balance).toBe(1000 - 5000);
+    expect((await bank('VICTIM')).balance).toBe(8000);
   });
 
   it('will not saddle someone else with debt', async () => {
     const { handlers } = await identified('GHOST');
     handlers['borrowFunds']({ username: 'VICTIM', amount: 5000 });
-    await drain(db);
+    // Onto the sender's own debt instead, so the handler is known to have finished.
+    expect((await landed('GHOST', (a) => a.debt !== 500)).debt).toBe(5500);
     expect((await bank('VICTIM')).debt).toBe(0);
   });
 
@@ -124,7 +126,8 @@ describe('whose account it is', () => {
     await run(db, `UPDATE bank_accounts SET debt = 1000 WHERE username = 'VICTIM' AND system = COALESCE((SELECT value FROM global_settings WHERE key = 'game_system'), 'generic')`);
     const { handlers } = await identified('GHOST');
     handlers['payDebt']({ username: 'VICTIM', amount: 500 });
-    await drain(db);
+    // The sender's own debt paid instead, so the handler is known to have finished.
+    expect(await landed('GHOST', (a) => a.debt !== 500)).toMatchObject({ balance: 500, debt: 0 });
     expect(await bank('VICTIM')).toMatchObject({ balance: 8000, debt: 1000 });
   });
 

@@ -169,11 +169,21 @@ describe('requestCustomDiceRoll — GM dice', () => {
     handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: id, count: 2, color: '#0f0' });
     await waitForRolls(emitted);
 
-    const { total, historyString } = rolls(emitted)[0].data;
+    const { total, historyString, results, board } = rolls(emitted)[0].data;
     expect(total).toBe(0);
     // Comma-joined list rather than a summed expression
     expect(historyString).toMatch(/\[[^\]]*,[^\]]*\]/);
     expect(historyString).not.toMatch(/=/);
+    // The tray's board says the faces rolled, in capitals (6c4d1).
+    expect(board).toEqual({ words: results.punk.map((v) => String(v).toUpperCase()).join(' · ') });
+  });
+
+  it('tells the tray\'s board nothing for faces that are all numbers, which it shows as their total (6c4d1)', async () => {
+    const id = await insertDie('nums', 4, NUMERIC_FACES);
+    const { handlers, emitted } = boot(db);
+    handlers['requestCustomDiceRoll']({ userName: 'GHOST', dieId: id, count: 3, color: '#0f0' });
+    await waitForRolls(emitted);
+    expect(rolls(emitted)[0].data).not.toHaveProperty('board');
   });
 
   it('rolls the requested number of dice', async () => {
