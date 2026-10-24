@@ -27,7 +27,6 @@ vi.mock('../../assets/lets-icons--paper-light.svg', () => ({ default: 'paper-lig
 import * as THREE from 'three';
 import { DiceTrayWindow, CharacterBoard, DiceScene, type TrayRoll } from '../DiceTray';
 import { emptyField, putShow, putReady, showOf, SETTLE_MS, HOLD_MS } from '../../utils/trayBoard';
-import { TURN_MS } from '../../utils/trayWaiting';
 import { ThemeContext, THEMES } from '../../theme/themes';
 import { themedRollColor } from '../../theme/rollColor';
 import { TRAY_ASPECT, floorSeen, trayCamera, throwDice, diceOfRoll, printedOn, revealAfter } from '../../utils/trayThrow';
@@ -40,6 +39,12 @@ beforeEach(() => { vi.clearAllMocks(); three.current = null; three.frame = null;
 
 describe('CharacterBoard', () => {
   const lit = (container: HTMLElement) => container.querySelectorAll('.tray-board-px.on').length;
+  /** The board's dots read back as a field: cell by cell, 35 dots each, into rows of 80. */
+  const fieldOf = (container: HTMLElement) => {
+    const dots = [...container.querySelectorAll('.tray-board-px')];
+    return Array.from({ length: 14 }, (_, y) => Array.from({ length: 80 }, (__, x) =>
+      (dots[(Math.floor(y / 7) * 16 + Math.floor(x / 5)) * 35 + (y % 7) * 5 + (x % 5)].classList.contains('on') ? 1 : 0)));
+  };
   const d20 = (total: number, board?: { label?: string; words?: string; outcome?: string }) => ({ total, results: { 20: [total] }, ...(board ? { board } : {}) });
 
   it('is 16 by 2 cells of 5 by 7 dots, waiting on READY_', () => {
@@ -50,24 +55,30 @@ describe('CharacterBoard', () => {
     expect(lit(container)).toBeGreaterThan(0);
   });
 
-  it('waits with pictures taking turns, READY_ first, then PONG (6c4f)', () => {
+  it('waits on one picture till a roll, the next one the next wait: READY_, then PONG (6c4f)', () => {
     vi.useFakeTimers();
     try {
-      const { container } = render(<CharacterBoard rolls={null} rolling={false} landedAt={0} />);
-      // The board's dots read back as a field: cell by cell, 35 dots each, into rows of 80.
-      const field = () => {
-        const dots = [...container.querySelectorAll('.tray-board-px')];
-        return Array.from({ length: 14 }, (_, y) => Array.from({ length: 80 }, (__, x) =>
-          (dots[(Math.floor(y / 7) * 16 + Math.floor(x / 5)) * 35 + (y % 7) * 5 + (x % 5)].classList.contains('on') ? 1 : 0)));
-      };
+      // In strict mode, as the app runs in development: React runs each effect twice when the board
+      // first appears, which once counted two waits and skipped PONG for SNAKE.
+      const board = (props: React.ComponentProps<typeof CharacterBoard>) => <React.StrictMode><CharacterBoard {...props} /></React.StrictMode>;
+      const { container, rerender } = render(board({ rolls: null, rolling: false, landedAt: 0 }));
       const ready = emptyField();
       putReady(ready, 0);
-      expect(field()).toEqual(ready);
-      act(() => { vi.advanceTimersByTime(TURN_MS + 100); });
-      // PONG: a paddle down each side of the board.
-      const f = field();
-      expect(f.filter((row) => row[0])).toHaveLength(4);
-      expect(f.filter((row) => row[79])).toHaveLength(4);
+      expect(fieldOf(container)).toEqual(ready);
+      // However long the table is quiet, READY_ it stays (its cursor blinking).
+      act(() => { vi.advanceTimersByTime(60_000); });
+      const later = emptyField();
+      putReady(later, 60_000);
+      expect(fieldOf(container)).toEqual(later);
+      // A roll, its result, and the next wait: PONG, a paddle down each side and the net between.
+      rerender(board({ rolls: null, rolling: true, landedAt: 0 }));
+      const at = performance.now();
+      rerender(board({ rolls: [d20(9)], rolling: false, landedAt: at }));
+      act(() => { vi.advanceTimersByTime(SETTLE_MS + HOLD_MS + 100); });
+      const f = fieldOf(container);
+      expect(f.filter((row) => row[0]).length).toBeGreaterThanOrEqual(4);
+      expect(f.filter((row) => row[79]).length).toBeGreaterThanOrEqual(4);
+      expect(f.map((row) => row[40])).toEqual(Array.from({ length: 14 }, (_, y) => (y % 2 === 0 ? 1 : 0)));
     } finally {
       vi.useRealTimers();
     }
@@ -92,7 +103,8 @@ describe('CharacterBoard', () => {
     vi.useFakeTimers();
     try {
       const rolls = [d20(15, { label: 'TO HIT', outcome: 'HIT' }), d20(7, { label: 'DAMAGE' })];
-      const { container } = render(<CharacterBoard rolls={rolls} rolling={false} landedAt={performance.now()} />);
+      // In strict mode: opening on a result runs the counting effect twice, which must count it once.
+      const { container } = render(<React.StrictMode><CharacterBoard rolls={rolls} rolling={false} landedAt={performance.now()} /></React.StrictMode>);
       expect(screen.getByRole('img', { name: 'TO HIT 15 HIT / DAMAGE 7' })).toBeTruthy();
       const f = emptyField();
       putShow(f, showOf(rolls), 0);
@@ -104,13 +116,10 @@ describe('CharacterBoard', () => {
       expect(lit(container)).toBe(result);
       act(() => { vi.advanceTimersByTime(HOLD_MS); });
       expect(screen.getByRole('img', { name: 'Ready' })).toBeTruthy();
-      // Waiting starts again from READY_, not where the last wait left off (6c4f).
-      const dots = [...container.querySelectorAll('.tray-board-px')];
-      const shownNow = Array.from({ length: 14 }, (_, y) => Array.from({ length: 80 }, (__, x) =>
-        (dots[(Math.floor(y / 7) * 16 + Math.floor(x / 5)) * 35 + (y % 7) * 5 + (x % 5)].classList.contains('on') ? 1 : 0)));
-      const ready = emptyField();
-      putReady(ready, 0);
-      expect(shownNow).toEqual(ready);
+      // The wait after a roll is the next picture, PONG, a game from its start: the net, 0 to 0 (6c4f).
+      const waitingNow = fieldOf(container);
+      expect(waitingNow.map((row) => row[40])).toEqual(Array.from({ length: 14 }, (_, y) => (y % 2 === 0 ? 1 : 0)));
+      expect([waitingNow[1].slice(35, 38), waitingNow[1].slice(43, 46)]).toEqual([[1, 1, 1], [1, 1, 1]]);
     } finally {
       vi.useRealTimers();
     }

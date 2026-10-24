@@ -30,7 +30,7 @@ interface CharacterBoardProps {
  * DICE_TRAY.EXE's board (6c4e; approved mockup docs/mockups/tray-scoreboard.html v3): a 16 by 2
  * character display in the theme's primary. While the dice roll every cell flickers; as they land
  * the result decodes into place left to right; it stays HOLD_MS, turning pages if it has more than
- * two lines, then the board waits: READY_, then pictures taking turns (utils/trayWaiting.ts;
+ * two lines, then the board waits with a picture, the next one each wait (utils/trayWaiting.ts;
  * utils/trayBoard.ts works out what each dot of a result shows).
  * Its 1,120 dots are made once and painted directly, so a frame repaints only what changed.
  */
@@ -49,10 +49,17 @@ export function CharacterBoard({ rolls, rolling, landedAt }: CharacterBoardProps
   }, [rolling, show, landedAt]);
   const waiting = !rolling && (!show || over === landedAt);
 
-  // While waiting, pictures take turns (6c4f, utils/trayWaiting.ts), READY_ first each time.
+  // While waiting, a picture (6c4f, utils/trayWaiting.ts): one for the whole wait, the next one the
+  // next time, READY_ when the tray opens.
   const waitingDraw = useRef(makeWaiting());
   const waitingSince = useRef(0);
   useEffect(() => { if (waiting) waitingSince.current = performance.now(); }, [waiting]);
+  // Which wait this is: one more for each result told, known by when it landed, so running an effect
+  // twice (React does in development) never counts one twice and skips a picture.
+  const told = useRef({ count: 0, last: Number.NaN });
+  useEffect(() => {
+    if (show && landedAt !== told.current.last) told.current = { count: told.current.count + 1, last: landedAt };
+  }, [show, landedAt]);
 
   useEffect(() => {
     const paint = () => {
@@ -63,7 +70,7 @@ export function CharacterBoard({ rolls, rolling, landedAt }: CharacterBoardProps
         const since = now - landedAt;
         putShow(f, show, Math.max(0, since - SETTLE_MS));
         if (since < SETTLE_MS) putNoise(f, decodedAt(since));
-      } else waitingDraw.current(f, now - waitingSince.current);
+      } else waitingDraw.current(f, now - waitingSince.current, told.current.count);
       for (let y = 0; y < HEIGHT; y += 1) for (let x = 0; x < WIDTH; x += 1) {
         const k = (Math.floor(y / 7) * COLS + Math.floor(x / 5)) * 35 + (y % 7) * 5 + (x % 5);
         if (painted.current[k] === f[y][x]) continue;

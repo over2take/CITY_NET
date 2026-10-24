@@ -171,6 +171,19 @@ export const putBig = (f: Field, digits: string) => {
   }
 };
 
+/** Small 3 by 5 digits at `x0`, `y0`, a dot between: a score in PONG (utils/trayWaiting.ts). */
+export const putSmall = (f: Field, x0: number, y0: number, digits: string) => {
+  [...digits].forEach((d, i) => {
+    const g = G3[d];
+    if (!g) return;
+    for (let k = 0; k < 15; k += 1) {
+      const x = x0 + i * 4 + (k % 3);
+      const y = y0 + Math.floor(k / 3);
+      if (g[k] === '1' && y >= 0 && y < HEIGHT && x >= 0 && x < WIDTH) f[y][x] = 1;
+    }
+  });
+};
+
 /** The result into the field, `since` ms after it landed. */
 export const putShow = (f: Field, show: BoardShow, since: number) => {
   if ('big' in show) putBig(f, show.big);
