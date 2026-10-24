@@ -53,6 +53,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **DICE_TRAY.EXE's board is a 16 by 2 character display (6c4e).** The old 25 by 5 dot board could
+  only show a number. The new one, two lines of sixteen letters in the theme's color, says what was
+  rolled and what it came to: ATHLETICS 17, PHYSICAL SAVE 14 / SUCCESS, an attack's TO HIT 15 HIT /
+  DAMAGE 7 together, the symbols left on a system's own dice (3XGOOD 2 HIT / 2 EDGE), a word die's
+  faces. A plain roll still shows its total in big digits across both lines. Its letters flicker
+  while the dice roll and decode into place as they land; more than two lines turn pages; after ten
+  seconds it goes back to READY_.
 - **Share a system with its uploaded images.** A system with pictures uploaded for it (a symbol's,
   a condition's or a currency's icon) used to share only their addresses, so on another server they
   showed as broken images. EXPORT in MY SYSTEMS now asks first: ticked, it saves a .zip of the
