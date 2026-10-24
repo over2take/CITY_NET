@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { themeRoot } from '../utils/themeRoot';
+import { diceRailClick } from '../utils/rollNotify';
 import { controlsToken } from '../utils/tokenControl';
 import { attackAsOptions } from './tokenActions';
 import kofiLogo from '../assets/kofi.png';
@@ -835,9 +836,11 @@ interface DiceMenuProps {
   attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number; vehicle?: AttackVehicle | null } | null;
   onCancelAttack?: () => void;
   gameSystem?: string;
+  /** Someone else rolled while the tray was shut (6c4g, utils/rollNotify.ts): DICE_TRAY.exe flashes till it opens. */
+  hasUnseenRoll?: boolean;
 }
 
-export function DiceMenu({ userName, token, writeToken, locations = [], socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack, gameSystem, customDice = [], onOpenCustomDieBuilder, onDeleteCustomDie }: DiceMenuProps) {
+export function DiceMenu({ userName, token, writeToken, locations = [], socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack, gameSystem, customDice = [], onOpenCustomDieBuilder, onDeleteCustomDie, hasUnseenRoll = false }: DiceMenuProps) {
   const isAdmin = !!token;
   const defenseLabel = getTokenDefense(gameSystem).label;
   const diceTypes = [2, 4, 6, 8, 10, 12, 20, 100];
@@ -1036,7 +1039,7 @@ export function DiceMenu({ userName, token, writeToken, locations = [], socketRe
         ROLL DICE
       </button>
 
-      <button className="upload-btn" style={{ flexShrink: 0, padding: '10px', fontSize: '0.8rem', width: '100%' }} onClick={() => setIsDiceTrayOpen((prev: any) => !prev)}>
+      <button className={hasUnseenRoll ? 'upload-btn unread-flash' : 'upload-btn'} style={{ flexShrink: 0, padding: '10px', fontSize: '0.8rem', width: '100%' }} onClick={() => setIsDiceTrayOpen((prev: any) => !prev)}>
         DICE_TRAY.exe
       </button>
     </div>
@@ -1193,6 +1196,8 @@ interface SidebarProps {
   isChatOpen: boolean;
   setIsChatOpen: (v: boolean) => void;
   hasUnreadChat: boolean;
+  /** Someone else rolled while the tray was shut (6c4g): the rail's DICE_ROLLER flashes, and a click opens the tray too. */
+  hasUnseenRoll?: boolean;
   syncRhombusToDB: (s: any) => void;
   view: string;
   activeBattleMapData: any;
@@ -1235,7 +1240,7 @@ interface SidebarProps {
   onDeleteCustomDie?: (id: number | string) => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, writeToken, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, onEndCombat, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, writeToken, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, hasUnseenRoll = false, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, onEndCombat, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
   /** The rail label under the pointer, positioned from the button it belongs to. */
   const [railTip, setRailTip] = useState<{ label: string; x: number; y: number } | null>(null);
   // A custom system's own words for the rail's labels; today's text otherwise.
@@ -1348,7 +1353,14 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
             </svg>
           </button>}
-          <button className={`rail-btn ${activeMenu === 'dice_menu' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'dice_menu' ? 'none' : 'dice_menu')} aria-label="DICE_ROLLER" data-tip="DICE_ROLLER">
+          <button
+            className={`rail-btn ${activeMenu === 'dice_menu' ? 'active' : ''} ${hasUnseenRoll ? 'unread-flash' : ''}`}
+            onClick={() => {
+              const click = diceRailClick(activeMenu, hasUnseenRoll);
+              setActiveMenu(click.menu);
+              if (click.openTray) setIsDiceTrayOpen(true);
+            }}
+            aria-label="DICE_ROLLER" data-tip="DICE_ROLLER">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="12 2 20.5 7 20.5 17 12 22 3.5 17 3.5 7" />
               <polygon points="12 8 16.6 15.2 7.4 15.2" />
@@ -1489,7 +1501,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
           {activeMenu === 'character_controls' && <CharacterControlsMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} writeToken={writeToken} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} isVehiclesOpen={isVehiclesOpen} setIsVehiclesOpen={setIsVehiclesOpen} gameSystem={gameSystem} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
-          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} writeToken={writeToken} locations={locations} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} customDice={customDice} onOpenCustomDieBuilder={onOpenCustomDieBuilder} onDeleteCustomDie={onDeleteCustomDie} />}
+          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} writeToken={writeToken} locations={locations} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} customDice={customDice} onOpenCustomDieBuilder={onOpenCustomDieBuilder} onDeleteCustomDie={onDeleteCustomDie} hasUnseenRoll={hasUnseenRoll} />}
           {activeMenu === 'initiative_tracker' && initiativeOn && (
             <InitiativeNavPanel
               system={gameSystem}

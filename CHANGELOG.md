@@ -53,6 +53,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **DICE_TRAY.EXE tells you when someone else rolls (6c4g).** With the tray shut, another player's
+  or the GM's roll makes the DICE_ROLLER button on the rail flash, and the DICE_TRAY.exe button in
+  its menu too, until the tray is opened. Clicking the flashing rail button opens the menu and the
+  tray together, and the tray opens on the roll history so you can see who rolled what. Your own
+  rolls open the tray as before. The tray has a bell like chat's, right of ANIMATION, to turn this
+  off; it is kept on your account apart from chat's bell, and starts on.
 - **Pictures on DICE_TRAY.EXE's board while it waits (6c4f).** Between rolls the board shows a
   picture for as long as the table is quiet, and the next one after each roll: READY_ when it opens,
   then a game of PONG two paddles really play (they chase the ball, miss now and then, and the score

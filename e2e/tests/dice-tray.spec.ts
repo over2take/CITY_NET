@@ -128,6 +128,54 @@ test('the tray\'s ANIMATION toggle, kept on the account: turned off, still off a
   if (process.env.GRAPH_SHOTS) await page.getByText('DICE_TRAY.EXE', { exact: true }).locator('xpath=ancestor::*[3]').screenshot({ path: path.join(SHOTS, 'dice-tray-animation-toggle.png') });
 });
 
+test('someone else\'s roll flashes a shut tray\'s buttons; one click opens it on the history; the bell turns that off (6c4g)', async ({ page, browser, request }, info) => {
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const player = { username: `e2e_bell${again}`, password: 'e2e-player-password' };
+  // Two people signed in and two rolls: about 16 s here, four times that on a slow CI runner.
+  test.setTimeout(120_000);
+  await approvedPlayer(request, await gmToken(request), player);
+  const context = await browser.newContext({ baseURL: info.project.use.baseURL });
+  const theirs = await context.newPage();
+  const broken: string[] = [];
+  theirs.on('pageerror', (e) => broken.push(e.message));
+  const heard = listen(theirs);
+  await signInAsPlayer(theirs, player);
+  await signInAsGm(page);
+  const gmRolls = async () => {
+    if (!(await page.getByRole('button', { name: 'One more d6', exact: true }).isVisible())) await page.getByRole('button', { name: 'DICE_ROLLER', exact: true }).click();
+    await page.getByRole('button', { name: 'One more d6', exact: true }).click();
+    await page.getByRole('button', { name: /ROLL DICE/ }).click();
+  };
+  const rail = theirs.getByRole('button', { name: 'DICE_ROLLER', exact: true });
+  const tray = theirs.getByText('DICE_TRAY.EXE', { exact: true });
+  const bell = theirs.locator('.win95-window', { has: tray }).getByTitle('TOGGLE_NOTIFICATIONS');
+
+  // The GM rolls; the player's tray is shut, so its rail button flashes.
+  await gmRolls();
+  await expect.poll(() => heard.length, { timeout: 15_000 }).toBe(1);
+  await expect(rail).toHaveClass(/unread-flash/);
+  await expect(tray).toBeHidden();
+  // One click: the menu, its DICE_TRAY.exe button no longer flashing, and the tray open on the history.
+  await rail.click();
+  await expect(tray).toBeVisible();
+  await expect(theirs.getByTestId('dice-history')).toBeVisible();
+  await expect(rail).not.toHaveClass(/unread-flash/);
+  await expect(theirs.getByRole('button', { name: 'DICE_TRAY.exe' })).not.toHaveClass(/unread-flash/);
+
+  // The bell, right of ANIMATION, off and saved; the tray shut; the GM's next roll flashes nothing.
+  const saved = theirs.waitForResponse((r) => r.url().endsWith('/api/me/settings') && r.request().method() === 'PUT');
+  await bell.click();
+  expect((await saved).ok()).toBe(true);
+  await expect(bell).toHaveAttribute('aria-pressed', 'false');
+  await theirs.getByRole('button', { name: 'DICE_TRAY.exe' }).click();
+  await expect(tray).toBeHidden();
+  await gmRolls();
+  await expect.poll(() => heard.length, { timeout: 15_000 }).toBe(2);
+  await expect(rail).not.toHaveClass(/unread-flash/);
+  expect(broken).toEqual([]);
+  await context.close();
+});
+
 test('the tray in the theme picked: its board and its record in Oceanic\'s cyan, not Classic\'s green', async ({ page }) => {
   // The tray sat outside the app's theme once, and drew Classic whatever was picked.
   await page.addInitScript(() => localStorage.setItem('citynet_theme', 'ocean'));

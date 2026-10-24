@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useContext, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { DraggableWindow } from './DraggableWindow';
+import { DraggableWindow, NotifyBell } from './DraggableWindow';
 import { ThemeContext } from '../theme/themes';
 import { themedRollColor } from '../theme/rollColor';
 import paperFillIcon from '../assets/lets-icons--paper-fill.svg';
@@ -248,16 +248,21 @@ interface DiceTrayWindowProps {
   socketRef: React.MutableRefObject<any>;
   /** Whoever is signed in, GM or player: their ROLL or LANDED is kept on their account (6c4b3b). */
   authToken?: string | null;
+  /** The tray's bell (6c4g), between ANIMATION and the history button: whether others' rolls flash it while shut. */
+  bell?: boolean;
+  onToggleBell?: () => void;
+  /** Open with the roll history showing: the tray was opened on a flash, so there are rolls to catch up on. */
+  openHistory?: boolean;
 }
 
-export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken }: DiceTrayWindowProps) {
+export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bell, onToggleBell, openHistory = false }: DiceTrayWindowProps) {
   const theme = useContext(ThemeContext);
   const [motion, setMotion] = useTrayMotion(authToken);
   // Read when a roll arrives, inside the socket handlers set up once.
   const motionNow = useRef(motion);
   useEffect(() => { motionNow.current = motion; }, [motion]);
   const [history, setHistory] = useState<DiceRoll[]>([]);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(openHistory);
   const [latestRoll, setLatestRoll] = useState<TrayRoll | null>(null);
   /** The rolls on the board once landed, a group's together, and when they came down. */
   const [shown, setShown] = useState<{ rolls: RollBroadcast[]; at: number } | null>(null);
@@ -353,6 +358,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken }: D
       </span>
       ANIMATION
     </button>
+    {onToggleBell && <NotifyBell enabled={!!bell} onToggle={onToggleBell} />}
     <button
       onClick={() => setIsHistoryOpen(!isHistoryOpen)}
       className="win95-close-btn"
