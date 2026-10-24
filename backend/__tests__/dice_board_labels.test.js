@@ -29,11 +29,13 @@ const enemy = (ac, hp = 30) => token('SYSTEM', { hp, ac, shape: 'enemy_rhombus',
 /** A player at the table, as GHOST unless named. */
 const join = async (who = 'GHOST') => {
   const emitted = [];
-  let connect;
-  socketsFactory({ on: (e, cb) => { if (e === 'connection') connect = cb; }, emit: (event, data) => emitted.push({ event, data }), to: () => ({ emit: () => {} }) },
+  // Every connection handler, as a server calls each: initiative registers one of its own.
+  const connects = [];
+  socketsFactory({ on: (e, cb) => { if (e === 'connection') connects.push(cb); }, emit: (event, data) => emitted.push({ event, data }), to: () => ({ emit: () => {} }) },
     db, { elevatedUsers: new Set(), emitUpdate: vi.fn(), recordAction: vi.fn() });
   const handlers = {};
-  connect({ id: `board-${who}-${Math.random()}`, on: (e, fn) => { handlers[e] = fn; }, emit: (event, data) => emitted.push({ event, data }), broadcast: { emit: () => {} }, use: () => {}, join: () => {} });
+  const socket = { id: `board-${who}-${Math.random()}`, on: (e, fn) => { handlers[e] = fn; }, emit: (event, data) => emitted.push({ event, data }), broadcast: { emit: () => {} }, use: () => {}, join: () => {} };
+  for (const connect of connects) connect(socket);
   handlers.identify(who);
   await drain(db);
   const rolls = () => emitted.filter((e) => e.event === 'diceRollBroadcast').map((e) => e.data);
@@ -136,6 +138,79 @@ describe('an attack', () => {
     await t.heard('attackResult');
     const roll = t.rolls()[1];
     expect(roll.board).toEqual({ label: 'TO HIT', outcome: roll.total >= 11 ? 'HIT' : 'MISS' });
+  });
+});
+
+describe('saves, checks and the rest of the table\'s rolls (6c4d3)', () => {
+  it('a CWN save meets or beats the sheet\'s own number: SUCCESS or FAILURE, on the board and in the log', async () => {
+    await playing('cities_without_number');
+    await sheet('GHOST', 'cities_without_number', { save_physical: 1, save_mental: 99 });
+    const t = await join();
+    t.handlers.requestSheetRoll({ fieldId: 'save_physical' });
+    await until(() => t.rolls().length === 1, { label: 'the physical save' });
+    t.handlers.requestSheetRoll({ fieldId: 'save_mental' });
+    await until(() => t.rolls().length === 2, { label: 'the mental save' });
+    const [easy, hard] = t.rolls();
+    expect(easy.board).toEqual({ label: 'PHYSICAL SAVE', outcome: 'SUCCESS' });
+    expect(easy.historyString).toMatch(/^GHOST rolled Physical Save \[.+ = \d+\] — vs 1: SUCCESS$/);
+    expect(hard.board).toEqual({ label: 'MENTAL SAVE', outcome: 'FAILURE' });
+    expect(hard.historyString).toMatch(/ — vs 99: FAILURE$/);
+  });
+
+  it('a check the GM judges, and a save with no number on the sheet, by name alone', async () => {
+    await playing('cities_without_number');
+    await sheet('GHOST', 'cities_without_number', { shoot: 1, dex_mod: 1 });
+    const t = await join();
+    t.handlers.requestSheetRoll({ fieldId: 'shoot' });
+    await until(() => t.rolls().length === 1, { label: 'the check' });
+    t.handlers.requestSheetRoll({ fieldId: 'save_luck' });
+    await until(() => t.rolls().length === 2, { label: 'the save' });
+    const [check, save] = t.rolls();
+    expect(check.board).toEqual({ label: 'SHOOT' });
+    expect(save.board).toEqual({ label: 'LUCK SAVE' });
+    expect(save.historyString).not.toMatch(/ vs /);
+  });
+
+  it('an ability roll by the name its window gave it, kept short', async () => {
+    await playing('cyberpunk_red');
+    await sheet('GHOST', 'cyberpunk_red', { ref: 6 });
+    const t = await join();
+    t.handlers.rollAbility({ formula: '1d10 + @ref', label: 'Reflexes check' });
+    await until(() => t.rolls().length === 1, { label: 'the ability' });
+    t.handlers.rollAbility({ formula: '1d10', label: 'x'.repeat(80) });
+    await until(() => t.rolls().length === 2, { label: 'the long one' });
+    expect(t.rolls()[0].board).toEqual({ label: 'REFLEXES CHECK' });
+    expect(t.rolls()[1].board.label).toBe('X'.repeat(40));
+  });
+
+  it('SR6 drain: NO DRAIN, or the stun it did', async () => {
+    await playing('shadowrun_6e');
+    await sheet('GHOST', 'shadowrun_6e', { willpower: 30, logic: 30, stun_monitor: 200, stun_current: 0 });
+    const t = await join();
+    t.handlers.resistDrain({ drainValue: 1, attr: 'logic' });
+    await until(() => t.rolls().length === 1, { label: 'the light drain' });
+    t.handlers.resistDrain({ drainValue: 99, attr: 'logic' });
+    await until(() => t.rolls().length === 2, { label: 'the heavy drain' });
+    const [light, heavy] = t.rolls();
+    // Sixty dice: a hit or more is all but certain.
+    expect(light.board).toEqual({ label: 'DRAIN', outcome: 'NO DRAIN' });
+    expect(heavy.board).toEqual({ label: 'DRAIN', outcome: `${99 - heavy.total} STUN` });
+  });
+
+  it('initiative, in the game\'s own word for it, a combatant\'s and the NPC side\'s', async () => {
+    await playing('generic');
+    await run(db, `CREATE TABLE initiative_combat (id INTEGER PRIMARY KEY AUTOINCREMENT, turn_counter INTEGER DEFAULT 1, pass_counter INTEGER DEFAULT 1,
+      system TEXT DEFAULT 'generic', mode TEXT DEFAULT 'individual', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+    await run(db, `CREATE TABLE initiative_scene (scene_key TEXT PRIMARY KEY, combat_id INTEGER NOT NULL, combatants TEXT NOT NULL DEFAULT '[]',
+      sides TEXT NOT NULL DEFAULT '[]', turn_index INTEGER DEFAULT 0, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+    const t = await join();
+    t.handlers['initiative:start']({ sceneKey: 'city:0', system: 'generic', mode: 'side' });
+    await until(async () => (await new Promise((r) => db.get('SELECT 1 AS n FROM initiative_scene', (e, row) => r(row)))), { label: 'the combat' });
+    t.handlers['initiative:roll']({ sceneKey: 'city:0', combatant: { id: 'ghost', name: 'GHOST', score: 14 } });
+    await until(() => t.rolls().length === 1, { label: 'the combatant' });
+    t.handlers['initiative:roll_side']({ sceneKey: 'city:0', score: 5 });
+    await until(() => t.rolls().length === 2, { label: 'the NPC side' });
+    expect(t.rolls().map((r) => r.board)).toEqual([{ label: 'INITIATIVE' }, { label: 'INITIATIVE' }]);
   });
 });
 

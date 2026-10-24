@@ -215,7 +215,7 @@ const trayOf = (result, symbols = [], dice = []) => {
  * which needn't be ROLLED BY anything yet, with no field or any, and `tryCosts` for changes that
  * cost something, since a test takes nothing. `conditions` are those on the character, whole as
  * conditionsOf gives them; each modifier on all rolls is added to the roll. Returns { ok: true, roll, result, historyText, results,
- * diceSides, own (the tray's own dice, 6c4b1), board (its words for the tray's board or null, 6c4d1), total, glitch,
+ * diceSides, own (the tray's own dice, 6c4b1), board (its words for the tray's board, 6c4d1, named 6c4d3), total, glitch,
  * criticalGlitch } or { ok: false, error } (nothing rolled).
  */
 /** A condition's modifiers on all rolls, each a term named by its short name: HURT -1. */
@@ -261,7 +261,9 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
     results: tray.results,
     diceSides: tray.diceSides,
     own: tray.own,
-    board,
+    // Named for what was rolled (6c4d3): the field where there is one (PHYSICAL SAVE says more
+    // than its roll's SAVE), otherwise the roll.
+    board: { label: String(what || label).toUpperCase(), ...(board || {}) },
     total: result.total,
     glitch: !!result.glitch,
     criticalGlitch: !!result.glitch && result.critical === 'failure',
