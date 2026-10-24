@@ -4,6 +4,7 @@ import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { DraggableWindow } from './DraggableWindow';
 import { ThemeContext } from '../theme/themes';
+import { themedRollColor } from '../theme/rollColor';
 import paperFillIcon from '../assets/lets-icons--paper-fill.svg';
 import paperLightIcon from '../assets/lets-icons--paper-light.svg';
 import type { DiceRoll } from '../types';
@@ -148,7 +149,7 @@ export function DotMatrixScoreboard({ value, timestamp, isRolling }: DotMatrixSc
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
+    <div data-testid="dice-board" style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
       {grid.map((row, rIdx) => (
         <div key={rIdx} style={{ display: 'flex', gap: '4px' }}>
           {row.map((val, cIdx) => {
@@ -221,7 +222,7 @@ export function DiceScene({ latestRoll, landed = false }: DiceSceneProps) {
     const owned: { dispose: () => void }[] = [];
     const ground = new THREE.Color(theme.background);
     const groups = thrown.dice.map((die) => {
-      const tone = new THREE.Color(die.spec.danger ? theme.danger : die.spec.color ?? latestRoll.color);
+      const tone = new THREE.Color(die.spec.danger ? theme.danger : themedRollColor(die.spec.color ?? latestRoll.color, theme));
       const group = new THREE.Group();
       const body = new THREE.MeshStandardMaterial({ color: tone.clone().lerp(ground, 0.82), emissive: tone.clone().multiplyScalar(0.05), roughness: 0.55, metalness: 0.15, flatShading: true });
       const edges = new THREE.EdgesGeometry(die.shape.geometry, 12);
@@ -315,6 +316,7 @@ interface DiceTrayWindowProps {
 }
 
 export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken }: DiceTrayWindowProps) {
+  const theme = useContext(ThemeContext);
   const [motion, setMotion] = useTrayMotion(authToken);
   // Read when a roll arrives, inside the socket handlers set up once.
   const motionNow = useRef(motion);
@@ -484,7 +486,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken }: D
               const match = h.historyString.match(/^(.*?) rolled (.*)$/);
               return (
                 <React.Fragment key={i}>
-                  <div style={{ marginBottom: '8px', color: h.color, textShadow: '1px 1px 2px #000, 0 0 8px #000, 0 0 4px #000', wordBreak: 'break-word' }}>
+                  <div style={{ marginBottom: '8px', color: themedRollColor(h.color, theme), textShadow: '1px 1px 2px #000, 0 0 8px #000, 0 0 4px #000', wordBreak: 'break-word' }}>
                     {match ? <><strong style={{ fontWeight: 800 }}>{match[1]}:</strong> rolled {match[2]}</> : h.historyString}
                   </div>
                   {i < history.length - 1 && <div style={{ borderBottom: '1px solid var(--green)', opacity: 0.4, margin: '12px 0' }} />}

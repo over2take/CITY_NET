@@ -9,6 +9,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **DICE_TRAY.EXE in every theme.** The tray's board, its rim and danger color, and the building
+  window's spinning render were drawn in Classic's green whatever theme was picked: they sat
+  outside the app's theme. They follow it now. A roll's dice and its line in the record take the
+  roller's token color as before, and a token with no color picked now takes the theme's color
+  rather than green; a picked color too dark to read on the theme (a deep blue) is lightened just
+  enough to read, staying that player's color.
 - **A symbol's COUNTS AS list on the DICE tab.** A symbol that already counted as another (Crit as
   Hit) listed that one twice. It is listed once now.
 - **Picking another roll on the ROLLS tab.** The roll's editor and its TEST ROLL panel could get

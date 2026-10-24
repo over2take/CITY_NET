@@ -125,6 +125,23 @@ test('the tray\'s ANIMATION toggle, kept on the account: turned off, still off a
   if (process.env.GRAPH_SHOTS) await page.getByText('DICE_TRAY.EXE', { exact: true }).locator('xpath=ancestor::*[3]').screenshot({ path: path.join(SHOTS, 'dice-tray-animation-toggle.png') });
 });
 
+test('the tray in the theme picked: its board and its record in Oceanic\'s cyan, not Classic\'s green', async ({ page }) => {
+  // The tray sat outside the app's theme once, and drew Classic whatever was picked.
+  await page.addInitScript(() => localStorage.setItem('citynet_theme', 'ocean'));
+  await signInAsGm(page);
+  await page.getByRole('button', { name: 'DICE_ROLLER', exact: true }).click();
+  await page.getByRole('button', { name: 'One more d6', exact: true }).click();
+  await page.getByRole('button', { name: /ROLL DICE/ }).click();
+  await expect(page.getByText('DICE_TRAY.EXE', { exact: true })).toBeVisible();
+  // A lit dot of the board, once the total is told: the only ones in a solid color, the rest fade.
+  const litDot = () => page.getByTestId('dice-board').evaluate((board) => [...board.querySelectorAll(':scope > div > div')]
+    .map((d) => (d as HTMLElement).style.backgroundColor).find((c) => c.startsWith('rgb(')) ?? null);
+  await expect.poll(litDot, { timeout: 15_000 }).toBe('rgb(0, 255, 255)');
+  await page.getByTitle('TOGGLE_HISTORY').click();
+  const line = page.getByTestId('dice-history').locator('> div').filter({ hasText: 'rolled' }).last();
+  await expect(line).toHaveCSS('color', 'rgb(0, 255, 255)');
+});
+
 test('no queue: one person\'s rolls a moment apart land as one throw, and a later roll cuts in with the earlier in the record at once (6c4c)', async ({ page }) => {
   const broadcasts = listen(page);
   await signInAsGm(page);
