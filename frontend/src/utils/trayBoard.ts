@@ -171,6 +171,19 @@ export const putBig = (f: Field, digits: string) => {
   }
 };
 
+/** Small 3 by 5 digits at `x0`, `y0`, a dot between: a score in PONG (utils/trayWaiting.ts). */
+export const putSmall = (f: Field, x0: number, y0: number, digits: string) => {
+  [...digits].forEach((d, i) => {
+    const g = G3[d];
+    if (!g) return;
+    for (let k = 0; k < 15; k += 1) {
+      const x = x0 + i * 4 + (k % 3);
+      const y = y0 + Math.floor(k / 3);
+      if (g[k] === '1' && y >= 0 && y < HEIGHT && x >= 0 && x < WIDTH) f[y][x] = 1;
+    }
+  });
+};
+
 /** The result into the field, `since` ms after it landed. */
 export const putShow = (f: Field, show: BoardShow, since: number) => {
   if ('big' in show) putBig(f, show.big);
@@ -185,5 +198,5 @@ export const putNoise = (f: Field, from = 0, random: () => number = Math.random)
 /** How many cells have decoded `since` ms after the dice came down. */
 export const decodedAt = (since: number): number => Math.max(0, Math.min(COLS, Math.floor((since / SETTLE_MS) * COLS)));
 
-/** Waiting: DICE_TRAY.EXE above a blinking READY_ (the other waiting pictures come next, 6c4f). */
+/** Waiting: DICE_TRAY.EXE above a blinking READY_, the first of the pictures taking turns (utils/trayWaiting.ts). */
 export const putReady = (f: Field, t: number) => putLines(f, [centerLine('DICE_TRAY.EXE'), centerLine(`READY${Math.floor(t / 530) % 2 ? '_' : ' '}`)]);
