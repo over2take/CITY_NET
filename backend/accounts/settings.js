@@ -4,10 +4,12 @@ const { isMainAdmin } = require('../middleware/auth');
 // a player's on their player account, the GM's on theirs. Only the settings named here, each with
 // the choices it may take and the one it starts on; nothing anybody writes becomes a setting.
 // The first is the dice tray's: ROLL, every throw played (6c4b2b), or LANDED, the dice shown as
-// they came to rest.
+// they came to rest. Then the tray's bell (6c4g): whether someone else's roll, made while the tray
+// is shut, makes its buttons flash.
 
 const SETTINGS = {
   trayMotion: { choices: ['roll', 'landed'], start: 'roll' },
+  trayNotify: { choices: ['on', 'off'], start: 'on' },
 };
 
 /**

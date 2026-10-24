@@ -11,6 +11,7 @@ vi.mock('../DraggableWindow', () => ({
       {children}
     </div>
   ),
+  NotifyBell: ({ enabled, onToggle }: any) => <button title="TOGGLE_NOTIFICATIONS" aria-pressed={enabled} onClick={onToggle} />,
 }));
 
 // A test can hand the scene a real three.js scene and camera (`three.current`) and step its frames.
@@ -179,6 +180,32 @@ describe('DiceTrayWindow', () => {
     render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} />);
     const controls = screen.getByTestId('title-controls');
     expect(controls.querySelector('button')).not.toBeNull();
+  });
+
+  it('puts its bell between ANIMATION and the history button, on or off as told (6c4g)', async () => {
+    const user = userEvent.setup();
+    const onToggleBell = vi.fn();
+    const { rerender } = render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={makeSocketRef()} bell onToggleBell={onToggleBell} />);
+    const order = [...screen.getByTestId('title-controls').querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.title);
+    expect(order).toEqual(['Animation', 'TOGGLE_NOTIFICATIONS', 'TOGGLE_HISTORY']);
+    expect(screen.getByTitle('TOGGLE_NOTIFICATIONS').getAttribute('aria-pressed')).toBe('true');
+    await user.click(screen.getByTitle('TOGGLE_NOTIFICATIONS'));
+    expect(onToggleBell).toHaveBeenCalledTimes(1);
+    rerender(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={makeSocketRef()} bell={false} onToggleBell={onToggleBell} />);
+    expect(screen.getByTitle('TOGGLE_NOTIFICATIONS').getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('has no bell when nothing is given to ring it', () => {
+    render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={makeSocketRef()} />);
+    expect(screen.queryByTitle('TOGGLE_NOTIFICATIONS')).toBeNull();
+  });
+
+  it('opens on the roll history when opened on a flash, and shut otherwise (6c4g)', () => {
+    const { unmount } = render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={makeSocketRef()} />);
+    expect(screen.queryByTestId('dice-history')).toBeNull();
+    unmount();
+    render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={makeSocketRef()} openHistory />);
+    expect(screen.getByTestId('dice-history')).toBeInTheDocument();
   });
 
   it('renders the Canvas for 3D dice', () => {

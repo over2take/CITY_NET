@@ -5,6 +5,26 @@ import { setStacked, unstack, useIsFocused, focusedZ, windowKey, rememberedPos, 
 
 let zCounter = 2000;
 
+/** The title bar's bell: a window's notifications on or off. A window may place it among its own controls. */
+export function NotifyBell({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+  return (
+    <button
+      onClick={onToggle}
+      className="win95-close-btn"
+      style={{ background: 'var(--black)', padding: '2px', width: '22px', height: '22px' }}
+      title="TOGGLE_NOTIFICATIONS"
+      aria-pressed={enabled}
+    >
+      <img
+        src={enabled ? notifyOnIcon : notifyOffIcon}
+        width="14" height="14"
+        alt="Notify"
+        style={{ filter: 'brightness(0) invert(1)' }}
+      />
+    </button>
+  );
+}
+
 interface DraggableWindowProps {
   title: string;
   centerTitle?: React.ReactNode;
@@ -122,21 +142,7 @@ export function DraggableWindow({
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           {titleControls}
-          {onToggleNotifications && (
-            <button
-              onClick={onToggleNotifications}
-              className="win95-close-btn"
-              style={{ background: 'var(--black)', padding: '2px', width: '22px', height: '22px' }}
-              title="TOGGLE_NOTIFICATIONS"
-            >
-              <img
-                src={notificationsEnabled ? notifyOnIcon : notifyOffIcon}
-                width="14" height="14"
-                alt="Notify"
-                style={{ filter: 'brightness(0) invert(1)' }}
-              />
-            </button>
-          )}
+          {onToggleNotifications && <NotifyBell enabled={!!notificationsEnabled} onToggle={onToggleNotifications} />}
           <button className="win95-close-btn" onClick={onClose} style={{ width: '22px', height: '22px' }}>×</button>
         </div>
       </div>

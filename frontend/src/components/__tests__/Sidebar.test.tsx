@@ -92,6 +92,18 @@ describe('DiceMenu', () => {
     expect(menu.match(/#1a3a1a|#1a4a2a|'#666'|'#444'/g)).toBeNull();
   });
 
+  it('flashes DICE_TRAY.exe while someone else\'s roll waits unseen, and opens the tray from it (6c4g)', async () => {
+    const setIsDiceTrayOpen = vi.fn();
+    const { rerender } = render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'DICE_TRAY.exe' }).classList.contains('unread-flash')).toBe(false);
+    rerender(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={vi.fn()} hasUnseenRoll />);
+    const tray = screen.getByRole('button', { name: 'DICE_TRAY.exe' });
+    expect(tray.classList.contains('unread-flash')).toBe(true);
+    await userEvent.setup().click(tray);
+    expect(setIsDiceTrayOpen).toHaveBeenCalledTimes(1);
+    expect(setIsDiceTrayOpen.mock.calls[0][0](false)).toBe(true);
+  });
+
   it('renders DICE_ROLLER header', () => {
     render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} />);
     expect(screen.getByText('DICE_ROLLER')).toBeInTheDocument();

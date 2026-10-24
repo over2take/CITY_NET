@@ -74,6 +74,9 @@ import { TvPortrait } from './components/TvPortrait';
 import { headshotsForShape } from './headshots';
 import { getTemplate } from './sheets';
 import { DiceTrayWindow, DiceScene } from './components/DiceTray';
+import { useTrayNotify } from './hooks/useTrayNotify';
+import { useRollFlash } from './hooks/useRollFlash';
+import { rollerOf } from './utils/rollNotify';
 import { CustomDieBuilder } from './components/CustomDieBuilder';
 import { useCustomDice } from './hooks/useCustomDice';
 import { EnemyRhombus, FriendlyRhombus, PlayerRhombus, OverlapChecker } from './components/Rhombuses';
@@ -382,6 +385,10 @@ function App() {
   }, []);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
+  // DICE_TRAY.EXE's bell and flash (6c4g): someone else's roll while the tray is shut flashes its
+  // buttons till it opens, and it opens on the roll history.
+  const [trayBell, setTrayBell] = useTrayNotify(token || playerToken);
+  const rollFlash = useRollFlash(userName, isDiceTrayOpen, trayBell === 'on');
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isVehiclesOpen, setIsVehiclesOpen] = useState(false);
@@ -932,9 +939,11 @@ function App() {
       // originating from the standalone sheet tab which can't call onRolled().
       // Match on the login account: userName in the broadcast is the sheet's
       // display name (handle), which may differ.
-      if ((data.account ?? data.userName) === userName) {
+      if (rollerOf(data) === userName) {
         setIsDiceTrayOpen(true);
         setActiveSidebarMenu('dice_menu');
+      } else {
+        rollFlash.arrived(data);
       }
     },
     onAttackResult: (data) => {
@@ -1757,6 +1766,7 @@ function App() {
               isChatOpen={isChatOpen}
               setIsChatOpen={setIsChatOpen}
               hasUnreadChat={hasUnreadChat}
+              hasUnseenRoll={rollFlash.flashing}
               syncRhombusToDB={syncRhombusToDB}
               view={view}
               activeBattleMapData={activeBattleMapData}
@@ -2446,6 +2456,9 @@ function App() {
                     onClose={() => setIsDiceTrayOpen(false)}
                     socketRef={socketRef}
                     authToken={token || playerToken}
+                    bell={trayBell === 'on'}
+                    onToggleBell={() => setTrayBell(trayBell === 'on' ? 'off' : 'on')}
+                    openHistory={rollFlash.openOnHistory}
                 />
             )}
             {(() => {
