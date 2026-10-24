@@ -14,7 +14,7 @@ const { applyDerived } = require('./templates');
 const { parseTokenConditions } = require('../tokens/conditions');
 const { restOn, restLine, restDice } = require('../systemBuilder/resting');
 const { conditionsOf } = require('../systemBuilder/conditions');
-const { withThrow } = require('../utils/diceThrow');
+const { withThrow, boardOf } = require('../utils/diceThrow');
 
 const LIMITS = { players: 100, npcs: 100 };
 const NPC_SHAPES = ['enemy_rhombus', 'friendly_rhombus'];
@@ -134,7 +134,8 @@ const callRest = async (db, io, { system, definition, rest, players, npcs, rng =
     const { results, total } = restDice(result);
     const account = c.kind === 'player' ? c.username : c.name;
     await run(db, 'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)', [account, total, JSON.stringify(results), LOG_COLOR, historyString]);
-    io.emit('diceRollBroadcast', withThrow({ userName: c.name, account, results, modifiers: [], color: LOG_COLOR, total, historyString }));
+    // The tray's board names the rest (6c4d3).
+    io.emit('diceRollBroadcast', withThrow({ userName: c.name, account, results, modifiers: [], color: LOG_COLOR, total, historyString, board: boardOf(String(rest.name).toUpperCase()) }));
     if (c.kind === 'player') io.emit('sheetUpdated', { username: c.username });
     done.push({ ...shown(definition, c, result), line: historyString });
   }

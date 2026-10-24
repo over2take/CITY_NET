@@ -229,6 +229,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   parallel mode, where on a busy machine a query sent later can be answered first; tests that
   waited a number of database rounds could then check too soon, and failed on CI only. It is
   now serialized, so those waits mean what they say.
+- **Every roll named for the dice tray's board, and CWN saves judged (6c4d3).** The rest of the
+  table's rolls now say what they were for too: sheet rolls by their skill or save, ability rolls,
+  initiative (in the game's own word for it), rests by name, ramming, and Shadowrun's drain with
+  the stun it did. A custom system's roll is named for the field rolled (PHYSICAL SAVE), or the roll
+  where there is none. And a Cities Without Number save now says whether it met the number on the
+  sheet: "rolled Physical Save [14] — vs 12: SUCCESS", in the log as on the board.
 - **What each roll was for, for the dice tray's board (6c4d2).** The built-in games' rolls now
   tell the tray what they were for and what they came to: an attack's TO HIT and whether it was a
   HIT or a MISS, its DAMAGE (DOWN, ARMOR HELD, a critical injury), Shadowrun's DODGE, a death save,

@@ -169,6 +169,8 @@ describe('calling a rest', () => {
     expect(lines[2].total).toBe(vexDie[8][0]);
 
     expect(emitted.filter((e) => e.event === 'diceRollBroadcast').map((e) => e.payload.historyString)).toEqual(lines.map((l) => l.historyString));
+    // The tray's board names the rest each was rolled for (6c4d3).
+    expect(emitted.filter((e) => e.event === 'diceRollBroadcast').map((e) => e.payload.board)).toEqual(lines.map(() => ({ label: 'LONG REST' })));
     expect(emitted.filter((e) => e.event === 'sheetUpdated').map((e) => e.payload.username)).toEqual(['ash', 'Rook', 'vex']);
     expect(emitted.filter((e) => e.event === 'dataUpdated')).toEqual([{ event: 'dataUpdated', payload: { isRhombusOnly: true } }]);
   });

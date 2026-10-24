@@ -1149,6 +1149,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               io.emit('diceRollBroadcast', withThrow({
                 username: info.userName, total: out.damage, results: roll.rolls,
                 color: '#ff4444', historyString: history,
+                // What the rammed came to, as the log ends it (6c4d3).
+                board: boardOf('RAM', out.targetDown ? (out.target.isPerson ? 'DOWN' : 'WRECKED') : null),
               }));
               afterSeatingChange([out.rammer.owner, payload.owner, targetUsername], system);
             }
@@ -1690,8 +1692,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               + (spend.negate ? ' (LUCK: FUMBLE SHIELD)' : '');
             const woundTag = hp !== null && hp <= 0 ? ' (MORTALLY WOUNDED -4)'
               : hp !== null && Number(data.seriously_wounded) > 0 && hp <= Number(data.seriously_wounded) ? ' (WOUNDED -2)' : '';
+            // A CWN save meets or beats the number on the sheet (sheets/rolls.js `target`, 6c4d3);
+            // a crashed plug fails whatever the die says.
+            const target = rollDef.target ? Number(data[rollDef.target]) : NaN;
+            const met = Number.isFinite(target) && target > 0 ? !outcome.plugCrash && outcome.total >= target : null;
+            const vsTag = met === null ? '' : ` — vs ${target}: ${met ? 'SUCCESS' : 'FAILURE'}`;
             const historyString =
-              `${identity.displayName(info.userName)} rolled ${rollDef.label}${forName ? ` for ${forName}` : ''} [${outcome.breakdown} = ${outcome.total}]${luckTag}${woundTag}${critTag}`;
+              `${identity.displayName(info.userName)} rolled ${rollDef.label}${forName ? ` for ${forName}` : ''} [${outcome.breakdown} = ${outcome.total}]${luckTag}${woundTag}${vsTag}${critTag}`;
             // A crashed jack is down for the scene, so it has to outlive this roll.
             if (outcome.plugCrash) {
               patchSheet(
@@ -1722,6 +1729,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               historyString,
               glitch: outcome.glitch ?? false,
               criticalGlitch: !!(outcome.glitch && outcome.critical === 'failure'),
+              board: boardOf(rollDef.label.toUpperCase(), outcome.plugCrash ? 'PLUG CRASH' : met === null ? null : met ? 'SUCCESS' : 'FAILURE'),
             };
             db.run(
               'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
@@ -1769,6 +1777,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               historyString,
               glitch: outcome.glitch ?? false,
               criticalGlitch: !!(outcome.glitch && outcome.critical === 'failure'),
+              // Named by the window that rolled it (6c4d3), kept to a board's sensible length.
+              board: boardOf(label.slice(0, 40).toUpperCase()),
             };
             db.run(
               'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
@@ -1829,6 +1839,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               historyString,
               glitch: outcome.glitch ?? false,
               criticalGlitch: !!(outcome.glitch && outcome.critical === 'failure'),
+              board: boardOf('DRAIN', netDrain === 0 ? 'NO DRAIN' : `${netDrain} STUN`),
             };
             patchSheet(
               db,

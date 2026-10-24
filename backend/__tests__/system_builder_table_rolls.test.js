@@ -186,11 +186,14 @@ describe('a field rolled', () => {
     expect(termsOf(undefined)).toEqual([]);
   });
 
-  it('tells the tray\'s board what a roll came to, and nothing for a total alone (6c4d1)', () => {
-    expect(roll({ fieldId: 'fight' }).board).toEqual({ outcome: 'FULL' });
-    expect(rollField({ definition: HEARTH, data: SHEET, fieldId: 'save', rng: d(20, 17), who: 'K' }).board).toEqual({ outcome: 'vs 15: SUCCESS' });
-    expect(rollField({ definition: HEARTH, data: SHEET, fieldId: 'str', chosen: ['advantage'], rng: d(20, 20, 3), who: 'K' }).board).toEqual({ outcome: 'NATURAL 20' });
-    expect(roll({ fieldId: 'fight', rollId: 'brawl' }).board).toBeNull();
+  it('tells the tray\'s board what was rolled and what it came to, only its name for a total alone (6c4d1, 6c4d3)', () => {
+    // Named for the field rolled, which says more than the roll: PHYSICAL SAVE, not SAVE.
+    expect(roll({ fieldId: 'fight' }).board).toEqual({ label: 'FIGHT', outcome: 'FULL' });
+    expect(rollField({ definition: HEARTH, data: SHEET, fieldId: 'save', rng: d(20, 17), who: 'K' }).board).toEqual({ label: 'PHYSICAL SAVE', outcome: 'vs 15: SUCCESS' });
+    expect(rollField({ definition: HEARTH, data: SHEET, fieldId: 'str', chosen: ['advantage'], rng: d(20, 20, 3), who: 'K' }).board).toEqual({ label: 'STRENGTH', outcome: 'NATURAL 20' });
+    expect(roll({ fieldId: 'fight', rollId: 'brawl' }).board).toEqual({ label: 'FIGHT' });
+    // A roll with no field, as TEST ROLL and the dice menu make, by the roll's own name.
+    expect(rollField({ definition: HEARTH, data: SHEET, roll: { id: 'quick', label: 'Quick d6', dice: [{ count: '1', sides: 6 }] }, rng: d(6, 4), who: 'K' }).board).toEqual({ label: 'QUICK D6' });
   });
 
   it('glitches tell the tray, as SR6\'s do', () => {
@@ -263,7 +266,7 @@ describe('rolling at the table, through the socket', () => {
     expect(roll.data.total).toBe(roll.data.results['6'].reduce((a, b) => a + b, 0) + 3);
     expect((await get(db, 'SELECT total, historyString FROM dice_rolls')).historyString).toBe(roll.data.historyString);
     // The tray's board is told what it came to, as the log ends (6c4d1).
-    expect(roll.data.board).toEqual({ outcome: roll.data.historyString.split(' — ')[1] });
+    expect(roll.data.board).toEqual({ label: 'FIGHT', outcome: roll.data.historyString.split(' — ')[1] });
   });
 
   it('rolls another of the field\'s rolls, with changes, and ignores what it can\'t roll', async () => {
@@ -452,13 +455,13 @@ describe('a system\'s own dice at the table (6c1b)', () => {
 
   it('tells the tray\'s board what is left and what it came to, in the log\'s words (6c4d1)', () => {
     const r = rollField({ definition: DICED, data: SHEET, fieldId: 'fight', rng: faces([3, 3], [2, 3], [2, 2]), who: 'K' });
-    expect(r.board).toEqual({ words: '1 HIT · 1 EDGE', outcome: 'vs 1: SUCCESS' });
+    expect(r.board).toEqual({ label: 'FIGHT', words: '1 HIT · 1 EDGE', outcome: 'vs 1: SUCCESS' });
     const none = rollField({ definition: DICED, data: SHEET, fieldId: 'fight', rng: faces([1, 3], [2, 3], [2, 2]), who: 'K' });
-    expect(none.board).toEqual({ words: 'NOTHING LEFT', outcome: 'vs 1: FAILURE' });
+    expect(none.board).toEqual({ label: 'FIGHT', words: 'NOTHING LEFT', outcome: 'vs 1: FAILURE' });
     // A roll reading a sum says its total first, then what is left, as the log does after it.
     const summed = rollField({ definition: DICED, data: SHEET, roll: { id: 's', label: 'S', dice: [{ count: '2', die: 'good' }] }, rng: faces([3, 3], [2, 3]), who: 'K' });
     expect(summed.historyText).toMatch(/ = \d+ · 2 HIT, 1 EDGE\]$/);
-    expect(summed.board).toEqual({ words: `${summed.total} · 2 HIT · 1 EDGE` });
+    expect(summed.board).toEqual({ label: 'S', words: `${summed.total} · 2 HIT · 1 EDGE` });
   });
 
   it('a number with its sign on a die with any below 0, summed as any roll is', () => {
