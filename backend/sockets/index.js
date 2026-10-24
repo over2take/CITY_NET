@@ -4,7 +4,7 @@ const bank = require('../bank/accounts');
 const bankCurrencies = require('../bank/currencies');
 const moneyRules = require('../bank/moneyRules');
 const { cryptoRng } = require('../utils/random');
-const { withThrow } = require('../utils/diceThrow');
+const { withThrow, boardOf } = require('../utils/diceThrow');
 const { registerInitiativeHandlers } = require('./initiative');
 const sheetTemplates = require('../sheets/templates');
 const { mutateSheet, mutateSheetForUser, patchSheet } = require('../sheets/mutate');
@@ -767,10 +767,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
         [userName, grandTotal, JSON.stringify(results), color, finalString], (err) => {
           if (err) console.error('Error saving dice roll:', err);
-          io.emit('diceRollBroadcast', withThrow(broadcastData));
+          // A roll made for an attack picked on the map is its to-hit (6c4d2).
+          const attack = pendingAttacks.get(socket.id);
+          const board = attack ? { board: boardOf('TO HIT', grandTotal >= attack.ac ? 'HIT' : 'MISS') } : {};
+          io.emit('diceRollBroadcast', withThrow({ ...broadcastData, ...board }));
 
           // If this player had a pending attack, resolve it.
-          const attack = pendingAttacks.get(socket.id);
           if (attack) {
             pendingAttacks.delete(socket.id);
             const hit = grandTotal >= attack.ac;
@@ -2586,7 +2588,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     // against stored data.
     const RHOMBUS_SHAPES = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'];
 
-    const broadcastRoll = (userName, outcome, historyString, color, cb) => {
+    /**
+     * A roll into the log and every tray. `board` is what the tray's board says of it (6c4d2):
+     * what it was for and, where the server decided one, what it came to, from boardOf.
+     */
+    const broadcastRoll = (userName, outcome, historyString, color, cb, board = null) => {
       const broadcastData = {
         userName: identity.displayName(userName),
         account: userName,
@@ -2595,6 +2601,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         color,
         total: outcome.total,
         historyString,
+        ...(board ? { board } : {}),
       };
       db.run(
         'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
@@ -2811,11 +2818,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   applyTokenDamage(target, damage, (newHp) => {
                     emitResult({ damage, through: damage, targetHp: newHp, targetDown: newHp <= 0 });
                   });
-                });
+                }, boardOf('TO HIT', hit ? 'HIT' : 'MISS'));
               };
               if (defense) {
                 broadcastRoll(defenderName, defense,
-                  `${defenderName} dodges [${defense.breakdown}]`, '#00ccff', resolve);
+                  `${defenderName} dodges [${defense.breakdown}]`, '#00ccff', resolve, boardOf('DODGE'));
               } else {
                 resolve();
               }
@@ -2944,7 +2951,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                           through,
                           vehicleHp: newHp, vehicleHpMax: ride.vehicle.hpMax, vehicleDestroyed: wrecked,
                         });
-                      });
+                      }, boardOf(outcome ? 'DAMAGE' : 'SHOCK', wrecked ? 'DESTROYED' : through === 0 ? 'ARMOR HELD' : null));
                     });
                   }
                   const frail = Number(defenderData.frail) === 1;
@@ -2973,16 +2980,17 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                         ...resultExtras, targetHp: newHp, targetDown: down, frailDeath: down && frail,
                         soakAbsorbed: soak.absorbed, soakLeft: soak.soakLeft, through: soak.through,
                       });
-                    });
+                    }, boardOf(outcome ? 'DAMAGE' : 'SHOCK', down && frail ? 'DEAD' : down ? 'DOWN' : soak.through === 0 ? 'ARMOR HELD' : null));
                   });
                 };
 
+                const toHitBoard = boardOf('TO HIT', hit ? 'HIT' : plugCrash ? 'PLUG CRASH' : 'MISS');
                 if (!hit) {
                   const shock = attackCwn.shockDamage(attackerData, weapon, ac);
                   return broadcastRoll(info.userName, toHit, hitHistory, color, () => {
                     if (shock <= 0) return emitResult({});
                     dealDamage(shock, null, `${weapon.name} SHOCK vs ${target.name} — ${shock} damage on the miss`, { shock, damage: shock, through: shock }, false);
-                  });
+                  }, toHitBoard);
                 }
 
                 broadcastRoll(info.userName, toHit, hitHistory, color, () => {
@@ -3013,7 +3021,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     damage: total, through: total,
                     traumatic, traumaRoll: trauma ? trauma.roll : null,
                   }, traumatic);
-                });
+                }, toHitBoard);
               });
               });
               });
@@ -3112,7 +3120,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   });
                 };
 
-                if (!hit) return broadcastRoll(info.userName, toHit, hitHistory, color, () => emitResult({}));
+                const toHitBoard = boardOf('TO HIT', hit ? 'HIT' : 'MISS');
+                if (!hit) return broadcastRoll(info.userName, toHit, hitHistory, color, () => emitResult({}), toHitBoard);
 
                 // Hit: damage, SP soak, ablation, HP write-through.
                 broadcastRoll(info.userName, toHit, hitHistory, color, () => {
@@ -3159,7 +3168,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                         applyTokenDamage(target, through, (newHp) => {
                           emitResult({ ...resultExtras, targetHp: newHp, targetDown: newHp <= 0 });
                         });
-                      });
+                      }, boardOf('DAMAGE', crit ? 'CRITICAL INJURY' : through <= 0 ? 'ARMOR HELD' : null));
                     };
 
                     const sheetChanged = defender && ((ablated && shield.remaining > 0) || shield.absorbed > 0);
@@ -3186,7 +3195,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                       finish();
                     }
                   });
-                });
+                }, toHitBoard);
                 });
               }
             );
@@ -3225,6 +3234,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 // after the client's 5s dice animation so the sheet doesn't
                 // change mid-roll.
                 const outcome = { rolls: { 10: [save.die] }, modTotal: save.penalty, total: save.total };
+                const saveBoard = boardOf('DEATH SAVE', save.success ? 'STABLE' : 'DEAD');
                 broadcastRoll(info.userName, outcome, historyString, '#ff3333', () => {
                   setTimeout(() => {
                     // Only the penalty changes, and it is applied to a fresh read. The old
@@ -3248,7 +3258,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                       }
                     );
                   }, DICE_ANIM_MS);
-                });
+                }, saveBoard);
               }
             );
           }
@@ -3353,7 +3363,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     }
                     broadcastRoll(info.userName, check, historyString, check.success ? '#00ff00' : '#ff3333', () => {
                       setTimeout(applyOutcome, DICE_ANIM_MS);
-                    });
+                    }, boardOf('STABILIZE', check.success ? 'STABLE' : rounds + 1 >= attackCwn.MORTAL_WOUND_ROUNDS ? 'DEAD' : 'FAILED'));
                   }
                 );
               }
@@ -3410,7 +3420,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 const outcome = dmg ?? { rolls: {}, modTotal: 0, total: 0 };
                 broadcastRoll(info.userName, outcome, historyString, overcast ? '#ff3333' : '#bb66ff', () => {
                   io.emit('spellCast', { userName: info.userName, name, overcast, damage: dmg ? dmg.total : null });
-                });
+                }, boardOf(name.toUpperCase(), overcast ? 'OVERCAST' : null));
               };
 
               if (cost > 0) {

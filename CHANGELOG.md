@@ -229,6 +229,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   parallel mode, where on a busy machine a query sent later can be answered first; tests that
   waited a number of database rounds could then check too soon, and failed on CI only. It is
   now serialized, so those waits mean what they say.
+- **What each roll was for, for the dice tray's board (6c4d2).** The built-in games' rolls now
+  tell the tray what they were for and what they came to: an attack's TO HIT and whether it was a
+  HIT or a MISS, its DAMAGE (DOWN, ARMOR HELD, a critical injury), Shadowrun's DODGE, a death save,
+  stabilizing someone, and a spell by its name. An attack's rolls already land as one throw, so the
+  board can show them together. Nothing shows them yet: the 16 by 2 board comes next.
 - **Words for the dice tray's board (6c4d1).** A custom system's roll now tells the tray what the
   log says it came to (SUCCESS, FULL, NATURAL 20), and for symbol dice what is left (2 HIT · 1 EDGE,
   or NOTHING LEFT); the table's word dice send their faces (APPLE · PEACH). Nothing shows them yet:

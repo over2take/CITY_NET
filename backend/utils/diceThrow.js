@@ -63,6 +63,13 @@ const groupOf = (account, now) => {
   return id;
 };
 
+/**
+ * What the tray's board says of a roll (6c4d2): what it was for (TO HIT, DAMAGE, DEATH SAVE), and
+ * what it came to where the server decided (HIT, MISS, DOWN), in the log's own words. A group's
+ * rolls each name theirs, so the board can show an attack as TO HIT 15 / DAMAGE 7.
+ */
+const boardOf = (label, outcome = null) => ({ label, ...(outcome ? { outcome } : {}) });
+
 /** A roll's broadcast with its throw and its group: every diceRollBroadcast goes out through this. */
 const withThrow = (data, given, now = Date.now()) => ({
   ...data,
@@ -70,4 +77,4 @@ const withThrow = (data, given, now = Date.now()) => ({
   group: groupOf(String(data.account ?? data.userName ?? data.username ?? ''), now),
 });
 
-module.exports = { throwOf, withThrow, groupOf, GROUP_MS, FATE };
+module.exports = { throwOf, withThrow, groupOf, boardOf, GROUP_MS, FATE };
