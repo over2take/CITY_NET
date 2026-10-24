@@ -229,6 +229,9 @@ describe('FORMULAS', () => {
     await userEvent.click(screen.getByRole('button', { name: '@dex' }));
     expect(hurt(last).else).toBe('@dex@str_mod');
     expect(hurt(last).when).toBe('@str < 5');
+    // INSERT puts the cursor back in its box a frame later. On a slow runner that frame came after
+    // the click below and took the cursor back to ELSE, so max() went there: wait for it first.
+    await waitFor(() => expect(document.activeElement).toBe(otherwise));
     const when = screen.getByLabelText('Hurt if') as HTMLInputElement;
     await userEvent.click(when);
     when.setSelectionRange(4, 4);
