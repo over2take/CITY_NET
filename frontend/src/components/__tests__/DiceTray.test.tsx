@@ -27,6 +27,7 @@ vi.mock('../../assets/lets-icons--paper-light.svg', () => ({ default: 'paper-lig
 import * as THREE from 'three';
 import { DiceTrayWindow, DotMatrixScoreboard, DiceScene, type TrayRoll } from '../DiceTray';
 import { ThemeContext, THEMES } from '../../theme/themes';
+import { themedRollColor } from '../../theme/rollColor';
 import { TRAY_ASPECT, floorSeen, trayCamera, throwDice, diceOfRoll, printedOn, revealAfter } from '../../utils/trayThrow';
 
 const makeSocketRef = () => ({ current: { emit: vi.fn(), on: vi.fn(), off: vi.fn() } });
@@ -107,6 +108,31 @@ describe('DiceTrayWindow', () => {
     });
     // History is populated — verify no crash and state updated silently
     expect(socketRef.current.emit).toHaveBeenCalledWith('requestDiceHistory');
+  });
+
+  it('writes the record in the theme: the usual green as its primary, the server\'s red as its danger, a chosen color as chosen', async () => {
+    const user = userEvent.setup();
+    const socketRef = makeSocketRef();
+    const ocean = THEMES.ocean;
+    render(<ThemeContext.Provider value={ocean}><DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} /></ThemeContext.Provider>);
+    const histHandler = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'diceRollHistory')[1];
+    act(() => {
+      histHandler([
+        { total: 17, results: { 20: [17] }, color: '#00ff00', historyString: 'GHOST rolled a plain d20' },
+        { total: 2, results: { 20: [2] }, color: '#ff3333', historyString: 'GHOST rolled a miss' },
+        { total: 9, results: { 20: [9] }, color: '#ff00ff', historyString: 'ROOK rolled in pink' },
+        { total: 7, results: { 20: [7] }, color: '#3749c8', historyString: 'KES rolled in dark blue' },
+      ]);
+    });
+    await user.click(screen.getByTitle('TOGGLE_HISTORY'));
+    const colorOf = (text: RegExp) => screen.getByText(text).closest('div')!.style.color;
+    const rgb = (hex: string) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;
+    expect(colorOf(/a plain d20/)).toBe(rgb(ocean.primary));
+    expect(colorOf(/a miss/)).toBe(rgb(ocean.danger));
+    expect(colorOf(/in pink/)).toBe(rgb('#ff00ff'));
+    // Too dark to read on the panel: lifted, still Kes's blue.
+    expect(colorOf(/in dark blue/)).toBe(rgb(themedRollColor('#3749c8', ocean)));
+    expect(themedRollColor('#3749c8', ocean)).not.toBe('#3749c8');
   });
 
   it('lets a new roll cut in, telling the one it cut short in the record at once (no queue, 6c4c)', async () => {
@@ -244,13 +270,32 @@ describe("the tray's dice", () => {
       const scene = stage();
       const { unmount } = render(
         <ThemeContext.Provider value={theme}>
-          <DiceScene latestRoll={roll({ color: '#123456', results: { 6: [1], Bad: ['✕'] }, throw: { seed: 3, dice: [{ key: '6', sides: 6, landed: [0] }, { key: 'Bad', sides: 2, landed: [1], faces: [{ text: '·' }, { text: '✕' }], color: 'danger' }] } })} />
+          <DiceScene latestRoll={roll({ color: '#ff00ff', results: { 6: [1], Bad: ['✕'] }, throw: { seed: 3, dice: [{ key: '6', sides: 6, landed: [0] }, { key: 'Bad', sides: 2, landed: [1], faces: [{ text: '·' }, { text: '✕' }], color: 'danger' }] } })} />
         </ThemeContext.Provider>,
       );
       const edgeColor = (g: THREE.Group) => `#${((g.children.find((c) => c instanceof THREE.LineSegments) as THREE.LineSegments).material as THREE.LineBasicMaterial).color.getHexString()}`;
       const [plain, bad] = dice(scene);
-      expect(edgeColor(plain), theme.id).toBe('#123456');
+      expect(edgeColor(plain), theme.id).toBe('#ff00ff');
       expect(edgeColor(bad), theme.id).toBe(`#${new THREE.Color(theme.danger).getHexString()}`);
+      unmount();
+    }
+  });
+
+  it('colors a die in the usual green the theme\'s primary, in any theme, and the board too', () => {
+    for (const theme of Object.values(THEMES)) {
+      const scene = stage();
+      const { unmount, container } = render(
+        <ThemeContext.Provider value={theme}>
+          <DiceScene latestRoll={roll({ color: '#00ff00' })} />
+          <DotMatrixScoreboard value="8" timestamp={Date.now()} />
+        </ThemeContext.Provider>,
+      );
+      const [die] = dice(scene);
+      const edge = ((die.children.find((c) => c instanceof THREE.LineSegments) as THREE.LineSegments).material as THREE.LineBasicMaterial).color.getHexString();
+      expect(`#${edge}`, theme.id).toBe(`#${new THREE.Color(theme.primary).getHexString()}`);
+      // A lit dot of the board is the theme's primary.
+      const lit = [...container.querySelectorAll('div')].find((d) => d.style.boxShadow.startsWith('0 0 5px'))!;
+      expect(lit.style.backgroundColor, theme.id).toBe(new THREE.Color(theme.primary).getStyle().replace(/,/g, ', '));
       unmount();
     }
   });
