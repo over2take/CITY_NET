@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef, useContext, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -12,153 +12,72 @@ import { diceOfRoll, throwDice, revealAfter, MOST_DICE, poseAt, printOrder, floo
 import { labelTurn } from '../utils/diceShapes';
 import { labelParts, labelKey, paintLabel } from '../utils/dieLabels';
 import { useTrayMotion } from '../hooks/useTrayMotion';
+import { showOf, sayOf, emptyField, putShow, putNoise, putReady, decodedAt, COLS, WIDTH, HEIGHT, SETTLE_MS, HOLD_MS, type BoardRoll } from '../utils/trayBoard';
 
-// ─── DOT_MATRIX_3x5 ──────────────────────────────────────────────────────────
+// ─── CharacterBoard ──────────────────────────────────────────────────────────
 
-const DOT_MATRIX_3x5: Record<string, number[][]> = {
-  '0': [[1,1,1],[1,0,1],[1,0,1],[1,0,1],[1,1,1]],
-  '1': [[0,1,0],[1,1,0],[0,1,0],[0,1,0],[1,1,1]],
-  '2': [[1,1,1],[0,0,1],[1,1,1],[1,0,0],[1,1,1]],
-  '3': [[1,1,1],[0,0,1],[1,1,1],[0,0,1],[1,1,1]],
-  '4': [[1,0,1],[1,0,1],[1,1,1],[0,0,1],[0,0,1]],
-  '5': [[1,1,1],[1,0,0],[1,1,1],[0,0,1],[1,1,1]],
-  '6': [[1,1,1],[1,0,0],[1,1,1],[1,0,1],[1,1,1]],
-  '7': [[1,1,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1]],
-  '8': [[1,1,1],[1,0,1],[1,1,1],[1,0,1],[1,1,1]],
-  '9': [[1,1,1],[1,0,1],[1,1,1],[0,0,1],[1,1,1]],
-  '-': [[0,0,0],[0,0,0],[1,1,1],[0,0,0],[0,0,0]],
-  ' ': [[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],
-};
-
-// ─── DotMatrixScoreboard ─────────────────────────────────────────────────────
-
-interface DotMatrixScoreboardProps {
-  value: string;
-  timestamp: number;
-  isRolling?: boolean;
+interface CharacterBoardProps {
+  /** The rolls landed and on show (a group's together), or null while there is nothing to tell. */
+  rolls: BoardRoll[] | null;
+  /** The dice still in the air: every cell flickers. */
+  rolling: boolean;
+  /** When the rolls came down, on performance.now()'s clock: they decode from then. */
+  landedAt: number;
 }
 
-export function DotMatrixScoreboard({ value, timestamp, isRolling }: DotMatrixScoreboardProps) {
+/**
+ * DICE_TRAY.EXE's board (6c4e; approved mockup docs/mockups/tray-scoreboard.html v3): a 16 by 2
+ * character display in the theme's primary. While the dice roll every cell flickers; as they land
+ * the result decodes into place left to right; it stays HOLD_MS, turning pages if it has more than
+ * two lines, then the board waits on READY_ (utils/trayBoard.ts works out what each dot shows).
+ * Its 1,120 dots are made once and painted directly, so a frame repaints only what changed.
+ */
+export function CharacterBoard({ rolls, rolling, landedAt }: CharacterBoardProps) {
   const theme = useContext(ThemeContext);
-  const cols = 25;
-  const rows = 5;
-  const [idleMode, setIdleMode] = useState(!value && !isRolling);
-  const [animFrame, setAnimFrame] = useState(0);
-  const [animType, setAnimType] = useState('matrix');
-
+  const dots = useRef<HTMLSpanElement[]>([]);
+  const painted = useRef<number[]>([]);
+  const show = useMemo(() => (rolls && rolls.length ? showOf(rolls) : null), [rolls]);
+  // Back to waiting once a result has been up long enough: the timer marks which landing is over.
+  const [over, setOver] = useState<number | null>(null);
   useEffect(() => {
-    const pickRandomAnim = (current: string) => {
-      const types = ['matrix', 'pingpong', 'sinewave', 'scanner'];
-      const others = types.filter(t => t !== current);
-      return others[Math.floor(Math.random() * others.length)];
-    };
-
-    if (!value && !isRolling) {
-      setIdleMode(true);
-      setAnimType(t => pickRandomAnim(''));
-      return;
-    }
-
-    setIdleMode(false);
-    if (isRolling) return;
-
-    const timer = setTimeout(() => {
-      setAnimType(t => pickRandomAnim(t));
-      setIdleMode(true);
-    }, 10000);
-
+    if (rolling || !show) return;
+    const left = landedAt + SETTLE_MS + HOLD_MS - performance.now();
+    const timer = setTimeout(() => setOver(landedAt), Math.max(0, left));
     return () => clearTimeout(timer);
-  }, [value, timestamp, isRolling]);
+  }, [rolling, show, landedAt]);
+  const waiting = !rolling && (!show || over === landedAt);
 
   useEffect(() => {
-    if (!idleMode && !isRolling) return;
-    const interval = setInterval(() => setAnimFrame(f => f + 1), 100);
-    return () => clearInterval(interval);
-  }, [idleMode, isRolling]);
-
-  let grid = Array.from({ length: rows }, () => Array(cols).fill(0));
-
-  if (isRolling) {
-    for (let r = 0; r < rows; r++)
-      for (let c = 0; c < cols; c++)
-        grid[r][c] = Math.random() > 0.8 ? 1 : Math.random() > 0.8 ? 2 : 0;
-  } else if (idleMode || !value) {
-    if (animType === 'matrix') {
-      for (let c = 0; c < cols; c++) {
-        const dropSpeed = (c % 3) + 1;
-        const y = (Math.floor(animFrame / dropSpeed) + (c * 7)) % (rows + 4) - 2;
-        for (let r = 0; r < rows; r++) {
-          if (r === y) grid[r][c] = 1;
-          else if (r === y - 1) grid[r][c] = 2;
-          else if (r === y - 2) grid[r][c] = 3;
-        }
+    const paint = () => {
+      const now = performance.now();
+      const f = emptyField();
+      if (rolling) putNoise(f);
+      else if (show && !waiting) {
+        const since = now - landedAt;
+        putShow(f, show, Math.max(0, since - SETTLE_MS));
+        if (since < SETTLE_MS) putNoise(f, decodedAt(since));
+      } else putReady(f, now);
+      for (let y = 0; y < HEIGHT; y += 1) for (let x = 0; x < WIDTH; x += 1) {
+        const k = (Math.floor(y / 7) * COLS + Math.floor(x / 5)) * 35 + (y % 7) * 5 + (x % 5);
+        if (painted.current[k] === f[y][x]) continue;
+        painted.current[k] = f[y][x];
+        dots.current[k]?.classList.toggle('on', f[y][x] === 1);
       }
-    } else if (animType === 'pingpong') {
-      const cycleX = (cols - 1) * 2;
-      const cycleY = (rows - 1) * 2;
-      let bx = animFrame % cycleX; if (bx >= cols) bx = cycleX - bx;
-      let by = Math.floor(animFrame * 0.7) % cycleY; if (by >= rows) by = cycleY - by;
-      grid[by][bx] = 1;
-      const p1y = Math.min(Math.max(by, 1), rows - 2);
-      grid[p1y - 1][0] = 2; grid[p1y][0] = 1; grid[p1y + 1][0] = 2;
-      const p2y = Math.min(Math.max(by, 1), rows - 2);
-      grid[p2y - 1][cols - 1] = 2; grid[p2y][cols - 1] = 1; grid[p2y + 1][cols - 1] = 2;
-    } else if (animType === 'sinewave') {
-      for (let c = 0; c < cols; c++) {
-        const y = Math.floor((Math.sin((c + animFrame) * 0.5) + 1) * (rows - 1) / 2);
-        grid[y][c] = 1;
-        if (y + 1 < rows) grid[y + 1][c] = 2;
-        if (y - 1 >= 0) grid[y - 1][c] = 2;
-      }
-    } else if (animType === 'scanner') {
-      const cycle = (cols - 1) * 2;
-      let pos = animFrame % cycle;
-      if (pos >= cols) pos = cycle - pos;
-      for (let r = 0; r < rows; r++) {
-        grid[r][pos] = 1;
-        if (pos - 1 >= 0) grid[r][pos - 1] = 2;
-        if (pos - 2 >= 0) grid[r][pos - 2] = 3;
-        if (pos + 1 < cols) grid[r][pos + 1] = 2;
-        if (pos + 2 < cols) grid[r][pos + 2] = 3;
-      }
-    }
-  } else {
-    const valStr = value.toString();
-    const totalWidth = valStr.length * 4 - 1;
-    let currentCol = Math.floor((cols - totalWidth) / 2) + totalWidth - 1;
-    for (let i = valStr.length - 1; i >= 0; i--) {
-      const char = valStr[i];
-      const charMatrix = DOT_MATRIX_3x5[char] || DOT_MATRIX_3x5[' '];
-      for (let r = 0; r < rows; r++) {
-        for (let c = 2; c >= 0; c--) {
-          const targetCol = currentCol - (2 - c);
-          if (targetCol >= 0 && targetCol < cols) grid[r][targetCol] = charMatrix[r][c];
-        }
-      }
-      currentCol -= 4;
-      if (currentCol < 0) break;
-    }
-  }
+    };
+    paint();
+    const timer = setInterval(paint, 50);
+    return () => clearInterval(timer);
+  }, [rolling, show, landedAt, waiting]);
 
-  const getColor = (val: number) => {
-    const p = theme.primary;
-    if (val === 1) return { bg: p, shadow: `0 0 5px ${p}, 0 0 10px ${p}` };
-    if (val === 2) return { bg: `${p}80`, shadow: `0 0 2px ${p}` };
-    if (val === 3) return { bg: `${p}33`, shadow: 'none' };
-    return { bg: `${p}0d`, shadow: 'none' };
-  };
-
+  const said = rolling ? 'Rolling' : show && !waiting ? sayOf(show) : 'Ready';
   return (
-    <div data-testid="dice-board" style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
-      {grid.map((row, rIdx) => (
-        <div key={rIdx} style={{ display: 'flex', gap: '4px' }}>
-          {row.map((val, cIdx) => {
-            const style = getColor(val);
-            return (
-              <div key={cIdx} style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: style.bg, boxShadow: style.shadow, transition: 'background-color 0.1s, box-shadow 0.1s' }} />
-            );
-          })}
-        </div>
+    <div data-testid="dice-board" role="img" aria-label={said} className="tray-board" style={{ '--board-on': theme.primary } as React.CSSProperties}>
+      {Array.from({ length: COLS * 2 }, (_, cell) => (
+        <span key={cell} className="tray-board-cell">
+          {Array.from({ length: 35 }, (__, dot) => (
+            <span key={dot} className="tray-board-px" ref={(el) => { if (el) dots.current[cell * 35 + dot] = el; }} />
+          ))}
+        </span>
       ))}
     </div>
   );
@@ -304,6 +223,8 @@ interface RollBroadcast {
   historyString: string;
   glitch?: boolean;
   criticalGlitch?: boolean;
+  /** What the board says of it: what it was for, its words, what it came to (6c4d1-3 on the server). */
+  board?: BoardRoll['board'];
 }
 
 interface DiceTrayWindowProps {
@@ -324,7 +245,8 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken }: D
   const [history, setHistory] = useState<DiceRoll[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [latestRoll, setLatestRoll] = useState<TrayRoll | null>(null);
-  const [displayRoll, setDisplayRoll] = useState<TrayRoll | null>(null);
+  /** The rolls on the board once landed, a group's together, and when they came down. */
+  const [shown, setShown] = useState<{ rolls: RollBroadcast[]; at: number } | null>(null);
   const [glitchState, setGlitchState] = useState<'none' | 'glitch' | 'critical'> ('none');
   const [isRolling, setIsRolling] = useState(false);
   const historyContainerRef = useRef<HTMLDivElement>(null);
@@ -354,12 +276,12 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken }: D
       const thrown = specs.length ? throwDice(specs, first.throw?.seed ?? 1, trayCamera()) : undefined;
       setLatestRoll({ total: last.total, results: last.results, diceSides: last.diceSides, throw: first.throw, thrown, color: first.color, timestamp: Date.now() });
       setIsRolling(true);
-      setDisplayRoll(null);
+      setShown(null);
       setGlitchState('none');
       rollTimer.current = setTimeout(() => {
         rollTimer.current = null;
         setIsRolling(false);
-        setDisplayRoll({ total: last.total, results: last.results, diceSides: last.diceSides, color: last.color, timestamp: Date.now() });
+        setShown({ rolls: [...group.rolls], at: performance.now() });
         if (group.rolls.some((r) => r.criticalGlitch)) setGlitchState('critical');
         else if (group.rolls.some((r) => r.glitch)) setGlitchState('glitch');
         group.told = true;
@@ -440,11 +362,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken }: D
     >
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, background: 'var(--black)' }}>
         <div style={{ padding: '20px', background: 'var(--black)', borderBottom: '2px solid var(--dark-green)', textAlign: 'center', overflow: 'hidden' }}>
-          <DotMatrixScoreboard
-            value={displayRoll !== null ? displayRoll.total.toString() : ''}
-            timestamp={displayRoll?.timestamp || 0}
-            isRolling={isRolling}
-          />
+          <CharacterBoard rolls={shown?.rolls ?? null} rolling={isRolling} landedAt={shown?.at ?? 0} />
           {glitchState !== 'none' && (
             <div style={{
               marginTop: '10px',

@@ -50,6 +50,9 @@ test('a handful of standard dice thrown in the tray, landing on what the server 
   expect(roll.throw!.dice.map((d) => [d.key, d.landed.length])).toEqual([['4', 1], ['6', 3], ['8', 1], ['10', 2], ['12', 1], ['20', 2]]);
   for (const d of roll.throw!.dice) expect(d.landed, `d${d.key}`).toEqual(roll.results[d.key].map((v) => Number(v) - 1));
   await expect(page.getByText('DICE_TRAY.EXE', { exact: true })).toBeVisible();
+  // The board (6c4e): rolling, then the total in big digits once the dice are down.
+  await expect(page.getByRole('img', { name: 'Rolling' })).toBeVisible();
+  await expect(page.getByRole('img', { name: String(roll.total) })).toBeVisible({ timeout: 15_000 });
   await picture(page, 'dice-tray-standard');
   expect(broken).toEqual([]);
 });
@@ -133,9 +136,11 @@ test('the tray in the theme picked: its board and its record in Oceanic\'s cyan,
   await page.getByRole('button', { name: 'One more d6', exact: true }).click();
   await page.getByRole('button', { name: /ROLL DICE/ }).click();
   await expect(page.getByText('DICE_TRAY.EXE', { exact: true })).toBeVisible();
-  // A lit dot of the board, once the total is told: the only ones in a solid color, the rest fade.
-  const litDot = () => page.getByTestId('dice-board').evaluate((board) => [...board.querySelectorAll(':scope > div > div')]
-    .map((d) => (d as HTMLElement).style.backgroundColor).find((c) => c.startsWith('rgb(')) ?? null);
+  // A lit dot of the board, once the total is told.
+  const litDot = () => page.getByTestId('dice-board').evaluate((board) => {
+    const dot = board.querySelector('.tray-board-px.on');
+    return dot ? getComputedStyle(dot).backgroundColor : null;
+  });
   await expect.poll(litDot, { timeout: 15_000 }).toBe('rgb(0, 255, 255)');
   await page.getByTitle('TOGGLE_HISTORY').click();
   const line = page.getByTestId('dice-history').locator('> div').filter({ hasText: 'rolled' }).last();

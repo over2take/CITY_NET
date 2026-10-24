@@ -73,7 +73,7 @@ import { controlsToken } from './utils/tokenControl';
 import { TvPortrait } from './components/TvPortrait';
 import { headshotsForShape } from './headshots';
 import { getTemplate } from './sheets';
-import { DiceTrayWindow, DotMatrixScoreboard, DiceScene } from './components/DiceTray';
+import { DiceTrayWindow, DiceScene } from './components/DiceTray';
 import { CustomDieBuilder } from './components/CustomDieBuilder';
 import { useCustomDice } from './hooks/useCustomDice';
 import { EnemyRhombus, FriendlyRhombus, PlayerRhombus, OverlapChecker } from './components/Rhombuses';

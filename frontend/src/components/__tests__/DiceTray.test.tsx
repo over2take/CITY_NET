@@ -25,7 +25,8 @@ vi.mock('../../assets/lets-icons--paper-fill.svg', () => ({ default: 'paper-fill
 vi.mock('../../assets/lets-icons--paper-light.svg', () => ({ default: 'paper-light.svg' }));
 
 import * as THREE from 'three';
-import { DiceTrayWindow, DotMatrixScoreboard, DiceScene, type TrayRoll } from '../DiceTray';
+import { DiceTrayWindow, CharacterBoard, DiceScene, type TrayRoll } from '../DiceTray';
+import { emptyField, putShow, showOf, SETTLE_MS, HOLD_MS } from '../../utils/trayBoard';
 import { ThemeContext, THEMES } from '../../theme/themes';
 import { themedRollColor } from '../../theme/rollColor';
 import { TRAY_ASPECT, floorSeen, trayCamera, throwDice, diceOfRoll, printedOn, revealAfter } from '../../utils/trayThrow';
@@ -34,21 +35,68 @@ const makeSocketRef = () => ({ current: { emit: vi.fn(), on: vi.fn(), off: vi.fn
 
 beforeEach(() => { vi.clearAllMocks(); three.current = null; three.frame = null; });
 
-// ─── DotMatrixScoreboard ─────────────────────────────────────────────────────
+// ─── CharacterBoard (6c4e) ────────────────────────────────────────────────────
 
-describe('DotMatrixScoreboard', () => {
-  it('renders a 5-row dot matrix grid', () => {
-    const { container } = render(<DotMatrixScoreboard value="" timestamp={0} />);
-    const rows = container.querySelectorAll('div > div');
-    expect(rows.length).toBeGreaterThan(0);
+describe('CharacterBoard', () => {
+  const lit = (container: HTMLElement) => container.querySelectorAll('.tray-board-px.on').length;
+  const d20 = (total: number, board?: { label?: string; words?: string; outcome?: string }) => ({ total, results: { 20: [total] }, ...(board ? { board } : {}) });
+
+  it('is 16 by 2 cells of 5 by 7 dots, waiting on READY_', () => {
+    const { container } = render(<CharacterBoard rolls={null} rolling={false} landedAt={0} />);
+    expect(container.querySelectorAll('.tray-board-cell')).toHaveLength(32);
+    expect(container.querySelectorAll('.tray-board-px')).toHaveLength(32 * 35);
+    expect(screen.getByRole('img', { name: 'Ready' })).toBeTruthy();
+    expect(lit(container)).toBeGreaterThan(0);
   });
 
-  it('renders without crashing with a numeric value', () => {
-    expect(() => render(<DotMatrixScoreboard value="42" timestamp={Date.now()} />)).not.toThrow();
+  it('flickers while the dice roll', () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(<CharacterBoard rolls={null} rolling landedAt={0} />);
+      expect(screen.getByRole('img', { name: 'Rolling' })).toBeTruthy();
+      // Every cell a letter or a number, a new one each frame.
+      const on = () => [...container.querySelectorAll('.tray-board-px')].map((d) => d.classList.contains('on')).join('');
+      const first = on();
+      act(() => { vi.advanceTimersByTime(100); });
+      expect(on()).not.toBe(first);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('renders without crashing in rolling mode', () => {
-    expect(() => render(<DotMatrixScoreboard value="" timestamp={0} isRolling={true} />)).not.toThrow();
+  it('tells a group once landed, decoded into place, then waits again', () => {
+    vi.useFakeTimers();
+    try {
+      const rolls = [d20(15, { label: 'TO HIT', outcome: 'HIT' }), d20(7, { label: 'DAMAGE' })];
+      const { container } = render(<CharacterBoard rolls={rolls} rolling={false} landedAt={performance.now()} />);
+      expect(screen.getByRole('img', { name: 'TO HIT 15 HIT / DAMAGE 7' })).toBeTruthy();
+      const f = emptyField();
+      putShow(f, showOf(rolls), 0);
+      const result = f.flat().filter(Boolean).length;
+      // Just landed: still noise, every cell a letter, not yet the result.
+      expect(lit(container)).toBeGreaterThan(result + 100);
+      // Once decoded, exactly the result's dots are lit.
+      act(() => { vi.advanceTimersByTime(SETTLE_MS + 100); });
+      expect(lit(container)).toBe(result);
+      act(() => { vi.advanceTimersByTime(HOLD_MS); });
+      expect(screen.getByRole('img', { name: 'Ready' })).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a lone plain total in big digits', () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = render(<CharacterBoard rolls={[d20(8)]} rolling={false} landedAt={performance.now()} />);
+      act(() => { vi.advanceTimersByTime(SETTLE_MS + 100); });
+      expect(screen.getByRole('img', { name: '8' })).toBeTruthy();
+      const f = emptyField();
+      putShow(f, { big: '8' }, 0);
+      expect(lit(container)).toBe(f.flat().filter(Boolean).length);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -173,8 +221,8 @@ describe('DiceTrayWindow', () => {
     const broadcast = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'diceRollBroadcast')[1];
     vi.useFakeTimers();
     try {
-      const toHit = { total: 15, results: { 20: [15] }, color: '#00ff00', historyString: 'to-hit', group: 'g', throw: { seed: 11, dice: [{ key: '20', sides: 20, landed: [14] }] } };
-      const damage = { total: 7, results: { 8: [7] }, color: '#ff00ff', historyString: 'damage', group: 'g', throw: { seed: 12, dice: [{ key: '8', sides: 8, landed: [6] }] } };
+      const toHit = { total: 15, results: { 20: [15] }, color: '#00ff00', historyString: 'to-hit', group: 'g', throw: { seed: 11, dice: [{ key: '20', sides: 20, landed: [14] }] }, board: { label: 'TO HIT', outcome: 'HIT' } };
+      const damage = { total: 7, results: { 8: [7] }, color: '#ff00ff', historyString: 'damage', group: 'g', throw: { seed: 12, dice: [{ key: '8', sides: 8, landed: [6] }] }, board: { label: 'DAMAGE' } };
       act(() => { broadcast(toHit); broadcast(damage); });
       // One throw: both dice, from the to-hit's seed, each in its own roll's color.
       const dice = scene.children.filter((c): c is THREE.Group => c instanceof THREE.Group);
@@ -185,9 +233,12 @@ describe('DiceTrayWindow', () => {
       const when = revealAfter(together);
       act(() => { vi.advanceTimersByTime(when - 50); });
       expect(screen.queryByText(/to-hit/)).not.toBeInTheDocument();
+      expect(screen.getByRole('img', { name: 'Rolling' })).toBeTruthy();
       act(() => { vi.advanceTimersByTime(50); });
       expect(screen.getByText(/to-hit/)).toBeInTheDocument();
       expect(screen.getByText(/damage/)).toBeInTheDocument();
+      // The board tells both, the group's lines together (6c4e).
+      expect(screen.getByRole('img', { name: 'TO HIT 15 HIT / DAMAGE 7' })).toBeTruthy();
     } finally {
       vi.useRealTimers();
     }
@@ -287,15 +338,14 @@ describe("the tray's dice", () => {
       const { unmount, container } = render(
         <ThemeContext.Provider value={theme}>
           <DiceScene latestRoll={roll({ color: '#00ff00' })} />
-          <DotMatrixScoreboard value="8" timestamp={Date.now()} />
+          <CharacterBoard rolls={[{ total: 8, results: { 6: [8] } }]} rolling={false} landedAt={0} />
         </ThemeContext.Provider>,
       );
       const [die] = dice(scene);
       const edge = ((die.children.find((c) => c instanceof THREE.LineSegments) as THREE.LineSegments).material as THREE.LineBasicMaterial).color.getHexString();
       expect(`#${edge}`, theme.id).toBe(`#${new THREE.Color(theme.primary).getHexString()}`);
-      // A lit dot of the board is the theme's primary.
-      const lit = [...container.querySelectorAll('div')].find((d) => d.style.boxShadow.startsWith('0 0 5px'))!;
-      expect(lit.style.backgroundColor, theme.id).toBe(new THREE.Color(theme.primary).getStyle().replace(/,/g, ', '));
+      // The board lights its dots in the theme's primary.
+      expect((container.querySelector('[data-testid="dice-board"]') as HTMLElement).style.getPropertyValue('--board-on'), theme.id).toBe(theme.primary);
       unmount();
     }
   });
