@@ -1625,6 +1625,9 @@ function App() {
   };
 
   return (
+    // The theme for everything drawn from code rather than CSS: the map, and windows such as
+    // DICE_TRAY.EXE and the building window's render, which once sat outside it and drew Classic.
+    <ThemeContext.Provider value={THEMES[currentTheme]}>
     <div className={`crt-container theme-${currentTheme}`}>
       <div className="scanlines"></div>
       {updateInfo && (
@@ -2693,7 +2696,6 @@ function App() {
             })()}
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : <StatusBarText />}</p></div>
           </div>}
-          <ThemeContext.Provider value={THEMES[currentTheme]}>
             <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }} onPointerMissed={() => {}}>
               <StreamerVisibilityContext.Provider value={IS_SPECTATOR ? directorState.visibility : ALL_VISIBLE}>
             <CursorPingListener socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} pingColor={rhombusState.color || '#00ccff'} />
@@ -3007,11 +3009,11 @@ function App() {
             <ambientLight intensity={0.5} />
               </StreamerVisibilityContext.Provider>
             </Canvas>
-          </ThemeContext.Provider>
         {IS_SPECTATOR && <StreamerOverlay socket={socketRef.current} directorState={directorState} selectedLocation={selectedLocation} gameSystem={gameSystem} battleMapLabel={view === 'battle_map' && activeBattleMapData ? activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation : null} />}
         </>
       )}
     </div>
+    </ThemeContext.Provider>
   );
 }
 
