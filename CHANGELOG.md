@@ -57,10 +57,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   picture for as long as the table is quiet, and the next one after each roll: READY_ when it opens,
   then a game of PONG two paddles really play (they chase the ball, miss now and then, and the score
   shows either side of the net), a SNAKE that steers itself to its food, RAIN, PIPES laid a dot at a
-  time, and a SCANNER sweeping side to side. Then BREAKOUT, a bat breaking three rows of bricks;
-  BLOCKS, a falling game across the whole board with shapes of our own (a token's diamond, a cup, a
-  bolt, a tower, a corner, a bar), pieces coming in all along the top and loose dots dropping into
-  the gaps so rows clear; a STARFIELD flown through; and TUMBLING DICE rolling in to rest on a face.
+  time, and a SCANNER sweeping side to side. Then BREAKOUT, a bat that follows the ball breaking
+  three rows of bricks; BLOCKS, one falling game across the whole board with shapes of our own (a
+  token's diamond, a cup, a bolt, a tower, a corner, a bar) coming in at random along the top, where
+  each letter's square clears on its own: five dots filled in a row of it flash and go, and what is
+  above them comes down; a STARFIELD flown through; and TUMBLING DICE rolling in to rest on a face.
 - **DICE_TRAY.EXE's board is a 16 by 2 character display (6c4e).** The old 25 by 5 dot board could
   only show a number. The new one, two lines of sixteen letters in the theme's color, says what was
   rolled and what it came to: ATHLETICS 17, PHYSICAL SAVE 14 / SUCCESS, an attack's TO HIT 15 HIT /

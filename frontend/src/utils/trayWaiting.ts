@@ -242,7 +242,7 @@ const BRICK_W = 4;
 const BRICKS_PER_ROW = 16;
 const BAT = 8;
 const brickX = (k: number) => k * 5 + 1;
-export const makeBreakout = (random: Random): Waiter & { readonly bricks: number; readonly balls: number } => {
+export const makeBreakout = (random: Random): Waiter & { readonly bricks: number; readonly balls: number; readonly batCenter: number; readonly ball: { x: number; rising: boolean } } => {
   let bricks: boolean[][] = [];
   let ball = { x: 0, y: 0, vx: 0, vy: 0 };
   let bat = 0;
@@ -267,9 +267,12 @@ export const makeBreakout = (random: Random): Waiter & { readonly bricks: number
   };
   const step = (dt: number) => {
     clock += dt * 1000;
-    // The bat chases where the ball is, with its aim, when the ball comes down.
-    const want = ball.vy > 0 ? ball.x - BAT / 2 + aim : WIDTH / 2 - BAT / 2;
-    bat = Math.max(0, Math.min(WIDTH - BAT, bat + Math.max(-28 * dt, Math.min(28 * dt, want - bat))));
+    // The bat chases the ball, with its aim, when it comes down; while it goes up, it keeps under it
+    // at an easy pace, as a player does, rather than going back to the middle (the user, 2026-10-24).
+    const coming = ball.vy > 0;
+    const want = ball.x - BAT / 2 + (coming ? aim : 0);
+    const speed = (coming ? 28 : 12) * dt;
+    bat = Math.max(0, Math.min(WIDTH - BAT, bat + Math.max(-speed, Math.min(speed, want - bat))));
     if (clock < waitUntil) { ball.x = bat + BAT / 2; return; }
     ball.x += ball.vx * dt;
     ball.y += ball.vy * dt;
@@ -300,6 +303,8 @@ export const makeBreakout = (random: Random): Waiter & { readonly bricks: number
   return {
     get bricks() { return bricks.flat().filter(Boolean).length; },
     get balls() { return balls; },
+    get batCenter() { return bat + BAT / 2; },
+    get ball() { return { x: ball.x, rising: ball.vy < 0 }; },
     draw: (f, t) => {
       if (t < last) reset();
       last = caughtUp(last, t);
@@ -317,16 +322,24 @@ export const makeBreakout = (random: Random): Waiter & { readonly bricks: number
  * BLOCKS: a falling game across the whole board (the user, 2026-10-24), with shapes of our own
  * rather than Tetris's (2026-10-23): the token's diamond, a cup, a bolt, a tower, a corner and a
  * bar, three and five dots, none of them a Tetris piece. Each piece comes in somewhere along the top
- * at random (the user, 2026-10-24), and the game plays itself, steering it to the best place within
- * REACH columns by how flat and gapless that leaves the board; full rows clear; filled to the top,
- * the board is emptied and play goes on. The rows cleared show at the top right.
+ * at random (the user, 2026-10-24), the lowest of SPAWN_TRIES spots, and the game steers it within
+ * REACH columns to where it leaves the board lowest, flattest and with the fewest gaps.
+ *
+ * Rows clear a character cell at a time (the user, same day): the board is 16 by 2 cells of 5 by 7
+ * dots, and five dots filled across one cell go, the dots above them in those five columns coming
+ * down a row, as rows do in Tetris; a row full across the board is all sixteen at once. What goes
+ * flashes first, as in the arcade (the user: "what about row deletion?"; gone in one frame, it went
+ * unseen). Filled to the top, the board is emptied and play goes on. The strips cleared show at the
+ * top right. Played out by simulation: a strip about every second, the stacks building three or
+ * four rows, a full board about once in ten minutes.
  */
 export const BLOCKS_STEP_MS = 60;
 export const WELL_W = WIDTH;
-const WELL_X = 0;
 const MOVE_COLS = 3;
 /** How far either side of where it comes in a piece is steered. */
 export const REACH = 6;
+/** How many steps full strips flash before they go, play waiting meanwhile. */
+export const FLASH_STEPS = 6;
 /** How many random spots a piece weighs before coming in at the lowest. */
 export const SPAWN_TRIES = 3;
 type Cells = [number, number][];
@@ -346,68 +359,79 @@ const turn = (cells: Cells): Cells => {
   return turned.map(([x, y]) => [x - mx, y - my] as [number, number]);
 };
 const turnsOf = (cells: Cells): Cells[] => [cells, turn(cells), turn(turn(cells)), turn(turn(turn(cells)))];
-export const makeBlocks = (random: Random): Waiter & { readonly cleared: number; readonly filled: number; readonly restarts: number; readonly gaps: number } => {
+/** A strip: row `y` across character cell `c`, its five columns. */
+export type Strip = { y: number; c: number };
+
+/**
+ * Strips cleared from a board, in place: each strip's five dots go and the dots above them in those
+ * five columns come down a row, as rows do in Tetris; the rest of the board stays. Top strip first,
+ * so a lower one is still where it was found.
+ */
+export const clearStrips = (board: number[][], strips: Strip[]) => {
+  for (const { y, c } of [...strips].sort((a, b) => a.y - b.y)) {
+    for (let x = c * 5; x < c * 5 + 5; x += 1) {
+      for (let k = y; k > 0; k -= 1) board[k][x] = board[k - 1][x];
+      board[0][x] = 0;
+    }
+  }
+};
+export const makeBlocks = (random: Random): Waiter & { readonly cleared: number; readonly filled: number; readonly restarts: number; readonly flashing: Strip[] } => {
   let well: number[][] = [];
   let piece = { shape: 0, rot: 0, x: 0, y: 0 };
-  let next = 0;
   let target = { rot: 0, x: 0 };
+  /** Full strips flashing, and the steps they have left. */
+  let flashing: Strip[] = [];
+  let flash = 0;
   let cleared = 0;
   let restarts = 0;
   let last = 0;
+  const empty = () => Array.from({ length: HEIGHT }, () => Array(WELL_W).fill(0));
   const cellsOf = (p: { shape: number; rot: number }) => turnsOf(SHAPES[p.shape].cells)[p.rot];
-  const fits = (cells: Cells, px: number, py: number, w = well) => cells.every(([x, y]) => px + x >= 0 && px + x < WELL_W && py + y < HEIGHT && (py + y < 0 || !w[py + y][px + x]));
+  const fits = (cells: Cells, px: number, py: number) => cells.every(([x, y]) => px + x >= 0 && px + x < WELL_W && py + y < HEIGHT && (py + y < 0 || !well[py + y][px + x]));
   /** Where a piece would rest dropped from the top at `px`, turned `rot`. */
-  const restAt = (shape: number, rot: number, px: number) => {
-    const cells = turnsOf(SHAPES[shape].cells)[rot];
+  const restAt = (cells: Cells, px: number) => {
     if (!fits(cells, px, 0)) return null;
     let py = 0;
     while (fits(cells, px, py + 1)) py += 1;
     return py;
   };
-  /** How good a well is to be left with: low, flat, without gaps under anything, rows cleared. */
-  const worth = (w: number[][], lines: number) => {
+  /** How good the board is to be left with: low, flat, and without gaps under anything. */
+  const worth = () => {
     let holes = 0; let total = 0; let bumps = 0; let before = -1;
     for (let x = 0; x < WELL_W; x += 1) {
       let top = HEIGHT;
-      for (let y = 0; y < HEIGHT; y += 1) if (w[y][x]) { top = y; break; }
-      for (let y = top + 1; y < HEIGHT; y += 1) if (!w[y][x]) holes += 1;
+      for (let y = 0; y < HEIGHT; y += 1) if (well[y][x]) { top = y; break; }
+      for (let y = top + 1; y < HEIGHT; y += 1) if (!well[y][x]) holes += 1;
       const h = HEIGHT - top;
       total += h;
       if (before >= 0) bumps += Math.abs(h - before);
       before = h;
     }
-    return lines * 8 - holes * 4 - total * 0.5 - bumps * 0.4;
+    return -holes * 4 - total * 0.5 - bumps * 0.4;
   };
-  /** Each column's dots fallen to the bottom. */
-  const settled = (w: number[][]) => {
-    const out = Array.from({ length: HEIGHT }, () => Array(WELL_W).fill(0));
-    for (let x = 0; x < WELL_W; x += 1) {
-      let n = 0;
-      for (let y = 0; y < HEIGHT; y += 1) n += w[y][x] ? 1 : 0;
-      for (let k = 0; k < n; k += 1) out[HEIGHT - 1 - k][x] = 1;
+  /** Every row of five dots filled across one character cell. */
+  const fullStrips = (): Strip[] => {
+    const out: Strip[] = [];
+    for (let y = 0; y < HEIGHT; y += 1) for (let c = 0; c < WELL_W / 5; c += 1) {
+      if (well[y].slice(c * 5, c * 5 + 5).every(Boolean)) out.push({ y, c });
     }
     return out;
   };
-  const clearRows = (w: number[][]) => {
-    const kept = w.filter((row) => row.some((v) => !v));
-    const lines = HEIGHT - kept.length;
-    return { w: [...Array.from({ length: lines }, () => Array(WELL_W).fill(0)), ...kept], lines };
-  };
   /**
    * The best place for a piece of `shape` come in at `from`: every turn and column within REACH
-   * tried, a little chance in a tie. Each is placed, weighed and lifted out again, so choosing copies
-   * nothing.
+   * tried, a little chance in a tie. Each is placed, weighed and lifted out again, copying nothing.
+   * It doesn't hunt for strips to finish: hunting them, it cleared each as soon as it could and the
+   * board never built up.
    */
   const choose = (shape: number, from: number) => {
     let best = { rot: 0, x: from, score: -Infinity };
     for (let rot = 0; rot < 4; rot += 1) {
       const cells = turnsOf(SHAPES[shape].cells)[rot];
       for (let x = from - REACH; x <= from + REACH; x += 1) {
-        const py = restAt(shape, rot, x);
+        const py = restAt(cells, x);
         if (py === null) continue;
         for (const [cx, cy] of cells) well[py + cy][x + cx] = 1;
-        const lines = well.filter((row) => row.every(Boolean)).length;
-        const score = worth(well, lines) + random() * 0.3;
+        const score = worth() + random() * 0.3;
         for (const [cx, cy] of cells) well[py + cy][x + cx] = 0;
         if (score > best.score) best = { rot, x, score };
       }
@@ -418,16 +442,15 @@ export const makeBlocks = (random: Random): Waiter & { readonly cleared: number;
   const depth = (x: number) => { let y = 0; while (y < HEIGHT && !well[y][Math.max(0, Math.min(WELL_W - 1, x))]) y += 1; return y; };
   /**
    * A new piece, somewhere along the top at random: the lowest of SPAWN_TRIES spots picked at
-   * random, so low gaps fill first, as a player aims for them, and rows can come to be cleared.
-   * Where it can't come in, the board is full: emptied, and play goes on.
+   * random, so low ground fills first, as a player aims for it. Where it can't come in, the board
+   * is full: emptied, and play goes on.
    */
   const spawn = () => {
-    const shape = next;
-    next = Math.floor(random() * SHAPES.length);
+    const shape = Math.floor(random() * SHAPES.length);
     const spots = Array.from({ length: SPAWN_TRIES }, () => Math.floor(random() * (WELL_W - 2)));
     const from = spots.reduce((a, b) => (depth(b + 1) > depth(a + 1) ? b : a));
     if (!fits(turnsOf(SHAPES[shape].cells)[0], from, 0)) {
-      well = Array.from({ length: HEIGHT }, () => Array(WELL_W).fill(0));
+      well = empty();
       restarts += 1;
     }
     const best = choose(shape, from);
@@ -435,12 +458,21 @@ export const makeBlocks = (random: Random): Waiter & { readonly cleared: number;
     target = best.score === -Infinity ? { rot: 0, x: from } : { rot: best.rot, x: best.x };
   };
   const reset = () => {
-    well = Array.from({ length: HEIGHT }, () => Array(WELL_W).fill(0));
-    cleared = 0; restarts = 0; last = 0;
-    next = Math.floor(random() * SHAPES.length);
+    well = empty();
+    cleared = 0; restarts = 0; last = 0; flashing = []; flash = 0;
     spawn();
   };
   const step = () => {
+    // Full strips flash, then go, the dots above each coming down a row, and the next piece comes.
+    if (flash > 0) {
+      flash -= 1;
+      if (flash > 0) return;
+      clearStrips(well, flashing);
+      cleared += flashing.length;
+      flashing = [];
+      spawn();
+      return;
+    }
     // Turned and moved toward where it is going, falling a row a step.
     if (piece.rot !== target.rot) {
       const rot = (piece.rot + 1) % 4;
@@ -452,13 +484,8 @@ export const makeBlocks = (random: Random): Waiter & { readonly cleared: number;
     }
     if (fits(cellsOf(piece), piece.x, piece.y + 1)) { piece.y += 1; return; }
     for (const [cx, cy] of cellsOf(piece)) if (piece.y + cy >= 0) well[piece.y + cy][piece.x + cx] = 1;
-    // The cascade: every dot with room under it falls, so no gap is ever left under anything and a
-    // row across the whole board can fill. Our shapes on flat ground always leave gaps (the token's
-    // arms), and without it a row of 80 almost never cleared.
-    well = settled(well);
-    const { w, lines } = clearRows(well);
-    well = w;
-    cleared += lines;
+    flashing = fullStrips();
+    if (flashing.length) { flash = FLASH_STEPS; return; }
     spawn();
   };
   reset();
@@ -466,14 +493,19 @@ export const makeBlocks = (random: Random): Waiter & { readonly cleared: number;
     get cleared() { return cleared; },
     get filled() { return well.flat().filter(Boolean).length; },
     get restarts() { return restarts; },
-    /** Empty places with a dot somewhere above them: never any, with the cascade. */
-    get gaps() { let n = 0; for (let x = 0; x < WELL_W; x += 1) { let seen = false; for (let y = 0; y < HEIGHT; y += 1) { if (well[y][x]) seen = true; else if (seen) n += 1; } } return n; },
+    get flashing() { return flashing; },
     draw: (f, t) => {
       if (t < last) reset();
       last = caughtUp(last, t);
       while (last + BLOCKS_STEP_MS <= t) { step(); last += BLOCKS_STEP_MS; }
-      for (let y = 0; y < HEIGHT; y += 1) for (let x = 0; x < WELL_W; x += 1) if (well[y][x]) f[y][WELL_X + x] = 1;
-      for (const [cx, cy] of cellsOf(piece)) if (inField(WELL_X + piece.x + cx, piece.y + cy)) f[piece.y + cy][WELL_X + piece.x + cx] = 1;
+      // A flashing strip is off every other step; the piece that filled it is part of the board by now.
+      const dark = flash > 0 && flash % 2 === 1;
+      for (let y = 0; y < HEIGHT; y += 1) {
+        for (let x = 0; x < WELL_W; x += 1) {
+          if (well[y][x] && !(dark && flashing.some((s) => s.y === y && Math.floor(x / 5) === s.c))) f[y][x] = 1;
+        }
+      }
+      if (flash === 0) for (const [cx, cy] of cellsOf(piece)) if (inField(piece.x + cx, piece.y + cy)) f[piece.y + cy][piece.x + cx] = 1;
       const said = String(cleared % 100);
       putSmall(f, WIDTH - 1 - said.length * 4, 0, said);
     },

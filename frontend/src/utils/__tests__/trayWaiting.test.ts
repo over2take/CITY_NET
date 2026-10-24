@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  makeWaiting, makeSnake, makePong, makeBreakout, makeBlocks, pictureFor, diceAt, ORDER, SHAPES,
+  makeWaiting, makeSnake, makePong, makeBreakout, makeBlocks, clearStrips, pictureFor, diceAt, ORDER, SHAPES, BLOCKS_STEP_MS, BREAKOUT_STEP_MS,
   PIPES_STEP_MS, SNAKE_STEP_MS, SNAKE_MOST, PONG_TO, MOST_BEHIND_MS, DICE_CYCLE_MS, DICE_ROLL_MS,
 } from '../trayWaiting';
 import { emptyField, putReady, WIDTH, HEIGHT } from '../trayBoard';
@@ -188,6 +188,23 @@ describe('BREAKOUT, played (6c4f2)', () => {
     }
   });
 
+  it('the bat keeps under the ball as it rises, never heading back to the middle (2026-10-24)', () => {
+    const game = makeBreakout(seeded(2));
+    let rising = 0;
+    let before = game.batCenter;
+    for (let t = 0; t <= 60_000; t += BREAKOUT_STEP_MS) {
+      const ball = game.ball;
+      game.draw(emptyField(), t);
+      const moved = game.batCenter - before;
+      before = game.batCenter;
+      if (!ball.rising || Math.abs(moved) < 1e-9) continue;
+      rising += 1;
+      // Whichever way it moves, it is toward the ball.
+      expect(Math.sign(moved), `at ${t}`).toBe(Math.sign(ball.x - (game.batCenter - moved)));
+    }
+    expect(rising).toBeGreaterThan(100);
+  });
+
   it('draws three rows of bricks at the top', () => {
     const f = emptyField();
     makeBreakout(seeded(1)).draw(f, 0);
@@ -221,23 +238,23 @@ describe('BLOCKS, played (6c4f2)', () => {
   });
 
   // Minutes of play simulated: seconds here, three times that on CI, past the usual five.
-  it('plays itself across the whole board: pieces everywhere, rows clear, and a full board is emptied', { timeout: 60_000 }, () => {
+  it('plays itself across the whole board, clearing a character cell\'s row at a time, and empties a full board', { timeout: 60_000 }, () => {
     let emptied = 0;
     for (const seed of [1, 2, 3, 4]) {
       const game = makeBlocks(seeded(seed));
       const columns = new Set<number>();
+      let most = 0;
       for (let t = 0; t <= 600_000; t += 100) {
         const f = emptyField();
         game.draw(f, t);
-        // Below the score's rows, where a piece has landed anywhere along the bottom.
         f[HEIGHT - 1].forEach((v, x) => { if (v) columns.add(x); });
-        // The cascade: never a gap under a dot, so a row of 80 can fill.
-        expect(game.gaps, `seed ${seed} at ${t}`).toBe(0);
+        most = Math.max(most, game.filled);
       }
-      // Across the whole width (2026-10-24), not a well in the middle.
+      // Across the whole width (2026-10-24), pieces coming in all along it.
       expect(columns.size, `seed ${seed}`).toBe(WIDTH);
-      // A row about every quarter minute once under way: thirty in ten minutes at the least.
-      expect(game.cleared, `seed ${seed}`).toBeGreaterThan(25);
+      // A strip every second or two, and the stacks still build: rows of them, not one.
+      expect(game.cleared, `seed ${seed}`).toBeGreaterThan(200);
+      expect(most, `seed ${seed}`).toBeGreaterThan(160);
       expect(game.restarts, `seed ${seed}`).toBeLessThan(6);
       emptied += game.restarts;
     }
@@ -245,10 +262,62 @@ describe('BLOCKS, played (6c4f2)', () => {
     expect(emptied).toBeGreaterThan(0);
   });
 
-  it('shows the rows cleared at the top right', () => {
+  it('a full strip of five flashes, then goes, five dots a strip, the dots above it coming down', { timeout: 60_000 }, () => {
+    const game = makeBlocks(seeded(3));
+    let deletions = 0;
+    let darkSeen = false;
+    let litSeen = false;
+    let during: { filled: number; cleared: number; strips: number } | null = null;
+    for (let t = 0; t <= 120_000; t += BLOCKS_STEP_MS) {
+      const f = emptyField();
+      game.draw(f, t);
+      if (game.flashing.length) {
+        // Each strip is the five dots of one character cell, every one of them filled.
+        for (const { y, c } of game.flashing) {
+          const shown = f[y].slice(c * 5, c * 5 + 5);
+          if (shown.every((v) => v === 0)) darkSeen = true;
+          if (shown.every((v) => v === 1)) litSeen = true;
+        }
+        during = { filled: game.filled, cleared: game.cleared, strips: game.flashing.length };
+      } else if (during) {
+        // Gone: five dots a strip, and counted.
+        expect(game.cleared - during.cleared).toBe(during.strips);
+        expect(during.filled - game.filled).toBe(5 * during.strips);
+        deletions += 1;
+        during = null;
+      }
+    }
+    expect(deletions).toBeGreaterThan(20);
+    expect(darkSeen && litSeen).toBe(true);
+  });
+
+  it('clearing a strip: its five dots go, and what is above them in those columns comes down a row', () => {
+    const board = emptyField();
+    // A full strip along the bottom of the first cell, a dot two rows above it, and the same in the next cell.
+    for (let x = 0; x < 10; x += 1) board[13][x] = 1;
+    board[11][2] = 1;
+    board[11][7] = 1;
+    board[12][4] = 1;
+    clearStrips(board, [{ y: 13, c: 0 }]);
+    // The first cell's strip gone and its dots come down a row; the next cell untouched.
+    expect(board[13].slice(0, 5)).toEqual([0, 0, 0, 0, 1]);
+    expect(board[12][2]).toBe(1);
+    expect(board[11][2]).toBe(0);
+    expect(board[13].slice(5, 10)).toEqual([1, 1, 1, 1, 1]);
+    expect(board[11][7]).toBe(1);
+    // Two in one cell: both go, the higher first, so the lower is still found where it was.
+    const two = emptyField();
+    for (let x = 0; x < 5; x += 1) { two[12][x] = 1; two[13][x] = 1; }
+    two[10][1] = 1;
+    clearStrips(two, [{ y: 13, c: 0 }, { y: 12, c: 0 }]);
+    expect(two.flat().filter(Boolean).length).toBe(1);
+    expect(two[12][1]).toBe(1);
+  });
+
+  it('shows the strips cleared at the top right', () => {
     const f = emptyField();
     makeBlocks(seeded(2)).draw(f, 0);
-    // A 0: three dots wide at the board's right edge, five tall.
+    // A 0: three dots wide near the board's right edge, five tall.
     expect(f.slice(0, 5).map((row) => row.slice(WIDTH - 5, WIDTH - 2))).toEqual([[1, 1, 1], [1, 0, 1], [1, 0, 1], [1, 0, 1], [1, 1, 1]]);
   });
 });
