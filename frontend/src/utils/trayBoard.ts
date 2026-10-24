@@ -185,5 +185,5 @@ export const putNoise = (f: Field, from = 0, random: () => number = Math.random)
 /** How many cells have decoded `since` ms after the dice came down. */
 export const decodedAt = (since: number): number => Math.max(0, Math.min(COLS, Math.floor((since / SETTLE_MS) * COLS)));
 
-/** Waiting: DICE_TRAY.EXE above a blinking READY_ (the other waiting pictures come next, 6c4f). */
+/** Waiting: DICE_TRAY.EXE above a blinking READY_, the first of the pictures taking turns (utils/trayWaiting.ts). */
 export const putReady = (f: Field, t: number) => putLines(f, [centerLine('DICE_TRAY.EXE'), centerLine(`READY${Math.floor(t / 530) % 2 ? '_' : ' '}`)]);

@@ -53,6 +53,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Pictures on DICE_TRAY.EXE's board while it waits (6c4f).** Between rolls the board now takes
+  turns showing READY_, a game of PONG playing itself, a SNAKE that steers itself to its food, RAIN,
+  PIPES laid a dot at a time, and a SCANNER sweeping side to side, seven seconds each. More are to
+  come.
 - **DICE_TRAY.EXE's board is a 16 by 2 character display (6c4e).** The old 25 by 5 dot board could
   only show a number. The new one, two lines of sixteen letters in the theme's color, says what was
   rolled and what it came to: ATHLETICS 17, PHYSICAL SAVE 14 / SUCCESS, an attack's TO HIT 15 HIT /
