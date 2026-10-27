@@ -252,7 +252,8 @@ describe('the routes', () => {
     const made = await make({ name: 'Tavern Tales', example: 'fantasy' });
     expect(made.body.problems).toEqual([]);
     const got = await request(app).get(`/api/systems/${made.body.id}`).set(as());
-    expect(got.body.draft).toEqual({ ...exampleDefinition('fantasy'), name: 'Tavern Tales' });
+    // A copy is a new system: players are kept from its rolls' targets (6c4h).
+    expect(got.body.draft).toEqual({ target_seen: 'gm', ...exampleDefinition('fantasy'), name: 'Tavern Tales' });
   });
 
   it('copy an example into a new draft under the name given, the GM\'s own', async () => {
@@ -261,7 +262,7 @@ describe('the routes', () => {
     expect(made.body.problems).toEqual([]);
     const got = await request(app).get(`/api/systems/${made.body.id}`).set(as());
     expect(got.body).toMatchObject({ name: 'Neon Nights', version: 0, published: null });
-    expect(got.body.draft).toEqual({ ...exampleDefinition('cwn'), name: 'Neon Nights' });
+    expect(got.body.draft).toEqual({ target_seen: 'gm', ...exampleDefinition('cwn'), name: 'Neon Nights' });
   });
 
   it('refuse an unknown example, no name, or a name already taken', async () => {

@@ -24,6 +24,7 @@ const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
 const tableRolls = require('../systemBuilder/tableRolls');
+const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { healthView } = require('../systemBuilder/healthView');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
@@ -105,6 +106,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   loadCatalogues();
   // Streamer mode: last director state, replayed to spectators when they join.
   let directorState = null;
+
+  // Every socket connected now, so a roll whose target is kept from players can be sent to each
+  // their own (6c4h, utils/rollSeen.js); and whose is the GM's (the main admin's, not an editor's).
+  const connections = new Map();
+  const isGmSocket = (s) => !!userSockets.get(s.id)?.isAdmin;
 
   // Attack system: one pending attack per socket. Cleared on roll, cancel, or disconnect.
   // { targetId, attackType: 'melee' | 'ranged', ac }
@@ -246,6 +252,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   };
 
   io.on('connection', (socket) => {
+    connections.set(socket.id, socket);
     // Spectators are read-only: drop every incoming event except the allowlist.
     socket.use(([event], next) => {
       if (socket.isSpectator && !SPECTATOR_ALLOWED_EVENTS.has(event)) return;
@@ -255,8 +262,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('requestDiceHistory', () => {
       db.all('SELECT * FROM dice_rolls ORDER BY timestamp DESC LIMIT 5', (err, rows) => {
         if (!err && rows) {
+          // Each their own line where a roll's target was kept from players (6c4h).
+          const gm = isGmSocket(socket);
           socket.emit('diceRollHistory', rows.reverse().map(r => ({
-            userName: r.username, total: r.total, results: JSON.parse(r.results), color: r.color, historyString: r.historyString || ''
+            userName: r.username, total: r.total, results: JSON.parse(r.results), color: r.color, historyString: historyFor(r, gm)
           })));
         }
       });
@@ -1626,13 +1635,15 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               glitch: made.glitch,
               criticalGlitch: made.criticalGlitch,
               ...(made.board ? { board: made.board } : {}),
+              // What players see where the target is kept from them (6c4h): each sent their own.
+              players: made.players,
             };
             db.run(
-              'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
-              [info.userName, made.total, JSON.stringify(made.results), color, made.historyText],
+              'INSERT INTO dice_rolls (username, total, results, color, historyString, players_history) VALUES (?, ?, ?, ?, ?, ?)',
+              [info.userName, made.total, JSON.stringify(made.results), color, made.historyText, made.players ? made.players.historyText : null],
               (err3) => {
                 if (err3) console.error('Error saving sheet roll:', err3);
-                io.emit('diceRollBroadcast', withThrow(broadcastData, made.own));
+                emitRoll(io, connections, isGmSocket, withThrow(broadcastData, made.own));
               }
             );
           });
@@ -3548,6 +3559,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     });
 
     socket.on('disconnect', () => {
+      connections.delete(socket.id);
       pendingAttacks.delete(socket.id);
       if (socket.isSpectator) {
         console.log('Spectator disconnected:', socket.id);

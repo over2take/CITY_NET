@@ -53,6 +53,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Players needn't see what a roll is against (6c4h, the server's half).** A system says how much
+  of a roll's target players see, and a roll can say otherwise: SHOWN ("vs 15: SUCCESS"), VERDICT
+  ONLY ("SUCCESS") or GM ONLY (only the total, and none of the effects that come only on a success or
+  a failure). The GM sees all of it, marked HIDDEN FROM PLAYERS when something was kept back, live
+  and in the history replayed after a reload; granted editors see what players see. A new system
+  starts on GM ONLY; a system made before this keeps showing players everything until its GM picks
+  otherwise. The builder's choices come next. And PUBLISH now says when a version changes the rolls,
+  their symbols and dice, or who sees a target: before, those changes went unmentioned.
 - **DICE_TRAY.EXE tells you when someone else rolls (6c4g).** With the tray shut, another player's
   or the GM's roll makes the DICE_ROLLER button on the rail flash, and the DICE_TRAY.exe button in
   its menu too, until the tray is opened. Clicking the flashing rail button opens the menu and the

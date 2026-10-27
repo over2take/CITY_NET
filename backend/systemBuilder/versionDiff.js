@@ -36,8 +36,11 @@ const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const list = (v) => (Array.isArray(v) ? v : []);
 
-/** The sections that change nothing on any character, said in one line. */
-const OTHER = ['name', 'description', 'author', 'license', 'words', 'buildings', 'bank', 'lookups', 'npc', 'rests'];
+/**
+ * The sections that change nothing on any character, said in one line. Phase 6's (rolls, their
+ * symbols and dice, who sees a roll's target) joined in 6c4h: a change to them said nothing before.
+ */
+const OTHER = ['name', 'description', 'author', 'license', 'words', 'buildings', 'bank', 'lookups', 'npc', 'rests', 'rolls', 'symbols', 'dice', 'target_seen'];
 
 const fieldMap = (definition) => new Map(fieldsOf(effectiveSheet(definition))
   .filter((f) => isPlainObject(f) && typeof f.id === 'string')
