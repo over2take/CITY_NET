@@ -20,6 +20,9 @@ const rollsSeenBy = (page: Page) => {
 };
 
 test('the GM builds a system, publishes it twice, switches the game to it, and a player rolls its save', async ({ page, browser, request }, info) => {
+  // A long journey: 16 s on a desktop, past the usual minute on CI once the player's half came in
+  // (2026-10-27, both tries). Three minutes, so a slow runner isn't a failure.
+  test.setTimeout(180_000);
   // A retry runs on the same database as the try before it, so it makes a system of its own name.
   const NAME = info.retry ? `Hearthfall ${info.retry + 1}` : 'Hearthfall';
   const again = info.retry ? `_${info.retry + 1}` : '';
