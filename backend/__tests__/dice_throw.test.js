@@ -76,7 +76,12 @@ describe('every roll broadcast', () => {
     const sends = sources(BACKEND).flatMap((f) => [...fs.readFileSync(f, 'utf8').matchAll(/emit\(\s*'diceRollBroadcast'\s*,\s*(\w+)\(?/g)]
       .map((m) => `${path.relative(BACKEND, f).replace(/\\/g, '/')}: ${m[1]}`));
     expect(sends.length).toBeGreaterThanOrEqual(12);
-    expect(sends.filter((s) => !s.endsWith(': withThrow'))).toEqual([]);
+    // utils/rollSeen.js sends on a roll already thrown, each their own version of it (6c4h): its two
+    // sends, and every roll handed to it, thrown where it is handed over.
+    expect(sends.filter((s) => !s.endsWith(': withThrow'))).toEqual(['utils/rollSeen.js: rollFor', 'utils/rollSeen.js: rollFor']);
+    const handed = sources(BACKEND).flatMap((f) => [...fs.readFileSync(f, 'utf8').matchAll(/emitRoll\([^()]*,\s*(\w+)\(/g)].map((m) => m[1]));
+    expect(handed.length).toBeGreaterThanOrEqual(1);
+    expect(handed.filter((name) => name !== 'withThrow')).toEqual([]);
   });
 });
 

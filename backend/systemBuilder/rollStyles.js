@@ -20,6 +20,7 @@
 //     add:     '@this + @tie_mod',                                                             // 3 ADD
 //     against: '13',       a target (formula text); met at or over it, or at or under with `under`
 //     under:   false,
+//     seen:    'shown' | 'verdict' | 'gm',  how much of the target players see (6c4h); none: the system's
 //     bands:   [{ upTo: 6, label: 'Miss' }, { upTo: 9, label: 'Success at a cost' }, { label: 'Full success' }],
 //     explode: { on: 6, once: false },                                                         // 4 SPECIAL
 //     natural: [{ face: 20, label: 'Critical', critical: 'success' }, { face: 1, label: 'Fumble', critical: 'failure' }],
@@ -81,7 +82,12 @@ const LIMITS = {
 /** A Fate die: −1, 0 or +1. */
 const FATE = 'F';
 const READS = ['sum', 'highest', 'lowest', 'count', 'symbols'];
-const ROLL_KEYS = new Set(['id', 'label', 'dice', 'read', 'keep', 'at', 'on', 'add', 'against', 'under', 'bands', 'explode', 'natural', 'matches', 'cancel', 'glitch', 'effects', 'zero', 'changes', 'by']);
+const ROLL_KEYS = new Set(['id', 'label', 'dice', 'read', 'keep', 'at', 'on', 'add', 'against', 'under', 'seen', 'bands', 'explode', 'natural', 'matches', 'cancel', 'glitch', 'effects', 'zero', 'changes', 'by']);
+/**
+ * How much of a roll's target players see (6c4h; approved mockup docs/mockups/players-see-target.html,
+ * 2026-10-24): SHOWN "vs 12: SUCCESS", VERDICT ONLY "SUCCESS", GM ONLY nothing of it. The GM sees all.
+ */
+const SEEN = ['shown', 'verdict', 'gm'];
 const WHEN = ['critical', 'success', 'failure', 'any'];
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -148,6 +154,10 @@ const checkRoll = (roll, where = 'roll', isFunction = () => false, own = { dice:
   if (roll.against !== undefined) formula('against', roll.against);
   if (roll.under !== undefined && typeof roll.under !== 'boolean') bad('under', 'Must be yes or no');
   if (roll.under === true && roll.against === undefined) bad('under', 'Rolling under needs a target');
+  if (roll.seen !== undefined) {
+    if (!SEEN.includes(roll.seen)) bad('seen', `One of ${SEEN.join(', ')}`);
+    else if (roll.against === undefined) bad('seen', 'Who sees the target needs a target');
+  }
 
   if (roll.bands !== undefined) {
     if (!Array.isArray(roll.bands) || !roll.bands.length) bad('bands', 'A list of bands, at least one');
@@ -568,4 +578,4 @@ const PRESETS = {
   },
 };
 
-module.exports = { checkRoll, checkRolls, makeRoll, tallyOf, rollDie, PRESETS, LIMITS, FATE, READS };
+module.exports = { checkRoll, checkRolls, makeRoll, tallyOf, rollDie, PRESETS, LIMITS, FATE, READS, SEEN };

@@ -236,7 +236,7 @@ describe('rolling at the table, through the socket', () => {
     db = await makeTestDb();
     await run(db, `CREATE TABLE IF NOT EXISTS dice_rolls (
       id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, total INTEGER, results TEXT, color TEXT, historyString TEXT,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+      players_history TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
     const def = JSON.stringify(HEARTH);
     await run(db, 'INSERT INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 1)', ['sys_hearthhearthhear', 'Hearth', def, def]);
     await new Promise((resolve) => runtime.load(db, resolve));

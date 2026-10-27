@@ -12,7 +12,7 @@
 // stat once the roll is made. A condition on the character with a modifier on all rolls (4e1a,
 // waiting for this phase) is added to every roll as its own term, named: "+ 4 - 1 (HURT)" (6b3b).
 
-const { makeRoll, FATE } = require('./rollStyles');
+const { makeRoll, FATE, SEEN } = require('./rollStyles');
 const { parse, evaluate } = require('./expression');
 const { lookupIn } = require('./derived');
 const { ruleValue } = require('./rules');
@@ -78,9 +78,11 @@ const faceText = (f, sides) => (sides === FATE ? (f.value > 0 ? '+' : f.value < 
 /**
  * The log's words for a roll made: its dice (kept ones bare, the rest in brackets, a die taken away
  * with a minus), what is added, the total, and what it came to: met or not, a band, a natural,
- * matches, a glitch, named dice's effects, the changes picked.
+ * matches, a glitch, named dice's effects, the changes picked. `hide` (6c4h) is what players are
+ * kept from: the target (`target`), the verdict too (`verdict`), and the effects that come only on
+ * a success or a failure (`effects`, their labels), which say the verdict as plainly.
  */
-const describe = (result, symbols = []) => {
+const describe = (result, symbols = [], hide = {}) => {
   const marks = new Map(symbols.map((s) => [s.id, s.mark ?? s.name.slice(0, 1).toUpperCase()]));
   // A named kind's name follows each face only where the roll mixes kinds (✶ Good ✕ Bad); with one
   // kind it is already said ("rolled 3×dF"), so the faces stand alone.
@@ -99,13 +101,15 @@ const describe = (result, symbols = []) => {
   const working = result.read === 'symbols'
     ? `${dice || 'no dice'} = ${tally}${added ? ` · ${result.dice}${added} = ${result.total}` : ''}`
     : `${dice || 'no dice'}${added ? ` = ${result.dice}${added}` : ''} = ${result.total}${tally ? ` · ${tally}` : ''}`;
+  const verdict = result.success ? 'SUCCESS' : 'FAILURE';
+  const kept = new Set(hide.effects ?? []);
   const said = [
-    ...(result.target !== null ? [`vs ${result.target}: ${result.success ? 'SUCCESS' : 'FAILURE'}`] : []),
+    ...(result.target !== null && !hide.verdict ? [hide.target ? verdict : `vs ${result.target}: ${verdict}`] : []),
     ...(result.band ? [result.band.toUpperCase()] : []),
     ...(result.natural ? [result.natural.label.toUpperCase()] : []),
     ...result.matches.map((m) => m.label.toUpperCase()),
     ...(result.glitch ? [result.glitch.toUpperCase()] : []),
-    ...result.effects.map((e) => e.toUpperCase()),
+    ...result.effects.filter((e) => !kept.has(e)).map((e) => e.toUpperCase()),
   ];
   const changes = result.changes.length ? ` (${result.changes.join(', ')})` : '';
   return { working, tags: said.length ? ` — ${said.join(' · ')}` : '', changes, board: boardOf(result, symbols, said) };
@@ -216,12 +220,26 @@ const trayOf = (result, symbols = [], dice = []) => {
  * cost something, since a test takes nothing. `conditions` are those on the character, whole as
  * conditionsOf gives them; each modifier on all rolls is added to the roll. Returns { ok: true, roll, result, historyText, results,
  * diceSides, own (the tray's own dice, 6c4b1), board (its words for the tray's board, 6c4d1, named 6c4d3), total, glitch,
- * criticalGlitch } or { ok: false, error } (nothing rolled).
+ * criticalGlitch, players (6c4h: { historyText, board } as players see them where the target is kept from them, else
+ * null; historyText and board are then the GM's) } or { ok: false, error } (nothing rolled).
  */
 /** A condition's modifiers on all rolls, each a term named by its short name: HURT -1. */
 const termsOf = (conditions) => (Array.isArray(conditions) ? conditions : []).flatMap((c) => (isPlainObject(c) && Array.isArray(c.modifiers) ? c.modifiers : [])
   .filter((m) => isPlainObject(m) && m.target === ALL_ROLLS && Number.isInteger(m.amount) && m.amount !== 0)
   .map((m) => ({ label: c.short || c.name || c.id, amount: m.amount })));
+
+/** How much of `roll`'s target players see (6c4h): its own setting, or the system's, or SHOWN. */
+const seenOf = (definition, roll) => (SEEN.includes(roll?.seen) ? roll.seen : SEEN.includes(definition?.target_seen) ? definition.target_seen : 'shown');
+
+/** What players are kept from at `seen` (describe's `hide`), or null when they see it all. */
+const hiddenAt = (seen, roll) => (seen === 'shown' ? null : {
+  target: true,
+  verdict: seen === 'gm',
+  effects: seen === 'gm' ? (roll.effects ?? []).filter((e) => e.when === 'success' || e.when === 'failure').map((e) => e.label) : [],
+});
+
+/** Said on the GM's line when players were kept from some of it (6c4h). */
+const HIDDEN = ' · HIDDEN FROM PLAYERS';
 
 const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, forName, roll: given, tryCosts = false, conditions = [] }) => {
   if (!isPlainObject(definition) || (!given && typeof fieldId !== 'string')) return { ok: false, error: 'Nothing to roll' };
@@ -247,23 +265,30 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
   const result = makeRoll(roll, valueOf(definition, fieldsFor(definition, data, fieldId), data), rng, picks, termsOf(conditions), { dice: diceOf(definition), symbols });
   const label = roll.label || roll.id;
   const what = typeof fieldId === 'string' ? (statOf(definition, fieldId)?.label || formulaOf(definition, fieldId)?.label || fieldId) : null;
-  const described = describe({ ...result, read: roll.read ?? 'sum' }, symbols);
+  const read = { ...result, read: roll.read ?? 'sum' };
+  const described = describe(read, symbols);
   const { working, tags, board } = described;
   // A change that cost something says what it cost.
   const costWords = new Map(spends.map((s) => [s.label, s.words]));
   const changes = result.changes.length ? ` (${result.changes.map((l) => costWords.get(l) ?? l).join(', ')})` : '';
   const tray = trayOf(result, symbols, diceOf(definition));
+  const named = String(what || label).toUpperCase();
+  const line = (said) => `${who} rolled ${label}${what ? ` (${what})` : ''}${forName ? ` for ${forName}` : ''}${changes} [${working}]${said}`;
+  // Players' own version where the target is kept from them (6c4h); with no target, nothing to keep.
+  const hide = result.target === null ? null : hiddenAt(seenOf(definition, roll), roll);
+  const theirs = hide ? describe(read, symbols, hide) : null;
   return {
     ok: true,
     roll: roll.id,
     result,
-    historyText: `${who} rolled ${label}${what ? ` (${what})` : ''}${forName ? ` for ${forName}` : ''}${changes} [${working}]${tags}`,
+    historyText: line(tags) + (hide ? HIDDEN : ''),
+    players: theirs ? { historyText: line(theirs.tags), board: { label: named, ...(theirs.board || {}) } } : null,
     results: tray.results,
     diceSides: tray.diceSides,
     own: tray.own,
     // Named for what was rolled (6c4d3): the field where there is one (PHYSICAL SAVE says more
     // than its roll's SAVE), otherwise the roll.
-    board: { label: String(what || label).toUpperCase(), ...(board || {}) },
+    board: { label: named, ...(board || {}) },
     total: result.total,
     glitch: !!result.glitch,
     criticalGlitch: !!result.glitch && result.critical === 'failure',
@@ -271,4 +296,4 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
   };
 };
 
-module.exports = { rollsFor, fieldsRolledBy, modifierOf, fieldsFor, termsOf, rollField, describe, menuDiceOf, rollMenuDice };
+module.exports = { rollsFor, fieldsRolledBy, modifierOf, fieldsFor, termsOf, rollField, describe, menuDiceOf, rollMenuDice, seenOf, HIDDEN };

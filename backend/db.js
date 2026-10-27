@@ -264,6 +264,8 @@ db.serialize(() => {
   )`);
 
   db.run(`ALTER TABLE dice_rolls ADD COLUMN historyString TEXT`, (err) => {});
+  // A roll's line as players saw it, where its target was kept from them (6c4h); none: as the GM's.
+  db.run(`ALTER TABLE dice_rolls ADD COLUMN players_history TEXT`, (err) => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS saved_maps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

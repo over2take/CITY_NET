@@ -12,7 +12,7 @@ const { zipBody: readZipBody } = require('../middleware/jsonBody');
 const { previewPublish } = require('../systemBuilder/publishPreview');
 const { buildCustomTemplate } = require('../sheets/pdfTemplate');
 const runtime = require('../systemBuilder/runtime');
-const { checkDefinition } = require('../systemBuilder/definition');
+const { checkDefinition, NEW_SYSTEM_SEEN } = require('../systemBuilder/definition');
 const { previewDerived } = require('../systemBuilder/derived');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { conditionsOf } = require('../systemBuilder/conditions');
@@ -116,7 +116,8 @@ module.exports = (db, io = null) => {
     const copy = exampleDefinition(example);
     if (!copy) return res.status(404).json({ error: 'No such example' });
     if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'A system needs a name' });
-    store.createSystem(db, { definition: { ...copy, name: name.trim() } }, (err, made) => answer(res, err, made));
+    // A copy is a new system: players kept from its rolls' targets unless the example says otherwise (6c4h).
+    store.createSystem(db, { definition: { target_seen: NEW_SYSTEM_SEEN, ...copy, name: name.trim() } }, (err, made) => answer(res, err, made));
   });
 
   // Whether the builder's first-time tour has been seen (4i; approved mockup

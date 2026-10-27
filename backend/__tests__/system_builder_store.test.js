@@ -232,7 +232,7 @@ describe('the systems routes', () => {
     const sys = (await request(app).get(`/api/systems/${id}`).set(bearer(GM))).body;
     expect(sys.name).toBe('Live, renamed');
     expect(sys.draft.parts).toEqual({ vehicles: { on: false } });
-    expect(sys.published).toEqual({ format: 1, name: 'Live' });
+    expect(sys.published).toEqual({ format: 1, name: 'Live', target_seen: 'gm' });
     expect((await list())[0]).toMatchObject({ unpublishedChanges: true, version: 1 });
 
     await request(app).post(`/api/systems/${id}/publish`).set(bearer(GM));
@@ -245,7 +245,7 @@ describe('the systems routes', () => {
     const { id } = (await create({ name: 'Keep' })).body;
     const res = await request(app).put(`/api/systems/${id}/draft`).set(bearer(GM)).send({ definition: 'gibberish' });
     expect(res.status).toBe(400);
-    expect((await request(app).get(`/api/systems/${id}`).set(bearer(GM))).body.draft).toEqual({ format: 1, name: 'Keep' });
+    expect((await request(app).get(`/api/systems/${id}`).set(bearer(GM))).body.draft).toEqual({ format: 1, name: 'Keep', target_seen: 'gm' });
   });
 
   it('answers 404 for a system that is not there, or an id that is not one', async () => {

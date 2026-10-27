@@ -44,6 +44,7 @@ export const OTHER_NAMES: Record<string, string> = {
   name: 'the name', description: 'the description', author: 'the author', license: 'the license',
   words: 'words', buildings: 'building and catalogue names', bank: 'bank settings', lookups: 'tables',
   npc: 'NPC tiers', rests: 'rests',
+  rolls: 'rolls', symbols: 'symbols', dice: 'dice', target_seen: 'who sees a roll\'s target',
 };
 
 /** A value one character holds, or worked out, written plainly. */
