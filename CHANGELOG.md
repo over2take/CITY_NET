@@ -267,6 +267,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **The builder's browser journey covers Phase 6.** The test that builds a system on screen from
+  + NEW now also makes a roll on ROLLS (a save with a target, rolled by its stat, its players told
+  only the verdict), and after the game switches to it, a player rolls that save from their sheet:
+  the player is told SUCCESS or FAILURE, the GM what it was against too.
 - **Backend tests run their database queries in order.** The test database was in sqlite's
   parallel mode, where on a busy machine a query sent later can be answered first; tests that
   waited a number of database rounds could then check too soon, and failed on CI only. It is
