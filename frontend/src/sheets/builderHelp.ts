@@ -106,6 +106,11 @@ const REFERENCE: HelpTopic[] = [
     'While you build, your work saves itself as a draft; SAVE saves it now. PUBLISH makes the draft the next version the game runs. From the second version on, PUBLISH first shows what will change for anyone playing, and nothing is ever deleted.',
     'EXPORT in MY SYSTEMS saves a system as a .citysys file to share, or as a .zip with the images uploaded for it. Installing either shows what it holds first; a system already here can be updated or kept beside the new one.',
   ] },
+  { id: 'target', group: 'REFERENCE', title: 'WHO SEES THE TARGET', body: [
+    'Some games say the number you roll against out loud; most GMs keep it to themselves. A system picks how much of a roll\'s target its players see, at the top of STATS & RULES\' ROLLS tab, and one roll can pick otherwise in its step 3.',
+    'Whatever is picked, you see everything, with HIDDEN FROM PLAYERS on the line when something was kept back. The players, a granted editor and the streamer overlay see their version, live and in the history after a reload. A new system starts on GM ONLY.',
+    'Below: KES rolls STEALTH, a d20 + 3 against 12, as a player and as you see it. Pick a setting and roll again.',
+  ] },
   { id: 'examples', group: 'REFERENCE', title: 'EXAMPLES', examples: true, body: [
     'The built-in games as systems you can look through, read-only, or copy to change: every page filled in by a real game.',
   ] },
@@ -186,6 +191,8 @@ export const HINTS = {
   'rolls.compare': 'What is added to the dice, the target the total is held against, and words for where it lands. Each is optional: with none, the roll is its total.',
   'rolls.add': 'A formula added to what the dice come to, like @this + @tie_mod. At the table, conditions that change every roll are added on top.',
   'rolls.against': 'The target the total must meet or beat to succeed, like 13 or @this. ROLL UNDER turns it round: at or under succeeds. Empty: no success or failure.',
+  'rolls.seen': 'How much of a roll\'s target your players see, for every roll in the system. SHOWN: "vs 12: SUCCESS". VERDICT ONLY: "SUCCESS", never the number. GM ONLY: their total alone; you see it all. HELP\'s WHO SEES THE TARGET shows each.',
+  'rolls.rollSeen': 'This roll\'s own, when it shouldn\'t follow the system\'s: a save whose number is on the player\'s sheet anyway can be SHOWN in a GM ONLY game. Needs a target to keep.',
   'rolls.bands': 'Words for the total, read top to bottom like a table: the first band the total isn\'t above is the one shown, like 6− MISS, 7–9 A COST, 10+ A HIT.',
   'rolls.special': 'What the faces themselves can mean: dice that explode, naturals, matches, cancelling, a glitch, a named kind\'s effects, and what happens with no dice.',
   'rolls.explode': 'A die on its highest face, or the face you give, rolls another that is added. ONLY ONCE stops a new die exploding again; FIRST DIE ONLY lets one die explode.',

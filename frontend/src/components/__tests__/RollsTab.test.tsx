@@ -48,17 +48,68 @@ const testRoll = vi.fn(async (definition: Definition, rollId: string, fieldId?: 
 });
 const api = { previewValues: vi.fn(async () => ({ ok: true as const, value: { values: {}, problems: [] } })), testRoll } as never;
 
-const open = (start: Definition = HEARTH) => {
+const open = (start: Definition = HEARTH, onHelp?: (topic: string) => void) => {
   const edits: Definition[] = [];
   const Harness = () => {
     const [def, setDef] = useState(start);
-    return <StatsRulesPage definition={def} api={api} edit={(next) => { edits.push(next); setDef(next); }} />;
+    return <StatsRulesPage definition={def} api={api} edit={(next) => { edits.push(next); setDef(next); }} onHelp={onHelp} />;
   };
   render(<Harness />);
   return { last: () => edits[edits.length - 1] };
 };
 const toRolls = () => userEvent.click(screen.getByRole('tab', { name: 'ROLLS' }));
 const rollsOf = (def: Definition) => def.rolls as Record<string, unknown>[];
+
+describe('who sees a roll\'s target (6c4h)', () => {
+  const everyRoll = () => within(screen.getByRole('group', { name: 'Every roll: players see' }));
+  const thisRoll = () => within(screen.getByRole('group', { name: 'This roll: players see' }));
+  const previews = () => screen.getAllByTestId('seen-preview').map((p) => p.textContent);
+
+  it('the system\'s, at the top: SHOWN where it has none, as a system made before it; picked, with an example of each', async () => {
+    const { last } = open();
+    await toRolls();
+    expect(everyRoll().getByRole('button', { name: 'SHOWN' }).getAttribute('aria-pressed')).toBe('true');
+    expect(previews()[0]).toBe('A PLAYER SEESSTEALTH 15 — vs 12: SUCCESSYOU SEESTEALTH 15 — vs 12: SUCCESS');
+    await userEvent.click(everyRoll().getByRole('button', { name: 'GM ONLY' }));
+    expect(last().target_seen).toBe('gm');
+    expect(screen.getByText('Players see their total and nothing about the target; you see it all.')).toBeTruthy();
+    expect(previews()[0]).toBe('A PLAYER SEESSTEALTH 15YOU SEESTEALTH 15 — vs 12: SUCCESS · HIDDEN FROM PLAYERS');
+    expect(problems(last())).toEqual([]);
+  });
+
+  it('a roll\'s own, in step 3: off until it has a target, then its own or the system\'s, gone with the target', async () => {
+    const { last } = open({ ...HEARTH, target_seen: 'gm' });
+    await toRolls();
+    // No target yet: nothing to keep, so nothing to pick, and no example.
+    for (const b of thisRoll().getAllByRole('button')) expect((b as HTMLButtonElement).disabled).toBe(true);
+    expect(previews()).toHaveLength(1);
+    await userEvent.type(screen.getByLabelText('Against'), '12');
+    expect(thisRoll().getByRole('button', { name: 'AS THE SYSTEM (GM ONLY)' }).getAttribute('aria-pressed')).toBe('true');
+    expect(previews()[1]).toBe(previews()[0]);
+    await userEvent.click(thisRoll().getByRole('button', { name: 'VERDICT ONLY' }));
+    expect(rollsOf(last())[0].seen).toBe('verdict');
+    expect(previews()[1]).toBe('A PLAYER SEESSTEALTH 15 — SUCCESSYOU SEESTEALTH 15 — vs 12: SUCCESS · HIDDEN FROM PLAYERS');
+    expect(problems(last())).toEqual([]);
+    await userEvent.click(thisRoll().getByRole('button', { name: 'AS THE SYSTEM (GM ONLY)' }));
+    expect(rollsOf(last())[0]).not.toHaveProperty('seen');
+    await userEvent.click(thisRoll().getByRole('button', { name: 'SHOWN' }));
+    await userEvent.clear(screen.getByLabelText('Against'));
+    expect(rollsOf(last())[0]).not.toHaveProperty('seen');
+    expect(problems(last())).toEqual([]);
+  });
+
+  it('opens HELP\'s WHO SEES THE TARGET, where there is a HELP to open', async () => {
+    const onHelp = vi.fn();
+    open(HEARTH, onHelp);
+    await toRolls();
+    await userEvent.click(screen.getByRole('button', { name: 'HOW PLAYERS SEE IT' }));
+    expect(onHelp).toHaveBeenCalledWith('target');
+    cleanup();
+    open();
+    await toRolls();
+    expect(screen.queryByRole('button', { name: 'HOW PLAYERS SEE IT' })).toBeNull();
+  });
+});
 
 describe('the ROLLS tab', () => {
   it('picking another roll shows that roll alone, with its own TEST ROLL (a key the two once shared)', async () => {
@@ -437,7 +488,7 @@ describe('the "?"', () => {
     await userEvent.click(screen.getByRole('button', { name: '+ CHANGE' }));
     look();
     const keys = Object.keys(HINTS).filter((k) => k.startsWith('rolls.')) as (keyof typeof HINTS)[];
-    expect(keys).toHaveLength(20);
+    expect(keys).toHaveLength(22);
     for (const k of keys) expect(seen.has(HINTS[k]), k).toBe(true);
     // The "?" stays out of what the steps, parts and boxes are called.
     for (const name of ['DICE', 'READ THE DICE', 'ADD AND COMPARE', 'SPECIAL RESULTS', 'CHANGE A ROLL', 'Rolled by']) expect(screen.getByRole('region', { name }), name).toBeTruthy();

@@ -31,6 +31,8 @@ interface Props {
   api?: ReturnType<typeof systemsApi>;
   /** EDIT IN GRAPH on a note or a map group: the map, opened on it. */
   onEditInGraph?: (node: string) => void;
+  /** Open a HELP topic, by id (the ROLLS tab's WHO SEES THE TARGET, 6c4h). */
+  onHelp?: (topic: string) => void;
 }
 
 type Tab = 'stats' | 'formulas' | 'tables' | 'dice' | 'rolls';
@@ -161,7 +163,7 @@ function FormulasTab({ definition, edit, api, onEditInGraph }: Props) {
   );
 }
 
-export function StatsRulesPage({ definition, edit, api, onEditInGraph }: Props) {
+export function StatsRulesPage({ definition, edit, api, onEditInGraph, onHelp }: Props) {
   const [tab, setTab] = useState<Tab>('stats');
   const tabs: [Tab, string][] = [['stats', 'STATS'], ['formulas', 'FORMULAS'], ['tables', 'TABLES'], ['dice', 'DICE'], ['rolls', 'ROLLS']];
   return (
@@ -175,7 +177,7 @@ export function StatsRulesPage({ definition, edit, api, onEditInGraph }: Props) 
       {tab === 'formulas' && <FormulasTab definition={definition} edit={edit} api={api} onEditInGraph={onEditInGraph} />}
       {tab === 'tables' && <TablesTab definition={definition} edit={edit} onEditInGraph={onEditInGraph} />}
       {tab === 'dice' && <DiceTab definition={definition} edit={edit} api={api} />}
-      {tab === 'rolls' && <RollsTab definition={definition} edit={edit} api={api} />}
+      {tab === 'rolls' && <RollsTab definition={definition} edit={edit} api={api} onHelp={onHelp} />}
     </div>
   );
 }

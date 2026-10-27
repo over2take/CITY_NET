@@ -45,7 +45,7 @@ describe('the HELP page\'s topics', () => {
     const pages = TOPICS.filter((t) => t.group === 'PAGES');
     expect(pages.map((t) => t.page)).toEqual(BUILDER_PAGES.map((p) => p.id));
     expect(pages.map((t) => t.title)).toEqual(BUILDER_PAGES.map((p) => p.label));
-    expect(TOPICS.filter((t) => t.group === 'REFERENCE').map((t) => t.title)).toEqual(['FORMULAS', 'DICE', 'HEALTH MODELS', 'SHARING AND VERSIONS', 'EXAMPLES']);
+    expect(TOPICS.filter((t) => t.group === 'REFERENCE').map((t) => t.title)).toEqual(['FORMULAS', 'DICE', 'HEALTH MODELS', 'SHARING AND VERSIONS', 'WHO SEES THE TARGET', 'EXAMPLES']);
     expect(new Set(TOPICS.map((t) => t.id)).size).toBe(TOPICS.length);
     for (const t of TOPICS) expect(t.body.length, t.id).toBeGreaterThan(0);
   });

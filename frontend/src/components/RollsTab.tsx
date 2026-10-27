@@ -13,6 +13,7 @@ import { FaceShown } from './DrawPad';
 import { onAllRolls } from '../sheets/conditions';
 import { FieldName, HelpHint } from './HelpHint';
 import { HINTS } from '../sheets/builderHelp';
+import { SEEN_LEVELS, systemSeen, rollSeen, seenLabel, seenLine, withSystemSeen, withRollSeen, previewOf, type Seen } from '../sheets/targetSeen';
 
 // STATS & RULES' ROLLS tab (Phase 6, 6b1a; approved mockup docs/mockups/builder-rolls.html,
 // 2026-10-19, on the builder design's Dice page): the system's rolls on the left; the one picked in
@@ -26,6 +27,21 @@ interface Props {
   definition: Definition;
   edit: (next: Definition) => void;
   api?: ReturnType<typeof systemsApi>;
+  /** Open a HELP topic, by id: WHO SEES THE TARGET (6c4h). */
+  onHelp?: (topic: string) => void;
+}
+
+const choice = (on: boolean): React.CSSProperties => ({ background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)', border: '1px solid var(--dark-green)', fontFamily: 'monospace', fontSize: 11, padding: '2px 8px', cursor: 'pointer' });
+
+/** What a player and the GM read at `seen`, for a roll of 15 against 12 (6c4h): it changes as the choice does. */
+function SeenPreview({ seen }: { seen: Seen }) {
+  const { player, gm } = previewOf(seen);
+  return (
+    <div data-testid="seen-preview" style={{ display: 'grid', gridTemplateColumns: 'max-content minmax(0, 1fr)', gap: '2px 10px', fontSize: 11, borderLeft: '2px solid var(--dark-green)', paddingLeft: 8 }}>
+      <span style={{ opacity: 0.6, letterSpacing: 1 }}>A PLAYER SEES</span><span>{player}</span>
+      <span style={{ opacity: 0.6, letterSpacing: 1 }}>YOU SEE</span><span>{gm}</span>
+    </div>
+  );
 }
 
 const PRESET_KEYS = Object.keys(PRESETS);
@@ -181,7 +197,16 @@ function CompareStep({ definition, edit, roll }: { definition: Definition; edit:
           style={{ justifySelf: 'start', background: 'none', border: 0, padding: 0, color: 'var(--cyan)', fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, cursor: 'pointer', opacity: roll.against === undefined ? 0.4 : 1 }}>
           {roll.under ? '◉' : '○'} ROLL UNDER: AT OR UNDER SUCCEEDS
         </button>
+        <FieldName hint={HINTS['rolls.rollSeen']}>PLAYERS SEE</FieldName>
+        {/* Off until there is a target: with nothing to beat there is nothing to keep (6c4h). */}
+        <div role="group" aria-label="This roll: players see" style={{ display: 'flex', flexWrap: 'wrap', gap: 5, opacity: roll.against === undefined ? 0.4 : 1 }}>
+          {[{ id: null, label: `AS THE SYSTEM (${seenLabel(systemSeen(definition))})` }, ...SEEN_LEVELS].map((c) => {
+            const on = (roll.seen ?? null) === c.id;
+            return <button key={c.label} type="button" aria-pressed={on} disabled={roll.against === undefined} onClick={() => edit(withRollSeen(definition, roll.id, c.id))} style={choice(on)}>{c.label}</button>;
+          })}
+        </div>
       </div>
+      {roll.against !== undefined && <SeenPreview seen={rollSeen(definition, roll)} />}
       {bands.length ? (
         <div data-testid="bands" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <FieldName hint={HINTS['rolls.bands']} style={small}>BANDS · READ TOP TO BOTTOM, LIKE A TABLE: THE FIRST THE TOTAL ISN&apos;T ABOVE</FieldName>
@@ -567,7 +592,23 @@ export function TestRoll({ definition, api, roll }: { definition: Definition; ap
   );
 }
 
-export function RollsTab({ definition, edit, api }: Props) {
+/** The system's own setting (6c4h), at the top of the tab: every roll follows it unless it picks its own. */
+function SystemSeen({ definition, edit, onHelp }: Props) {
+  const seen = systemSeen(definition);
+  return (
+    <section aria-label="Players see a roll's target" style={{ display: 'flex', flexDirection: 'column', gap: 6, border: '1px solid var(--dark-green)', padding: '8px 10px', maxWidth: 640 }}>
+      <FieldName hint={HINTS['rolls.seen']} style={small}>PLAYERS SEE A ROLL&apos;S TARGET</FieldName>
+      <div role="group" aria-label="Every roll: players see" style={{ display: 'flex', flexWrap: 'wrap', gap: 5, alignItems: 'center' }}>
+        {SEEN_LEVELS.map((l) => <button key={l.id} type="button" aria-pressed={seen === l.id} onClick={() => edit(withSystemSeen(definition, l.id))} style={choice(seen === l.id)}>{l.label}</button>)}
+        {onHelp && <button type="button" className="utility-btn" style={{ ...btn, marginLeft: 6 }} onClick={() => onHelp('target')}>HOW PLAYERS SEE IT</button>}
+      </div>
+      <span style={{ ...why, fontSize: 11 }}>{seenLine(seen)}</span>
+      <SeenPreview seen={seen} />
+    </section>
+  );
+}
+
+export function RollsTab({ definition, edit, api, onHelp }: Props) {
   const rolls = rollList(definition);
   const [picked, setPicked] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -585,6 +626,7 @@ export function RollsTab({ definition, edit, api }: Props) {
       <p style={{ ...why, margin: 0, maxWidth: '72ch' }}>
         The system&apos;s own rolls: the dice, how they are read, what is added, and what the result means. Give each the stats it is rolled by and players get a die button by them on the sheet.
       </p>
+      <SystemSeen definition={definition} edit={edit} onHelp={onHelp} />
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(150px, 200px) minmax(0, 1fr) minmax(200px, 280px)', gap: 14, alignItems: 'start' }}>
         <nav aria-label="Rolls" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {rolls.map((r) => (
