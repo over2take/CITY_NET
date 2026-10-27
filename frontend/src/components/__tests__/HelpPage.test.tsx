@@ -102,6 +102,35 @@ describe('the references', () => {
     expect(onLook.mock.calls.map((c) => c[0])).toEqual(EXAMPLES.map((e) => e.id));
   });
 
+  it('WHO SEES THE TARGET shows one roll as a player\'s tray and the GM\'s, at the setting picked (6c4h)', async () => {
+    open();
+    await pick('WHO SEES THE TARGET');
+    const example = within(screen.getByTestId('target-seen-example'));
+    const line = (tray: string) => within(example.getByRole('region', { name: tray })).getByTestId('tray-line').textContent;
+    const board = (tray: string) => within(example.getByRole('region', { name: tray })).getByRole('img').getAttribute('aria-label');
+    const setting = (name: string) => userEvent.click(within(example.getByRole('group', { name: 'Players see' })).getByRole('button', { name }));
+    // Opens on GM ONLY, as a new system starts: the player sees their total alone; the GM all, marked.
+    expect(within(example.getByRole('group', { name: 'Players see' })).getByRole('button', { name: 'GM ONLY' }).getAttribute('aria-pressed')).toBe('true');
+    expect(line('A PLAYER')).toBe('KES rolled STEALTH [d20 (11) + 3 = 14]');
+    expect(board('A PLAYER')).toBe('STEALTH       14');
+    expect(line('YOU, THE GM')).toBe('KES rolled STEALTH [d20 (11) + 3 = 14] — vs 12: SUCCESS · SILENT · HIDDEN FROM PLAYERS');
+    expect(board('YOU, THE GM')).toBe('STEALTH       14 / VS 12 SUCCESS');
+    await setting('VERDICT ONLY');
+    expect(line('A PLAYER')).toBe('KES rolled STEALTH [d20 (11) + 3 = 14] — SUCCESS · SILENT');
+    expect(board('A PLAYER')).toBe('STEALTH       14 / SUCCESS');
+    await setting('SHOWN');
+    expect(line('A PLAYER')).toBe('KES rolled STEALTH [d20 (11) + 3 = 14] — vs 12: SUCCESS · SILENT');
+    expect(line('YOU, THE GM')).toBe(line('A PLAYER'));
+    // ROLL AGAIN: another face, never the same one.
+    const random = vi.spyOn(Math, 'random').mockReturnValueOnce(0.5).mockReturnValueOnce(0.06);
+    await userEvent.click(example.getByRole('button', { name: 'ROLL AGAIN' }));
+    random.mockRestore();
+    expect(line('A PLAYER')).toBe('KES rolled STEALTH [d20 (2) + 3 = 5] — vs 12: FAILURE');
+    // And the table of what each setting keeps, a row each.
+    const rows = within(example.getByRole('table', { name: 'What each setting keeps from players' })).getAllByRole('row').slice(1);
+    expect(rows.map((r) => within(r).getAllByRole('cell').map((c) => c.textContent))[1]).toEqual(['The target ("vs 12")', 'yes', '— hidden', '— hidden']);
+  });
+
   it('EXAMPLES only describes them where they can\'t be opened', async () => {
     open();
     await pick('EXAMPLES');

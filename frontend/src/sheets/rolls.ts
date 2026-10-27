@@ -11,6 +11,7 @@
 // the dice are read drops what only the old way used, and the last band always catches the rest.
 
 import type { Definition } from './systemsApi';
+import type { Seen } from './targetSeen';
 import { idFor } from './setup';
 import { statGroups, formulaList } from './statsRules';
 
@@ -24,6 +25,8 @@ export interface Roll {
   id: string; label?: string;
   dice: RollDice[]; read?: 'sum' | 'highest' | 'lowest' | 'count' | 'symbols'; keep?: string; at?: number; on?: string;
   add?: string; against?: string; under?: boolean; bands?: RollBand[];
+  /** How much of the target players see, this roll's own (6c4h, targetSeen.ts); none: the system's. */
+  seen?: Seen;
   explode?: { on?: number; once?: boolean; low?: number; first?: boolean };
   natural?: { face: number; label: string; critical?: 'success' | 'failure' }[];
   matches?: { face?: number; count: number; adds?: number; label: string; critical?: 'success' | 'failure' }[];
@@ -243,7 +246,8 @@ export const withRollAgainst = (def: Definition, id: string, text: string, under
     const next: Roll = { ...r, against: text };
     if (under !== undefined) next.under = under;
     if (!next.under) delete next.under;
-    if (!text.trim()) { delete next.against; delete next.under; }
+    // With no target there is nothing to keep from players either (6c4h).
+    if (!text.trim()) { delete next.against; delete next.under; delete next.seen; }
     return next;
   });
 

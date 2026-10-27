@@ -69,10 +69,10 @@ test('every control in the builder takes a click, on every page', async ({ page 
           missed[`${p} · DICE · ICONS`] = await unreachable(page);
         }
       }
-      // ROLLS shows one roll at a time: two made from presets, so all five steps and TEST ROLL
+      // ROLLS shows one roll at a time: three made from presets, so all five steps and TEST ROLL
       // have something in them. Blades' push with its cost (TAKES or ADDS); Vampire's Hunger dice
-      // with their effects and glitch.
-      for (const preset of ['BLADES ACTION', 'VAMPIRE POOL']) {
+      // with their effects and glitch; CWN's save, whose target opens PLAYERS SEE in step 3 (6c4h).
+      for (const preset of ['BLADES ACTION', 'VAMPIRE POOL', 'CWN SAVE']) {
         if (preset !== 'BLADES ACTION') await page.getByRole('navigation', { name: 'Rolls' }).getByRole('button', { name: '+ ROLL' }).click();
         await page.getByRole('group', { name: 'New roll from a preset' }).getByRole('button', { name: preset }).click();
         await expect(page.getByTestId('test-roll').getByRole('group', { name: 'Conditions on the sample' })).toBeVisible();
@@ -98,6 +98,15 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await page.getByRole('tab', { name: 'STAT BLOCK', exact: true }).click();
     }
   }
+  // HELP's WHO SEES THE TARGET (6c4h), opened as a GM would from the ROLLS tab: its settings,
+  // ROLL AGAIN and the two trays.
+  await builderPage(page, 'STATS & RULES');
+  await page.getByRole('tab', { name: 'ROLLS', exact: true }).click();
+  await page.getByRole('button', { name: 'HOW PLAYERS SEE IT' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'HELP', exact: true })).toBeVisible();
+  await expect(page.getByRole('article', { name: 'WHO SEES THE TARGET' })).toBeVisible();
+  await expect(page.getByTestId('target-seen-example')).toBeVisible();
+  missed['HELP · WHO SEES THE TARGET'] = await unreachable(page);
   expect(Object.fromEntries(Object.entries(missed).filter(([, v]) => v.length))).toEqual({});
 });
 
