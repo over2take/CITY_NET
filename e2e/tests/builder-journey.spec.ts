@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { signInAsGm, signInAsPlayer, openBuilder, openGameSystem, builderPage, clickRail, gmToken, approvedPlayer } from './helpers';
+import { signInAsGm, signInAsPlayer, openBuilder, openGameSystem, builderPage, clickRail, gmToken, asGm, approvedPlayer } from './helpers';
 
 // The builder journey, the GM's half (4l2a; plan row 4l browser-journey): a system built through
 // the builder's own screens from + NEW (its words, a part off, a stat and a formula worked out on
@@ -111,7 +111,8 @@ test('the GM builds a system, publishes it twice, switches the game to it, and a
 
   // A PLAYER, in a browser of their own: the save has a die button by Grit on their sheet.
   const player = { username: `e2e_saver${again}`, password: 'e2e-player-password' };
-  await approvedPlayer(request, await gmToken(request), player);
+  const gm = await gmToken(request);
+  await approvedPlayer(request, gm, player);
   const context = await browser.newContext({ baseURL: info.project.use.baseURL });
   const playerPage = await context.newPage();
   const playerSees = rollsSeenBy(playerPage);
@@ -120,8 +121,8 @@ test('the GM builds a system, publishes it twice, switches the game to it, and a
   await playerPage.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
   await playerPage.getByLabel('Name', { exact: true }).fill('Wren');
   await playerPage.getByLabel('Grit', { exact: true }).fill('3');
-  // Saved first, so the server reads Grit from the stored sheet.
-  await playerPage.waitForTimeout(800);
+  // Saved first, so the server reads Grit from the stored sheet: waited for there, not for a time.
+  await expect.poll(async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data.new_stat).toBe(3);
   await playerPage.getByRole('button', { name: 'Roll Grit save' }).click();
 
   // The player is told whether it worked; the GM what it was against too, and that players weren't.
