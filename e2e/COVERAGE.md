@@ -81,6 +81,7 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 | Picking at the table, the GM | drops a pick, asked first; picks past a requirement | `picking` | `sheet-choices` (on the GM's own sheet; the window onto a player's sheet is unit-tested, as picking a token in the 3D map has no browser helper yet) | **AT THE TABLE** |
 | A bonus named on the field it changes | a stat as typed and with it; a formula with it | `choices_numbers` | `sheet-choices` (10 → 11, Guard Stance +1) | **AT THE TABLE** |
 | A rest refilling a feature's uses | the rest itself; one it counts as | `picking` | `sheet-choices` (a short rest) | **AT THE TABLE** (the rest itself) |
+| A list filled from a file | IMPORT: new and changed options and features, empty cells and `-`, skipped lines, same-named features | `choices_import` | | **GAP** until import 2, which brings the IMPORT panel and its journey (download, change, import, seen on a sheet) |
 
 ## Sheets and NPCs
 

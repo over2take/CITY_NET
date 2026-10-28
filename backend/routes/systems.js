@@ -23,6 +23,7 @@ const { npcSheetOf, LIMITS: NPC_LIMITS } = require('../systemBuilder/npc');
 const { rollTier } = require('../systemBuilder/tierRolls');
 const { tryHealth } = require('../systemBuilder/tryHealth');
 const { tryRest } = require('../systemBuilder/tryRest');
+const { readChoicesFile } = require('../systemBuilder/choicesImport');
 const { exampleList, exampleDefinition, exampleKind, KINDS } = require('../systemBuilder/examples');
 const { checkTableConditions, saveTableConditions } = require('../systemBuilder/tableConditions');
 const { isBuiltIn } = require('../sheets/templates');
@@ -389,6 +390,21 @@ module.exports = (db, io = null) => {
     const checked = checkDefinition(definition);
     if (checked.fatal) return res.status(400).json({ error: checked.fatal });
     res.json({ sheet: effectiveSheet(definition), starter: starterSheet(definition) });
+  });
+
+  /**
+   * The CHOICES page's IMPORT, its PREVIEW (choices import 1; approved mockup
+   * docs/mockups/choices-import.html): a file of options and features read against one of a draft's
+   * lists, with what it would add and change, each line skipped and why, and the list as it would
+   * be, which the builder puts into the draft. Changes nothing.
+   */
+  router.post('/import-choices', gm, (req, res) => {
+    const { definition, list, text } = req.body || {};
+    const checked = checkDefinition(definition);
+    if (checked.fatal) return res.status(400).json({ error: checked.fatal });
+    const { ok, error, ...read } = readChoicesFile(definition, list, text);
+    if (!ok) return res.status(400).json({ error });
+    res.json(read);
   });
 
   /**

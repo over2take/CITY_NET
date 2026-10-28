@@ -298,6 +298,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Importing a list of choices, the server's half (choices import 1).** The server can now read a
+  file of a list's options and their features (`[options]` name, description, requires;
+  `[features]` option, feature, level, words, uses, refill) against the draft and say what it
+  would add and change, each part from and to, without saving anything. As decided with the
+  mockup: matched by name, nothing deleted or renamed; an empty cell leaves things as they are and
+  `-` clears; a feature is found by its level too only when its name repeats (ABILITY SCORE
+  IMPROVEMENT at 4 and 8); a line with a mistake (an unknown rest, a typo in a formula's @name, a
+  level past 30) is skipped and named by its line, and the rest goes in; modifiers, rolls and the
+  rest of what a feature does are never touched. The IMPORT button on the CHOICES page comes next.
 - **Who sees what on a sheet, proven in a browser.** The first gap in e2e/COVERAGE.md is closed: a
   new browser test plays a custom system with a sheet the GM laid out. Its owner fills it in and
   can't change the field kept for the GM; another player, looking them up from the chat's user

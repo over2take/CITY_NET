@@ -462,5 +462,5 @@ const choicesShown = (definition) => {
 
 module.exports = {
   LIMITS, PICKS_KEY, USES_KEY, WORKED_KEY, checkChoices, choicesOf, picksOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
-  capOf, valueOn, meets, needsText, usesOf, workedOf, choicesShown,
+  capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, choicesShown,
 };
