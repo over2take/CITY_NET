@@ -413,9 +413,11 @@ const getLinkedFields = (system) => metaFor(system).linkedFields || {};
  */
 // A custom system's picks (systemBuilder/choices.js PICKS_KEY, held equal by a test; not required
 // here, which would make a circle through the engine) are never a player's to write as a field:
-// picking checks what may be picked (7a3).
+// picking checks what may be picked (systemBuilder/picking.js, 7a3a). Nor is anything else kept
+// beside the fields under a name starting with _ (spent uses, what a save worked out): no field can
+// be called that.
 const PICKS_KEY = '_choices';
-const playerMayEdit = (system, fieldId) => fieldId !== PICKS_KEY && !(metaFor(system).gmFields || []).includes(fieldId);
+const playerMayEdit = (system, fieldId) => !String(fieldId).startsWith('_') && !(metaFor(system).gmFields || []).includes(fieldId);
 
 // Returns a map of maxFieldId → currentFieldId for the system.
 const getMaxPairs = (system) => metaFor(system).maxPairs || {};

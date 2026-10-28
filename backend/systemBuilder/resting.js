@@ -13,6 +13,7 @@
 // pending ("9 + 1d8 + @con_mod") until a later refill settles it.
 
 const { restsOf, reachOf, amountNames, SECTION } = require('./rests');
+const { usesOf, USES_KEY } = require('./choices');
 const { conditionsOf } = require('./conditions');
 const { applyHealthAction } = require('./health');
 const { effectiveSheet, fieldsOf } = require('./sheet');
@@ -192,6 +193,16 @@ const restOn = ({ definition, restId, sheet = {}, token = null, conditions = [],
   }
 
   const ends = new Set(order);
+  // A feature's uses refilled by this rest, or one it counts as (7a3a): none spent again.
+  const refilled = usesOf(definition, data).filter((u) => u.refill && ends.has(u.refill) && u.spent > 0);
+  if (refilled.length) {
+    const spent = { ...(isPlainObject(data[USES_KEY]) ? data[USES_KEY] : {}) };
+    for (const u of refilled) {
+      spent[u.feature.id] = 0;
+      note(`uses:${u.feature.id}`, `${u.feature.label || u.feature.id} uses`, u.max - u.spent, u.max);
+    }
+    setField(USES_KEY, spent);
+  }
   const wearsOff = new Set(conditionsOf(definition).filter((c) => c.ends === 'rest' && c.at.some((a) => ends.has(a))).map((c) => c.id));
   const kept = list(conditions).filter((c) => !wearsOff.has(c.id));
   const gone = list(conditions).filter((c) => wearsOff.has(c.id)).map((c) => c.id);
