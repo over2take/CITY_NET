@@ -1,0 +1,214 @@
+import React, { useState } from 'react';
+import type { Definition } from '../sheets/systemsApi';
+import {
+  featureList, levelOf, kindsOf, withNewFeature, withFeature, withoutFeature, modifierTargets, refillRests, rollChoices, choiceLists, LIMITS,
+  type ChoiceList, type ChoiceOption, type Feature, type FeatureKind, type FeaturePatch,
+} from '../sheets/choices';
+import { HINTS } from '../sheets/builderHelp';
+import { FieldName } from './HelpHint';
+
+// An option's features on the CHOICES page (7a2b2; approved mockup docs/mockups/builder-choices.html,
+// 2026-10-27): what a pick gives, grouped by the level each unlocks at in a levelled list. Each row
+// names a feature and tags what it does; the open one shows its name, words, level and every kind
+// of thing it can do, several at once: modifiers on a stat, formula or health field, uses a rest
+// refills, rolls it gives, changes it lets a roll take, a list it opens. What it reads and writes is
+// sheets/choices.ts; every change goes through the builder's `edit`.
+
+interface Props {
+  definition: Definition;
+  edit: (next: Definition) => void;
+  list: ChoiceList;
+  option: ChoiceOption;
+}
+
+const small: React.CSSProperties = { fontSize: 10, letterSpacing: 2, opacity: 0.75 };
+const why: React.CSSProperties = { fontSize: 12, lineHeight: 1.45, opacity: 0.85, margin: 0 };
+const btn: React.CSSProperties = { fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, padding: '4px 9px' };
+const xBtn: React.CSSProperties = { ...btn, padding: '2px 7px' };
+const input: React.CSSProperties = {
+  background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'monospace', fontSize: 12, padding: '4px 6px', minWidth: 0, boxSizing: 'border-box',
+};
+const row: React.CSSProperties = { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' };
+const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '110px minmax(0, 1fr)', gap: '8px 10px', alignItems: 'start' };
+const END = { justifySelf: 'end', paddingTop: 4 } as const;
+const choice = (on: boolean): React.CSSProperties => ({
+  background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)', border: '1px solid var(--dark-green)', fontFamily: 'monospace', fontSize: 11, padding: '2px 8px', cursor: 'pointer',
+});
+
+/** Each kind as a tag: its word and its color, as the mockup has them. */
+const TAGS: Record<FeatureKind, [string, string]> = {
+  modifier: ['MODIFIER', 'var(--green)'], uses: ['USES', 'var(--cyan)'], roll: ['ROLL', 'var(--warning)'],
+  change: ['CHANGE', 'var(--warning)'], choice: ['CHOICE', 'var(--warning)'], text: ['TEXT', 'color-mix(in srgb, var(--green) 60%, transparent)'],
+};
+const Tag = ({ kind }: { kind: FeatureKind }) => (
+  <span style={{ fontSize: 9, letterSpacing: 1, border: '1px solid currentColor', padding: '0 4px', color: TAGS[kind][1], whiteSpace: 'nowrap' }}>{TAGS[kind][0]}</span>
+);
+
+function FeatureForm({ definition, edit, list, option, feature }: Props & { feature: Feature }) {
+  const [asking, setAsking] = useState(false);
+  const set = (patch: FeaturePatch) => edit(withFeature(definition, list.id, option.id, feature.id, patch));
+  // The level is set when the box is left (or on Enter), not as it is typed: a new level moves the
+  // feature to its group, and typing 12 would otherwise move it to 1 and lose the box after the 1.
+  const [levelText, setLevelText] = useState(String(levelOf(feature)));
+  const commitLevel = () => {
+    const n = Math.trunc(Number(levelText));
+    if (Number.isFinite(n) && n >= 1) { if (n !== levelOf(feature)) set({ at: n }); } else setLevelText(String(levelOf(feature)));
+  };
+  const targets = modifierTargets(definition);
+  const rests = refillRests(definition);
+  const rolls = rollChoices(definition);
+  const withChanges = rolls.filter((r) => r.changes.length);
+  const otherLists = choiceLists(definition).filter((c) => c.id !== list.id);
+  const mods = feature.modifiers ?? [];
+  const changes = feature.changes ?? [];
+  const given = new Set(feature.rolls ?? []);
+  const id = (part: string) => `feature-${feature.id}-${part}`;
+  const name = feature.label.trim() || 'this feature';
+  return (
+    <div role="group" aria-label={`Feature ${feature.label || feature.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 12px', border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--green) 4%, transparent)' }}>
+      <div style={grid}>
+        <FieldName boxStyle={END} htmlFor={id('name')} hint={HINTS['choices.featureName']} style={small}>NAME</FieldName>
+        <input id={id('name')} type="text" maxLength={LIMITS.label} value={feature.label} style={input}
+          aria-invalid={!feature.label.trim() ? true : undefined} onChange={(e) => set({ label: e.target.value })} />
+        {list.levelled && <>
+          <FieldName boxStyle={END} htmlFor={id('at')} hint={HINTS['choices.at']} style={small}>AT LEVEL</FieldName>
+          <input id={id('at')} type="number" min={1} max={LIMITS.level} step={1} value={levelText} style={{ ...input, width: 64 }}
+            onChange={(e) => setLevelText(e.target.value)} onBlur={commitLevel} onKeyDown={(e) => { if (e.key === 'Enter') commitLevel(); }} />
+        </>}
+        <FieldName boxStyle={END} htmlFor={id('text')} hint={HINTS['choices.text']} style={small}>WORDS</FieldName>
+        <textarea id={id('text')} rows={2} maxLength={LIMITS.description} value={feature.text ?? ''} style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }}
+          onChange={(e) => set({ text: e.target.value })} />
+
+        <FieldName boxStyle={END} hint={HINTS['choices.modifiers']} style={small}>MODIFIERS</FieldName>
+        <div role="group" aria-label="Modifiers" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {mods.map((m, i) => (
+            <span key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto', gap: 6, alignItems: 'center' }}>
+              <select aria-label={`Modifier ${i + 1}: changes`} value={m.target} style={input}
+                onChange={(e) => set({ modifiers: mods.map((x, j) => (j === i ? { ...x, target: e.target.value } : x)) })}>
+                {!targets.some((g) => g.items.some((t) => t.id === m.target)) && <option value={m.target}>{m.target || 'PICK ONE'}</option>}
+                {targets.map((g) => <optgroup key={g.group} label={g.group}>{g.items.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</optgroup>)}
+              </select>
+              <input type="text" aria-label={`Modifier ${i + 1}: by`} maxLength={1000} value={m.amount} placeholder="1 · @mage_level" style={input}
+                onChange={(e) => set({ modifiers: mods.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)) })} />
+              <button type="button" className="utility-btn" style={xBtn} aria-label={`Remove modifier ${i + 1}`}
+                onClick={() => set({ modifiers: mods.filter((_, j) => j !== i) })}>×</button>
+            </span>
+          ))}
+          <div><button type="button" className="utility-btn" style={btn} disabled={mods.length >= LIMITS.modifiers || !targets.length}
+            onClick={() => set({ modifiers: [...mods, { target: targets[0].items[0].id, amount: '1' }] })}>+ MODIFIER</button></div>
+          {!targets.length && <span style={{ ...why, fontSize: 11 }}>No stats or formulas yet to change: make them on STATS &amp; RULES.</span>}
+        </div>
+
+        <FieldName boxStyle={END} hint={HINTS['choices.uses']} style={small}>USES</FieldName>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <button type="button" role="switch" aria-checked={!!feature.uses} onClick={() => set({ uses: feature.uses ? null : { count: '1', refill: rests[0]?.id } })}
+            style={{ justifySelf: 'start', alignSelf: 'start', background: 'none', border: 0, padding: 0, color: 'var(--cyan)', fontFamily: 'monospace', fontSize: 12, letterSpacing: 1, cursor: 'pointer' }}>
+            {feature.uses ? '◉' : '○'} HAS USES
+          </button>
+          {feature.uses && (
+            <span style={row}>
+              <input type="text" aria-label="How many uses" maxLength={1000} value={feature.uses.count} placeholder="1 · @level" style={{ ...input, width: 120 }}
+                onChange={(e) => set({ uses: { ...feature.uses!, count: e.target.value } })} />
+              <span style={small}>REFILLED BY</span>
+              <select aria-label="Refilled by" value={feature.uses.refill ?? ''} style={input}
+                onChange={(e) => set({ uses: { count: feature.uses!.count, refill: e.target.value } })}>
+                <option value="">NOTHING: THE GM REFILLS</option>
+                {rests.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+              </select>
+            </span>
+          )}
+        </div>
+
+        <FieldName boxStyle={END} hint={HINTS['choices.rolls']} style={small}>GIVES ROLLS</FieldName>
+        {rolls.length
+          ? <div role="group" aria-label="Gives rolls" style={row}>
+              {rolls.map((r) => (
+                <button key={r.id} type="button" aria-pressed={given.has(r.id)} style={choice(given.has(r.id))}
+                  disabled={!given.has(r.id) && given.size >= LIMITS.rolls}
+                  onClick={() => set({ rolls: given.has(r.id) ? (feature.rolls ?? []).filter((x) => x !== r.id) : [...(feature.rolls ?? []), r.id] })}>{r.label}</button>
+              ))}
+            </div>
+          : <span style={{ ...why, fontSize: 11 }}>No rolls yet: make them on STATS &amp; RULES&apos; ROLLS tab.</span>}
+
+        <FieldName boxStyle={END} hint={HINTS['choices.changes']} style={small}>CHANGES A ROLL</FieldName>
+        <div role="group" aria-label="Changes a roll" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {changes.map((ch, i) => {
+            const roll = withChanges.find((r) => r.id === ch.roll);
+            return (
+              <span key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto', gap: 6, alignItems: 'center' }}>
+                <select aria-label={`Change ${i + 1}: roll`} value={ch.roll} style={input}
+                  onChange={(e) => { const r = withChanges.find((x) => x.id === e.target.value); set({ changes: changes.map((x, j) => (j === i ? { roll: e.target.value, change: r?.changes[0]?.id ?? '' } : x)) }); }}>
+                  {!roll && <option value={ch.roll}>{ch.roll || 'PICK ONE'}</option>}
+                  {withChanges.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                </select>
+                <select aria-label={`Change ${i + 1}: which`} value={ch.change} style={input}
+                  onChange={(e) => set({ changes: changes.map((x, j) => (j === i ? { ...x, change: e.target.value } : x)) })}>
+                  {!roll?.changes.some((c) => c.id === ch.change) && <option value={ch.change}>{ch.change || 'PICK ONE'}</option>}
+                  {(roll?.changes ?? []).map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+                <button type="button" className="utility-btn" style={xBtn} aria-label={`Remove change ${i + 1}`}
+                  onClick={() => set({ changes: changes.filter((_, j) => j !== i) })}>×</button>
+              </span>
+            );
+          })}
+          <div><button type="button" className="utility-btn" style={btn} disabled={!withChanges.length || changes.length >= LIMITS.rolls}
+            onClick={() => set({ changes: [...changes, { roll: withChanges[0].id, change: withChanges[0].changes[0].id }] })}>+ CHANGE</button></div>
+          {!withChanges.length && <span style={{ ...why, fontSize: 11 }}>None of the system&apos;s rolls has a change to pick yet, like ADVANTAGE: add one in a roll&apos;s step 5.</span>}
+        </div>
+
+        <FieldName boxStyle={END} htmlFor={id('choice')} hint={HINTS['choices.choice']} style={small}>OPENS A LIST</FieldName>
+        <select id={id('choice')} value={feature.choice ?? ''} style={{ ...input, justifySelf: 'start' }} onChange={(e) => set({ choice: e.target.value || null })}>
+          <option value="">NOTHING</option>
+          {otherLists.map((c) => <option key={c.id} value={c.id}>{(c.one || c.id).toUpperCase()}</option>)}
+        </select>
+      </div>
+      <div style={{ ...row, justifyContent: 'flex-end' }}>
+        {asking
+          ? <span role="group" aria-label={`Delete ${name}`} style={row}>
+              <span style={{ ...why, color: 'var(--danger)' }}>Delete {name}?</span>
+              <button type="button" className="utility-btn danger-btn" style={btn} onClick={() => edit(withoutFeature(definition, list.id, option.id, feature.id))}>DELETE</button>
+              <button type="button" className="utility-btn" style={btn} onClick={() => setAsking(false)}>KEEP</button>
+            </span>
+          : <button type="button" className="utility-btn danger-btn" style={btn} onClick={() => setAsking(true)}>DELETE FEATURE</button>}
+      </div>
+    </div>
+  );
+}
+
+export function FeaturesEditor({ definition, edit, list, option }: Props) {
+  const features = featureList(option);
+  const [open, setOpen] = useState<string | null>(null);
+  // In a levelled list, by the level each unlocks at; otherwise all together.
+  const levels = list.levelled ? [...new Set(features.map(levelOf))].sort((a, b) => a - b) : [null];
+  const add = () => {
+    const made = withNewFeature(definition, list.id, option.id, list.levelled && features.length ? Math.max(...features.map(levelOf)) : undefined);
+    if (!made) return;
+    edit(made.definition);
+    setOpen(made.id);
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ ...row, justifyContent: 'space-between' }}>
+        <FieldName hint={HINTS['choices.features']} style={small}>FEATURES · {features.length} OF {LIMITS.features}</FieldName>
+        <button type="button" className="utility-btn" style={btn} disabled={features.length >= LIMITS.features} onClick={add}>+ FEATURE</button>
+      </div>
+      {!features.length && <p style={{ ...why, fontSize: 11 }}>None yet. A feature is what this pick gives a character: a bonus, uses a rest refills, a roll, another list to pick from, or words for the table.</p>}
+      {features.length > 0 && levels.map((lv) => (
+        <section key={lv ?? 'all'} aria-label={lv === null ? 'Features' : `Level ${lv}`} style={{ display: 'flex', flexDirection: 'column', gap: 4, borderLeft: '2px solid var(--dark-green)', paddingLeft: 8 }}>
+          {lv !== null && <span style={small}>LEVEL {lv}</span>}
+          {features.filter((f) => lv === null || levelOf(f) === lv).map((f) => (
+            <React.Fragment key={f.id}>
+              <button type="button" aria-expanded={open === f.id} onClick={() => setOpen(open === f.id ? null : f.id)}
+                style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', background: 'none', border: 0, padding: '3px 0', textAlign: 'left', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12,
+                  color: f.label.trim() ? 'var(--green)' : 'var(--danger)' }}>
+                <span>{open === f.id ? '▾' : '▸'} {(f.label.trim() || 'NEEDS A NAME').toUpperCase()}</span>
+                {kindsOf(f).map((k) => <Tag key={k} kind={k} />)}
+              </button>
+              {open === f.id && <FeatureForm key={`form:${f.id}`} definition={definition} edit={edit} list={list} option={option} feature={f} />}
+            </React.Fragment>
+          ))}
+        </section>
+      ))}
+    </div>
+  );
+}

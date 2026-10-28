@@ -58,6 +58,11 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await page.getByRole('group', { name: 'A character picks' }).getByRole('button', { name: 'SEVERAL' }).click();
       await page.getByRole('button', { name: '+ OPTION' }).click();
       await expect(page.getByRole('region', { name: 'NEW OPTION option' })).toBeVisible();
+      // A feature open, with uses and a modifier, so every box of the features editor is there (7a2b2).
+      await page.getByRole('button', { name: '+ FEATURE' }).click();
+      const feature = page.getByRole('group', { name: 'Feature NEW FEATURE' });
+      await feature.getByRole('switch', { name: /HAS USES/ }).click();
+      await feature.getByRole('button', { name: '+ MODIFIER' }).click();
     }
     missed[p] = await unreachable(page);
     if (p === 'STATS & RULES') {

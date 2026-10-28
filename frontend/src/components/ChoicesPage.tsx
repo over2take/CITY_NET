@@ -6,12 +6,13 @@ import {
 } from '../sheets/choices';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
+import { FeaturesEditor } from './FeaturesEditor';
 
 // The builder's CHOICES page (7a2b1; approved mockup docs/mockups/builder-choices.html, 2026-10-27):
 // the lists a character picks from (classes, backgrounds, feats), named in the game's own words. The
 // lists down the left; the open one in the middle, with its names, how many a character picks,
 // MORE THAN ONCE and LEVELLED, and its options; the open option on the right, with its name, words
-// and requirement. Features, what a pick gives, come next (7a2b2). What it reads and writes is
+// and requirement, and its features (7a2b2, FeaturesEditor.tsx). What it reads and writes is
 // sheets/choices.ts; every change goes through the builder's `edit`.
 
 interface Props {
@@ -144,10 +145,7 @@ function OptionPanel({ list, option, definition, edit }: Props & { list: ChoiceL
           onChange={(e) => set({ requires: e.target.value })} />
       </div>
       {list.levelled && <p style={{ ...why, fontSize: 11, opacity: 0.7 }}>Its level reads as {levelNames(list).options[option.id]} in formulas: 0 for a character without it.</p>}
-      <span style={small}>FEATURES</span>
-      {features.length
-        ? <ul aria-label="Features" style={{ margin: 0, paddingLeft: '1.2em', fontSize: 12 }}>{features.map((f) => <li key={f.id}>{f.label || f.id}</li>)}</ul>
-        : <p style={{ ...why, fontSize: 11 }}>What a pick gives, like a bonus, uses a rest refills or a roll, is made here next.</p>}
+      <FeaturesEditor definition={definition} edit={edit} list={list} option={option} />
     </section>
   );
 }

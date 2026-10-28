@@ -137,7 +137,7 @@ describe('the options', () => {
   it('shows the features it has, and deleting it asks first', async () => {
     const { last } = open();
     const panel = optionPanel('Soldier');
-    expect(within(panel.getByRole('list', { name: 'Features' })).getByText('Guard Stance')).toBeTruthy();
+    expect(panel.getByRole('button', { name: /GUARD STANCE/ })).toBeTruthy();
     await userEvent.click(panel.getByRole('button', { name: 'DELETE' }));
     expect(panel.getByText(/Its 1 feature go with it\./)).toBeTruthy();
     await userEvent.click(within(panel.getByRole('group', { name: 'Delete Soldier' })).getByRole('button', { name: 'DELETE' }));
@@ -155,8 +155,9 @@ describe('the options', () => {
 describe('help', () => {
   it('a "?" beside every setting, each named for screen readers', () => {
     open();
-    const keys = Object.keys(HINTS).filter((k) => k.startsWith('choices.')) as (keyof typeof HINTS)[];
-    expect(keys).toHaveLength(9);
+    // The page's own; a feature's are FeaturesEditor.test's, shown once one is open.
+    const keys = ['choices.lists', 'choices.names', 'choices.picks', 'choices.again', 'choices.levelled', 'choices.options', 'choices.optionName', 'choices.description', 'choices.requires', 'choices.features'] as (keyof typeof HINTS)[];
+    expect(Object.keys(HINTS).filter((k) => k.startsWith('choices.'))).toHaveLength(18);
     for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
   });
 });

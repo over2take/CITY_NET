@@ -3,8 +3,9 @@ import { signInAsGm, openBuilder, builderPage, gmToken, asGm } from './helpers';
 
 // The builder's CHOICES page (7a2b1; approved mockup docs/mockups/builder-choices.html, 2026-10-27):
 // a GM makes the list characters pick their class from, levelled and taken more than once, gives it
-// two options, one with a requirement, and finds it all as they left it after a reload; the server
-// takes it with no problems.
+// two options, one with a requirement, gives the SOLDIER a feature at level 2 (7a2b2) with a
+// modifier on Intellect and uses a long rest refills, and finds it all as they left it after a
+// reload; the server takes it with no problems.
 
 test('a class list made on CHOICES, with two options, kept after a reload', async ({ page, request }, info) => {
   const name = `Choosing Hearth ${info.retry + 1}`;
@@ -37,11 +38,30 @@ test('a class list made on CHOICES, with two options, kept after a reload', asyn
   await page.getByRole('region', { name: 'Mage option' }).getByRole('textbox', { name: 'REQUIRES' }).fill('@int >= 13');
   await expect(page.getByRole('region', { name: 'Mage option' }).getByText('Its level reads as @new_option_2_level in formulas: 0 for a character without it.')).toBeVisible();
 
+  // SOLDIER's feature: at level 2, +1 Intellect, one use a long rest refills.
+  await page.getByRole('region', { name: 'Classes list' }).getByRole('group', { name: 'Options' }).getByRole('button', { name: 'SOLDIER' }).click();
+  const soldier = page.getByRole('region', { name: 'Soldier option' });
+  await soldier.getByRole('button', { name: '+ FEATURE' }).click();
+  const feature = soldier.getByRole('group', { name: 'Feature NEW FEATURE' });
+  await feature.getByRole('textbox', { name: 'NAME' }).fill('Sharp Mind');
+  const sharp = soldier.getByRole('group', { name: 'Feature Sharp Mind' });
+  await sharp.getByRole('spinbutton', { name: 'AT LEVEL' }).fill('2');
+  await sharp.getByRole('spinbutton', { name: 'AT LEVEL' }).press('Enter');
+  await expect(soldier.getByRole('region', { name: 'Level 2' })).toContainText('SHARP MIND');
+  await sharp.getByRole('button', { name: '+ MODIFIER' }).click();
+  await sharp.getByRole('switch', { name: /HAS USES/ }).click();
+  await sharp.getByRole('combobox', { name: 'Refilled by' }).selectOption('long_rest');
+  await expect(soldier.getByRole('button', { name: /SHARP MIND/ })).toContainText('MODIFIER');
+  await expect(soldier.getByRole('button', { name: /SHARP MIND/ })).toContainText('USES');
+
   // Saved, and nothing for PROBLEMS.
   await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
   const saved = await asGm(request, token, 'get', `/api/systems/${id}`);
   expect(saved.problems).toEqual([]);
-  expect(saved.draft.choices[0]).toMatchObject({ one: 'Class', many: 'Classes', levelled: true, again: true, options: [{ label: 'Soldier' }, { label: 'Mage', requires: '@int >= 13' }] });
+  expect(saved.draft.choices[0]).toMatchObject({ one: 'Class', many: 'Classes', levelled: true, again: true, options: [
+    { label: 'Soldier', features: [{ label: 'Sharp Mind', at: 2, modifiers: [{ target: 'int', amount: '1' }], uses: { count: '1', refill: 'long_rest' } }] },
+    { label: 'Mage', requires: '@int >= 13' },
+  ] });
 
   // Kept: after a reload, as it was left.
   await page.reload();
@@ -53,6 +73,7 @@ test('a class list made on CHOICES, with two options, kept after a reload', asyn
   await expect(page.getByRole('list', { name: 'Lists' })).toContainText('CLASSES');
   const options = page.getByRole('region', { name: 'Classes list' }).getByRole('group', { name: 'Options' });
   await expect(options.getByRole('button')).toHaveText(['SOLDIER', 'MAGE']);
+  await expect(page.getByRole('region', { name: 'Soldier option' }).getByRole('region', { name: 'Level 2' })).toContainText('SHARP MIND');
   await options.getByRole('button', { name: 'MAGE' }).click();
   await expect(page.getByRole('region', { name: 'Mage option' }).getByRole('textbox', { name: 'REQUIRES' })).toHaveValue('@int >= 13');
 });
