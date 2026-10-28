@@ -460,6 +460,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **The builder's tour and HELP catch up.** The map view from Phase 5 was nowhere in them: HELP
+  now has THE MAP, how to use GRAPH (adding with + ADD or A, wiring by dragging a dot, CUT, the
+  diamonds on wires, notes, map groups and LINE UP, UNDO and REDO, the PROBLEMS corner, hover and
+  TRY ON THE MAP), and STATS & RULES' tour step and topic point to it. The tour has a ninth step,
+  CHOICES, and GETTING STARTED names it on the way down the rail. CONDITIONS says a condition on
+  every roll now changes the system's own rolls, named in the log.
 - **The builder's FEATURES page is now PARTS (7a2a).** It turns parts of the app on and off (the
   bank, shops, vehicles), and the plan already called them parts. "Features" now means only what a
   class or other pick gives a character, which the CHOICES page brings next. The rail, the page,
