@@ -34,7 +34,7 @@ export const GROUPS: { id: string; label: string; kinds: Change['kind'][] }[] = 
   { id: 'stats', label: 'STATS', kinds: ['stat'] },
   { id: 'health', label: 'HEALTH', kinds: ['health'] },
   { id: 'money', label: 'MONEY', kinds: ['currency'] },
-  { id: 'features', label: 'FEATURES', kinds: ['part'] },
+  { id: 'features', label: 'PARTS', kinds: ['part'] },
   { id: 'conditions', label: 'CONDITIONS', kinds: ['condition'] },
   { id: 'house_rules', label: 'HOUSE RULES', kinds: ['house_rule'] },
 ];

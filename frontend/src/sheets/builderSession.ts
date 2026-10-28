@@ -149,7 +149,7 @@ export type BuilderPage = 'setup' | 'words' | 'features' | 'rules' | 'sheet' | '
 export const BUILDER_PAGES: { id: BuilderPage; label: string; what: string }[] = [
   { id: 'setup', label: 'SETUP', what: 'The questions a new system starts with.' },
   { id: 'words', label: 'WORDS', what: 'What the game calls things: HP, credits, skills.' },
-  { id: 'features', label: 'FEATURES', what: 'Which parts of the app this game uses.' },
+  { id: 'features', label: 'PARTS', what: 'Which parts of the app this game uses.' },
   { id: 'rules', label: 'STATS & RULES', what: 'Stats, formulas and tables.' },
   { id: 'sheet', label: 'CHARACTER SHEET', what: 'How a character sheet is laid out.' },
   { id: 'npcs', label: 'NPCS', what: 'NPC tiers and their sheets.' },

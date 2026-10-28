@@ -10,7 +10,7 @@ import { systemsApi, type Definition } from '../../sheets/systemsApi';
 import { HINTS } from '../../sheets/builderHelp';
 
 /**
- * The bank's settings on FEATURES (4b1c2). Approved mockup builder-words-features (2026-10-06):
+ * The bank's settings on PARTS (4b1c2; FEATURES until 7a2a). Approved mockup builder-words-features (2026-10-06):
  * currencies counted in whole numbers, decimals or coins, each with its switches and icon (the five,
  * or uploaded); the main one is the bank balance; celebrations with a whale threshold in it.
  */

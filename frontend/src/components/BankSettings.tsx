@@ -10,7 +10,7 @@ import { CurrencyIcon } from './BankWindows';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName, HelpHint } from './HelpHint';
 
-// The bank's settings on the builder's FEATURES page (4b1c2): the system's currencies and its
+// The bank's settings on the builder's PARTS page (4b1c2; FEATURES until 7a2a): the system's currencies and its
 // celebrations (approved mockup docs/mockups/builder-words-features.html, 2026-10-06). Each currency
 // is counted in whole numbers, decimals or coins, with its debt and below-zero switches and its
 // icon: the five CURRENCY_ICON has always offered, or one uploaded (the user, same day). The first

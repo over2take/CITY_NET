@@ -452,6 +452,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **The builder's FEATURES page is now PARTS (7a2a).** It turns parts of the app on and off (the
+  bank, shops, vehicles), and the plan already called them parts. "Features" now means only what a
+  class or other pick gives a character, which the CHOICES page brings next. The rail, the page,
+  HELP, the tour, HOUSE RULES' list of what waits on a rule, WORDS' "off in PARTS" and PUBLISH's
+  preview all say PARTS. Nothing moves and nothing is lost: the page and its settings are as they
+  were.
 - **Each game system has its own bank.** A character's money now belongs to the game it was
   earned in: starting a new campaign on another system opens fresh accounts, and switching
   back finds the old money exactly where it was. On the first start after updating, every

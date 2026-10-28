@@ -15,7 +15,7 @@ export const TOUR: TourStep[] = [
   { at: null, title: 'WELCOME TO THE SYSTEM BUILDER', text: 'A system is a game: what it calls things, which parts of CITY_NET it uses, its stats and rules, and its character sheet. You build it page by page down this rail. Nothing reaches your players until you PUBLISH.' },
   { at: 'setup', title: 'SETUP', text: 'Start here: how characters get hurt (one pool of HP, two tracks, harm levels...), how they advance, and how the ruler measures. The rest builds on these answers.' },
   { at: 'words', title: 'WORDS', text: 'What your game calls things. Call HP "Wounds" and credits "Gold", and every window your players see says so. Leave a word blank to keep the app\'s.' },
-  { at: 'features', title: 'FEATURES', text: 'Which parts of CITY_NET this game uses: the bank, shops, vehicles, GIVE ITEM, SHEET IMPORT... Off only hides; turn one back on and everything it held comes back.' },
+  { at: 'features', title: 'PARTS', text: 'Which parts of CITY_NET this game uses: the bank, shops, vehicles, GIVE ITEM, SHEET IMPORT... Off only hides; turn one back on and everything it held comes back.' },
   { at: 'rules', title: 'STATS & RULES', text: 'The numbers players fill in, the formulas worked out from them (Defense = 10 + @agility), lookup tables, and the game\'s own dice and rolls. Each formula shows its value on a sample character as you type. Optional rules for the table, like MAGIC, are made on HOUSE RULES, further down.' },
   { at: 'sheet', title: 'CHARACTER SHEET', text: 'How a sheet is laid out. It arranges itself from your stats at first; CUSTOMIZE to move tabs, sections and fields, and to say who sees and changes each one.' },
   { at: 'try', title: 'TRY IT', text: 'A test character, to see your rules work: change a stat, take some damage, call a rest, make an NPC. Nothing here is saved to any player.' },
@@ -36,7 +36,7 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
     'What your game calls the app\'s things: HP, credits, skills, the GM, a shop... Each word has a singular, a plural and a short form, used wherever players see it.',
     'A word left blank keeps the app\'s own, so nothing changes until you choose one.',
   ] },
-  { page: 'features', title: 'FEATURES', body: [
+  { page: 'features', title: 'PARTS', body: [
     'The parts of CITY_NET this game uses, as switches: the bank and its currencies, shops and their catalogues, GIVE ITEM, vehicles, cyberware, initiative, combat, token health, NPC tiers, SHEET IMPORT.',
     'Turning a part off only hides it. Nothing it holds is deleted, and turning it back on brings it all back.',
   ] },
@@ -64,7 +64,7 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
   ] },
   { page: 'house_rules', title: 'HOUSE RULES', body: [
     'Rules the GM turns on or off for their table, like MAGIC or GRITTY WOUNDS: each with a name, what it means, and whether a game starts with it on.',
-    'Things go under a rule on their own pages, with ONLY WITH: a FEATURES part, a sheet section, a condition, or a formula\'s alternative. While the rule is off they are hidden, never deleted. The GM switches the rules in the GAME tab\'s HOUSE RULES.',
+    'Things go under a rule on their own pages, with ONLY WITH: a part on PARTS, a sheet section, a condition, or a formula\'s alternative. While the rule is off they are hidden, never deleted. The GM switches the rules in the GAME tab\'s HOUSE RULES.',
   ] },
   { page: 'try', title: 'TRY IT', body: [
     'A test character for the draft as it stands: change its stats and watch the formulas, hurt and heal it, call a rest, make an NPC from a tier.',
@@ -119,7 +119,7 @@ const REFERENCE: HelpTopic[] = [
 /** Every topic on the HELP page, in order. */
 export const TOPICS: HelpTopic[] = [
   { id: 'start', group: 'START', title: 'GETTING STARTED', tour: true, body: [
-    'Build a system down the rail: SETUP, then WORDS, FEATURES, STATS & RULES, and the CHARACTER SHEET once you want your own layout. TRY IT to check it works, fix anything in PROBLEMS, then PUBLISH.',
+    'Build a system down the rail: SETUP, then WORDS, PARTS, STATS & RULES, and the CHARACTER SHEET once you want your own layout. TRY IT to check it works, fix anything in PROBLEMS, then PUBLISH.',
     'Or start from one of the EXAMPLES and change it.',
   ] },
   ...PAGE_TOPICS.map(({ page, title, body }) => ({ id: page, group: 'PAGES' as const, title, body, page })),
@@ -150,7 +150,7 @@ export const HINTS = {
   'words.many': 'The word for more than one: 3 Wounds. Often the same word with an s.',
   'words.short': 'A short form for tight spaces: bars, chips and buttons. HP, GP.',
   'words.readsAs': 'How the term reads in the game with your words, or the app\'s where you left a box empty.',
-  // FEATURES: the bank's currencies
+  // PARTS: the bank's currencies
   'bank.main': 'The main currency is what every bank account\'s balance is in. Prices are in it unless a catalogue names another. MAKE MAIN swaps which one it is.',
   'bank.countedIn': 'Whole numbers (40 Gold), decimals (4.34 credits) or coins (2 gp 5 sp). Amounts are kept in the smallest unit, so nothing is lost to rounding.',
   'bank.symbol': 'A sign written with amounts, like $ or €, before or after the number. Left empty, amounts show the short name, or the name.',
@@ -226,7 +226,7 @@ export const HINTS = {
   // RESTS
   'rests.refills': 'What the rest puts back, line by line in order: health, a number on the sheet, or a whole section, to its maximum, by an amount or to a number. Rolled for each character.',
   'rests.sample': 'This rest on the sample character, its token hurt to half, worked out the way the game would. Nothing is saved.',
-  // ONLY WITH, on FEATURES, CHARACTER SHEET (and the NPC stat block) and CONDITIONS
+  // ONLY WITH, on PARTS, CHARACTER SHEET (and the NPC stat block) and CONDITIONS
   'only.alternative': 'A house rule under which this formula is worked out another way, like fewer hit points with GRITTY WOUNDS. Off, it is worked out as written.',
   'only.instead': 'The formula used while the rule is on, written like any other. The sample character\'s value with the rule on shows under it.',
   'only.with': 'The house rule this waits on. While the GM has the rule off it is hidden in the game, never deleted; always means it is always there.',

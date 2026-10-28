@@ -8,7 +8,7 @@ import { TERM_GROUPS, PART_ROWS, WORD_LIMIT, wordOf, withWord, withoutWord, read
 // The builder's WORDS page (4b1b): what the game calls the app's terms, one table, each term's one,
 // many and short forms with the app's own word as the placeholder (approved mockup
 // docs/mockups/builder-words-features.html, 2026-10-06). A box left blank is the app's word and
-// nothing is stored for it (the user, same day). A term whose part is off in FEATURES is greyed: it
+// nothing is stored for it (the user, same day). A term whose part is off in PARTS is greyed: it
 // has nowhere to show. What it reads and writes is sheets/wordsFeatures.ts; every change goes
 // through the builder's `edit`, which autosaves it.
 
@@ -48,7 +48,7 @@ export function WordsPage({ definition, edit }: Props) {
                 <tr key={row.id} data-testid={`term-${row.id}`} style={{ opacity: off ? 0.45 : 1 }}>
                   <td style={{ ...cell, width: 160 }}>
                     <b style={{ color: 'var(--green)', letterSpacing: 1 }}>{name}</b>
-                    <span style={{ display: 'block', fontSize: 11, opacity: 0.65 }}>{part ? `${part.label} is off in FEATURES` : row.what}</span>
+                    <span style={{ display: 'block', fontSize: 11, opacity: 0.65 }}>{part ? `${part.label} is off in PARTS` : row.what}</span>
                   </td>
                   {FORMS.map((form) => (
                     <td key={form} style={{ ...cell, ...(form === 'short' ? { width: 90 } : {}) }}>

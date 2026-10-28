@@ -5,7 +5,7 @@
 //     { id: 'magic', name: 'MAGIC', description: 'Characters can learn spells.', starts: false },
 //   ],
 //
-// A rule is made once, and things go under it where they live: a FEATURES part
+// A rule is made once, and things go under it where they live: a PARTS part
 // (parts.shops.only_with), a sheet section, the character sheet's or the NPC stat block's
 // (sheet.sections[].only_with), a condition (conditions.hexed.only_with), and a formula's one
 // alternative, worked out instead while its rule is on (derived[].alternative: { rule, formula }).

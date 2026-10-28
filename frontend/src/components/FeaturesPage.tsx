@@ -7,7 +7,8 @@ import {
 } from '../sheets/wordsFeatures';
 import { OnlyWith } from './OnlyWith';
 
-// The builder's FEATURES page (4b1c): which parts of the app the game uses, one switch each, the
+// The builder's PARTS page (4b1c; called FEATURES until 7a2a, renamed so a "feature" means only
+// what a pick gives, approved mockup builder-choices 2026-10-27; its id stays 'features'): which parts of the app the game uses, one switch each, the
 // parts with settings opening out beneath (approved mockup docs/mockups/builder-words-features.html,
 // 2026-10-06). SHOPS holds the app's building types and catalogues: renamed, turned off, and each
 // catalogue's currency. Renaming buildings lives here, beside their switches, not on WORDS; a blank
