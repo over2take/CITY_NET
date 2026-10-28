@@ -61,6 +61,8 @@ export interface CustomRender {
   house_rules?: import('./types').HouseRuleState[];
   /** Its own rolls (6b2a): each one's name, the fields with a die button for it, and its changes. */
   rolls?: (CustomFieldRoll & { fields: string[] })[];
+  /** Its lists to pick from, in words, never a formula (7a3b1). */
+  choices?: import('./choicesShown').ChoiceListShown[];
 }
 
 /** Fired on window when a custom template has been loaded, so the app can redraw. */
@@ -134,6 +136,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.bank ? { bank: render.bank } : {}),
     ...(render.distance ? { distance: render.distance } : {}),
     ...(render.house_rules?.length ? { houseRules: render.house_rules } : {}),
+    ...(render.choices?.length ? { choices: render.choices } : {}),
     ...tiers,
     ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived, rolls), ...tiers } } : {}),
   };

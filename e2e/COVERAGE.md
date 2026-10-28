@@ -74,11 +74,12 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 
 | Option | Variants | Server tests | Browser test | Status |
 |---|---|---|---|---|
-| Lists and options | one / several / any, MORE THAN ONCE, LEVELLED, a requirement | `choices` | `builder-choices` | **BUILDER ONLY**, picked at the table in 7a3 |
+| Lists and options | one / several / any, MORE THAN ONCE, LEVELLED, a requirement | `choices` | `builder-choices`, `sheet-choices` | **AT THE TABLE** |
 | Features | at a level; modifiers, uses and their rest, rolls, roll changes, a list opened | `choices`, `choices_numbers` | `builder-choices` | **BUILDER ONLY**, at the table in 7a3 |
-| What picks do to the numbers | levels, @level, modifiers read by formulas and rolls | `choices_numbers` | | **GAP**, comes with 7a3b |
-| Picking at the table | a player picks (room, a requirement), sets levels, ticks uses; only the GM drops or picks past a requirement | `picking` | | **GAP**, comes with 7a3b (the sheet's block) |
-| A rest refilling a feature's uses | the rest, or one it counts as | `picking` | | **GAP**, comes with 7a3b |
+| What picks do to the numbers | a modifier reaching a formula, levels unlocking features | `choices_numbers` | `sheet-choices` (Defense +1 from Guard Stance; Veteran at level 2) | **AT THE TABLE** |
+| Picking at the table | a player picks, one not met off with what it needs; sets a level; ticks a use | `picking` | `sheet-choices` | **AT THE TABLE** |
+| Picking at the table, the GM | drops a pick; picks past a requirement | `picking` | | **GAP**, comes with 7a3b2 |
+| A rest refilling a feature's uses | the rest itself; one it counts as | `picking` | `sheet-choices` (a short rest) | **AT THE TABLE** (the rest itself) |
 
 ## Sheets and NPCs
 

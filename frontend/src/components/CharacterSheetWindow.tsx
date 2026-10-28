@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
@@ -38,6 +38,20 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   const { sheet, template, handleFieldChange, handleFieldsChange, allowFumbleShield, xpRate, encumbranceEnforced, hiddenTabs, actions } =
     usePlayerSheet(socket, userName, { onRolled });
+  // Why the server last said no to a pick, a level or a use (7a3b1), shown under the CHOICES block
+  // for a few seconds; the next change that lands clears it.
+  const [refused, setRefused] = useState<string | null>(null);
+  useEffect(() => {
+    if (!socket) return undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onRefused = (e: { error?: string }) => {
+      setRefused(typeof e?.error === 'string' ? e.error : null);
+      clearTimeout(timer);
+      timer = setTimeout(() => setRefused(null), 6000);
+    };
+    socket.on('choicesRefused', onRefused);
+    return () => { socket.off('choicesRefused', onRefused); clearTimeout(timer); };
+  }, [socket]);
 
   const handlePortraitUpload = useCallback(
     (file: File) => uploadSheetPortrait(adminToken || playerToken, file),
@@ -126,6 +140,8 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           xpRate={xpRate}
           encumbranceEnforced={encumbranceEnforced}
           hiddenTabs={hiddenTabs}
+          onChoices={(action) => socket?.emit('choicesAction', action)}
+          choicesRefused={refused}
         />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>ACCESSING RECORD...</div>

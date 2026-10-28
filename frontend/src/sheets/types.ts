@@ -152,7 +152,7 @@ export interface SheetField {
  *  row (one-click: rolls the row's damage dice and spends its Effort cost).
  *  'ability_list' is a dynamic add/remove list stored as JSON in a single
  *  field; each item has name, cost, attr (dropdown), die, and effect. */
-export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list' | 'cyberware' | 'encumbrance' | 'weapon_stash' | 'inventory';
+export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list' | 'cyberware' | 'encumbrance' | 'weapon_stash' | 'inventory' | 'choices';
 
 /** Configuration for the 'ability_list' section layout. */
 export interface AbilityListConfig {
@@ -296,6 +296,9 @@ export interface SheetTemplate {
   /** A custom system's house rules, each with whether the table has it on (sheets/houseRules.ts
    *  houseRulesIn reads them). Absent on the built-in systems, whose house rules are their own. */
   houseRules?: HouseRuleState[];
+  /** A custom system's lists to pick from, in words (backend choices.js choicesShown, 7a3b1): what
+   *  its CHOICES block draws, with the character's own picks from the sheet's worked-out view. */
+  choices?: import('./choicesShown').ChoiceListShown[];
   /** The layout an NPC's sheet is drawn with, when the system gives NPCs one of their own
    *  (a custom system's stat block). Absent = NPCs use this template. */
   npcLayout?: SheetTemplate;

@@ -21,6 +21,7 @@ const { checkDefinition } = require_('../systemBuilder/definition');
 const { restOn } = require_('../systemBuilder/resting');
 const runtime = require_('../systemBuilder/runtime');
 const templates = require_('../sheets/templates');
+const { effectiveSheet, starterSheet, LAYOUTS } = require_('../systemBuilder/sheet');
 const socketsFactory = (await import('../sockets/index.js')).default;
 
 const HEARTH = {
@@ -269,5 +270,25 @@ describe('through the socket', () => {
     kes.handlers.choicesAction({ kind: 'pick', list: 'classes', option: 'soldier' });
     await until(() => kes.refused().length === 1, { label: 'the refusal' });
     expect(kes.refused()).toEqual(['This game has no choices to pick from']);
+  });
+});
+
+describe('the sheet\'s CHOICES block (7a3b1)', () => {
+  const block = (def) => effectiveSheet(def).sections.find((s) => s.layout === 'choices');
+
+  it('the starter sheet has one when the system has lists, on STATS after IDENTITY, named for the one list', () => {
+    const sheet = effectiveSheet({ ...HEARTH, choices: [HEARTH.choices[0]] });
+    expect(sheet.sections.slice(0, 2).map((s) => s.id)).toEqual(['identity', 'choices']);
+    expect(block({ ...HEARTH, choices: [HEARTH.choices[0]] })).toEqual({ id: 'choices', label: 'CLASSES', layout: 'choices', tab: 'STATS', fields: [] });
+    expect(block(HEARTH).label).toBe('CHOICES');
+    expect(block({ ...HEARTH, choices: undefined })).toBeUndefined();
+    expect(block({ ...HEARTH, choices: ['junk'] })).toBeUndefined();
+  });
+
+  it('a designed sheet may hold one, and CUSTOMIZE copies the starter\'s', () => {
+    expect(LAYOUTS).toContain('choices');
+    const sheet = starterSheet(HEARTH);
+    expect(checkDefinition({ ...HEARTH, sheet }).problems).toEqual([]);
+    expect(sheet.sections.some((s) => s.layout === 'choices')).toBe(true);
   });
 });

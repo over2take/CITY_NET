@@ -27,6 +27,7 @@ export const LIMITS = { tabs: 12, tabName: 20, label: 60, hint: 300, options: 10
 /** How a section looks (sheet.js LAYOUTS), with the page's names for them. */
 export const LAYOUTS = [
   { id: 'list', label: 'LIST' }, { id: 'grid', label: 'GRID' }, { id: 'notes', label: 'NOTES' }, { id: 'inventory', label: 'ITEMS' },
+  { id: 'choices', label: 'CHOICES' },
 ] as const;
 /** What a field holds (sheet.js TYPES), with the page's names for them. */
 export const TYPES = [

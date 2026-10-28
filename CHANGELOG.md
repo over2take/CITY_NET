@@ -53,6 +53,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Picking on the character sheet (7a3b1).** A custom system with lists now has a CHOICES block on
+  its sheets (on STATS, after IDENTITY, on the automatic sheet; a block you can place on a designed
+  one). Players see each list, their picks with their levels, the features each has unlocked and
+  what they do, and the next one to come. They pick while a list has room (an option they don't meet
+  is greyed, saying what it needs: NEEDS INTELLECT >= 13), raise or lower a class's level, and tick a
+  feature's uses off and back, the rest that refills them named beside them. Hover a list's LEVEL
+  for how it adds up: SOLDIER 3 + MAGE 1. When the server says no, the reason shows under the block.
+  The GM's own tools on a player's sheet (taking a pick away, picking past a requirement) come next.
 - **Features on the CHOICES page (7a2b2).** Each option now has its features, what a pick gives a
   character, grouped by the level each unlocks at in a levelled list and tagged with what they do.
   Open one to set its name, level and words, and any of: modifiers on a stat, formula or health
