@@ -298,6 +298,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Who sees what on a sheet, proven in a browser.** The first gap in e2e/COVERAGE.md is closed: a
+  new browser test plays a custom system with a sheet the GM laid out. Its owner fills it in and
+  can't change the field kept for the GM; another player, looking them up from the chat's user
+  list, sees only the public lines, and the server sends their browser nothing else; the GM opens
+  the whole sheet the same way and sets the GM's field, which the owner then sees. The way it looks
+  a player up (GLOBAL_CHAT, their name, VIEW_PLAYER_INFO) lets later tests reach another player's
+  token without clicking the 3D map.
 - **Picking on the sheet, the server's half (7a3a).** The server now takes a character's picks
   from their sheet, checked as decided: a player picks for their own character while a list has
   room and the requirement is met (told why not, in words: "Mage needs INTELLECT >= 13"), sets
