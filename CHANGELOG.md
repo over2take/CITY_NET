@@ -53,6 +53,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Features on the CHOICES page (7a2b2).** Each option now has its features, what a pick gives a
+  character, grouped by the level each unlocks at in a levelled list and tagged with what they do.
+  Open one to set its name, level and words, and any of: modifiers on a stat, formula or health
+  field (+1 DEFENSE, +@mage_level), uses the player ticks off and a rest refills, rolls it gives,
+  a change it lets a roll take (ADVANTAGE on a save), and another list to pick from when it
+  unlocks. One feature can do several of these at once. Deleting one asks first, and every
+  setting has a "?". The server already works out what these do to a character's numbers;
+  picking on the sheet comes next.
 - **The CHOICES page in the System Builder (7a2b1).** A new page on the rail, after STATS & RULES,
   for the lists characters pick from: classes, backgrounds, feats, playbooks, named in your game's
   own words (CLASS / CLASSES). Each list says how many a character picks (one, several or any),
