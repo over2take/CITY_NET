@@ -267,6 +267,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **What a character's picks do to their numbers (7a1b).** A character's picks are now kept on
+  their sheet, and the server works out what they do on every save. Each class picked has its own
+  level (`@soldier_level`), a levelled list adds them up (`@classes_level`), and `@level` is the
+  total, unless the system already has its own level, which keeps meaning what it always did.
+  Features unlock by level, and their modifiers reach the numbers: a stat stays as the player typed
+  it while formulas and rolls read it with its bonus (CON 14, +2 HARDY, read as 16), and a formula's
+  own bonuses are added before anything reading it. Nothing is written into a stat, so taking a
+  pick away takes its effects with it. A modifier's amount reads stats and levels, never a formula,
+  so nothing can go round in a loop. PUBLISH's preview shows what a changed feature does to each
+  character. Players can't write their picks as a plain field; picking on the sheet comes next.
 - **Choices and features, the format (7a1a).** The first piece of Phase 7 (approved mockup,
   2026-10-27): a system can now hold the lists a character picks from (classes, backgrounds,
   feats, playbooks, in the game's own words) and the features each pick gives. A list is picked

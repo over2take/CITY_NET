@@ -411,7 +411,11 @@ const getLinkedFields = (system) => metaFor(system).linkedFields || {};
  * system marks as the GM's to set (XP, awarded items). The built-in sheets mark nothing, so
  * this is always true for them. The GM's own edits do not ask.
  */
-const playerMayEdit = (system, fieldId) => !(metaFor(system).gmFields || []).includes(fieldId);
+// A custom system's picks (systemBuilder/choices.js PICKS_KEY, held equal by a test; not required
+// here, which would make a circle through the engine) are never a player's to write as a field:
+// picking checks what may be picked (7a3).
+const PICKS_KEY = '_choices';
+const playerMayEdit = (system, fieldId) => fieldId !== PICKS_KEY && !(metaFor(system).gmFields || []).includes(fieldId);
 
 // Returns a map of maxFieldId → currentFieldId for the system.
 const getMaxPairs = (system) => metaFor(system).maxPairs || {};
@@ -438,7 +442,7 @@ const applyDerived = (system, data, changedFieldId) => {
 };
 
 module.exports = {
-  TEMPLATES, DEFAULT_SYSTEM, isValidSystem, isBuiltIn, metaFor, setCustomMeta, filterPublicData, getLinkedFields, getMaxPairs, playerMayEdit,
+  TEMPLATES, DEFAULT_SYSTEM, isValidSystem, isBuiltIn, metaFor, setCustomMeta, filterPublicData, getLinkedFields, getMaxPairs, playerMayEdit, PICKS_KEY,
   applyDerived, cwnEffectiveAc, cwnImplantAc, cwnMoveBonus, CWN_BASE_MOVE,
   TOKEN_SOURCES, rangedAcOf, acColumns,
 };

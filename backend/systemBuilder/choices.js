@@ -6,7 +6,7 @@
 //     { id: 'classes', one: 'Class', many: 'Classes',
 //       picks: 1,            // how many a character picks: a whole number, or 'any'; 1 when absent
 //       levelled: true,      // each pick has a level, and its features unlock by it
-//       again: true,         // MORE THAN ONCE: the same character may take several (multiclassing)
+//       again: true,         // MORE THAN ONCE: more can be added after those (multiclassing)
 //       options: [
 //         { id: 'soldier', label: 'Soldier', description: '...',
 //           requires: '@str >= 13',          // optional: a formula, met when it isn't 0
@@ -23,17 +23,37 @@
 //   ]
 //
 // A feature does any of these, several at once, or none: then it is words for the table. Option and
-// feature ids share one set across the system, as has() will read them (7b); an option's level is
-// read as @<option>_level, so that name must be free too. A requirement is optional, per option: one
-// not met is shown with the reason at the table, and the GM may pick it anyway.
+// feature ids share one set across the system, as has() will read them (7b). A requirement is
+// optional, per option: one not met is shown with the reason at the table, and the GM may pick it
+// anyway.
 //
-// Pure: checks only. definition.js runs them. What a character picked, and what that does to their
-// numbers, is 7a1b's.
+// A character's picks (7a1b) are kept on their sheet under PICKS_KEY, a name no stat can have, as
+// { classes: [{ option: 'soldier', level: 3 }, { option: 'mage', level: 1 }], feats: ['tough'] }.
+// Players never write it directly (sheets/templates.js playerMayEdit); picking, with its checks,
+// comes with the sheet (7a3). Read here, only what holds is kept: an option of that list, once, no
+// more than the list allows, a level from 1 up in a levelled list (1 when it has none).
+//
+// Levels are read in formulas, rolls and modifier amounts: @<option>_level (0 when not taken),
+// @<list>_level, a levelled list's sum, and @level, every levelled list's sum, unless the system
+// has a stat or formula called level of its own, which keeps meaning what it always did (the user,
+// 2026-10-27). A modifier's amount reads the sheet as typed and these levels, never a formula, so a
+// feature's modifiers can never go round in a loop.
+//
+// What the picks do to the numbers is worked out, never written into a stat (overlayOf): a stat
+// stays as the player typed it while formulas and rolls read it with its modifiers; a formula's own
+// modifiers are added once it is worked out, before anything reading it. Take the pick away and its
+// effects are gone at once. definition.js runs the checks; runtime.js, tableRolls.js and
+// versionDiff.js read the overlay.
 
-const { parse, NAME } = require('./expression');
+const { parse, evaluate, references, NAME } = require('./expression');
+const { ruleValue } = require('./rules');
+const { tablesOf, lookupIn } = require('./derived');
 const { statIdsOf } = require('./stats');
 const { restIdsOf } = require('./rests');
 const { healthLayout } = require('./core');
+
+/** Where a sheet keeps its picks: starting with _, so no stat, formula or field can be called it. */
+const PICKS_KEY = '_choices';
 
 const LIMITS = {
   lists: 20,
@@ -57,12 +77,27 @@ const list = (v) => (Array.isArray(v) ? v : []);
 /** A definition's lists, the entries well formed enough to read. */
 const choicesOf = (definition) => list(definition && definition.choices).filter((c) => isPlainObject(c) && typeof c.id === 'string');
 
-/** What a modifier may change: the system's stats, formulas and health fields. */
-const targetsOf = (definition) => new Set([
+/** The sheet's own fields a modifier may change: the system's stats and health fields. */
+const fieldTargetsOf = (definition) => new Set([
   ...statIdsOf(definition),
-  ...list(definition.derived).filter(isPlainObject).map((d) => d.id),
   ...healthLayout(isPlainObject(definition.core) ? definition.core.health : undefined).sections.flatMap((s) => s.fields.map((f) => f.id)),
 ].filter((id) => typeof id === 'string'));
+const derivedIdsOf = (definition) => new Set(list(definition.derived).filter(isPlainObject).map((d) => d.id).filter((id) => typeof id === 'string'));
+
+/** What a modifier may change: the system's stats, formulas and health fields. */
+const targetsOf = (definition) => new Set([...fieldTargetsOf(definition), ...derivedIdsOf(definition)]);
+
+const optionsOf = (c) => list(c.options).filter((o) => isPlainObject(o) && typeof o.id === 'string');
+const levelledOf = (definition) => choicesOf(definition).filter((c) => c.levelled === true);
+
+/** The level names a system's formulas can read: each option's, each list's sum, and @level unless it has its own. */
+const levelNamesOf = (definition) => {
+  const levelled = levelledOf(definition);
+  return new Set([
+    ...levelled.flatMap((c) => [`${c.id}_level`, ...optionsOf(c).map((o) => `${o.id}_level`)]),
+    ...(levelled.length && !targetsOf(definition).has('level') ? ['level'] : []),
+  ]);
+};
 
 /** A definition's `choices` checked, its problems added to `problems`. */
 const checkChoices = (definition, problems) => {
@@ -74,6 +109,9 @@ const checkChoices = (definition, problems) => {
   const tables = new Set(isPlainObject(definition.lookups) ? Object.keys(definition.lookups) : []);
   const isFunction = (name) => tables.has(name);
   const targets = targetsOf(definition);
+  const formulas = derivedIdsOf(definition);
+  const levels = levelNamesOf(definition);
+  const optionLevels = new Set(levelledOf(definition).flatMap((c) => optionsOf(c).map((o) => `${o.id}_level`)));
   const rests = restIdsOf(definition);
   const rolls = new Map(list(definition.rolls).filter((r) => isPlainObject(r) && typeof r.id === 'string')
     .map((r) => [r.id, new Set(list(r.changes).filter(isPlainObject).map((c) => c.id))]));
@@ -119,6 +157,14 @@ const checkChoices = (definition, problems) => {
           keys(m, new Set(['target', 'amount']), at, 'a modifier');
           if (typeof m.target !== 'string' || !targets.has(m.target)) problems.push({ where: `${at}, target`, message: 'Not one of this system\'s stats, formulas or health fields' });
           formula(m.amount, `${at}, amount`);
+          // Worked out from the sheet as typed and the levels: a formula could read this modifier back.
+          if (typeof m.amount === 'string') {
+            let read = [];
+            try { read = [...references(parse(m.amount, isFunction)).fields]; } catch { /* reported above */ }
+            for (const name of read.filter((n) => formulas.has(n) && !levels.has(n))) {
+              problems.push({ where: `${at}, amount`, message: `Reads @${name}, a formula: an amount reads the sheet as typed and levels` });
+            }
+          }
         });
       }
     }
@@ -173,6 +219,9 @@ const checkChoices = (definition, problems) => {
     for (const key of ['levelled', 'again']) {
       if (c[key] !== undefined && typeof c[key] !== 'boolean') problems.push({ where: `${where}, ${key}`, message: `Must say ${key}: true or ${key}: false` });
     }
+    if (c.levelled === true && typeof c.id === 'string' && (targets.has(`${c.id}_level`) || optionLevels.has(`${c.id}_level`))) {
+      problems.push({ where, message: `Its levels add up as @${c.id}_level, which a stat, formula or option already has` });
+    }
     if (!Array.isArray(c.options)) { problems.push({ where: `${where}, options`, message: 'Must be a list of options' }); return; }
     if (c.options.length > LIMITS.options) problems.push({ where: `${where}, options`, message: `At most ${LIMITS.options} options` });
     c.options.slice(0, LIMITS.options).forEach((o, j) => {
@@ -197,4 +246,97 @@ const checkChoices = (definition, problems) => {
   });
 };
 
-module.exports = { LIMITS, checkChoices, choicesOf };
+/** How many of a list a character may have: as many as it picks, or no end when more can follow (again) or any. */
+const capOf = (c) => (c.again === true || c.picks === 'any' ? Infinity : Number.isInteger(c.picks) ? c.picks : 1);
+
+/**
+ * A character's picks, as stored on their sheet, kept only where they hold: [{ list, option, level }],
+ * the list and option as the definition has them, level null in a list that isn't levelled.
+ */
+const picksOf = (definition, data) => {
+  const stored = isPlainObject(data) && isPlainObject(data[PICKS_KEY]) ? data[PICKS_KEY] : {};
+  const out = [];
+  for (const c of choicesOf(definition)) {
+    const mine = Object.prototype.hasOwnProperty.call(stored, c.id) && Array.isArray(stored[c.id]) ? stored[c.id] : [];
+    const options = new Map(optionsOf(c).map((o) => [o.id, o]));
+    const taken = new Set();
+    for (const p of mine.slice(0, LIMITS.options)) {
+      if (taken.size >= capOf(c)) break;
+      const id = isPlainObject(p) ? p.option : p;
+      if (typeof id !== 'string' || !options.has(id) || taken.has(id)) continue;
+      taken.add(id);
+      const level = c.levelled !== true ? null
+        : isPlainObject(p) && Number.isInteger(p.level) && p.level >= 1 ? Math.min(p.level, LIMITS.level) : 1;
+      out.push({ list: c, option: options.get(id), level });
+    }
+  }
+  return out;
+};
+
+/** The levels `picks` give, by the names formulas read them (levelNamesOf): untaken options read 0. */
+const levelsOf = (definition, picks) => {
+  const levels = {};
+  let total = 0;
+  const levelled = levelledOf(definition);
+  for (const c of levelled) {
+    for (const o of optionsOf(c)) levels[`${o.id}_level`] = 0;
+    let sum = 0;
+    for (const p of picks.filter((x) => x.list === c)) { levels[`${p.option.id}_level`] = p.level; sum += p.level; }
+    levels[`${c.id}_level`] = sum;
+    total += sum;
+  }
+  if (levelled.length && !targetsOf(definition).has('level')) levels.level = total;
+  return levels;
+};
+
+/** The features `picks` have unlocked: [{ feature, option, list }], each pick's in its order. */
+const unlockedOf = (picks) => picks.flatMap((p) => list(p.option.features)
+  .filter((f) => isPlainObject(f) && typeof f.id === 'string' && (p.level === null || (Number.isInteger(f.at) ? f.at : 1) <= p.level))
+  .map((feature) => ({ feature, option: p.option, list: p.list })));
+
+/**
+ * What a character's picks do to their numbers: `{ sheet, add, levels, from }`, the overlay
+ * derived.js reads. `sheet` holds the levels and each stat or health field a feature changes, as
+ * modified; `add` each formula's modifiers, added once it is worked out; `from` every modifier by
+ * what it changes, [{ feature, amount }], for the sheet to name. Empty for a sheet with no picks.
+ */
+const overlayOf = (definition, data) => {
+  const sheet = isPlainObject(data) ? data : {};
+  const picks = picksOf(definition, sheet);
+  const levels = levelsOf(definition, picks);
+  const own = (o, name) => Object.prototype.hasOwnProperty.call(o, name);
+  const tables = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+  const env = {
+    field: (name) => (own(levels, name) ? levels[name] : num(sheet[name])),
+    rule: (name) => ruleValue(name, sheet),
+    table: (name, x) => lookupIn(own(tables, name) ? tables[name] : [], x),
+  };
+  const isTable = (name) => own(tables, name);
+  const targets = targetsOf(definition);
+  const fields = fieldTargetsOf(definition);
+  const from = {};
+  const totals = {};
+  for (const { feature } of unlockedOf(picks)) {
+    for (const m of list(feature.modifiers).slice(0, LIMITS.modifiers)) {
+      if (!isPlainObject(m) || typeof m.target !== 'string' || !targets.has(m.target) || typeof m.amount !== 'string') continue;
+      let amount;
+      try { amount = evaluate(parse(m.amount, isTable), env); } catch { continue; }
+      if (!Number.isFinite(amount)) continue;
+      totals[m.target] = (own(totals, m.target) ? totals[m.target] : 0) + amount;
+      (own(from, m.target) ? from[m.target] : (from[m.target] = [])).push({ feature: feature.label || feature.id, amount });
+    }
+  }
+  const over = { ...levels };
+  const add = {};
+  for (const [target, amount] of Object.entries(totals)) {
+    if (fields.has(target)) over[target] = num(sheet[target]) + amount;
+    else add[target] = amount;
+  }
+  return { sheet: over, add, levels, from };
+};
+
+/** The sheet as rolls read it: the stats and health fields with their modifiers, and the levels. Never stored. */
+const effectiveData = (definition, data) => ({ ...(isPlainObject(data) ? data : {}), ...overlayOf(definition, data).sheet });
+
+module.exports = { LIMITS, PICKS_KEY, checkChoices, choicesOf, picksOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData };

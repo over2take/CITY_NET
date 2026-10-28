@@ -14,6 +14,7 @@
 // section or condition waiting on a rule that is off is hidden from every answer at once.
 
 const { compileSystem } = require('./derived');
+const { overlayOf } = require('./choices');
 const { fieldsRolledBy } = require('./tableRolls');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf, LIMITS: NPC_LIMITS } = require('./npc');
@@ -62,9 +63,10 @@ const metaOf = (definition) => {
     // definition compiles (publishing refuses one with problems); should one not, nothing is
     // recomputed rather than a save failing. Saves call this inside database callbacks, where a
     // throw would stop the server, so one never leaves here: whatever a system's formulas do,
-    // the sheet keeps the values it had and the server logs why.
+    // the sheet keeps the values it had and the server logs why. The character's picks (7a1b) are
+    // read with it: their levels and modifiers, worked out each time, never written into a stat.
     recompute: compiled.ok ? (data) => {
-      try { return compiled.system.apply(data); } catch (err) {
+      try { return compiled.system.apply(data, overlayOf(definition, data)); } catch (err) {
         console.error(`[systems] ${definition.name}: derived values not worked out:`, err.message);
         return [];
       }

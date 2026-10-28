@@ -26,6 +26,7 @@
 
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { compileSystem } = require('./derived');
+const { overlayOf } = require('./choices');
 const { derivedLabel } = require('./stats');
 const { conditionsOf } = require('./conditions');
 const { currenciesOf } = require('./currencies');
@@ -39,7 +40,7 @@ const list = (v) => (Array.isArray(v) ? v : []);
 /**
  * The sections that change nothing on any character, said in one line. Phase 6's (rolls, their
  * symbols and dice, who sees a roll's target) joined in 6c4h: a change to them said nothing before.
- * Choices (7a1a) are here until characters pick from them (7a1b), when they change characters.
+ * Choices (7a1a) are here too: what a change to them does to each character shows in their values (7a1b).
  */
 const OTHER = ['name', 'description', 'author', 'license', 'words', 'buildings', 'bank', 'lookups', 'npc', 'rests', 'rolls', 'symbols', 'dice', 'target_seen', 'choices'];
 
@@ -157,7 +158,8 @@ const versionChanges = (before, after) => {
 /** Every worked-out value a version gives `data`, or null when its formulas can't run. */
 const valuesUnder = (definition, data) => {
   const compiled = compileSystem({ lookups: (definition || {}).lookups, derived: list((definition || {}).derived) });
-  return compiled.ok ? compiled.system.evaluate(data || {}) : null;
+  // With what the sheet's picks do under that version (7a1b): a feature changed changes values.
+  return compiled.ok ? compiled.system.evaluate(data || {}, overlayOf(definition || {}, data)) : null;
 };
 
 /** The worked-out values that differ between the two versions, for `data`: old → new (null: none). */
