@@ -14,7 +14,7 @@
 // section or condition waiting on a rule that is off is hidden from every answer at once.
 
 const { compileSystem } = require('./derived');
-const { overlayOf } = require('./choices');
+const { overlayOf, choicesOf, workedOf, choicesShown, WORKED_KEY } = require('./choices');
 const { fieldsRolledBy } = require('./tableRolls');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf, LIMITS: NPC_LIMITS } = require('./npc');
@@ -64,9 +64,15 @@ const metaOf = (definition) => {
     // recomputed rather than a save failing. Saves call this inside database callbacks, where a
     // throw would stop the server, so one never leaves here: whatever a system's formulas do,
     // the sheet keeps the values it had and the server logs why. The character's picks (7a1b) are
-    // read with it: their levels and modifiers, worked out each time, never written into a stat.
+    // read with it: their levels and modifiers, worked out each time, never written into a stat;
+    // and what the sheet shows of them (7a3a, choices.js workedOf), written beside the values.
     recompute: compiled.ok ? (data) => {
-      try { return compiled.system.apply(data, overlayOf(definition, data)); } catch (err) {
+      try {
+        const changed = compiled.system.apply(data, overlayOf(definition, data));
+        if (choicesOf(definition).length) data[WORKED_KEY] = workedOf(definition, data);
+        else delete data[WORKED_KEY];
+        return changed;
+      } catch (err) {
         console.error(`[systems] ${definition.name}: derived values not worked out:`, err.message);
         return [];
       }
@@ -146,6 +152,8 @@ const renderOf = (id, definition, on = new Set()) => ({
     fields: fieldsRolledBy(definition, r),
     changes: (Array.isArray(r.changes) ? r.changes : []).map((c) => ({ id: c.id, label: c.label, ...(c.cost ? { cost: costShown(definition, c.cost) } : {}) })),
   })),
+  // Its lists to pick from (7a3a): names, options and features in words, never a formula.
+  choices: choicesShown(definition),
 });
 
 /**

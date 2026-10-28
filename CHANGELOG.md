@@ -283,6 +283,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Picking on the sheet, the server's half (7a3a).** The server now takes a character's picks
+  from their sheet, checked as decided: a player picks for their own character while a list has
+  room and the requirement is met (told why not, in words: "Mage needs INTELLECT >= 13"), sets
+  their own class levels, and ticks a feature's uses off and back; only the GM takes a pick away,
+  or picks past a requirement. Every save works out what the sheet will show: the picks and their
+  levels, where each bonus comes from, each feature's uses left, and which options a character
+  doesn't meet yet. A rest refills the uses of features it (or a rest it counts as) refills.
+  Nothing kept beside a sheet's fields can be written by a player as a field. The CHOICES block on
+  the sheet comes next.
 - **A map of what the browser tests cover.** e2e/COVERAGE.md lists every option a GM can set in the
   System Builder, the server tests for its rules, and the browser test that proves it at the table:
   AT THE TABLE, BUILDER ONLY, or a GAP. An audit found most options built and tested on the server

@@ -6,6 +6,7 @@ const moneyRules = require('../bank/moneyRules');
 const { cryptoRng } = require('../utils/random');
 const { withThrow, boardOf } = require('../utils/diceThrow');
 const { registerInitiativeHandlers } = require('./initiative');
+const { registerChoicesHandlers } = require('./choices');
 const sheetTemplates = require('../sheets/templates');
 const { mutateSheet, mutateSheetForUser, patchSheet } = require('../sheets/mutate');
 const cyberware = require('../sheets/cyberware');
@@ -1338,6 +1339,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         );
       });
     });
+
+    // Picking on a custom system's sheet (7a3a): who may do what is systemBuilder/picking.js's.
+    registerChoicesHandlers(socket, { io, db, userSockets, isAdminSocket, getGameSystem });
 
     socket.on('updateSheetField', (payload) => {
       const info = userSockets.get(socket.id);

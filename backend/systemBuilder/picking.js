@@ -1,0 +1,76 @@
+// Picking on a character's sheet (7a3a; approved mockup docs/mockups/builder-choices.html, and the
+// user's calls of 2026-10-28): what a player or the GM may do to a character's picks, checked here on
+// the server, the sheet as stored the only thing trusted.
+//
+//   pick   a player picks for their own character while the list has room and the option's
+//          requirement is met; the GM may pick past a requirement, never past the list's room
+//   drop   only the GM takes a pick away
+//   level  a pick's level in a levelled list, from 1 to the highest: the player or the GM
+//   use    how many of a feature's uses are spent, from none to all of them: the player or the GM
+//
+// Pure: takes the running definition and the sheet's data, and gives back the data to store or why
+// not. The socket (sockets/choices.js) stores it through the sheet queue and works the numbers out
+// again. Picks and spent uses are kept where choices.js says (PICKS_KEY, USES_KEY).
+
+const { choicesOf, picksOf, capOf, meets, needsText, usesOf, PICKS_KEY, USES_KEY, LIMITS } = require('./choices');
+
+const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+const fail = (error) => ({ ok: false, error });
+
+/** The list's picks, stored back as they are read: only what holds, in order. */
+const storedPicks = (picks, c) => picks.filter((p) => p.list === c).map((p) => (p.level === null ? { option: p.option.id } : { option: p.option.id, level: p.level }));
+
+const withPicks = (data, listId, stored) => ({ ...data, [PICKS_KEY]: { ...(isPlainObject(data[PICKS_KEY]) ? data[PICKS_KEY] : {}), [listId]: stored } });
+
+/**
+ * One action on a sheet's picks. `action` is { kind: 'pick' | 'drop' | 'level', list, option, level }
+ * or { kind: 'use', feature, spent }; `gm` says whether the GM asks. Returns { ok: true, data } or
+ * { ok: false, error } in words for the person who asked.
+ */
+const pickAction = (definition, data, action, { gm = false } = {}) => {
+  const sheet = isPlainObject(data) ? data : {};
+  if (!isPlainObject(action)) return fail('Nothing to do');
+
+  if (action.kind === 'use') {
+    const u = usesOf(definition, sheet).find((x) => x.feature.id === action.feature);
+    if (!u) return fail('This character has no such feature with uses');
+    const spent = Number(action.spent);
+    if (!Number.isInteger(spent) || spent < 0 || spent > u.max) return fail(`Between none and all ${u.max} of its uses`);
+    return { ok: true, data: { ...sheet, [USES_KEY]: { ...(isPlainObject(sheet[USES_KEY]) ? sheet[USES_KEY] : {}), [u.feature.id]: spent } } };
+  }
+
+  const c = choicesOf(definition).find((x) => x.id === action.list);
+  if (!c) return fail('Not one of this system\'s lists');
+  const option = (Array.isArray(c.options) ? c.options : []).find((o) => isPlainObject(o) && o.id === action.option);
+  if (!option) return fail(`Not one of the ${c.many || c.id}`);
+  const name = option.label || option.id;
+  const picks = picksOf(definition, sheet);
+  const mine = picks.filter((p) => p.list === c);
+  const taken = mine.find((p) => p.option === option);
+
+  if (action.kind === 'pick') {
+    if (taken) return fail(`${name} is already picked`);
+    if (mine.length >= capOf(c)) return fail(`No more ${c.many || c.id} can be picked`);
+    if (!gm && !meets(definition, sheet, option)) return fail(`${name} needs ${needsText(definition, option.requires)}`);
+    const added = c.levelled === true ? { option: option.id, level: 1 } : { option: option.id };
+    return { ok: true, data: withPicks(sheet, c.id, [...storedPicks(picks, c), added]) };
+  }
+
+  if (action.kind === 'drop') {
+    if (!gm) return fail('Only the GM takes a pick away');
+    if (!taken) return fail(`${name} isn't picked`);
+    return { ok: true, data: withPicks(sheet, c.id, storedPicks(picks, c).filter((p) => p.option !== option.id)) };
+  }
+
+  if (action.kind === 'level') {
+    if (c.levelled !== true) return fail(`The ${c.many || c.id} have no levels`);
+    if (!taken) return fail(`${name} isn't picked`);
+    const level = Number(action.level);
+    if (!Number.isInteger(level) || level < 1 || level > LIMITS.level) return fail(`A level from 1 to ${LIMITS.level}`);
+    return { ok: true, data: withPicks(sheet, c.id, storedPicks(picks, c).map((p) => (p.option === option.id ? { ...p, level } : p))) };
+  }
+
+  return fail('Nothing to do');
+};
+
+module.exports = { pickAction };

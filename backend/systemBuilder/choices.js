@@ -44,6 +44,12 @@
 // modifiers are added once it is worked out, before anything reading it. Take the pick away and its
 // effects are gone at once. definition.js runs the checks; runtime.js, tableRolls.js and
 // versionDiff.js read the overlay.
+//
+// At the table (7a3a): how many of each feature's uses are spent is kept under USES_KEY, by feature,
+// and a rest that refills them sets them back (resting.js). Every save writes what the sheet shows of
+// the picks under WORKED_KEY (workedOf): the picks and their levels, what each modifier comes from,
+// each feature's uses left, and the options whose requirement isn't met. Picking itself, with who may
+// do what, is picking.js's. The sheet is drawn from choicesShown, the lists without their formulas.
 
 const { parse, evaluate, references, NAME } = require('./expression');
 const { ruleValue } = require('./rules');
@@ -54,6 +60,10 @@ const { healthLayout } = require('./core');
 
 /** Where a sheet keeps its picks: starting with _, so no stat, formula or field can be called it. */
 const PICKS_KEY = '_choices';
+/** Where a sheet keeps each feature's uses spent, by feature id. */
+const USES_KEY = '_uses';
+/** Where every save writes what the sheet shows of the picks (workedOf). Never read back as input. */
+const WORKED_KEY = '_worked';
 
 const LIMITS = {
   lists: 20,
@@ -339,4 +349,118 @@ const overlayOf = (definition, data) => {
 /** The sheet as rolls read it: the stats and health fields with their modifiers, and the levels. Never stored. */
 const effectiveData = (definition, data) => ({ ...(isPlainObject(data) ? data : {}), ...overlayOf(definition, data).sheet });
 
-module.exports = { LIMITS, PICKS_KEY, checkChoices, choicesOf, picksOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData };
+/**
+ * Formula text worked out on the sheet as it reads now: stats with their modifiers, the levels, and
+ * formulas as last saved. Null when it can't be (it never happens to a published system's).
+ */
+const valueOn = (definition, data, text) => {
+  if (typeof text !== 'string') return null;
+  const sheet = effectiveData(definition, data);
+  const own = (o, name) => Object.prototype.hasOwnProperty.call(o, name);
+  const tables = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+  try {
+    const n = evaluate(parse(text, (name) => own(tables, name)), {
+      field: (name) => num(sheet[name]),
+      rule: (name) => ruleValue(name, sheet),
+      table: (name, x) => lookupIn(own(tables, name) ? tables[name] : [], x),
+    });
+    return Number.isFinite(n) ? n : null;
+  } catch { return null; }
+};
+
+/** Whether a character meets an option's requirement: one with none always does. */
+const meets = (definition, data, option) => {
+  if (!isPlainObject(option) || typeof option.requires !== 'string' || !option.requires.trim()) return true;
+  const v = valueOn(definition, data, option.requires);
+  return v === null || v !== 0;
+};
+
+/** Every name a sheet shows for what a formula can read: stats, formulas, health fields, levels. */
+const namesOf = (definition) => {
+  const names = new Map();
+  for (const g of list(definition.stats)) for (const s of list(g.stats)) if (typeof s.id === 'string') names.set(s.id, s.label || s.id);
+  for (const d of list(definition.derived)) if (typeof d.id === 'string') names.set(d.id, d.label || d.id);
+  for (const s of healthLayout(isPlainObject(definition.core) ? definition.core.health : undefined).sections) for (const f of s.fields) names.set(f.id, f.label || f.id);
+  for (const c of levelledOf(definition)) {
+    names.set(`${c.id}_level`, `${c.many || c.id} level`);
+    for (const o of optionsOf(c)) names.set(`${o.id}_level`, `${o.label || o.id} level`);
+  }
+  if (!names.has('level') && levelledOf(definition).length) names.set('level', 'Level');
+  return names;
+};
+
+/** A requirement in the words the sheet shows: @int >= 13 as INTELLECT >= 13. */
+const needsText = (definition, text) => {
+  const names = namesOf(definition);
+  return String(text).replace(/@([a-z][a-z0-9_]*)/g, (_, id) => String(names.get(id) || id).toUpperCase()).trim();
+};
+
+/** Each unlocked feature with uses: how many it has (its count worked out), how many are spent, and its rest. */
+const usesOf = (definition, data) => {
+  const stored = isPlainObject(data) && isPlainObject(data[USES_KEY]) ? data[USES_KEY] : {};
+  return unlockedOf(picksOf(definition, data)).filter(({ feature }) => isPlainObject(feature.uses)).map(({ feature }) => {
+    const max = Math.max(0, Math.floor(valueOn(definition, data, feature.uses.count) ?? 0));
+    const had = Object.prototype.hasOwnProperty.call(stored, feature.id) ? Number(stored[feature.id]) : 0;
+    const spent = Math.max(0, Math.min(max, Number.isInteger(had) ? had : 0));
+    return { feature, max, spent, refill: typeof feature.uses.refill === 'string' ? feature.uses.refill : null };
+  });
+};
+
+/**
+ * What the sheet shows of a character's picks, worked out on every save: the picks with their levels,
+ * the levels formulas read, what each changed value's modifiers come from, each feature's uses
+ * ({ max, spent }), and the options not taken whose requirement isn't met.
+ */
+const workedOf = (definition, data) => {
+  const picks = picksOf(definition, data);
+  const taken = new Set(picks.map((p) => p.option.id));
+  return {
+    picks: picks.map((p) => ({ list: p.list.id, option: p.option.id, ...(p.level === null ? {} : { level: p.level }) })),
+    levels: levelsOf(definition, picks),
+    from: overlayOf(definition, data).from,
+    uses: Object.fromEntries(usesOf(definition, data).map((u) => [u.feature.id, { max: u.max, spent: u.spent }])),
+    unmet: choicesOf(definition).flatMap((c) => optionsOf(c).filter((o) => !taken.has(o.id) && !meets(definition, data, o)).map((o) => o.id)),
+  };
+};
+
+/**
+ * The lists as the sheet draws them (7a3a): names, how many and how, each option's words and what
+ * it needs in words, and each feature's words, level and what it does, named. Never a formula.
+ */
+const choicesShown = (definition) => {
+  const names = namesOf(definition);
+  const rolls = new Map(list(definition.rolls).filter((r) => typeof r.id === 'string').map((r) => [r.id, r]));
+  const restName = new Map(list(Object.entries(isPlainObject(definition.rests) ? definition.rests : {}).map(([id, r]) => ({ id, ...r }))).map((r) => [r.id, r.name]));
+  const STANDARD_REST = { short_rest: 'Short rest', long_rest: 'Long rest', end_of_scene: 'End of scene', end_of_session: 'End of session' };
+  const lists = choicesOf(definition);
+  return lists.map((c) => ({
+    id: c.id, one: c.one, many: c.many,
+    picks: c.picks === 'any' ? 'any' : Number.isInteger(c.picks) ? c.picks : 1,
+    again: c.again === true, levelled: c.levelled === true,
+    options: optionsOf(c).map((o) => ({
+      id: o.id, label: o.label || o.id,
+      ...(typeof o.description === 'string' && o.description.trim() ? { description: o.description } : {}),
+      ...(typeof o.requires === 'string' && o.requires.trim() ? { needs: needsText(definition, o.requires) } : {}),
+      features: list(o.features).filter((f) => typeof f.id === 'string').map((f) => ({
+        id: f.id, label: f.label || f.id,
+        ...(typeof f.text === 'string' && f.text.trim() ? { text: f.text } : {}),
+        ...(c.levelled === true ? { at: Number.isInteger(f.at) && f.at >= 1 ? f.at : 1 } : {}),
+        ...(list(f.modifiers).length ? { modifies: [...new Set(list(f.modifiers).map((m) => String(names.get(m.target) || m.target)))] } : {}),
+        ...(isPlainObject(f.uses) ? { uses: { refill: typeof f.uses.refill === 'string' ? (restName.get(f.uses.refill) || STANDARD_REST[f.uses.refill] || f.uses.refill) : null } } : {}),
+        ...(Array.isArray(f.rolls) && f.rolls.length ? { rolls: f.rolls.map((id) => (rolls.get(id) ? rolls.get(id).label || id : id)) } : {}),
+        ...(list(f.changes).length ? { changes: list(f.changes).map((ch) => {
+          const roll = rolls.get(ch.roll);
+          const change = roll ? list(roll.changes).find((x) => x.id === ch.change) : null;
+          return `${(change && change.label) || ch.change} on ${(roll && roll.label) || ch.roll}`;
+        }) } : {}),
+        ...(typeof f.choice === 'string' && lists.some((l) => l.id === f.choice) ? { opens: f.choice } : {}),
+      })),
+    })),
+  }));
+};
+
+module.exports = {
+  LIMITS, PICKS_KEY, USES_KEY, WORKED_KEY, checkChoices, choicesOf, picksOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
+  capOf, valueOn, meets, needsText, usesOf, workedOf, choicesShown,
+};
