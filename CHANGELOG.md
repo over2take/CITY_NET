@@ -267,6 +267,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Choices and features, the format (7a1a).** The first piece of Phase 7 (approved mockup,
+  2026-10-27): a system can now hold the lists a character picks from (classes, backgrounds,
+  feats, playbooks, in the game's own words) and the features each pick gives. A list is picked
+  once, so many times or any number; it can be levelled, with features unlocking by level, and
+  taken more than once, for multiclassing. An option can have a requirement. A feature can change a
+  stat, formula or health field, have uses a rest refills, give rolls or a change to a roll, open
+  another list to pick from, or just be words, several at once. All of it is checked like the rest
+  of a shared file and travels in it beside the system, so a builder from before choices still
+  installs it. PUBLISH says when a version changes them. Nothing uses them yet: what a character
+  picks, and what that does to their numbers, comes next.
 - **Browser tests steady on CI's slower machines.** Every browser test now has two minutes, not
   one: tests of 15 seconds on a desktop ran past a minute on CI. The dice tray's no-queue test
   sends its two quick rolls with the tray already open and nothing drawn between them; drawing the

@@ -6,10 +6,11 @@
 //     "definition": { ...the system, format 1 (definition.js) },
 //     "graph": { ...the map's layout, when it has one (graph.js) },
 //     "rolls": [ ...the system's own rolls, when it has some (rollStyles.js) ],
-//     "symbols": [ ... ], "dice": [ ...its own dice and their symbols (diceFaces.js, 6c1a) ]
+//     "symbols": [ ... ], "dice": [ ...its own dice and their symbols (diceFaces.js, 6c1a) ],
+//     "choices": [ ...the lists a character picks from, and their features (choices.js, 7a1a) ]
 //   }
 //
-// The map's layout, the rolls and the dice travel beside the system, not in it (2026-10-18, rolls 6a2a): a
+// The map's layout, the rolls, the dice and the choices travel beside the system, not in it (2026-10-18, rolls 6a2a): a
 // builder from before them reads only "manifest" and "definition", so a file from here installs and
 // publishes there, its map laid out afresh and without the rolls it can't make. Here, installing
 // puts them back in the definition, where they are checked with the rest; a file with them inside
@@ -46,7 +47,7 @@ const appVersion = () => {
 const hashOf = (text) => crypto.createHash('sha256').update(String(text)).digest('hex');
 
 /** The sections a file carries beside its definition, for builders from before them. */
-const BESIDE = ['graph', 'rolls', 'symbols', 'dice'];
+const BESIDE = ['graph', 'rolls', 'symbols', 'dice', 'choices'];
 
 /** A file name from a system's name: lowercase, dashes, never empty. */
 const fileNameFor = (name) => {
