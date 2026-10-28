@@ -3,6 +3,13 @@
 // character's own picks, levels and uses come in their sheet, worked out by the server on every save
 // (choices.js workedOf, under WORKED_KEY). Nothing here works a number out: the server does, and the
 // sheet only draws what it says. Pure, so the CHOICES block (components/ChoicesSection.tsx) only draws.
+//
+// What the picks do to the numbers shows on the fields themselves (7a3b2, choiceEffects): the badge the
+// sheet already draws for CWN chrome, the value with its bonuses and where each came from (14 → 16,
+// Hardy +2), from what the server says each modifier came from.
+
+import type { SheetEffects, FieldEffect } from './cyberwareEffects';
+import type { SheetTemplate } from './types';
 
 export interface FeatureShown {
   id: string; label: string; text?: string; at?: number;
@@ -98,3 +105,25 @@ export const featureDoes = (f: FeatureShown, lists: ChoiceListShown[]): string[]
   ...(f.changes ?? []).map((c) => c.toUpperCase()),
   ...(f.opens ? [`PICK ${(lists.find((l) => l.id === f.opens)?.one ?? f.opens).toUpperCase()}`] : []),
 ];
+
+/**
+ * What the picks do to each field, for the sheet's badge (SheetRenderer's ChromeBadge): a stat as
+ * typed and with its bonuses, a formula as the server saved it (bonuses already in) and without them,
+ * each bonus named by its feature. Fields the sheet doesn't show are left out.
+ */
+export const choiceEffects = (data: Obj | null | undefined, template: SheetTemplate): SheetEffects => {
+  const worked = workedOn(data);
+  const fields = new Map(template.sections.flatMap((s) => s.fields).map((f) => [f.id, f]));
+  const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+  const out: Record<string, FieldEffect> = {};
+  for (const [id, from] of Object.entries(worked.from)) {
+    const field = fields.get(id);
+    if (!field || !Array.isArray(from) || !from.length) continue;
+    const delta = from.reduce((n, s) => n + num(s.amount), 0);
+    const stored = num(isObject(data) ? data[id] : 0);
+    // A formula is saved with its bonuses in; a stat keeps what the player typed.
+    const base = field.derived ? stored - delta : stored;
+    out[id] = { id, base, value: base + delta, delta, sources: from.map((s) => ({ name: s.feature, value: num(s.amount), kind: 'stat' as const })) };
+  }
+  return { fields: out, unmatched: [] };
+};

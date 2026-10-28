@@ -6,6 +6,8 @@ import { SheetRenderer } from './SheetRenderer';
 import { ImportSheetDialog } from './ImportSheetDialog';
 import { getTemplate, getMaxPairs, hiddenTabsFor, npcTemplateOf, type CharacterSheet, type SheetTemplate } from '../sheets';
 import type { SheetFieldValue, RollPick } from '../sheets/types';
+import type { ChoicesAction } from '../sheets/choicesShown';
+import { useChoicesRefused } from '../hooks/useChoicesRefused';
 import { npcInitiativePortrait } from '../modules/initiative/npcPortrait';
 import { canImport, canImportNpc } from '../sheets/importable';
 import { themeRoot } from '../utils/themeRoot';
@@ -51,6 +53,8 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
   }, [playerUsername]);
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Why the server said no to a pick the GM asked for on a player's sheet (7a3b2).
+  const choicesRefused = useChoicesRefused(playerUsername ? socket : null);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   const [reloadKey, setReloadKey] = useState(0);
@@ -292,6 +296,8 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
           portraitShadow={shadowFilter}
           onTogglePortraitShadow={handleTogglePortraitShadow}
           hiddenTabs={hiddenTabsFor(sheet.system, ruleSettings)}
+          // A player's picks (7a3b2): the GM picks, drops and changes them for the player named.
+          {...(playerUsername && socket ? { onChoices: (action: ChoicesAction) => socket.emit('choicesAction', { ...action, username: playerUsername }), choicesRefused } : {})}
         />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>

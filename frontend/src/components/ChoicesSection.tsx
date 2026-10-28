@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   workedOn, listShown, spentAfterClick, featureDoes,
   type ChoiceListShown, type ChoicesAction, type FeatureShown,
@@ -9,7 +9,8 @@ import {
 // total on hover, broken down: SOLDIER 3 + MAGE 1), the features each pick has unlocked with their
 // uses to tick off, the next feature to come, and the options still to pick, one not met shown with
 // what it needs. What a player may do is the server's to say (backend systemBuilder/picking.js); this
-// only asks, and the server's answer comes back as the sheet saved again, or in words.
+// only asks, and the server's answer comes back as the sheet saved again, or in words. The GM (7a3b2)
+// also takes a pick away (DROP, asked first) and picks an option not met (ADD ANYWAY).
 
 interface Props {
   lists: ChoiceListShown[];
@@ -19,6 +20,8 @@ interface Props {
   onChoices?: (action: ChoicesAction) => void;
   /** Why the server last said no, to show under the block. */
   refused?: string | null;
+  /** The viewer is the GM: DROP, and ADD ANYWAY for an option not met. */
+  gm?: boolean;
 }
 
 const small: React.CSSProperties = { fontSize: '0.55rem', letterSpacing: '1px', opacity: 0.7 };
@@ -60,8 +63,10 @@ function Feature({ f, lists, use, canTick, onTick }: {
   );
 }
 
-export function ChoicesSection({ lists, data, readOnly, onChoices, refused }: Props) {
+export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm = false }: Props) {
   const worked = workedOn(data);
+  // The pick the GM asked to take away, waiting for YES: "list:option".
+  const [dropping, setDropping] = useState<string | null>(null);
   const can = !readOnly && !!onChoices;
   // In the builder's previews nothing is published yet: the block says what will be here.
   if (!lists.length) return <div style={small}>A character&apos;s picks from the system&apos;s lists show here: classes, backgrounds, feats.</div>;
@@ -93,7 +98,19 @@ export function ChoicesSection({ lists, data, readOnly, onChoices, refused }: Pr
                         onClick={() => onChoices!({ kind: 'level', list: list.id, option: p.option.id, level: p.level! + 1 })}>+</button>}
                     </span>
                   )}
+                  {can && gm && dropping !== `${list.id}:${p.option.id}` && (
+                    <button type="button" style={{ ...btn, color: 'var(--danger)', borderColor: 'var(--danger)' }} aria-label={`Drop ${p.option.label}`}
+                      onClick={() => setDropping(`${list.id}:${p.option.id}`)}>DROP</button>
+                  )}
                 </div>
+                {can && gm && dropping === `${list.id}:${p.option.id}` && (
+                  <div role="group" aria-label={`Take ${p.option.label} away`} style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ ...small, color: 'var(--danger)', opacity: 1 }}>TAKE {p.option.label.toUpperCase()} AWAY, AND WHAT IT GIVES?</span>
+                    <button type="button" style={{ ...btn, color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                      onClick={() => { setDropping(null); onChoices!({ kind: 'drop', list: list.id, option: p.option.id }); }}>YES, DROP</button>
+                    <button type="button" style={btn} onClick={() => setDropping(null)}>KEEP</button>
+                  </div>
+                )}
                 {p.unlocked.map((f) => (
                   <Feature key={f.id} f={f} lists={lists} use={worked.uses[f.id]} canTick={can}
                     onTick={(spent) => onChoices!({ kind: 'use', feature: f.id, spent })} />
@@ -108,9 +125,10 @@ export function ChoicesSection({ lists, data, readOnly, onChoices, refused }: Pr
                 <span style={small}>+ {list.one.toUpperCase()}</span>
                 {view.open.map(({ option, unmet }) => (
                   <span key={option.id} style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
-                    <button type="button" style={{ ...btn, opacity: unmet ? 0.4 : 1, cursor: unmet ? 'not-allowed' : 'pointer' }} disabled={!!unmet} title={option.description}
+                    <button type="button" style={{ ...btn, opacity: unmet && !gm ? 0.4 : 1, cursor: unmet && !gm ? 'not-allowed' : 'pointer' }} disabled={!!unmet && !gm}
+                      title={unmet && gm ? 'Not met: as the GM, you can add it anyway' : option.description}
                       onClick={() => onChoices!({ kind: 'pick', list: list.id, option: option.id })}>{option.label.toUpperCase()}</button>
-                    {unmet && <span style={{ ...small, color: 'var(--warning)', opacity: 1 }}>NEEDS {unmet}</span>}
+                    {unmet && <span style={{ ...small, color: 'var(--warning)', opacity: 1 }}>NEEDS {unmet}{gm ? ' · ADD ANYWAY' : ''}</span>}
                   </span>
                 ))}
               </div>
