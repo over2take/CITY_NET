@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { SheetRenderer } from '../SheetRenderer';
 import { CharacterSheetWindow } from '../CharacterSheetWindow';
 import { getTemplate, TEMPLATES } from '../../sheets';
+import { registerCustomTemplate, clearCustomTemplates } from '../../sheets/customTemplates';
 
 vi.mock('../DraggableWindow', () => ({
   DraggableWindow: ({ children, title, titleControls }: any) => (
@@ -167,6 +168,29 @@ describe('SheetRenderer', () => {
 // ─── CharacterSheetWindow ─────────────────────────────────────────────────────
 
 describe('CharacterSheetWindow', () => {
+  it('a custom system\'s CHOICES block asks the server over the socket, and says why not when refused (7a3b1)', () => {
+    vi.useFakeTimers();
+    clearCustomTemplates();
+    registerCustomTemplate({
+      id: 'sys_0123456789abcdef', name: 'Hearth', words: {}, parts: {}, derived: [],
+      sheet: { sections: [{ id: 'choices', label: 'CLASSES', layout: 'choices', fields: [] }] },
+      choices: [{ id: 'classes', one: 'Class', many: 'Classes', picks: 1, again: true, levelled: true, options: [{ id: 'scout', label: 'Scout', features: [] }] }],
+    });
+    const socket = makeSocket();
+    render(<CharacterSheetWindow pos={basePos} setPos={setPos} onClose={onClose} socket={socket} userName="GHOST" />);
+    const onSheetData = socket.on.mock.calls.find((c: any) => c[0] === 'sheetData')[1];
+    act(() => onSheetData({ id: 1, username: 'GHOST', system: 'sys_0123456789abcdef', data: { _worked: { picks: [], levels: {}, from: {}, uses: {}, unmet: [] } }, portrait_url: null, is_npc: 0 }));
+    fireEvent.click(screen.getByRole('button', { name: 'SCOUT' }));
+    expect(socket.emit).toHaveBeenCalledWith('choicesAction', { kind: 'pick', list: 'classes', option: 'scout' });
+    const onRefused = socket.on.mock.calls.find((c: any) => c[0] === 'choicesRefused')[1];
+    act(() => onRefused({ error: 'No more Classes can be picked' }));
+    expect(screen.getByRole('alert').textContent).toBe('No more Classes can be picked');
+    act(() => { vi.advanceTimersByTime(6000); });
+    expect(screen.queryByRole('alert')).toBeNull();
+    vi.useRealTimers();
+    clearCustomTemplates();
+  });
+
   it('requests the sheet on mount and shows loading state', () => {
     const socket = makeSocket();
     render(<CharacterSheetWindow pos={basePos} setPos={setPos} onClose={onClose} socket={socket} userName="GHOST" />);

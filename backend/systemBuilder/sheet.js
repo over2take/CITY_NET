@@ -18,7 +18,9 @@ const { statSections, derivedLabel } = require('./stats');
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
 const LIMITS = { sections: 50, fields: 500, perSection: 100, tabs: 12, label: 60, hint: 300, options: 100 };
-const LAYOUTS = ['list', 'grid', 'notes', 'inventory'];
+// 'choices' (7a3b1) is the block where a character's picks are: like 'inventory', drawn by the sheet
+// itself rather than from fields.
+const LAYOUTS = ['list', 'grid', 'notes', 'inventory', 'choices'];
 const TYPES = ['number', 'text', 'textarea', 'select'];
 /** Values that live elsewhere and are overlaid at read time (sheets/templates.js linkedFields). */
 const SOURCES = ['token_hp', 'token_hp_max', 'token_ac', 'bank_balance'];
@@ -190,6 +192,12 @@ const withoutOffParts = (sheet, definition) => {
   return { ...sheet, sections, ...(header !== undefined ? { header } : {}) };
 };
 
+/** The starter sheet's CHOICES block title: the one list's name for many, or CHOICES for several. */
+const choicesLabel = (lists) => {
+  const named = lists.filter((c) => isPlainObject(c) && typeof c.id === 'string');
+  return (named.length === 1 && typeof named[0].many === 'string' && named[0].many.trim() ? named[0].many : 'Choices').toUpperCase().slice(0, LIMITS.label);
+};
+
 /** The system's own sheet, or the starter one. */
 const designedOrStarter = (definition) => {
   if (definition && isPlainObject(definition.sheet)) return definition.sheet;
@@ -206,6 +214,10 @@ const designedOrStarter = (definition) => {
       { id: 'concept', label: 'Concept', type: 'text' },
       { id: 'description', label: 'Description', type: 'textarea', visibility: 'public' },
     ] },
+    // The character's picks (7a3b1), when the system has lists to pick from: named for the list when
+    // there is one. Read here rather than through choices.js, which would make a circle (rests.js).
+    ...(Array.isArray(definition && definition.choices) && definition.choices.some((c) => isPlainObject(c) && typeof c.id === 'string')
+      ? [{ id: 'choices', label: choicesLabel(definition.choices), layout: 'choices', tab: 'STATS', fields: [] }] : []),
     ...health.sections,
     // What players fill in, a section per group (stats.js, 4b2a).
     ...statSections(definition),
