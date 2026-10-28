@@ -44,7 +44,7 @@ describe('the box', () => {
   it('says the step, its title and words, read out with the dialog', () => {
     draw(2);
     const dialog = screen.getByRole('dialog', { name: 'The builder tour' });
-    expect(screen.getByText('STEP 3 OF 8')).toBeTruthy();
+    expect(screen.getByText('STEP 3 OF 9')).toBeTruthy();
     expect(screen.getByRole('heading').textContent).toBe(TOUR[2].title);
     expect(document.getElementById(dialog.getAttribute('aria-describedby')!)!.textContent).toBe(TOUR[2].text);
   });
