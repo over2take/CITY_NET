@@ -24,7 +24,7 @@ import {
   carriedToStashed, compactCarried, type StashedWeapon,
 } from '../sheets/cwnWeaponStash';
 import { ChoicesSection } from './ChoicesSection';
-import type { ChoicesAction } from '../sheets/choicesShown';
+import { choiceEffects, type ChoicesAction } from '../sheets/choicesShown';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
   return (
@@ -1818,7 +1818,8 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
   // What the character's chrome is doing to their numbers. Computed once for the whole
   // sheet rather than per field: it reads the cyberware list, which every stat and skill
   // would otherwise re-read and re-scan for itself.
-  const effects = useMemo(() => sheetEffects(data, template), [data, template]);
+  // A custom system's picks show on its fields as CWN's chrome does (7a3b2); the built-in games as before.
+  const effects = useMemo(() => (template.choices?.length ? choiceEffects(data as Record<string, unknown>, template) : sheetEffects(data, template)), [data, template]);
   // How many carried weapon rows this template declares. Counted rather than imported, so
   // the stash cannot disagree with the sheet it is moving weapons into.
   const weaponRows = useMemo(
@@ -2036,7 +2037,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
                   {section.layout === 'weapon_stash' && <WeaponStashSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} rows={weaponRows} />}
                   {section.layout === 'encumbrance' && <EncumbranceSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} enforced={encumbranceEnforced} />}
                   {section.layout === 'cyberware' && <CyberwareSection section={section} template={template} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
-                  {section.layout === 'choices' && <ChoicesSection lists={template.choices ?? []} data={data as Record<string, unknown>} readOnly={readOnly} onChoices={onChoices} refused={choicesRefused} />}
+                  {section.layout === 'choices' && <ChoicesSection lists={template.choices ?? []} data={data as Record<string, unknown>} readOnly={readOnly} gm={gm} onChoices={onChoices} refused={choicesRefused} />}
                   {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />}
                 </div>
               )}

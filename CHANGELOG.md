@@ -53,6 +53,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **The GM's tools in the CHOICES block, and bonuses named on the sheet (7a3b2).** On a player's
+  sheet opened from their token, or on their own, the GM can take a pick away (DROP, asked first:
+  the pick and what it gives go together) and add an option the character doesn't meet (it says
+  NEEDS INTELLECT >= 13 · ADD ANYWAY, and stays clickable for the GM only). The GM can also set a
+  player's class levels and tick their uses. And what picks do now shows on the fields themselves:
+  a stat or formula a feature changes gets a small badge with its value, and its tooltip says how it
+  got there ("10 → 11 (Guard Stance +1)"), the same badge CWN's cyberware uses.
 - **Picking on the character sheet (7a3b1).** A custom system with lists now has a CHOICES block on
   its sheets (on STATS, after IDENTITY, on the automatic sheet; a block you can place on a designed
   one). Players see each list, their picks with their levels, the features each has unlocked and

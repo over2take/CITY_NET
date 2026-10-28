@@ -121,3 +121,40 @@ describe('the CHOICES block', () => {
     expect(screen.getByText(/A character's picks from the system's lists show here/)).toBeTruthy();
   });
 });
+
+describe('the GM (7a3b2)', () => {
+  it('takes a pick away, asked first; KEEP keeps it', async () => {
+    const onChoices = draw({ _choices: { classes: [{ option: 'soldier', level: 2 }] } }, { gm: true });
+    await userEvent.click(soldier().getByRole('button', { name: 'Drop Soldier' }));
+    const ask = within(soldier().getByRole('group', { name: 'Take Soldier away' }));
+    expect(ask.getByText('TAKE SOLDIER AWAY, AND WHAT IT GIVES?')).toBeTruthy();
+    await userEvent.click(ask.getByRole('button', { name: 'KEEP' }));
+    expect(onChoices).not.toHaveBeenCalled();
+    await userEvent.click(soldier().getByRole('button', { name: 'Drop Soldier' }));
+    await userEvent.click(soldier().getByRole('button', { name: 'YES, DROP' }));
+    expect(onChoices).toHaveBeenCalledWith({ kind: 'drop', list: 'classes', option: 'soldier' });
+  });
+
+  it('adds an option not met anyway', async () => {
+    const onChoices = draw({ int: 10, _choices: { classes: [{ option: 'soldier', level: 1 }] } }, { gm: true });
+    const pick = within(screen.getByRole('group', { name: 'Pick a Class' }));
+    expect(pick.getByText('NEEDS INTELLECT >= 13 · ADD ANYWAY')).toBeTruthy();
+    await userEvent.click(pick.getByRole('button', { name: 'MAGE' }));
+    expect(onChoices).toHaveBeenCalledWith({ kind: 'pick', list: 'classes', option: 'mage' });
+  });
+
+  it('a player has neither', () => {
+    draw({ int: 10, _choices: { classes: [{ option: 'soldier', level: 1 }] } });
+    expect(soldier().queryByRole('button', { name: 'Drop Soldier' })).toBeNull();
+    expect(within(screen.getByRole('group', { name: 'Pick a Class' })).getByRole('button', { name: 'MAGE' })).toHaveProperty('disabled', true);
+  });
+});
+
+describe('what the picks do, on the fields (7a3b2)', () => {
+  it('a badge beside a stat changed, its value with the bonus and where it came from', () => {
+    const withStats = { ...template, sections: [...template.sections, { id: 'stats', label: 'STATS', layout: 'grid', fields: [{ id: 'defense', label: 'Defense', type: 'number', derived: true }] }] } as SheetTemplate;
+    render(<SheetRenderer template={withStats} data={sheet({ defense: 11, _choices: { classes: [{ option: 'soldier', level: 1 }] } }) as never} onFieldChange={() => {}} />);
+    const badge = screen.getByTitle('10 → 11 (Guard Stance +1)');
+    expect(badge.textContent).toBe('11');
+  });
+});

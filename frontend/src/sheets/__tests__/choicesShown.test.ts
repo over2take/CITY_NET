@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
-import { workedOn, listShown, spentAfterClick, featureDoes, WORKED_KEY, type ChoiceListShown } from '../choicesShown';
+import { workedOn, listShown, spentAfterClick, featureDoes, choiceEffects, WORKED_KEY, type ChoiceListShown } from '../choicesShown';
 
 /**
  * A character's picks on their sheet, as logic (7a3b1): the server's worked-out view read safely, each
@@ -88,5 +88,26 @@ describe('uses and what a feature does', () => {
     expect(featureDoes(soldier.find((f) => f.id === 'specialty')!, lists)).toEqual(['PICK PATH']);
     expect(featureDoes(lists[0].options[1].features[0], lists)).toEqual(['ROLL SPARK']);
     expect(featureDoes(soldier.find((f) => f.id === 'rally')!, lists)).toEqual([]);
+  });
+});
+
+describe('what the picks do, on the fields (7a3b2)', () => {
+  const template = {
+    id: 'sys_x', name: 'Hearth', sections: [{ id: 'stats', label: 'STATS', layout: 'grid', fields: [
+      { id: 'int', label: 'Intellect', type: 'number' }, { id: 'defense', label: 'Defense', type: 'number', derived: true },
+    ] }],
+  } as never;
+
+  it('a stat as typed and with its bonus; a formula as saved, bonus in; each named', () => {
+    const data = { int: 14, defense: 13, [WORKED_KEY]: { from: { int: [{ feature: 'Sharp', amount: 2 }], defense: [{ feature: 'Guard Stance', amount: 1 }, { feature: 'Ward', amount: 2 }] } } };
+    const { fields } = choiceEffects(data, template);
+    expect(fields.int).toEqual({ id: 'int', base: 14, value: 16, delta: 2, sources: [{ name: 'Sharp', value: 2, kind: 'stat' }] });
+    expect(fields.defense).toMatchObject({ base: 10, value: 13, delta: 3 });
+    expect(fields.defense.sources.map((s) => s.name)).toEqual(['Guard Stance', 'Ward']);
+  });
+
+  it('nothing for a field the sheet doesn\'t show, or a sheet with no picks', () => {
+    expect(choiceEffects({ [WORKED_KEY]: { from: { luck: [{ feature: 'Lucky', amount: 1 }] } } }, template).fields).toEqual({});
+    expect(choiceEffects({}, template)).toEqual({ fields: {}, unmatched: [] });
   });
 });
