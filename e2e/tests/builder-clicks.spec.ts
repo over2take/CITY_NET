@@ -50,8 +50,15 @@ test('every control in the builder takes a click, on every page', async ({ page 
   // ROLLS is swept: + MODIFIER gives the open condition ALL ROLLS -1.
   await builderPage(page, 'CONDITIONS');
   await page.getByRole('button', { name: '+ MODIFIER' }).click();
-  for (const p of ['SETUP', 'WORDS', 'PARTS', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
+  for (const p of ['SETUP', 'WORDS', 'PARTS', 'STATS & RULES', 'CHOICES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
     await builderPage(page, p);
+    if (p === 'CHOICES') {
+      // A list picking several, with an option, so every box on the page is there (7a2b1).
+      await page.getByRole('button', { name: '+ LIST' }).click();
+      await page.getByRole('group', { name: 'A character picks' }).getByRole('button', { name: 'SEVERAL' }).click();
+      await page.getByRole('button', { name: '+ OPTION' }).click();
+      await expect(page.getByRole('region', { name: 'NEW OPTION option' })).toBeVisible();
+    }
     missed[p] = await unreachable(page);
     if (p === 'STATS & RULES') {
       // Each of its tabs, not only the first.

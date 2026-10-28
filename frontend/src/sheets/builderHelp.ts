@@ -46,6 +46,12 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
     'Every formula shows its value on the SAMPLE character as you type, and its mistakes under it. See FORMULAS for what a formula can say.',
     'A formula can be worked out another way while a house rule is on: WITH A RULE, then USE INSTEAD. See HOUSE RULES.',
   ] },
+  { page: 'choices', title: 'CHOICES', body: [
+    'The lists a character picks from, in your game\'s words: classes, backgrounds, feats, playbooks, clans. Each list says how many a character picks, whether picks have levels, and whether more can be added later, which is how multiclassing works.',
+    'Each option in a list has a name, words for the table, and can have a requirement, a formula like @int >= 13: one that isn\'t met is shown greyed with the reason, and the GM can pick it anyway.',
+    'In a levelled list, formulas read each option\'s level as @soldier_level (0 when not taken), the list\'s total as @classes_level, and @level as every levelled list together, unless your system has a stat called level of its own.',
+    'Features, what each pick gives (a bonus, uses that a rest refills, a roll, another list to pick from), are made on each option.',
+  ] },
   { page: 'sheet', title: 'CHARACTER SHEET', body: [
     'The layout players see. Until you CUSTOMIZE it, it arranges itself from your stats, formulas and health model.',
     'Customized, you move tabs, sections and fields, and say who sees each field and who changes it: the player, or only the GM. DOWNLOAD FORM gives the blank PDF players can fill in and upload.',
@@ -185,6 +191,16 @@ export const HINTS = {
   'dice.countsAs': 'Another symbol this one counts as too, like a Crit that is also a Hit. It goes one step only, so a symbol another counts as can\'t count as anything itself.',
   'dice.test': 'A handful of the die thrown on the server, as the table throws it, and its symbols counted. Nothing is saved or written in the log.',
   // STATS & RULES: ROLLS
+  // CHOICES (7a2b1)
+  'choices.lists': 'The lists a character picks from: classes, backgrounds, feats, playbooks. Each is named in your game\'s words.',
+  'choices.names': 'What the list is called, one and many: CLASS and CLASSES. Players see these on their sheet.',
+  'choices.picks': 'How many options a character picks from this list: ONE (a class), a number (two backgrounds), or ANY (feats).',
+  'choices.again': 'More can be added later, past what was picked first. With levels, this is multiclassing: a second class, each with its own level.',
+  'choices.levelled': 'Each pick has a level, and its features unlock by it, like a class. Formulas read it as @<option>_level.',
+  'choices.options': 'What a character can pick from this list. A big list, like forty feats, is fine: up to a hundred.',
+  'choices.optionName': 'What players see for this option: SOLDIER, DOCKHAND, TOUGH.',
+  'choices.description': 'Words for the table about this option, shown when a player picks.',
+  'choices.requires': 'Optional. A formula that must not be 0 for this to be picked, like @int >= 13. One not met shows greyed with the reason; the GM can pick it anyway.',
   'rolls.preset': 'A ready-made roll from a game, like a PbtA move or a Blades action, put into the five steps. The roll\'s name and ROLLED BY stay; change anything after.',
   'rolls.dice': 'What is rolled: how many, as a number or a formula like @this, and of which size, or the system\'s own dice. Name a kind, like Hunger, to show it apart and give it effects.',
   'rolls.read': 'How the dice become a number: SUM them, KEEP the HIGHEST or LOWEST few, COUNT SUCCESSES at or over a face, or COUNT THE SYMBOLS on the system\'s own dice.',

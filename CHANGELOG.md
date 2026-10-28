@@ -53,6 +53,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **The CHOICES page in the System Builder (7a2b1).** A new page on the rail, after STATS & RULES,
+  for the lists characters pick from: classes, backgrounds, feats, playbooks, named in your game's
+  own words (CLASS / CLASSES). Each list says how many a character picks (one, several or any),
+  whether picks are LEVELLED, and whether MORE THAN ONCE is allowed, for multiclassing; a line
+  under it says what that means, and which name formulas read its levels by. Its options each have
+  a name, words for the table, and can have a requirement, a formula like @int >= 13. Deleting a
+  list or an option asks first. HELP has a CHOICES topic and every setting a "?". Features, what
+  each pick gives, are made on this page next.
 - **Players needn't see what a roll is against: the builder's choices (6c4h).** At the top of STATS
   & RULES' ROLLS tab, PLAYERS SEE A ROLL'S TARGET: SHOWN, VERDICT ONLY or GM ONLY, with a live example
   under it of what a player sees and what you see. A roll can pick its own in its step 3 (PLAYERS

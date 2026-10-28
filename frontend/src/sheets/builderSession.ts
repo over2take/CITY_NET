@@ -139,7 +139,7 @@ export const publishedMessage = (version: number, running: boolean): string =>
 
 // ─── The sidebar ────────────────────────────────────────────────────────────
 
-export type BuilderPage = 'setup' | 'words' | 'features' | 'rules' | 'sheet' | 'npcs' | 'conditions' | 'rests' | 'house_rules' | 'try' | 'problems';
+export type BuilderPage = 'setup' | 'words' | 'features' | 'rules' | 'choices' | 'sheet' | 'npcs' | 'conditions' | 'rests' | 'house_rules' | 'try' | 'problems';
 
 /**
  * The builder's pages, in the sidebar's order, each with the line that says what it is for
@@ -151,6 +151,7 @@ export const BUILDER_PAGES: { id: BuilderPage; label: string; what: string }[] =
   { id: 'words', label: 'WORDS', what: 'What the game calls things: HP, credits, skills.' },
   { id: 'features', label: 'PARTS', what: 'Which parts of the app this game uses.' },
   { id: 'rules', label: 'STATS & RULES', what: 'Stats, formulas and tables.' },
+  { id: 'choices', label: 'CHOICES', what: 'What characters pick, like classes and feats, and what each gives.' },
   { id: 'sheet', label: 'CHARACTER SHEET', what: 'How a character sheet is laid out.' },
   { id: 'npcs', label: 'NPCS', what: 'NPC tiers and their sheets.' },
   { id: 'conditions', label: 'CONDITIONS', what: 'What can happen to a character besides losing health.' },

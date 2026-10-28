@@ -314,7 +314,7 @@ describe('the builder', () => {
     open({ startPage: 'problems' });
     await ready();
     const pages = within(sidebar()).getAllByRole('button').filter((b) => b.title && !['PUBLISH', 'MY SYSTEMS', 'HELP'].includes(b.textContent!));
-    expect(pages.map((b) => b.textContent)).toEqual(['SETUP', 'WORDS', 'PARTS', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT', 'PROBLEMS']);
+    expect(pages.map((b) => b.textContent)).toEqual(['SETUP', 'WORDS', 'PARTS', 'STATS & RULES', 'CHOICES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT', 'PROBLEMS']);
     expect(pages[1].title).toBe('What the game calls things: HP, credits, skills.');
     await userEvent.click(pages[1]);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('WORDS');
