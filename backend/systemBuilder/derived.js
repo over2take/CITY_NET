@@ -98,6 +98,10 @@ const partsOf = (entry) => (entry.kind === 'condition'
  * Returns `{ ok: false, problems: [{ where, message }] }`, or `{ ok: true, system }` where
  * `system.evaluate(data)` gives every derived value and `system.apply(data)` writes them the
  * way the hand-written recompute functions do.
+ *
+ * Both take an optional `overlay` (7a1b, choices.js overlayOf): `sheet`, values read in place of
+ * the sheet's own (a stat with its features' modifiers, a pick's level), and `add`, an amount added
+ * to a derived value once it is worked out, before anything reading it is.
  */
 const compileSystem = (definition) => {
   const problems = [];
@@ -179,12 +183,15 @@ const compileSystem = (definition) => {
 
   if (problems.length) return { ok: false, problems };
 
-  const evaluateAll = (data) => {
+  const evaluateAll = (data, overlay = {}) => {
     const sheet = data || {};
+    const over = overlay.sheet || {};
+    const add = overlay.add || {};
+    const own = (o, name) => Object.prototype.hasOwnProperty.call(o, name);
     const values = {};
     const ruleCache = new Map();
     const env = {
-      field: (name) => (Object.prototype.hasOwnProperty.call(values, name) ? values[name] : num(sheet[name])),
+      field: (name) => (own(values, name) ? values[name] : own(over, name) ? num(over[name]) : num(sheet[name])),
       rule: (name) => {
         if (!ruleCache.has(name)) ruleCache.set(name, ruleValue(name, sheet));
         return ruleCache.get(name);
@@ -196,6 +203,7 @@ const compileSystem = (definition) => {
       values[id] = c.kind === 'condition'
         ? (evaluate(c.trees.when, env) !== 0 ? evaluate(c.trees.then, env) : evaluate(c.trees.else, env))
         : evaluate(c.trees.formula, env);
+      if (own(add, id)) values[id] += num(add[id]);
     }
     return values;
   };
@@ -205,8 +213,8 @@ const compileSystem = (definition) => {
    * the ids that changed - the contract of the recompute functions in sheets/templates.js, so
    * one can stand in for the other.
    */
-  const apply = (data) => {
-    const values = evaluateAll(data);
+  const apply = (data, overlay) => {
+    const values = evaluateAll(data, overlay);
     const changed = [];
     for (const c of compiled) {
       const value = values[c.id];
@@ -262,4 +270,7 @@ const previewDerived = ({ lookups, derived }, data) => {
   return { values: compiled.ok ? compiled.system.evaluate(data) : {}, problems: first.problems };
 };
 
-module.exports = { compileSystem, previewDerived, lookupIn, LIMITS };
+/** A system's lookup tables as a formula reads them: the ones well formed enough to read. */
+const tablesOf = (lookups) => checkLookups(lookups, []);
+
+module.exports = { compileSystem, previewDerived, lookupIn, tablesOf, LIMITS };

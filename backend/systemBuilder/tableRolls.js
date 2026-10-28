@@ -11,6 +11,8 @@
 // refused when it hasn't enough; or added to one, refused past its highest. The socket changes the
 // stat once the roll is made. A condition on the character with a modifier on all rolls (4e1a,
 // waiting for this phase) is added to every roll as its own term, named: "+ 4 - 1 (HURT)" (6b3b).
+// A roll reads the sheet with what the character's picks do to it (7a1b, choices.js): a stat with its
+// features' modifiers, and the levels (@soldier_level). Costs are paid from the sheet as stored.
 
 const { makeRoll, FATE, SEEN } = require('./rollStyles');
 const { parse, evaluate } = require('./expression');
@@ -18,6 +20,7 @@ const { lookupIn } = require('./derived');
 const { ruleValue } = require('./rules');
 const { ALL_ROLLS } = require('./conditions');
 const { diceOf, symbolsOf } = require('./diceFaces');
+const { effectiveData } = require('./choices');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const groupsOf = (def) => (Array.isArray(def.stats) ? def.stats.filter((g) => isPlainObject(g) && Array.isArray(g.stats)) : []);
@@ -262,7 +265,8 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
   }
 
   const symbols = symbolsOf(definition);
-  const result = makeRoll(roll, valueOf(definition, fieldsFor(definition, data, fieldId), data), rng, picks, termsOf(conditions), { dice: diceOf(definition), symbols });
+  const reads = effectiveData(definition, data);
+  const result = makeRoll(roll, valueOf(definition, fieldsFor(definition, reads, fieldId), reads), rng, picks, termsOf(conditions), { dice: diceOf(definition), symbols });
   const label = roll.label || roll.id;
   const what = typeof fieldId === 'string' ? (statOf(definition, fieldId)?.label || formulaOf(definition, fieldId)?.label || fieldId) : null;
   const read = { ...result, read: roll.read ?? 'sum' };
