@@ -24,6 +24,7 @@
 //     conditions: { blinded: { on: false }, glitching: { name: 'Glitching', ... } }, // (conditions.js)
 //     rests: { long_rest: { counts_as: ['short_rest'], refills: [...] } },          // (rests.js)
 //     house_rules: [ { id: 'magic', name: 'MAGIC', starts: false } ],  // what waits on one: houseRules.js
+//     choices: [ { id: 'classes', one, many, options: [...] } ],  // lists to pick from and their features (choices.js)
 //   }
 //
 // Problems come in two weights. A **fatal** one means the document cannot be stored at all:
@@ -54,6 +55,7 @@ const { checkHouseRules } = require('./houseRules');
 const { checkGraph } = require('./graph');
 const { checkRolls, SEEN } = require('./rollStyles');
 const { checkDice } = require('./diceFaces');
+const { checkChoices } = require('./choices');
 
 const FORMAT = 1;
 
@@ -69,7 +71,7 @@ const LIMITS = {
   word: 40,
 };
 
-const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules', 'graph', 'rolls', 'symbols', 'dice', 'target_seen']);
+const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules', 'graph', 'rolls', 'symbols', 'dice', 'target_seen', 'choices']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -181,6 +183,7 @@ const checkDefinition = (definition) => {
   checkGraph(definition, problems);
   checkDice(definition, problems);
   checkRolls(definition, problems);
+  checkChoices(definition, problems);
   if (definition.target_seen !== undefined && !SEEN.includes(definition.target_seen)) {
     problems.push({ where: 'target_seen', message: `One of ${SEEN.join(', ')}` });
   }
