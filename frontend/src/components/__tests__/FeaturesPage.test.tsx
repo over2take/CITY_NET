@@ -8,7 +8,7 @@ import type { Definition } from '../../sheets/systemsApi';
 import { HINTS } from '../../sheets/builderHelp';
 
 /**
- * The builder's FEATURES page, parts and shops (4b1c1). Approved mockup builder-words-features
+ * The builder's PARTS page (FEATURES until 7a2a), parts and shops (4b1c1). Approved mockup builder-words-features
  * (2026-10-06): a switch per part; SHOPS opens out to building types and catalogues; renames blank =
  * the app's; XP awards, death saves and luck off and greyed for custom systems (SHEET IMPORT usable since 4h2c).
  */

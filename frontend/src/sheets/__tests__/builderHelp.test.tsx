@@ -32,6 +32,14 @@ describe('the tour', () => {
     expect(TOUR).toHaveLength(8);
   });
 
+  it('names each page as the rail does (PARTS since 7a2a)', () => {
+    for (const s of TOUR) {
+      const page = BUILDER_PAGES.find((p) => p.id === s.at);
+      if (page) expect(s.title, s.at as string).toBe(page.label);
+    }
+    expect(TOUR.find((s) => s.at === 'features')!.title).toBe('PARTS');
+  });
+
   it('stays eight steps, the STATS & RULES one pointing to HOUSE RULES (4j, decision 9)', () => {
     expect(TOUR.find((s) => s.at === 'rules')!.text).toContain('HOUSE RULES');
     expect(TOUR.some((s) => (s.at as string) === 'house_rules')).toBe(false);

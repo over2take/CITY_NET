@@ -78,7 +78,7 @@ export const openBuilder = async (page: Page) => {
  *  it, so the pointer then moves off it to the page, as a person's would, and the rail narrows
  *  again; otherwise it covers whatever sits at the page's left edge. It narrows over 0.2 s, and
  *  data-expanded turns false as it starts, so the wait is for the narrowing to finish too: on
- *  CI's slower runner the clicks sweep measured FEATURES' switches under the rail still closing. */
+ *  CI's slower runner the clicks sweep measured FEATURES' (now PARTS') switches under the rail still closing. */
 export const clickRail = async (page: Page, name: string) => {
   const rail = page.getByRole('navigation', { name: 'Builder' });
   await rail.getByRole('button', { name, exact: true }).click();

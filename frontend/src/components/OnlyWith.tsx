@@ -5,7 +5,7 @@ import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
 
 // ONLY WITH (4j4a; approved mockup docs/mockups/optional-rules.html, 2026-10-14): the house rule a
-// FEATURES part, a sheet section or a condition waits on, picked where it lives; "always" is none.
+// part on PARTS, a sheet section or a condition waits on, picked where it lives; "always" is none.
 // Nothing to pick in a system with no house rules, so nothing is shown there, unless something
 // still names one since deleted (shown GONE, to clear). A name and its box, as a pair, so it sits in
 // a page's own grid or column.

@@ -43,8 +43,8 @@ test('the GM builds a system, publishes it twice, switches the game to it, and a
   await page.getByLabel('HP many').fill('Wounds');
   await expect(page.getByTestId('term-hp')).toContainText('1 WOUND · 3 WOUNDS');
 
-  // FEATURES: no vehicles in this game.
-  await builderPage(page, 'FEATURES');
+  // PARTS: no vehicles in this game.
+  await builderPage(page, 'PARTS');
   const vehicles = page.getByRole('switch', { name: 'VEHICLES' });
   await vehicles.click();
   await expect(vehicles).toHaveAttribute('aria-checked', 'false');

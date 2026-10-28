@@ -33,7 +33,7 @@ import type { PublishPreview } from '../sheets/versionPreview';
 // autosave writes the draft, SAVE saves now, PUBLISH goes live; leaving warns only when saving
 // failed). What it says is sheets/builderSession.ts.
 //
-// The pages themselves come in later pieces (SETUP 4a3, WORDS and FEATURES 4b1...); until then
+// The pages themselves come in later pieces (SETUP 4a3, WORDS and PARTS 4b1...); until then
 // each says what it will hold. PROBLEMS already lists the draft's real problems.
 
 interface Props {

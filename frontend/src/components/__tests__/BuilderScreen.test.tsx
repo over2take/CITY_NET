@@ -293,7 +293,7 @@ describe('the builder', () => {
     await waitFor(() => expect(drafts.at(-1)).toEqual({ format: 1, name: 'Hearth', sheet: starterSheet({ format: 1, name: 'Hearth' }) }));
   });
 
-  it('FEATURES turns parts on and off, saved like any other change', async () => {
+  it('PARTS turns parts on and off, saved like any other change', async () => {
     open({ startPage: 'features' });
     await ready();
     await userEvent.click(await screen.findByRole('switch', { name: 'VEHICLES' }));
@@ -314,7 +314,7 @@ describe('the builder', () => {
     open({ startPage: 'problems' });
     await ready();
     const pages = within(sidebar()).getAllByRole('button').filter((b) => b.title && !['PUBLISH', 'MY SYSTEMS', 'HELP'].includes(b.textContent!));
-    expect(pages.map((b) => b.textContent)).toEqual(['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT', 'PROBLEMS']);
+    expect(pages.map((b) => b.textContent)).toEqual(['SETUP', 'WORDS', 'PARTS', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT', 'PROBLEMS']);
     expect(pages[1].title).toBe('What the game calls things: HP, credits, skills.');
     await userEvent.click(pages[1]);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('WORDS');
@@ -566,7 +566,7 @@ describe('looking at a built-in example (4d1b)', () => {
     expect((within(banner()).getByLabelText('Name for the copy') as HTMLInputElement).disabled).toBe(false);
   });
 
-  it('opens things out on FEATURES, but switches nothing', async () => {
+  it('opens things out on PARTS, but switches nothing', async () => {
     look('features');
     const opener = await within(await screen.findByTestId('part-bank')).findByRole('button', { name: /SETTINGS/, expanded: false });
     await userEvent.click(opener);
@@ -969,7 +969,7 @@ describe('the tour (4i)', () => {
     expect(litNames()).toEqual([]);
     expect(within(dialog()!).queryByRole('button', { name: 'BACK' })).toBeNull();
     expect(document.activeElement).toBe(within(dialog()!).getByRole('button', { name: 'NEXT' }));
-    const expected = [['SETUP'], ['WORDS'], ['FEATURES'], ['STATS & RULES'], ['CHARACTER SHEET'], ['TRY IT'], ['SAVE', 'PUBLISH']];
+    const expected = [['SETUP'], ['WORDS'], ['PARTS'], ['STATS & RULES'], ['CHARACTER SHEET'], ['TRY IT'], ['SAVE', 'PUBLISH']];
     for (const [i, names] of expected.entries()) {
       await press('NEXT');
       expect(step()).toBe(`STEP ${i + 2} OF 8`);

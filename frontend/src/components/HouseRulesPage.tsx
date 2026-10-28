@@ -77,7 +77,7 @@ function Detail({ rule, definition, edit, onGoTo }: Props & { rule: HouseRule })
           ))}
         </ul>
       ) : (
-        <p style={{ ...why, fontSize: 11 }}>Nothing yet, so this rule changes nothing. Put something under it on its own page, with its ONLY WITH box: a FEATURES part, a sheet section, a condition, or a formula&apos;s alternative.</p>
+        <p style={{ ...why, fontSize: 11 }}>Nothing yet, so this rule changes nothing. Put something under it on its own page, with its ONLY WITH box: a part on PARTS, a sheet section, a condition, or a formula&apos;s alternative.</p>
       )}
     </section>
   );

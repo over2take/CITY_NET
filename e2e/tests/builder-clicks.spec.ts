@@ -50,7 +50,7 @@ test('every control in the builder takes a click, on every page', async ({ page 
   // ROLLS is swept: + MODIFIER gives the open condition ALL ROLLS -1.
   await builderPage(page, 'CONDITIONS');
   await page.getByRole('button', { name: '+ MODIFIER' }).click();
-  for (const p of ['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
+  for (const p of ['SETUP', 'WORDS', 'PARTS', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
     await builderPage(page, p);
     missed[p] = await unreachable(page);
     if (p === 'STATS & RULES') {
