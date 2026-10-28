@@ -87,8 +87,8 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 | Option | Variants | Server tests | Browser test | Status |
 |---|---|---|---|---|
 | The starter sheet | stats, formulas, the health section | `sheet_form`, `preview_sheet` | `player-journey`, `sheet-rolls` | **AT THE TABLE** |
-| A customized sheet | tabs, sections, fields moved; field kinds | `sheet_form` | | **GAP** |
-| Who sees and changes a field | public / private / combat; player / GM | `runtime`, `npc_privacy` | | **GAP** (privacy) |
+| A customized sheet | its own tabs, sections and fields, drawn at the table | `sheet_form` | `sheet-visibility` | **AT THE TABLE** |
+| Who sees and changes a field | public / private / combat; player / GM | `runtime`, `npc_privacy` | `sheet-visibility` (the owner, another player looking them up from the chat, the GM) | **AT THE TABLE**. Two guards stand behind the screen, each proven on the server: combat values are dropped from the public card even if counted public, and the server refuses an owner's write to a GM's field even past the screen's lock (`system_builder_npc_privacy`) |
 | A section under a house rule | | `house_rules` | | **GAP** |
 | NPC stat block | | `npc_sheets`, `npc_privacy` | | **GAP** |
 | NPC tiers | GENERATE_SHEET at a level: numbers, formulas, dice | `tier_rolls`, `parts_tiers`, `npc_tiers` | | **GAP** |
@@ -129,7 +129,7 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 
 Fitted into Phase 7, one family between each of its pieces, riskiest first:
 
-1. **Sheet visibility**: a customized sheet's public, private and GM-only fields, as another player and the GM see them.
+1. ~~**Sheet visibility**~~: done, `sheet-visibility.spec.ts`. It also gave the journeys a way to reach another player's token without the 3D map: GLOBAL_CHAT, their name, VIEW_PLAYER_INFO.
 2. **Health models**: each model damaged, healed and shown at the table, and what other players see.
 3. **Parts switched off**: each part hidden at the table while off, and back when on.
 4. **House rules at the table**: switched in the GAME tab, and what waits on them shown and hidden.
