@@ -23,13 +23,13 @@ afterEach(() => cleanup());
 
 describe('the tour', () => {
   it('welcomes, then walks the rail top to bottom, SETUP to PUBLISH', () => {
-    expect(TOUR.map((s) => s.at)).toEqual([null, 'setup', 'words', 'features', 'rules', 'sheet', 'try', 'publish']);
+    expect(TOUR.map((s) => s.at)).toEqual([null, 'setup', 'words', 'features', 'rules', 'choices', 'sheet', 'try', 'publish']);
     const pages = new Set(BUILDER_PAGES.map((p) => p.id as string));
     for (const s of TOUR) {
       if (s.at && s.at !== 'publish') expect(pages.has(s.at), s.at).toBe(true);
       expect(s.text.length, s.title).toBeGreaterThan(40);
     }
-    expect(TOUR).toHaveLength(8);
+    expect(TOUR).toHaveLength(9);
   });
 
   it('names each page as the rail does (PARTS since 7a2a)', () => {
@@ -40,7 +40,7 @@ describe('the tour', () => {
     expect(TOUR.find((s) => s.at === 'features')!.title).toBe('PARTS');
   });
 
-  it('stays eight steps, the STATS & RULES one pointing to HOUSE RULES (4j, decision 9)', () => {
+  it('nine steps since CHOICES (2026-10-28; eight before), the STATS & RULES one pointing to HOUSE RULES (4j, decision 9) and the map', () => {
     expect(TOUR.find((s) => s.at === 'rules')!.text).toContain('HOUSE RULES');
     expect(TOUR.some((s) => (s.at as string) === 'house_rules')).toBe(false);
     expect(topicById('rules').body.join(' ')).toContain('WITH A RULE');
@@ -53,7 +53,7 @@ describe('the HELP page\'s topics', () => {
     const pages = TOPICS.filter((t) => t.group === 'PAGES');
     expect(pages.map((t) => t.page)).toEqual(BUILDER_PAGES.map((p) => p.id));
     expect(pages.map((t) => t.title)).toEqual(BUILDER_PAGES.map((p) => p.label));
-    expect(TOPICS.filter((t) => t.group === 'REFERENCE').map((t) => t.title)).toEqual(['FORMULAS', 'DICE', 'HEALTH MODELS', 'SHARING AND VERSIONS', 'WHO SEES THE TARGET', 'EXAMPLES']);
+    expect(TOPICS.filter((t) => t.group === 'REFERENCE').map((t) => t.title)).toEqual(['FORMULAS', 'THE MAP', 'DICE', 'HEALTH MODELS', 'SHARING AND VERSIONS', 'WHO SEES THE TARGET', 'EXAMPLES']);
     expect(new Set(TOPICS.map((t) => t.id)).size).toBe(TOPICS.length);
     for (const t of TOPICS) expect(t.body.length, t.id).toBeGreaterThan(0);
   });
@@ -95,7 +95,7 @@ describe('the formula reference', () => {
 describe('the words beside each setting', () => {
   it('are sentences, filed by the page that shows them (each page\'s test checks they are all there)', () => {
     for (const [k, text] of Object.entries(HINTS)) {
-      expect(k, k).toMatch(/^(setup|words|bank|rules|dice|rolls|sheet|npcs|conditions|rests|house|only|try)\.[a-zA-Z]+$/);
+      expect(k, k).toMatch(/^(setup|words|bank|rules|dice|rolls|choices|sheet|npcs|conditions|rests|house|only|try)\.[a-zA-Z]+$/);
       expect(text.length, k).toBeGreaterThan(30);
       expect(text.trim(), k).toMatch(/\.$/);
     }

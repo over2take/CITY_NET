@@ -16,7 +16,8 @@ export const TOUR: TourStep[] = [
   { at: 'setup', title: 'SETUP', text: 'Start here: how characters get hurt (one pool of HP, two tracks, harm levels...), how they advance, and how the ruler measures. The rest builds on these answers.' },
   { at: 'words', title: 'WORDS', text: 'What your game calls things. Call HP "Wounds" and credits "Gold", and every window your players see says so. Leave a word blank to keep the app\'s.' },
   { at: 'features', title: 'PARTS', text: 'Which parts of CITY_NET this game uses: the bank, shops, vehicles, GIVE ITEM, SHEET IMPORT... Off only hides; turn one back on and everything it held comes back.' },
-  { at: 'rules', title: 'STATS & RULES', text: 'The numbers players fill in, the formulas worked out from them (Defense = 10 + @agility), lookup tables, and the game\'s own dice and rolls. Each formula shows its value on a sample character as you type. Optional rules for the table, like MAGIC, are made on HOUSE RULES, further down.' },
+  { at: 'rules', title: 'STATS & RULES', text: 'The numbers players fill in, the formulas worked out from them (Defense = 10 + @agility), lookup tables, and the game\'s own dice and rolls. Each formula shows its value on a sample character as you type; GRAPH at the top shows it all as a map of wires instead. Optional rules for the table, like MAGIC, are made on HOUSE RULES, further down.' },
+  { at: 'choices', title: 'CHOICES', text: 'What characters pick from, in your game\'s words: classes, backgrounds, feats. Each option gives features, like a bonus, uses that a rest refills, or a roll, unlocked by level. Taking a class more than once is multiclassing.' },
   { at: 'sheet', title: 'CHARACTER SHEET', text: 'How a sheet is laid out. It arranges itself from your stats at first; CUSTOMIZE to move tabs, sections and fields, and to say who sees and changes each one.' },
   { at: 'try', title: 'TRY IT', text: 'A test character, to see your rules work: change a stat, take some damage, call a rest, make an NPC. Nothing here is saved to any player.' },
   { at: 'publish', title: 'SAVE AND PUBLISH', text: 'Your work saves itself as a draft while you build. PUBLISH makes it the version the game runs; from the second version on, it shows what will change for anyone playing first.' },
@@ -45,6 +46,13 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
     'DICE are the game\'s own dice: faces with numbers, signs or symbols that cancel and count. ROLLS are its rolls, in five steps: the dice, how they are read, what is added and compared, special results, and the choices asked before rolling. Each roll gets a die button on the sheet beside what it is rolled by, and TEST ROLL tries it on the sample.',
     'Every formula shows its value on the SAMPLE character as you type, and its mistakes under it. See FORMULAS for what a formula can say.',
     'A formula can be worked out another way while a house rule is on: WITH A RULE, then USE INSTEAD. See HOUSE RULES.',
+    'FORMS / GRAPH at the top switches between the boxes and a map of the same system: every stat, formula, table and roll a node, every name a formula reads a wire. Anything changed on one is changed on the other. See THE MAP for what you can do on it.',
+  ] },
+  { page: 'choices', title: 'CHOICES', body: [
+    'The lists a character picks from, in your game\'s words: classes, backgrounds, feats, playbooks, clans. Each list says how many a character picks, whether picks have levels, and whether more can be added later, which is how multiclassing works.',
+    'Each option in a list has a name, words for the table, and can have a requirement, a formula like @int >= 13: one that isn\'t met is shown greyed with the reason, and the GM can pick it anyway.',
+    'In a levelled list, formulas read each option\'s level as @soldier_level (0 when not taken), the list\'s total as @classes_level, and @level as every levelled list together, unless your system has a stat called level of its own.',
+    'Features, what each pick gives (a bonus, uses that a rest refills, a roll, another list to pick from), are made on each option.',
   ] },
   { page: 'sheet', title: 'CHARACTER SHEET', body: [
     'The layout players see. Until you CUSTOMIZE it, it arranges itself from your stats, formulas and health model.',
@@ -57,6 +65,7 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
   { page: 'conditions', title: 'CONDITIONS', body: [
     'What can happen to a character besides losing health: the ten standard conditions, renamed or switched off, and your own, up to sixty.',
     'Each has an icon, a description, how it ends (when removed, after rounds, or at a rest) and modifiers on a stat, a formula or every roll.',
+    'A modifier on every roll changes each of the system\'s own rolls made by a character with the condition on their token, named in the log: 4 5 = 9 + 3 - 1 (HURT). TEST ROLL on the ROLLS tab has a switch for each, to see a roll under it.',
   ] },
   { page: 'rests', title: 'RESTS', body: [
     'The moments a game refills things: a short rest, a long rest, the end of a scene or a session, and your own. Each says what it refills, in order, and a rest can count as another.',
@@ -96,6 +105,13 @@ const REFERENCE: HelpTopic[] = [
     'A formula works a value out from the sheet. @agility reads a stat or another formula; $cwn_soak reads one of the app\'s built-in rules; a table is used like a function, mod(@str).',
     'Numbers, + - * / and brackets; comparisons < <= > >= == != ; and, or, not. A test is true when it isn\'t 0.',
   ] },
+  { id: 'map', group: 'REFERENCE', title: 'THE MAP', body: [
+    'GRAPH, at the top of STATS & RULES, draws the system as nodes and wires, read left to right: stats on the left, formulas worked out from them, rolls at the end. Every value is the sample character\'s, as the server works it out. Hover a node to light everything it reads and everything that reads it.',
+    'Click a node to change it in a panel beside it, with the same boxes FORMS has. + ADD, or the A key, adds a formula, stat, group, table, condition, roll or note where you are looking; Delete removes the node picked.',
+    'Drag from a dot onto a formula to make it read that value; drag onto a roll to have it rolled by it. Click a wire, then CUT, to take the name out. A diamond on a wire (×6, ÷2) is something done to a value on its way in, changed in the formula\'s panel.',
+    'NOTES are for you only, pinned to a node. Formulas can go into MAP GROUPS of your own, folded and lined up with LINE UP. UNDO and REDO (Ctrl+Z, Ctrl+Y) take back what was done on the map. FIT, the minimap and AUTO-LAYOUT help find your way.',
+    'The corner counts PROBLEMS, and a node with one is outlined red. A house rule\'s TRY ON THE MAP shows the numbers with it on, never saved and never changing the game.',
+  ] },
   { id: 'dice', group: 'REFERENCE', title: 'DICE', body: [
     'Where a box takes dice (an NPC tier\'s HP and numbers, a rest\'s amounts), write them as 2d6, with numbers and @stats added or taken away: 1d8 + @con_mod.',
     'The number of dice can come from a stat: @level d8, with a space before the d. Dice are rolled on the server, and the result shows in the dice log; TRY IT rolls them too.',
@@ -119,7 +135,7 @@ const REFERENCE: HelpTopic[] = [
 /** Every topic on the HELP page, in order. */
 export const TOPICS: HelpTopic[] = [
   { id: 'start', group: 'START', title: 'GETTING STARTED', tour: true, body: [
-    'Build a system down the rail: SETUP, then WORDS, PARTS, STATS & RULES, and the CHARACTER SHEET once you want your own layout. TRY IT to check it works, fix anything in PROBLEMS, then PUBLISH.',
+    'Build a system down the rail: SETUP, then WORDS, PARTS, STATS & RULES, CHOICES, and the CHARACTER SHEET once you want your own layout. TRY IT to check it works, fix anything in PROBLEMS, then PUBLISH.',
     'Or start from one of the EXAMPLES and change it.',
   ] },
   ...PAGE_TOPICS.map(({ page, title, body }) => ({ id: page, group: 'PAGES' as const, title, body, page })),
@@ -185,6 +201,16 @@ export const HINTS = {
   'dice.countsAs': 'Another symbol this one counts as too, like a Crit that is also a Hit. It goes one step only, so a symbol another counts as can\'t count as anything itself.',
   'dice.test': 'A handful of the die thrown on the server, as the table throws it, and its symbols counted. Nothing is saved or written in the log.',
   // STATS & RULES: ROLLS
+  // CHOICES (7a2b1)
+  'choices.lists': 'The lists a character picks from: classes, backgrounds, feats, playbooks. Each is named in your game\'s words.',
+  'choices.names': 'What the list is called, one and many: CLASS and CLASSES. Players see these on their sheet.',
+  'choices.picks': 'How many options a character picks from this list: ONE (a class), a number (two backgrounds), or ANY (feats).',
+  'choices.again': 'More can be added later, past what was picked first. With levels, this is multiclassing: a second class, each with its own level.',
+  'choices.levelled': 'Each pick has a level, and its features unlock by it, like a class. Formulas read it as @<option>_level.',
+  'choices.options': 'What a character can pick from this list. A big list, like forty feats, is fine: up to a hundred.',
+  'choices.optionName': 'What players see for this option: SOLDIER, DOCKHAND, TOUGH.',
+  'choices.description': 'Words for the table about this option, shown when a player picks.',
+  'choices.requires': 'Optional. A formula that must not be 0 for this to be picked, like @int >= 13. One not met shows greyed with the reason; the GM can pick it anyway.',
   'rolls.preset': 'A ready-made roll from a game, like a PbtA move or a Blades action, put into the five steps. The roll\'s name and ROLLED BY stay; change anything after.',
   'rolls.dice': 'What is rolled: how many, as a number or a formula like @this, and of which size, or the system\'s own dice. Name a kind, like Hunger, to show it apart and give it effects.',
   'rolls.read': 'How the dice become a number: SUM them, KEEP the HIGHEST or LOWEST few, COUNT SUCCESSES at or over a face, or COUNT THE SYMBOLS on the system\'s own dice.',

@@ -18,6 +18,7 @@ import { NpcsPage } from './NpcsPage';
 import { ConditionsPage } from './ConditionsPage';
 import { RestsPage } from './RestsPage';
 import { HouseRulesPage } from './HouseRulesPage';
+import { ChoicesPage } from './ChoicesPage';
 import { CONDITION_ICONS } from '../sheets/conditionIcons';
 import { TryItPage } from './TryItPage';
 import { PublishPreviewPage } from './PublishPreviewPage';
@@ -136,6 +137,7 @@ const Icons: Record<BuilderPage | 'builder' | 'systems' | 'help' | 'save' | 'pub
   words: icon('M4 7V4h16v3', 'M9 20h6', 'M12 4v16'),
   features: icon('M8 5h8a7 7 0 0 1 0 14H8A7 7 0 0 1 8 5z', 'M16 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6z'),
   rules: icon('M18 7V4H6l6 8-6 8h12v-3'),
+  choices: icon('M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6l1 1 2-2', 'M3 12l1 1 2-2', 'M3 18l1 1 2-2'),
   sheet: icon('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M16 13H8', 'M16 17H8', 'M10 9H8'),
   npcs: icon('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8z', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'),
   conditions: icon(...CONDITION_ICONS.skull),
@@ -549,6 +551,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
                 <GraphView definition={definition!} edit={edit} api={api} readOnly={looking} startWith={graphStart} problems={problems} onGoTo={(p) => { setPage(p); setStatus(null); }} />
               </React.Suspense>
             )}
+            {ready && page === 'choices' && <ChoicesPage definition={definition!} edit={edit} />}
             {ready && page === 'sheet' && <SheetPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'npcs' && <NpcsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'conditions' && <ConditionsPage definition={definition!} edit={edit} api={looking ? undefined : api} />}

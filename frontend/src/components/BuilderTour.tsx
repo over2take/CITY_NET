@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { TOUR } from '../sheets/builderHelp';
 
 // The builder's first-time tour (4i; approved mockup docs/mockups/builder-help.html, 2026-10-13):
-// eight short steps, a welcome and then the rail top to bottom, each beside the place on the rail
+// short steps (nine since CHOICES, 2026-10-28), a welcome and then the rail top to bottom, each beside the place on the rail
 // it explains (lit there by the builder, which marks it with data-tour-place). BACK, NEXT, and SKIP
 // THE TOUR or Escape; the builder remembers on the server that it was seen once finished or
 // skipped. The words are sheets/builderHelp.ts.
