@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { signInAsPlayer, gmToken, runningSystem, approvedPlayer } from './helpers';
+import { signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer } from './helpers';
 
 // A custom system's own rolls at the table (6b2; approved mockup docs/mockups/builder-rolls.html,
 // 2026-10-19): a published system running as the game. A player opens their sheet and a die button
@@ -53,8 +53,11 @@ test('a player rolls a custom system\'s rolls from their sheet, picking first wh
   // A die button by each stat the first roll is rolled by.
   const rolls = page.getByRole('button', { name: 'Roll Trait check' });
   await expect(rolls).toHaveCount(2);
-  // Saved first, so the server reads them from the stored sheet.
-  await page.waitForTimeout(800);
+  // Saved first, so the server reads them from the stored sheet: waited for there, not for a time.
+  await expect.poll(async () => {
+    const { data } = await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`);
+    return [data.grit, data.wits, data.stress];
+  }).toEqual([3, 2, 1]);
 
   // WITS: one roll, nothing to pick: rolled on the click.
   await rolls.nth(1).click();

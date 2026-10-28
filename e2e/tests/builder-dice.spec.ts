@@ -20,9 +20,6 @@ const openSystem = async (page: Page, name: string) => {
 };
 
 test('dice made from a preset, a face changed, a symbol drawn, thrown on the server, and a table die copied in', async ({ page, request }, info) => {
-  // A long journey: 17 s on a desktop, 43-52 s on CI, and past the usual minute on a slow CI runner
-  // (2026-10-24, both tries). Two minutes, so a slow runner isn't a failure.
-  test.setTimeout(120_000);
   const name = `Dicing Hearth ${info.retry + 1}`;
   const token = await gmToken(request);
   await asGm(request, token, 'post', '/api/systems', { definition: { format: 1, name, stats: [{ id: 'skills', label: 'Skills', stats: [{ id: 'fight', label: 'Fight' }] }] } });

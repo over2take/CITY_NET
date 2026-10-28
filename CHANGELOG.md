@@ -267,6 +267,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Browser tests steady on CI's slower machines.** Every browser test now has two minutes, not
+  one: tests of 15 seconds on a desktop ran past a minute on CI. The dice tray's no-queue test
+  sends its two quick rolls with the tray already open and nothing drawn between them; drawing the
+  first throw held the page long enough that the second started a throw of its own (seen locally
+  with the CPU slowed 8 times). And two tests that waited 800 ms for a sheet to save before rolling
+  from it now wait until the server has it.
 - **The builder's browser journey covers Phase 6.** The test that builds a system on screen from
   + NEW now also makes a roll on ROLLS (a save with a target, rolled by its stat, its players told
   only the verdict), and after the game switches to it, a player rolls that save from their sheet:

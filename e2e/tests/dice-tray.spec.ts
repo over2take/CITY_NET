@@ -131,8 +131,6 @@ test('the tray\'s ANIMATION toggle, kept on the account: turned off, still off a
 test('someone else\'s roll flashes a shut tray\'s buttons; one click opens it on the history; the bell turns that off (6c4g)', async ({ page, browser, request }, info) => {
   const again = info.retry ? `_${info.retry + 1}` : '';
   const player = { username: `e2e_bell${again}`, password: 'e2e-player-password' };
-  // Two people signed in and two rolls: about 16 s here, four times that on a slow CI runner.
-  test.setTimeout(120_000);
   await approvedPlayer(request, await gmToken(request), player);
   const context = await browser.newContext({ baseURL: info.project.use.baseURL });
   const theirs = await context.newPage();
@@ -199,20 +197,27 @@ test('no queue: one person\'s rolls a moment apart land as one throw, and a late
   const broadcasts = listen(page);
   await signInAsGm(page);
   await page.getByRole('button', { name: 'DICE_ROLLER', exact: true }).click();
+  // The tray open first, as it sits at a table mid-fight. ROLL DICE opens a shut one, and on CI's
+  // slow software graphics building it took past the group's 400 ms, in the same flush as the click,
+  // so the next roll started a group of its own (2026-10-27; seen locally with the CPU slowed 8x).
+  await page.getByRole('button', { name: 'DICE_TRAY.exe' }).click();
+  await expect(page.getByText('DICE_TRAY.EXE', { exact: true })).toBeVisible();
   const roll = async (sides: number) => {
     await page.getByRole('button', { name: `One more d${sides}`, exact: true }).click();
     await page.getByRole('button', { name: /ROLL DICE/ }).click();
   };
   // Two rolls straight after each other, as an attack's to-hit and damage go out: the server puts
-  // them in one group. Clicked from inside the page, a frame apart, since four of Playwright's own
-  // clicks can take longer than the group's 400 ms on a loaded runner.
+  // them in one group. Clicked from inside the page, since four of Playwright's own clicks can take
+  // longer than the group's 400 ms on a loaded runner; and only microtasks apart (React applies a
+  // click in one), not a frame: the first roll came back during a frame's wait and drawing its throw
+  // held the next frame for half a second with the CPU slowed 8x, as CI's is (2026-10-27).
   const d6 = await page.getByRole('button', { name: 'One more d6', exact: true }).elementHandle();
   const d8 = await page.getByRole('button', { name: 'One more d8', exact: true }).elementHandle();
   const go = await page.getByRole('button', { name: /ROLL DICE/ }).elementHandle();
   await page.evaluate(async (buttons) => {
     for (const b of buttons) {
       (b as HTMLElement).click();
-      await new Promise((r) => requestAnimationFrame(r));
+      for (let i = 0; i < 3; i++) await new Promise<void>((r) => queueMicrotask(r));
     }
   }, [d6, go, d8, go]);
   await expect.poll(() => broadcasts.length, { timeout: 15_000 }).toBe(2);
