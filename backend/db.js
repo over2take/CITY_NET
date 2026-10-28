@@ -264,6 +264,8 @@ db.serialize(() => {
   )`);
 
   db.run(`ALTER TABLE dice_rolls ADD COLUMN historyString TEXT`, (err) => {});
+  // A roll's line as players saw it, where its target was kept from them (6c4h); none: as the GM's.
+  db.run(`ALTER TABLE dice_rolls ADD COLUMN players_history TEXT`, (err) => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS saved_maps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -305,6 +307,16 @@ db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS global_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
+  )`);
+
+  // A person's own settings (6c4b3a: the dice tray's ROLL or LANDED), on their account: kind is
+  // 'player' or 'gm', as accounts/settings.js names them. Only its own settings go in.
+  db.run(`CREATE TABLE IF NOT EXISTS account_settings (
+    kind TEXT NOT NULL,
+    username TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (kind, username, key)
   )`);
 
   /**

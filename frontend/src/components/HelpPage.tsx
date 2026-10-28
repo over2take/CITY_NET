@@ -1,6 +1,7 @@
 import React from 'react';
 import { TOPICS, FORMULA_FUNCTIONS, EXAMPLES, topicById, type HelpTopic } from '../sheets/builderHelp';
 import type { BuilderPage } from '../sheets/builderSession';
+import { TargetSeenExample } from './TargetSeenExample';
 
 // The builder's HELP page (4i; approved mockup docs/mockups/builder-help.html, 2026-10-13): the
 // topics down the left (getting started, every page, and the references), the open one on the
@@ -82,6 +83,7 @@ export function HelpPage({ topic: openId, onTopic, ...rest }: Props) {
             </table>
           </div>
         )}
+        {open.id === 'target' && <TargetSeenExample />}
         <Actions topic={open} {...rest} />
       </article>
     </div>

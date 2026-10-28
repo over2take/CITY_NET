@@ -3,8 +3,17 @@
 //   {
 //     "citysys": 1,
 //     "manifest": { "name", "author", "version", "builder", "license", "origin", "exported" },
-//     "definition": { ...the system, format 1 (definition.js) }
+//     "definition": { ...the system, format 1 (definition.js) },
+//     "graph": { ...the map's layout, when it has one (graph.js) },
+//     "rolls": [ ...the system's own rolls, when it has some (rollStyles.js) ],
+//     "symbols": [ ... ], "dice": [ ...its own dice and their symbols (diceFaces.js, 6c1a) ]
 //   }
+//
+// The map's layout, the rolls and the dice travel beside the system, not in it (2026-10-18, rolls 6a2a): a
+// builder from before them reads only "manifest" and "definition", so a file from here installs and
+// publishes there, its map laid out afresh and without the rolls it can't make. Here, installing
+// puts them back in the definition, where they are checked with the rest; a file with them inside
+// its definition is read too.
 //
 // Plain JSON, pretty-printed, so a system can be read, diffed and kept on GitHub. The plan's
 // zip form, a folder of images beside the JSON, arrives when a system can hold images; until
@@ -36,6 +45,9 @@ const appVersion = () => {
 /** A stable fingerprint of a definition as stored. */
 const hashOf = (text) => crypto.createHash('sha256').update(String(text)).digest('hex');
 
+/** The sections a file carries beside its definition, for builders from before them. */
+const BESIDE = ['graph', 'rolls', 'symbols', 'dice'];
+
 /** A file name from a system's name: lowercase, dashes, never empty. */
 const fileNameFor = (name) => {
   // Accents come off their letters (Ä to A) rather than turning into dashes.
@@ -45,19 +57,25 @@ const fileNameFor = (name) => {
 };
 
 /** The file for a system's published definition. */
-const buildFile = ({ definition, version, origin }) => ({
-  citysys: FILE_FORMAT,
-  manifest: {
-    name: definition.name,
-    author: typeof definition.author === 'string' ? definition.author : '',
-    version,
-    builder: appVersion(),
-    license: typeof definition.license === 'string' ? definition.license : '',
-    origin,
-    exported: new Date().toISOString(),
-  },
-  definition,
-});
+const buildFile = ({ definition: whole, version, origin }) => {
+  const definition = { ...whole };
+  const beside = {};
+  for (const key of BESIDE) if (key in definition) { if (definition[key] !== undefined) beside[key] = definition[key]; delete definition[key]; }
+  return {
+    citysys: FILE_FORMAT,
+    manifest: {
+      name: definition.name,
+      author: typeof definition.author === 'string' ? definition.author : '',
+      version,
+      builder: appVersion(),
+      license: typeof definition.license === 'string' ? definition.license : '',
+      origin,
+      exported: new Date().toISOString(),
+    },
+    definition,
+    ...beside,
+  };
+};
 
 /**
  * Read a file's text. Returns { fatal } when it cannot be installed at all (not a system file,
@@ -86,9 +104,13 @@ const readFile = (text) => {
     origin: m.origin,
   };
 
-  const checked = checkDefinition(parsed.definition);
+  // What travels beside the system goes back into it, to be checked like the rest of it; the
+  // definition's own copy wins where a file has both.
+  const definition = { ...parsed.definition };
+  for (const key of BESIDE) if (key in parsed && !(key in parsed.definition)) definition[key] = parsed[key];
+  const checked = checkDefinition(definition);
   if (checked.fatal) return { fatal: checked.fatal };
-  return { file: { manifest, definition: parsed.definition }, problems: checked.problems };
+  return { file: { manifest, definition }, problems: checked.problems };
 };
 
 /** What the preview lists as inside: counts, never the content itself. */

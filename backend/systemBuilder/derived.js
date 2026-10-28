@@ -262,4 +262,4 @@ const previewDerived = ({ lookups, derived }, data) => {
   return { values: compiled.ok ? compiled.system.evaluate(data) : {}, problems: first.problems };
 };
 
-module.exports = { compileSystem, previewDerived, LIMITS };
+module.exports = { compileSystem, previewDerived, lookupIn, LIMITS };

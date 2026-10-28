@@ -195,6 +195,13 @@ function makeTestDb() {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       )`);
+      db.run(`CREATE TABLE account_settings (
+        kind TEXT NOT NULL,
+        username TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        PRIMARY KEY (kind, username, key)
+      )`);
 
       db.run(`CREATE TABLE character_sheets (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -286,6 +293,12 @@ function makeTestDb() {
 
       db.run(`CREATE TABLE sqlite_sequence (name TEXT, seq INTEGER)`, () => {
         // ignore error — it may already exist
+        // Serialized for good, not only for the tables above: in node-sqlite3's default parallel
+        // mode every queued statement goes to a worker thread at once and they race for the
+        // connection, so on a crowded runner a query queued later can be answered first. That
+        // let drain (helpers/until.js) read before a handler's own queries had landed, and
+        // tests failed on CI only (3 times in 200 on a busy core; never serialized).
+        db.serialize();
         resolve(db);
       });
     });

@@ -18,8 +18,8 @@
 //   SVG (POST /api/systems/condition-icons), kept in its own colors as currency icons are;
 // - a condition ends when removed, after a number of rounds, or at any of the rests it names
 //   (4f1, rests.js; approved mockup docs/mockups/builder-rests.html), one way only;
-// - modifiers name a stat, a formula or all rolls, and are recorded and shown now; they reach
-//   rolls once a system's rolls are built (Phase 6).
+// - modifiers name a stat, a formula or all rolls, and are recorded and shown; one on all rolls
+//   reaches every roll of a system's own (tableRolls.js, 6b3b).
 //
 // Pure: the definition checks and the running game both read it.
 
@@ -165,4 +165,4 @@ const conditionsOf = (definition) => {
   return out.slice(0, LIMITS.conditions);
 };
 
-module.exports = { STANDARD, ICONS, ENDS, ALL_ROLLS, LIMITS, isIcon, checkConditions, conditionsOf };
+module.exports = { STANDARD, ICONS, ENDS, ALL_ROLLS, LIMITS, UPLOADED_ICON, isIcon, checkConditions, conditionsOf };

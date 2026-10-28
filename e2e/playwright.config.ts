@@ -29,7 +29,9 @@ export default defineConfig({
   workers: 1,
   fullyParallel: false,
   retries: process.env.CI ? 1 : 0,
-  timeout: 60_000,
+  // Two minutes: CI runs about four times slower than a desktop, and tests of 15 s here took past
+  // one minute there (builder-dice, the bell, the journey, the clicks sweep; 2026-10-24 to 10-27).
+  timeout: 120_000,
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: `http://127.0.0.1:${FRONTEND_PORT}`,

@@ -1,3 +1,4 @@
+import type { RollPick } from '../sheets/types';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { getTemplate, getMaxPairs, hiddenTabsFor, type CharacterSheet, type SheetFieldValue } from '../sheets';
 import { SLOW_ADVANCEMENT_RULE } from '../sheets/cwnAdvancement';
@@ -13,7 +14,7 @@ import { OVERDRAFT_RULE } from '../data/shopRules';
 // not in the surfaces - that's how the two stay in sync.
 
 export interface PlayerSheetActions {
-  onRoll: (fieldId: string, luck?: number, negateFumble?: boolean) => void;
+  onRoll: (fieldId: string, luck?: number, negateFumble?: boolean, pick?: RollPick) => void;
   onDeathSave: () => void;
   onStabilize: () => void;
   onCastSpell: (index: number) => void;
@@ -162,8 +163,8 @@ export function usePlayerSheet(
 
   const rolled = () => onRolledRef.current?.();
   const actions: PlayerSheetActions = {
-    onRoll: (fieldId, luck, negateFumble) => {
-      socket?.emit('requestSheetRoll', { fieldId, luck, luckNegate: negateFumble });
+    onRoll: (fieldId, luck, negateFumble, pick) => {
+      socket?.emit('requestSheetRoll', { fieldId, luck, luckNegate: negateFumble, ...(pick ? { rollId: pick.rollId, changes: pick.changes } : {}) });
       rolled();
     },
     onDeathSave: () => { socket?.emit('requestDeathSave'); rolled(); },

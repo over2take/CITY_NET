@@ -73,7 +73,10 @@ import { controlsToken } from './utils/tokenControl';
 import { TvPortrait } from './components/TvPortrait';
 import { headshotsForShape } from './headshots';
 import { getTemplate } from './sheets';
-import { DiceTrayWindow, DotMatrixScoreboard, DiceScene } from './components/DiceTray';
+import { DiceTrayWindow, DiceScene } from './components/DiceTray';
+import { useTrayNotify } from './hooks/useTrayNotify';
+import { useRollFlash } from './hooks/useRollFlash';
+import { rollerOf } from './utils/rollNotify';
 import { CustomDieBuilder } from './components/CustomDieBuilder';
 import { useCustomDice } from './hooks/useCustomDice';
 import { EnemyRhombus, FriendlyRhombus, PlayerRhombus, OverlapChecker } from './components/Rhombuses';
@@ -382,6 +385,10 @@ function App() {
   }, []);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [hasUnreadChat, setHasUnreadChat] = useState(false);
+  // DICE_TRAY.EXE's bell and flash (6c4g): someone else's roll while the tray is shut flashes its
+  // buttons till it opens, and it opens on the roll history.
+  const [trayBell, setTrayBell] = useTrayNotify(token || playerToken);
+  const rollFlash = useRollFlash(userName, isDiceTrayOpen, trayBell === 'on');
   const [isBankOpen, setIsBankOpen] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isVehiclesOpen, setIsVehiclesOpen] = useState(false);
@@ -932,9 +939,11 @@ function App() {
       // originating from the standalone sheet tab which can't call onRolled().
       // Match on the login account: userName in the broadcast is the sheet's
       // display name (handle), which may differ.
-      if ((data.account ?? data.userName) === userName) {
+      if (rollerOf(data) === userName) {
         setIsDiceTrayOpen(true);
         setActiveSidebarMenu('dice_menu');
+      } else {
+        rollFlash.arrived(data);
       }
     },
     onAttackResult: (data) => {
@@ -1625,6 +1634,9 @@ function App() {
   };
 
   return (
+    // The theme for everything drawn from code rather than CSS: the map, and windows such as
+    // DICE_TRAY.EXE and the building window's render, which once sat outside it and drew Classic.
+    <ThemeContext.Provider value={THEMES[currentTheme]}>
     <div className={`crt-container theme-${currentTheme}`}>
       <div className="scanlines"></div>
       {updateInfo && (
@@ -1754,6 +1766,7 @@ function App() {
               isChatOpen={isChatOpen}
               setIsChatOpen={setIsChatOpen}
               hasUnreadChat={hasUnreadChat}
+              hasUnseenRoll={rollFlash.flashing}
               syncRhombusToDB={syncRhombusToDB}
               view={view}
               activeBattleMapData={activeBattleMapData}
@@ -2442,6 +2455,10 @@ function App() {
                     setPos={setDiceTrayPos} 
                     onClose={() => setIsDiceTrayOpen(false)}
                     socketRef={socketRef}
+                    authToken={token || playerToken}
+                    bell={trayBell === 'on'}
+                    onToggleBell={() => setTrayBell(trayBell === 'on' ? 'off' : 'on')}
+                    openHistory={rollFlash.openOnHistory}
                 />
             )}
             {(() => {
@@ -2692,7 +2709,6 @@ function App() {
             })()}
             <div className="bottom-bar"><p>{token ? 'EDITOR_ACTIVE // USE GIZMO TO MANIPULATE DATA_POINT' : <StatusBarText />}</p></div>
           </div>}
-          <ThemeContext.Provider value={THEMES[currentTheme]}>
             <Canvas shadows frameloop="always" onPointerDown={() => { if (!rhombusState.active) setActiveSidebarMenu('none'); }} onPointerMissed={() => {}}>
               <StreamerVisibilityContext.Provider value={IS_SPECTATOR ? directorState.visibility : ALL_VISIBLE}>
             <CursorPingListener socket={socketRef.current} view={view} activeBattleMapData={activeBattleMapData} pingColor={rhombusState.color || '#00ccff'} />
@@ -3006,11 +3022,11 @@ function App() {
             <ambientLight intensity={0.5} />
               </StreamerVisibilityContext.Provider>
             </Canvas>
-          </ThemeContext.Provider>
         {IS_SPECTATOR && <StreamerOverlay socket={socketRef.current} directorState={directorState} selectedLocation={selectedLocation} gameSystem={gameSystem} battleMapLabel={view === 'battle_map' && activeBattleMapData ? activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation : null} />}
         </>
       )}
     </div>
+    </ThemeContext.Provider>
   );
 }
 

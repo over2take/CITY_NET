@@ -17,6 +17,7 @@ const { STANDARD: STANDARD_CONDITIONS, ICONS } = require('../../systemBuilder/co
 const { STANDARD: STANDARD_RESTS, reachOf } = require('../../systemBuilder/rests');
 const { starterSheet, effectiveSheet, fieldsOf } = require('../../systemBuilder/sheet');
 const { npcSheetOf } = require('../../systemBuilder/npc');
+const { PRESETS } = require('../../systemBuilder/rollStyles');
 
 /** A small, fast generator with a seed (mulberry32): the same seed, the same numbers. */
 const randomFrom = (seed) => {
@@ -261,6 +262,42 @@ const randomSystem = (seed, { parts = true } = {}) => {
     for (const [id, c] of Object.entries(def.conditions || {})) if (r.chance(0.3)) def.conditions[id] = { ...c, only_with: ruleId() };
     // An alternative reads only stats and tables, so no rule can make a loop.
     for (const d of derived) if (r.chance(0.3)) d.alternative = { rule: ruleId(), formula: formulaFrom(r, statIds, tables, []) };
+  }
+
+  // GRAPH: the map's layout for some systems, last so every seed's system is otherwise as before.
+  if (r.chance(0.6)) {
+    const nodes = [...statIds, ...derived.map((d) => d.id), ...tables.map((t) => `table:${t}`), ...rules.map((x) => `rule:${x.id}`)];
+    const notes = Array.from({ length: r.int(0, 3) }, (_, i) => ({ id: `n${i + 1}`, text: `${r.word()} ${r.word()}.`, ...(nodes.length && r.chance(0.8) ? { on: r.pick(nodes.filter((n) => !n.startsWith('note:'))) } : {}) }));
+    const grouped = r.some(derived.map((d) => d.id), 0.4);
+    const graph = { positions: Object.fromEntries([...nodes, ...notes.map((n) => `note:${n.id}`)].map((n) => [n, [r.int(0, 60) * 24, r.int(0, 40) * 24]])) };
+    if (grouped.length) graph.groups = [{ id: 'mapgroup1', label: r.word(2).toUpperCase().slice(0, 40), members: grouped }];
+    const foldable = [...groups.map((g) => g.id), ...(grouped.length ? ['mapgroup1'] : [])];
+    if (foldable.length && r.chance(0.5)) graph.collapsed = r.some(foldable, 0.5);
+    if (notes.length) graph.notes = notes;
+    def.graph = graph;
+  }
+
+  // ROLLS (6a2a): for some systems, each from a preset, rolled by stats, groups and formulas it
+  // has; last, so every seed's system is otherwise as before.
+  if (r.chance(0.5)) {
+    const rollables = [...statIds, ...groups.map((g) => g.id), ...derived.map((d) => d.id)];
+    def.rolls = Array.from({ length: r.int(1, 4) }, (_, i) => {
+      const key = r.pick(Object.keys(PRESETS));
+      return { id: `roll${i + 1}`, label: r.word(2).slice(0, 40), ...JSON.parse(JSON.stringify(PRESETS[key].roll)), by: r.some(rollables, 0.3) };
+    });
+  }
+
+  // DICE (6c1a): for some systems, symbols and dice whose faces show numbers, symbols or nothing;
+  // last again, so every seed's system is otherwise as before.
+  if (r.chance(0.4)) {
+    const symbols = Array.from({ length: r.int(1, 6) }, (_, i) => ({ id: `sym${i + 1}`, name: r.word(1).slice(0, 20), mark: r.pick(['✶', '✕', '◆', '◇', '★', '☠', 'S', 'F']) }));
+    if (symbols.length >= 2 && r.chance(0.5)) { symbols[0].cancels = symbols[1].id; symbols[1].cancels = symbols[0].id; }
+    if (symbols.length >= 3 && r.chance(0.5)) symbols[2].also = symbols[0].id;
+    def.symbols = symbols;
+    def.dice = Array.from({ length: r.int(1, 4) }, (_, i) => ({
+      id: `die${i + 1}`, name: r.word(1).slice(0, 20), ...(r.chance(0.3) ? { color: 'danger' } : {}),
+      faces: Array.from({ length: r.int(2, 12) }, () => ({ ...(r.chance(0.5) ? { n: r.int(-3, 6) } : {}), ...(r.chance(0.6) ? { s: r.some(symbols.map((s) => s.id), 0.3) } : {}) })),
+    }));
   }
   return def;
 };

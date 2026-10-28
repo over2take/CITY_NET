@@ -4,6 +4,7 @@ const bank = require('../bank/accounts');
 const bankCurrencies = require('../bank/currencies');
 const moneyRules = require('../bank/moneyRules');
 const { cryptoRng } = require('../utils/random');
+const { withThrow, boardOf } = require('../utils/diceThrow');
 const { registerInitiativeHandlers } = require('./initiative');
 const sheetTemplates = require('../sheets/templates');
 const { mutateSheet, mutateSheetForUser, patchSheet } = require('../sheets/mutate');
@@ -22,6 +23,8 @@ const { parseTokenConditions } = require('../tokens/conditions');
 const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
+const tableRolls = require('../systemBuilder/tableRolls');
+const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { healthView } = require('../systemBuilder/healthView');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
@@ -103,6 +106,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   loadCatalogues();
   // Streamer mode: last director state, replayed to spectators when they join.
   let directorState = null;
+
+  // Every socket connected now, so a roll whose target is kept from players can be sent to each
+  // their own (6c4h, utils/rollSeen.js); and whose is the GM's (the main admin's, not an editor's).
+  const connections = new Map();
+  const isGmSocket = (s) => !!userSockets.get(s.id)?.isAdmin;
 
   // Attack system: one pending attack per socket. Cleared on roll, cancel, or disconnect.
   // { targetId, attackType: 'melee' | 'ranged', ac }
@@ -244,6 +252,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   };
 
   io.on('connection', (socket) => {
+    connections.set(socket.id, socket);
     // Spectators are read-only: drop every incoming event except the allowlist.
     socket.use(([event], next) => {
       if (socket.isSpectator && !SPECTATOR_ALLOWED_EVENTS.has(event)) return;
@@ -253,8 +262,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('requestDiceHistory', () => {
       db.all('SELECT * FROM dice_rolls ORDER BY timestamp DESC LIMIT 5', (err, rows) => {
         if (!err && rows) {
+          // Each their own line where a roll's target was kept from players (6c4h).
+          const gm = isGmSocket(socket);
           socket.emit('diceRollHistory', rows.reverse().map(r => ({
-            userName: r.username, total: r.total, results: JSON.parse(r.results), color: r.color, historyString: r.historyString || ''
+            userName: r.username, total: r.total, results: JSON.parse(r.results), color: r.color, historyString: historyFor(r, gm)
           })));
         }
       });
@@ -765,10 +776,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
         [userName, grandTotal, JSON.stringify(results), color, finalString], (err) => {
           if (err) console.error('Error saving dice roll:', err);
-          io.emit('diceRollBroadcast', broadcastData);
+          // A roll made for an attack picked on the map is its to-hit (6c4d2).
+          const attack = pendingAttacks.get(socket.id);
+          const board = attack ? { board: boardOf('TO HIT', grandTotal >= attack.ac ? 'HIT' : 'MISS') } : {};
+          io.emit('diceRollBroadcast', withThrow({ ...broadcastData, ...board }));
 
           // If this player had a pending attack, resolve it.
-          const attack = pendingAttacks.get(socket.id);
           if (attack) {
             pendingAttacks.delete(socket.id);
             const hit = grandTotal >= attack.ac;
@@ -810,9 +823,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (!Array.isArray(faces) || faces.length === 0) return;
 
         const rolledFaces = [];
+        const landed = [];
         for (let i = 0; i < c; i++) {
           const idx = Math.floor(cryptoRng() * faces.length);
           rolledFaces.push(faces[idx].value);
+          landed.push(idx);
         }
 
         // Only sum when every rolled face is a number; mixed or symbolic dice
@@ -827,14 +842,34 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         // are, so the tray is told the shape to render via `diceSides`.
         const results = { [name]: rolledFaces };
         const diceSides = { [name]: faces.length };
-        const broadcastData = { userName: identity.displayName(userName), account: userName, results, diceSides, modifiers: [], color, total, historyString };
+        // Faces that aren't all numbers are what the tray's board says (6c4d1): APPLE · PEACH.
+        const board = allNumeric ? null : { words: rolledFaces.map((v) => String(v).toUpperCase()).join(' · ') };
+        const broadcastData = { userName: identity.displayName(userName), account: userName, results, diceSides, modifiers: [], color, total, historyString, ...(board ? { board } : {}) };
 
         db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
           [userName, total, JSON.stringify(results), color, historyString], (err2) => {
             if (err2) console.error('Error saving custom dice roll:', err2);
-            io.emit('diceRollBroadcast', broadcastData);
+            io.emit('diceRollBroadcast', withThrow(broadcastData, { kinds: { [name]: { faces: faces.map((f) => ({ text: String(f.value) })), landed } } }));
           });
       };
+
+      // A running custom system's own die (6c4a): rolled by the table's engine from the published
+      // system, its symbols counted, into the same log and tray.
+      if (typeof dieId === 'string' && dieId.startsWith('own:')) {
+        getGameSystem((err, system) => {
+          const definition = err ? null : customSystems.definitionOf(system);
+          if (!definition) return;
+          const made = tableRolls.rollMenuDice({ definition, dieId: dieId.slice(4), count: c, rng: cryptoRng, who: identity.displayName(userName) });
+          if (!made || !made.ok) return;
+          const broadcastData = { userName: identity.displayName(userName), account: userName, results: made.results, diceSides: made.diceSides, modifiers: [], color, total: made.total, historyString: made.historyText, ...(made.board ? { board: made.board } : {}) };
+          db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
+            [userName, made.total, JSON.stringify(made.results), color, made.historyText], (err2) => {
+              if (err2) console.error('Error saving system dice roll:', err2);
+              io.emit('diceRollBroadcast', withThrow(broadcastData, made.own));
+            });
+        });
+        return;
+      }
 
       // Built-ins resolve from code; GM dice from the DB. Either way the
       // definition comes from the server, never from the client, so a player
@@ -1088,7 +1123,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         const roll = rollEngine.executeRoll(
           rollEngine.resolveFormula(ram.RAM_FORMULA, {}),
           'sum',
-          Math.random,
+          cryptoRng,
         );
         // The attack panel targets a token. Whether that resolves to a person or to the
         // car they are sitting in is the resolver's call, not the client's.
@@ -1120,10 +1155,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
             [info.userName, out.damage, JSON.stringify(roll.rolls), '#ff4444', history],
             () => {
-              io.emit('diceRollBroadcast', {
+              io.emit('diceRollBroadcast', withThrow({
                 username: info.userName, total: out.damage, results: roll.rolls,
                 color: '#ff4444', historyString: history,
-              });
+                // What the rammed came to, as the log ends it (6c4d3).
+                board: boardOf('RAM', out.targetDown ? (out.target.isPerson ? 'DOWN' : 'WRECKED') : null),
+              }));
               afterSeatingChange([out.rammer.owner, payload.owner, targetUsername], system);
             }
           );
@@ -1523,22 +1560,24 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
      * as an unknown roll always was. `hp` is the token's current HP, for the wound penalties;
      * `forName` names the NPC in the log ("Ash rolled Shoot for Rex"); `updated` is what tells open
      * windows the sheet changed (LUCK spent, a jack locked); `tokenId` is the NPC's token, where an
-     * attack from it starts (null for the roller's own token).
+     * attack from it starts (null for the roller's own token); `conditions` the token's, as stored
+     * (none without a token).
      */
     const rollSheetOf = (info, payload, system, cb) => {
       if (payload.location_id === undefined || payload.location_id === null) {
         db.get(`SELECT id, data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0`, [info.userName, system], (e, row) => {
           if (e || !row) return;
-          db.get(`SELECT hp_current FROM locations WHERE shape = 'rhombus' AND owner = ?
+          db.get(`SELECT hp_current, conditions FROM locations WHERE shape = 'rhombus' AND owner = ?
                   ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`, [info.userName], (e2, hpRow) => {
-            cb({ row, hp: !e2 && hpRow ? hpRow.hp_current : null, forName: null, updated: { username: info.userName, system }, tokenId: null });
+            cb({ row, hp: !e2 && hpRow ? hpRow.hp_current : null, forName: null, updated: { username: info.userName, system }, tokenId: null,
+              conditions: !e2 && hpRow ? parseTokenConditions(hpRow.conditions) : [] });
           });
         });
         return;
       }
       // A token with no NPC sheet linked for this system (a player's, or none at all) is ignored
       // below, as is one the roller may not roll for.
-      db.get(`SELECT id, name, shape, owner, controllers, hp_current FROM locations WHERE id = ?`, [payload.location_id], (e, loc) => {
+      db.get(`SELECT id, name, shape, owner, controllers, hp_current, conditions FROM locations WHERE id = ?`, [payload.location_id], (e, loc) => {
         if (e || !loc) return;
         if (!isAdminSocket(socket) && !tokenAccess.controls(loc, info.userName)) return;
         db.get(`SELECT cs.id, cs.data FROM npc_sheet_links l JOIN character_sheets cs ON cs.id = l.sheet_id
@@ -1546,7 +1585,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           if (e2 || !row) return;
           let name = loc.name;
           try { name = JSON.parse(row.data || '{}').name || loc.name; } catch { /* the token's name */ }
-          cb({ row, hp: loc.hp_current, forName: name || 'an NPC', updated: { npc_id: row.id, system }, tokenId: loc.id });
+          cb({ row, hp: loc.hp_current, forName: name || 'an NPC', updated: { npc_id: row.id, system }, tokenId: loc.id, conditions: parseTokenConditions(loc.conditions) });
         });
       });
     };
@@ -1557,6 +1596,59 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (!payload || typeof payload.fieldId !== 'string') return;
       getGameSystem((err, system) => {
         if (err) return;
+        // A custom system's own rolls (6a2b): the roll its ROLLED BY gives the field, worked out
+        // on the stored sheet with the server's secure dice, into the same log and tray.
+        const custom = customSystems.definitionOf(system);
+        if (custom) {
+          rollSheetOf(info, payload, system, ({ row, forName, updated, conditions }) => {
+            let data;
+            try { data = JSON.parse(row.data || '{}'); } catch { return; }
+            // The token's conditions as the game runs them (6b3b): HURT -1 on all rolls.
+            const on = new Set(conditions.map((c) => c.id));
+            const made = tableRolls.rollField({
+              definition: custom, data, fieldId: payload.fieldId,
+              rollId: typeof payload.rollId === 'string' ? payload.rollId : undefined,
+              chosen: Array.isArray(payload.changes) ? payload.changes.slice(0, 20) : [],
+              rng: cryptoRng, who: identity.displayName(info.userName), forName,
+              conditions: customSystems.conditionsIn(system).filter((c) => on.has(c.id)),
+            });
+            if (!made.ok) return;
+            // What the changes picked cost (6b3a): the stat changed on the sheet as it is now, as
+            // CP:R's Luck is spent, and every window showing it told.
+            if (made.spends.length) {
+              patchSheet(
+                db, row.id,
+                (d) => Object.fromEntries(made.spends.map((s) => [s.from, (Number.isFinite(Number(d[s.from])) ? Number(d[s.from]) : 0) + s.by])),
+                () => io.emit('sheetUpdated', updated)
+              );
+            }
+            const color = typeof payload.color === 'string' ? payload.color : '#00ff00';
+            const broadcastData = {
+              userName: identity.displayName(info.userName),
+              account: info.userName,
+              results: made.results,
+              diceSides: made.diceSides,
+              modifiers: [...(made.result.add !== 0 ? [made.result.add] : []), ...(made.result.terms ?? []).map((t) => t.amount)],
+              color,
+              total: made.total,
+              historyString: made.historyText,
+              glitch: made.glitch,
+              criticalGlitch: made.criticalGlitch,
+              ...(made.board ? { board: made.board } : {}),
+              // What players see where the target is kept from them (6c4h): each sent their own.
+              players: made.players,
+            };
+            db.run(
+              'INSERT INTO dice_rolls (username, total, results, color, historyString, players_history) VALUES (?, ?, ?, ?, ?, ?)',
+              [info.userName, made.total, JSON.stringify(made.results), color, made.historyText, made.players ? made.players.historyText : null],
+              (err3) => {
+                if (err3) console.error('Error saving sheet roll:', err3);
+                emitRoll(io, connections, isGmSocket, withThrow(broadcastData, made.own));
+              }
+            );
+          });
+          return;
+        }
         const rollDef = sheetRolls.getRoll(system, payload.fieldId);
         if (!rollDef) return;
         db.get(`SELECT value FROM global_settings WHERE key = 'luck_negates_fumble'`, (lnErr, lnRow) => {
@@ -1591,7 +1683,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               // Chrome, as its own labelled term rather than folded into the stat, so the
               // breakdown says where the bonus came from.
               resolved.modifiers.push(...cyberEffects.formulaModifiers(data, rollDef.formula, system));
-              outcome = rollEngine.executeRoll(resolved, rollDef.shape, Math.random, { noFumble });
+              outcome = rollEngine.executeRoll(resolved, rollDef.shape, cryptoRng, { noFumble });
               // The price of borrowed expertise. A natural 2 on a plug-augmented check is
               // an automatic failure "that no reroll ability can save", and the jack locks
               // up for the scene - so this overrides the total rather than modifying it,
@@ -1611,8 +1703,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               + (spend.negate ? ' (LUCK: FUMBLE SHIELD)' : '');
             const woundTag = hp !== null && hp <= 0 ? ' (MORTALLY WOUNDED -4)'
               : hp !== null && Number(data.seriously_wounded) > 0 && hp <= Number(data.seriously_wounded) ? ' (WOUNDED -2)' : '';
+            // A CWN save meets or beats the number on the sheet (sheets/rolls.js `target`, 6c4d3);
+            // a crashed plug fails whatever the die says.
+            const target = rollDef.target ? Number(data[rollDef.target]) : NaN;
+            const met = Number.isFinite(target) && target > 0 ? !outcome.plugCrash && outcome.total >= target : null;
+            const vsTag = met === null ? '' : ` — vs ${target}: ${met ? 'SUCCESS' : 'FAILURE'}`;
             const historyString =
-              `${identity.displayName(info.userName)} rolled ${rollDef.label}${forName ? ` for ${forName}` : ''} [${outcome.breakdown} = ${outcome.total}]${luckTag}${woundTag}${critTag}`;
+              `${identity.displayName(info.userName)} rolled ${rollDef.label}${forName ? ` for ${forName}` : ''} [${outcome.breakdown} = ${outcome.total}]${luckTag}${woundTag}${vsTag}${critTag}`;
             // A crashed jack is down for the scene, so it has to outlive this roll.
             if (outcome.plugCrash) {
               patchSheet(
@@ -1643,13 +1740,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               historyString,
               glitch: outcome.glitch ?? false,
               criticalGlitch: !!(outcome.glitch && outcome.critical === 'failure'),
+              board: boardOf(rollDef.label.toUpperCase(), outcome.plugCrash ? 'PLUG CRASH' : met === null ? null : met ? 'SUCCESS' : 'FAILURE'),
             };
             db.run(
               'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
               [info.userName, outcome.total, JSON.stringify(outcome.rolls), color, historyString],
               (err3) => {
                 if (err3) console.error('Error saving sheet roll:', err3);
-                io.emit('diceRollBroadcast', broadcastData);
+                io.emit('diceRollBroadcast', withThrow(broadcastData));
               }
             );
         });
@@ -1675,7 +1773,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             let outcome;
             try {
               const resolved = rollEngine.resolveFormula(formula, data, { allowNoDice: shape === 'pool' });
-              outcome = rollEngine.executeRoll(resolved, shape, Math.random);
+              outcome = rollEngine.executeRoll(resolved, shape, cryptoRng);
             } catch (e) {
               return;
             }
@@ -1690,11 +1788,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               historyString,
               glitch: outcome.glitch ?? false,
               criticalGlitch: !!(outcome.glitch && outcome.critical === 'failure'),
+              // Named by the window that rolled it (6c4d3), kept to a board's sensible length.
+              board: boardOf(label.slice(0, 40).toUpperCase()),
             };
             db.run(
               'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
               [info.userName, outcome.total, JSON.stringify(outcome.rolls), '#00ff00', historyString],
-              () => io.emit('diceRollBroadcast', broadcastData)
+              () => io.emit('diceRollBroadcast', withThrow(broadcastData))
             );
         });
       });
@@ -1724,7 +1824,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             let outcome;
             try {
               const resolved = rollEngine.resolveFormula(formula, data, { allowNoDice: true });
-              outcome = rollEngine.executeRoll(resolved, 'pool', Math.random);
+              outcome = rollEngine.executeRoll(resolved, 'pool', cryptoRng);
             } catch (e) { return; }
             const netDrain = Math.max(0, drainValue - outcome.hits);
             // Apply net drain to stun track, overflow into Physical
@@ -1750,6 +1850,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               historyString,
               glitch: outcome.glitch ?? false,
               criticalGlitch: !!(outcome.glitch && outcome.critical === 'failure'),
+              board: boardOf('DRAIN', netDrain === 0 ? 'NO DRAIN' : `${netDrain} STUN`),
             };
             patchSheet(
               db,
@@ -1768,7 +1869,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
                   [info.userName, outcome.hits, JSON.stringify(outcome.rolls), '#ffcc00', historyString],
                   () => {
-                    io.emit('diceRollBroadcast', broadcastData);
+                    io.emit('diceRollBroadcast', withThrow(broadcastData));
                     io.emit('sheetUpdated', { username: info.userName });
                     if (stunOverflow > 0) {
                       db.run(
@@ -2509,7 +2610,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     // against stored data.
     const RHOMBUS_SHAPES = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'];
 
-    const broadcastRoll = (userName, outcome, historyString, color, cb) => {
+    /**
+     * A roll into the log and every tray. `board` is what the tray's board says of it (6c4d2):
+     * what it was for and, where the server decided one, what it came to, from boardOf.
+     */
+    const broadcastRoll = (userName, outcome, historyString, color, cb, board = null) => {
       const broadcastData = {
         userName: identity.displayName(userName),
         account: userName,
@@ -2518,11 +2623,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         color,
         total: outcome.total,
         historyString,
+        ...(board ? { board } : {}),
       };
       db.run(
         'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
         [userName, outcome.total, JSON.stringify(outcome.rolls), color, historyString],
-        () => { io.emit('diceRollBroadcast', broadcastData); if (cb) cb(); }
+        () => { io.emit('diceRollBroadcast', withThrow(broadcastData)); if (cb) cb(); }
       );
     };
 
@@ -2734,11 +2840,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   applyTokenDamage(target, damage, (newHp) => {
                     emitResult({ damage, through: damage, targetHp: newHp, targetDown: newHp <= 0 });
                   });
-                });
+                }, boardOf('TO HIT', hit ? 'HIT' : 'MISS'));
               };
               if (defense) {
                 broadcastRoll(defenderName, defense,
-                  `${defenderName} dodges [${defense.breakdown}]`, '#00ccff', resolve);
+                  `${defenderName} dodges [${defense.breakdown}]`, '#00ccff', resolve, boardOf('DODGE'));
               } else {
                 resolve();
               }
@@ -2867,7 +2973,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                           through,
                           vehicleHp: newHp, vehicleHpMax: ride.vehicle.hpMax, vehicleDestroyed: wrecked,
                         });
-                      });
+                      }, boardOf(outcome ? 'DAMAGE' : 'SHOCK', wrecked ? 'DESTROYED' : through === 0 ? 'ARMOR HELD' : null));
                     });
                   }
                   const frail = Number(defenderData.frail) === 1;
@@ -2896,16 +3002,17 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                         ...resultExtras, targetHp: newHp, targetDown: down, frailDeath: down && frail,
                         soakAbsorbed: soak.absorbed, soakLeft: soak.soakLeft, through: soak.through,
                       });
-                    });
+                    }, boardOf(outcome ? 'DAMAGE' : 'SHOCK', down && frail ? 'DEAD' : down ? 'DOWN' : soak.through === 0 ? 'ARMOR HELD' : null));
                   });
                 };
 
+                const toHitBoard = boardOf('TO HIT', hit ? 'HIT' : plugCrash ? 'PLUG CRASH' : 'MISS');
                 if (!hit) {
                   const shock = attackCwn.shockDamage(attackerData, weapon, ac);
                   return broadcastRoll(info.userName, toHit, hitHistory, color, () => {
                     if (shock <= 0) return emitResult({});
                     dealDamage(shock, null, `${weapon.name} SHOCK vs ${target.name} — ${shock} damage on the miss`, { shock, damage: shock, through: shock }, false);
-                  });
+                  }, toHitBoard);
                 }
 
                 broadcastRoll(info.userName, toHit, hitHistory, color, () => {
@@ -2936,7 +3043,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     damage: total, through: total,
                     traumatic, traumaRoll: trauma ? trauma.roll : null,
                   }, traumatic);
-                });
+                }, toHitBoard);
               });
               });
               });
@@ -2988,7 +3095,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 const noFumble = spend.negate || (luckNegatesFumble && spend.bonus > 0);
                 const luck = spend.total;
                 let toHit;
-                try { toHit = sheetAttack.rollToHit(attackerData, weapon, aimed, Math.random, { luck: spend.bonus, noFumble, hp: attackerHp }); } catch (e) { return; }
+                try { toHit = sheetAttack.rollToHit(attackerData, weapon, aimed, cryptoRng, { luck: spend.bonus, noFumble, hp: attackerHp }); } catch (e) { return; }
                 const hit = toHit.total >= dv;
                 const critTag = toHit.critical === 'success' ? ' — CRITICAL!'
                   : toHit.critical === 'failure' ? ' — FUMBLE!' : '';
@@ -3035,7 +3142,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   });
                 };
 
-                if (!hit) return broadcastRoll(info.userName, toHit, hitHistory, color, () => emitResult({}));
+                const toHitBoard = boardOf('TO HIT', hit ? 'HIT' : 'MISS');
+                if (!hit) return broadcastRoll(info.userName, toHit, hitHistory, color, () => emitResult({}), toHitBoard);
 
                 // Hit: damage, SP soak, ablation, HP write-through.
                 broadcastRoll(info.userName, toHit, hitHistory, color, () => {
@@ -3082,7 +3190,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                         applyTokenDamage(target, through, (newHp) => {
                           emitResult({ ...resultExtras, targetHp: newHp, targetDown: newHp <= 0 });
                         });
-                      });
+                      }, boardOf('DAMAGE', crit ? 'CRITICAL INJURY' : through <= 0 ? 'ARMOR HELD' : null));
                     };
 
                     const sheetChanged = defender && ((ablated && shield.remaining > 0) || shield.absorbed > 0);
@@ -3109,7 +3217,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                       finish();
                     }
                   });
-                });
+                }, toHitBoard);
                 });
               }
             );
@@ -3148,6 +3256,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 // after the client's 5s dice animation so the sheet doesn't
                 // change mid-roll.
                 const outcome = { rolls: { 10: [save.die] }, modTotal: save.penalty, total: save.total };
+                const saveBoard = boardOf('DEATH SAVE', save.success ? 'STABLE' : 'DEAD');
                 broadcastRoll(info.userName, outcome, historyString, '#ff3333', () => {
                   setTimeout(() => {
                     // Only the penalty changes, and it is applied to a fresh read. The old
@@ -3171,7 +3280,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                       }
                     );
                   }, DICE_ANIM_MS);
-                });
+                }, saveBoard);
               }
             );
           }
@@ -3276,7 +3385,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     }
                     broadcastRoll(info.userName, check, historyString, check.success ? '#00ff00' : '#ff3333', () => {
                       setTimeout(applyOutcome, DICE_ANIM_MS);
-                    });
+                    }, boardOf('STABILIZE', check.success ? 'STABLE' : rounds + 1 >= attackCwn.MORTAL_WOUND_ROUNDS ? 'DEAD' : 'FAILED'));
                   }
                 );
               }
@@ -3333,7 +3442,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 const outcome = dmg ?? { rolls: {}, modTotal: 0, total: 0 };
                 broadcastRoll(info.userName, outcome, historyString, overcast ? '#ff3333' : '#bb66ff', () => {
                   io.emit('spellCast', { userName: info.userName, name, overcast, damage: dmg ? dmg.total : null });
-                });
+                }, boardOf(name.toUpperCase(), overcast ? 'OVERCAST' : null));
               };
 
               if (cost > 0) {
@@ -3450,6 +3559,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     });
 
     socket.on('disconnect', () => {
+      connections.delete(socket.id);
       pendingAttacks.delete(socket.id);
       if (socket.isSpectator) {
         console.log('Spectator disconnected:', socket.id);

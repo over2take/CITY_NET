@@ -1,4 +1,5 @@
 const { cryptoRng } = require('../utils/random');
+const { withThrow, boardOf } = require('../utils/diceThrow');
 const customSystems = require('../systemBuilder/runtime');
 const { tickCombat } = require('../tokens/conditions');
 
@@ -322,11 +323,12 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
               db.run(
                 `INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)`,
                 ['NPC SIDE', score, JSON.stringify(results), '#00ff00', historyString],
-                () => io.emit('diceRollBroadcast', {
+                () => io.emit('diceRollBroadcast', withThrow({
                   userName: 'NPC SIDE', account: 'NPC SIDE',
                   results, modifiers: [], color: '#00ff00',
                   total: score, historyString,
-                })
+                  board: boardOf(initiativeWord(row.system)),
+                }))
               );
             }
           );
@@ -590,7 +592,7 @@ function logRoll(io, db, combatant, system) {
   db.run(
     `INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)`,
     [combatant.name, combatant.score, resultsJson, '#00ff00', historyString],
-    () => io.emit('diceRollBroadcast', {
+    () => io.emit('diceRollBroadcast', withThrow({
       userName: combatant.name,
       account: combatant.name,
       results,
@@ -598,7 +600,9 @@ function logRoll(io, db, combatant, system) {
       color: '#00ff00',
       total: combatant.score,
       historyString,
-    })
+      // The tray's board says what it was for (6c4d3), in the game's own word for it.
+      board: boardOf(initiativeWord(system)),
+    }))
   );
 }
 

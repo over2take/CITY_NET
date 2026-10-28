@@ -1,159 +1,97 @@
-import React, { useState, useEffect, useRef, useContext } from 'react';
+import React, { useState, useEffect, useRef, useContext, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { DraggableWindow } from './DraggableWindow';
+import { DraggableWindow, NotifyBell } from './DraggableWindow';
 import { ThemeContext } from '../theme/themes';
+import { themedRollColor } from '../theme/rollColor';
 import paperFillIcon from '../assets/lets-icons--paper-fill.svg';
 import paperLightIcon from '../assets/lets-icons--paper-light.svg';
 import type { DiceRoll } from '../types';
+import { diceOfRoll, throwDice, revealAfter, MOST_DICE, poseAt, printOrder, floorSeen, trayCamera, TRAY_VIEW, TRAY_ASPECT, type Throw, type RollThrow } from '../utils/trayThrow';
+import { labelTurn } from '../utils/diceShapes';
+import { labelParts, labelKey, paintLabel } from '../utils/dieLabels';
+import { useTrayMotion } from '../hooks/useTrayMotion';
+import { showOf, sayOf, emptyField, putShow, putNoise, decodedAt, COLS, WIDTH, HEIGHT, SETTLE_MS, HOLD_MS, type BoardRoll } from '../utils/trayBoard';
+import { makeWaiting } from '../utils/trayWaiting';
 
-// ─── DOT_MATRIX_3x5 ──────────────────────────────────────────────────────────
+// ─── CharacterBoard ──────────────────────────────────────────────────────────
 
-const DOT_MATRIX_3x5: Record<string, number[][]> = {
-  '0': [[1,1,1],[1,0,1],[1,0,1],[1,0,1],[1,1,1]],
-  '1': [[0,1,0],[1,1,0],[0,1,0],[0,1,0],[1,1,1]],
-  '2': [[1,1,1],[0,0,1],[1,1,1],[1,0,0],[1,1,1]],
-  '3': [[1,1,1],[0,0,1],[1,1,1],[0,0,1],[1,1,1]],
-  '4': [[1,0,1],[1,0,1],[1,1,1],[0,0,1],[0,0,1]],
-  '5': [[1,1,1],[1,0,0],[1,1,1],[0,0,1],[1,1,1]],
-  '6': [[1,1,1],[1,0,0],[1,1,1],[1,0,1],[1,1,1]],
-  '7': [[1,1,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1]],
-  '8': [[1,1,1],[1,0,1],[1,1,1],[1,0,1],[1,1,1]],
-  '9': [[1,1,1],[1,0,1],[1,1,1],[0,0,1],[1,1,1]],
-  '-': [[0,0,0],[0,0,0],[1,1,1],[0,0,0],[0,0,0]],
-  ' ': [[0,0,0],[0,0,0],[0,0,0],[0,0,0],[0,0,0]],
-};
-
-// ─── DotMatrixScoreboard ─────────────────────────────────────────────────────
-
-interface DotMatrixScoreboardProps {
-  value: string;
-  timestamp: number;
-  isRolling?: boolean;
+interface CharacterBoardProps {
+  /** The rolls landed and on show (a group's together), or null while there is nothing to tell. */
+  rolls: BoardRoll[] | null;
+  /** The dice still in the air: every cell flickers. */
+  rolling: boolean;
+  /** When the rolls came down, on performance.now()'s clock: they decode from then. */
+  landedAt: number;
 }
 
-export function DotMatrixScoreboard({ value, timestamp, isRolling }: DotMatrixScoreboardProps) {
+/**
+ * DICE_TRAY.EXE's board (6c4e; approved mockup docs/mockups/tray-scoreboard.html v3): a 16 by 2
+ * character display in the theme's primary. While the dice roll every cell flickers; as they land
+ * the result decodes into place left to right; it stays HOLD_MS, turning pages if it has more than
+ * two lines, then the board waits with a picture, the next one each wait (utils/trayWaiting.ts;
+ * utils/trayBoard.ts works out what each dot of a result shows).
+ * Its 1,120 dots are made once and painted directly, so a frame repaints only what changed.
+ */
+export function CharacterBoard({ rolls, rolling, landedAt }: CharacterBoardProps) {
   const theme = useContext(ThemeContext);
-  const cols = 25;
-  const rows = 5;
-  const [idleMode, setIdleMode] = useState(!value && !isRolling);
-  const [animFrame, setAnimFrame] = useState(0);
-  const [animType, setAnimType] = useState('matrix');
-
+  const dots = useRef<HTMLSpanElement[]>([]);
+  const painted = useRef<number[]>([]);
+  const show = useMemo(() => (rolls && rolls.length ? showOf(rolls) : null), [rolls]);
+  // Back to waiting once a result has been up long enough: the timer marks which landing is over.
+  const [over, setOver] = useState<number | null>(null);
   useEffect(() => {
-    const pickRandomAnim = (current: string) => {
-      const types = ['matrix', 'pingpong', 'sinewave', 'scanner'];
-      const others = types.filter(t => t !== current);
-      return others[Math.floor(Math.random() * others.length)];
-    };
-
-    if (!value && !isRolling) {
-      setIdleMode(true);
-      setAnimType(t => pickRandomAnim(''));
-      return;
-    }
-
-    setIdleMode(false);
-    if (isRolling) return;
-
-    const timer = setTimeout(() => {
-      setAnimType(t => pickRandomAnim(t));
-      setIdleMode(true);
-    }, 10000);
-
+    if (rolling || !show) return;
+    const left = landedAt + SETTLE_MS + HOLD_MS - performance.now();
+    const timer = setTimeout(() => setOver(landedAt), Math.max(0, left));
     return () => clearTimeout(timer);
-  }, [value, timestamp, isRolling]);
+  }, [rolling, show, landedAt]);
+  const waiting = !rolling && (!show || over === landedAt);
+
+  // While waiting, a picture (6c4f, utils/trayWaiting.ts): one for the whole wait, the next one the
+  // next time, READY_ when the tray opens.
+  const waitingDraw = useRef(makeWaiting());
+  const waitingSince = useRef(0);
+  useEffect(() => { if (waiting) waitingSince.current = performance.now(); }, [waiting]);
+  // Which wait this is: one more for each result told, known by when it landed, so running an effect
+  // twice (React does in development) never counts one twice and skips a picture.
+  const told = useRef({ count: 0, last: Number.NaN });
+  useEffect(() => {
+    if (show && landedAt !== told.current.last) told.current = { count: told.current.count + 1, last: landedAt };
+  }, [show, landedAt]);
 
   useEffect(() => {
-    if (!idleMode && !isRolling) return;
-    const interval = setInterval(() => setAnimFrame(f => f + 1), 100);
-    return () => clearInterval(interval);
-  }, [idleMode, isRolling]);
-
-  let grid = Array.from({ length: rows }, () => Array(cols).fill(0));
-
-  if (isRolling) {
-    for (let r = 0; r < rows; r++)
-      for (let c = 0; c < cols; c++)
-        grid[r][c] = Math.random() > 0.8 ? 1 : Math.random() > 0.8 ? 2 : 0;
-  } else if (idleMode || !value) {
-    if (animType === 'matrix') {
-      for (let c = 0; c < cols; c++) {
-        const dropSpeed = (c % 3) + 1;
-        const y = (Math.floor(animFrame / dropSpeed) + (c * 7)) % (rows + 4) - 2;
-        for (let r = 0; r < rows; r++) {
-          if (r === y) grid[r][c] = 1;
-          else if (r === y - 1) grid[r][c] = 2;
-          else if (r === y - 2) grid[r][c] = 3;
-        }
+    const paint = () => {
+      const now = performance.now();
+      const f = emptyField();
+      if (rolling) putNoise(f);
+      else if (show && !waiting) {
+        const since = now - landedAt;
+        putShow(f, show, Math.max(0, since - SETTLE_MS));
+        if (since < SETTLE_MS) putNoise(f, decodedAt(since));
+      } else waitingDraw.current(f, now - waitingSince.current, told.current.count);
+      for (let y = 0; y < HEIGHT; y += 1) for (let x = 0; x < WIDTH; x += 1) {
+        const k = (Math.floor(y / 7) * COLS + Math.floor(x / 5)) * 35 + (y % 7) * 5 + (x % 5);
+        if (painted.current[k] === f[y][x]) continue;
+        painted.current[k] = f[y][x];
+        dots.current[k]?.classList.toggle('on', f[y][x] === 1);
       }
-    } else if (animType === 'pingpong') {
-      const cycleX = (cols - 1) * 2;
-      const cycleY = (rows - 1) * 2;
-      let bx = animFrame % cycleX; if (bx >= cols) bx = cycleX - bx;
-      let by = Math.floor(animFrame * 0.7) % cycleY; if (by >= rows) by = cycleY - by;
-      grid[by][bx] = 1;
-      const p1y = Math.min(Math.max(by, 1), rows - 2);
-      grid[p1y - 1][0] = 2; grid[p1y][0] = 1; grid[p1y + 1][0] = 2;
-      const p2y = Math.min(Math.max(by, 1), rows - 2);
-      grid[p2y - 1][cols - 1] = 2; grid[p2y][cols - 1] = 1; grid[p2y + 1][cols - 1] = 2;
-    } else if (animType === 'sinewave') {
-      for (let c = 0; c < cols; c++) {
-        const y = Math.floor((Math.sin((c + animFrame) * 0.5) + 1) * (rows - 1) / 2);
-        grid[y][c] = 1;
-        if (y + 1 < rows) grid[y + 1][c] = 2;
-        if (y - 1 >= 0) grid[y - 1][c] = 2;
-      }
-    } else if (animType === 'scanner') {
-      const cycle = (cols - 1) * 2;
-      let pos = animFrame % cycle;
-      if (pos >= cols) pos = cycle - pos;
-      for (let r = 0; r < rows; r++) {
-        grid[r][pos] = 1;
-        if (pos - 1 >= 0) grid[r][pos - 1] = 2;
-        if (pos - 2 >= 0) grid[r][pos - 2] = 3;
-        if (pos + 1 < cols) grid[r][pos + 1] = 2;
-        if (pos + 2 < cols) grid[r][pos + 2] = 3;
-      }
-    }
-  } else {
-    const valStr = value.toString();
-    const totalWidth = valStr.length * 4 - 1;
-    let currentCol = Math.floor((cols - totalWidth) / 2) + totalWidth - 1;
-    for (let i = valStr.length - 1; i >= 0; i--) {
-      const char = valStr[i];
-      const charMatrix = DOT_MATRIX_3x5[char] || DOT_MATRIX_3x5[' '];
-      for (let r = 0; r < rows; r++) {
-        for (let c = 2; c >= 0; c--) {
-          const targetCol = currentCol - (2 - c);
-          if (targetCol >= 0 && targetCol < cols) grid[r][targetCol] = charMatrix[r][c];
-        }
-      }
-      currentCol -= 4;
-      if (currentCol < 0) break;
-    }
-  }
+    };
+    paint();
+    const timer = setInterval(paint, 50);
+    return () => clearInterval(timer);
+  }, [rolling, show, landedAt, waiting]);
 
-  const getColor = (val: number) => {
-    const p = theme.primary;
-    if (val === 1) return { bg: p, shadow: `0 0 5px ${p}, 0 0 10px ${p}` };
-    if (val === 2) return { bg: `${p}80`, shadow: `0 0 2px ${p}` };
-    if (val === 3) return { bg: `${p}33`, shadow: 'none' };
-    return { bg: `${p}0d`, shadow: 'none' };
-  };
-
+  const said = rolling ? 'Rolling' : show && !waiting ? sayOf(show) : 'Ready';
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
-      {grid.map((row, rIdx) => (
-        <div key={rIdx} style={{ display: 'flex', gap: '4px' }}>
-          {row.map((val, cIdx) => {
-            const style = getColor(val);
-            return (
-              <div key={cIdx} style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: style.bg, boxShadow: style.shadow, transition: 'background-color 0.1s, box-shadow 0.1s' }} />
-            );
-          })}
-        </div>
+    <div data-testid="dice-board" role="img" aria-label={said} className="tray-board" style={{ '--board-on': theme.primary } as React.CSSProperties}>
+      {Array.from({ length: COLS * 2 }, (_, cell) => (
+        <span key={cell} className="tray-board-cell">
+          {Array.from({ length: 35 }, (__, dot) => (
+            <span key={dot} className="tray-board-px" ref={(el) => { if (el) dots.current[cell * 35 + dot] = el; }} />
+          ))}
+        </span>
       ))}
     </div>
   );
@@ -161,151 +99,125 @@ export function DotMatrixScoreboard({ value, timestamp, isRolling }: DotMatrixSc
 
 // ─── DiceScene ───────────────────────────────────────────────────────────────
 
+/** A roll as the tray plays it: the server's dice and its throw (6c4b1), and who rolled's color. */
+export interface TrayRoll {
+  total: number;
+  results: Record<string, unknown>;
+  diceSides?: Record<string, number>;
+  throw?: RollThrow;
+  /** The throw worked out (utils/trayThrow), once, when the roll came: the window reveals as it ends. */
+  thrown?: Throw;
+  color: string;
+  timestamp: number;
+}
+
 interface DiceSceneProps {
-  latestRoll: { total: number; results: any; diceSides?: Record<string, number>; color: string; timestamp: number } | null;
+  latestRoll: TrayRoll | null;
+  /** LANDED (6c4b3b): each throw shown already at rest. Read as a throw starts, so flipping it never replays one. */
+  landed?: boolean;
 }
 
 /**
- * Side count for a results key. Standard rolls key by side count ('6'); custom
- * dice key by name ('Fate') and carry their shape in `diceSides`. Falls back to
- * a d6 so an unrecognised key still renders something rather than building
- * geometry from NaN.
+ * The tray's dice (6c4b2b; approved mockup docs/mockups/builder-dice.html): solid, every face
+ * printed, thrown by physics from the server's seed with the faces it rolled on top (utils/trayThrow),
+ * inside a rim drawn where the walls are. A die takes the roller's color, or the theme's danger
+ * color for a bad die; its body is that color sunk toward the theme's background.
  */
-export const sidesForKey = (key: string, diceSides?: Record<string, number>): number => {
-  const explicit = diceSides?.[key];
-  if (Number.isFinite(explicit) && (explicit as number) >= 2) return explicit as number;
-  const parsed = parseInt(key);
-  return Number.isFinite(parsed) && parsed >= 2 ? parsed : 6;
-};
-
-export function DiceScene({ latestRoll }: DiceSceneProps) {
+export function DiceScene({ latestRoll, landed = false }: DiceSceneProps) {
   const { scene, camera } = useThree();
+  const landedNow = useRef(landed);
+  useEffect(() => { landedNow.current = landed; }, [landed]);
+  const theme = useContext(ThemeContext);
+  const playing = useRef<{ thrown: Throw; groups: THREE.Group[]; start: number } | null>(null);
 
   useEffect(() => {
-    camera.lookAt(0, 0, 0);
-    const diceObjects: THREE.Mesh[] = [];
-    if (latestRoll && latestRoll.results) {
-      const material = new THREE.MeshBasicMaterial({ color: latestRoll.color, wireframe: true });
-      let xOffset = -2.5;
-      for (const [key, rolls] of Object.entries(latestRoll.results)) {
-        const s = sidesForKey(key, latestRoll.diceSides);
-        let geometry: THREE.BufferGeometry;
-        switch (s) {
-          case 4: geometry = new THREE.TetrahedronGeometry(1); break;
-          case 6: geometry = new THREE.BoxGeometry(1.2, 1.2, 1.2); break;
-          case 8: geometry = new THREE.OctahedronGeometry(1); break;
-          case 12: geometry = new THREE.DodecahedronGeometry(1); break;
-          case 20: geometry = new THREE.IcosahedronGeometry(1); break;
-          // Segments are capped: a 999-sided die would otherwise build a
-          // ~500x500 sphere per die and stall the tab.
-          default: {
-            const seg = Math.min(32, Math.max(3, Math.round(s / 2)));
-            geometry = new THREE.SphereGeometry(1, seg, seg);
-            break;
-          }
+    camera.position.set(...TRAY_VIEW.position);
+    camera.lookAt(...TRAY_VIEW.target);
+  }, [camera]);
+
+  // The rim of the tray, just inside the edges of the picture, where the walls keep the dice.
+  useEffect(() => {
+    const { corners, mid } = floorSeen(trayCamera(), 0);
+    const points = corners.map((p) => {
+      const toMid = new THREE.Vector2(mid.x - p.x, mid.z - p.z).normalize().multiplyScalar(0.25);
+      return new THREE.Vector3(p.x + toMid.x, 0, p.z + toMid.y);
+    });
+    const rim = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: theme.primary, transparent: true, opacity: 0.45 }));
+    scene.add(rim);
+    return () => { scene.remove(rim); rim.geometry.dispose(); (rim.material as THREE.Material).dispose(); };
+  }, [scene, theme.primary]);
+
+  useEffect(() => {
+    if (!latestRoll) return undefined;
+    const thrown = latestRoll.thrown ?? throwDice(diceOfRoll(latestRoll), latestRoll.throw?.seed ?? 1, trayCamera());
+    const symbols = new Map((latestRoll.throw?.symbols ?? []).map((s) => [s.id, s]));
+    const textures = new Map<string, THREE.CanvasTexture>();
+    const owned: { dispose: () => void }[] = [];
+    const ground = new THREE.Color(theme.background);
+    const groups = thrown.dice.map((die) => {
+      const tone = new THREE.Color(die.spec.danger ? theme.danger : themedRollColor(die.spec.color ?? latestRoll.color, theme));
+      const group = new THREE.Group();
+      const body = new THREE.MeshStandardMaterial({ color: tone.clone().lerp(ground, 0.82), emissive: tone.clone().multiplyScalar(0.05), roughness: 0.55, metalness: 0.15, flatShading: true });
+      const edges = new THREE.EdgesGeometry(die.shape.geometry, 12);
+      const edgeLine = new THREE.LineBasicMaterial({ color: tone });
+      owned.push(die.shape.geometry, body, edges, edgeLine);
+      group.add(new THREE.Mesh(die.shape.geometry, body), new THREE.LineSegments(edges, edgeLine));
+      // Every face printed: what came up on the face that lands on top, the die's others round it.
+      const order = printOrder(die);
+      const plane = new THREE.PlaneGeometry(die.shape.label, die.shape.label);
+      owned.push(plane);
+      die.shape.faces.forEach((spot, k) => {
+        const i = order[k];
+        if (i < 0) return;
+        const parts = labelParts(die.spec.faces?.[i] ?? { text: die.spec.texts[i] ?? '' }, symbols);
+        if (!parts.length) return;
+        const color = `#${tone.getHexString()}`;
+        const key = labelKey(parts, color);
+        let texture = textures.get(key);
+        if (!texture) {
+          const canvas = document.createElement('canvas');
+          texture = new THREE.CanvasTexture(canvas);
+          const made = texture;
+          paintLabel(canvas, parts, color, () => { made.needsUpdate = true; });
+          texture.anisotropy = 4;
+          textures.set(key, texture);
         }
-        (Array.isArray(rolls) ? rolls as number[] : [rolls as number]).forEach(val => {
-          const mesh = new THREE.Mesh(geometry, material);
-          mesh.position.set(xOffset + (Math.random() - 0.5), (Math.random() - 0.5), 2 + Math.random() * 2);
-          mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-          let typeFriction = 0.88;
-          let rotMult = 1.5;
-          if (s === 2) { typeFriction = 0.60; rotMult = 0.2; }
-          else if (s === 4) { typeFriction = 0.70; rotMult = 0.5; }
-          else if (s === 6) { typeFriction = 0.80; rotMult = 0.8; }
-          else if (s === 8) { typeFriction = 0.84; rotMult = 1.0; }
-          else if (s === 10 || s === 100) { typeFriction = 0.86; rotMult = 1.2; }
-          else if (s === 12) { typeFriction = 0.88; rotMult = 1.3; }
-          else if (s === 20) { typeFriction = 0.90; rotMult = 1.5; }
-          const speed = 15 + Math.random() * 10;
-          const angle = Math.random() * Math.PI * 2;
-          mesh.userData = {
-            velocity: new THREE.Vector3(Math.cos(angle) * speed, Math.sin(angle) * speed, 10 + Math.random() * 10),
-            stopped: false, typeFriction, rotMult,
-          };
-          scene.add(mesh);
-          diceObjects.push(mesh);
-          xOffset += 1.5;
-          if (xOffset > 2.5) xOffset = -2.5;
-        });
-      }
-    }
+        const label = new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false });
+        owned.push(label);
+        const print = new THREE.Mesh(plane, label);
+        print.userData.face = i; // which of the die's own faces it shows
+        // The top face's words turned on it to read from the camera.
+        print.quaternion.copy(labelTurn(spot.normal));
+        if (k === die.up && die.twist) print.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), die.twist));
+        print.position.copy(spot.center).addScaledVector(spot.normal, 0.012);
+        group.add(print);
+      });
+      group.scale.setScalar(die.scale);
+      const pose = poseAt(die, 0);
+      group.position.copy(pose.position);
+      group.quaternion.copy(pose.quaternion);
+      scene.add(group);
+      return group;
+    });
+    // Every throw is played, whatever the computer's own motion setting: the throw is the tray.
+    playing.current = { thrown, groups, start: performance.now() - (landedNow.current ? 1e7 : 0) };
     return () => {
-      diceObjects.forEach(d => { scene.remove(d); d.geometry.dispose(); });
-      if (diceObjects.length > 0 && diceObjects[0].material) (diceObjects[0].material as THREE.Material).dispose();
+      playing.current = null;
+      for (const g of groups) scene.remove(g);
+      for (const o of owned) o.dispose();
+      for (const t of textures.values()) t.dispose();
     };
-  }, [latestRoll, scene]);
+  }, [latestRoll, scene, theme.background, theme.danger]);
 
-  useFrame((state, delta) => {
-    const dt = Math.min(delta, 0.1);
-    const bounds = { minX: -5.4, maxX: 5.4, minY: -3.2, maxY: 3.2 };
-    const restitution = 0.8;
-    const gravity = 60;
-    const diceList: THREE.Mesh[] = [];
-
-    scene.children.forEach(c => {
-      if (c.userData.velocity !== undefined) diceList.push(c as THREE.Mesh);
+  useFrame(() => {
+    const p = playing.current;
+    if (!p) return;
+    const seconds = (performance.now() - p.start) / 1000;
+    p.thrown.dice.forEach((die, i) => {
+      const pose = poseAt(die, seconds);
+      p.groups[i].position.copy(pose.position);
+      p.groups[i].quaternion.copy(pose.quaternion);
     });
-
-    diceList.forEach(c => {
-      if (c.userData.stopped) return;
-      c.userData.velocity.z -= gravity * dt;
-      if (c.position.z <= 0) {
-        const drag = c.userData.typeFriction || 0.88;
-        c.userData.velocity.x *= drag;
-        c.userData.velocity.y *= drag;
-      }
-      c.position.addScaledVector(c.userData.velocity, dt);
-      if (c.position.z <= 0) {
-        c.position.z = 0;
-        if (c.userData.velocity.z < -2.0) {
-          c.userData.velocity.z *= -restitution;
-          const veer = Math.abs(c.userData.velocity.z) * 0.2;
-          c.userData.velocity.x += (Math.random() - 0.5) * veer;
-          c.userData.velocity.y += (Math.random() - 0.5) * veer;
-        } else {
-          c.userData.velocity.z = 0;
-        }
-      }
-      if (c.position.x < bounds.minX) { c.position.x = bounds.minX; c.userData.velocity.x *= -restitution; }
-      if (c.position.x > bounds.maxX) { c.position.x = bounds.maxX; c.userData.velocity.x *= -restitution; }
-      if (c.position.y < bounds.minY) { c.position.y = bounds.minY; c.userData.velocity.y *= -restitution; }
-      if (c.position.y > bounds.maxY) { c.position.y = bounds.maxY; c.userData.velocity.y *= -restitution; }
-      const speedSq = c.userData.velocity.lengthSq();
-      if (speedSq < 0.2 && c.position.z === 0) { c.userData.stopped = true; return; }
-      const speed = Math.sqrt(speedSq);
-      const rotAxis = new THREE.Vector3(-c.userData.velocity.y, c.userData.velocity.x, c.userData.velocity.z).normalize();
-      if (rotAxis.lengthSq() > 0.1) c.rotateOnWorldAxis(rotAxis, speed * dt * (c.userData.rotMult || 1.5));
-    });
-
-    for (let i = 0; i < diceList.length; i++) {
-      for (let j = i + 1; j < diceList.length; j++) {
-        const c1 = diceList[i];
-        const c2 = diceList[j];
-        const dx = c2.position.x - c1.position.x;
-        const dy = c2.position.y - c1.position.y;
-        const dz = c2.position.z - c1.position.z;
-        const distSq = dx * dx + dy * dy + dz * dz;
-        const minDist = 2.0;
-        if (distSq < minDist * minDist && distSq > 0) {
-          const dist = Math.sqrt(distSq);
-          const overlap = minDist - dist;
-          const nx = dx / dist, ny = dy / dist, nz = dz / dist;
-          c1.position.x -= nx * overlap * 0.5; c1.position.y -= ny * overlap * 0.5; c1.position.z -= nz * overlap * 0.5;
-          c2.position.x += nx * overlap * 0.5; c2.position.y += ny * overlap * 0.5; c2.position.z += nz * overlap * 0.5;
-          const v1 = c1.userData.velocity, v2 = c2.userData.velocity;
-          const velAlongNormal = (v2.x - v1.x) * nx + (v2.y - v1.y) * ny + (v2.z - v1.z) * nz;
-          if (velAlongNormal < 0) {
-            const jImpulse = -(1 + 0.7) * velAlongNormal / 2;
-            const ix = nx * jImpulse, iy = ny * jImpulse, iz = nz * jImpulse;
-            v1.x -= ix; v1.y -= iy; v1.z -= iz;
-            v2.x += ix; v2.y += iy; v2.z += iz;
-            if (c1.userData.stopped && v1.lengthSq() > 0.5) c1.userData.stopped = false;
-            if (c2.userData.stopped && v2.lengthSq() > 0.5) c2.userData.stopped = false;
-          }
-        }
-      }
-    }
   });
 
   return null;
@@ -313,57 +225,101 @@ export function DiceScene({ latestRoll }: DiceSceneProps) {
 
 // ─── DiceTrayWindow ───────────────────────────────────────────────────────────
 
+/** A roll as the server sends it to the tray (diceRollBroadcast). */
+interface RollBroadcast {
+  total: number;
+  results: Record<string, unknown>;
+  diceSides?: Record<string, number>;
+  throw?: RollThrow;
+  /** Rolls of one group land in one throw (6c4c, utils/diceThrow.js on the server). */
+  group?: string;
+  color: string;
+  historyString: string;
+  glitch?: boolean;
+  criticalGlitch?: boolean;
+  /** What the board says of it: what it was for, its words, what it came to (6c4d1-3 on the server). */
+  board?: BoardRoll['board'];
+}
+
 interface DiceTrayWindowProps {
   pos: { x: number; y: number };
   setPos: (pos: { x: number; y: number }) => void;
   onClose: () => void;
   socketRef: React.MutableRefObject<any>;
+  /** Whoever is signed in, GM or player: their ROLL or LANDED is kept on their account (6c4b3b). */
+  authToken?: string | null;
+  /** The tray's bell (6c4g), between ANIMATION and the history button: whether others' rolls flash it while shut. */
+  bell?: boolean;
+  onToggleBell?: () => void;
+  /** Open with the roll history showing: the tray was opened on a flash, so there are rolls to catch up on. */
+  openHistory?: boolean;
 }
 
-export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWindowProps) {
+export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bell, onToggleBell, openHistory = false }: DiceTrayWindowProps) {
+  const theme = useContext(ThemeContext);
+  const [motion, setMotion] = useTrayMotion(authToken);
+  // Read when a roll arrives, inside the socket handlers set up once.
+  const motionNow = useRef(motion);
+  useEffect(() => { motionNow.current = motion; }, [motion]);
   const [history, setHistory] = useState<DiceRoll[]>([]);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [latestRoll, setLatestRoll] = useState<{ total: number; results: any; diceSides?: Record<string, number>; color: string; timestamp: number } | null>(null);
-  const [displayRoll, setDisplayRoll] = useState<{ total: number; results: any; diceSides?: Record<string, number>; color: string; timestamp: number } | null>(null);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(openHistory);
+  const [latestRoll, setLatestRoll] = useState<TrayRoll | null>(null);
+  /** The rolls on the board once landed, a group's together, and when they came down. */
+  const [shown, setShown] = useState<{ rolls: RollBroadcast[]; at: number } | null>(null);
   const [glitchState, setGlitchState] = useState<'none' | 'glitch' | 'critical'> ('none');
   const [isRolling, setIsRolling] = useState(false);
   const historyContainerRef = useRef<HTMLDivElement>(null);
-  // Rolls play one at a time: attacks broadcast to-hit and damage
-  // back-to-back, and without a queue the second wiped the first's dice
-  // mid-flight. Dice-less rolls (shock damage) show briefly, not for the
-  // full animation.
-  const rollQueue = useRef<any[]>([]);
+  // No queue (6c4c): a new roll cuts straight in, and the one it cut short goes into the record at
+  // once. Rolls the server puts in one group (one person's within a moment, as an attack's to-hit
+  // and damage) land in one throw together. Dice-less rolls (shock damage) show briefly.
+  const playing = useRef<{ group?: string; rolls: RollBroadcast[]; told: boolean } | null>(null);
   const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!socketRef.current) return;
     socketRef.current.emit('requestDiceHistory');
 
-    const playNext = () => {
-      const data = rollQueue.current.shift();
-      if (!data) { rollTimer.current = null; return; }
-      const hasDice = data.results && Object.keys(data.results).length > 0;
-      setLatestRoll({ total: data.total, results: data.results, diceSides: data.diceSides, color: data.color, timestamp: Date.now() });
+    /** Rolls into the record, in the order they came. */
+    const record = (rolls: RollBroadcast[]) => setHistory(prev => {
+      setTimeout(() => { if (historyContainerRef.current) historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight; }, 50);
+      return [...prev, ...(rolls as unknown as DiceRoll[])];
+    });
+
+    /** Throw a group's dice, all its rolls' together, from its first roll's seed; tell its result as they stop. */
+    const play = (group: { rolls: RollBroadcast[]; told: boolean }) => {
+      if (rollTimer.current) clearTimeout(rollTimer.current);
+      const first = group.rolls[0];
+      const last = group.rolls[group.rolls.length - 1];
+      // Worked out now, so the total is revealed as the last die stops, not after a set time.
+      const specs = group.rolls.flatMap((r) => (r.results && Object.keys(r.results).length ? diceOfRoll(r).map((s) => ({ ...s, color: r.color })) : [])).slice(0, MOST_DICE);
+      const thrown = specs.length ? throwDice(specs, first.throw?.seed ?? 1, trayCamera()) : undefined;
+      setLatestRoll({ total: last.total, results: last.results, diceSides: last.diceSides, throw: first.throw, thrown, color: first.color, timestamp: Date.now() });
       setIsRolling(true);
-      setDisplayRoll(null);
+      setShown(null);
       setGlitchState('none');
       rollTimer.current = setTimeout(() => {
+        rollTimer.current = null;
         setIsRolling(false);
-        setDisplayRoll({ total: data.total, results: data.results, diceSides: data.diceSides, color: data.color, timestamp: Date.now() });
-        if (data.criticalGlitch) setGlitchState('critical');
-        else if (data.glitch) setGlitchState('glitch');
-        setHistory(prev => {
-          const newHistory = [...prev, data];
-          setTimeout(() => { if (historyContainerRef.current) historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight; }, 50);
-          return newHistory;
-        });
-        playNext();
-      }, hasDice ? 5000 : 800);
+        setShown({ rolls: [...group.rolls], at: performance.now() });
+        if (group.rolls.some((r) => r.criticalGlitch)) setGlitchState('critical');
+        else if (group.rolls.some((r) => r.glitch)) setGlitchState('glitch');
+        group.told = true;
+        record(group.rolls);
+      }, thrown && motionNow.current === 'roll' ? revealAfter(thrown) : 800);
     };
 
-    const handleBroadcast = (data: any) => {
-      rollQueue.current.push(data);
-      if (!rollTimer.current) playNext();
+    const handleBroadcast = (data: RollBroadcast) => {
+      const now = playing.current;
+      // The same group as the throw under way: thrown with it.
+      if (now && !now.told && data.group && now.group === data.group) {
+        now.rolls.push(data);
+        play(now);
+        return;
+      }
+      // Another: it cuts in, and what it cut short is told in the record at once.
+      if (now && !now.told) { now.told = true; record(now.rolls); }
+      playing.current = { group: data.group, rolls: [data], told: false };
+      play(playing.current);
     };
 
     const handleHistory = (data: any[]) => {
@@ -380,11 +336,29 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
       socket.off('diceRollHistory', handleHistory);
       if (rollTimer.current) clearTimeout(rollTimer.current);
       rollTimer.current = null;
-      rollQueue.current = [];
+      playing.current = null;
     };
   }, [socketRef.current]);
 
   const titleControls = (
+    <>
+    <button
+      type="button"
+      role="switch"
+      onClick={() => setMotion(motion === 'roll' ? 'landed' : 'roll')}
+      className="win95-title-toggle"
+      aria-checked={motion === 'roll'}
+      aria-label="Animation"
+      title={motion === 'roll' ? 'ANIMATION ON: THE DICE ROLL' : 'ANIMATION OFF: THE DICE LAND AT ONCE'}
+      style={{ background: 'var(--black)', color: 'var(--green)', padding: '0 6px', height: '22px', width: 'auto', fontFamily: 'monospace', fontSize: '10px', letterSpacing: '1px', marginRight: '4px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+    >
+      {/* A toggle: the knob to the right and the track lit when on. */}
+      <span aria-hidden style={{ position: 'relative', width: '20px', height: '10px', borderRadius: '5px', border: '1px solid var(--green)', boxSizing: 'border-box', background: motion === 'roll' ? 'var(--green)' : 'transparent', transition: 'background 0.15s' }}>
+        <span style={{ position: 'absolute', top: '1px', left: motion === 'roll' ? '11px' : '1px', width: '6px', height: '6px', borderRadius: '50%', background: motion === 'roll' ? 'var(--black)' : 'var(--green)', transition: 'left 0.15s' }} />
+      </span>
+      ANIMATION
+    </button>
+    {onToggleBell && <NotifyBell enabled={!!bell} onToggle={onToggleBell} />}
     <button
       onClick={() => setIsHistoryOpen(!isHistoryOpen)}
       className="win95-close-btn"
@@ -393,6 +367,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
     >
       <img src={isHistoryOpen ? paperFillIcon : paperLightIcon} width="14" height="14" alt="Paper" style={{ filter: 'brightness(0) invert(1)' }} />
     </button>
+    </>
   );
 
   return (
@@ -407,11 +382,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
     >
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1, background: 'var(--black)' }}>
         <div style={{ padding: '20px', background: 'var(--black)', borderBottom: '2px solid var(--dark-green)', textAlign: 'center', overflow: 'hidden' }}>
-          <DotMatrixScoreboard
-            value={displayRoll !== null ? displayRoll.total.toString() : ''}
-            timestamp={displayRoll?.timestamp || 0}
-            isRolling={isRolling}
-          />
+          <CharacterBoard rolls={shown?.rolls ?? null} rolling={isRolling} landedAt={shown?.at ?? 0} />
           {glitchState !== 'none' && (
             <div style={{
               marginTop: '10px',
@@ -429,16 +400,19 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
           )}
         </div>
 
-        <div style={{ height: '320px', width: '100%', position: 'relative' }}>
-          <Canvas camera={{ position: [0, 0, 13], fov: 35, near: 0.1, far: 100 }}>
-            <ambientLight intensity={1} />
-            <DiceScene latestRoll={latestRoll} />
+        {/* One shape on every screen (TRAY_ASPECT), so the walls, and the throw, are everyone's. */}
+        <div data-testid="dice-tray-floor" style={{ width: '100%', aspectRatio: String(TRAY_ASPECT), position: 'relative' }}>
+          <Canvas camera={{ position: [...TRAY_VIEW.position], fov: TRAY_VIEW.fov, near: 0.1, far: 100 }}>
+            <ambientLight intensity={0.6} />
+            <directionalLight position={[-3, 8, 5]} intensity={0.9} />
+            <DiceScene latestRoll={latestRoll} landed={motion === 'landed'} />
           </Canvas>
         </div>
 
         {isHistoryOpen && (
           <div
             ref={historyContainerRef}
+            data-testid="dice-history"
             style={{
               position: 'absolute', left: '-252px', top: 0, bottom: 0, width: '250px',
               boxSizing: 'border-box', border: '2px solid var(--green)',
@@ -450,7 +424,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef }: DiceTrayWind
               const match = h.historyString.match(/^(.*?) rolled (.*)$/);
               return (
                 <React.Fragment key={i}>
-                  <div style={{ marginBottom: '8px', color: h.color, textShadow: '1px 1px 2px #000, 0 0 8px #000, 0 0 4px #000', wordBreak: 'break-word' }}>
+                  <div style={{ marginBottom: '8px', color: themedRollColor(h.color, theme), textShadow: '1px 1px 2px #000, 0 0 8px #000, 0 0 4px #000', wordBreak: 'break-word' }}>
                     {match ? <><strong style={{ fontWeight: 800 }}>{match[1]}:</strong> rolled {match[2]}</> : h.historyString}
                   </div>
                   {i < history.length - 1 && <div style={{ borderBottom: '1px solid var(--green)', opacity: 0.4, margin: '12px 0' }} />}

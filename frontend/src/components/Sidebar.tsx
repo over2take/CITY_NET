@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { themeRoot } from '../utils/themeRoot';
+import { diceRailClick } from '../utils/rollNotify';
 import { controlsToken } from '../utils/tokenControl';
 import { attackAsOptions } from './tokenActions';
 import kofiLogo from '../assets/kofi.png';
@@ -835,9 +836,11 @@ interface DiceMenuProps {
   attackPending?: { targetId: number; targetName: string; attackType: 'melee' | 'ranged'; ac: number; vehicle?: AttackVehicle | null } | null;
   onCancelAttack?: () => void;
   gameSystem?: string;
+  /** Someone else rolled while the tray was shut (6c4g, utils/rollNotify.ts): DICE_TRAY.exe flashes till it opens. */
+  hasUnseenRoll?: boolean;
 }
 
-export function DiceMenu({ userName, token, writeToken, locations = [], socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack, gameSystem, customDice = [], onOpenCustomDieBuilder, onDeleteCustomDie }: DiceMenuProps) {
+export function DiceMenu({ userName, token, writeToken, locations = [], socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack, gameSystem, customDice = [], onOpenCustomDieBuilder, onDeleteCustomDie, hasUnseenRoll = false }: DiceMenuProps) {
   const isAdmin = !!token;
   const defenseLabel = getTokenDefense(gameSystem).label;
   const diceTypes = [2, 4, 6, 8, 10, 12, 20, 100];
@@ -958,44 +961,45 @@ export function DiceMenu({ userName, token, writeToken, locations = [], socketRe
           <div key={sides} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'color-mix(in srgb, var(--black) 50%, transparent)', padding: '5px 10px', marginBottom: '5px', borderRadius: '4px', border: '1px solid var(--dark-green)' }}>
             <span style={{ fontWeight: 'bold', color: 'var(--cyan)', width: '40px' }}>d{sides}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <button className="upload-btn" style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleSubDice(sides)}>-</button>
+              <button className="upload-btn" aria-label={`One less d${sides}`} style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleSubDice(sides)}>-</button>
               <span style={{ width: '20px', textAlign: 'center' }}>{diceCounts[sides] || 0}</span>
-              <button className="upload-btn" style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleAddDice(sides)}>+</button>
+              <button className="upload-btn" aria-label={`One more d${sides}`} style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleAddDice(sides)}>+</button>
             </div>
           </div>
         ))}
 
-        {/* Custom dice */}
-        {customDice.length > 0 && (
-          <div style={{ borderTop: '1px solid #1a3a1a', marginTop: '6px', paddingTop: '6px' }}>
-            {customDice.map(die => (
-              <div key={die.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'color-mix(in srgb, var(--black) 50%, transparent)', padding: '5px 10px', marginBottom: '5px', borderRadius: '4px', border: '1px solid #1a4a2a' }}>
+        {/* This game's dice (a built-in game's, or a custom system's own, 6c4a), then the table's from CUSTOM_DIE.EXE. */}
+        {([[customDice.filter(d => d.locked), "THIS GAME'S DICE"], [customDice.filter(d => !d.locked), "THE TABLE'S DICE"]] as const).map(([dice, heading]) => dice.length > 0 && (
+          <div key={heading} role="group" aria-label={heading} style={{ borderTop: '1px solid var(--dark-green)', marginTop: '6px', paddingTop: '6px' }}>
+            <div style={{ fontSize: '0.6rem', letterSpacing: 2, opacity: 0.75, marginBottom: '4px' }}>{heading}</div>
+            {dice.map(die => (
+              <div key={die.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'color-mix(in srgb, var(--black) 50%, transparent)', padding: '5px 10px', marginBottom: '5px', borderRadius: '4px', border: '1px solid var(--dark-green)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0 }}>
-                  <span style={{ fontWeight: 'bold', color: 'var(--cyan)', whiteSpace: 'nowrap' }}>{die.name}</span>
+                  <span style={{ fontWeight: 'bold', color: die.color === 'danger' ? 'var(--danger)' : 'var(--cyan)', whiteSpace: 'nowrap' }}>{die.name}</span>
                   {isAdmin && !die.locked && (
                     <>
                       <button
                         onClick={() => onOpenCustomDieBuilder?.(die)}
-                        style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', padding: '0 2px', fontSize: '0.8rem', lineHeight: 1, flexShrink: 0 }}
-                        title="Edit die"
+                        style={{ background: 'none', border: 'none', color: 'var(--text)', opacity: 0.6, cursor: 'pointer', padding: '0 2px', fontSize: '0.8rem', lineHeight: 1, flexShrink: 0 }}
+                        title="Edit die" aria-label={`Edit ${die.name}`}
                       >⚙</button>
                       <button
                         onClick={() => onDeleteCustomDie?.(die.id)}
-                        style={{ background: 'none', border: 'none', color: '#444', cursor: 'pointer', padding: '0 2px', fontSize: '0.7rem', lineHeight: 1, flexShrink: 0 }}
-                        title="Delete die"
+                        style={{ background: 'none', border: 'none', color: 'var(--danger)', opacity: 0.6, cursor: 'pointer', padding: '0 2px', fontSize: '0.7rem', lineHeight: 1, flexShrink: 0 }}
+                        title="Delete die" aria-label={`Delete ${die.name}`}
                       >✕</button>
                     </>
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <button className="upload-btn" style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleSubCustom(die.id)}>-</button>
+                  <button className="upload-btn" aria-label={`One less ${die.name}`} style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleSubCustom(die.id)}>-</button>
                   <span style={{ width: '20px', textAlign: 'center' }}>{customCounts[die.id] || 0}</span>
-                  <button className="upload-btn" style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleAddCustom(die.id)}>+</button>
+                  <button className="upload-btn" aria-label={`One more ${die.name}`} style={{ minWidth: '30px', padding: '0 5px' }} onClick={() => handleAddCustom(die.id)}>+</button>
                 </div>
               </div>
             ))}
           </div>
-        )}
+        ))}
 
         {isAdmin && (
           <button
@@ -1035,7 +1039,7 @@ export function DiceMenu({ userName, token, writeToken, locations = [], socketRe
         ROLL DICE
       </button>
 
-      <button className="upload-btn" style={{ flexShrink: 0, padding: '10px', fontSize: '0.8rem', width: '100%' }} onClick={() => setIsDiceTrayOpen((prev: any) => !prev)}>
+      <button className={hasUnseenRoll ? 'upload-btn unread-flash' : 'upload-btn'} style={{ flexShrink: 0, padding: '10px', fontSize: '0.8rem', width: '100%' }} onClick={() => setIsDiceTrayOpen((prev: any) => !prev)}>
         DICE_TRAY.exe
       </button>
     </div>
@@ -1192,6 +1196,8 @@ interface SidebarProps {
   isChatOpen: boolean;
   setIsChatOpen: (v: boolean) => void;
   hasUnreadChat: boolean;
+  /** Someone else rolled while the tray was shut (6c4g): the rail's DICE_ROLLER flashes, and a click opens the tray too. */
+  hasUnseenRoll?: boolean;
   syncRhombusToDB: (s: any) => void;
   view: string;
   activeBattleMapData: any;
@@ -1234,7 +1240,7 @@ interface SidebarProps {
   onDeleteCustomDie?: (id: number | string) => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, writeToken, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, onEndCombat, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, writeToken, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, hasUnseenRoll = false, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, onEndCombat, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
   /** The rail label under the pointer, positioned from the button it belongs to. */
   const [railTip, setRailTip] = useState<{ label: string; x: number; y: number } | null>(null);
   // A custom system's own words for the rail's labels; today's text otherwise.
@@ -1347,7 +1353,14 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
             </svg>
           </button>}
-          <button className={`rail-btn ${activeMenu === 'dice_menu' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'dice_menu' ? 'none' : 'dice_menu')} aria-label="DICE_ROLLER" data-tip="DICE_ROLLER">
+          <button
+            className={`rail-btn ${activeMenu === 'dice_menu' ? 'active' : ''} ${hasUnseenRoll ? 'unread-flash' : ''}`}
+            onClick={() => {
+              const click = diceRailClick(activeMenu, hasUnseenRoll);
+              setActiveMenu(click.menu);
+              if (click.openTray) setIsDiceTrayOpen(true);
+            }}
+            aria-label="DICE_ROLLER" data-tip="DICE_ROLLER">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
               <polygon points="12 2 20.5 7 20.5 17 12 22 3.5 17 3.5 7" />
               <polygon points="12 8 16.6 15.2 7.4 15.2" />
@@ -1488,7 +1501,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
           {activeMenu === 'character_controls' && <CharacterControlsMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} writeToken={writeToken} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} isVehiclesOpen={isVehiclesOpen} setIsVehiclesOpen={setIsVehiclesOpen} gameSystem={gameSystem} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
-          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} writeToken={writeToken} locations={locations} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} customDice={customDice} onOpenCustomDieBuilder={onOpenCustomDieBuilder} onDeleteCustomDie={onDeleteCustomDie} />}
+          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} writeToken={writeToken} locations={locations} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} customDice={customDice} onOpenCustomDieBuilder={onOpenCustomDieBuilder} onDeleteCustomDie={onDeleteCustomDie} hasUnseenRoll={hasUnseenRoll} />}
           {activeMenu === 'initiative_tracker' && initiativeOn && (
             <InitiativeNavPanel
               system={gameSystem}

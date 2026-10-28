@@ -46,10 +46,67 @@ test('every control in the builder takes a click, on every page', async ({ page 
   await page.getByRole('tab', { name: /NEW$/ }).click();
   await page.locator('#systems-new-name').fill(`Clicks ${test.info().retry}`);
   await page.getByRole('button', { name: 'CREATE', exact: true }).click();
+  // A condition that changes every roll, so TEST ROLL shows its condition switches (6b3c) when
+  // ROLLS is swept: + MODIFIER gives the open condition ALL ROLLS -1.
+  await builderPage(page, 'CONDITIONS');
+  await page.getByRole('button', { name: '+ MODIFIER' }).click();
   for (const p of ['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
     await builderPage(page, p);
     missed[p] = await unreachable(page);
+    if (p === 'STATS & RULES') {
+      // Each of its tabs, not only the first.
+      for (const tab of ['FORMULAS', 'TABLES', 'DICE', 'ROLLS']) {
+        await page.getByRole('tab', { name: tab, exact: true }).click();
+        missed[`${p} · ${tab}`] = await unreachable(page);
+        if (tab === 'DICE') {
+          // Dice made from a preset, and a symbol's drawing pad and icons open (6c2b2).
+          await page.getByRole('group', { name: 'New dice from a preset' }).getByRole('button', { name: 'GOOD / GREAT / BAD' }).click();
+          const hit = page.getByRole('group', { name: 'Symbol Hit' });
+          await hit.getByRole('group', { name: 'Hit: look' }).getByRole('button', { name: 'DRAW' }).click();
+          await expect(hit.getByRole('group', { name: 'Drawing of Hit' })).toBeVisible();
+          missed[`${p} · DICE · A DIE AND THE PAD`] = await unreachable(page);
+          await hit.getByRole('group', { name: 'Hit: look' }).getByRole('button', { name: 'ICON' }).click();
+          missed[`${p} · DICE · ICONS`] = await unreachable(page);
+        }
+      }
+      // ROLLS shows one roll at a time: three made from presets, so all five steps and TEST ROLL
+      // have something in them. Blades' push with its cost (TAKES or ADDS); Vampire's Hunger dice
+      // with their effects and glitch; CWN's save, whose target opens PLAYERS SEE in step 3 (6c4h).
+      for (const preset of ['BLADES ACTION', 'VAMPIRE POOL', 'CWN SAVE']) {
+        if (preset !== 'BLADES ACTION') await page.getByRole('navigation', { name: 'Rolls' }).getByRole('button', { name: '+ ROLL' }).click();
+        await page.getByRole('group', { name: 'New roll from a preset' }).getByRole('button', { name: preset }).click();
+        await expect(page.getByTestId('test-roll').getByRole('group', { name: 'Conditions on the sample' })).toBeVisible();
+        missed[`${p} · ROLLS · ${preset}`] = await unreachable(page);
+      }
+      await page.getByRole('tab', { name: 'STATS', exact: true }).click();
+      // And as a map (5a3a): the map's own controls, then back to FORMS, as the next journeys expect.
+      const view = page.getByRole('group', { name: 'View' });
+      await view.getByRole('button', { name: 'GRAPH' }).click();
+      await expect(page.getByTestId('graph-view')).toBeVisible();
+      missed[`${p} · GRAPH`] = await unreachable(page);
+      // A roll's panel on the map (6b4a): the ROLLS tab's five steps and TEST ROLL, in the side panel.
+      await page.getByTestId('graph-node-roll:blades_action').click();
+      await expect(page.getByTestId('graph-panel').getByTestId('test-roll')).toBeVisible();
+      missed[`${p} · GRAPH · ROLL PANEL`] = await unreachable(page);
+      await page.keyboard.press('Escape');
+      await view.getByRole('button', { name: 'FORMS' }).click();
+    }
+    if (p === 'NPCS') {
+      // Its second tab, the tiers.
+      await page.getByRole('tab', { name: 'TIERS', exact: true }).click();
+      missed[`${p} · TIERS`] = await unreachable(page);
+      await page.getByRole('tab', { name: 'STAT BLOCK', exact: true }).click();
+    }
   }
+  // HELP's WHO SEES THE TARGET (6c4h), opened as a GM would from the ROLLS tab: its settings,
+  // ROLL AGAIN and the two trays.
+  await builderPage(page, 'STATS & RULES');
+  await page.getByRole('tab', { name: 'ROLLS', exact: true }).click();
+  await page.getByRole('button', { name: 'HOW PLAYERS SEE IT' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'HELP', exact: true })).toBeVisible();
+  await expect(page.getByRole('article', { name: 'WHO SEES THE TARGET' })).toBeVisible();
+  await expect(page.getByTestId('target-seen-example')).toBeVisible();
+  missed['HELP · WHO SEES THE TARGET'] = await unreachable(page);
   expect(Object.fromEntries(Object.entries(missed).filter(([, v]) => v.length))).toEqual({});
 });
 

@@ -8,11 +8,16 @@ import type { PublishPreview } from './versionPreview';
 import type { CustomRenderSheet } from './customTemplates';
 import type { GameCondition } from './tokenConditions';
 import type { TableEntry } from './tableConditions';
+import type { CustomDie } from '../types';
 
 type Problem = { where: string; message: string };
 
 /** A system's definition as stored: the builder edits it whole (backend/systemBuilder/definition.js). */
 export type Definition = { format: number; name: string; author?: string; [section: string]: unknown };
+
+/** The builder pages with a map, so a FORMS / GRAPH choice (backend routes/systems.js MAP_PAGES). */
+export type MapPage = 'rules';
+export type BuilderView = 'forms' | 'graph';
 
 /** One system as GET /api/systems/:id answers (store.getSystem). */
 export interface SystemCopies {
@@ -31,6 +36,37 @@ export type TriedBox =
   | { value: number | string; dice: { count: number; sides: number; rolls: number[] }[] }
   | { blank: true }
   | { error: string };
+/** A roll made by TEST ROLL (backend tableRolls.js rollField, rollStyles.js makeRoll). */
+/** A handful of a system's own die thrown by TEST (backend routes/systems.js test-dice). */
+export interface TestedDice {
+  /** Each face as the log writes it: its number and its symbols' marks, '·' for a blank. */
+  faces: string[];
+  symbols: { counted: Record<string, number>; left: Record<string, number> };
+  total: number;
+  historyText: string;
+}
+
+export interface TestedRoll {
+  /** The field it was rolled for, and every field it is rolled by. */
+  field: string | null;
+  fields: string[];
+  result: {
+    /** A kind of dice: a system's own die (`die`) has its faces' places and symbols (6c3). */
+    groups: { name?: string; die?: string; signed?: true; sides: number | 'F'; faces: { value: number; kept: boolean; extra?: boolean; minus?: boolean; face?: number; blank?: true; symbols?: string[] }[] }[];
+    dice: number; add: number; total: number; target: number | null; success: boolean | null; band: string | null;
+    natural: { label: string; critical?: 'success' | 'failure' } | null;
+    matches: { label: string; sets: number; critical?: 'success' | 'failure' }[];
+    glitch: string | null; effects: string[]; critical: 'success' | 'failure' | null;
+    changes: string[]; costs: { from: string; amount: number; adds?: true }[]; zero?: true;
+    /** Conditions' modifiers on all rolls, each added as its own term (6b3b). */
+    terms?: { label: string; amount: number }[];
+    /** The symbols counted and what is left of each, when the roll's dice show any (6c3). */
+    symbols?: { counted: Record<string, number>; left: Record<string, number> };
+  };
+  historyText: string;
+  total: number;
+}
+
 /** A tier worked out for a level (tierRolls.js rollTier). */
 export interface TriedTier { level: number; hp: TriedBox; defense: TriedBox; values: Record<string, TriedBox> }
 
@@ -83,6 +119,22 @@ const call = async <T>(fetcher: typeof fetch, token: string, url: string, method
   } catch {
     return { ok: false, error: UNREACHABLE, status: 0 };
   }
+  return answerOf<T>(res);
+};
+
+/** A zip sent as its own bytes (a system and its pictures, POST /api/systems/install/zip...). */
+const sendZip = async <T>(fetcher: typeof fetch, token: string, url: string, zip: Blob): Promise<Answer<T>> => {
+  let res: Response;
+  try {
+    res = await fetcher(url, { method: 'POST', headers: { 'Content-Type': 'application/zip', Authorization: `Bearer ${token}` }, body: zip });
+  } catch {
+    return { ok: false, error: UNREACHABLE, status: 0 };
+  }
+  return answerOf<T>(res);
+};
+
+/** What the server answered: its JSON, or its own words for a refusal. */
+const answerOf = async <T>(res: Response): Promise<Answer<T>> => {
   const json = await res.json().catch(() => null);
   if (res.ok) return { ok: true, value: json as T };
   return {
@@ -110,6 +162,18 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      */
     previewValues: (definition: Definition) =>
       call<{ values: Record<string, number>; problems: Problem[] }>(fetcher, token, '/api/systems/preview-values', 'POST', { definition }),
+    /**
+     * TEST ROLL (6b1a): one of a draft's rolls made for its sample character by the table's own
+     * engine, for `fieldId` or the first field it is rolled by, with the changes picked. Changes
+     * nothing, logs nothing.
+     */
+    testRoll: (definition: Definition, rollId: string, fieldId?: string | null, changes: string[] = [], conditions: string[] = []) =>
+      call<TestedRoll>(fetcher, token, '/api/systems/test-roll', 'POST', { definition, rollId, fieldId: fieldId ?? undefined, changes, conditions }),
+    /** The DICE tab's TEST (6c2a): a handful of a draft's own die thrown on the server, its faces as the log writes them and its symbols counted. */
+    /** The table's dice from CUSTOM_DIE.EXE (routes/custom_dice.js), for COPY FROM THE TABLE'S DICE. */
+    tableDice: () => call<CustomDie[]>(fetcher, token, '/api/custom_dice'),
+    testDice: (definition: Definition, dieId: string, count: number) =>
+      call<TestedDice>(fetcher, token, '/api/systems/test-dice', 'POST', { definition, dieId, count }),
     /**
      * A draft's sheet as it would be drawn (its own or the starter, without the parts it turned
      * off), and the starter sheet CUSTOMIZE copies, without saving (CHARACTER SHEET).
@@ -161,12 +225,19 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
     tourSeen: () => call<{ seen: boolean }>(fetcher, token, '/api/systems/tour'),
     /** The tour seen (finished or skipped), or to be shown again the next time the builder opens. */
     setTourSeen: (seen: boolean) => call<{ seen: boolean }>(fetcher, token, '/api/systems/tour', 'PUT', { seen }),
+    /** FORMS or GRAPH on each builder page with a map (Phase 5: STATS & RULES only), as last picked. */
+    views: () => call<{ views: Record<MapPage, BuilderView> }>(fetcher, token, '/api/systems/view'),
+    setView: (page: MapPage, view: BuilderView) => call<{ page: MapPage; view: BuilderView }>(fetcher, token, '/api/systems/view', 'PUT', { page, view }),
     rename: (systemId: string, name: string) => call<{ name: string }>(fetcher, token, `${id(systemId)}/name`, 'PUT', { name }),
     duplicate: (systemId: string) => call<{ id: string; name: string }>(fetcher, token, `${id(systemId)}/duplicate`, 'POST', {}),
     remove: (systemId: string) => call<{ deleted: true }>(fetcher, token, id(systemId), 'DELETE'),
     preview: (file: string) => call<InstallPreview>(fetcher, token, '/api/systems/install/preview', 'POST', { file }),
     install: (file: string, mode: InstallMode, replaceChanges = false) =>
       call<InstallResult>(fetcher, token, '/api/systems/install', 'POST', { file, mode, ...(replaceChanges ? { replaceChanges: true } : {}) }),
+    /** The same for a zip of a system and its pictures, sent as it is. */
+    previewZip: (zip: Blob) => sendZip<InstallPreview>(fetcher, token, '/api/systems/install/zip/preview', zip),
+    installZip: (zip: Blob, mode: InstallMode, replaceChanges = false) =>
+      sendZip<InstallResult>(fetcher, token, `/api/systems/install/zip?mode=${encodeURIComponent(mode)}${replaceChanges ? '&replaceChanges=1' : ''}`, zip),
     /**
      * A currency's or a condition's icon image (PNG, WebP or SVG, a quarter of a megabyte at most),
      * stored by the server under its content hash: the address the currency's or condition's
@@ -191,11 +262,14 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
       if (res.ok && json && typeof json.icon === 'string') return { ok: true, value: { icon: json.icon } };
       return { ok: false, status: res.status, error: json && typeof json.error === 'string' ? json.error : 'The icon could not be uploaded.' };
     },
-    /** A published system as its .citysys file: its name and text, for the window to save. */
-    exportFile: async (systemId: string): Promise<Answer<{ fileName: string; text: string }>> => {
+    /**
+     * A published system as a file to save, its name and contents: with `images`, a zip of it and
+     * its uploaded pictures when it has some; otherwise its .citysys without them.
+     */
+    exportFile: async (systemId: string, images = false): Promise<Answer<{ fileName: string; file: Blob }>> => {
       let res: Response;
       try {
-        res = await fetcher(`${id(systemId)}/export`, { headers: { Authorization: `Bearer ${token}` } });
+        res = await fetcher(`${id(systemId)}/export${images ? '?images=1' : ''}`, { headers: { Authorization: `Bearer ${token}` } });
       } catch {
         return { ok: false, error: UNREACHABLE, status: 0 };
       }
@@ -204,7 +278,7 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
         return { ok: false, status: res.status, error: json && typeof json.error === 'string' ? json.error : UNREACHABLE };
       }
       const named = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '');
-      return { ok: true, value: { fileName: named ? named[1] : 'system.citysys', text: await res.text() } };
+      return { ok: true, value: { fileName: named ? named[1] : 'system.citysys', file: await res.blob() } };
     },
     /**
      * The blank PDF form a draft would give players to fill in and upload through IMPORT (4h2c),

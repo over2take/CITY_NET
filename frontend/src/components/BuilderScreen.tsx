@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { systemsApi, type Definition, type SystemCopies } from '../sheets/systemsApi';
+import { systemsApi, type Definition, type SystemCopies, type BuilderView } from '../sheets/systemsApi';
 import { lockControls, suggestedName, LOCKED_MESSAGE } from '../sheets/examples';
 import {
   createAutosave, saveStatus, exitWarning, leaveNeedsAsking, publishBlocked, publishedMessage,
@@ -11,6 +11,8 @@ import { SetupPage } from './SetupPage';
 import { WordsPage } from './WordsPage';
 import { FeaturesPage } from './FeaturesPage';
 import { StatsRulesPage } from './StatsRulesPage';
+// The map and React Flow under it load only when GRAPH is first shown (Phase 5 decision 9).
+const GraphView = React.lazy(() => import('./GraphView').then((m) => ({ default: m.GraphView })));
 import { SheetPage } from './SheetPage';
 import { NpcsPage } from './NpcsPage';
 import { ConditionsPage } from './ConditionsPage';
@@ -62,7 +64,7 @@ interface Props {
  * A page of an example, locked: every control greyed but those that only move around it (tabs,
  * things opening out), so it can be read but not changed (sheets/examples.ts lockControls).
  */
-function Locked({ on, children }: { on: boolean; children: React.ReactNode }) {
+function Locked({ on, fill = false, children }: { on: boolean; fill?: boolean; children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const root = ref.current;
@@ -73,7 +75,7 @@ function Locked({ on, children }: { on: boolean; children: React.ReactNode }) {
     watch.observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['disabled'] });
     return () => watch.disconnect();
   }, [on]);
-  return <div ref={ref} className={on ? 'builder-locked' : undefined} data-testid={on ? 'locked-page' : undefined}>{children}</div>;
+  return <div ref={ref} className={on ? 'builder-locked' : undefined} data-testid={on ? 'locked-page' : undefined} style={fill ? { height: '100%' } : undefined}>{children}</div>;
 }
 
 /**
@@ -211,6 +213,10 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
   const [helpTopic, setHelpTopic] = useState<string | null>(null);
   /** The tour's step while it is showing (4i): the first time the builder opens, or from HELP. */
   const [tourStep, setTourStep] = useState<number | null>(null);
+  /** STATS & RULES as FORMS or GRAPH (Phase 5): FORMS until GRAPH is picked, then as last picked, on the server. */
+  const [rulesView, setRulesView] = useState<BuilderView>('forms');
+  /** A note FORMS' EDIT IN GRAPH asked to open the map on (5b5). */
+  const [graphStart, setGraphStart] = useState<string | undefined>(undefined);
   const rootRef = useRef<HTMLDivElement>(null);
   const tourRoot = useCallback(() => rootRef.current, []);
 
@@ -245,6 +251,16 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
     api.tourSeen().then((r) => { if (live && r.ok && !r.value.seen) setTourStep(0); });
     return () => { live = false; };
   }, [api]);
+  // Asked only once there is a system or an example to show: MY SYSTEMS has no map.
+  const hasPages = !!systemId || looking;
+  useEffect(() => {
+    if (!hasPages) return undefined;
+    let live = true;
+    api.views().then((r) => { if (live && r.ok) setRulesView(r.value.views.rules); });
+    return () => { live = false; };
+  }, [api, hasPages]);
+  const pickRulesView = (view: BuilderView, start?: string) => { setGraphStart(start); setRulesView(view); void api.setView('rules', view); };
+
   /** Finished or skipped: it doesn't come back by itself (START THE TOUR on HELP plays it again). */
   const endTour = () => { setTourStep(null); void api.setTourSeen(true); };
   const lit: TourPlace = tourStep === null ? null : TOUR[tourStep].at;
@@ -350,6 +366,8 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
   const saveLine = state ? saveStatus(state) : null;
   /** Whether the pages have something to show: an open system's draft, or an example. */
   const ready = !!definition && (looking || !!system);
+  /** The map fills the page, edge to edge; every other page scrolls inside its margins. */
+  const graphOn = ready && page === 'rules' && rulesView === 'graph';
 
   return (
     <div
@@ -446,10 +464,20 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
           </span>
           <span aria-hidden style={{ opacity: 0.4 }}>/</span>
           <h1 style={{ margin: 0, color: 'var(--green)', fontSize: 14, letterSpacing: 1, flexShrink: 0 }}>{current.label}</h1>
+          {ready && page === 'rules' && (
+            <span role="group" aria-label="View" style={{ display: 'inline-flex', border: '1px solid var(--green)', flexShrink: 0 }}>
+              {(['forms', 'graph'] as const).map((v) => (
+                <button key={v} type="button" aria-pressed={rulesView === v} onClick={() => pickRulesView(v)} style={{
+                  ...mono, background: rulesView === v ? 'var(--green)' : 'none', color: rulesView === v ? 'var(--black)' : 'var(--green)',
+                  border: 0, fontSize: 11, letterSpacing: 1, padding: '3px 10px', cursor: 'pointer', fontWeight: rulesView === v ? 700 : 400,
+                }}>{v.toUpperCase()}</button>
+              ))}
+            </span>
+          )}
           <span style={{ opacity: 0.6, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current.what}</span>
         </header>
 
-        <section aria-label={current.label} className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 24, fontSize: 13, lineHeight: 1.5 }}>
+        <section aria-label={current.label} className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: graphOn ? 'hidden' : 'auto', padding: graphOn ? 0 : 24, fontSize: 13, lineHeight: 1.5 }}>
           {loadError && <p role="alert" style={{ color: 'var(--danger)' }}>{loadError}</p>}
           {(systemId ? !system : looking && !definition) && !loadError && <p style={{ opacity: 0.7 }}>LOADING…</p>}
           {page === 'systems' && (systemId === null || system) && (
@@ -502,7 +530,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
             <PublishPreviewPage preview={preview.value} system={name} busy={busy}
               onBack={() => { setPage(preview.back); setPreview(null); }} onPublish={() => publishNow(preview.back)} />
           )}
-          <Locked key={page} on={looking && page !== 'try'}>
+          <Locked key={page} on={looking && page !== 'try'} fill={graphOn}>
             {ready && page === 'problems' && (problems.length === 0
               ? <p style={{ color: 'var(--green)' }}>No problems. It can be published.</p>
               : (
@@ -515,7 +543,12 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
             )}
             {ready && page === 'words' && <WordsPage definition={definition!} edit={edit} />}
             {ready && page === 'features' && <FeaturesPage definition={definition!} edit={edit} api={api} />}
-            {ready && page === 'rules' && <StatsRulesPage definition={definition!} edit={edit} api={api} />}
+            {ready && page === 'rules' && !graphOn && <StatsRulesPage definition={definition!} edit={edit} api={api} onEditInGraph={(node) => pickRulesView('graph', node)} onHelp={(topic) => { setHelpTopic(topic); setPage('help'); setStatus(null); }} />}
+            {graphOn && (
+              <React.Suspense fallback={<p style={{ opacity: 0.7, padding: 24 }}>LOADING THE MAP…</p>}>
+                <GraphView definition={definition!} edit={edit} api={api} readOnly={looking} startWith={graphStart} problems={problems} onGoTo={(p) => { setPage(p); setStatus(null); }} />
+              </React.Suspense>
+            )}
             {ready && page === 'sheet' && <SheetPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'npcs' && <NpcsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'conditions' && <ConditionsPage definition={definition!} edit={edit} api={looking ? undefined : api} />}

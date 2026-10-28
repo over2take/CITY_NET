@@ -55,7 +55,7 @@ const untilValue = async (read, check, opts = {}) =>
  * This waits for the actual thing instead. sqlite serializes statements on a connection,
  * so a query queued after the handler's queries resolves after them. One round drains one
  * layer; a handler whose callback queues more work needs another, so several rounds run in
- * sequence and each one is a real barrier rather than a delay.
+ * sequence, each waiting on the database rather than on a clock.
  *
  * Eight is chosen to cover the deepest nesting in these handlers - read settings, read the
  * sheet, read the token, write, re-read - with room to spare. Extra rounds on an already
@@ -63,6 +63,12 @@ const untilValue = async (read, check, opts = {}) =>
  *
  * This does NOT wait for work scheduled off the database - a setTimeout inside a handler,
  * say. Nothing here does that, and `until` is the tool where something does.
+ *
+ * It relies on the connection being serialized, as makeTestDb leaves it. In node-sqlite3's
+ * default parallel mode a round can be answered before a handler's query on a crowded runner,
+ * and tests built on that failed on CI only; a database made another way needs `db.serialize()`
+ * before drain means anything. Where a handler hops off the database (a timer, a file, crypto)
+ * before its next query, a round can still pass it: wait for the result with `until` there.
  */
 const drain = (db, rounds = 8) => new Promise((resolve, reject) => {
   let left = rounds;

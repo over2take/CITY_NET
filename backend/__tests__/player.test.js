@@ -3,6 +3,10 @@ import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { makeTestDb, get, all, run } from './helpers/testDb.js';
 
 // Must be set before the route module is loaded — it captures SECURE_MODE at import time
@@ -332,6 +336,30 @@ describe('Admin reset player password', () => {
     expect(res.body.tempPassword).toBeTruthy();
     const row = await get(db, `SELECT temp_password FROM player_accounts WHERE username = 'netrunner'`);
     expect(row.temp_password).toBe(1);
+  });
+
+  // Eight characters a GM can read out without mixing up (no 0/O, no 1/I/L).
+  const READABLE = /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{8}$/;
+  const reset = () => request(app).post('/api/player/admin/players/netrunner/reset').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+
+  it('makes it from the operating system\'s secure random source, readable aloud, and stores only its hash', async () => {
+    await seedPlayer(db);
+    const first = (await reset()).body.tempPassword;
+    const second = (await reset()).body.tempPassword;
+    expect(first).toMatch(READABLE);
+    expect(second).toMatch(READABLE);
+    expect(second).not.toBe(first);
+    const row = await get(db, "SELECT password_hash FROM player_accounts WHERE username = 'netrunner'");
+    expect(row.password_hash).not.toContain(second);
+    expect(await bcrypt.compare(second, row.password_hash)).toBe(true);
+    // Each character is the operating system's pick: standing in for it decides the password.
+    const spy = vi.spyOn(crypto, 'randomInt').mockReturnValue(0);
+    try { expect((await reset()).body.tempPassword).toBe('AAAAAAAA'); } finally { spy.mockRestore(); }
+  });
+
+  it('never comes from Math.random, which can be predicted', () => {
+    const route = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'routes', 'player.js'), 'utf8');
+    expect(route).not.toMatch(/Math\.random/);
   });
 
   it('returns 404 for unknown player', async () => {

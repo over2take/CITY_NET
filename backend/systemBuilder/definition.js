@@ -51,6 +51,9 @@ const { checkBank } = require('./bank');
 const { checkConditions } = require('./conditions');
 const { checkRests, restIdsOf } = require('./rests');
 const { checkHouseRules } = require('./houseRules');
+const { checkGraph } = require('./graph');
+const { checkRolls, SEEN } = require('./rollStyles');
+const { checkDice } = require('./diceFaces');
 
 const FORMAT = 1;
 
@@ -66,7 +69,7 @@ const LIMITS = {
   word: 40,
 };
 
-const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules']);
+const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules', 'graph', 'rolls', 'symbols', 'dice', 'target_seen']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -175,13 +178,26 @@ const checkDefinition = (definition) => {
   checkConditions(definition.conditions, new Set([...statIdsOf(definition), ...derivedIds]), problems, restIdsOf(definition));
   checkRests(definition, problems);
   checkHouseRules(definition, problems);
+  checkGraph(definition, problems);
+  checkDice(definition, problems);
+  checkRolls(definition, problems);
+  if (definition.target_seen !== undefined && !SEEN.includes(definition.target_seen)) {
+    problems.push({ where: 'target_seen', message: `One of ${SEEN.join(', ')}` });
+  }
   return { problems };
 };
 
-/** A new system's starting point: a name and nothing else. */
-const blankDefinition = (name) => ({ format: FORMAT, name: String(name || '').trim() });
+/**
+ * How much of a roll's target players see, for the whole system (6c4h): a roll's own `seen`, or
+ * this. A system made before the setting existed has none, and stays SHOWN, as it always was; a new
+ * one is made with GM ONLY written in (the user, 2026-10-24), never by reading none as GM ONLY.
+ */
+const NEW_SYSTEM_SEEN = 'gm';
+
+/** A new system's starting point: a name, and players kept from its rolls' targets. */
+const blankDefinition = (name) => ({ format: FORMAT, name: String(name || '').trim(), target_seen: NEW_SYSTEM_SEEN });
 
 module.exports = {
   FORMAT, LIMITS, TERMS, PARTS, WORD_FORMS,
-  parseDefinition, checkDefinition, blankDefinition, wordFor, resolveWords, ownWords, partOn,
+  parseDefinition, checkDefinition, blankDefinition, wordFor, resolveWords, ownWords, partOn, NEW_SYSTEM_SEEN,
 };

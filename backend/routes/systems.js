@@ -6,11 +6,18 @@ const multer = require('multer');
 const { authenticate, optionalAuthenticate, requireMainAdmin } = require('../middleware/auth');
 const { LIMITS, rejectFormat, uploadErrors } = require('../middleware/uploadConstraints');
 const store = require('../systemBuilder/store');
+const citysys = require('../systemBuilder/citysys');
+const citysysZip = require('../systemBuilder/citysysZip');
+const { zipBody: readZipBody } = require('../middleware/jsonBody');
 const { previewPublish } = require('../systemBuilder/publishPreview');
 const { buildCustomTemplate } = require('../sheets/pdfTemplate');
 const runtime = require('../systemBuilder/runtime');
-const { checkDefinition } = require('../systemBuilder/definition');
+const { checkDefinition, NEW_SYSTEM_SEEN } = require('../systemBuilder/definition');
 const { previewDerived } = require('../systemBuilder/derived');
+const tableRolls = require('../systemBuilder/tableRolls');
+const { conditionsOf } = require('../systemBuilder/conditions');
+const { diceOf } = require('../systemBuilder/diceFaces');
+const { cryptoRng } = require('../utils/random');
 const { effectiveSheet, starterSheet, fieldsOf } = require('../systemBuilder/sheet');
 const { npcSheetOf, LIMITS: NPC_LIMITS } = require('../systemBuilder/npc');
 const { rollTier } = require('../systemBuilder/tierRolls');
@@ -23,6 +30,9 @@ const { houseRuleKey } = require('../systemBuilder/houseRules');
 
 /** The global_settings key that says the builder's first-time tour has been seen. */
 const TOUR_SEEN = 'builder_tour_seen';
+/** The builder pages with a map, so a FORMS / GRAPH choice (Phase 5: STATS & RULES only). */
+const MAP_PAGES = ['rules'];
+const VIEW_KEY = (page) => `builder_view_${page}`;
 
 /** What a currency's or condition's icon may be uploaded as (decided with the user, 2026-10-01). */
 const ICON_EXT = new Set(['.png', '.webp', '.svg']);
@@ -106,7 +116,8 @@ module.exports = (db, io = null) => {
     const copy = exampleDefinition(example);
     if (!copy) return res.status(404).json({ error: 'No such example' });
     if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'A system needs a name' });
-    store.createSystem(db, { definition: { ...copy, name: name.trim() } }, (err, made) => answer(res, err, made));
+    // A copy is a new system: players kept from its rolls' targets unless the example says otherwise (6c4h).
+    store.createSystem(db, { definition: { target_seen: NEW_SYSTEM_SEEN, ...copy, name: name.trim() } }, (err, made) => answer(res, err, made));
   });
 
   // Whether the builder's first-time tour has been seen (4i; approved mockup
@@ -125,6 +136,25 @@ module.exports = (db, io = null) => {
     const done = (err) => (err ? answer(res, err) : res.json({ seen }));
     if (seen) db.run(`INSERT INTO global_settings (key, value) VALUES (?, '1') ON CONFLICT(key) DO UPDATE SET value = '1'`, [TOUR_SEEN], done);
     else db.run('DELETE FROM global_settings WHERE key = ?', [TOUR_SEEN], done);
+  });
+
+  // FORMS or GRAPH, per builder page that has a map (Phase 5; approved mockup
+  // docs/mockups/builder-graph.html, 2026-10-17): remembered here like the tour, one setting per
+  // page as only the main admin builds. FORMS until GRAPH is picked. Before /:id, as /tour is.
+  router.get('/view', gm, (req, res) => {
+    const keys = MAP_PAGES.map((p) => VIEW_KEY(p));
+    db.all(`SELECT key, value FROM global_settings WHERE key IN (${keys.map(() => '?').join(', ')})`, keys, (err, rows) => {
+      if (err) return answer(res, err);
+      const set = new Map((rows || []).map((r) => [r.key, r.value]));
+      return res.json({ views: Object.fromEntries(MAP_PAGES.map((p) => [p, set.get(VIEW_KEY(p)) === 'graph' ? 'graph' : 'forms'])) });
+    });
+  });
+  router.put('/view', gm, (req, res) => {
+    const { page, view } = req.body || {};
+    if (!MAP_PAGES.includes(page)) return res.status(400).json({ error: 'That page has no map' });
+    if (view !== 'forms' && view !== 'graph') return res.status(400).json({ error: 'The view is forms or graph' });
+    db.run('INSERT INTO global_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [VIEW_KEY(page), view],
+      (err) => (err ? answer(res, err) : res.json({ page, view })));
   });
 
   router.get('/:id', gm, (req, res) => store.getSystem(db, req.params.id, (err, sys) => answer(res, err, sys)));
@@ -231,13 +261,14 @@ module.exports = (db, io = null) => {
 
   // ─── Sharing as files (systemBuilder/citysys.js) ────────────────────────────
 
-  // A published system as a .citysys file to download.
+  // A published system to download: with ?images=1 and pictures uploaded for it, a zip of its file
+  // and them; otherwise its .citysys, the pictures' addresses left out (store.exportSystem).
   router.get('/:id/export', gm, (req, res) => {
-    store.exportSystem(db, req.params.id, (err, file) => {
+    store.exportSystem(db, req.params.id, { images: req.query.images === '1' }, (err, file) => {
       if (err) return answer(res, err);
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Content-Type', file.zip ? 'application/zip' : 'application/json; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
-      res.send(file.text);
+      res.send(file.zip || file.text);
     });
   });
 
@@ -251,6 +282,61 @@ module.exports = (db, io = null) => {
     if (checked.fatal) return res.status(400).json({ error: checked.fatal });
     const samples = definition.samples && typeof definition.samples === 'object' && !Array.isArray(definition.samples) ? definition.samples : {};
     res.json(previewDerived({ lookups: definition.lookups, derived: definition.derived }, samples));
+  });
+
+  /**
+   * TEST ROLL (6b1a; approved mockup docs/mockups/builder-rolls.html): one of a draft's rolls, unsaved
+   * changes and all, made for its sample character (its samples, and its formulas worked out on
+   * them) by the table's own engine on the secure dice, for the field asked or the first it is
+   * rolled by. A roll with problems is refused with the first; changes that cost something are
+   * tried, since nothing is taken; `conditions` names the draft's conditions to try it under (6b3b).
+   * Changes nothing, logs nothing.
+   */
+  router.post('/test-roll', gm, (req, res) => {
+    const { definition, rollId, fieldId, changes, conditions } = req.body || {};
+    const checked = checkDefinition(definition);
+    if (checked.fatal) return res.status(400).json({ error: checked.fatal });
+    const roll = Array.isArray(definition.rolls) ? definition.rolls.find((r) => r && typeof r === 'object' && r.id === rollId) : null;
+    if (!roll || typeof rollId !== 'string') return res.status(400).json({ error: 'No such roll' });
+    const own = checked.problems.find((p) => p.where === `roll ${rollId}` || p.where.startsWith(`roll ${rollId},`));
+    if (own) return res.status(400).json({ error: `${own.where}: ${own.message}` });
+    const samples = definition.samples && typeof definition.samples === 'object' && !Array.isArray(definition.samples) ? definition.samples : {};
+    const { values } = previewDerived({ lookups: definition.lookups, derived: definition.derived }, samples);
+    // The field: the one asked, if the roll is rolled by it; else the first it is rolled by (a
+    // group's first stat); else none, @this reading 0.
+    const fields = tableRolls.fieldsRolledBy(definition, roll);
+    const field = typeof fieldId === 'string' && fields.includes(fieldId) ? fieldId : fields[0] ?? null;
+    const made = tableRolls.rollField({
+      definition, data: { ...samples, ...values }, fieldId: field, roll,
+      chosen: Array.isArray(changes) ? changes.slice(0, 20) : [], rng: cryptoRng, who: 'The sample', tryCosts: true,
+      // The draft's conditions the sample is tried under (6b3b), by id.
+      conditions: Array.isArray(conditions) ? conditionsOf(definition).filter((c) => conditions.includes(c.id)) : [],
+    });
+    if (!made.ok) return res.status(400).json({ error: made.error });
+    res.json({ field, fields, result: made.result, historyText: made.historyText, total: made.total });
+  });
+
+  /**
+   * The DICE tab's TEST (6c2a; approved mockup docs/mockups/builder-dice.html): a handful of one of
+   * a draft's own dice thrown by the table's own engine on the secure dice, its symbols counted and
+   * cancelled as COUNT THE SYMBOLS reads them. A draft whose dice have problems is refused with the
+   * first. Changes nothing, logs nothing.
+   */
+  router.post('/test-dice', gm, (req, res) => {
+    const { definition, dieId, count } = req.body || {};
+    const checked = checkDefinition(definition);
+    if (checked.fatal) return res.status(400).json({ error: checked.fatal });
+    const die = typeof dieId === 'string' ? diceOf(definition).find((d) => d.id === dieId) : null;
+    if (!die) return res.status(400).json({ error: 'No such die' });
+    const own = checked.problems.find((p) => /^(symbol|die )/.test(p.where) || p.where === 'symbols' || p.where === 'dice');
+    if (own) return res.status(400).json({ error: `${own.where}: ${own.message}` });
+    const n = Number.isInteger(count) ? Math.max(1, Math.min(20, count)) : 4;
+    const made = tableRolls.rollField({
+      definition, data: {}, roll: { id: 'test', label: 'Test', dice: [{ count: String(n), die: die.id }], read: 'symbols' },
+      rng: cryptoRng, who: 'The test',
+    });
+    if (!made.ok) return res.status(400).json({ error: made.error });
+    res.json({ faces: made.results[die.name] ?? [], symbols: made.result.symbols, total: made.total, historyText: made.historyText });
   });
 
   /**
@@ -329,22 +415,54 @@ module.exports = (db, io = null) => {
     store.previewInstall(db, req.body && req.body.file, (err, preview) => answer(res, err, preview));
   });
 
-  // `replaceChanges: true` only after the GM was warned that changes made here would go.
-  router.post('/install', gm, (req, res) => {
-    const { file, mode, replaceChanges } = req.body || {};
-    store.installSystem(db, { text: file, mode, replaceChanges }, (err, installed) => {
+  /** Install a file's text, then (once it is in) its pictures, and answer. */
+  const install = (res, { text, mode, replaceChanges, images = [] }) => {
+    store.installSystem(db, { text, mode, replaceChanges }, (err, installed) => {
       if (err) return res.status(err.status || 500).json({
         error: err.status ? err.message : 'Could not reach the systems store',
         ...(err.problems ? { problems: err.problems } : {}),
         ...(err.installed ? { installed: err.installed } : {}),
         ...(err.changed ? { changed: true } : {}),
       });
+      try {
+        citysysZip.storeImages(images);
+      } catch (e) {
+        console.error('[systems] pictures', e.message);
+        return res.status(500).json({ error: 'The system installed, but its pictures could not be stored' });
+      }
       // An update or a system brought back may be one a browser already has: it fetches it again.
       runtime.refresh(db, installed.id, () => {
         if (io) io.emit('customSystemChanged', { id: installed.id });
-        answer(res, null, installed);
+        answer(res, null, { ...installed, images: images.length });
       });
     });
+  };
+
+  // `replaceChanges: true` only after the GM was warned that changes made here would go.
+  router.post('/install', gm, (req, res) => {
+    const { file, mode, replaceChanges } = req.body || {};
+    install(res, { text: file, mode, replaceChanges });
+  });
+
+  // The same for a zip of a system and its pictures (citysysZip.js), sent as its own bytes rather
+  // than as JSON text; how to install it comes in the address (?mode=, ?replaceChanges=1).
+  const zipBody = readZipBody(citysysZip.LIMITS.zipBytes);
+  /** The zip's file and the pictures its system names, or null with the refusal already sent. */
+  const readSent = (req, res) => {
+    const read = citysysZip.readZip(req.body);
+    if (read.fatal) { res.status(400).json({ error: read.fatal }); return null; }
+    const file = citysys.readFile(read.text);
+    return { text: read.text, images: file.fatal ? [] : citysysZip.imagesFor(file.file.definition, read.images) };
+  };
+  router.post('/install/zip/preview', gm, zipBody, (req, res) => {
+    const sent = readSent(req, res);
+    if (!sent) return;
+    store.previewInstall(db, sent.text, (err, preview) => answer(res, err, preview && { ...preview, inside: { ...preview.inside, images: sent.images.length } }));
+  });
+  router.post('/install/zip', gm, zipBody, (req, res) => {
+    const sent = readSent(req, res);
+    if (!sent) return;
+    install(res, { text: sent.text, mode: req.query.mode, replaceChanges: req.query.replaceChanges === '1', images: sent.images });
   });
 
   router.delete('/:id', gm, (req, res) => {

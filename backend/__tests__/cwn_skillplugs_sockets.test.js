@@ -8,6 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import crypto from 'crypto';
 import { makeTestDb, get, run } from './helpers/testDb.js';
 import { until, untilValue, drain } from './helpers/until.js';
 
@@ -120,8 +121,9 @@ describe('a loaded plug reaches the dice', () => {
 });
 
 describe('the jack crashes on the worst the dice can do', () => {
-  // A d6 that always shows 1, so every skill check is a natural 2.
-  const snakeEyes = () => vi.spyOn(Math, 'random').mockReturnValue(0);
+  // A d6 that always shows 1, so every skill check is a natural 2. The server rolls on the
+  // operating system's dice (utils/random.js), so they stand in for it here.
+  const snakeEyes = () => vi.spyOn(crypto, 'randomInt').mockReturnValue(0);
 
   it('fails the check and says so, however good the total was', async () => {
     // Fix-3 with INT +2 rolls 2 for a total of 7, which would beat most difficulties.
@@ -180,7 +182,7 @@ describe('the jack crashes on the worst the dice can do', () => {
     await seed({ fix: 0, [skillplugs.FIELD]: [{ skill: 'fix', level: 1 }] });
     const { handlers, emitted } = await identified(db);
     // Every d6 shows 4, so the natural is 8 - nowhere near the band.
-    const spy = vi.spyOn(Math, 'random').mockReturnValue(0.6);
+    const spy = vi.spyOn(crypto, 'randomInt').mockReturnValue(Math.floor(0.6 * 0x100000000));
     try {
       handlers['requestSheetRoll']({ fieldId: 'fix' });
       const roll = await untilValue(() => lastRoll(emitted), Boolean, { label: 'a Fix roll' });

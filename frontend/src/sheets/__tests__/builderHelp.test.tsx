@@ -45,7 +45,7 @@ describe('the HELP page\'s topics', () => {
     const pages = TOPICS.filter((t) => t.group === 'PAGES');
     expect(pages.map((t) => t.page)).toEqual(BUILDER_PAGES.map((p) => p.id));
     expect(pages.map((t) => t.title)).toEqual(BUILDER_PAGES.map((p) => p.label));
-    expect(TOPICS.filter((t) => t.group === 'REFERENCE').map((t) => t.title)).toEqual(['FORMULAS', 'DICE', 'HEALTH MODELS', 'SHARING AND VERSIONS', 'EXAMPLES']);
+    expect(TOPICS.filter((t) => t.group === 'REFERENCE').map((t) => t.title)).toEqual(['FORMULAS', 'DICE', 'HEALTH MODELS', 'SHARING AND VERSIONS', 'WHO SEES THE TARGET', 'EXAMPLES']);
     expect(new Set(TOPICS.map((t) => t.id)).size).toBe(TOPICS.length);
     for (const t of TOPICS) expect(t.body.length, t.id).toBeGreaterThan(0);
   });
@@ -87,7 +87,7 @@ describe('the formula reference', () => {
 describe('the words beside each setting', () => {
   it('are sentences, filed by the page that shows them (each page\'s test checks they are all there)', () => {
     for (const [k, text] of Object.entries(HINTS)) {
-      expect(k, k).toMatch(/^(setup|words|bank|rules|sheet|npcs|conditions|rests|house|only|try)\.[a-zA-Z]+$/);
+      expect(k, k).toMatch(/^(setup|words|bank|rules|dice|rolls|sheet|npcs|conditions|rests|house|only|try)\.[a-zA-Z]+$/);
       expect(text.length, k).toBeGreaterThan(30);
       expect(text.trim(), k).toMatch(/\.$/);
     }

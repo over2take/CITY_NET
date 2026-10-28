@@ -61,6 +61,49 @@ describe('SystemInfoMenu', () => {
 // ─── DiceMenu ─────────────────────────────────────────────────────────────────
 
 describe('DiceMenu', () => {
+  it("lists this game's dice (read-only), then the table's; rolling one sends its id (6c4a)", async () => {
+    const socketRef = makeSocketRef();
+    const customDice = [
+      { id: 'own:good', name: 'Good', sides: 6, faces: [{ value: '✶' }], locked: true },
+      { id: 'own:bad', name: 'Bad', sides: 4, faces: [{ value: '✕' }], locked: true, color: 'danger' as const },
+      { id: 3, name: 'Bone', sides: 6, faces: [{ value: '1' }] },
+    ];
+    render(<DiceMenu userName="GHOST" socketRef={socketRef} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} customDice={customDice} token="t" onOpenCustomDieBuilder={vi.fn()} onDeleteCustomDie={vi.fn()} />);
+    const game = screen.getByRole('group', { name: "THIS GAME'S DICE" });
+    const table = screen.getByRole('group', { name: "THE TABLE'S DICE" });
+    expect(game.textContent).toContain('Good');
+    expect(game.textContent).toContain('Bad');
+    expect(table.textContent).toContain('Bone');
+    // Only the table's can be edited or deleted here; the game's are the builder's.
+    expect(screen.queryByRole('button', { name: 'Edit Good' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Edit Bone' })).toBeTruthy();
+    // A bad die in the danger color, everything else the theme's: no fixed greens left.
+    expect((screen.getByText('Bad') as HTMLElement).style.color).toBe('var(--danger)');
+    expect((screen.getByText('Good') as HTMLElement).style.color).toBe('var(--cyan)');
+    await userEvent.click(screen.getByRole('button', { name: 'One more Good' }));
+    await userEvent.click(screen.getByRole('button', { name: 'One more Good' }));
+    await userEvent.click(screen.getByRole('button', { name: /ROLL DICE/ }));
+    expect(socketRef.current.emit).toHaveBeenCalledWith('requestCustomDiceRoll', expect.objectContaining({ dieId: 'own:good', count: 2 }));
+  });
+
+  it("draws its dice rows in the theme's colors only", () => {
+    const src = readFileSync(resolve(__dirname, '../Sidebar.tsx'), 'utf8');
+    const menu = src.slice(src.indexOf('export function DiceMenu'), src.indexOf('export function', src.indexOf('export function DiceMenu') + 10));
+    expect(menu.match(/#1a3a1a|#1a4a2a|'#666'|'#444'/g)).toBeNull();
+  });
+
+  it('flashes DICE_TRAY.exe while someone else\'s roll waits unseen, and opens the tray from it (6c4g)', async () => {
+    const setIsDiceTrayOpen = vi.fn();
+    const { rerender } = render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'DICE_TRAY.exe' }).classList.contains('unread-flash')).toBe(false);
+    rerender(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={vi.fn()} hasUnseenRoll />);
+    const tray = screen.getByRole('button', { name: 'DICE_TRAY.exe' });
+    expect(tray.classList.contains('unread-flash')).toBe(true);
+    await userEvent.setup().click(tray);
+    expect(setIsDiceTrayOpen).toHaveBeenCalledTimes(1);
+    expect(setIsDiceTrayOpen.mock.calls[0][0](false)).toBe(true);
+  });
+
   it('renders DICE_ROLLER header', () => {
     render(<DiceMenu userName="GHOST" socketRef={makeSocketRef()} rhombusState={{ color: '#0f0' }} setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} />);
     expect(screen.getByText('DICE_ROLLER')).toBeInTheDocument();

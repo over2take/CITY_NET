@@ -1025,6 +1025,37 @@ header {
   border-color: #ff0000;
 }
 
+/* DICE_TRAY.EXE's board (6c4e): a 16 by 2 character display, each cell 5 by 7 dots, lit in the
+   theme's primary (--board-on, set by the board from the theme). */
+.tray-board {
+  /* As wide as the window gives it, the dots square and scaling with it, so it never runs past the
+     window's edge whatever its width. */
+  display: grid;
+  width: 100%;
+  box-sizing: border-box;
+  grid-template-columns: repeat(16, minmax(0, 1fr));
+  gap: 5px 3px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--board-on) 4%, var(--black));
+  border: 1px solid color-mix(in srgb, var(--board-on) 25%, transparent);
+  border-radius: 3px;
+}
+.tray-board-cell { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; }
+.tray-board-px { aspect-ratio: 1; border-radius: 0.5px; background: color-mix(in srgb, var(--board-on) 9%, transparent); }
+.tray-board-px.on { background: var(--board-on); box-shadow: 0 0 3px color-mix(in srgb, var(--board-on) 80%, transparent); }
+
+/* A toggle in a window's title bar (DICE_TRAY.EXE's ANIMATION): framed like the close button,
+   without its red, which says "close". */
+.win95-title-toggle {
+  border: 1px solid var(--green);
+  cursor: pointer;
+}
+.win95-title-toggle:hover,
+.win95-title-toggle:focus-visible {
+  background: color-mix(in srgb, var(--green) 18%, var(--black)) !important;
+  outline: none;
+}
+
 .win95-content {
   position: relative;
   padding: 15px;

@@ -1,3 +1,4 @@
+import type { RollPick } from '../sheets/types';
 import React, { useCallback, useEffect, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
@@ -61,8 +62,8 @@ export function ControlledNpcSheetWindow({ token, locationId, name, socket, pos,
     };
   }, [locationId, token, socket]);
 
-  const roll = useCallback((fieldId: string, luck?: number, luckNegate?: boolean) => {
-    socket?.emit('requestSheetRoll', { fieldId, location_id: locationId, ...(luck ? { luck } : {}), ...(luckNegate ? { luckNegate } : {}) });
+  const roll = useCallback((fieldId: string, luck?: number, luckNegate?: boolean, pick?: RollPick) => {
+    socket?.emit('requestSheetRoll', { fieldId, location_id: locationId, ...(luck ? { luck } : {}), ...(luckNegate ? { luckNegate } : {}), ...(pick ? { rollId: pick.rollId, changes: pick.changes } : {}) });
   }, [socket, locationId]);
   const rollAbility = useCallback((formula: string, label: string) => {
     socket?.emit('rollAbility', { formula, label, location_id: locationId });

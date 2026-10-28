@@ -13,12 +13,13 @@ const server = (status = 200, body: unknown = {}, headers: Record<string, string
   status,
   json: async () => body,
   text: async () => (typeof body === 'string' ? body : JSON.stringify(body)),
+  blob: async () => new Blob([typeof body === 'string' ? body : JSON.stringify(body)]),
   headers: { get: (k: string) => headers[k] ?? null },
 }) as unknown as Response);
 
 const asked = (f: ReturnType<typeof server>) => {
   const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
-  return { url, method: init?.method ?? 'GET', headers: init?.headers, body: init?.body ? JSON.parse(String(init.body)) : undefined };
+  return { url, method: init?.method ?? 'GET', headers: init?.headers, body: init?.body instanceof Blob ? init.body : init?.body ? JSON.parse(String(init.body)) : undefined };
 };
 
 describe('the requests', () => {
@@ -33,6 +34,11 @@ describe('the requests', () => {
       [(a) => a.tryTier({ format: 1, name: 'H' }, 'boss', 6), '/api/systems/try-tier', 'POST', { definition: { format: 1, name: 'H' }, tier: 'boss', level: 6 }],
       [(a) => a.tryHealth({ format: 1, name: 'H' }, { token: { current: 5, max: 9 }, action: { kind: 'damage', amount: 2 } }), '/api/systems/try-health', 'POST',
         { definition: { format: 1, name: 'H' }, token: { current: 5, max: 9 }, action: { kind: 'damage', amount: 2 } }],
+      [(a) => a.testRoll({ format: 1, name: 'H' }, 'skill', 'lore', ['push'], ['hurt']), '/api/systems/test-roll', 'POST',
+        { definition: { format: 1, name: 'H' }, rollId: 'skill', fieldId: 'lore', changes: ['push'], conditions: ['hurt'] }],
+      [(a) => a.testRoll({ format: 1, name: 'H' }, 'skill'), '/api/systems/test-roll', 'POST',
+        { definition: { format: 1, name: 'H' }, rollId: 'skill', changes: [], conditions: [] }],
+      [(a) => a.testDice({ format: 1, name: 'H' }, 'good', 5), '/api/systems/test-dice', 'POST', { definition: { format: 1, name: 'H' }, dieId: 'good', count: 5 }],
       [(a) => a.create('Hearth'), '/api/systems', 'POST', { name: 'Hearth' }],
       [(a) => a.rename(ID, 'Emberhold'), `/api/systems/${ID}/name`, 'PUT', { name: 'Emberhold' }],
       [(a) => a.setHouseRules(ID, { magic: true }), `/api/systems/${ID}/house-rules`, 'PUT', { rules: { magic: true } }],
@@ -114,15 +120,47 @@ describe('uploading a currency icon', () => {
   });
 });
 
+describe('installing a zip (2026-10-23)', () => {
+  it('sends it as its own bytes, how to install it in the address', async () => {
+    const zipped = new Blob([new Uint8Array([0x50, 0x4b])]);
+    const f = server(200, { name: 'Iron Sea' });
+    expect(await systemsApi('tok', f).previewZip(zipped)).toEqual({ ok: true, value: { name: 'Iron Sea' } });
+    expect(asked(f)).toEqual({ url: '/api/systems/install/zip/preview', method: 'POST', headers: { 'Content-Type': 'application/zip', Authorization: 'Bearer tok' }, body: zipped });
+    const g = server(200, { id: ID });
+    await systemsApi('tok', g).installZip(zipped, 'keep_both');
+    expect(asked(g).url).toBe('/api/systems/install/zip?mode=keep_both');
+    const h = server(200, { id: ID });
+    await systemsApi('tok', h).installZip(zipped, 'update', true);
+    expect(asked(h).url).toBe('/api/systems/install/zip?mode=update&replaceChanges=1');
+  });
+
+  it('passes on a refusal in the server\'s words, and an unreachable server', async () => {
+    expect(await systemsApi('tok', server(400, { error: 'Not a zip file CITY_NET can read' })).previewZip(new Blob(['x'])))
+      .toEqual({ ok: false, status: 400, error: 'Not a zip file CITY_NET can read' });
+    const down = vi.fn(async () => { throw new TypeError('Failed to fetch'); });
+    expect(await systemsApi('tok', down as never).installZip(new Blob(['x']), 'new')).toEqual({ ok: false, status: 0, error: 'Could not reach the server.' });
+  });
+});
+
 describe('exporting', () => {
   it('fetches the file with the token and names it as the server does', async () => {
     const f = server(200, '{"citysys":1}', { 'Content-Disposition': 'attachment; filename="vault-knights.citysys"' });
-    expect(await systemsApi('tok', f).exportFile(ID)).toEqual({ ok: true, value: { fileName: 'vault-knights.citysys', text: '{"citysys":1}' } });
+    const r = await systemsApi('tok', f).exportFile(ID);
+    expect(r.ok && r.value.fileName).toBe('vault-knights.citysys');
+    expect(r.ok && await r.value.file.text()).toBe('{"citysys":1}');
     expect(asked(f)).toMatchObject({ url: `/api/systems/${ID}/export`, method: 'GET', headers: { Authorization: 'Bearer tok' } });
   });
 
+  it('asks for the images when told to (a zip, 2026-10-23)', async () => {
+    const f = server(200, 'PK', { 'Content-Disposition': 'attachment; filename="vault-knights.zip"' });
+    const r = await systemsApi('tok', f).exportFile(ID, true);
+    expect(r.ok && r.value.fileName).toBe('vault-knights.zip');
+    expect(asked(f).url).toBe(`/api/systems/${ID}/export?images=1`);
+  });
+
   it('falls back to a plain name', async () => {
-    expect((await systemsApi('tok', server(200, 'x')).exportFile(ID))).toEqual({ ok: true, value: { fileName: 'system.citysys', text: 'x' } });
+    const r = await systemsApi('tok', server(200, 'x')).exportFile(ID);
+    expect(r.ok && r.value.fileName).toBe('system.citysys');
   });
 
   it('passes on a refusal, and an unreachable server', async () => {

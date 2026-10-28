@@ -14,6 +14,7 @@
 // section or condition waiting on a rule that is off is hidden from every answer at once.
 
 const { compileSystem } = require('./derived');
+const { fieldsRolledBy } = require('./tableRolls');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf, LIMITS: NPC_LIMITS } = require('./npc');
 const { rollTier } = require('./tierRolls');
@@ -59,8 +60,15 @@ const metaOf = (definition) => {
     maxPairs,
     // Derived values on every save, as the built-in recompute functions do. A published
     // definition compiles (publishing refuses one with problems); should one not, nothing is
-    // recomputed rather than a save failing.
-    recompute: compiled.ok ? (data) => compiled.system.apply(data) : () => [],
+    // recomputed rather than a save failing. Saves call this inside database callbacks, where a
+    // throw would stop the server, so one never leaves here: whatever a system's formulas do,
+    // the sheet keeps the values it had and the server logs why.
+    recompute: compiled.ok ? (data) => {
+      try { return compiled.system.apply(data); } catch (err) {
+        console.error(`[systems] ${definition.name}: derived values not worked out:`, err.message);
+        return [];
+      }
+    } : () => [],
   };
 };
 
@@ -127,7 +135,29 @@ const renderOf = (id, definition, on = new Set()) => ({
     tiers: tiersWhenOn(definition).map((t) => ({ id: t.id, label: t.label })),
   },
   house_rules: houseRuleList(definition, on),
+  // Its own rolls (6b2a), only what a sheet needs to offer them: each one's name, the fields with a
+  // die button for it, and the changes a player may pick with what they cost. How it rolls stays
+  // on the server (tableRolls.js), as its formulas do.
+  rolls: (Array.isArray(definition.rolls) ? definition.rolls : []).filter((r) => r && typeof r === 'object' && typeof r.id === 'string').map((r) => ({
+    id: r.id,
+    label: typeof r.label === 'string' && r.label.trim() ? r.label : r.id,
+    fields: fieldsRolledBy(definition, r),
+    changes: (Array.isArray(r.changes) ? r.changes : []).map((c) => ({ id: c.id, label: c.label, ...(c.cost ? { cost: costShown(definition, c.cost) } : {}) })),
+  })),
 });
+
+/**
+ * What a change costs, as a sheet shows it (6b3a): the stat, its name, how much, which way, and the
+ * stat's highest when it is added to, so the chooser can say what can't be paid before asking.
+ */
+const costShown = (definition, cost) => {
+  const stat = (Array.isArray(definition.stats) ? definition.stats : []).flatMap((g) => (g && Array.isArray(g.stats) ? g.stats : []))
+    .find((s) => s && s.id === cost.from);
+  return {
+    from: cost.from, amount: cost.amount, label: (stat && stat.label) || cost.from,
+    ...(cost.adds ? { adds: true, ...(stat && Number.isFinite(stat.max) ? { max: stat.max } : {}) } : {}),
+  };
+};
 
 /** A published system, held as the game runs it: its house rules applied, by the table's `chosen` (rule -> on). */
 const put = (id, publishedText, version, chosen = {}) => {

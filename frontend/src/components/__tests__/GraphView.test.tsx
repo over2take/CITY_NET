@@ -1,0 +1,517 @@
+import React, { useState } from 'react';
+import { describe, it, expect, afterEach, beforeAll, vi } from 'vitest';
+import { render, screen, cleanup, within, waitFor, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { createRequire } from 'module';
+
+import { GraphView } from '../GraphView';
+import { GraphProblems } from '../GraphProblems';
+import type { Definition } from '../../sheets/systemsApi';
+import { graphOf, layoutOf, positionsOf } from '../../sheets/graphModel';
+import { lockControls } from '../../sheets/examples';
+import { standInsForReactFlow } from '../../test/reactFlow';
+
+/**
+ * STATS & RULES with GRAPH on (5a3a). Approved mockup builder-graph (2026-10-17), nodes as the
+ * builder design's node kit draws them (2026-09-29): a stats group as a list with SCORE and MOD and
+ * the table it is worked out by; a formula's inputs by name with where each comes from, BEST of
+ * several, its text in names and = its value, or its problem inside it; a folded group's one line;
+ * every node as tall as the model plans; AUTO-LAYOUT asking first; an example's map that only moves
+ * and zooms. Where dots and wires land needs a real browser: e2e/tests/builder-graph.spec.ts.
+ */
+
+beforeAll(() => standInsForReactFlow());
+afterEach(() => cleanup());
+
+const HEARTH: Definition = {
+  format: 1,
+  name: 'Hearth',
+  stats: [
+    { id: 'character', label: 'Character', stats: [{ id: 'lvl', label: 'Level', min: 1, max: 10 }] },
+    { id: 'abilities', label: 'Abilities', stats: [{ id: 'str', label: 'Strength', min: 3, max: 18 }, { id: 'wit', label: 'Wits', min: 3, max: 18 }] },
+  ],
+  samples: { lvl: 3, str: 16, wit: 9 },
+  lookups: { attribute_mod: { label: 'Attribute mod', bands: [{ upTo: 13, value: 0 }, { value: 1 }] } },
+  derived: [
+    { id: 'str_mod', label: 'Str mod', formula: 'attribute_mod(@str)' },
+    { id: 'wit_mod', label: 'Wit mod', formula: 'attribute_mod(@wit)' },
+    { id: 'save', label: 'Physical save', formula: '16 - (@lvl + max(@str_mod, @wit_mod))' },
+    { id: 'odd', label: 'Odd', formula: '@cash + @nowhere + nothing(@lvl) + $cwn_move_bonus' },
+    { id: 'spell', label: 'Spell power', formula: '0', alternative: { rule: 'magic', formula: '@wit_mod + @lvl' } },
+  ],
+  house_rules: [{ id: 'magic', name: 'Magic', description: 'Characters can learn spells.' }],
+  graph: { groups: [{ id: 'saves', label: 'SAVES', members: ['save', 'odd'] }], notes: [{ id: 'n1', on: 'save', text: 'Best of the two.' }] },
+};
+
+/** The server's values: odd has a mistake (it calls a table that isn't there). */
+const api = {
+  previewValues: vi.fn(async () => ({ ok: true as const, value: {
+    values: { str_mod: 1, wit_mod: 0, save: 12, spell: 0 },
+    problems: [{ where: 'derived odd, formula', message: 'No function or table called "nothing"' }],
+  } })),
+} as never;
+
+const open = (start: Definition = HEARTH, readOnly = false) => {
+  const edits: Definition[] = [];
+  const Harness = () => {
+    const [def, setDef] = useState(start);
+    return <div style={{ width: 1200, height: 800 }}><GraphView definition={def} edit={(next) => { edits.push(next); setDef(next); }} api={api} readOnly={readOnly} /></div>;
+  };
+  render(<Harness />);
+  return { edits, last: () => edits[edits.length - 1] };
+};
+const node = (id: string) => screen.getByTestId(`graph-node-${id}`);
+const settled = () => waitFor(() => expect(node('save').querySelector('[data-value]')?.textContent).toBe('12'), { timeout: 2000 });
+
+describe('the nodes, as the node kit draws them', () => {
+  it('draws every node as tall as the model plans', () => {
+    open();
+    for (const n of graphOf(HEARTH).nodes) expect(node(n.id).style.height, n.id).toBe(`${n.height}px`);
+  });
+
+  it('a stats group is one list: a row a stat, its score, and its modifier from the table named on it', async () => {
+    open();
+    const list = node('abilities');
+    expect(list.textContent).toContain('MOD VIA');
+    expect(list.textContent).toContain('ATTRIBUTE MOD');
+    expect(within(list).getByText('STRENGTH')).toBeTruthy();
+    expect(within(list).getByText('16')).toBeTruthy();
+    await waitFor(() => expect(within(list).getByText('+1')).toBeTruthy(), { timeout: 2000 });
+    expect(screen.queryByTestId('graph-node-str_mod')).toBeNull();
+    expect(node('character').textContent).not.toContain('MOD VIA');
+  });
+
+  it('a formula reads its inputs by name, where each comes from, BEST of several, its text in names, and = its value', async () => {
+    open();
+    await settled();
+    const save = node('save');
+    expect(within(save).getByText('LEVEL').nextElementSibling!.textContent).toBe('↗ CHARACTER');
+    expect(within(save).getByText('BEST').nextElementSibling!.textContent).toBe('STR MOD, WIT MOD · HIGHEST');
+    expect(within(save).getByText('16 − (LEVEL + BEST)')).toBeTruthy();
+  });
+
+  it('says what a name with no wire is: a sheet field, a name no sheet has, a table that isn\'t there, the engine\'s own', async () => {
+    open();
+    await settled();
+    const odd = node('odd');
+    expect(within(odd).getByText('@cash').nextElementSibling!.textContent).toBe('SHEET FIELD');
+    expect(within(odd).getByText('@nowhere').nextElementSibling!.textContent).toBe('ON NO SHEET');
+    expect(within(odd).getByText('nothing').nextElementSibling!.textContent).toBe('NO SUCH TABLE');
+    expect(within(odd).getByText('CWN MOVE BONUS').nextElementSibling!.textContent).toBe('BUILT-IN');
+  });
+
+  it('shows a formula\'s problem inside it, in place of its value', async () => {
+    open();
+    await settled();
+    expect(within(node('odd')).getByRole('alert').textContent).toBe('✕ No function or table called "nothing"');
+    expect(node('odd').querySelector('[data-value]')).toBeNull();
+  });
+
+  it('shows a formula\'s alternative under its house rule, and the rule, a table and a note as nodes of their own', () => {
+    open();
+    expect(node('spell').textContent).toContain('WITH MAGIC, USE');
+    expect(within(node('spell')).getByText('WIT MOD + LEVEL')).toBeTruthy();
+    expect(node('rule:magic').textContent).toContain('Characters can learn spells.');
+    expect(node('note:n1').textContent).toContain('Best of the two.');
+    expect(node('table:attribute_mod').textContent).toContain('UP TO 13');
+  });
+});
+
+describe('groups', () => {
+  it('folds a group into one line of how many nodes and wires out, through edit, and opens it again', async () => {
+    const { last } = open();
+    await userEvent.click(screen.getByRole('button', { name: 'Fold SAVES' }));
+    expect((last().graph as { collapsed: string[] }).collapsed).toEqual(['saves']);
+    expect(screen.getByTestId('graph-group-saves').textContent).toContain('2 NODES · 0 WIRES OUT');
+    await userEvent.click(screen.getByRole('button', { name: 'Open SAVES' }));
+    expect((last().graph as Record<string, unknown>).collapsed).toBeUndefined();
+  });
+});
+
+describe('the toolbar and the status line', () => {
+  it('has zoom, zoom out and FIT', () => {
+    open();
+    const bar = screen.getByRole('toolbar', { name: 'Map' });
+    for (const name of ['Zoom in', 'Zoom out', 'FIT']) expect(within(bar).getByRole('button', { name })).toBeTruthy();
+    expect(within(bar).getByTestId('graph-zoom').textContent).toMatch(/^\d+%$/);
+  });
+
+  it('AUTO-LAYOUT puts every node back in its column, in one click it can undo', async () => {
+    const moved = { ...HEARTH, graph: { ...(HEARTH.graph as object), positions: { save: [2400, 2400] } } };
+    const { last } = open(moved);
+    await userEvent.click(screen.getByRole('button', { name: 'AUTO-LAYOUT' }));
+    const laid = layoutOf(graphOf(moved));
+    expect((last().graph as { positions: Record<string, number[]> }).positions.save).toEqual([laid.save.x, laid.save.y]);
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(last()).toEqual(moved);
+  });
+
+  it('says how much is on the map and the sample character it is worked out on', () => {
+    open();
+    const status = screen.getByTestId('graph-status').textContent!;
+    expect(status).toContain(`${graphOf(HEARTH).nodes.length} NODES`);
+    expect(status).toContain('SAMPLE: LVL 3 · STR 16 · WIT 9');
+  });
+});
+
+describe('undo and redo', () => {
+  it('start with nothing to undo or redo', () => {
+    open();
+    expect((screen.getByRole('button', { name: 'Undo' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Redo' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('take back a fold and a change made in a node\'s panel, in turn, and put them back', async () => {
+    const { last } = open();
+    await userEvent.click(screen.getByRole('button', { name: 'Fold SAVES' }));
+    const folded = last();
+    fireEvent.click(node('spell'));
+    const text = within(await screen.findByTestId('graph-panel')).getByLabelText('Spell power formula');
+    await userEvent.type(text, ' + 1');
+    const typed = last();
+    expect((typed.derived as { id: string; formula: string }[]).find((d) => d.id === 'spell')!.formula).toBe('0 + 1');
+    // The typing is one step, the fold another.
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(last()).toEqual(folded);
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(last()).toEqual(HEARTH);
+    expect((screen.getByRole('button', { name: 'Undo' }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(screen.getByRole('button', { name: 'Redo' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Redo' }));
+    expect(last()).toEqual(typed);
+  });
+
+  it('answer Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z on the map, but leave a box being typed in its own', async () => {
+    const { last } = open();
+    await userEvent.click(screen.getByRole('button', { name: 'Fold SAVES' }));
+    const map = screen.getByTestId('graph-map');
+    fireEvent.keyDown(map, { key: 'z', ctrlKey: true });
+    expect(last()).toEqual(HEARTH);
+    fireEvent.keyDown(map, { key: 'y', ctrlKey: true });
+    expect((last().graph as { collapsed: string[] }).collapsed).toEqual(['saves']);
+    fireEvent.keyDown(map, { key: 'z', ctrlKey: true });
+    fireEvent.keyDown(map, { key: 'Z', ctrlKey: true, shiftKey: true });
+    expect((last().graph as { collapsed: string[] }).collapsed).toEqual(['saves']);
+    fireEvent.click(node('spell'));
+    const before = last();
+    fireEvent.keyDown(within(await screen.findByTestId('graph-panel')).getByLabelText('Spell power formula'), { key: 'z', ctrlKey: true });
+    expect(last()).toBe(before);
+  });
+});
+
+describe('+ ADD and Delete (5b4)', () => {
+  it('+ ADD searches what can be added, and adds a formula where the GM is looking, its panel open', async () => {
+    const { last } = open();
+    await userEvent.click(screen.getByRole('button', { name: '+ ADD' }));
+    const search = screen.getByRole('dialog', { name: 'Add a node' });
+    expect(within(search).getByRole('option', { name: /CHOICE · FEATURE/ }).hasAttribute('disabled')).toBe(true);
+    await userEvent.type(within(search).getByLabelText('Add a node: type to search'), 'formula{Enter}');
+    expect(screen.queryByRole('dialog', { name: 'Add a node' })).toBeNull();
+    expect((last().derived as { id: string }[]).map((d) => d.id)).toContain('new_formula');
+    expect((last().graph as { positions: Record<string, unknown> }).positions.new_formula).toBeTruthy();
+    expect(node('new_formula')).toBeTruthy();
+    expect(screen.getByTestId('graph-panel').getAttribute('aria-label')).toBe('FORMULA NEW FORMULA');
+  });
+
+  it('+ ADD → ROLL from a preset (6b4b): the roll made, its ROLL node on the map and its panel open', async () => {
+    const { last } = open();
+    await userEvent.click(screen.getByRole('button', { name: '+ ADD' }));
+    const search = screen.getByRole('dialog', { name: 'Add a node' });
+    await userEvent.type(within(search).getByLabelText('Add a node: type to search'), 'roll pbta{Enter}');
+    expect((last().rolls as { id: string }[]).map((r) => r.id)).toEqual(['pbta_move']);
+    expect(node('roll:pbta_move')).toBeTruthy();
+    expect(screen.getByTestId('graph-panel').getAttribute('aria-label')).toBe('ROLL PBTA MOVE');
+  });
+
+  it('A opens it from the map, not from a box being typed in; Escape closes it', async () => {
+    open();
+    fireEvent.keyDown(screen.getByTestId('graph-map'), { key: 'a' });
+    expect(screen.getByRole('dialog', { name: 'Add a node' })).toBeTruthy();
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Add a node' }), { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Add a node' })).toBeNull();
+    fireEvent.click(node('save'));
+    fireEvent.keyDown(within(await screen.findByTestId('graph-panel')).getByLabelText('Physical save formula'), { key: 'a' });
+    expect(screen.queryByRole('dialog', { name: 'Add a node' })).toBeNull();
+  });
+
+  it('a stat goes in the group picked, its list opened', async () => {
+    const { last } = open();
+    await userEvent.click(screen.getByRole('button', { name: '+ ADD' }));
+    await userEvent.click(screen.getByRole('option', { name: /STAT IN ABILITIES/ }));
+    expect((last().stats as { id: string; stats: { id: string }[] }[]).find((g) => g.id === 'abilities')!.stats.map((s) => s.id)).toEqual(['str', 'wit', 'new_stat']);
+    expect(screen.getByTestId('graph-panel').getAttribute('aria-label')).toBe('STATS ABILITIES');
+  });
+
+  it('Delete removes the picked node, as FORMS\' × does, and undoes; a house rule says where it goes', async () => {
+    const { last } = open();
+    fireEvent.click(node('odd'));
+    await screen.findByTestId('graph-panel');
+    fireEvent.keyDown(screen.getByTestId('graph-map'), { key: 'Delete' });
+    expect((last().derived as { id: string }[]).map((d) => d.id)).not.toContain('odd');
+    expect(screen.queryByTestId('graph-node-odd')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(last()).toEqual(HEARTH);
+    fireEvent.click(node('rule:magic'));
+    await screen.findByTestId('graph-panel');
+    fireEvent.keyDown(screen.getByTestId('graph-map'), { key: 'Delete' });
+    expect(screen.getByRole('status').textContent).toBe('House rules are removed on HOUSE RULES, where removing one says what stays.');
+    expect(last()).toEqual(HEARTH);
+  });
+});
+
+describe('notes (5b5)', () => {
+  it('+ ADD → NOTE pins a new one to the node picked, beside it, its panel open', async () => {
+    const { last } = open();
+    fireEvent.click(node('spell'));
+    await screen.findByTestId('graph-panel');
+    fireEvent.keyDown(screen.getByTestId('graph-map'), { key: 'a' });
+    await userEvent.type(screen.getByLabelText('Add a node: type to search'), 'note{Enter}');
+    const layout = last().graph as { notes: unknown[]; positions: Record<string, number[]> };
+    expect(layout.notes[1]).toEqual({ id: 'n2', on: 'spell', text: 'A note.' });
+    const spell = positionsOf(HEARTH, graphOf(HEARTH)).spell;
+    expect(layout.positions['note:n2']).toEqual([spell.x + 264 + 48, spell.y]);
+    expect(node('note:n2').textContent).toContain('A note.');
+    expect(screen.getByTestId('graph-panel').getAttribute('aria-label')).toBe('NOTE ON SPELL POWER');
+  });
+
+  it('with nothing picked, a note pinned to nothing', async () => {
+    const { last } = open();
+    await userEvent.click(screen.getByRole('button', { name: '+ ADD' }));
+    await userEvent.click(screen.getByRole('option', { name: /NOTE/ }));
+    expect((last().graph as { notes: unknown[] }).notes[1]).toEqual({ id: 'n2', text: 'A note.' });
+    expect(screen.getByTestId('graph-panel').getAttribute('aria-label')).toBe('NOTE NOT PINNED');
+  });
+
+  it('Delete removes the picked note and its place, and undoes', async () => {
+    const { last } = open();
+    fireEvent.click(node('note:n1'));
+    await screen.findByTestId('graph-panel');
+    fireEvent.keyDown(screen.getByTestId('graph-map'), { key: 'Delete' });
+    expect((last().graph as { notes?: unknown[] }).notes).toBeUndefined();
+    expect(screen.queryByTestId('graph-node-note:n1')).toBeNull();
+    expect(screen.getByRole('status').textContent).toBe('Removed the note. Undo brings it back.');
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(last()).toEqual(HEARTH);
+  });
+
+  it('a note\'s square dot can be dragged onto a node; an example\'s can\'t', () => {
+    open();
+    const dot = () => node('note:n1').querySelector('.react-flow__handle-left')!;
+    expect(dot().classList.contains('connectable')).toBe(true);
+    cleanup();
+    open(HEARTH, true);
+    expect(dot().classList.contains('connectable')).toBe(false);
+  });
+});
+
+describe('an example, looked at', () => {
+  it('folds and lays out nothing, and keeps zoom usable when the page is locked', () => {
+    const { edits } = open(HEARTH, true);
+    lockControls(screen.getByTestId('graph-view'));
+    expect((screen.getByRole('button', { name: 'Fold SAVES' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'AUTO-LAYOUT' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: '+ ADD' })).toBeNull();
+    const bar = screen.getByRole('toolbar', { name: 'Map' });
+    for (const name of ['Zoom in', 'Zoom out', 'FIT']) expect((within(bar).getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(false);
+    expect(edits).toEqual([]);
+  });
+});
+
+describe('PROBLEMS on the map (5b6b)', () => {
+  const serverSays = [
+    { where: 'derived odd, formula', message: 'No function or table called "nothing"' },
+    { where: 'words currency', message: 'Too long' },
+  ];
+  const withProblems = (onGoTo = vi.fn()) => {
+    render(<div style={{ width: 1200, height: 800 }}><GraphView definition={HEARTH} edit={() => {}} api={api} problems={serverSays} onGoTo={onGoTo} /></div>);
+    return onGoTo;
+  };
+  const box = () => screen.getByTestId('graph-problems');
+
+  it('counts errors and warnings, closed until opened, then lists them in players\' names', async () => {
+    withProblems();
+    const head = within(box()).getByRole('button', { name: /PROBLEMS/ });
+    expect(head.textContent).toContain('2 ✕');
+    expect(head.textContent).toContain('0 !');
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+    expect(within(box()).queryByRole('list')).toBeNull();
+    await userEvent.click(head);
+    const items = within(within(box()).getByRole('list', { name: 'Problems' })).getAllByRole('button').map((b) => b.textContent);
+    expect(items).toEqual(['✕ODD: No function or table called "nothing"', '✕words currency: Too longNOT ON THE MAP · GO TO PROBLEMS']);
+  });
+
+  it('a problem clicked opens its node; one on another page goes to PROBLEMS', async () => {
+    const onGoTo = withProblems();
+    await userEvent.click(within(box()).getByRole('button', { name: /PROBLEMS/ }));
+    await userEvent.click(within(box()).getByRole('button', { name: /^✕ODD/ }));
+    expect(screen.getByTestId('graph-panel').getAttribute('aria-label')).toBe('FORMULA ODD');
+    await userEvent.click(within(box()).getByRole('button', { name: /words currency/ }));
+    expect(onGoTo).toHaveBeenCalledWith('problems');
+  });
+
+  it('draws a node with an error red, and says so when there are none', async () => {
+    withProblems();
+    expect((node('odd').closest('.react-flow__node') as HTMLElement).style.outline).toBe('2px solid var(--danger)');
+    expect((node('save').closest('.react-flow__node') as HTMLElement).style.outline).toBe('');
+    cleanup();
+    open();
+    await userEvent.click(within(box()).getByRole('button', { name: /PROBLEMS/ }));
+    expect(box().textContent).toContain('No problems. It can be published.');
+  });
+});
+
+describe('the PROBLEMS box itself', () => {
+  it('counts errors and warnings apart, each marked its own way', async () => {
+    render(<GraphProblems onPick={() => {}} problems={[
+      { kind: 'error', text: 'ODD: Wrong', node: 'odd' },
+      { kind: 'warning', text: "SPARE isn't on the character sheet, and nothing reads it", node: 'spare' },
+      { kind: 'warning', text: "MORE isn't on the character sheet, and nothing reads it", node: 'more' },
+    ]} />);
+    const head = screen.getByRole('button', { name: /PROBLEMS/ });
+    expect(head.textContent).toBe('PROBLEMS1 ✕2 !▸');
+    await userEvent.click(head);
+    expect(screen.getAllByRole('listitem').map((li) => li.textContent![0])).toEqual(['✕', '!', '!']);
+  });
+});
+
+describe('TRY ON THE MAP (5b6c)', () => {
+  const req = createRequire(import.meta.url);
+  const { previewDerived } = req('../../../../backend/systemBuilder/derived.js');
+  /** The route's own work, with the server's engine, and what it was asked. */
+  const asked: Definition[] = [];
+  const engine = { previewValues: vi.fn(async (definition: Definition) => {
+    asked.push(definition);
+    return { ok: true as const, value: previewDerived({ lookups: definition.lookups, derived: definition.derived }, definition.samples ?? {}) };
+  }) } as never;
+  const openTrying = (readOnly = false) => {
+    const edits: Definition[] = [];
+    render(<div style={{ width: 1200, height: 800 }}><GraphView definition={HEARTH} edit={(d) => edits.push(d)} api={engine} readOnly={readOnly} /></div>);
+    return edits;
+  };
+  const sw = () => within(node('rule:magic')).getByRole('switch', { name: 'Try on the map' });
+  const spellValue = () => node('spell').querySelector('[data-value]')?.textContent;
+
+  it('works the map out with the rule on, its formulas swapped, and changes nothing', async () => {
+    const edits = openTrying();
+    expect(sw().getAttribute('aria-checked')).toBe('false');
+    expect(sw().textContent).toBe('TRY ON THE MAP: OFF');
+    await waitFor(() => expect(spellValue()).toBe('0'), { timeout: 2000 });
+    expect(node('spell').querySelector('[data-in-use]')!.textContent).toBe('NOT IN USE');
+    expect(screen.queryByTestId('graph-trying')).toBeNull();
+
+    fireEvent.click(sw());
+    expect(sw().getAttribute('aria-checked')).toBe('true');
+    expect(sw().textContent).toBe('TRY ON THE MAP: ON');
+    expect(node('spell').querySelector('[data-in-use]')!.textContent).toBe('IN USE');
+    expect(screen.getByTestId('graph-trying').textContent).toBe('TRYING MAGIC · THE MAP ONLY');
+    // WITS 9 gives +0, LEVEL 3: the WITH MAGIC formula's 3, by the server's engine.
+    await waitFor(() => expect(spellValue()).toBe('3'), { timeout: 2000 });
+    expect((asked.at(-1)!.derived as { id: string; formula: string }[]).find((d) => d.id === 'spell')!.formula).toBe('@wit_mod + @lvl');
+    expect(edits).toEqual([]);
+
+    fireEvent.click(sw());
+    await waitFor(() => expect(spellValue()).toBe('0'), { timeout: 2000 });
+    expect(screen.queryByTestId('graph-trying')).toBeNull();
+  });
+
+  it('the panel says its value is the WITH-rule one while trying', async () => {
+    openTrying();
+    fireEvent.click(sw());
+    fireEvent.click(node('spell'));
+    const panel = await screen.findByTestId('graph-panel');
+    expect(panel.textContent).toContain('ON THE SAMPLE, WITH MAGIC (TRYING)');
+    await waitFor(() => expect(within(panel).getByTestId('panel-value-spell').textContent).toBe('= 3'), { timeout: 2000 });
+    fireEvent.click(node('rule:magic'));
+    expect(screen.getByTestId('graph-panel').textContent).toContain('changes only the numbers here, never the game');
+  });
+
+  it('works on an example being looked at, its page locked', async () => {
+    const edits = openTrying(true);
+    lockControls(screen.getByTestId('graph-view'));
+    expect((sw() as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(sw());
+    await waitFor(() => expect(spellValue()).toBe('3'), { timeout: 2000 });
+    expect(edits).toEqual([]);
+  });
+});
+
+describe('hover highlighting (5c1)', () => {
+  const wrap = (id: string) => node(id).closest('.react-flow__node') as HTMLElement;
+
+  it('lights what the node hovered is wired to, fades the rest, and lets go when the pointer leaves', () => {
+    open();
+    expect(wrap('odd').style.opacity).toBe('');
+    fireEvent.mouseEnter(wrap('save'));
+    // The save reads LEVEL and the two modifiers on ABILITIES; its note is pinned to it.
+    for (const id of ['save', 'character', 'abilities', 'note:n1']) expect(wrap(id).style.opacity, id).toBe('');
+    for (const id of ['odd', 'spell', 'rule:magic']) expect(wrap(id).style.opacity, id).toBe('0.16');
+    fireEvent.mouseLeave(wrap('save'));
+    for (const id of ['odd', 'spell', 'save']) expect(wrap(id).style.opacity, id).toBe('');
+  });
+
+  it('keeps a picked node\'s outline while faded', async () => {
+    open();
+    fireEvent.click(node('odd'));
+    await screen.findByTestId('graph-panel');
+    fireEvent.mouseEnter(wrap('spell'));
+    expect(wrap('odd').style.outline).toBe('2px solid var(--cyan)');
+    expect(wrap('odd').style.opacity).toBe('0.16');
+  });
+});
+
+describe('the map\'s own groups (5c2)', () => {
+  const groups = (def: Definition) => (def.graph as { groups?: unknown[] }).groups;
+
+  it('a formula put in a group from its panel, or a new one', async () => {
+    const { last } = open();
+    fireEvent.click(node('spell'));
+    const pick = within(await screen.findByTestId('graph-panel')).getByLabelText('Map group') as HTMLSelectElement;
+    expect(pick.value).toBe('');
+    expect([...pick.options].map((o) => o.textContent)).toEqual(['NONE', 'SAVES', '+ NEW GROUP']);
+    await userEvent.selectOptions(pick, 'SAVES');
+    expect(groups(last())).toEqual([{ id: 'saves', label: 'SAVES', members: ['save', 'odd', 'spell'] }]);
+    await userEvent.selectOptions(within(screen.getByTestId('graph-panel')).getByLabelText('Map group'), '+ NEW GROUP');
+    expect(groups(last())).toEqual([{ id: 'saves', label: 'SAVES', members: ['save', 'odd'] }, { id: 'group_1', label: 'NEW GROUP', members: ['spell'] }]);
+    expect(screen.getByTestId('graph-group-group_1')).toBeTruthy();
+  });
+
+  it('its title bar opens its panel: renamed, a formula taken out, ungrouped; folding doesn\'t open it', async () => {
+    const { last } = open();
+    fireEvent.click(within(screen.getByTestId('graph-group-saves')).getByRole('button', { name: 'Fold SAVES' }));
+    expect(screen.queryByTestId('graph-panel')).toBeNull();
+    fireEvent.click(within(screen.getByTestId('graph-group-saves')).getByRole('button', { name: 'Open SAVES' }));
+    fireEvent.click(screen.getByTestId('graph-group-saves').querySelector('.graph-group-head')!);
+    const panel = await screen.findByTestId('graph-panel');
+    expect(panel.getAttribute('aria-label')).toBe('MAP GROUP SAVES');
+    const name = within(panel).getByLabelText('Group name');
+    await userEvent.clear(name);
+    await userEvent.type(name, 'DEFENCE');
+    expect(groups(last())).toEqual([{ id: 'saves', label: 'DEFENCE', members: ['save', 'odd'] }]);
+    await userEvent.click(within(panel).getByRole('button', { name: 'Take ODD out' }));
+    expect(groups(last())).toEqual([{ id: 'saves', label: 'DEFENCE', members: ['save'] }]);
+    await userEvent.click(within(screen.getByTestId('graph-panel')).getByRole('button', { name: 'UNGROUP' }));
+    expect(groups(last())).toBeUndefined();
+    expect(screen.queryByTestId('graph-group-saves')).toBeNull();
+    expect(screen.queryByTestId('graph-panel')).toBeNull();
+    expect(node('save')).toBeTruthy();
+  });
+
+  it('the map opened on a group, from FORMS, has its panel open', async () => {
+    render(<div style={{ width: 1200, height: 800 }}><GraphView definition={HEARTH} edit={() => {}} api={api} startWith="group:saves" /></div>);
+    expect((await screen.findByTestId('graph-panel')).getAttribute('aria-label')).toBe('MAP GROUP SAVES');
+  });
+});
+
+describe('LINE UP (5c3)', () => {
+  it('stacks a group\'s formulas in one column from its panel, and undoes', async () => {
+    const { last } = open();
+    fireEvent.click(screen.getByTestId('graph-group-saves').querySelector('.graph-group-head')!);
+    await userEvent.click(within(await screen.findByTestId('graph-panel')).getByRole('button', { name: 'LINE UP' }));
+    const places = (last().graph as { positions: Record<string, [number, number]> }).positions;
+    expect(places.save[0]).toBe(places.odd[0]);
+    expect(places.odd[1]).toBeGreaterThan(places.save[1]);
+    await userEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    expect(last()).toEqual(HEARTH);
+  });
+});

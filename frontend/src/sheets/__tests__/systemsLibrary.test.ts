@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   badgesFor, versionLabel, versionFact, originFact, changedFact, lineFacts, NO_DESCRIPTION, deleteBlocked, exportBlocked, insideBadges, installPlan,
-  installedMessage, renamedMessage, duplicatedMessage, deletedMessage, createdMessage,
+  installedMessage, renamedMessage, duplicatedMessage, deletedMessage, createdMessage, includeImagesLabel, exportNote,
   type LibrarySystem, type InstallPreview,
 } from '../systemsLibrary';
 
@@ -90,6 +90,22 @@ describe('what the file holds', () => {
       .toEqual(['12 WORDS RENAMED', '1 PART OFF', '2 CURRENCIES', '1 FORMULA', '3 TABLES', '41 SHEET FIELDS', '1 NPC TIER', 'HEALTH: WOUNDS']);
     expect(insideBadges({ ...INSIDE, words: 1, partsOff: 2, currencies: 1, derived: 2, lookups: 1, sheetFields: 1, npcTiers: 3 }))
       .toEqual(['1 WORD RENAMED', '2 PARTS OFF', '1 CURRENCY', '2 FORMULAS', '1 TABLE', '1 SHEET FIELD', '3 NPC TIERS']);
+  });
+
+  it('counts a zip\'s images, none when it has none', () => {
+    expect(insideBadges({ ...INSIDE, images: 1 })).toEqual(['1 IMAGE']);
+    expect(insideBadges({ ...INSIDE, images: 4 })).toEqual(['4 IMAGES']);
+    expect(insideBadges({ ...INSIDE, images: 0 })).toEqual([]);
+  });
+});
+
+describe('EXPORT\'s line for a system with uploaded images (2026-10-23)', () => {
+  const with_ = (images: number) => ({ ...HERE, images });
+  it('names how many go, and says what each choice saves', () => {
+    expect(includeImagesLabel(with_(1))).toBe('INCLUDE THE 1 UPLOADED IMAGE');
+    expect(includeImagesLabel(with_(3))).toBe('INCLUDE THE 3 UPLOADED IMAGES');
+    expect(exportNote(with_(1), true)).toBe('A .zip of the system and its 1 image, which install with it on any server.');
+    expect(exportNote(with_(3), false)).toBe('A .citysys without them: symbols show their mark or first letter instead, conditions a drawn icon, currencies none.');
   });
 });
 
@@ -181,6 +197,11 @@ describe('the line after each action', () => {
     expect(installedMessage(result({ name: 'Vault Knights copy' }), 'keep_both', 4)).toBe('Installed a second copy, Vault Knights copy, beside the first.');
     expect(installedMessage(result({ name: 'Vault Knights copy', published: false, problems: [PROBLEM] }), 'keep_both', 4))
       .toBe('Installed a second copy, Vault Knights copy, beside the first as a draft with 1 problem to fix.');
+    // A zip's images, whichever way it went in.
+    expect(installedMessage(result({ images: 1 }), 'update', 4)).toBe('Updated Vault Knights to v4. Its characters, banks and tokens are untouched. Its 1 image came with it.');
+    expect(installedMessage(result({ restored: true, images: 2 }), 'new', 4)).toBe('Vault Knights is back, with its characters. Its 2 images came with it.');
+    expect(installedMessage(result({ name: 'Vault Knights copy', images: 2 }), 'keep_both', 4)).toBe('Installed a second copy, Vault Knights copy, beside the first. Its 2 images came with it.');
+    expect(installedMessage(result({ images: 0 }), 'new', 4)).toBe('Installed Vault Knights v4. It\'s in the list and the game-system picker.');
   });
 
   it('after the others', () => {

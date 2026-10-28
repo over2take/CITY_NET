@@ -9,6 +9,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **DICE_TRAY.EXE in every theme.** The tray's board, its rim and danger color, and the building
+  window's spinning render were drawn in Classic's green whatever theme was picked: they sat
+  outside the app's theme. They follow it now. A roll's dice and its line in the record take the
+  roller's token color as before, and a token with no color picked now takes the theme's color
+  rather than green; a picked color too dark to read on the theme (a deep blue) is lightened just
+  enough to read, staying that player's color.
+- **A symbol's COUNTS AS list on the DICE tab.** A symbol that already counted as another (Crit as
+  Hit) listed that one twice. It is listed once now.
+- **Picking another roll on the ROLLS tab.** The roll's editor and its TEST ROLL panel could get
+  mixed up when another roll was picked, showing two editors at once. Each now keeps to itself.
+- **A system file can't stop the server.** A formula calling `constructor(1)` or `toString(1)`
+  passed every check and could be published, and then each save of a sheet in that system threw
+  where nothing caught it, stopping the server. Those names are now refused like any other unknown
+  function. A `buildings` section naming its own kinds this way made the check itself throw, and
+  is now an ordinary problem. And a system's formulas can no longer throw out into a save at all:
+  should one fail, the sheet keeps the values it had and the server logs why. Found by new tests
+  that put harmful names everywhere a system file has a key or a name (in the CWN example and
+  two random systems, thousands of variations each), with nesting and sizes past the caps, and check that
+  nothing throws, nothing leaks, and a file with problems installs only as a draft to fix.
+
 - **A system open in the builder can be closed.** DELETE is off for the system open in the
   builder, and there was no way to close it: the only way to free one was to make or open another.
   MY SYSTEMS now has CLOSE on the open system, which saves it and leaves the builder with no system
@@ -33,6 +53,211 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Players needn't see what a roll is against: the builder's choices (6c4h).** At the top of STATS
+  & RULES' ROLLS tab, PLAYERS SEE A ROLL'S TARGET: SHOWN, VERDICT ONLY or GM ONLY, with a live example
+  under it of what a player sees and what you see. A roll can pick its own in its step 3 (PLAYERS
+  SEE, there once the roll has a target), or follow the system's. HOW PLAYERS SEE IT opens a new
+  HELP topic, WHO SEES THE TARGET: one roll on a player's tray and yours side by side, the three
+  settings and ROLL AGAIN to try, and a table of what each keeps from players.
+- **Players needn't see what a roll is against (6c4h, the server's half).** A system says how much
+  of a roll's target players see, and a roll can say otherwise: SHOWN ("vs 15: SUCCESS"), VERDICT
+  ONLY ("SUCCESS") or GM ONLY (only the total, and none of the effects that come only on a success or
+  a failure). The GM sees all of it, marked HIDDEN FROM PLAYERS when something was kept back, live
+  and in the history replayed after a reload; granted editors see what players see. A new system
+  starts on GM ONLY; a system made before this keeps showing players everything until its GM picks
+  otherwise. And PUBLISH now says when a version changes the rolls,
+  their symbols and dice, or who sees a target: before, those changes went unmentioned.
+- **DICE_TRAY.EXE tells you when someone else rolls (6c4g).** With the tray shut, another player's
+  or the GM's roll makes the DICE_ROLLER button on the rail flash, and the DICE_TRAY.exe button in
+  its menu too, until the tray is opened. Clicking the flashing rail button opens the menu and the
+  tray together, and the tray opens on the roll history so you can see who rolled what. Your own
+  rolls open the tray as before. The tray has a bell like chat's, right of ANIMATION, to turn this
+  off; it is kept on your account apart from chat's bell, and starts on.
+- **Pictures on DICE_TRAY.EXE's board while it waits (6c4f).** Between rolls the board shows a
+  picture for as long as the table is quiet, and the next one after each roll: READY_ when it opens,
+  then a game of PONG two paddles really play (they chase the ball, miss now and then, and the score
+  shows either side of the net), a SNAKE that steers itself to its food, RAIN, PIPES laid a dot at a
+  time, and a SCANNER sweeping side to side. Then BREAKOUT, a bat that follows the ball breaking
+  three rows of bricks; BLOCKS, one falling game across the whole board with shapes of our own (a
+  token's diamond, a cup, a bolt, a tower, a corner, a bar) coming in at random along the top, where
+  each letter's square clears on its own: five dots filled in a row of it flash and go, and what is
+  above them comes down; a STARFIELD flown through; and TUMBLING DICE rolling in to rest on a face.
+- **DICE_TRAY.EXE's board is a 16 by 2 character display (6c4e).** The old 25 by 5 dot board could
+  only show a number. The new one, two lines of sixteen letters in the theme's color, says what was
+  rolled and what it came to: ATHLETICS 17, PHYSICAL SAVE 14 / SUCCESS, an attack's TO HIT 15 HIT /
+  DAMAGE 7 together, the symbols left on a system's own dice (3XGOOD 2 HIT / 2 EDGE), a word die's
+  faces. A plain roll still shows its total in big digits across both lines. Its letters flicker
+  while the dice roll and decode into place as they land; more than two lines turn pages; after ten
+  seconds it goes back to READY_.
+- **Share a system with its uploaded images.** A system with pictures uploaded for it (a symbol's,
+  a condition's or a currency's icon) used to share only their addresses, so on another server they
+  showed as broken images. EXPORT in MY SYSTEMS now asks first: ticked, it saves a .zip of the
+  system and its images, each named for what it is, with a list of where each is used; unticked,
+  a .citysys without them, where each falls back cleanly (a symbol shows its mark or first letter,
+  a condition a drawn icon, a currency none). INSTALL A FILE takes the zip too. A zip is read with
+  care: nothing in it is unpacked but the system and its images, none past an icon's size, and only
+  images the system uses are kept. Drawn symbols always travelled with the system and still do.
+  (fflate, new to the app, reads and writes the zip.)
+- **Solid dice in DICE_TRAY.EXE (6c4b2b).** The tray's see-through wireframes are now solid dice
+  with every face printed, for every game: a coin for a d2, the usual shapes for d4 to d20, kites
+  for any other even size and a long prism for an odd one (a d13). They are thrown by real physics
+  (cannon-es, new to the app): tossed in from the tray's edge, tumbling, bouncing off the walls and
+  each other and rolling to a stop, whatever the computer's own animation setting. The face that
+  ends on top shows what the server rolled (a d4 face down, its number on the faces it shows), and
+  everyone watching sees the same throw. The total shows as the last die stops, rather than after
+  a fixed five seconds. A system's own dice show their symbols, drawings and icons; a bad die is in the
+  theme's danger color, the rest in the roller's color. Dice now stay inside the tray: the old one
+  let them bounce past its edges. The dice menu's standard dice + and − buttons are now named for
+  screen readers ("One more d20").
+
+- **Help on the DICE and ROLLS tabs.** Like every other builder page, both tabs now have a "?"
+  beside each setting: on DICE, the presets, COPY FROM THE TABLE'S DICE, a die's name, faces and
+  color, a face's number and symbols, the symbols' LOOK, MARK, CANCELS and COUNTS AS, and TEST; on
+  ROLLS, each of the five steps and each special result, ADD, AGAINST, the bands, a change's cost,
+  ROLLED BY and TEST ROLL. The HELP page's STATS & RULES topic and the tour now cover the dice and
+  rolls, and its DICE reference explains a game's own dice.
+- **A custom system's dice in the dice menu (6c4a).** While a custom system runs, its own dice (from
+  the builder's DICE tab) appear in DICE_ROLLER under THIS GAME'S DICE, and the dice made with
+  CUSTOM_DIE.EXE under THE TABLE'S DICE. Rolling them from the menu counts their symbols as a roll
+  does: "Kestrel rolled 2×Good [✶ ✶✶ = 3 HIT]". A die's name follows each face in the log only when
+  a roll mixes kinds ("[✶ Good ✕ Bad = ...]"); with one kind it is already said, so 1×dF logs as
+  "[-1 = -1]" rather than "[-1 dF = -1]". The list follows a new version when the system is
+  published again. The menu's dice rows now take the theme's colors. The DICE tab's draw pad has
+  faint lines through its middle, down and across, to center a symbol by; pressing on a line
+  still draws the square under it.
+- **Rolls with the system's own dice (6c3).** On the ROLLS tab, the dice step now lists the system's
+  own dice (from the DICE tab) under the usual sizes. With one picked, the roll can COUNT THE
+  SYMBOLS: each pair cancels (a HIT against a MISS) and the roll reads what is left of the symbol
+  you choose, so AGAINST 1 means at least one HIT left. TEST ROLL shows each die as the face it
+  landed on, pictures and all. On the DICE tab, giving a numbered die more faces now numbers them
+  on: a d6 made a d13 gets faces 7 to 13.
+- **The DICE tab (6c2b2).** STATS & RULES has a DICE tab, between TABLES and ROLLS, for a system's own
+  dice. Start from a preset (Fate's dF, a GOOD / GREAT / BAD set of symbol dice, a d6 with a word on
+  a face), make a plain d6, or copy one of the dice you made with CUSTOM_DIE.EXE (its words become
+  symbols). Give each face a number, symbols, both, or nothing. Each symbol has a name and a mark,
+  can cancel another (a HIT against a MISS) or count as another too, and can look like its mark,
+  one of the drawn icons, an uploaded picture, or a picture you draw yourself on a 16 by 16 pad,
+  which is kept in the system and travels with it. TEST throws a handful on the server. Rolls use
+  these dice next.
+- **STATS & RULES as a map (System Builder, 5a3a).** FORMS / GRAPH in the top bar shows the same
+  system as nodes and wires, read left to right: a stats group is one node with a row per stat (and
+  the modifier a table gives each, so ATTRIBUTES lists STR 16 +1), each formula reads its inputs by
+  the names players see, where each comes from, BEST of several, its text in those names and
+  `= 12`, and a formula's mistake shows inside it. Values are worked out by the server, as FORMS
+  shows them. Drag nodes on a grid (they stay put), fold a group to one line, zoom, FIT, a minimap,
+  AUTO-LAYOUT, and a line under the map with the counts and the sample character.
+  Your choice of FORMS or GRAPH is remembered. The map opens at a zoom that can be read, and takes
+  every theme's colors.
+- **Click a node to edit it (5a3b2).** A node clicked on the map opens a panel beside it with the very
+  boxes FORMS has: a stats group with the modifiers its table gives, a formula's name, text, INSERT,
+  value and alternative, a table's rows and TRY IT. A change there is a change in FORMS, and the map
+  follows at once: a new wire, the new value. A house rule goes to HOUSE RULES.
+  ×, Escape or a click on the map closes it, and the map slides a node the panel would cover into view.
+- **UNDO and REDO on the map (5b1).** ↶ and ↷ in the map's toolbar, or Ctrl+Z and Ctrl+Y (Ctrl+Shift+Z
+  too), take back what was done on the map and in a node's panel: a move, a fold, AUTO-LAYOUT (now one
+  click), a change typed in the panel (one step for the typing, not one a key). A box being typed in
+  keeps its own undo.
+- **Wires drawn and cut on the map (5b2).** Drag from a stat's or formula's dot onto a formula and
+  `+ @name` goes on the end of its formula; from a house rule, the formula gets one to use WITH that
+  rule. Click a wire and CUT takes the name out of the formula where a whole formula is left (one
+  name of a BEST keeps the others); where it isn't (a name inside `floor(...)`), the formula's panel
+  opens to change it by hand. A name already read, a formula reading itself and a loop are refused,
+  each saying why. Every one is the formula's own text, the same as typing it in FORMS, and undoes.
+- **Modifiers as diamonds on wires (5b3).** Where a formula does something simple to one name on its
+  way in (`@level * 6`, `@x / 2`, `floor(@level / 2)`, `ceil(...)`), a diamond on that name's wire
+  shows it (×6, ÷2, ÷2↓, ÷2↑), and the input's row says it too. A node's panel lists them under ON THE
+  WAY IN, each number changeable: that rewrites the formula's text, as typing it in FORMS would.
+- **Add and remove on the map (5b4).** + ADD, or A on the map, searches what can be added: a formula, a
+  stat in a group you pick, a stats group or a table, placed where you are looking with its panel open
+  to name it. Rolls and choices show greyed, saying when they come. Delete removes
+  the node picked. Each is the same edit as FORMS' own + and × buttons, and undoes.
+- **Notes on the map (5b5).** + ADD → NOTE makes a note for you, pinned with a dashed line to the
+  node you have picked and put in clear space beside it. Its panel is where you write it (up to 1000
+  characters), choose what it's pinned to (or nothing) and remove it; Delete removes it too. Drag
+  its square dot onto another node to pin it there, or cut its line to unpin it. Players never see
+  notes. FORMS shows each one, read only, under the stats group, formula or table it's pinned to,
+  with EDIT IN GRAPH to open the map on it. Notes travel in a shared system file.
+- **Conditions written in FORMS and on the map (5b6a).** A condition (IF something THEN one number
+  ELSE another) was shown but couldn't be changed. Now it has three boxes, IF, THEN and ELSE, in
+  FORMULAS and in its panel on the map, with INSERT in each, and + CONDITION (or + ADD → CONDITION)
+  makes one. A wire dragged into a condition opens its panel to add the name to IF and say how it
+  compares; cutting one takes the name out of THEN or ELSE, never out of IF's comparison. A formula
+  read only by a condition, or by a house rule's formula, now says so under "used by".
+- **Something added lands in clear space.** A node added from + ADD went exactly where you were
+  looking, on top of whatever was there. It now goes to the nearest place a cell clear of every node
+  and group, and nothing else on the map moves (a map never arranged used to be laid out again round it).
+- **PROBLEMS on the map (5b6b).** The map's bottom left corner counts the draft's problems (✕) and
+  warnings (!), the same check as the PROBLEMS page, and opens to the list in the names players see.
+  Click one to open its node and move the map to it; one on another page (WORDS, the sheet) goes to
+  PROBLEMS. A node with a problem is outlined red. One warning is the map's own: a formula your
+  customized character sheet leaves off that nothing reads either, so it would show nowhere.
+- **TRY a house rule on the map (5b6c).** A house rule's node has a TRY ON THE MAP switch. On, the
+  map's numbers are worked out with the rule on, by the game's own engine: the formulas wired to it
+  use their WITH-rule formula (marked IN USE), their usual one and its wires go faint, and the line
+  along the bottom says TRYING. It is never saved and never changes the game, so it works on an
+  example too. The GM still switches rules for the table in the GAME tab.
+- **Hover to see what is wired to what (5c1).** Point at a node on the map and everything it reads,
+  however far back, and everything that reads it, however far on, stays lit with their wires in cyan;
+  the rest fades. Formulas that only share an input with it fade too, so where a number comes from
+  is plain on a busy map, and a wire is easier to pick out before clicking it.
+- **Groups of your own on the map (5c2).** A formula's panel has a MAP GROUP choice: none, one of
+  your groups, or + NEW GROUP. A group's title bar opens its own panel, to name it, take formulas out
+  of it, or UNGROUP it (the formulas stay). Groups fold like the stats groups do. Only the map has
+  them: FORMS shows a formula's group under it, read only, with EDIT IN GRAPH.
+- **LINE UP a group (5c3).** A group's panel has LINE UP: its formulas stack in one column in the
+  order they stand, left edges even, a cell apart, starting where the top one is. Undo takes it back.
+- **ROLLS in the System Builder (6b1a).** STATS & RULES has a fourth tab, ROLLS: make a roll from a
+  preset (D&D, PbtA, Blades, Vampire, Fate, CWN, CP:R, SR6), name it, and pick the stats, stats groups
+  or formulas it is rolled by. Its five steps show in words, and TEST ROLL rolls it on the server for
+  the sample character, showing the dice kept and dropped and what it came to. Editing each step comes
+  next; the sheet's die buttons after that.
+- **Edit a roll's dice, reading and result (6b1b1).** In the ROLLS tab, steps 1 to 3 are now boxes:
+  each kind of dice (how many, the size including Fate dice, a name like Hunger), how they are read
+  (sum, keep the highest or lowest so many, count successes at a face), what is added, a target with
+  rolling under, and the bands the total is read on. TEST ROLL rolls it as it now stands.
+- **Edit a roll's special results (6b1b2).** Step 4 of a roll is now edited too: exploding dice (on
+  which face, only once, the first die only, a face that takes one away), naturals, matches (a pair
+  of 10s adding successes), cancelling, a glitch, a named kind of dice's own effects, and the rule
+  for rolling with no dice.
+- **Edit what a player can pick before rolling (6b1b3).** Step 5 of a roll is now edited too: each
+  choice's name, the dice it adds (kept highest for advantage, lowest for disadvantage, or simply
+  joining the pool), what it adds to the total, and what it costs from which stat. All five steps of
+  a roll are now made in the builder.
+- **A custom system's rolls on the character sheet (6b2a).** Each stat or formula a roll is rolled by
+  now has a ROLL button on the sheet, for players and for NPCs. A click rolls it on the server from the
+  sheet as saved, into the roll log and dice tray like any roll. Choosing between rolls, and picking
+  advantage or a push first, comes next.
+- **Pick before rolling (6b2b).** Where a stat has more than one roll, or a roll offers choices like
+  ADVANTAGE, its ROLL button asks first: which roll, which choices, then ROLL. Anything else still
+  rolls on the first click. A choice that costs something (2 Stress) shows its cost and is off until
+  the table can take it, which comes next.
+- **Choices that cost something (6b3a).** A cost now either takes from a stat (a Fate point spent) or
+  adds to one (Blades' push adds 2 Stress), picked in step 5 of a roll as TAKES or ADDS. Rolling with
+  it changes the sheet, and the roll log says so: "(Push: +2 STRESS)". The chooser shows where the
+  stat stands ("YOU HAVE 4", or "3 OF 9" for one that adds), and a choice the sheet can't pay is off:
+  too little to take, or past the stat's highest. The server checks again before rolling. The Blades
+  in the Dark preset's push now adds Stress, as the game does.
+- **Conditions reach a custom system's rolls (6b3b).** A condition with a modifier on all rolls, set
+  in the builder since conditions arrived, now changes every roll of the system's own made by a
+  character with it on their token, players' and NPCs' alike. The roll log names it:
+  "4 5 = 9 + 3 - 1 (HURT) = 11". It counts toward a target or band, so HURT can turn a hit into a
+  cost. A modifier on one stat is still only shown, as before.
+- **TEST ROLL under a condition (6b3c).** In the builder's ROLLS tab, TEST ROLL now has a switch for
+  each condition that changes every roll ("HURT · ALL ROLLS −1"), to see a roll as a character with
+  it would. Its note on what a choice costs now says when the cost adds instead: "At the table this
+  adds 2 STRESS."
+- **Rolls on the map (6b4a).** With GRAPH on, STATS & RULES now draws each roll as an amber ROLL node:
+  what it is rolled by wired in (a whole stats group from one dot on its list), what its dice and
+  adding read wired as a formula's are, the dice in a line ("2d6 + @this") and its bands. Click it
+  and its panel is the ROLLS tab's five steps with TEST ROLL; a change there is a change on the tab.
+  Cutting a ROLLED BY wire takes that stat off the roll; Delete removes the roll. Adding a roll from
+  + ADD comes next.
+- **Adding a roll on the map (6b4b).** + ADD (or A) on the GRAPH view now offers a roll from each
+  preset: pick ROLL · BLADES ACTION and the roll appears with its panel open, as the ROLLS tab's
+  preset buttons make it. Drag a stat's or formula's dot onto a ROLL node and the roll is rolled by
+  it; a stats list has a dot of its own at its top for the whole group, every stat in it getting a
+  die button on the sheet.
+
 - **GO BACK TO STABLE.** On a dev build, the LOOK FOR DEV BUILDS box offers a way back. After asking
   first, it puts back the copy of your database made when you turned dev builds on, downloads the
   stable release and restarts on it. Nothing is deleted: the dev database is set aside beside it as
@@ -41,6 +266,129 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   say), the box says how by hand.
 
 ### Under the hood (tidying)
+
+- **Browser tests steady on CI's slower machines.** Every browser test now has two minutes, not
+  one: tests of 15 seconds on a desktop ran past a minute on CI. The dice tray's no-queue test
+  sends its two quick rolls with the tray already open and nothing drawn between them; drawing the
+  first throw held the page long enough that the second started a throw of its own (seen locally
+  with the CPU slowed 8 times). And two tests that waited 800 ms for a sheet to save before rolling
+  from it now wait until the server has it.
+- **The builder's browser journey covers Phase 6.** The test that builds a system on screen from
+  + NEW now also makes a roll on ROLLS (a save with a target, rolled by its stat, its players told
+  only the verdict), and after the game switches to it, a player rolls that save from their sheet:
+  the player is told SUCCESS or FAILURE, the GM what it was against too. It has three minutes to
+  run: CI's slower machines took it past the usual one.
+- **Backend tests run their database queries in order.** The test database was in sqlite's
+  parallel mode, where on a busy machine a query sent later can be answered first; tests that
+  waited a number of database rounds could then check too soon, and failed on CI only. It is
+  now serialized, so those waits mean what they say.
+- **Every roll named for the dice tray's board, and CWN saves judged (6c4d3).** The rest of the
+  table's rolls now say what they were for too: sheet rolls by their skill or save, ability rolls,
+  initiative (in the game's own word for it), rests by name, ramming, and Shadowrun's drain with
+  the stun it did. A custom system's roll is named for the field rolled (PHYSICAL SAVE), or the roll
+  where there is none. And a Cities Without Number save now says whether it met the number on the
+  sheet: "rolled Physical Save [14] — vs 12: SUCCESS", in the log as on the board.
+- **What each roll was for, for the dice tray's board (6c4d2).** The built-in games' rolls now
+  tell the tray what they were for and what they came to: an attack's TO HIT and whether it was a
+  HIT or a MISS, its DAMAGE (DOWN, ARMOR HELD, a critical injury), Shadowrun's DODGE, a death save,
+  stabilizing someone, and a spell by its name. An attack's rolls already land as one throw, so the
+  board can show them together. Nothing shows them yet: the 16 by 2 board comes next.
+- **Words for the dice tray's board (6c4d1).** A custom system's roll now tells the tray what the
+  log says it came to (SUCCESS, FULL, NATURAL 20), and for symbol dice what is left (2 HIT · 1 EDGE,
+  or NOTHING LEFT); the table's word dice send their faces (APPLE · PEACH). Nothing shows them yet:
+  the tray's new 16 by 2 board comes next.
+- **No waiting line in DICE_TRAY.EXE (6c4c).** A new roll no longer waits for the one before it to
+  finish: it cuts straight in, and the roll it cut short goes into the record at once, so nothing
+  is missed. One person's rolls made a moment apart, such as an attack's to-hit and damage, land in
+  one throw together, each die in its roller's color, and every screen groups them the same way.
+- **An ANIMATION toggle in DICE_TRAY.EXE (6c4b3b).** In the tray's title bar: on (the default), every
+  throw rolls; off, the dice show already at rest and the total at once. It is kept on your
+  account, so it follows you to any computer you sign in on; someone not signed in keeps it in
+  their browser.
+- **Settings kept on your account (6c4b3a).** A player's or the GM's own settings can now be kept
+  on their account, so they follow them to any computer they sign in on. The first is the dice
+  tray's: whether throws roll or the dice are shown already landed, starting on roll. Everyone
+  signed in reads and changes only their own, and only settings the app knows, each with one of
+  its choices. Nothing on screen yet: the tray's switch for it comes next.
+- **The new dice tray's dice and throw, worked out (6c4b2a).** The shapes for a die of any size,
+  what is printed on each face, and a whole throw worked out from the roll's seed: dice tossed in,
+  bouncing off the floor, each other and the tray's walls, and rolling to rest with the server's
+  face up. The walls are now the edges of the tray as it is shown, less each die's size, so a die
+  can no longer bounce past the window's edge as the old tray let it. Every screen works out the
+  same throw. Nothing on screen changes yet: the tray draws it next.
+- **Every roll says how its dice landed (6c4b1).** Each roll sent to the dice tray now carries the
+  face every die landed on, the faces themselves for dice that aren't numbered 1 to n (Fate dice,
+  the table's CUSTOM_DIE.EXE dice, a system's own dice and the looks of their symbols), and one
+  random seed for the tumble. Nothing on screen changes yet: the new 3D tray will use it so the dice
+  land on the server's result and everyone watching sees the same throw. A test holds every roll
+  the server sends to it.
+- **A symbol's look (6c2b1).** A dice symbol can now look like a picture instead of its mark: one of
+  the drawn icons, an uploaded image (as condition icons are), or a 16 by 16 drawing made in the app,
+  kept in the system so it travels in a shared file. The log still writes the mark. The DICE tab,
+  with its drawing pad, comes next.
+- **The DICE tab's workings (6c2a).** Behind the coming DICE tab: making, changing and removing a
+  system's own dice and symbols (each edit checked against the server's own rules), three presets
+  to start from, copying one of the table's CUSTOM_DIE.EXE dice into a system (its words becoming
+  symbols), and a TEST that throws a handful on the server. Nothing to see until the tab itself.
+- **A system's own dice, rolled (6c1b).** The server now rolls a system's own dice: a roll can use
+  them alongside dice of any size, and a new way to read them counts their symbols, cancels each
+  pair (a HIT against a MISS) and reads what is left: at least one HIT left succeeds. The log shows
+  each face's marks and what was left ("✶◆ Good ✶ Good ✕ Bad = 1 HIT, 1 EDGE"). Making the dice
+  on screen (the DICE tab) comes next.
+- **A system's own dice, the data (6c1a).** The first of the dice pieces (approved mockup, 2026-10-21):
+  a system can now hold its own symbols (HIT, MISS, a mark for each, what cancels what) and dice
+  whose faces show numbers, signs or symbols, checked like the rest of a shared file and carried
+  in it beside the system, so a build from before them still installs it (checked with the dev
+  build's own reader). Nothing uses them yet; rolling them, and the DICE tab, come next.
+- **Every roll on the server's secure dice (6d).** The built-in games' sheet rolls, NPC rolls, pool
+  rolls, an attack's to-hit and a vehicle's ram now roll on the operating system's random source,
+  as damage, initiative and a custom system's rolls already did. A test holds every file that rolls
+  to it, so none can go back. Nothing changes in how anything rolls.
+- **Rolls of a system's own, the engine (6a1).** The first piece of Phase 6 (roll styles): the server can
+  now roll what a GM describes, with dice of any size, Fate dice and named dice like Hunger, read as a
+  sum, the highest or lowest kept, or successes counted, with a target or bands and exploding dice.
+  Nothing uses it yet; the builder's ROLLS tab and the sheet's roll buttons come next.
+- **Special results for those rolls (6a1b).** Matched dice (a pair of 10s, doubles), ones that cancel
+  successes, glitches, a named die's own effect (a Hunger 10 in a critical is messy), and the rule for
+  rolling with no dice (roll two, keep the lowest, never a critical).
+- **Choices before rolling, and the presets (6a1c).** Advantage and disadvantage (cancelling each
+  other), a push for more dice, a bonus to the total, each with what it costs; and the rolls the builder
+  will start from: D&D, PbtA, Blades, Vampire, Fate, CWN, CP:R and SR6. The CWN, CP:R and SR6 presets
+  roll exactly as the app's own code for those games does, checked with the same dice.
+- **Rolls are part of a system (6a2a).** A system can now hold its own rolls, each saying which stats,
+  stats groups or formulas roll it, checked like everything else in it. A shared system file carries
+  them beside the system, so a builder from before rolls still installs the file (checked with the dev
+  branch's own reader); installed here, they come back with it.
+- **A custom system's rolls at the table (6a2b).** The server now rolls a custom system's own rolls
+  from a character's stored sheet, reading the stat rolled, its modifier, and a skill's ability and its
+  modifier, on the secure dice, into the same roll log and dice tray as every roll (named dice and Fate
+  dice shown as themselves). The sheet's die buttons come next; a change that costs something waits
+  until the table can take the cost.
+- **The click check reaches STATS & RULES' other tabs.** The browser test that clicks every control in
+  the builder now visits FORMULAS, TABLES and ROLLS too, not only STATS, with a Blades and a Vampire
+  roll made so every step of a roll is checked, and NPCS' TIERS tab. Nothing changes in the app.
+
+- **A shared system file installs on a builder from before the map.** A .citysys file now carries
+  the graph view's layout beside the system rather than inside it. A builder from before the map
+  reads only the system, so it installs and publishes the file as it always did, its map laid out
+  afresh; a builder with the map puts the layout back. Checked against the dev branch's own reader.
+
+- **STATS & RULES' controls shared (5a3b1).** Nothing to see: the boxes that edit a stats group, a
+  table and a formula are now one copy that FORMS lays out, ready for the graph view's node panel to
+  show the same ones, so an edit made from the map is the very same edit as one made in FORMS.
+
+- **The System Builder's graph view as logic (5a2).** Nothing to see yet: the builder can now read
+  a system as the map will draw it (a node for every stat, table, house rule, formula, condition
+  and note, a wire for each name a formula reads, stats grouped as on the STATS tab), lay it out in
+  columns on a grid, and write moved nodes and folded groups back into the system. Its reading of
+  formulas is held to the server's own over every built-in example and sixty random systems. The
+  map itself comes in 5a3.
+
+- **The System Builder's graph view can be saved (5a1).** Nothing to see yet: a system can now
+  hold the map's layout (where each node sits, groups of formulas, which groups are folded, and
+  notes), checked as strictly as the rest of a shared file, carried in a .citysys file and never
+  sent to players. Nothing done in FORMS can make a problem in it. The builder also remembers
+  whether STATS & RULES was last shown as FORMS or GRAPH. The map itself comes in 5a3.
 
 - **A conditions test no longer fails on a busy machine.** It read a token's condition chips as soon
   as they appeared, but the rounds left arrive a moment later with the server's reply, so under load
@@ -130,6 +478,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Security
 
+- **Temporary passwords that can't be guessed.** RESET in the GM's player list now makes the
+  temporary password from the server's secure random source. It came from the browser-grade random
+  numbers, which can be worked out from others made around the same time. It is still eight
+  characters, now without the ones easy to mix up when read out (0 and O, 1, I and L).
 - **Only you can change your own token.** Anyone, signed in or not, could change any player's
   token with a request of their own: knock another player's HP to 0, mark their injuries, move
   their token or even make it someone else's. The GM and granted editors still change any token;

@@ -5,7 +5,7 @@ import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
 import { ImportSheetDialog } from './ImportSheetDialog';
 import { getTemplate, getMaxPairs, hiddenTabsFor, npcTemplateOf, type CharacterSheet, type SheetTemplate } from '../sheets';
-import type { SheetFieldValue } from '../sheets/types';
+import type { SheetFieldValue, RollPick } from '../sheets/types';
 import { npcInitiativePortrait } from '../modules/initiative/npcPortrait';
 import { canImport, canImportNpc } from '../sheets/importable';
 import { themeRoot } from '../utils/themeRoot';
@@ -285,7 +285,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
           // GM-only in both modes: the GM sets the values a system keeps for the GM.
           gm
           {...(!playerUsername && socket && locationId !== undefined ? {
-            onRoll: (fieldId: string, luck?: number, luckNegate?: boolean) => socket.emit('requestSheetRoll', { fieldId, location_id: locationId, ...(luck ? { luck } : {}), ...(luckNegate ? { luckNegate } : {}) }),
+            onRoll: (fieldId: string, luck?: number, luckNegate?: boolean, pick?: RollPick) => socket.emit('requestSheetRoll', { fieldId, location_id: locationId, ...(luck ? { luck } : {}), ...(luckNegate ? { luckNegate } : {}), ...(pick ? { rollId: pick.rollId, changes: pick.changes } : {}) }),
             onRollAbility: (formula: string, label: string) => socket.emit('rollAbility', { formula, label, location_id: locationId }),
           } : {})}
           onPortraitUpload={handlePortraitUpload}

@@ -143,8 +143,10 @@ const cwnRolls = () => {
   Object.entries(CWN_SKILLS).forEach(([id, [label, mod]]) => {
     rolls[id] = { formula: `2d6 + @${id} + @${mod}`, label, shape: 'sum' };
   });
+  // `target`: the sheet's own field holding the number a save must meet or beat (6c4d3), the
+  // same as the roll's id, so the server can say SUCCESS or FAILURE as it does for a custom save.
   Object.entries(CWN_SAVES).forEach(([id, label]) => {
-    rolls[id] = { formula: '1d20', label, shape: 'sum' };
+    rolls[id] = { formula: '1d20', label, shape: 'sum', target: id };
   });
   return rolls;
 };

@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { SheetRenderer } from '../../components/SheetRenderer';
 import {
   templateFromRender, loadCustomTemplate, refreshCustomTemplate, registerCustomTemplate, clearCustomTemplates,
@@ -158,5 +158,143 @@ describe('drawn by the ordinary renderer', () => {
     expect(screen.getByDisplayValue('Sir Ash')).toBeTruthy();
     fireEvent.change(screen.getByDisplayValue('15'), { target: { value: '16' } });
     expect(onFieldChange).toHaveBeenCalled();
+  });
+});
+
+describe('a custom system\'s rolls on its sheet (6b2a)', () => {
+  const ROLLING: CustomRender = {
+    ...VAULT,
+    rolls: [
+      { id: 'check', label: 'Might check', fields: ['might', 'might_mod'], changes: [] },
+      { id: 'push', label: 'Pushed check', fields: ['might'], changes: [{ id: 'push', label: 'Push', cost: { from: 'stress', amount: 2 } }] },
+    ],
+  };
+  const field = (t: ReturnType<typeof templateFromRender>, id: string) => t.sections.flatMap((s) => s.fields).find((f) => f.id === id)!;
+
+  it('gives each field a roll is rolled by its die button, with every roll it has; the others none', () => {
+    const t = templateFromRender(ROLLING);
+    expect(field(t, 'might').roll).toEqual({ formula: '', label: 'Might check' });
+    expect(field(t, 'might').customRolls).toEqual([
+      { id: 'check', label: 'Might check', changes: [] },
+      { id: 'push', label: 'Pushed check', changes: [{ id: 'push', label: 'Push', cost: { from: 'stress', amount: 2 } }] },
+    ]);
+    expect(field(t, 'might_mod').customRolls!.map((r) => r.id)).toEqual(['check']);
+    expect(field(t, 'armor').roll).toBeUndefined();
+    expect(field(templateFromRender(VAULT), 'might').roll).toBeUndefined();
+  });
+
+  it('draws ROLL by a rolled field, which asks for that field\'s roll', () => {
+    const onRoll = vi.fn();
+    render(<SheetRenderer template={templateFromRender(ROLLING)} data={{ might: 14 }} onFieldChange={() => {}} onRoll={onRoll} />);
+    const roll = screen.getAllByRole('button', { name: 'Roll Might check' });
+    expect(roll).toHaveLength(2);
+    // MOD has one roll and no changes, so it rolls on the first click (MIGHT asks first: 6b2b).
+    fireEvent.click(roll[1]);
+    expect(onRoll).toHaveBeenCalledWith('might_mod', undefined, undefined);
+    expect(screen.queryByRole('button', { name: /Roll ARMOR/ })).toBeNull();
+  });
+});
+
+describe('the chooser by the sheet (6b2b)', () => {
+  const CHOOSING: CustomRender = {
+    ...VAULT,
+    rolls: [
+      { id: 'check', label: 'Might check', fields: ['might', 'might_mod'], changes: [{ id: 'advantage', label: 'Advantage' }] },
+      { id: 'push', label: 'Pushed check', fields: ['might'], changes: [{ id: 'push', label: 'Push', cost: { from: 'stress', amount: 2, label: 'Stress' } }] },
+      { id: 'plain', label: 'Plain', fields: ['armor'], changes: [] },
+      { id: 'blades', label: 'Action', fields: ['gold'], changes: [{ id: 'push', label: 'Push yourself', cost: { from: 'stress', amount: 2, label: 'Stress', adds: true, max: 9 } }] },
+    ],
+  };
+  const draw = (data: Record<string, unknown> = { might: 14 }) => {
+    const onRoll = vi.fn();
+    render(<SheetRenderer template={templateFromRender(CHOOSING)} data={data} onFieldChange={() => {}} onRoll={onRoll} />);
+    return onRoll;
+  };
+
+  it('a field with one roll and no changes rolls on the first click, asking nothing', () => {
+    const onRoll = draw();
+    fireEvent.click(screen.getByRole('button', { name: 'Roll Plain' }));
+    expect(onRoll).toHaveBeenCalledWith('armor', undefined, undefined);
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('asks which roll and which changes first, then rolls with them', () => {
+    const onRoll = draw();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Roll Might check' })[0]);
+    expect(onRoll).not.toHaveBeenCalled();
+    const ask = screen.getByRole('dialog', { name: 'Roll MIGHT' });
+    expect(within(ask).getAllByRole('radio').map((r) => r.textContent)).toEqual(['MIGHT CHECK', 'PUSHED CHECK']);
+    fireEvent.click(within(ask).getByRole('switch', { name: 'ADVANTAGE' }));
+    fireEvent.click(within(ask).getByRole('button', { name: 'ROLL MIGHT CHECK' }));
+    expect(onRoll).toHaveBeenCalledWith('might', undefined, undefined, { rollId: 'check', changes: ['advantage'] });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('another roll starts with no changes picked; a cost says what the sheet has, and is picked like any change (6b3a)', () => {
+    const onRoll = draw({ might: 14, stress: 4 });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Roll Might check' })[0]);
+    const ask = screen.getByRole('dialog');
+    fireEvent.click(within(ask).getByRole('switch', { name: 'ADVANTAGE' }));
+    fireEvent.click(within(ask).getByRole('radio', { name: 'PUSHED CHECK' }));
+    const push = within(ask).getByRole('switch', { name: 'PUSH · COSTS 2 STRESS · YOU HAVE 4' }) as HTMLButtonElement;
+    expect(push.disabled).toBe(false);
+    fireEvent.click(push);
+    fireEvent.click(within(ask).getByRole('button', { name: 'ROLL PUSHED CHECK' }));
+    expect(onRoll).toHaveBeenCalledWith('might', undefined, undefined, { rollId: 'push', changes: ['push'] });
+  });
+
+  it('a cost the sheet can\'t pay is off: too little to take, or too much to add', () => {
+    const onRoll = draw({ might: 14, stress: 8 });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Roll Might check' })[0]);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('radio', { name: 'PUSHED CHECK' }));
+    // 8 is enough to take 2 from.
+    expect((screen.getByRole('switch', { name: 'PUSH · COSTS 2 STRESS · YOU HAVE 8' }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'CANCEL' }));
+    // GOLD's Action adds 2 Stress, past its highest of 9 from 8.
+    fireEvent.click(screen.getByRole('button', { name: 'Roll Action' }));
+    const adds = screen.getByRole('switch', { name: 'PUSH YOURSELF · ADDS 2 STRESS · 8 OF 9' }) as HTMLButtonElement;
+    expect(adds.disabled).toBe(true);
+    expect(adds.title).toBe('That would take it past its highest');
+    fireEvent.click(adds);
+    fireEvent.click(screen.getByRole('button', { name: 'ROLL ACTION' }));
+    expect(onRoll).toHaveBeenCalledWith('gold', undefined, undefined, { rollId: 'blades', changes: [] });
+  });
+
+  it('one short is too little to take', () => {
+    draw({ might: 14, stress: 1 });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Roll Might check' })[0]);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('radio', { name: 'PUSHED CHECK' }));
+    expect((screen.getByRole('switch', { name: 'PUSH · COSTS 2 STRESS · YOU HAVE 1' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('with nothing on the sheet, a cost to take is off and one to add is on', () => {
+    draw();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Roll Might check' })[0]);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('radio', { name: 'PUSHED CHECK' }));
+    const push = screen.getByRole('switch', { name: 'PUSH · COSTS 2 STRESS · YOU HAVE 0' }) as HTMLButtonElement;
+    expect([push.disabled, push.title]).toEqual([true, 'There is not enough to pay it']);
+    fireEvent.click(screen.getByRole('button', { name: 'CANCEL' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Roll Action' }));
+    expect((screen.getByRole('switch', { name: 'PUSH YOURSELF · ADDS 2 STRESS · 0 OF 9' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('a field with one roll that has changes asks too, without a choice of roll', () => {
+    const onRoll = draw();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Roll Might check' })[1]);
+    const ask = screen.getByRole('dialog', { name: 'Roll MOD' });
+    expect(within(ask).queryByRole('radio')).toBeNull();
+    fireEvent.click(within(ask).getByRole('button', { name: 'ROLL MIGHT CHECK' }));
+    expect(onRoll).toHaveBeenCalledWith('might_mod', undefined, undefined, { rollId: 'check', changes: [] });
+  });
+
+  it('CANCEL or Escape closes it, rolling nothing', () => {
+    const onRoll = draw();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Roll Might check' })[0]);
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'CANCEL' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Roll Might check' })[0]);
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onRoll).not.toHaveBeenCalled();
   });
 });
