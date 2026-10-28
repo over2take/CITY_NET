@@ -283,6 +283,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **A map of what the browser tests cover.** e2e/COVERAGE.md lists every option a GM can set in the
+  System Builder, the server tests for its rules, and the browser test that proves it at the table:
+  AT THE TABLE, BUILDER ONLY, or a GAP. An audit found most options built and tested on the server
+  but never played in a browser (health models other than a pool, parts switched off, house rules
+  at the table, conditions on tokens, who sees a sheet's fields, NPC tiers, currencies, most rest
+  and roll options, sheet import). Phase 7 closes them one family at a time, and every piece that
+  adds an option now adds its row and its proof at the table.
 - **What a character's picks do to their numbers (7a1b).** A character's picks are now kept on
   their sheet, and the server works out what they do on every save. Each class picked has its own
   level (`@soldier_level`), a levelled list adds them up (`@classes_level`), and `@level` is the

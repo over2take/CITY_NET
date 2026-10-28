@@ -4,6 +4,10 @@ The real app in a real browser: the backend and the frontend started fresh, and 
 them the way a GM and players would. Everything else in the repo is tested piece by piece; these
 journeys check the pieces work together on screen.
 
+[COVERAGE.md](COVERAGE.md) maps every option a GM can set in the System Builder to the journey that
+proves it at the table, and lists the gaps still to close. A piece that adds or changes an option
+updates its row there.
+
 ## What a run does
 
 - Starts its **own backend** on port **5055** and its **own frontend** on port **5174**. A dev setup
