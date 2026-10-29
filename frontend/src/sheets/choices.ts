@@ -15,7 +15,7 @@ import { restList } from './rests';
 import { rollList } from './rolls';
 
 /** backend choices.js LIMITS, held equal by a test. */
-export const LIMITS = { lists: 20, options: 100, features: 40, modifiers: 10, rolls: 10, level: 30, picks: 100, label: 40, description: 1000 } as const;
+export const LIMITS = { lists: 20, options: 100, features: 40, modifiers: 10, rolls: 10, level: 30, picks: 100, label: 40, description: 1000, opens: 10 } as const;
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
