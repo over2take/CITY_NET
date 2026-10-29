@@ -75,7 +75,8 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 | Option | Variants | Server tests | Browser test | Status |
 |---|---|---|---|---|
 | Lists and options | one / several / any, MORE THAN ONCE, LEVELLED, a requirement | `choices` | `builder-choices`, `sheet-choices` | **AT THE TABLE** |
-| Lists inside lists | a list picked ON ITS OWN, THROUGH FEATURES or BOTH; a feature's HOW MANY; a pick waiting when its feature locks; nested deeper | `nested_choices`, `picking` | | **GAP** until 7a5a2, which brings the builder's settings, the sheet and their journey |
+| Lists inside lists | a list picked ON ITS OWN, THROUGH FEATURES or BOTH; a feature's HOW MANY; a pick waiting when its feature locks; nested deeper | `nested_choices`, `picking` | `sheet-nested-choices` (THROUGH FEATURES set in the builder; picked under the feature, waiting when lowered, back) | **AT THE TABLE** (BOTH, HOW MANY above 1 and deeper nesting in component and server tests) |
+| A list everyone has | EVERYONE HAS IT: no picks, a requirement deciding, features by the character's level | `nested_choices` | `sheet-nested-choices` (set in the builder; every character's, a feature unlocking at level 2) | **AT THE TABLE** |
 | Features | at a level; modifiers, uses and their rest, rolls, roll changes, a list opened | `choices`, `choices_numbers` | `builder-choices` | **BUILDER ONLY**, at the table in 7a3 |
 | What picks do to the numbers | a modifier reaching a formula, levels unlocking features | `choices_numbers` | `sheet-choices` (Defense +1 from Guard Stance; Veteran at level 2) | **AT THE TABLE** |
 | Picking at the table | a player picks, one not met off with what it needs; sets a level; ticks a use | `picking` | `sheet-choices` | **AT THE TABLE** |

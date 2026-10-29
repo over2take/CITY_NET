@@ -53,6 +53,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Lists inside lists, and lists every character has (7a5a2).** On the CHOICES page each list now
+  says how it is PICKED: ON ITS OWN, as before; THROUGH FEATURES, only under the features that open
+  it (a SOLDIER's SPECIALTY at level 3); BOTH, some at the start and more from features, like feats;
+  or EVERYONE HAS IT, nothing to pick, every character has its options (a requirement still deciding
+  who), their features unlocking by the character's level, for what no class gives. A list shows
+  which features open it (OPENED BY), and a feature opening a list says HOW MANY picks it gives. On the
+  sheet, the pick waits right under its feature, PICK A SPECIALTY, and the chosen one hangs there
+  with its own features. Lower the level and it is kept, greyed, until the feature unlocks again;
+  one left with nothing to wait under is listed at the foot for the GM. HELP on CHOICES says how.
 - **A CHOICES list from a file (choices import).** A list with twelve classes and a hundred features
   no longer has to be typed in by hand. IMPORT on a list opens a panel where you paste or upload a
   table of its options (`name, description, requires`) and their features (`option, feature, level,

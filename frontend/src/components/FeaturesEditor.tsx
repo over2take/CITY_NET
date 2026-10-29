@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { Definition } from '../sheets/systemsApi';
 import {
-  featureList, levelOf, kindsOf, withNewFeature, withFeature, withoutFeature, modifierTargets, refillRests, rollChoices, choiceLists, LIMITS,
+  featureList, levelOf, kindsOf, withNewFeature, withFeature, withoutFeature, modifierTargets, refillRests, rollChoices, choiceLists, pickedOf, unlocksByLevel, LIMITS,
   type ChoiceList, type ChoiceOption, type Feature, type FeatureKind, type FeaturePatch,
 } from '../sheets/choices';
 import { HINTS } from '../sheets/builderHelp';
@@ -58,7 +58,9 @@ function FeatureForm({ definition, edit, list, option, feature }: Props & { feat
   const rests = refillRests(definition);
   const rolls = rollChoices(definition);
   const withChanges = rolls.filter((r) => r.changes.length);
-  const otherLists = choiceLists(definition).filter((c) => c.id !== list.id);
+  // A list everyone has is never picked, so no feature opens it.
+  const otherLists = choiceLists(definition).filter((c) => c.id !== list.id && pickedOf(c) !== 'everyone');
+  const opened = otherLists.find((c) => c.id === feature.choice);
   const mods = feature.modifiers ?? [];
   const changes = feature.changes ?? [];
   const given = new Set(feature.rolls ?? []);
@@ -70,7 +72,7 @@ function FeatureForm({ definition, edit, list, option, feature }: Props & { feat
         <FieldName boxStyle={END} htmlFor={id('name')} hint={HINTS['choices.featureName']} style={small}>NAME</FieldName>
         <input id={id('name')} type="text" maxLength={LIMITS.label} value={feature.label} style={input}
           aria-invalid={!feature.label.trim() ? true : undefined} onChange={(e) => set({ label: e.target.value })} />
-        {list.levelled && <>
+        {unlocksByLevel(list) && <>
           <FieldName boxStyle={END} htmlFor={id('at')} hint={HINTS['choices.at']} style={small}>AT LEVEL</FieldName>
           <input id={id('at')} type="number" min={1} max={LIMITS.level} step={1} value={levelText} style={{ ...input, width: 64 }}
             onChange={(e) => setLevelText(e.target.value)} onBlur={commitLevel} onKeyDown={(e) => { if (e.key === 'Enter') commitLevel(); }} />
@@ -161,6 +163,18 @@ function FeatureForm({ definition, edit, list, option, feature }: Props & { feat
           <option value="">NOTHING</option>
           {otherLists.map((c) => <option key={c.id} value={c.id}>{(c.one || c.id).toUpperCase()}</option>)}
         </select>
+        {feature.choice && <>
+          <FieldName boxStyle={END} htmlFor={id('count')} hint={HINTS['choices.opensCount']} style={small}>HOW MANY</FieldName>
+          <span style={row}>
+            <input id={id('count')} type="number" min={1} max={LIMITS.opens} step={1} value={feature.choice_count ?? 1} style={{ ...input, width: 64 }}
+              onChange={(e) => { const n = Math.trunc(Number(e.target.value)); if (Number.isFinite(n) && n >= 1) set({ choice_count: n }); }} />
+            {opened && pickedOf(opened) === 'own' && (
+              <span style={{ ...why, fontSize: 11, color: 'var(--warning)' }}>
+                {(opened.many || opened.id).toUpperCase()} is picked on its own, so this only names it. Set it to THROUGH FEATURES or BOTH on its page for a pick here.
+              </span>
+            )}
+          </span>
+        </>}
       </div>
       <div style={{ ...row, justifyContent: 'flex-end' }}>
         {asking
@@ -178,10 +192,10 @@ function FeatureForm({ definition, edit, list, option, feature }: Props & { feat
 export function FeaturesEditor({ definition, edit, list, option }: Props) {
   const features = featureList(option);
   const [open, setOpen] = useState<string | null>(null);
-  // In a levelled list, by the level each unlocks at; otherwise all together.
-  const levels = list.levelled ? [...new Set(features.map(levelOf))].sort((a, b) => a - b) : [null];
+  // In a levelled list (or one everyone has), by the level each unlocks at; otherwise all together.
+  const levels = unlocksByLevel(list) ? [...new Set(features.map(levelOf))].sort((a, b) => a - b) : [null];
   const add = () => {
-    const made = withNewFeature(definition, list.id, option.id, list.levelled && features.length ? Math.max(...features.map(levelOf)) : undefined);
+    const made = withNewFeature(definition, list.id, option.id, unlocksByLevel(list) && features.length ? Math.max(...features.map(levelOf)) : undefined);
     if (!made) return;
     edit(made.definition);
     setOpen(made.id);

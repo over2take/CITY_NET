@@ -1,4 +1,4 @@
-// Picking on the sheet, over the socket (7a3a): `choicesAction` with { kind, list, option, level }
+// Picking on the sheet, over the socket (7a3a): `choicesAction` with { kind, list, option, level, from }
 // or { kind: 'use', feature, spent }, for the caller's own character; the GM may name another
 // player's with `username`. What may be done, and by whom, is systemBuilder/picking.js's; this stores
 // it through the sheet queue (sheets/mutate.js), works the numbers out again, and tells every screen

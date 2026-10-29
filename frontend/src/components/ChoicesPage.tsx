@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
-  choiceLists, picksOf, withNewList, withList, withoutList, withNewOption, withOption, withoutOption, levelNames, LIMITS,
-  type ChoiceList, type ChoiceOption,
+  choiceLists, picksOf, pickedOf, openedBy, withNewList, withList, withoutList, withNewOption, withOption, withoutOption, levelNames, LIMITS,
+  type ChoiceList, type ChoiceOption, type Picked,
 } from '../sheets/choices';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
@@ -36,6 +36,14 @@ const seg = (on: boolean): React.CSSProperties => ({
   background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)', border: 0, fontFamily: 'monospace', fontSize: 11, padding: '3px 12px', cursor: 'pointer',
 });
 const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '130px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' };
+/** How a list is picked, as the page offers it (7a5a2; approved mockup nested-choices), with what each means. */
+const PICKED_WAYS: { id: Picked; label: string; why: string }[] = [
+  { id: 'own', label: 'ON ITS OWN', why: 'A list of its own on the sheet. A feature opening it only names it.' },
+  { id: 'features', label: 'THROUGH FEATURES', why: 'Only under the features that open it: as many picks as each gives, when it unlocks. Not a list of its own on the sheet.' },
+  { id: 'both', label: 'BOTH', why: 'Its own picks at the start, and more under each feature that opens it, like feats.' },
+  { id: 'everyone', label: 'EVERYONE HAS IT', why: 'Nothing to pick: every character has each option whose requirement they meet, its features unlocking by their level.' },
+];
+
 /** No options outlined as new. */
 const NONE = new Set<string>();
 /** A name in the right-aligned column of the settings grid. */
@@ -68,6 +76,9 @@ interface ListExtras { list: ChoiceList; picked: string | null; onPick: (id: str
 function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, status }: Props & ListExtras) {
   const set = (patch: Parameters<typeof withList>[2]) => edit(withList(definition, list.id, patch));
   const picks = picksOf(list);
+  const way = pickedOf(list);
+  const openers = openedBy(definition, list.id);
+  const ownPicks = way === 'own' || way === 'both';
   const name = list.many.trim() || 'this list';
   const add = () => {
     const made = withNewOption(definition, list.id);
@@ -86,6 +97,11 @@ function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, st
         </span>
       </div>
       {status && <p role="status" style={{ ...why, color: 'var(--cyan)', opacity: 1, letterSpacing: 1 }}>{status}</p>}
+      {openers.length > 0 && (
+        <p aria-label="Opened by" style={{ ...why, color: 'var(--warning)', border: '1px dashed var(--warning)', padding: '4px 8px', opacity: 1, letterSpacing: 1 }}>
+          OPENED BY · {openers.map((o) => `${(o.option.label || o.option.id).toUpperCase()}: ${(o.feature.label || o.feature.id).toUpperCase()}${o.list.levelled && o.feature.at ? ` (LV ${o.feature.at})` : ''}`).join(' · ')}
+        </p>
+      )}
       <div style={grid}>
         <FieldName boxStyle={END} hint={HINTS['choices.names']} style={small}>ONE / MANY</FieldName>
         <span style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 6 }}>
@@ -94,6 +110,18 @@ function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, st
           <input type="text" aria-label="Many" maxLength={LIMITS.label} value={list.many} style={input}
             aria-invalid={!list.many.trim() ? true : undefined} onChange={(e) => set({ many: e.target.value })} />
         </span>
+        <FieldName boxStyle={END} hint={HINTS['choices.picked']} style={small}>PICKED</FieldName>
+        <span role="group" aria-label="Picked" style={{ display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--green)', justifySelf: 'start' }}>
+          {PICKED_WAYS.map((w) => (
+            <button key={w.id} type="button" aria-pressed={way === w.id} title={w.why} style={seg(way === w.id)} onClick={() => set({ picked: w.id })}>{w.label}</button>
+          ))}
+        </span>
+        <span />
+        <span style={{ ...why, fontSize: 11, opacity: 0.7 }}>
+          {PICKED_WAYS.find((w) => w.id === way)!.why}
+          {openers.length > 0 && way === 'own' ? ' Features open this list: THROUGH FEATURES or BOTH puts their picks under them.' : ''}
+        </span>
+        {ownPicks && <>
         <FieldName boxStyle={END} hint={HINTS['choices.picks']} style={small}>A CHARACTER PICKS</FieldName>
         <span style={row}>
           <span role="group" aria-label="A character picks" style={{ display: 'inline-flex', border: '1px solid var(--green)' }}>
@@ -109,11 +137,14 @@ function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, st
         </span>
         <FieldName boxStyle={END} hint={HINTS['choices.again']} style={small}>MORE LATER</FieldName>
         <Switch label="MORE THAN ONCE" on={list.again === true} disabled={picks === 'any'} onFlip={() => set({ again: list.again !== true })} />
+        </>}
+        {way !== 'everyone' && <>
         <FieldName boxStyle={END} hint={HINTS['choices.levelled']} style={small}>LEVELS</FieldName>
         <Switch label="LEVELLED" on={list.levelled === true} onFlip={() => set({ levelled: list.levelled !== true })} />
+        </>}
       </div>
       <p style={{ ...why, fontSize: 11, opacity: 0.7 }}>
-        {picks === 'any' ? 'Any number of these, picked whenever.' : `${picks === 1 ? 'One' : picks} ${picks === 1 ? list.one || 'pick' : list.many || 'picks'}${list.again ? ', and more can be added later' : ' per character'}.`}
+        {!ownPicks ? '' : picks === 'any' ? 'Any number of these, picked whenever.' : `${picks === 1 ? 'One' : picks} ${picks === 1 ? list.one || 'pick' : list.many || 'picks'}${list.again ? ', and more can be added later' : ' per character'}${way === 'both' ? ' at the start' : ''}.`}
         {list.levelled ? ` Each has its own level; together they read as ${levelNames(list).list}.` : ''}
       </p>
       <div style={{ ...row, justifyContent: 'space-between' }}>
