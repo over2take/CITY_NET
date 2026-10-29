@@ -10,6 +10,7 @@ import { ConditionIconPicker } from './ConditionIconPicker';
 import { OnlyWith } from './OnlyWith';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
+import { ToggleSwitch } from './ToggleSwitch';
 
 // The builder's CONDITIONS page (4e1b; approved mockup docs/mockups/builder-conditions.html,
 // 2026-10-09): what can happen to a character besides losing health. The standard set, each with
@@ -49,16 +50,6 @@ function WholeBox({ aria, value, min, max, width = 64, onChange }: { aria: strin
   );
 }
 
-/** An on/off switch, as the rail's lists use it (CONDITIONS, RESTS). */
-export function Switch({ on, label, onChange }: { on: boolean; label: string; onChange: (on: boolean) => void }) {
-  return (
-    <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}
-      style={{ width: 28, height: 14, borderRadius: 7, border: '1px solid var(--green)', padding: 0, position: 'relative', cursor: 'pointer', flexShrink: 0,
-        background: on ? 'color-mix(in srgb, var(--green) 30%, transparent)' : 'none' }}>
-      <span aria-hidden style={{ position: 'absolute', top: 1, left: on ? 15 : 1, width: 10, height: 10, borderRadius: '50%', background: 'var(--green)' }} />
-    </button>
-  );
-}
 
 /**
  * AT A REST (4f4b; approved mockup builder-rests, 2026-10-09): the rests that end a condition, ticked
@@ -198,7 +189,7 @@ export function ConditionsPage({ definition, edit, api }: Props) {
               boxShadow: c.id === current?.id ? 'inset 3px 0 0 var(--green)' : 'none',
             }}>
               {c.standard
-                ? <Switch on={c.on} label={`${c.name} on`} onChange={(on) => edit(withCondition(definition, c.id, { on }))} />
+                ? <ToggleSwitch on={c.on} name={`${c.name} on`} onChange={(on) => edit(withCondition(definition, c.id, { on }))} />
                 : <span />}
               <span style={{ color: 'var(--green)', opacity: c.on ? 1 : 0.4 }}><ConditionIcon icon={c.icon} /></span>
               <button type="button" aria-current={c.id === current?.id || undefined} onClick={() => setPicked(c.id)}

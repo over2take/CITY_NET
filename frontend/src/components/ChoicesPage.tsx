@@ -8,6 +8,7 @@ import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
 import { FeaturesEditor } from './FeaturesEditor';
 import { ChoicesImport } from './ChoicesImport';
+import { ToggleSwitch } from './ToggleSwitch';
 
 // The builder's CHOICES page (7a2b1; approved mockup docs/mockups/builder-choices.html, 2026-10-27):
 // the lists a character picks from (classes, backgrounds, feats), named in the game's own words. The
@@ -62,14 +63,6 @@ function DeleteButton({ what, gone, onDelete }: { what: string; gone: string; on
 }
 
 /** An on/off setting, read by screen readers as a switch, with what it means under it. */
-function Switch({ label, on, onFlip, disabled }: { label: string; on: boolean; onFlip: () => void; disabled?: boolean }) {
-  return (
-    <button type="button" role="switch" aria-checked={on} disabled={disabled} onClick={onFlip}
-      style={{ justifySelf: 'start', background: 'none', border: 0, padding: 0, color: 'var(--cyan)', fontFamily: 'monospace', fontSize: 12, letterSpacing: 1, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1 }}>
-      {on ? '◉' : '○'} {label}
-    </button>
-  );
-}
 
 interface ListExtras { list: ChoiceList; picked: string | null; onPick: (id: string) => void; onImport: () => void; fresh: Set<string>; status: string | null }
 
@@ -136,11 +129,11 @@ function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, st
           )}
         </span>
         <FieldName boxStyle={END} hint={HINTS['choices.again']} style={small}>MORE LATER</FieldName>
-        <Switch label="MORE THAN ONCE" on={list.again === true} disabled={picks === 'any'} onFlip={() => set({ again: list.again !== true })} />
+        <ToggleSwitch label="MORE THAN ONCE" on={list.again === true} disabled={picks === 'any'} onChange={() => set({ again: list.again !== true })} />
         </>}
         {way !== 'everyone' && <>
         <FieldName boxStyle={END} hint={HINTS['choices.levelled']} style={small}>LEVELS</FieldName>
-        <Switch label="LEVELLED" on={list.levelled === true} onFlip={() => set({ levelled: list.levelled !== true })} />
+        <ToggleSwitch label="LEVELLED" on={list.levelled === true} onChange={() => set({ levelled: list.levelled !== true })} />
         </>}
       </div>
       <p style={{ ...why, fontSize: 11, opacity: 0.7 }}>

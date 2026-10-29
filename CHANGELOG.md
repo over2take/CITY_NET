@@ -568,6 +568,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **One switch across the builder, easy to see.** Switches like LEVELLED and MORE THAN ONCE on
+  CHOICES were plain words with a small circle in front, easy to miss as something to click. Every
+  switch in the builder is now the same pill with a knob that slides across and lights up when on:
+  CHOICES (MORE THAN ONCE, LEVELLED, HAS USES), PARTS and its shop buildings and catalogues,
+  CONDITIONS, RESTS, TRY IT's house rules, and every switch on ROLLS and TEST ROLL. The words beside
+  a switch are part of it, so clicking them flips it too. Its colors follow the theme.
 - **The builder's tour and HELP catch up.** The map view from Phase 5 was nowhere in them: HELP
   now has THE MAP, how to use GRAPH (adding with + ADD or A, wiring by dragging a dot, CUT, the
   diamonds on wires, notes, map groups and LINE UP, UNDO and REDO, the PROBLEMS corner, hover and

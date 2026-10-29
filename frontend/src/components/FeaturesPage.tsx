@@ -6,6 +6,7 @@ import {
   cataloguePartOff, currencyList, type BuildingKind,
 } from '../sheets/wordsFeatures';
 import { OnlyWith } from './OnlyWith';
+import { ToggleSwitch } from './ToggleSwitch';
 
 // The builder's PARTS page (4b1c; called FEATURES until 7a2a, renamed so a "feature" means only
 // what a pick gives, approved mockup builder-choices 2026-10-27; its id stays 'features'): which parts of the app the game uses, one switch each, the
@@ -30,18 +31,6 @@ const field: React.CSSProperties = {
 };
 const td: React.CSSProperties = { padding: '3px 8px 3px 0', verticalAlign: 'middle' };
 
-/** An on/off switch, drawn as the mockup's, read as a switch by assistive tech. */
-function Switch({ on, label, disabled, onChange }: { on: boolean; label: string; disabled?: boolean; onChange: (on: boolean) => void }) {
-  return (
-    <button type="button" role="switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={() => onChange(!on)}
-      style={{
-        width: 44, height: 22, padding: 0, position: 'relative', cursor: disabled ? 'not-allowed' : 'pointer', flexShrink: 0,
-        border: '1px solid var(--green)', background: on ? 'color-mix(in srgb, var(--green) 20%, transparent)' : 'var(--black)', opacity: disabled ? 0.45 : 1,
-      }}>
-      <span aria-hidden style={{ position: 'absolute', top: 2, left: on ? 24 : 2, width: 16, height: 16, background: on ? 'var(--green)' : 'var(--dark-green)', transition: 'left 0.15s' }} />
-    </button>
-  );
-}
 
 /** One table of building types or catalogues: the app's name, the system's, (a currency), on. */
 function BuildingTable({ definition, edit, kind, rows, priced }: {
@@ -76,7 +65,7 @@ function BuildingTable({ definition, edit, kind, rows, priced }: {
                 </td>
               )}
               <td style={{ ...td, width: 60 }}>
-                <Switch on={s.on !== false} label={`${row.label} on`} disabled={partOff}
+                <ToggleSwitch on={s.on !== false} name={`${row.label} on`} disabled={partOff}
                   onChange={(on) => edit(withBuilding(definition, kind, row.id, { on }))} />
               </td>
             </tr>
@@ -129,7 +118,7 @@ export function FeaturesPage({ definition, edit, api }: Props) {
           return (
             <div key={p.id} data-testid={`part-${p.id}`} style={{ borderBottom: '1px solid var(--dark-green)' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto', gap: '4px 14px', alignItems: 'center', padding: '10px 14px' }}>
-                <Switch on={on} label={p.label} disabled={!!p.unused} onChange={(next) => edit(withPart(definition, p.id, next))} />
+                <ToggleSwitch on={on} name={p.label} disabled={!!p.unused} onChange={(next) => edit(withPart(definition, p.id, next))} />
                 <b style={{ letterSpacing: 1, color: 'var(--green)', opacity: on ? 1 : 0.5 }}>{p.label}</b>
                 {Settings && on
                   ? <button type="button" aria-expanded={isOpen} onClick={() => setOpen({ ...open, [p.id]: !isOpen })}
