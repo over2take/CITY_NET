@@ -27,6 +27,7 @@ const customSystems = require('../systemBuilder/runtime');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { healthView } = require('../systemBuilder/healthView');
+const { syncTokenMax } = require('../systemBuilder/tokenMax');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
 const vehicleState = require('../sheets/vehicleState');
@@ -1440,7 +1441,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     }
                   );
                 } else {
-                  io.emit('sheetUpdated', { username: info.userName, system });
+                  // A custom system's feature may read what changed (a stat, a level) and move
+                  // the token's maximum with it (systemBuilder/tokenMax.js, 7a5a3).
+                  syncTokenMax(db, system, info.userName, (moved) => {
+                    if (moved) emitUpdate({ isRhombusOnly: true });
+                    io.emit('sheetUpdated', { username: info.userName, system });
+                  });
                 }
           }
         );
@@ -1523,10 +1529,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   });
                 }
                 const effAc = system === 'cities_without_number' ? sheetTemplates.cwnEffectiveAc(data) : null;
-                const finish = () => {
+                const finish = () => syncTokenMax(db, system, info.userName, (moved) => {
+                  if (moved) emitUpdate({ isRhombusOnly: true });
                   io.emit('sheetUpdated', { username: info.userName, system });
                   socket.emit('sheetImportApplied', { count: entries.length });
-                };
+                });
                 // Editing a vehicle changes what every badge showing it should say —
                 // including the badges of passengers, whose sheets were not touched.
                 if (vehicleSystems.hasVehicles(system) && entries.some(([k]) => k.startsWith('vehicle'))) {

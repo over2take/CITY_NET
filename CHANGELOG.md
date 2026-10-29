@@ -53,6 +53,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Features that add to the token's maximum (7a5a3).** A feature whose modifier is on HP MAX (or
+  WOUNDS, under a wound count) now moves the token's real maximum, not just the number the sheet
+  names: a level 3 fighter picking Tough (`2 * @level`) goes from 20 to 26 of 26, the current
+  moving with the maximum. A level up or down, or a change to a stat the bonus reads, moves it
+  again, and when the pick stops counting (dropped, or locked) it comes back off. Damage, healing,
+  rests and the health window all read the real number. The sheet names the bonus on its HP box
+  (20 → 26, Tough +6), and CHARACTER_CONTROLS' MAX HEALTH now follows the token when its maximum
+  changes elsewhere, so SAVE_STATS can't write an old number back. A new version of the running
+  game moves every player's token at once.
 - **Lists inside lists, and lists every character has (7a5a2).** On the CHOICES page each list now
   says how it is PICKED: ON ITS OWN, as before; THROUGH FEATURES, only under the features that open
   it (a SOLDIER's SPECIALTY at level 3); BOTH, some at the start and more from features, like feats;

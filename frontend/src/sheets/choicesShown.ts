@@ -184,7 +184,9 @@ export const featureDoes = (f: FeatureShown, lists: ChoiceListShown[]): string[]
 /**
  * What the picks do to each field, for the sheet's badge (SheetRenderer's ChromeBadge): a stat as
  * typed and with its bonuses, a formula as the server saved it (bonuses already in) and without them,
- * each bonus named by its feature. Fields the sheet doesn't show are left out.
+ * each bonus named by its feature. The token's maximum reads like a formula: the server puts its
+ * bonuses on the token (7a5a3), and with no token there is nothing to show. Fields the sheet doesn't
+ * show are left out.
  */
 export const choiceEffects = (data: Obj | null | undefined, template: SheetTemplate): SheetEffects => {
   const worked = workedOn(data);
@@ -194,10 +196,12 @@ export const choiceEffects = (data: Obj | null | undefined, template: SheetTempl
   for (const [id, from] of Object.entries(worked.from)) {
     const field = fields.get(id);
     if (!field || !Array.isArray(from) || !from.length) continue;
+    const onToken = field.source === 'token_hp_max';
+    if (onToken && (!isObject(data) || data[id] === null || data[id] === undefined)) continue;
     const delta = from.reduce((n, s) => n + num(s.amount), 0);
     const stored = num(isObject(data) ? data[id] : 0);
-    // A formula is saved with its bonuses in; a stat keeps what the player typed.
-    const base = field.derived ? stored - delta : stored;
+    // A formula is saved with its bonuses in, the token's maximum holds them; a stat keeps what the player typed.
+    const base = field.derived || onToken ? stored - delta : stored;
     out[id] = { id, base, value: base + delta, delta, sources: from.map((s) => ({ name: s.feature, value: num(s.amount), kind: 'stat' as const })) };
   }
   return { fields: out, unmatched: [] };
