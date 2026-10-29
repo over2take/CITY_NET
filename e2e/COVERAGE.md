@@ -28,7 +28,9 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 | Option | Variants | Server tests | Browser test | Status |
 |---|---|---|---|---|
 | Words renamed | HP, the GM, any term; one / many / short | `words`, `initiative_words` | `builder-journey` (renamed on WORDS), `player-journey` (WOUNDS, "THE KEEPER GAVE YOU") | **AT THE TABLE** |
-| Parts switched off | bank, shops, vehicles, cyberware, initiative, combat, token health, death, luck, XP, NPC tiers, sheet import, GIVE ITEM | `parts`, `parts_*` | `builder-journey` (VEHICLES off, in the builder) | **GAP**: never checked hidden at the table |
+| Parts switched off | bank, shops, initiative, combat, token health, sheet import, GIVE ITEM | `parts`, `parts_*` | `parts-off` (each shown, hidden in a version with it off, back when on: the player's BANK and HIT_POINTS, MAX HEALTH, ARMOR and SAVE_STATS, IMPORT on the sheet; the GM's INITIATIVE_TRACKER, PAY_PLAYERS, GIVE_ITEM, the buy-back rate), `builder-journey` (VEHICLES off, in the builder) | **AT THE TABLE** |
+| Parts only built-in games have | vehicles, cyberware, death saves, luck, XP awards | `parts` | | Nothing to hide at a custom table: shown off and greyed in PARTS |
+| NPC tiers off | | `parts_tiers` | | **GAP**, with family 8 (NPC tiers): the tier picker is on an NPC token in the 3D map |
 | GIVE ITEM and shop catalogues | a catalogue typed in, an item given with a note | `shops_give`, `shop_catalogue_*` | `player-journey` | **AT THE TABLE** |
 | Building types and catalogues renamed or off | | `buildings` | | **GAP** |
 | Currencies | several, decimals, a catalogue's currency, the cart per currency, PAYROLL | `currencies`, `currency_icons`, `catalogue_currency`, `bank_currencies`, `shop_checkout_currencies` | | **GAP** |
@@ -134,7 +136,7 @@ Fitted into Phase 7, one family between each of its pieces, riskiest first:
 
 1. ~~**Sheet visibility**~~: done, `sheet-visibility.spec.ts`. It also gave the journeys a way to reach another player's token without the 3D map: GLOBAL_CHAT, their name, VIEW_PLAYER_INFO.
 2. ~~**Health models**~~: done, `health-models.spec.ts`. It gave the journeys a token on the map without the 3D map too: the GM posts one to /api/locations, and HIT_POINTS opens it.
-3. **Parts switched off**: each part hidden at the table while off, and back when on.
+3. ~~**Parts switched off**~~: done, `parts-off.spec.ts`, but for NPC tiers, which waits for family 8. A new version published through the API (the draft, then PUBLISH) is how a journey changes a running system.
 4. **House rules at the table**: switched in the GAME tab, and what waits on them shown and hidden.
 5. **Conditions on tokens**: put on, a modifier reaching a stat, a formula and every roll, ending after rounds and at a rest.
 6. **Rest variants**: every kind of refill, a rest counting as another, one switched off, the system's own.

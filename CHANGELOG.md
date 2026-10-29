@@ -319,6 +319,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Parts switched off, proven in a browser.** The third gap in e2e/COVERAGE.md is closed: a new
+  browser test runs a custom system with every part on and checks what each shows, the player's
+  BANK and HIT_POINTS buttons, their MAX HEALTH, ARMOR and SAVE_STATS, IMPORT on their sheet, and the
+  GM's initiative tracker, PAY_PLAYERS, GIVE_ITEM and buy-back rate. It then publishes a version with
+  those parts off and checks each one is gone for both, then turns them back on and checks they all
+  return. The parts only the built-in games have (vehicles, cyberware, death saves, luck, XP) have
+  nothing to hide at a custom table; NPC tiers waits for the NPC family.
 - **Lists inside lists, the server's half (7a5a1).** A list can now say how it is picked: on its own
   (as every list was), only through the features that open it (a SOLDIER's SPECIALTY at level 3), or
   both (FEATS: one at creation, more from features). A feature opening a list says how many picks it
