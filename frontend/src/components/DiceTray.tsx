@@ -3,6 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { DraggableWindow, NotifyBell } from './DraggableWindow';
+import { ToggleSwitch } from './ToggleSwitch';
 import { ThemeContext } from '../theme/themes';
 import { themedRollColor } from '../theme/rollColor';
 import paperFillIcon from '../assets/lets-icons--paper-fill.svg';
@@ -342,22 +343,10 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
 
   const titleControls = (
     <>
-    <button
-      type="button"
-      role="switch"
-      onClick={() => setMotion(motion === 'roll' ? 'landed' : 'roll')}
-      className="win95-title-toggle"
-      aria-checked={motion === 'roll'}
-      aria-label="Animation"
+    <ToggleSwitch on={motion === 'roll'} onChange={(on) => setMotion(on ? 'roll' : 'landed')} label="ANIMATION" name="Animation"
+      color="var(--green)" className="win95-title-toggle"
       title={motion === 'roll' ? 'ANIMATION ON: THE DICE ROLL' : 'ANIMATION OFF: THE DICE LAND AT ONCE'}
-      style={{ background: 'var(--black)', color: 'var(--green)', padding: '0 6px', height: '22px', width: 'auto', fontFamily: 'monospace', fontSize: '10px', letterSpacing: '1px', marginRight: '4px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-    >
-      {/* A toggle: the knob to the right and the track lit when on. */}
-      <span aria-hidden style={{ position: 'relative', width: '20px', height: '10px', borderRadius: '5px', border: '1px solid var(--green)', boxSizing: 'border-box', background: motion === 'roll' ? 'var(--green)' : 'transparent', transition: 'background 0.15s' }}>
-        <span style={{ position: 'absolute', top: '1px', left: motion === 'roll' ? '11px' : '1px', width: '6px', height: '6px', borderRadius: '50%', background: motion === 'roll' ? 'var(--black)' : 'var(--green)', transition: 'left 0.15s' }} />
-      </span>
-      ANIMATION
-    </button>
+      style={{ background: 'var(--black)', padding: '0 6px', height: '22px', fontSize: '10px', marginRight: '4px', gap: '6px' }} />
     {onToggleBell && <NotifyBell enabled={!!bell} onToggle={onToggleBell} />}
     <button
       onClick={() => setIsHistoryOpen(!isHistoryOpen)}

@@ -568,6 +568,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **The same switch at the table.** The dice tray's ANIMATION, the choices a roll asks about before
+  it is rolled (ADVANTAGE, PUSH and the like), and TRY ON THE MAP on a house rule in the builder's
+  graph now use the one switch the builder has: a pill whose knob slides across and lights up when
+  on, the words beside it part of it. A choice that can't be paid stays red and can't be switched.
 - **One switch across the builder, easy to see.** Switches like LEVELLED and MORE THAN ONCE on
   CHOICES were plain words with a small circle in front, easy to miss as something to click. Every
   switch in the builder is now the same pill with a knob that slides across and lights up when on:
