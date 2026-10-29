@@ -148,9 +148,9 @@ describe('a feature open', () => {
     expect(features()[1].uses).toEqual({ count: '@con', refill: 'vigil' });
     fireEvent.change(f.getByRole('combobox', { name: 'Refilled by' }), { target: { value: '' } });
     expect(features()[1].uses).toEqual({ count: '@con' });
-    await userEvent.click(f.getByRole('switch', { name: '◉ HAS USES' }));
+    await userEvent.click(f.getByRole('switch', { name: 'HAS USES' }));
     expect(features()[1]).not.toHaveProperty('uses');
-    await userEvent.click(f.getByRole('switch', { name: '○ HAS USES' }));
+    await userEvent.click(f.getByRole('switch', { name: 'HAS USES' }));
     expect(features()[1].uses).toEqual({ count: '1', refill: 'short_rest' });
   });
 

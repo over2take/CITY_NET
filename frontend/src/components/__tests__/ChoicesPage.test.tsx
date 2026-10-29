@@ -78,7 +78,7 @@ describe('the lists', () => {
     expect(choiceLists(last())[0].picks).toBe(3);
     await userEvent.click(picks.getByRole('button', { name: 'ANY' }));
     expect(choiceLists(last())[0].picks).toBe('any');
-    expect(panel.getByRole('switch', { name: '◉ MORE THAN ONCE' })).toHaveProperty('disabled', true);
+    expect(panel.getByRole('switch', { name: 'MORE THAN ONCE' })).toHaveProperty('disabled', true);
     await userEvent.click(picks.getByRole('button', { name: 'ONE' }));
     expect(choiceLists(last())[0]).not.toHaveProperty('picks');
   });
@@ -87,8 +87,8 @@ describe('the lists', () => {
     const { last } = open();
     const panel = listPanel('Classes');
     expect(panel.getByText(/One Class, and more can be added later\. Each has its own level; together they read as @classes_level\./)).toBeTruthy();
-    await userEvent.click(panel.getByRole('switch', { name: '◉ MORE THAN ONCE' }));
-    await userEvent.click(panel.getByRole('switch', { name: '◉ LEVELLED' }));
+    await userEvent.click(panel.getByRole('switch', { name: 'MORE THAN ONCE' }));
+    await userEvent.click(panel.getByRole('switch', { name: 'LEVELLED' }));
     expect(choiceLists(last())[0]).not.toHaveProperty('again');
     expect(choiceLists(last())[0]).not.toHaveProperty('levelled');
     expect(panel.getByText('One Class per character.')).toBeTruthy();

@@ -7,12 +7,12 @@ import {
 } from '../sheets/rests';
 import { conditionsOf } from '../sheets/conditions';
 import { ConditionIcon } from './ConditionIcon';
-import { Switch } from './ConditionsPage';
 import { TRY_DELAY_MS } from './NpcsPage';
 import { sampleCharacter, hurtToken } from '../sheets/tryIt';
 import { changeText } from '../sheets/restCalls';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
+import { ToggleSwitch } from './ToggleSwitch';
 
 // The builder's RESTS page (4f4a; approved mockup docs/mockups/builder-rests.html, 2026-10-09): the
 // moments the game refills things and wears things off. The standard four, each with a switch,
@@ -257,7 +257,7 @@ export function RestsPage({ definition, edit, api }: Props) {
               background: r.id === current?.id ? 'color-mix(in srgb, var(--green) 10%, transparent)' : 'none',
               boxShadow: r.id === current?.id ? 'inset 3px 0 0 var(--green)' : 'none',
             }}>
-              {r.standard ? <Switch on={r.on} label={`${r.name} on`} onChange={(on) => edit(withRest(definition, r.id, { on }))} /> : <span />}
+              {r.standard ? <ToggleSwitch on={r.on} name={`${r.name} on`} onChange={(on) => edit(withRest(definition, r.id, { on }))} /> : <span />}
               <button type="button" aria-current={r.id === current?.id || undefined} onClick={() => setPicked(r.id)}
                 style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, letterSpacing: 1,
                   color: r.name.trim() ? 'var(--green)' : 'var(--danger)', opacity: r.on ? 1 : 0.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

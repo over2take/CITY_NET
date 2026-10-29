@@ -10,13 +10,13 @@ import {
 } from '../sheets/tryIt';
 import { restsOf } from '../sheets/rests';
 import { houseRuleList, withHouseRules, rulesOnAtStart } from '../sheets/houseRules';
-import { Switch } from './ConditionsPage';
 import { SheetRenderer } from './SheetRenderer';
 import { HeartMonitor } from './HitPoints';
 import { ModelHealthEditor, ModelHealthDescription, NoHealthNotice, monitorBandFor, type SendHealth } from './HealthModelPanels';
 import type { HealthView } from '../hooks/useHealthView';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
+import { ToggleSwitch } from './ToggleSwitch';
 
 // The builder's TRY IT page (4c3; approved mockup docs/mockups/builder-try-it.html, 2026-10-08):
 // the draft as a player would meet it, unsaved changes included. A made-up character on the
@@ -201,7 +201,7 @@ export function TryItPage({ definition: draft, edit, api }: Props) {
           <FieldName hint={HINTS['try.rules']} style={{ ...small, opacity: 1 }}>RULES</FieldName>
           {rules.map((r) => (
             <span key={r.id} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 11, letterSpacing: 1 }}>
-              <Switch on={onKey.split(',').includes(r.id)} label={`${(r.name.trim() || r.id).toUpperCase()} on`} onChange={(v) => setSwitched((s) => ({ ...s, [r.id]: v }))} />
+              <ToggleSwitch on={onKey.split(',').includes(r.id)} name={`${(r.name.trim() || r.id).toUpperCase()} on`} onChange={(v) => setSwitched((s) => ({ ...s, [r.id]: v }))} />
               {(r.name.trim() || r.id).toUpperCase()}
             </span>
           ))}

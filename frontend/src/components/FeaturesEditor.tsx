@@ -6,6 +6,7 @@ import {
 } from '../sheets/choices';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
+import { ToggleSwitch } from './ToggleSwitch';
 
 // An option's features on the CHOICES page (7a2b2; approved mockup docs/mockups/builder-choices.html,
 // 2026-10-27): what a pick gives, grouped by the level each unlocks at in a levelled list. Each row
@@ -103,10 +104,8 @@ function FeatureForm({ definition, edit, list, option, feature }: Props & { feat
 
         <FieldName boxStyle={END} hint={HINTS['choices.uses']} style={small}>USES</FieldName>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-          <button type="button" role="switch" aria-checked={!!feature.uses} onClick={() => set({ uses: feature.uses ? null : { count: '1', refill: rests[0]?.id } })}
-            style={{ justifySelf: 'start', alignSelf: 'start', background: 'none', border: 0, padding: 0, color: 'var(--cyan)', fontFamily: 'monospace', fontSize: 12, letterSpacing: 1, cursor: 'pointer' }}>
-            {feature.uses ? '◉' : '○'} HAS USES
-          </button>
+          <ToggleSwitch label="HAS USES" on={!!feature.uses} style={{ alignSelf: 'start' }}
+            onChange={(has) => set({ uses: has ? { count: '1', refill: rests[0]?.id } : null })} />
           {feature.uses && (
             <span style={row}>
               <input type="text" aria-label="How many uses" maxLength={1000} value={feature.uses.count} placeholder="1 · @level" style={{ ...input, width: 120 }}
