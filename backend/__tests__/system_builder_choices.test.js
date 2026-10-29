@@ -99,7 +99,7 @@ describe('a system\'s choices', () => {
     expect(at(1)).toEqual([]);
     expect(at(LIMITS.level)).toEqual([]);
     for (const n of [0, 2.5, LIMITS.level + 1, '3']) expect(at(n)).toEqual([`list specialties, option duelist, feature riposte, at: A level from 1 to ${LIMITS.level}`]);
-    expect(at(1, false)).toEqual(['list specialties, option duelist, feature riposte, at: Only a levelled list\'s features unlock at a level']);
+    expect(at(1, false)).toEqual(['list specialties, option duelist, feature riposte, at: Only the features of a levelled list, or one everyone has, unlock at a level']);
   });
 
   const feature = (f) => problems([CLASSES, SPECIALTIES, { ...FEATS, options: [{ id: 'tough', label: 'Tough', features: [{ id: 'grit', label: 'Grit', ...f }] }] }]);

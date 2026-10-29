@@ -51,7 +51,7 @@ describe('the checks', () => {
   });
 
   it('a list is picked on its own, through features or both; a feature opening a list says how many, 1 to 10', () => {
-    expect(problems(withList('origins', { picked: 'sometimes' }))).toEqual(['list origins, picked: own (on its own), features (through the features that open it) or both']);
+    expect(problems(withList('origins', { picked: 'sometimes' }))).toEqual(['list origins, picked: own (on its own), features (through the features that open it), both, or everyone (every character has it)']);
     const count = (f) => ({ ...HEARTH, choices: HEARTH.choices.map((c) => (c.id === 'origins' ? { ...c, options: [{ id: 'port', label: 'Port', features: [f] }] } : c)) });
     expect(problems(count({ id: 'dock', label: 'Dock', choice_count: 2 }))).toEqual(['list origins, option port, feature dock, choice_count: Only a feature that opens a list says how many']);
     expect(problems(count({ id: 'dock', label: 'Dock', choice: 'feats', choice_count: 11 }))).toEqual(['list origins, option port, feature dock, choice_count: A number from 1 to 10']);
@@ -187,5 +187,68 @@ describe('picking under a feature', () => {
     expect(pickAction(HEARTH, waiting, { kind: 'drop', list: 'specialties', option: 'duelist' }, { gm: true }).data[PICKS_KEY].specialties).toEqual([]);
     expect(pickAction(HEARTH, at(3), { kind: 'pick', list: 'specialties', option: 'vanguard', from: 'specialty' })).toEqual({ ok: false, error: 'Vanguard needs INTELLECT >= 13' });
     expect(pickAction(HEARTH, at(3), { kind: 'pick', list: 'specialties', option: 'vanguard', from: 'specialty' }, { gm: true }).ok).toBe(true);
+  });
+});
+
+describe('a list everyone has (7a5a2)', () => {
+  const COMMONS = { id: 'commons', one: 'Common', many: 'Commons', picked: 'everyone', options: [
+    { id: 'all_breath', label: 'Second Wind', features: [
+      { id: 'breath', label: 'Breath', uses: { count: '1', refill: 'short_rest' } },
+      { id: 'knack', label: 'Knack', at: 2, choice: 'specialties' },
+      { id: 'improve', label: 'Improvement', at: 4, modifiers: [{ target: 'defense', amount: '1' }] },
+    ] },
+    { id: 'strong', label: 'Strong Back', requires: '@int >= 13', features: [{ id: 'carry', label: 'Carry' }] },
+  ] };
+  const EVERYONE = { ...HEARTH, choices: [...HEARTH.choices, COMMONS] };
+  const mine = (def, data) => heldOf(def, data).filter((p) => p.list.id === 'commons').map((p) => `${p.option.id}@${p.level}`);
+
+  it('checks clean, its features unlocking at a level though the list has none of its own', () => {
+    expect(problems(EVERYONE)).toEqual([]);
+    expect(problems({ ...EVERYONE, choices: [...HEARTH.choices, { ...COMMONS, levelled: true }] }))
+      .toEqual(['list commons, levelled: A list everyone has has no levels of its own: its features unlock by the character\'s level']);
+  });
+
+  it('every character has each option whose requirement they meet, at their total level', () => {
+    expect(mine(EVERYONE, sheet(soldierAt(3)))).toEqual(['all_breath@3']);
+    expect(mine(EVERYONE, sheet(soldierAt(3), { int: 14 }))).toEqual(['all_breath@3', 'strong@3']);
+    // No class yet: level 1, so what comes at the start counts; a system with no levels: everything.
+    expect(mine(EVERYONE, sheet({}))).toEqual(['all_breath@1']);
+    const flat = { format: 1, name: 'Flat', choices: [COMMONS] };
+    expect(mine(flat, sheet({}))).toEqual(['all_breath@null']);
+    expect(overlayOf({ ...flat, derived: HEARTH.derived }, sheet({})).add).toEqual({ defense: 1 });
+    expect(workedOf(EVERYONE, sheet(soldierAt(3))).unmet).toEqual(['vanguard', 'strong']);
+  });
+
+  it('a system with its own level stat: that is the level', () => {
+    const own = { ...EVERYONE, stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'int', label: 'Intellect' }, { id: 'level', label: 'Level' }] }] };
+    expect(problems(own)).toEqual([]);
+    expect(mine(own, sheet(soldierAt(1), { level: 7 }))).toEqual(['all_breath@7']);
+    expect(mine(own, sheet(soldierAt(1), { level: 0 }))).toEqual(['all_breath@1']);
+  });
+
+  it('its features count by that level: uses, a bonus at 4, a list opened at 2', () => {
+    expect(overlayOf(EVERYONE, sheet(soldierAt(3))).add).toEqual({});
+    expect(overlayOf(EVERYONE, sheet(soldierAt(4))).add).toEqual({ defense: 1 });
+    expect(workedOf(EVERYONE, sheet(soldierAt(1))).uses).toEqual({ breath: { max: 1, spent: 0 } });
+    const r = pickAction(EVERYONE, sheet(soldierAt(2)), { kind: 'pick', list: 'specialties', option: 'duelist', from: 'knack' });
+    expect(r.ok).toBe(true);
+    expect(ids(picksOf(EVERYONE, r.data))).toContain('specialties:duelist<knack');
+    expect(pickAction(EVERYONE, sheet(soldierAt(1)), { kind: 'pick', list: 'specialties', option: 'duelist', from: 'knack' }))
+      .toEqual({ ok: false, error: 'Nothing unlocked there opens the Specialties' });
+  });
+
+  it('nothing in it is picked, dropped or levelled, by anyone', () => {
+    for (const kind of ['pick', 'drop', 'level']) {
+      expect(pickAction(EVERYONE, sheet(soldierAt(3)), { kind, list: 'commons', option: 'all_breath', level: 2 }, { gm: true }))
+        .toEqual({ ok: false, error: 'Every character has the Commons: nothing to pick' });
+    }
+  });
+
+  it('is told to the sheet as a list everyone has, its picks at the character\'s level', () => {
+    const commons = choicesShown(EVERYONE).find((c) => c.id === 'commons');
+    expect(commons.picked).toBe('everyone');
+    // Its features keep their level, though the list has none of its own.
+    expect(commons.options[0].features.map((f) => [f.id, f.at])).toEqual([['breath', 1], ['knack', 2], ['improve', 4]]);
+    expect(workedOf(EVERYONE, sheet(soldierAt(3))).picks).toContainEqual({ list: 'commons', option: 'all_breath', level: 3 });
   });
 });

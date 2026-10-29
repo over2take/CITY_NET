@@ -6,6 +6,8 @@
 // uses a rest refills, rolls it gives, changes it lets a roll take, and a list it opens. Mirrors
 // backend/systemBuilder/choices.js,
 // which checks what is written and works out what picks do; the tests hold the two together.
+// 7a5a2: how a list is picked (on its own, through the features that open it, both, or everyone has
+// it) and how many picks a feature opening a list gives.
 
 import type { Definition } from './systemsApi';
 import { idFor } from './setup';
@@ -21,13 +23,15 @@ type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 
 export interface ChoiceOption { id: string; label: string; description?: string; requires?: string; features?: unknown[] }
-export interface ChoiceList { id: string; one: string; many: string; picks?: number | 'any'; levelled?: boolean; again?: boolean; options: ChoiceOption[] }
-export type ListPatch = Partial<Pick<ChoiceList, 'one' | 'many' | 'picks' | 'levelled' | 'again'>>;
+/** How a list is picked (backend choices.js PICKED); on its own when it says nothing. */
+export type Picked = 'own' | 'features' | 'both' | 'everyone';
+export interface ChoiceList { id: string; one: string; many: string; picks?: number | 'any'; levelled?: boolean; again?: boolean; picked?: Picked; options: ChoiceOption[] }
+export type ListPatch = Partial<Pick<ChoiceList, 'one' | 'many' | 'picks' | 'levelled' | 'again' | 'picked'>>;
 export type OptionPatch = Partial<Pick<ChoiceOption, 'label' | 'description' | 'requires'>>;
 export interface Modifier { target: string; amount: string }
 export interface Uses { count: string; refill?: string }
 export interface RollChange { roll: string; change: string }
-export interface Feature { id: string; label: string; text?: string; at?: number; modifiers?: Modifier[]; uses?: Uses; rolls?: string[]; changes?: RollChange[]; choice?: string }
+export interface Feature { id: string; label: string; text?: string; at?: number; modifiers?: Modifier[]; uses?: Uses; rolls?: string[]; changes?: RollChange[]; choice?: string; choice_count?: number }
 /** A change to a feature: `uses: null` and `choice: null` take them away. */
 export type FeaturePatch = Partial<Omit<Feature, 'id' | 'uses' | 'choice'>> & { uses?: Uses | null; choice?: string | null };
 
@@ -60,6 +64,17 @@ const takenIds = (def: Definition): string[] => [
   ...[...allStats(def).map((s) => s.id), ...formulaList(def).map((f) => f.id)].filter((id) => typeof id === 'string' && id.endsWith('_level')).map((id) => id.slice(0, -'_level'.length)),
 ];
 
+/** How a list is picked: on its own when it says nothing. */
+export const pickedOf = (c: ChoiceList): Picked => (c.picked === 'features' || c.picked === 'both' || c.picked === 'everyone' ? c.picked : 'own');
+
+/** Whether a list's features unlock at a level: a levelled list's, by its pick's; one everyone has, by the character's. */
+export const unlocksByLevel = (c: ChoiceList): boolean => c.levelled === true || pickedOf(c) === 'everyone';
+
+/** Every feature, in another list, that opens this one: OPENED BY on its page. */
+export const openedBy = (def: Definition, listId: string): { list: ChoiceList; option: ChoiceOption; feature: Feature }[] => choiceLists(def)
+  .filter((c) => c.id !== listId)
+  .flatMap((c) => c.options.flatMap((option) => featureList(option).filter((feature) => feature.choice === listId).map((feature) => ({ list: c, option, feature }))));
+
 /** How many a list lets a character pick, as the page shows it: 1 when it says nothing. */
 export const picksOf = (c: ChoiceList): number | 'any' => (c.picks === 'any' ? 'any' : Number.isInteger(c.picks) ? c.picks as number : 1);
 
@@ -82,6 +97,9 @@ export const withList = (def: Definition, id: string, patch: ListPatch): Definit
   else if (typeof next.picks === 'number') next.picks = Math.min(next.picks, LIMITS.picks);
   if (next.levelled !== true) delete next.levelled;
   if (next.again !== true) delete next.again;
+  // On its own stores nothing; a list everyone has has no levels of its own (the server refuses both).
+  if (pickedOf(next) === 'own') delete next.picked;
+  if (next.picked === 'everyone') delete next.levelled;
   return next;
 }));
 
@@ -155,7 +173,7 @@ export const withNewFeature = (def: Definition, listId: string, optionId: string
   if (!option || featureList(option).length >= LIMITS.features) return null;
   const id = idFor('new feature', takenIds(def));
   return {
-    definition: withFeatures(def, listId, optionId, (fs, c) => [...fs, { id, label: 'NEW FEATURE', ...(c.levelled && at && at > 1 ? { at: Math.min(at, LIMITS.level) } : {}) }]),
+    definition: withFeatures(def, listId, optionId, (fs, c) => [...fs, { id, label: 'NEW FEATURE', ...(unlocksByLevel(c) && at && at > 1 ? { at: Math.min(at, LIMITS.level) } : {}) }]),
     id,
   };
 };
@@ -170,12 +188,15 @@ export const withFeature = (def: Definition, listId: string, optionId: string, f
     if (f.id !== featureId) return f;
     const next = { ...f, ...patch } as Feature & { uses?: Uses | null; choice?: string | null };
     if (typeof next.text === 'string' && !next.text.trim()) delete next.text;
-    if (!c.levelled || !(Number.isInteger(next.at) && (next.at as number) > 1)) delete next.at;
+    if (!unlocksByLevel(c) || !(Number.isInteger(next.at) && (next.at as number) > 1)) delete next.at;
     else next.at = Math.min(next.at as number, LIMITS.level);
     for (const k of ['modifiers', 'rolls', 'changes'] as const) if (!next[k]?.length) delete next[k];
     if (!next.uses) delete next.uses;
     else if (!next.uses.refill) next.uses = { count: next.uses.count };
     if (!next.choice) delete next.choice;
+    // How many it opens: only with a list, 1 stored as nothing, no more than the most.
+    if (!next.choice || !Number.isInteger(next.choice_count) || (next.choice_count as number) <= 1) delete next.choice_count;
+    else next.choice_count = Math.min(next.choice_count as number, LIMITS.opens);
     return next as Feature;
   }));
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
-import { workedOn, listShown, spentAfterClick, featureDoes, choiceEffects, WORKED_KEY, type ChoiceListShown } from '../choicesShown';
+import { workedOn, listShown, spentAfterClick, featureDoes, choiceEffects, pickedOf, listsOnTheirOwn, underFeature, keptAside, WORKED_KEY, type ChoiceListShown } from '../choicesShown';
 
 /**
  * A character's picks on their sheet, as logic (7a3b1): the server's worked-out view read safely, each
@@ -42,9 +42,9 @@ describe('the server\'s worked-out view', () => {
   });
 
   it('empty when a sheet has none yet, or something else is there', () => {
-    expect(workedOn({})).toEqual({ picks: [], levels: {}, from: {}, uses: {}, unmet: [] });
+    expect(workedOn({})).toEqual({ picks: [], opens: [], levels: {}, from: {}, uses: {}, unmet: [] });
     expect(workedOn(null).picks).toEqual([]);
-    expect(workedOn({ [WORKED_KEY]: { picks: 'soldier', uses: [], unmet: [1, 'mage'] } })).toEqual({ picks: [], levels: {}, from: {}, uses: {}, unmet: ['mage'] });
+    expect(workedOn({ [WORKED_KEY]: { picks: 'soldier', opens: [{ feature: 3 }], uses: [], unmet: [1, 'mage'] } })).toEqual({ picks: [], opens: [], levels: {}, from: {}, uses: {}, unmet: ['mage'] });
   });
 });
 
@@ -109,5 +109,69 @@ describe('what the picks do, on the fields (7a3b2)', () => {
   it('nothing for a field the sheet doesn\'t show, or a sheet with no picks', () => {
     expect(choiceEffects({ [WORKED_KEY]: { from: { luck: [{ feature: 'Lucky', amount: 1 }] } } }, template).fields).toEqual({});
     expect(choiceEffects({}, template)).toEqual({ fields: {}, unmatched: [] });
+  });
+});
+
+describe('lists inside lists, and a list everyone has (7a5a2)', () => {
+  const NEST = {
+    format: 1, name: 'Nest',
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'int', label: 'Intellect' }] }],
+    choices: [
+      { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [
+        { id: 'soldier', label: 'Soldier', features: [
+          { id: 'specialty', label: 'Specialty', at: 3, choice: 'specs' },
+          { id: 'feat_2', label: 'Feat', at: 2, choice: 'feats', choice_count: 2 },
+        ] },
+      ] },
+      { id: 'specs', one: 'Specialty', many: 'Specialties', picked: 'features', options: [{ id: 'duelist', label: 'Duelist' }, { id: 'vanguard', label: 'Vanguard', requires: '@int >= 13' }] },
+      { id: 'feats', one: 'Feat', many: 'Feats', picked: 'both', options: [{ id: 'tough', label: 'Tough' }, { id: 'quick', label: 'Quick' }, { id: 'keen', label: 'Keen' }] },
+      { id: 'commons', one: 'Common', many: 'Commons', picked: 'everyone', options: [
+        { id: 'breath', label: 'Second Wind', features: [{ id: 'b1', label: 'Breath' }, { id: 'b4', label: 'Improvement', at: 4 }] },
+        { id: 'strong', label: 'Strong Back', requires: '@int >= 13' },
+      ] },
+    ],
+  };
+  const nestLists = backend.choicesShown(NEST) as ChoiceListShown[];
+  const list = (id: string) => nestLists.find((l) => l.id === id)!;
+  const seen = (stored: Record<string, unknown>) => workedOn({ [WORKED_KEY]: backend.workedOf(NEST, { int: 10, _choices: stored }) });
+  const feature = (id: string) => list('classes').options[0].features.find((f) => f.id === id)!;
+
+  it('draws as blocks every list but those picked only under features', () => {
+    expect(listsOnTheirOwn(nestLists).map((l) => l.id)).toEqual(['classes', 'feats', 'commons']);
+    expect(pickedOf({ ...list('classes'), picked: undefined })).toBe('own');
+    // Nothing to pick in its own name, even with none picked.
+    expect(listShown(list('specs'), seen({})).room).toBe(false);
+  });
+
+  it('under a feature: room while it is unlocked, its picks once made, and a pick waiting when it locks', () => {
+    const at3 = underFeature(feature('specialty'), nestLists, seen({ classes: [{ option: 'soldier', level: 3 }] }))!;
+    expect([at3.room, at3.picks.length, at3.open.map((o) => [o.option.id, o.unmet])]).toEqual([1, 0, [['duelist', null], ['vanguard', 'INTELLECT >= 13']]]);
+    const picked = underFeature(feature('specialty'), nestLists, seen({ classes: [{ option: 'soldier', level: 3 }], specs: [{ option: 'duelist', from: 'specialty' }] }))!;
+    expect([picked.room, picked.picks.map((p) => p.option.id), picked.waiting]).toEqual([0, ['duelist'], []]);
+    const lowered = underFeature(feature('specialty'), nestLists, seen({ classes: [{ option: 'soldier', level: 2 }], specs: [{ option: 'duelist', from: 'specialty' }] }))!;
+    expect([lowered.room, lowered.picks, lowered.waiting.map((o) => o.id)]).toEqual([0, [], ['duelist']]);
+    // A list picked on its own has nothing under the feature naming it.
+    expect(underFeature({ id: 'x', label: 'X', opens: 'classes' }, nestLists, seen({}))).toBeNull();
+  });
+
+  it('a list picked both ways: its own picks in its block, those under features under them, room counted apart', () => {
+    const w = seen({ classes: [{ option: 'soldier', level: 2 }], feats: [{ option: 'tough' }, { option: 'quick', from: 'feat_2' }] });
+    const view = listShown(list('feats'), w);
+    expect([view.picks.map((p) => p.option.id), view.room, view.open.map((o) => o.option.id)]).toEqual([['tough'], false, ['keen']]);
+    const under = underFeature(feature('feat_2'), nestLists, w)!;
+    expect([under.picks.map((p) => p.option.id), under.room]).toEqual([['quick'], 1]);
+  });
+
+  it('keeps aside only what has nothing to wait under', () => {
+    expect(keptAside(nestLists, seen({ classes: [{ option: 'soldier', level: 2 }], specs: [{ option: 'duelist', from: 'specialty' }] }))).toEqual([]);
+    expect(keptAside(nestLists, seen({ specs: [{ option: 'duelist', from: 'specialty' }] })).map((k) => `${k.list.id}:${k.option.id}`)).toEqual(['specs:duelist']);
+  });
+
+  it('a list everyone has: what every character has, unlocked by their level, nothing to pick', () => {
+    const at3 = listShown(list('commons'), seen({ classes: [{ option: 'soldier', level: 3 }] }));
+    expect([at3.picks.map((p) => [p.option.id, p.level, p.unlocked.map((f) => f.id), p.next?.id]), at3.room]).toEqual([[['breath', null, ['b1'], 'b4']], false]);
+    expect(at3.open.map((o) => [o.option.id, o.unmet])).toEqual([['strong', 'INTELLECT >= 13']]);
+    const at4 = listShown(list('commons'), seen({ classes: [{ option: 'soldier', level: 4 }] }));
+    expect(at4.picks[0].unlocked.map((f) => f.id)).toEqual(['b1', 'b4']);
   });
 });

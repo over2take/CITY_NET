@@ -53,7 +53,9 @@ test('every control in the builder takes a click, on every page', async ({ page 
   for (const p of ['SETUP', 'WORDS', 'PARTS', 'STATS & RULES', 'CHOICES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
     await builderPage(page, p);
     if (p === 'CHOICES') {
-      // A list picking several, with an option, so every box on the page is there (7a2b1).
+      // A list picking several, with an option, so every box on the page is there (7a2b1); a second
+      // list first, for its feature to open (HOW MANY, 7a5a2).
+      await page.getByRole('button', { name: '+ LIST' }).click();
       await page.getByRole('button', { name: '+ LIST' }).click();
       await page.getByRole('group', { name: 'A character picks' }).getByRole('button', { name: 'SEVERAL' }).click();
       await page.getByRole('button', { name: '+ OPTION' }).click();
@@ -63,6 +65,8 @@ test('every control in the builder takes a click, on every page', async ({ page 
       const feature = page.getByRole('group', { name: 'Feature NEW FEATURE' });
       await feature.getByRole('switch', { name: /HAS USES/ }).click();
       await feature.getByRole('button', { name: '+ MODIFIER' }).click();
+      await feature.getByRole('combobox', { name: 'OPENS A LIST' }).selectOption({ label: 'NEW CHOICE' });
+      await expect(feature.getByRole('spinbutton', { name: 'HOW MANY' })).toBeVisible();
     }
     missed[p] = await unreachable(page);
     if (p === 'CHOICES') {

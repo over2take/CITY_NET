@@ -53,6 +53,7 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
     'Each option in a list has a name, words for the table, and can have a requirement, a formula like @int >= 13: one that isn\'t met is shown greyed with the reason, and the GM can pick it anyway.',
     'In a levelled list, formulas read each option\'s level as @soldier_level (0 when not taken), the list\'s total as @classes_level, and @level as every levelled list together, unless your system has a stat called level of its own.',
     'Features, what each pick gives (a bonus, uses that a rest refills, a roll, another list to pick from), are made on each option.',
+    'A list can be picked ON ITS OWN, only THROUGH FEATURES that open it (a specialty at level 3: OPENS A LIST on the feature, with HOW MANY), BOTH (feats at the start and from levels), or EVERYONE HAS IT (what every character has, unlocking by their level). A pick under a feature counts while the feature is unlocked; lower the level and it waits, kept, until it unlocks again.',
     'A long list is quicker from a file: IMPORT on a list reads a table of options and features (from a spreadsheet, or typed), shows what it would add and change and any line with a mistake, and puts it into the draft. DOWNLOAD EXAMPLE gives a file in the right shape for your system; DOWNLOAD THIS LIST gives the list as it is, to keep or to edit and import back.',
   ] },
   { page: 'sheet', title: 'CHARACTER SHEET', body: [
@@ -205,6 +206,7 @@ export const HINTS = {
   // CHOICES (7a2b1)
   'choices.lists': 'The lists a character picks from: classes, backgrounds, feats, playbooks. Each is named in your game\'s words.',
   'choices.names': 'What the list is called, one and many: CLASS and CLASSES. Players see these on their sheet.',
+  'choices.picked': 'How characters get this list\'s options. ON ITS OWN: picked from it as a list of its own. THROUGH FEATURES: only under the features that open it, like a specialty at level 3. BOTH: some at the start and more from features, like feats. EVERYONE HAS IT: nothing to pick, every character has them.',
   'choices.picks': 'How many options a character picks from this list: ONE (a class), a number (two backgrounds), or ANY (feats).',
   'choices.again': 'More can be added later, past what was picked first. With levels, this is multiclassing: a second class, each with its own level.',
   'choices.levelled': 'Each pick has a level, and its features unlock by it, like a class. Formulas read it as @<option>_level.',
@@ -221,6 +223,7 @@ export const HINTS = {
   'choices.rolls': 'Rolls from STATS & RULES this feature gives, like a spell or a special attack.',
   'choices.changes': 'One of a roll\'s changes this feature lets the character take, like ADVANTAGE on a save.',
   'choices.choice': 'Another list to pick from once this unlocks: a specialty at level 3, a spell, a feat.',
+  'choices.opensCount': 'How many picks this feature gives from the list it opens: SKILLED might give three skills. Each is picked under the feature on the sheet.',
   'choices.import': 'Fill this list from a file: paste or upload a table of options and features, PREVIEW what it changes, then APPLY. Names are matched, nothing is deleted, and a line with a mistake is skipped and named. DOWNLOAD EXAMPLE shows the shape; DOWNLOAD THIS LIST keeps a copy first.',
   'rolls.preset': 'A ready-made roll from a game, like a PbtA move or a Blades action, put into the five steps. The roll\'s name and ROLLED BY stay; change anything after.',
   'rolls.dice': 'What is rolled: how many, as a number or a formula like @this, and of which size, or the system\'s own dice. Name a kind, like Hunger, to show it apart and give it effects.',

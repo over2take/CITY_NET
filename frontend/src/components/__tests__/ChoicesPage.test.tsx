@@ -156,8 +156,8 @@ describe('help', () => {
   it('a "?" beside every setting, each named for screen readers', () => {
     open();
     // The page's own; a feature's are FeaturesEditor.test's, shown once one is open.
-    const keys = ['choices.lists', 'choices.names', 'choices.picks', 'choices.again', 'choices.levelled', 'choices.options', 'choices.optionName', 'choices.description', 'choices.requires', 'choices.features'] as (keyof typeof HINTS)[];
-    expect(Object.keys(HINTS).filter((k) => k.startsWith('choices.'))).toHaveLength(19);
+    const keys = ['choices.lists', 'choices.names', 'choices.picked', 'choices.picks', 'choices.again', 'choices.levelled', 'choices.options', 'choices.optionName', 'choices.description', 'choices.requires', 'choices.features'] as (keyof typeof HINTS)[];
+    expect(Object.keys(HINTS).filter((k) => k.startsWith('choices.'))).toHaveLength(21);
     for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
   });
 

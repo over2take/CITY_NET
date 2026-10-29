@@ -5,7 +5,8 @@
 //   pick   a player picks for their own character while the list has room and the option's
 //          requirement is met; the GM may pick past a requirement, never past the list's room.
 //          A list picked through features (7a5a) is picked under one that opens it (`from`), while
-//          that feature is unlocked and has room; a list picked both ways takes either
+//          that feature is unlocked and has room; a list picked both ways takes either. Nothing
+//          is picked, dropped or levelled in a list every character has (7a5a2)
 //   drop   only the GM takes a pick away
 //   level  a pick's level in a levelled list, from 1 to the highest: the player or the GM
 //   use    how many of a feature's uses are spent, from none to all of them: the player or the GM
@@ -48,6 +49,7 @@ const pickAction = (definition, data, action, { gm = false } = {}) => {
   if (!option) return fail(`Not one of the ${c.many || c.id}`);
   const name = option.label || option.id;
   const many = c.many || c.id;
+  if (pickedOf(c) === 'everyone') return fail(`Every character has the ${many}: nothing to pick`);
   const held = heldOf(definition, sheet);
   const mine = held.filter((p) => p.list === c);
   const taken = mine.find((p) => p.option === option);
