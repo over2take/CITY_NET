@@ -38,7 +38,7 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 
 | Option | Variants | Server tests | Browser test | Status |
 |---|---|---|---|---|
-| Health model | pool, two tracks, typed, harm levels, wounds, hit locations, none | `health`, `health_view`, `parts_health`, `try_health` | `player-journey` and `sheet-rolls` run a pool, never hurt or healed | **GAP**: no model damaged, healed or shown at the table |
+| Health model | pool, two tracks, typed, harm levels, wounds, hit locations, none | `health`, `health_view`, `parts_health`, `try_health` | `health-models` (each one hurt and healed by its owner from HIT_POINTS, the GM setting a second track's maximum, another player watching from the chat; what that player is sent checked for numbers and notes; a model needing a sheet refused without one) | **AT THE TABLE** |
 | Advancement | XP levels, milestone, spend XP, improve by use | `core` | | **GAP**, comes alive with 7d |
 | Dice the game uses, distance unit | | `core` | | **GAP** |
 
@@ -131,7 +131,7 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 Fitted into Phase 7, one family between each of its pieces, riskiest first:
 
 1. ~~**Sheet visibility**~~: done, `sheet-visibility.spec.ts`. It also gave the journeys a way to reach another player's token without the 3D map: GLOBAL_CHAT, their name, VIEW_PLAYER_INFO.
-2. **Health models**: each model damaged, healed and shown at the table, and what other players see.
+2. ~~**Health models**~~: done, `health-models.spec.ts`. It gave the journeys a token on the map without the 3D map too: the GM posts one to /api/locations, and HIT_POINTS opens it.
 3. **Parts switched off**: each part hidden at the table while off, and back when on.
 4. **House rules at the table**: switched in the GAME tab, and what waits on them shown and hidden.
 5. **Conditions on tokens**: put on, a modifier reaching a stat, a formula and every roll, ending after rounds and at a rest.

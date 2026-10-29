@@ -310,6 +310,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Every health model, proven in a browser.** The second gap in e2e/COVERAGE.md is closed: a new
+  browser test plays each of the seven health models a system can choose, one at a time. A player
+  with a token hurts and heals it from HIT_POINTS (a pool under its own name, two tracks where
+  damage past the second spills into the first, damage types marked lightly and heavily, harm
+  levels where a full level moves harm up, a wound count down to INCAPACITATED, hit locations with
+  their notes, and none, which says harm is conditions). The GM sets the second track's maximum.
+  Another player watches from the chat's user list and sees only the picture: the heartbeat, a bar,
+  the worst harm's name, which place is hurt. The test also reads what the server sends that
+  player, and it never holds a number or a note.
 - **Importing a list of choices, the server's half (choices import 1).** The server can now read a
   file of a list's options and their features (`[options]` name, description, requires;
   `[features]` option, feature, level, words, uses, refill) against the draft and say what it
