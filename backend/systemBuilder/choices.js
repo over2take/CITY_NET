@@ -7,6 +7,8 @@
 //       picks: 1,            // how many a character picks: a whole number, or 'any'; 1 when absent
 //       levelled: true,      // each pick has a level, and its features unlock by it
 //       again: true,         // MORE THAN ONCE: more can be added after those (multiclassing)
+//       picked: 'features',  // 7a5a: own (on its own, as when absent), features (only under the
+//                            // features that open it) or both (its own picks, and those)
 //       options: [
 //         { id: 'soldier', label: 'Soldier', description: '...',
 //           requires: '@str >= 13',          // optional: a formula, met when it isn't 0
@@ -17,7 +19,7 @@
 //               uses: { count: '1', refill: 'short_rest' },     // ticked off on the sheet, refilled by a rest
 //               rolls: ['rally'],                               // rolls of the system it gives
 //               changes: [{ roll: 'mind_save', change: 'advantage' }], // a change it lets one roll take
-//               choice: 'specialties' },                        // a list picked from when it unlocks
+//               choice: 'specialties', choice_count: 2 },       // a list picked from when it unlocks, and how many (1)
 //           ] },
 //       ] },
 //   ]
@@ -32,6 +34,12 @@
 // Players never write it directly (sheets/templates.js playerMayEdit); picking, with its checks,
 // comes with the sheet (7a3). Read here, only what holds is kept: an option of that list, once, no
 // more than the list allows, a level from 1 up in a levelled list (1 when it has none).
+//
+// Lists inside lists (7a5a; approved mockup docs/mockups/nested-choices.html, 2026-10-28): a list
+// picked THROUGH FEATURES (or BOTH) gets a pick under each unlocked feature that opens it, as many as
+// the feature says, stored with `from` naming that feature. A pick whose feature locks again (a level
+// lowered, the pick above it dropped) is kept but not counted, and counts again once it unlocks:
+// heldOf reads every pick kept, picksOf only those that count. Lists never open each other in a loop.
 //
 // Levels are read in formulas, rolls and modifier amounts: @<option>_level (0 when not taken),
 // @<list>_level, a levelled list's sum, and @level, every levelled list's sum, unless the system
@@ -76,10 +84,14 @@ const LIMITS = {
   picks: 100,
   label: 40,
   description: 1000,
+  /** How many picks one feature opening a list gives (7a5a). */
+  opens: 10,
 };
-const LIST_KEYS = new Set(['id', 'one', 'many', 'picks', 'levelled', 'again', 'options']);
+/** How a list is picked (7a5a): on its own, only under the features that open it, or both. */
+const PICKED = ['own', 'features', 'both'];
+const LIST_KEYS = new Set(['id', 'one', 'many', 'picks', 'levelled', 'again', 'picked', 'options']);
 const OPTION_KEYS = new Set(['id', 'label', 'description', 'requires', 'features']);
-const FEATURE_KEYS = new Set(['id', 'label', 'text', 'at', 'modifiers', 'uses', 'rolls', 'changes', 'choice']);
+const FEATURE_KEYS = new Set(['id', 'label', 'text', 'at', 'modifiers', 'uses', 'rolls', 'changes', 'choice', 'choice_count']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
@@ -214,7 +226,16 @@ const checkChoices = (definition, problems) => {
       if (typeof f.choice !== 'string' || !listIds.has(f.choice)) problems.push({ where: `${where}, choice`, message: 'Not one of this system\'s lists' });
       else if (f.choice === ownList) problems.push({ where: `${where}, choice`, message: 'A list can\'t be picked from inside itself' });
     }
+    if (f.choice_count !== undefined) {
+      if (f.choice === undefined) problems.push({ where: `${where}, choice_count`, message: 'Only a feature that opens a list says how many' });
+      else if (!Number.isInteger(f.choice_count) || f.choice_count < 1 || f.choice_count > LIMITS.opens) problems.push({ where: `${where}, choice_count`, message: `A number from 1 to ${LIMITS.opens}` });
+    }
   };
+
+  const names = new Map(choicesOf(definition).map((c) => [c.id, String(c.many || c.id).toUpperCase()]));
+  for (const { list: id, path } of loopsOf(definition)) {
+    problems.push({ where: `list ${id}`, message: `Its features open lists that lead back to it: ${path.map((p) => names.get(p)).join(' → ')}` });
+  }
 
   lists.slice(0, LIMITS.lists).forEach((c, i) => {
     const where = isPlainObject(c) && typeof c.id === 'string' && NAME.test(c.id) ? `list ${c.id}` : `list ${i + 1}`;
@@ -229,6 +250,7 @@ const checkChoices = (definition, problems) => {
     for (const key of ['levelled', 'again']) {
       if (c[key] !== undefined && typeof c[key] !== 'boolean') problems.push({ where: `${where}, ${key}`, message: `Must say ${key}: true or ${key}: false` });
     }
+    if (c.picked !== undefined && !PICKED.includes(c.picked)) problems.push({ where: `${where}, picked`, message: 'own (on its own), features (through the features that open it) or both' });
     if (c.levelled === true && typeof c.id === 'string' && (targets.has(`${c.id}_level`) || optionLevels.has(`${c.id}_level`))) {
       problems.push({ where, message: `Its levels add up as @${c.id}_level, which a stat, formula or option already has` });
     }
@@ -256,32 +278,109 @@ const checkChoices = (definition, problems) => {
   });
 };
 
-/** How many of a list a character may have: as many as it picks, or no end when more can follow (again) or any. */
-const capOf = (c) => (c.again === true || c.picks === 'any' ? Infinity : Number.isInteger(c.picks) ? c.picks : 1);
+/** The lists each list's features open, other than itself (that is refused on its own). */
+const opensOf = (definition) => {
+  const lists = choicesOf(definition);
+  const ids = new Set(lists.map((c) => c.id));
+  return new Map(lists.map((c) => [c.id, [...new Set(optionsOf(c).flatMap((o) => list(o.features)).filter(isPlainObject)
+    .map((f) => f.choice).filter((id) => typeof id === 'string' && id !== c.id && ids.has(id)))]]));
+};
 
-/**
- * A character's picks, as stored on their sheet, kept only where they hold: [{ list, option, level }],
- * the list and option as the definition has them, level null in a list that isn't levelled.
- */
-const picksOf = (definition, data) => {
-  const stored = isPlainObject(data) && isPlainObject(data[PICKS_KEY]) ? data[PICKS_KEY] : {};
+/** Each list that leads back to itself through others, with the way round: [{ list, path }]. */
+const loopsOf = (definition) => {
+  const opens = opensOf(definition);
   const out = [];
-  for (const c of choicesOf(definition)) {
-    const mine = Object.prototype.hasOwnProperty.call(stored, c.id) && Array.isArray(stored[c.id]) ? stored[c.id] : [];
-    const options = new Map(optionsOf(c).map((o) => [o.id, o]));
-    const taken = new Set();
-    for (const p of mine.slice(0, LIMITS.options)) {
-      if (taken.size >= capOf(c)) break;
-      const id = isPlainObject(p) ? p.option : p;
-      if (typeof id !== 'string' || !options.has(id) || taken.has(id)) continue;
-      taken.add(id);
-      const level = c.levelled !== true ? null
-        : isPlainObject(p) && Number.isInteger(p.level) && p.level >= 1 ? Math.min(p.level, LIMITS.level) : 1;
-      out.push({ list: c, option: options.get(id), level });
+  for (const start of opens.keys()) {
+    // Breadth first, so the way round named is the shortest.
+    const came = new Map([[start, null]]);
+    const queue = [start];
+    let found = null;
+    while (queue.length && !found) {
+      const at = queue.shift();
+      for (const next of opens.get(at) || []) {
+        if (next === start) { found = at; break; }
+        if (!came.has(next)) { came.set(next, at); queue.push(next); }
+      }
     }
+    if (!found) continue;
+    const path = [start];
+    for (let at = found; at !== start; at = came.get(at)) path.splice(1, 0, at);
+    out.push({ list: start, path: [...path, start] });
   }
   return out;
 };
+
+/** How many of a list a character may have: as many as it picks, or no end when more can follow (again) or any. */
+const capOf = (c) => (c.again === true || c.picks === 'any' ? Infinity : Number.isInteger(c.picks) ? c.picks : 1);
+
+/** How a list is picked: on its own when it says nothing. */
+const pickedOf = (c) => (PICKED.includes(c.picked) ? c.picked : 'own');
+/** How many picks a feature opening a list gives: 1 when it says nothing. */
+const openCountOf = (f) => (Number.isInteger(f.choice_count) && f.choice_count >= 1 ? Math.min(f.choice_count, LIMITS.opens) : 1);
+
+/**
+ * The features among `picks` that open a list picked through features (or both), each with how
+ * many picks it gives and how many of them are taken: [{ feature, list, count, used }].
+ */
+const openingsOf = (definition, picks) => {
+  const lists = new Map(choicesOf(definition).map((c) => [c.id, c]));
+  return unlockedOf(picks)
+    .filter(({ feature }) => typeof feature.choice === 'string' && lists.has(feature.choice) && pickedOf(lists.get(feature.choice)) !== 'own')
+    .map(({ feature }) => ({ feature, list: lists.get(feature.choice), count: openCountOf(feature), used: picks.filter((p) => p.from === feature.id).length }));
+};
+
+/**
+ * Every pick a character's sheet keeps: [{ list, option, level, from, active }], the list and option
+ * as the definition has them, level null in a list that isn't levelled, `from` the feature it was
+ * picked under (null for a list's own), `active` whether it counts. A list's own picks count up to
+ * what it allows (those past it aren't kept); one picked under a feature counts while that feature is
+ * unlocked by a pick that counts, and has room, worked out down the lists until nothing more
+ * changes. Picks that don't count are kept for when they do: a list switched to THROUGH FEATURES
+ * keeps its own, a list switched back keeps those picked under features.
+ */
+const heldOf = (definition, data) => {
+  const stored = isPlainObject(data) && isPlainObject(data[PICKS_KEY]) ? data[PICKS_KEY] : {};
+  const held = [];
+  for (const c of choicesOf(definition)) {
+    const mode = pickedOf(c);
+    const mine = Object.prototype.hasOwnProperty.call(stored, c.id) && Array.isArray(stored[c.id]) ? stored[c.id] : [];
+    const options = new Map(optionsOf(c).map((o) => [o.id, o]));
+    const taken = new Set();
+    let own = 0;
+    for (const p of mine.slice(0, LIMITS.options)) {
+      const id = isPlainObject(p) ? p.option : p;
+      if (typeof id !== 'string' || !options.has(id) || taken.has(id)) continue;
+      const from = isPlainObject(p) && typeof p.from === 'string' ? p.from : null;
+      // A list's own picks past what it allows were never kept.
+      if (!from && mode !== 'features' && own >= capOf(c)) continue;
+      taken.add(id);
+      const level = c.levelled !== true ? null
+        : isPlainObject(p) && Number.isInteger(p.level) && p.level >= 1 ? Math.min(p.level, LIMITS.level) : 1;
+      const counts = from ? (mode === 'own' ? false : null) : mode !== 'features';
+      if (counts) own += 1;
+      held.push({ list: c, option: options.get(id), level, from, active: counts });
+    }
+  }
+  // Picks under features, settled from the top down: each pass may unlock features for the next.
+  for (let changed = true; changed;) {
+    changed = false;
+    const room = new Map(openingsOf(definition, held.filter((p) => p.active === true))
+      .map((o) => [o.feature.id, { list: o.list, left: o.count - o.used }]));
+    for (const p of held.filter((x) => x.active === null)) {
+      const r = room.get(p.from);
+      if (r && r.list === p.list && r.left > 0) { p.active = true; r.left -= 1; changed = true; }
+    }
+  }
+  for (const p of held) if (p.active === null) p.active = false;
+  return held;
+};
+
+/**
+ * A character's picks that count: [{ list, option, level, from }], as heldOf reads them. What the
+ * numbers, uses, rests and rolls read.
+ */
+const picksOf = (definition, data) => heldOf(definition, data).filter((p) => p.active)
+  .map(({ list: c, option, level, from }) => ({ list: c, option, level, from }));
 
 /** The levels `picks` give, by the names formulas read them (levelNamesOf): untaken options read 0. */
 const levelsOf = (definition, picks) => {
@@ -408,15 +507,20 @@ const usesOf = (definition, data) => {
 };
 
 /**
- * What the sheet shows of a character's picks, worked out on every save: the picks with their levels,
- * the levels formulas read, what each changed value's modifiers come from, each feature's uses
+ * What the sheet shows of a character's picks, worked out on every save: every pick kept with its
+ * level, the feature it was picked under and whether it waits (7a5a), each feature's picks open, the
+ * levels formulas read, what each changed value's modifiers come from, each feature's uses
  * ({ max, spent }), and the options not taken whose requirement isn't met.
  */
 const workedOf = (definition, data) => {
-  const picks = picksOf(definition, data);
-  const taken = new Set(picks.map((p) => p.option.id));
+  const held = heldOf(definition, data);
+  const picks = held.filter((p) => p.active);
+  const taken = new Set(held.map((p) => p.option.id));
   return {
-    picks: picks.map((p) => ({ list: p.list.id, option: p.option.id, ...(p.level === null ? {} : { level: p.level }) })),
+    picks: held.map((p) => ({ list: p.list.id, option: p.option.id, ...(p.level === null ? {} : { level: p.level }),
+      ...(p.from ? { from: p.from } : {}), ...(p.active ? {} : { waiting: true }) })),
+    // 7a5a: each unlocked feature opening a list picked through features, and how many it gives and has.
+    opens: openingsOf(definition, picks).map((o) => ({ feature: o.feature.id, list: o.list.id, count: o.count, used: o.used })),
     levels: levelsOf(definition, picks),
     from: overlayOf(definition, data).from,
     uses: Object.fromEntries(usesOf(definition, data).map((u) => [u.feature.id, { max: u.max, spent: u.spent }])),
@@ -437,7 +541,7 @@ const choicesShown = (definition) => {
   return lists.map((c) => ({
     id: c.id, one: c.one, many: c.many,
     picks: c.picks === 'any' ? 'any' : Number.isInteger(c.picks) ? c.picks : 1,
-    again: c.again === true, levelled: c.levelled === true,
+    again: c.again === true, levelled: c.levelled === true, picked: pickedOf(c),
     options: optionsOf(c).map((o) => ({
       id: o.id, label: o.label || o.id,
       ...(typeof o.description === 'string' && o.description.trim() ? { description: o.description } : {}),
@@ -454,13 +558,13 @@ const choicesShown = (definition) => {
           const change = roll ? list(roll.changes).find((x) => x.id === ch.change) : null;
           return `${(change && change.label) || ch.change} on ${(roll && roll.label) || ch.roll}`;
         }) } : {}),
-        ...(typeof f.choice === 'string' && lists.some((l) => l.id === f.choice) ? { opens: f.choice } : {}),
+        ...(typeof f.choice === 'string' && lists.some((l) => l.id === f.choice) ? { opens: f.choice, opensCount: openCountOf(f) } : {}),
       })),
     })),
   }));
 };
 
 module.exports = {
-  LIMITS, PICKS_KEY, USES_KEY, WORKED_KEY, checkChoices, choicesOf, picksOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
+  LIMITS, PICKED, PICKS_KEY, USES_KEY, WORKED_KEY, checkChoices, choicesOf, heldOf, picksOf, pickedOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
   capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, choicesShown,
 };

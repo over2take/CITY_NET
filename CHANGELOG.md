@@ -310,6 +310,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Lists inside lists, the server's half (7a5a1).** A list can now say how it is picked: on its own
+  (as every list was), only through the features that open it (a SOLDIER's SPECIALTY at level 3), or
+  both (FEATS: one at creation, more from features). A feature opening a list says how many picks it
+  gives. A pick made under a feature counts while that feature is unlocked; lower the level or take
+  the class away and it is kept, waiting, its bonuses and levels gone until the feature unlocks
+  again. Lists can nest as deep as they go, and the builder names any that open each other in a loop.
+  The settings on the CHOICES page and the picks under features on the sheet come next.
 - **Every health model, proven in a browser.** The second gap in e2e/COVERAGE.md is closed: a new
   browser test plays each of the seven health models a system can choose, one at a time. A player
   with a token hurts and heals it from HIT_POINTS (a pool under its own name, two tracks where

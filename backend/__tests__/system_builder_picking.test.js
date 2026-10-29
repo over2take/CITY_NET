@@ -118,6 +118,7 @@ describe('what the sheet shows', () => {
     runtime.metaOf(HEARTH).recompute(data);
     expect(data[WORKED_KEY]).toEqual({
       picks: [{ list: 'classes', option: 'soldier', level: 3 }],
+      opens: [],
       levels: { soldier_level: 3, mage_level: 0, classes_level: 3, level: 3 },
       from: { defense: [{ feature: 'Guard Stance', amount: 1 }] },
       uses: { rally: { max: 4, spent: 1 } },
@@ -150,7 +151,7 @@ describe('what the sheet shows', () => {
   it('the lists as the sheet draws them: words, never a formula', () => {
     const shown = choicesShown(HEARTH);
     expect(shown[0]).toEqual({
-      id: 'classes', one: 'Class', many: 'Classes', picks: 1, again: true, levelled: true,
+      id: 'classes', one: 'Class', many: 'Classes', picks: 1, again: true, levelled: true, picked: 'own',
       options: [
         { id: 'soldier', label: 'Soldier', features: [
           { id: 'guard', label: 'Guard Stance', at: 1, modifies: ['Defense'] },
