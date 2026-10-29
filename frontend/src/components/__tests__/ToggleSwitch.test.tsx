@@ -53,6 +53,26 @@ describe('ToggleSwitch', () => {
     expect(knobOf(sw).style.background).toBe('var(--warning)');
   });
 
+  it('passes a button\'s own attributes through, but never its role or state', () => {
+    render(<ToggleSwitch label="ANIMATION" on title="ANIMATION ON" className="win95-title-toggle" data-browse
+      {...({ role: 'checkbox', 'aria-checked': false } as object)} onChange={() => {}} />);
+    const sw = screen.getByRole('switch', { name: 'ANIMATION' });
+    expect(sw.title).toBe('ANIMATION ON');
+    expect(sw.className).toBe('win95-title-toggle');
+    expect(sw.hasAttribute('data-browse')).toBe(true);
+    expect(sw.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('lets a click be seen first, then says what it becomes (the graph keeps it off the map)', async () => {
+    const seen: string[] = [];
+    const outside = vi.fn();
+    render(<div onClick={outside}><ToggleSwitch label="TRY" on={false} onClick={(e) => { e.stopPropagation(); seen.push('click'); }}
+      onChange={(next) => seen.push(`change ${next}`)} /></div>);
+    await userEvent.click(screen.getByRole('switch'));
+    expect(seen).toEqual(['click', 'change true']);
+    expect(outside).not.toHaveBeenCalled();
+  });
+
   it('does nothing while disabled, and looks it', async () => {
     const onChange = vi.fn();
     render(<ToggleSwitch label="MORE THAN ONCE" on={false} disabled onChange={onChange} />);

@@ -21,6 +21,7 @@ import { spotBeside } from '../sheets/graphNotes';
 import { mapProblems, type MapProblem } from '../sheets/graphProblems';
 import { GraphProblems } from './GraphProblems';
 import { GraphAddPalette } from './GraphAddPalette';
+import { ToggleSwitch } from './ToggleSwitch';
 
 // STATS & RULES with GRAPH on (5a3a; approved mockup docs/mockups/builder-graph.html, 2026-10-17,
 // nodes as the builder design's node kit draws them, docs/mockups/builder-design, 2026-09-29): the
@@ -205,14 +206,9 @@ function TrySwitch({ rule, values }: { rule: string; values: Values }) {
   const on = values.trying.has(rule);
   return (
     <div style={{ ...line, height: SIZE.row, padding: '0 10px' }}>
-      <button type="button" role="switch" aria-checked={on} aria-label="Try on the map" data-browse className="nodrag"
-        onClick={(e) => { e.stopPropagation(); values.onTry(rule); }}
-        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 0, background: 'none', border: 0, color: 'var(--cyan)', fontFamily: 'monospace', fontSize: 10, letterSpacing: 1, cursor: 'pointer' }}>
-        <span aria-hidden style={{ position: 'relative', width: 22, height: 10, borderRadius: 5, border: '1px solid var(--cyan)', background: on ? 'var(--cyan)' : 'none', boxSizing: 'border-box' }}>
-          <span style={{ position: 'absolute', top: 1, left: on ? 13 : 1, width: 6, height: 6, borderRadius: 3, background: on ? GROUND.base : 'var(--cyan)' }} />
-        </span>
-        TRY ON THE MAP: <b>{on ? 'ON' : 'OFF'}</b>
-      </button>
+      <ToggleSwitch on={on} name="Try on the map" data-browse className="nodrag" style={{ fontSize: 10, gap: 6 }}
+        onClick={(e) => e.stopPropagation()} onChange={() => values.onTry(rule)}
+        label={<span>TRY ON THE MAP: <b>{on ? 'ON' : 'OFF'}</b></span>} />
     </div>
   );
 }

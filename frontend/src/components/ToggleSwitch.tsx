@@ -5,7 +5,8 @@ import React from 'react';
 // one button. Asked for after LEVELLED on the builder's CHOICES page, drawn as plain text with a ○,
 // went unseen as a control. Colors come from the theme, cyan unless the caller says otherwise.
 
-interface Props {
+/** A button's own attributes pass through (a title, a class, a click seen first), all but its role and state. */
+interface Props extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onChange' | 'role' | 'type' | 'children' | 'name'> {
   on: boolean;
   /** Called with what the switch becomes. */
   onChange: (on: boolean) => void;
@@ -19,9 +20,10 @@ interface Props {
   style?: React.CSSProperties;
 }
 
-export function ToggleSwitch({ on, onChange, label, name, disabled, color = 'var(--cyan)', style }: Props) {
+export function ToggleSwitch({ on, onChange, label, name, disabled, color = 'var(--cyan)', style, onClick, ...rest }: Props) {
   return (
-    <button type="button" role="switch" aria-checked={on} aria-label={name} disabled={disabled} onClick={() => onChange(!on)}
+    <button {...rest} type="button" role="switch" aria-checked={on} aria-label={name} disabled={disabled}
+      onClick={(e) => { onClick?.(e); onChange(!on); }}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 8, justifySelf: 'start', alignSelf: 'center', background: 'none', border: 0, padding: 0,
         color, fontFamily: 'monospace', fontSize: 12, letterSpacing: 1, textAlign: 'left', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1, ...style,
