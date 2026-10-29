@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { Definition } from '../sheets/systemsApi';
+import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   choiceLists, picksOf, withNewList, withList, withoutList, withNewOption, withOption, withoutOption, levelNames, LIMITS,
   type ChoiceList, type ChoiceOption,
@@ -7,17 +7,21 @@ import {
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
 import { FeaturesEditor } from './FeaturesEditor';
+import { ChoicesImport } from './ChoicesImport';
 
 // The builder's CHOICES page (7a2b1; approved mockup docs/mockups/builder-choices.html, 2026-10-27):
 // the lists a character picks from (classes, backgrounds, feats), named in the game's own words. The
 // lists down the left; the open one in the middle, with its names, how many a character picks,
 // MORE THAN ONCE and LEVELLED, and its options; the open option on the right, with its name, words
 // and requirement, and its features (7a2b2, FeaturesEditor.tsx). What it reads and writes is
-// sheets/choices.ts; every change goes through the builder's `edit`.
+// sheets/choices.ts; every change goes through the builder's `edit`. IMPORT on a list (choices import 2,
+// ChoicesImport.tsx) opens over the list and option columns.
 
 interface Props {
   definition: Definition;
   edit: (next: Definition) => void;
+  /** The server, for IMPORT's PREVIEW; none when looking at an example. */
+  api?: ReturnType<typeof systemsApi>;
 }
 
 const small: React.CSSProperties = { fontSize: 10, letterSpacing: 2, opacity: 0.75 };
@@ -32,6 +36,8 @@ const seg = (on: boolean): React.CSSProperties => ({
   background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)', border: 0, fontFamily: 'monospace', fontSize: 11, padding: '3px 12px', cursor: 'pointer',
 });
 const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '130px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' };
+/** No options outlined as new. */
+const NONE = new Set<string>();
 /** A name in the right-aligned column of the settings grid. */
 const END = { justifySelf: 'end' } as const;
 
@@ -57,7 +63,9 @@ function Switch({ label, on, onFlip, disabled }: { label: string; on: boolean; o
   );
 }
 
-function ListPanel({ list, definition, edit, picked, onPick }: Props & { list: ChoiceList; picked: string | null; onPick: (id: string) => void }) {
+interface ListExtras { list: ChoiceList; picked: string | null; onPick: (id: string) => void; onImport: () => void; fresh: Set<string>; status: string | null }
+
+function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, status }: Props & ListExtras) {
   const set = (patch: Parameters<typeof withList>[2]) => edit(withList(definition, list.id, patch));
   const picks = picksOf(list);
   const name = list.many.trim() || 'this list';
@@ -71,9 +79,13 @@ function ListPanel({ list, definition, edit, picked, onPick }: Props & { list: C
     <section aria-label={`${list.many || list.id} list`} style={panel}>
       <div style={{ ...row, justifyContent: 'space-between' }}>
         <span style={small}>THE LIST · {(list.many || list.id).toUpperCase()}</span>
-        <DeleteButton what={name} gone={list.options.length ? `Its ${list.options.length} option${list.options.length === 1 ? '' : 's'} go with it, and characters lose these picks.` : ''}
-          onDelete={() => edit(withoutList(definition, list.id))} />
+        <span style={row}>
+          <button type="button" className="utility-btn" style={btn} title={`Fill ${name} from a file`} onClick={onImport}>IMPORT</button>
+          <DeleteButton what={name} gone={list.options.length ? `Its ${list.options.length} option${list.options.length === 1 ? '' : 's'} go with it, and characters lose these picks.` : ''}
+            onDelete={() => edit(withoutList(definition, list.id))} />
+        </span>
       </div>
+      {status && <p role="status" style={{ ...why, color: 'var(--cyan)', opacity: 1, letterSpacing: 1 }}>{status}</p>}
       <div style={grid}>
         <FieldName boxStyle={END} hint={HINTS['choices.names']} style={small}>ONE / MANY</FieldName>
         <span style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 6 }}>
@@ -112,7 +124,7 @@ function ListPanel({ list, definition, edit, picked, onPick }: Props & { list: C
         <div role="group" aria-label="Options" style={row}>
           {list.options.map((o) => (
             <button key={o.id} type="button" aria-pressed={o.id === picked} onClick={() => onPick(o.id)}
-              style={{ ...seg(o.id === picked), border: '1px solid var(--dark-green)', color: o.id === picked ? 'var(--black)' : o.label.trim() ? 'var(--green)' : 'var(--danger)' }}>
+              style={{ ...seg(o.id === picked), border: `1px solid ${fresh.has(o.id) ? 'var(--cyan)' : 'var(--dark-green)'}`, color: o.id === picked ? 'var(--black)' : o.label.trim() ? 'var(--green)' : 'var(--danger)' }}>
               {(o.label.trim() || 'NEEDS A NAME').toUpperCase()}
             </button>
           ))}
@@ -150,7 +162,7 @@ function OptionPanel({ list, option, definition, edit }: Props & { list: ChoiceL
   );
 }
 
-export function ChoicesPage({ definition, edit }: Props) {
+export function ChoicesPage({ definition, edit, api }: Props) {
   const lists = choiceLists(definition);
   const [pickedList, setPickedList] = useState<string>(lists[0]?.id ?? '');
   const list = lists.find((c) => c.id === pickedList) ?? lists[0];
@@ -158,6 +170,9 @@ export function ChoicesPage({ definition, edit }: Props) {
   // Option ids are one set across the system, so the one picked is only ever in its own list:
   // another list opens on its first.
   const option = list?.options.find((o) => o.id === pickedOption) ?? list?.options[0];
+  /** The list IMPORT is open on, what its last APPLY said, and the options it added (outlined). */
+  const [importing, setImporting] = useState<string | null>(null);
+  const [applied, setApplied] = useState<{ list: string; text: string; added: Set<string> } | null>(null);
 
   const add = () => {
     const made = withNewList(definition);
@@ -181,7 +196,7 @@ export function ChoicesPage({ definition, edit }: Props) {
               background: c.id === list?.id ? 'color-mix(in srgb, var(--green) 10%, transparent)' : 'none',
               boxShadow: c.id === list?.id ? 'inset 3px 0 0 var(--green)' : 'none',
             }}>
-              <button type="button" aria-current={c.id === list?.id || undefined} onClick={() => setPickedList(c.id)}
+              <button type="button" aria-current={c.id === list?.id || undefined} onClick={() => { setPickedList(c.id); setImporting(null); }}
                 style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, letterSpacing: 1, width: '100%',
                   color: c.many.trim() ? 'var(--green)' : 'var(--danger)', display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(c.many.trim() || 'NEEDS A NAME').toUpperCase()}</span>
@@ -192,8 +207,16 @@ export function ChoicesPage({ definition, edit }: Props) {
         </ul>
         {!lists.length && <p style={{ ...why, padding: '8px 10px' }}>None yet. A list is something characters pick from, like CLASSES, BACKGROUNDS or FEATS: + LIST makes one.</p>}
       </div>
-      {list && <ListPanel key={list.id} list={list} definition={definition} edit={edit} picked={option?.id ?? null} onPick={setPickedOption} />}
-      {list && option && <OptionPanel key={`${list.id}:${option.id}`} list={list} option={option} definition={definition} edit={edit} />}
+      {list && importing === list.id && (
+        <ChoicesImport key={list.id} definition={definition} list={list} api={api} edit={edit} onClose={() => setImporting(null)}
+          onApplied={(added, text) => { setApplied({ list: list.id, text, added: new Set(added) }); setImporting(null); }} />
+      )}
+      {list && importing !== list.id && (
+        <ListPanel key={list.id} list={list} definition={definition} edit={edit} picked={option?.id ?? null} onPick={setPickedOption}
+          onImport={() => { setImporting(list.id); setApplied(null); }}
+          fresh={applied?.list === list.id ? applied.added : NONE} status={applied?.list === list.id ? applied.text : null} />
+      )}
+      {list && option && importing !== list.id && <OptionPanel key={`${list.id}:${option.id}`} list={list} option={option} definition={definition} edit={edit} />}
     </div>
   );
 }

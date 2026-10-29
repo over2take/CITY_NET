@@ -42,6 +42,11 @@ const CLEAR = '-';
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
 const same = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+/**
+ * Words that differ only in spacing are the same: a cell is trimmed and can't hold a line break, so
+ * a list downloaded and imported back keeps its words as they were.
+ */
+const sameWords = (a, b) => String(a).replace(/\s+/g, ' ').trim() === String(b).replace(/\s+/g, ' ').trim();
 const nameKey = (option, feature) => `${String(option).trim().toLowerCase()}|${String(feature).trim().toLowerCase()}`;
 /** A feature's level: 1 when it has none, as the builder shows it. */
 const atOf = (f) => (Number.isInteger(f.at) ? f.at : 1);
@@ -202,7 +207,7 @@ const readChoicesFile = (definition, listId, input) => {
       if (!value) continue;
       const to = clearing(value) ? '' : value;
       const from = typeof option[key] === 'string' ? option[key] : '';
-      if (from === to) continue;
+      if (sameWords(from, to)) continue;
       parts.push({ part: key, from, to });
       if (to) option[key] = to; else delete option[key];
     }
@@ -265,22 +270,24 @@ const readChoicesFile = (definition, listId, input) => {
       const count = uses && !clearing(uses) ? uses : null;
       if (rest && !count) { skip(row.line, `${name}: a refill needs uses`); continue; }
       const made = { id: idFrom(name, taken), label: name };
-      if (levelled) made.at = level ?? 1;
+      // Level 1 is stored as no level, as the builder writes it.
+      if (levelled && level > 1) made.at = level;
       if (words && !clearing(words)) made.text = words;
       if (count) made.uses = { count, ...(rest ? { refill: rest } : {}) };
       option.features.push(made);
       if (levelled) option.features.sort((a, b) => atOf(a) - atOf(b));
-      added.features.push({ line: row.line, option: option.label, feature: name, ...(levelled ? { level: made.at } : {}), ...(made.uses ? { uses: made.uses.count, ...(rest ? { refill: rest } : {}) } : {}) });
+      added.features.push({ line: row.line, option: option.label, feature: name, ...(levelled ? { level: atOf(made) } : {}), ...(made.uses ? { uses: made.uses.count, ...(rest ? { refill: rest } : {}) } : {}) });
       const before = named.filter((f) => !addedHere.has(f.id));
-      if (before.length) notes.push({ line: row.line, message: `${option.label} already has ${name} at level ${before.map(atOf).join(', ')}: this one is added beside it, at level ${made.at}, not moved` });
+      if (before.length) notes.push({ line: row.line, message: `${option.label} already has ${name} at level ${before.map(atOf).join(', ')}: this one is added beside it, at level ${atOf(made)}, not moved` });
       addedHere.add(made.id);
       continue;
     }
 
     const parts = [];
     const set = (part, from, to, write) => { if (from !== to) { parts.push({ part, from, to }); write(to); } };
-    if (levelled && level !== undefined) set('level', atOf(feature), level, (to) => { feature.at = to; });
-    if (words) set('words', typeof feature.text === 'string' ? feature.text : '', clearing(words) ? '' : words, (to) => { if (to) feature.text = to; else delete feature.text; });
+    if (levelled && level !== undefined) set('level', atOf(feature), level, (to) => { if (to > 1) feature.at = to; else delete feature.at; });
+    const text = typeof feature.text === 'string' ? feature.text : '';
+    if (words && !sameWords(text, clearing(words) ? '' : words)) set('words', text, clearing(words) ? '' : words, (to) => { if (to) feature.text = to; else delete feature.text; });
     const had = isPlainObject(feature.uses) ? feature.uses : null;
     const count = !uses ? (had ? had.count : null) : clearing(uses) ? null : uses;
     // Uses cleared take their refill with them, unless the row names one.

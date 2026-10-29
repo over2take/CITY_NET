@@ -157,7 +157,13 @@ describe('help', () => {
     open();
     // The page's own; a feature's are FeaturesEditor.test's, shown once one is open.
     const keys = ['choices.lists', 'choices.names', 'choices.picks', 'choices.again', 'choices.levelled', 'choices.options', 'choices.optionName', 'choices.description', 'choices.requires', 'choices.features'] as (keyof typeof HINTS)[];
-    expect(Object.keys(HINTS).filter((k) => k.startsWith('choices.'))).toHaveLength(18);
+    expect(Object.keys(HINTS).filter((k) => k.startsWith('choices.'))).toHaveLength(19);
     for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
+  });
+
+  it('a "?" on IMPORT, once it is open', async () => {
+    open();
+    await userEvent.click(listPanel('Classes').getByRole('button', { name: 'IMPORT' }));
+    expect(screen.getByRole('note', { name: HINTS['choices.import'] })).toBeTruthy();
   });
 });

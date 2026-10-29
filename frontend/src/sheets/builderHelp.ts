@@ -53,6 +53,7 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
     'Each option in a list has a name, words for the table, and can have a requirement, a formula like @int >= 13: one that isn\'t met is shown greyed with the reason, and the GM can pick it anyway.',
     'In a levelled list, formulas read each option\'s level as @soldier_level (0 when not taken), the list\'s total as @classes_level, and @level as every levelled list together, unless your system has a stat called level of its own.',
     'Features, what each pick gives (a bonus, uses that a rest refills, a roll, another list to pick from), are made on each option.',
+    'A long list is quicker from a file: IMPORT on a list reads a table of options and features (from a spreadsheet, or typed), shows what it would add and change and any line with a mistake, and puts it into the draft. DOWNLOAD EXAMPLE gives a file in the right shape for your system; DOWNLOAD THIS LIST gives the list as it is, to keep or to edit and import back.',
   ] },
   { page: 'sheet', title: 'CHARACTER SHEET', body: [
     'The layout players see. Until you CUSTOMIZE it, it arranges itself from your stats, formulas and health model.',
@@ -220,6 +221,7 @@ export const HINTS = {
   'choices.rolls': 'Rolls from STATS & RULES this feature gives, like a spell or a special attack.',
   'choices.changes': 'One of a roll\'s changes this feature lets the character take, like ADVANTAGE on a save.',
   'choices.choice': 'Another list to pick from once this unlocks: a specialty at level 3, a spell, a feat.',
+  'choices.import': 'Fill this list from a file: paste or upload a table of options and features, PREVIEW what it changes, then APPLY. Names are matched, nothing is deleted, and a line with a mistake is skipped and named. DOWNLOAD EXAMPLE shows the shape; DOWNLOAD THIS LIST keeps a copy first.',
   'rolls.preset': 'A ready-made roll from a game, like a PbtA move or a Blades action, put into the five steps. The roll\'s name and ROLLED BY stay; change anything after.',
   'rolls.dice': 'What is rolled: how many, as a number or a formula like @this, and of which size, or the system\'s own dice. Name a kind, like Hunger, to show it apart and give it effects.',
   'rolls.read': 'How the dice become a number: SUM them, KEEP the HIGHEST or LOWEST few, COUNT SUCCESSES at or over a face, or COUNT THE SYMBOLS on the system\'s own dice.',

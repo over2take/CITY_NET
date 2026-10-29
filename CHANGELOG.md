@@ -53,6 +53,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **A CHOICES list from a file (choices import).** A list with twelve classes and a hundred features
+  no longer has to be typed in by hand. IMPORT on a list opens a panel where you paste or upload a
+  table of its options (`name, description, requires`) and their features (`option, feature, level,
+  words, uses, refill`), from a spreadsheet or typed. PREVIEW shows what it would add and change,
+  each change old to new, before anything happens; APPLY puts it into the draft, live on PUBLISH like
+  any other change. Names are matched, nothing is deleted, and modifiers, rolls and the rest of what
+  a feature does are never touched. A line with a mistake is skipped, and you are told: a warning at
+  the top names each line (click one to jump to it), the line numbers beside the text mark them with
+  the mistake on hover, and APPLY says how many it will skip. DOWNLOAD EXAMPLE gives a file in the
+  right shape made for your system (its stat names, its rests, a level column only for a levelled
+  list); DOWNLOAD THIS LIST gives the list as it is, to keep a copy or to edit and import back
+  without changing anything else.
 - **The GM's tools in the CHOICES block, and bonuses named on the sheet (7a3b2).** On a player's
   sheet opened from their token, or on their own, the GM can take a pick away (DROP, asked first:
   the pick and what it gives go together) and add an option the character doesn't meet (it says

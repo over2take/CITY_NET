@@ -65,6 +65,14 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await feature.getByRole('button', { name: '+ MODIFIER' }).click();
     }
     missed[p] = await unreachable(page);
+    if (p === 'CHOICES') {
+      // IMPORT open over the list, a file previewed with a mistake, so its warning and links are there (choices import 2).
+      await page.getByRole('button', { name: 'IMPORT', exact: true }).click();
+      await page.getByRole('textbox', { name: 'Text to import' }).fill('[options]\nname\nRanger\n[features]\noption, feature, uses, refill\nRanger, Ward, 1, Dawn');
+      await page.getByRole('button', { name: 'PREVIEW', exact: true }).click();
+      await expect(page.getByRole('status', { name: 'Preview' }).getByRole('alert')).toBeVisible();
+      missed[`${p} · IMPORT`] = await unreachable(page);
+    }
     if (p === 'STATS & RULES') {
       // Each of its tabs, not only the first.
       for (const tab of ['FORMULAS', 'TABLES', 'DICE', 'ROLLS']) {
