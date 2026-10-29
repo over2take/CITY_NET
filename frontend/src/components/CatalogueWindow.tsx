@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import { exampleFor, currentFor, type StoredEntry } from '../sheets/catalogueSchema';
 import { catalogueLabel, type ShopStock } from '../data/buildingTypes';
+import { downloadText } from '../utils/downloadText';
 
 // Where a GM adds to what the shops sell.
 //
@@ -40,19 +41,6 @@ const mono = (size: number): React.CSSProperties => ({
   fontFamily: 'monospace', fontSize: size, letterSpacing: 0,
 });
 
-
-/** Hand the browser a text file to save. */
-const download = (filename: string, text: string) => {
-  const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-};
 
 export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props) {
   const [text, setText] = useState('');
@@ -95,7 +83,7 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
     const onCatalogues = (payload: { entries?: Partial<Record<ShopStock, StoredEntry[]>> }) => {
       if (!awaitingCurrent.current) return;
       awaitingCurrent.current = false;
-      download(`${system}-storefronts-current.csv`, currentFor(system, payload?.entries ?? {}));
+      downloadText(`${system}-storefronts-current.csv`, currentFor(system, payload?.entries ?? {}));
       setBusy(null);
     };
 
@@ -175,7 +163,7 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
             className="utility-btn"
             style={btn}
             title="A file in the right shape for this system, with a few real rows to copy"
-            onClick={() => download(`${system}-storefronts-example.csv`, exampleFor(system))}
+            onClick={() => downloadText(`${system}-storefronts-example.csv`, exampleFor(system))}
           >DOWNLOAD EXAMPLE</button>
           <button
             type="button"

@@ -63,7 +63,7 @@ describe('a file read against a list', () => {
     expect(r.ok).toBe(true);
     expect(r.skipped).toEqual([]);
     expect(optionIn(r, 'Ranger')).toEqual({ id: 'ranger', label: 'Ranger', description: 'At home past the last road.', requires: '@dex >= 13', features: [
-      { id: 'favored_foe', label: 'Favored Foe', at: 1, text: 'Mark a quarry, and hunt it.', uses: { count: '@ranger_level + 1', refill: 'long_rest' } },
+      { id: 'favored_foe', label: 'Favored Foe', text: 'Mark a quarry, and hunt it.', uses: { count: '@ranger_level + 1', refill: 'long_rest' } },
       // Second Wind is the soldier's id already: ids are one set across the system.
       { id: 'second_wind_2', label: 'Second Wind', at: 3, text: 'Breathe.' },
     ] });
@@ -118,6 +118,14 @@ describe('a file read against a list', () => {
     expect(r.same).toBe(2);
   });
 
+  it('takes words differing only in spacing as the same, keeping them as written', () => {
+    const spaced = { ...HEARTH, choices: [{ ...HEARTH.choices[0], options: HEARTH.choices[0].options.map((o) => (o.id === 'mage'
+      ? { ...o, description: 'Reads\nthe  weave. ' } : o)) }, HEARTH.choices[1]] };
+    const r = read(FILE('[options]', 'name, description', 'Mage, Reads the weave.', '[features]', 'option, feature, words', 'Soldier, Second Wind, " Catch your  breath."'), 'classes', spaced);
+    expect(r).toMatchObject({ changes: 0, same: 2 });
+    expect(optionIn(r, 'Mage').description).toBe('Reads\nthe  weave. ');
+  });
+
   it('clears a refill alone, keeping the uses, and refuses a refill with no uses', () => {
     const r = read(FILE(
       '[features]', 'option, feature, level, words, uses, refill',
@@ -153,6 +161,14 @@ describe('a file read against a list', () => {
       ? { ...o, features: [...o.features, { id: 'asi_8', label: 'Ability Score Improvement', at: 8 }] } : o)) }, HEARTH.choices[1]] };
     const r = read(FILE('[features]', 'option, feature, level, words', 'Soldier, Ability Score Improvement, 8, Or a feat.'), 'classes', twice);
     expect(featureIn(r, 'Soldier', 'Ability Score Improvement').map((f) => [f.id, f.at, f.text])).toEqual([['asi', 4, 'Raise one stat by 2.'], ['asi_8', 8, 'Or a feat.']]);
+  });
+
+  it('keeps level 1 as no level, as the builder writes it', () => {
+    const r = read(FILE('[features]', 'option, feature, level', 'Soldier, Guard Stance, 1', 'Mage, Cantrips, 1'));
+    expect(featureIn(r, 'Soldier', 'Guard Stance')[0]).toEqual({ id: 'guard_stance', label: 'Guard Stance', modifiers: [{ target: 'guard', amount: '1' }] });
+    expect(r.changed.features[0].parts).toEqual([{ part: 'level', from: 2, to: 1 }]);
+    expect(featureIn(r, 'Mage', 'Cantrips')[0]).toEqual({ id: 'cantrips', label: 'Cantrips' });
+    expect(r.added.features).toEqual([{ line: 4, option: 'Mage', feature: 'Cantrips', level: 1 }]);
   });
 
   it('moves a name that is once in the list and once in the file', () => {

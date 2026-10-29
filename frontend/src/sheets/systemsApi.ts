@@ -5,6 +5,7 @@
 
 import type { InstallMode, InstallPreview, InstallResult, LibrarySystem } from './systemsLibrary';
 import type { PublishPreview } from './versionPreview';
+import type { ImportPreview } from './choicesImport';
 import type { CustomRenderSheet } from './customTemplates';
 import type { GameCondition } from './tokenConditions';
 import type { TableEntry } from './tableConditions';
@@ -180,6 +181,12 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      */
     previewSheet: (definition: Definition) =>
       call<{ sheet: CustomRenderSheet; starter: CustomRenderSheet }>(fetcher, token, '/api/systems/preview-sheet', 'POST', { definition }),
+    /**
+     * The CHOICES page's IMPORT, PREVIEW (choices import 2): a file read against one of a draft's
+     * lists by the server, with what it would change and the list as it would be. Changes nothing.
+     */
+    importChoices: (definition: Definition, list: string, text: string) =>
+      call<ImportPreview>(fetcher, token, '/api/systems/import-choices', 'POST', { definition, list, text }),
     /**
      * One of a draft's NPC tiers worked out and rolled for a level, without saving (NPCS, TRY IT):
      * each box's value and dice, or what is wrong with it.

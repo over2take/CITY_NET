@@ -551,7 +551,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
                 <GraphView definition={definition!} edit={edit} api={api} readOnly={looking} startWith={graphStart} problems={problems} onGoTo={(p) => { setPage(p); setStatus(null); }} />
               </React.Suspense>
             )}
-            {ready && page === 'choices' && <ChoicesPage definition={definition!} edit={edit} />}
+            {ready && page === 'choices' && <ChoicesPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'sheet' && <SheetPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'npcs' && <NpcsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'conditions' && <ConditionsPage definition={definition!} edit={edit} api={looking ? undefined : api} />}
