@@ -1201,7 +1201,8 @@ function GridSection({ section, allFields, data, readOnly, onFieldChange, onRoll
           <div key={field.id} title={field.hint} style={{ border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--black) 35%, transparent)', textAlign: 'center', display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '4px 2px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
               {field.label}
-              {effects.fields[field.id]?.delta ? <ChromeBadge effect={effects.fields[field.id]} /> : null}
+              {/* The pair's maximum too: a feature adding to the token's (7a5a3) is named here. */}
+              {[field, maxField].map((f) => (f && effects.fields[f.id]?.delta ? <ChromeBadge key={f.id} effect={effects.fields[f.id]} /> : null))}
             </div>
             {maxField ? (
               <>

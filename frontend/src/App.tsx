@@ -484,7 +484,10 @@ function App() {
     return { active: false, color: savedColor, name: '', description: '', hp_max: savedHpMax, hp_current: savedHpCurrent, hp_temp: savedHpTemp };
   });
 
-  // Load player configuration from the database when locations are fetched
+  // Load player configuration from the database when locations are fetched, and again when the
+  // token's maximum changes from elsewhere (the GM, a feature's bonus, 7a5a3): MAX HEALTH must never
+  // hold an old number for SAVE_STATS to write back.
+  const myTokenMax = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName)?.hp_max;
   useEffect(() => {
     if (!userName || !locations.length) return;
     const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
@@ -492,7 +495,7 @@ function App() {
         // DO NOT set active: true here. That should only happen when the user clicks 'DEPLOY'
         setRhombusState(prev => ({ ...prev, ...mergeRhombusHealthFromLocation(existing, prev) }));
     }
-  }, [userName, locations.length]);
+  }, [userName, locations.length, myTokenMax]);
 
   // Sync player configuration to DB whenever they change it in the sidebar
   // Color only — name/description come from the character sheet (the backend

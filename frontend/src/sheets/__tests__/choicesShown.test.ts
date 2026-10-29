@@ -106,6 +106,18 @@ describe('what the picks do, on the fields (7a3b2)', () => {
     expect(fields.defense.sources.map((s) => s.name)).toEqual(['Guard Stance', 'Ward']);
   });
 
+  it('the token\'s maximum as the token holds it, bonus in; nothing without a token (7a5a3)', () => {
+    const linked = {
+      id: 'sys_x', name: 'Hearth', sections: [{ id: 'health', label: 'HEALTH', layout: 'grid', fields: [
+        { id: 'hp_max', label: 'HP MAX', type: 'number', source: 'token_hp_max' },
+      ] }],
+    } as never;
+    const from = { hp_max: [{ feature: 'Tough', amount: 6 }] };
+    expect(choiceEffects({ hp_max: 26, [WORKED_KEY]: { from } }, linked).fields.hp_max).toMatchObject({ base: 20, value: 26, delta: 6 });
+    expect(choiceEffects({ hp_max: null, [WORKED_KEY]: { from } }, linked).fields).toEqual({});
+    expect(choiceEffects({ [WORKED_KEY]: { from } }, linked).fields).toEqual({});
+  });
+
   it('nothing for a field the sheet doesn\'t show, or a sheet with no picks', () => {
     expect(choiceEffects({ [WORKED_KEY]: { from: { luck: [{ feature: 'Lucky', amount: 1 }] } } }, template).fields).toEqual({});
     expect(choiceEffects({}, template)).toEqual({ fields: {}, unmatched: [] });

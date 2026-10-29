@@ -55,7 +55,8 @@
 // stays as the player typed it while formulas and rolls read it with its modifiers; a formula's own
 // modifiers are added once it is worked out, before anything reading it. Take the pick away and its
 // effects are gone at once. definition.js runs the checks; runtime.js, tableRolls.js and
-// versionDiff.js read the overlay.
+// versionDiff.js read the overlay. The token's maximum (HP MAX, WOUNDS) is the one exception: it lives
+// on the token, so its modifiers are moved onto the token itself, and back off (tokenMax.js, 7a5a3).
 //
 // At the table (7a3a): how many of each feature's uses are spent is kept under USES_KEY, by feature,
 // and a rest that refills them sets them back (resting.js). Every save writes what the sheet shows of
@@ -112,6 +113,13 @@ const derivedIdsOf = (definition) => new Set(list(definition.derived).filter(isP
 
 /** What a modifier may change: the system's stats, formulas and health fields. */
 const targetsOf = (definition) => new Set([...fieldTargetsOf(definition), ...derivedIdsOf(definition)]);
+
+/** The health field linked to the token's maximum (HP MAX, WOUNDS), or null: its modifiers live on the token (tokenMax.js). */
+const tokenMaxFieldOf = (definition) => {
+  const fields = healthLayout(isPlainObject(definition.core) ? definition.core.health : undefined).sections.flatMap((s) => s.fields);
+  const field = fields.find((f) => f.source === 'token_hp_max');
+  return field ? field.id : null;
+};
 
 const optionsOf = (c) => list(c.options).filter((o) => isPlainObject(o) && typeof o.id === 'string');
 const levelledOf = (definition) => choicesOf(definition).filter((c) => c.levelled === true);
@@ -482,7 +490,10 @@ const overlayOf = (definition, data) => {
   }
   const over = { ...levels };
   const add = {};
+  // The token's maximum already holds its modifiers (7a5a3, tokenMax.js): read as it is, never added twice.
+  const onToken = tokenMaxFieldOf(definition);
   for (const [target, amount] of Object.entries(totals)) {
+    if (target === onToken) continue;
     if (fields.has(target)) over[target] = num(sheet[target]) + amount;
     else add[target] = amount;
   }
@@ -610,5 +621,5 @@ const choicesShown = (definition) => {
 
 module.exports = {
   LIMITS, PICKED, PICKS_KEY, USES_KEY, WORKED_KEY, checkChoices, choicesOf, heldOf, picksOf, pickedOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
-  capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, choicesShown,
+  capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, choicesShown, tokenMaxFieldOf,
 };

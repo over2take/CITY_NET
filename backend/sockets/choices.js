@@ -2,9 +2,11 @@
 // or { kind: 'use', feature, spent }, for the caller's own character; the GM may name another
 // player's with `username`. What may be done, and by whom, is systemBuilder/picking.js's; this stores
 // it through the sheet queue (sheets/mutate.js), works the numbers out again, and tells every screen
-// the sheet changed, as a field edit does. A refusal goes back to the one who asked, in words.
+// the sheet changed, as a field edit does. A refusal goes back to the one who asked, in words. A
+// feature changing the token's maximum moves the token too (systemBuilder/tokenMax.js, 7a5a3).
 
 const { pickAction } = require('../systemBuilder/picking');
+const { syncTokenMax } = require('../systemBuilder/tokenMax');
 const customSystems = require('../systemBuilder/runtime');
 const sheetTemplates = require('../sheets/templates');
 const { mutateSheetForUser } = require('../sheets/mutate');
@@ -34,7 +36,11 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
       }, (err2, stored) => {
         if (error) return refuse(error);
         if (err2) return refuse('That character has no sheet yet');
-        if (stored) io.emit('sheetUpdated', { username, system });
+        if (!stored) return undefined;
+        return syncTokenMax(db, system, username, (moved) => {
+          if (moved) io.emit('dataUpdated', { isRhombusOnly: true });
+          io.emit('sheetUpdated', { username, system });
+        });
       });
     });
   });

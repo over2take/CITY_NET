@@ -9,6 +9,7 @@ const { canReadNpcSheets, redactTokenCard } = require('../sheets/npcPrivacy');
 const bankAccounts = require('../bank/accounts');
 const tokenVitals = require('../tokens/vitals');
 const customSystems = require('../systemBuilder/runtime');
+const { syncTokenMax } = require('../systemBuilder/tokenMax');
 const {
   TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived, cwnEffectiveAc,
   TOKEN_SOURCES, rangedAcOf, acColumns,
@@ -231,10 +232,12 @@ module.exports = (db, io) => {
                   if (changed) io.emit('dataUpdated', { isRhombusOnly: true });
                 });
               }
-              pushAc(() => {
+              // A custom system's feature may read what changed and move the token's maximum (7a5a3).
+              pushAc(() => syncTokenMax(db, system, req.params.username, (moved) => {
+                if (moved) io.emit('dataUpdated', { isRhombusOnly: true });
                 io.emit('sheetUpdated', { username: req.params.username, system });
                 res.json({ message: 'Sheet updated' });
-              });
+              }));
             }
           );
         }

@@ -28,6 +28,7 @@ const { exampleList, exampleDefinition, exampleKind, KINDS } = require('../syste
 const { checkTableConditions, saveTableConditions } = require('../systemBuilder/tableConditions');
 const { isBuiltIn } = require('../sheets/templates');
 const { houseRuleKey } = require('../systemBuilder/houseRules');
+const { syncAllTokenMax } = require('../systemBuilder/tokenMax');
 
 /** The global_settings key that says the builder's first-time tour has been seen. */
 const TOUR_SEEN = 'builder_tour_seen';
@@ -217,10 +218,12 @@ module.exports = (db, io = null) => {
   router.post('/:id/publish', gm, (req, res) => {
     store.publishSystem(db, req.params.id, (err, done) => {
       if (err) return answer(res, err);
-      runtime.refresh(db, req.params.id, () => {
+      runtime.refresh(db, req.params.id, () => syncAllTokenMax(db, req.params.id, (moved) => {
+        // A new version may change what a feature adds to the token's maximum (7a5a3, tokenMax.js).
+        if (io && moved) io.emit('dataUpdated', { isRhombusOnly: true });
         if (io) io.emit('customSystemChanged', { id: req.params.id });
         answer(res, null, done);
-      });
+      }));
     });
   });
 
