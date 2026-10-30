@@ -13,6 +13,7 @@ import { changeText } from '../sheets/restCalls';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
 import { ToggleSwitch } from './ToggleSwitch';
+import { useFormulaBox } from '../hooks/useFormulaBox';
 
 // The builder's RESTS page (4f4a; approved mockup docs/mockups/builder-rests.html, 2026-10-09): the
 // moments the game refills things and wears things off. The standard four, each with a switch,
@@ -25,7 +26,7 @@ interface Props {
   definition: Definition;
   edit: (next: Definition) => void;
   /** For the sheet the system plays with (what a rest can refill), and ON THE SAMPLE. */
-  api?: Pick<ReturnType<typeof systemsApi>, 'previewSheet' | 'tryRest'>;
+  api?: Pick<ReturnType<typeof systemsApi>, 'previewSheet' | 'tryRest' | 'previewFormulas'>;
 }
 
 const small: React.CSSProperties = { fontSize: 10, letterSpacing: 2, opacity: 0.75 };
@@ -44,7 +45,54 @@ const tick = (on: boolean): React.CSSProperties => ({
 /** The ways a target allows, as its select offers them. */
 const howLabel = (t: Target | undefined, how: string) => (t?.kind === 'section' ? 'ALL TO THEIR MAXIMUMS' : HOW_LABELS[how as keyof typeof HOW_LABELS] ?? how);
 
-function Refills({ rest, definition, edit, targets }: { rest: Rest; definition: Definition; edit: Props['edit']; targets: Target[] }) {
+/**
+ * One refill: what, how, and an amount where it takes one, a formula box (formula box 2) saying it in
+ * words with the least and most it comes to for the sample, its help under the row.
+ */
+function RefillRow({ rest, i, definition, edit, targets, api }: { rest: Rest; i: number; definition: Definition; edit: Props['edit']; targets: Target[]; api?: Props['api'] }) {
+  const r = rest.refills[i];
+  const t = targets.find((x) => x.id === r.what);
+  const needsAmount = r.how === 'by' || r.how === 'to';
+  const amount = useFormulaBox({
+    definition, api, kind: 'refill', value: r.amount ?? '', label: `Refill ${i + 1}: amount`, inputStyle: input, maxLength: LIMITS.amount,
+    placeholder: r.how === 'by' ? '-1, @level, 1d8 + @con_mod' : '0',
+    onChange: (text) => edit(withRest(definition, rest.id, { refills: rest.refills.map((x, j) => (j === i ? { ...x, amount: text } : x)) })),
+  });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) auto', gap: 6 }}>
+        <select aria-label={`Refill ${i + 1}: what`} value={r.what} style={input}
+          onChange={(e) => edit(withRefill(definition, rest.id, i, { what: e.target.value }, targets))}>
+          {targets.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+          {!t && <option value={r.what}>{r.what} (GONE)</option>}
+        </select>
+        <select aria-label={`Refill ${i + 1}: how`} value={r.how} style={input}
+          onChange={(e) => edit(withRefill(definition, rest.id, i, { how: e.target.value as Rest['refills'][number]['how'] }, targets))}>
+          {(t?.hows ?? [r.how]).map((h) => <option key={h} value={h}>{howLabel(t, h)}</option>)}
+        </select>
+        {needsAmount
+          ? (
+            <span style={{ display: 'flex', gap: 4, minWidth: 0 }}>
+              <span style={{ flex: 1, minWidth: 0 }}>{amount.field}</span>
+              {t?.tracks && r.how === 'by' && (
+                <select aria-label={`Refill ${i + 1}: track`} value={r.track ?? ''} style={input}
+                  onChange={(e) => edit(withRefill(definition, rest.id, i, { track: e.target.value }, targets))}>
+                  <option value="">{t.tracks[0]?.label ?? 'FIRST'}</option>
+                  {t.tracks.slice(1).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+                </select>
+              )}
+            </span>
+          )
+          : <span />}
+        <button type="button" className="utility-btn danger-btn" style={btn} aria-label={`Remove refill ${i + 1}`}
+          onClick={() => edit(withoutRefill(definition, rest.id, i))}>×</button>
+      </div>
+      {needsAmount && amount.help}
+    </div>
+  );
+}
+
+function Refills({ rest, definition, edit, targets, api }: { rest: Rest; definition: Definition; edit: Props['edit']; targets: Target[]; api?: Props['api'] }) {
   const inherited = countedAs(definition, rest.id).flatMap((id) => {
     const other = restList(definition).find((r) => r.id === id);
     return other ? other.refills.map((r) => `${other.name.toUpperCase()}: ${describeRefill(r, targets)}`) : [];
@@ -54,41 +102,7 @@ function Refills({ rest, definition, edit, targets }: { rest: Rest; definition: 
       {inherited.map((text, i) => (
         <div key={`from-${i}`} style={{ ...why, fontSize: 11, opacity: 0.7, borderLeft: '2px solid var(--dark-green)', paddingLeft: 8 }}>{text}</div>
       ))}
-      {rest.refills.map((r, i) => {
-        const t = targets.find((x) => x.id === r.what);
-        const needsAmount = r.how === 'by' || r.how === 'to';
-        return (
-          <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) auto', gap: 6 }}>
-            <select aria-label={`Refill ${i + 1}: what`} value={r.what} style={input}
-              onChange={(e) => edit(withRefill(definition, rest.id, i, { what: e.target.value }, targets))}>
-              {targets.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
-              {!t && <option value={r.what}>{r.what} (GONE)</option>}
-            </select>
-            <select aria-label={`Refill ${i + 1}: how`} value={r.how} style={input}
-              onChange={(e) => edit(withRefill(definition, rest.id, i, { how: e.target.value as Rest['refills'][number]['how'] }, targets))}>
-              {(t?.hows ?? [r.how]).map((h) => <option key={h} value={h}>{howLabel(t, h)}</option>)}
-            </select>
-            {needsAmount
-              ? (
-                <span style={{ display: 'flex', gap: 4, minWidth: 0 }}>
-                  <input type="text" aria-label={`Refill ${i + 1}: amount`} value={r.amount ?? ''} maxLength={LIMITS.amount} style={{ ...input, flex: 1 }}
-                    placeholder={r.how === 'by' ? '-1, @level, 1d8 + @con_mod' : '0'}
-                    onChange={(e) => edit(withRest(definition, rest.id, { refills: rest.refills.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)) }))} />
-                  {t?.tracks && r.how === 'by' && (
-                    <select aria-label={`Refill ${i + 1}: track`} value={r.track ?? ''} style={input}
-                      onChange={(e) => edit(withRefill(definition, rest.id, i, { track: e.target.value }, targets))}>
-                      <option value="">{t.tracks[0]?.label ?? 'FIRST'}</option>
-                      {t.tracks.slice(1).map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
-                    </select>
-                  )}
-                </span>
-              )
-              : <span />}
-            <button type="button" className="utility-btn danger-btn" style={btn} aria-label={`Remove refill ${i + 1}`}
-              onClick={() => edit(withoutRefill(definition, rest.id, i))}>×</button>
-          </div>
-        );
-      })}
+      {rest.refills.map((_, i) => <RefillRow key={i} rest={rest} i={i} definition={definition} edit={edit} targets={targets} api={api} />)}
       <div style={row}>
         <button type="button" className="utility-btn" style={btn} disabled={!targets.length || rest.refills.length >= LIMITS.refills}
           onClick={() => edit(withNewRefill(definition, rest.id, targets))}>+ REFILL</button>
@@ -184,7 +198,7 @@ function Detail({ rest, definition, edit, targets, api }: { rest: Rest; definiti
         </div>
 
         <FieldName boxStyle={{ justifySelf: 'end', paddingTop: 6 }} hint={HINTS['rests.refills']} style={small}>REFILLS</FieldName>
-        <Refills rest={rest} definition={definition} edit={edit} targets={targets} />
+        <Refills rest={rest} definition={definition} edit={edit} targets={targets} api={api} />
 
         <span style={{ ...small, textAlign: 'right', paddingTop: 6 }}>WEARS OFF</span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>

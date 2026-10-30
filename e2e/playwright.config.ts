@@ -8,7 +8,8 @@ import path from 'path';
 // system's temp folder and a GM account that exists only there. Secure Mode is on, as at a real
 // table: everyone signs in.
 //
-// CI runs it on every pull request (.github/workflows/ci.yml), with Playwright's own Chromium. On a
+// CI runs it on every pull request (.github/workflows/ci.yml), with Playwright's own Chromium, in four
+// parts on four machines (--shard=N/4 --fully-parallel), each still one test at a time. On a
 // developer's machine it runs only when asked (cd e2e && npm test), with the Chrome already
 // installed there, so nothing large is downloaded.
 

@@ -85,14 +85,17 @@ npx playwright test --debug
   npx playwright show-trace test-results/<the test's folder>/trace.zip
   ```
 
-- In CI the same files, and an HTML report, are attached to the run as an artifact
-  (**e2e-report**), downloadable from the run's summary page on GitHub.
+- In CI the same files, and an HTML report, are attached to the run as an artifact, one per part
+  (**e2e-report-1** to **e2e-report-4**), downloadable from the run's summary page on GitHub.
 
 ## In CI
 
-`.github/workflows/ci.yml` runs these on every pull request, in the **Browser Journeys** job, with
-Playwright's own Chromium (`CI` is set there). They are part of the same check as the backend and
-frontend suites.
+`.github/workflows/ci.yml` runs these on every pull request with Playwright's own Chromium (`CI`
+is set there), split across four machines at once: **Browser Journeys (1/4)** to **(4/4)**, each with
+its own servers and database, the tests shared out one by one (`--shard=N/4 --fully-parallel`), each
+part still one test at a time. About 12 minutes in place of 27. A last job named **Browser Journeys**
+passes only when all four did, so the check keeps its name. On a developer's machine nothing changes:
+one machine, files in order.
 
 ## Writing a journey
 
@@ -107,6 +110,11 @@ frontend suites.
   player journey does, so each has their own sign-in.
 - The tests share one database and run in order, one at a time, files alphabetically. A journey that needs a
   fresh state (the tour unseen) sets it up through the API first, rather than counting on running first.
+- Every test stands alone. In CI each part gets its own fresh database and only some of the tests,
+  split one by one, so a test may run without the tests before it in its file: never lean on what
+  an earlier test made, and keep `beforeAll` to what the test itself sets up.
+- Look a status up within its panel, never on the whole page: the formula box's words line is a
+  `role="status"` under every formula, so `page.getByRole('status')` finds more than one.
 - In CI a failed journey is tried once more, on the same database, so a journey that makes something
   named gives the retry a name of its own (`Hearthfall 2`).
 - The builder's rail widens over the page while the pointer is on it. Click it with `clickRail` (or
@@ -121,8 +129,8 @@ frontend suites.
   to narrow, and on CI the clicks sweep once measured the page under the rail still closing; so
   `clickRail` also waits for `getAnimations()` on the rail to be empty. Do the same for anything
   that slides or fades over the page before checking what's under it.
-- When a journey fails only on CI, the run's **e2e-report** download (bottom of the run's Summary
-  page) holds each failure's `trace.zip`; its screencast frames show the page at the failing step.
+- When a journey fails only on CI, the failing part's **e2e-report-N** download (bottom of the run's
+  Summary page) holds each failure's `trace.zip`; its screencast frames show the page at the failing step.
 - Put shared steps (signing in, opening the builder) in `tests/helpers.ts`.
 
 ## Files
@@ -151,7 +159,7 @@ frontend suites.
 | `tests/sheet-nested-choices.spec.ts` | Lists inside lists, and a list everyone has (7a5a2): in the builder SPECIALTIES shows OPENED BY · SOLDIER: SPECIALTY (LV 3) and is set THROUGH FEATURES, COMMONS EVERYONE HAS IT, saved with no problems; published, a player's sheet has no SPECIALTIES block, COMMONS every character's with Improvement next at level 2 and then unlocked; SOLDIER at 3 offers PICK A SPECIALTY under its feature, DUELIST picked there with its own feature; lowered to 2 it waits, kept; back at 3 it counts again; as the server keeps it |
 | `tests/sheet-subclass-levels.spec.ts` | A list a feature opens takes the level of what opened it (7a5d): in the builder ARCHETYPES is set THROUGH FEATURES and says each one's features unlock by the level of the pick that opened it: FIGHTER; Champion's Remarkable Athlete is put at LEVEL 7, saved with no problems; published, a player raises FIGHTER to 3, picks CHAMPION under Martial Archetype (Pick an Archetype) and has Improved Critical with NEXT · LV 7: Remarkable Athlete; at Fighter 7 it unlocks, the archetype's worked level is 7 and the character's levels stay 7 |
 | `tests/sheet-token-max.spec.ts` | A feature on the token's maximum (7a5a3): a player with a 20 HP token, a FIGHTER at level 3, picks TOUGH (+2 HP per level) and sees 26 / 26 on HIT_POINTS, the bonus named on the sheet's HP and MAX HEALTH at 26; a level down, 24; the GM opens their sheet from VIEW_PLAYER_INFO and drops TOUGH, and the token is back at 20 |
-| `tests/builder-formula-box.spec.ts` | The formula box (formula box 1): on Tough, `2 * @lvl` in red with USE @level, then +2 for each level · sample Level 3: +6 from the real server; PER CLASS LEVEL for FIGHTER at 3 and @con from INSERT at the cursor; AT LEAST on Fighter's REQUIRES (the sample meets it); the draft saved as written with no problems |
+| `tests/builder-formula-box.spec.ts` | The formula box (formula box 1): on Tough, `2 * @lvl` in red with USE @level, then +2 for each level · sample Level 3: +6 from the real server; PER CLASS LEVEL for FIGHTER at 3 and @con from INSERT at the cursor; AT LEAST on Fighter's REQUIRES (the sample meets it); the draft saved as written with no problems; and formula box 2: on ROLLS, `@thsi` in AGAINST shown in red and fixed with USE @this, then against your rolled stat · sample, rolling Strength, rolled stat 16: target 16; ADD written by ITS MODIFIER; on RESTS, a short rest's amount written by DICE AND A STAT with CON MODIFIER as 1d8 + @con_mod, said 1d8 + CON modifier · sample CON modifier 2: 3 to 10; the draft saved as written with no problems |
 | `tests/sheet-visibility.spec.ts` | Who sees what on a customized sheet (coverage family 1): its owner fills in a public field, a private one and a combat value and can't change the GM's field; another player, looking them up from GLOBAL_CHAT's user list (VIEW_PLAYER_INFO), sees only the public lines, and the server sends nothing else; the GM opens the whole sheet the same way (OPEN_SHEET) and sets the GM's field, which the owner then sees |
 | `tests/player-journey.spec.ts` | A custom system running (set up through the API), played in two browsers at once: a player makes a character and sees the system's words and its formula worked out; the GM types in a catalogue, gives the player something from it with a note, and calls a rest from the GAME tab; the player sees the gift arrive and the rest change their sheet |
 | `tests/builder-smoke.spec.ts` | The GM signs in, opens the System Builder, meets and skips the first-time tour (reset first, so it always shows), and goes back to the map |

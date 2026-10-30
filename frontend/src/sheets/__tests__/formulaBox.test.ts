@@ -117,3 +117,42 @@ describe('SHAPES', () => {
     expect(writeShape('nonsense', 1)).toBe('');
   });
 });
+
+describe('a roll\'s ADD and AGAINST, and a rest\'s amount (formula box 2)', () => {
+  const ROLLED = [{ id: 'this', label: 'rolled stat', value: 16 }];
+
+  it('says them in words', () => {
+    expect(wordsOf('add', '@this_mod', [{ id: 'this_mod', label: 'rolled stat\'s modifier', value: 3 }])).toBe('+ your rolled stat\'s modifier');
+    expect(wordsOf('add', '2')).toBe('+2, always');
+    expect(wordsOf('against', '13')).toBe('against 13');
+    expect(wordsOf('against', '@this', ROLLED)).toBe('against your rolled stat');
+    expect(wordsOf('against', '10 + @this', ROLLED)).toBe('against a target worked out from rolled stat');
+    expect(wordsOf('refill', '1d8  +  @con_mod', [{ id: 'con_mod', label: 'CON modifier', value: 2 }])).toBe('1d8 + CON modifier');
+    expect(wordsOf('refill', '@hp_max')).toBe('hp_max');
+  });
+
+  it('says the sample: the stat it rolls, a target, and what dice can come to', () => {
+    expect(sampleLine('add', { ok: true, value: 3, reads: [{ id: 'this_mod', label: 'rolled stat\'s modifier', value: 3 }], rolling: 'Strength' }))
+      .toBe('sample, rolling Strength, rolled stat\'s modifier 3: +3');
+    expect(sampleLine('add', { ok: true, value: 2, reads: [], rolling: 'Strength' })).toBe('sample, rolling Strength: +2');
+    expect(sampleLine('against', { ok: true, value: 16, reads: ROLLED })).toBe('sample rolled stat 16: target 16');
+    expect(sampleLine('refill', { ok: true, value: 3, most: 10, reads: [{ id: 'con_mod', label: 'CON modifier', value: 2 }] })).toBe('sample CON modifier 2: 3 to 10');
+    expect(sampleLine('refill', { ok: true, value: 5, reads: [] })).toBe('5');
+  });
+
+  it('INSERT: the stat rolled first in a roll, no levels or tables in a rest', () => {
+    expect(insertGroups(DEF, 'add').map((g) => g.title)).toEqual(['THIS ROLL', 'LEVELS', 'STATS', 'FORMULAS', 'TABLES', 'WORKINGS']);
+    expect(insertGroups(DEF, 'against')[0].items.map((i) => i.token)).toEqual(['@this', '@this_mod', '@tie', '@tie_mod']);
+    expect(insertGroups(DEF, 'refill').map((g) => g.title)).toEqual(['STATS', 'FORMULAS', 'WORKINGS']);
+  });
+
+  it('SHAPES: the stat rolled and its modifier, a target, dice', () => {
+    expect(shapesOf(DEF, 'add').map((s) => s.label)).toEqual(['A NUMBER', 'THE STAT ROLLED', 'ITS MODIFIER', 'PER LEVEL']);
+    expect(shapesOf(DEF, 'against').map((s) => s.label)).toEqual(['A NUMBER', 'THE STAT ROLLED']);
+    expect(shapesOf(DEF, 'refill').map((s) => [s.label, s.asks])).toEqual([['A NUMBER', 'number'], ['DICE', 'dice'], ['DICE AND A STAT', 'dice-and-stat']]);
+    expect(shapesOf({ format: 1, name: 'B' } as Definition, 'refill')[2].needs).toBe('No stats yet: make them on STATS & RULES');
+    expect(shapesOf({ format: 1, name: 'B' } as Definition, 'add')[3].needs).toBe('No levels yet: make a list levelled on CHOICES');
+    expect([writeShape('rolled', 1), writeShape('rolled_mod', 1)]).toEqual(['@this', '@this_mod']);
+    expect([writeShape('dice', 2, '@level', 6), writeShape('dice', 0), writeShape('dice_and_stat', 1, '@con_mod', 10)]).toEqual(['2d6', '1d8', '1d10 + @con_mod']);
+  });
+});

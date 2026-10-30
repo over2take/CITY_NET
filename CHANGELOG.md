@@ -53,6 +53,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **The formula box on ROLLS and RESTS.** A roll's ADD and AGAINST, and a rest's refill amounts,
+  now get the same box as CHOICES. A line under each says it in words with what it comes to for
+  the sample character: "against your rolled stat · sample, rolling Strength, rolled stat 16:
+  target 16", "1d8 + CON modifier · sample CON modifier 2: 3 to 10". A roll's box rolls the first
+  stat in ROLLED BY. Dice in a rest are said as the least and most they can come to. A misspelt
+  name shows in red with a fix (`@thsi` offers USE @this). A typo in ADD or AGAINST used to count
+  as 0 at the table without a word. The formula button writes common ones for you: THE STAT
+  ROLLED and ITS MODIFIER on a roll, DICE and DICE AND A STAT on a rest (pick how many, which die
+  and which stat or formula). INSERT lists what each box can read, the stat being rolled first on
+  a roll.
 - **Subclasses follow their class's level.** A list a feature opens, like Fighter's Martial
   Archetype opening the archetypes at 3, now takes the level of the pick that opened it. Champion's
   features get AT LEVEL on CHOICES, grouped by level, and unlock by the Fighter's level: Improved
@@ -683,6 +693,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The browser journeys run in four parts at once on CI.** Each pull request's journeys were run
+  one after another on one machine, about 27 minutes. They now run on four machines at once, each with
+  its own servers and database and a share of the tests, about 12 minutes. The check is still called
+  Browser Journeys and passes only when all four parts do; a failed part uploads its own report
+  (e2e-report-1 to 4). Nothing changes when they are run on a developer's machine. The builder's
+  journey now finds PUBLISH's message by its words, as the formula box added a second status line.
 - **Browser tests.** The first tests in a real browser (e2e/, Playwright): the real app started on a throwaway
   database, the GM signing in, building a system through the builder's screens, publishing it twice and switching
   the game to it; and a custom game played in two browsers at once, a player making a character in its words
