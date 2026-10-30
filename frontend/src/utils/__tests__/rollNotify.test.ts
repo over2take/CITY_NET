@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { rollerOf, rollFlashes, diceRailClick } from '../rollNotify';
+import { rollerOf, rollFlashes, rollOpensTray, diceRailClick } from '../rollNotify';
 
 /**
  * When a roll flashes DICE_TRAY.EXE's buttons (6c4g): someone else's, while the tray is shut,
@@ -43,5 +43,17 @@ describe('a click on the rail\'s DICE_ROLLER', () => {
 
   it('while it flashes, opens the menu and the tray with it, never shutting the menu', () => {
     for (const menu of ['none', 'dice_menu', 'bank_menu']) expect(diceRailClick(menu, true), menu).toEqual({ menu: 'dice_menu', openTray: true });
+  });
+});
+
+describe('a quiet line (a rest that rolled no dice)', () => {
+  it('neither flashes the tray nor opens it, whoever it is for', () => {
+    expect(rollFlashes({ userName: 'rook', quiet: true }, quiet)).toBe(false);
+    expect(rollOpensTray({ userName: 'KES', account: 'kes', quiet: true }, 'kes')).toBe(false);
+  });
+
+  it('a roll of your own opens the tray; someone else\'s doesn\'t', () => {
+    expect(rollOpensTray({ userName: 'KES', account: 'kes' }, 'kes')).toBe(true);
+    expect(rollOpensTray({ userName: 'rook' }, 'kes')).toBe(false);
   });
 });

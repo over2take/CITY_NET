@@ -171,6 +171,10 @@ describe('calling a rest', () => {
     expect(emitted.filter((e) => e.event === 'diceRollBroadcast').map((e) => e.payload.historyString)).toEqual(lines.map((l) => l.historyString));
     // The tray's board names the rest each was rolled for (6c4d3).
     expect(emitted.filter((e) => e.event === 'diceRollBroadcast').map((e) => e.payload.board)).toEqual(lines.map(() => ({ label: 'LONG REST' })));
+    // Vex rolled the short rest's die, so the tray opens for it; Ash and Rook, with no token to
+    // heal, rolled nothing, so theirs are quiet lines.
+    expect(emitted.filter((e) => e.event === 'diceRollBroadcast').map((e) => e.payload.quiet)).toEqual([true, true, undefined]);
+    expect(lines.map((l) => l.results)).toEqual(['{}', '{}', lines[2].results]);
     expect(emitted.filter((e) => e.event === 'sheetUpdated').map((e) => e.payload.username)).toEqual(['ash', 'Rook', 'vex']);
     expect(emitted.filter((e) => e.event === 'dataUpdated')).toEqual([{ event: 'dataUpdated', payload: { isRhombusOnly: true } }]);
   });
@@ -271,5 +275,16 @@ describe('the dice-log line and its dice', () => {
     expect(restLine({}, 'Nap', 'Ash', { changes: [], gone: [], rolls: [] })).toBe('NAP · Ash: nothing changed');
     expect(restDice(result)).toEqual({ results: { 8: [5], 6: [] }, total: 5 });
     expect(restDice({ rolls: [{ dice: [{ sides: 6, rolls: [2, 3] }] }, { dice: [{ sides: 6, rolls: [4] }] }] })).toEqual({ results: { 6: [2, 3, 4] }, total: 9 });
+  });
+});
+
+describe('a rest that rolls no dice (quiet rests)', () => {
+  it('is quiet: its line goes into the dice log and to every screen, marked so no tray opens for it', async () => {
+    const res = await rest({ rest: 'end_of_session', players: true });
+    expect(res.status).toBe(200);
+    const lines = await all(db, 'SELECT username, results, historyString FROM dice_rolls ORDER BY id');
+    expect(lines.map((l) => [l.username, l.results])).toEqual([['ash', '{}'], ['Rook', '{}'], ['vex', '{}']]);
+    const told = emitted.filter((e) => e.event === 'diceRollBroadcast').map((e) => e.payload);
+    expect(told.map((p) => [p.historyString, p.quiet])).toEqual(lines.map((l) => [l.historyString, true]));
   });
 });

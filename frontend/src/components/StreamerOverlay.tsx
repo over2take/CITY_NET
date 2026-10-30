@@ -27,7 +27,9 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
 
   useEffect(() => {
     if (!socket) return;
-    const onRoll = (data: { userName: string; results: Record<string, number[]>; modifiers: number[]; color: string; total: number }) => {
+    const onRoll = (data: { userName: string; results: Record<string, number[]>; modifiers: number[]; color: string; total: number; quiet?: boolean }) => {
+      // A rest that rolled no dice is a line for the log, not a roll for the stream.
+      if (data.quiet) return;
       // Delay matches the DiceTray rolling animation (5s) so the result isn't
       // spoiled on stream before the roller sees it themselves.
       setTimeout(() => {

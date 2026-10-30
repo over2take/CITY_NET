@@ -76,7 +76,7 @@ import { getTemplate } from './sheets';
 import { DiceTrayWindow, DiceScene } from './components/DiceTray';
 import { useTrayNotify } from './hooks/useTrayNotify';
 import { useRollFlash } from './hooks/useRollFlash';
-import { rollerOf } from './utils/rollNotify';
+import { rollOpensTray } from './utils/rollNotify';
 import { CustomDieBuilder } from './components/CustomDieBuilder';
 import { useCustomDice } from './hooks/useCustomDice';
 import { EnemyRhombus, FriendlyRhombus, PlayerRhombus, OverlapChecker } from './components/Rhombuses';
@@ -942,7 +942,8 @@ function App() {
       // originating from the standalone sheet tab which can't call onRolled().
       // Match on the login account: userName in the broadcast is the sheet's
       // display name (handle), which may differ.
-      if (rollerOf(data) === userName) {
+      // A quiet line (a rest that rolled nothing) only joins the log.
+      if (rollOpensTray(data, userName)) {
         setIsDiceTrayOpen(true);
         setActiveSidebarMenu('dice_menu');
       } else {
