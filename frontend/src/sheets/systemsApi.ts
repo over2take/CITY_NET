@@ -6,6 +6,7 @@
 import type { InstallMode, InstallPreview, InstallResult, LibrarySystem } from './systemsLibrary';
 import type { PublishPreview } from './versionPreview';
 import type { ImportPreview } from './choicesImport';
+import type { FormulaKind, FormulaRead } from './formulaBox';
 import type { CustomRenderSheet } from './customTemplates';
 import type { GameCondition } from './tokenConditions';
 import type { TableEntry } from './tableConditions';
@@ -163,6 +164,9 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      */
     previewValues: (definition: Definition) =>
       call<{ values: Record<string, number>; problems: Problem[] }>(fetcher, token, '/api/systems/preview-values', 'POST', { definition }),
+    /** The formula box (formula box 1): each formula read as the game reads it, for the sample character. */
+    previewFormulas: (definition: Definition, formulas: { text: string; kind: FormulaKind }[]) =>
+      call<{ results: FormulaRead[]; sampleLevel: number }>(fetcher, token, '/api/systems/preview-formulas', 'POST', { definition, formulas }),
     /**
      * TEST ROLL (6b1a): one of a draft's rolls made for its sample character by the table's own
      * engine, for `fieldId` or the first field it is rolled by, with the changes picked. Changes

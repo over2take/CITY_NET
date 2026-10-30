@@ -14,6 +14,7 @@ const { buildCustomTemplate } = require('../sheets/pdfTemplate');
 const runtime = require('../systemBuilder/runtime');
 const { checkDefinition, NEW_SYSTEM_SEEN } = require('../systemBuilder/definition');
 const { previewDerived } = require('../systemBuilder/derived');
+const { previewFormulas, SAMPLE_LEVEL } = require('../systemBuilder/formulaPreview');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { conditionsOf } = require('../systemBuilder/conditions');
 const { diceOf } = require('../systemBuilder/diceFaces');
@@ -286,6 +287,18 @@ module.exports = (db, io = null) => {
     if (checked.fatal) return res.status(400).json({ error: checked.fatal });
     const samples = definition.samples && typeof definition.samples === 'object' && !Array.isArray(definition.samples) ? definition.samples : {};
     res.json(previewDerived({ lookups: definition.lookups, derived: definition.derived }, samples));
+  });
+
+  /**
+   * The builder's formula box (formula box 1): up to 20 formulas, `{ text, kind }` each (a
+   * modifier's amount, a requirement, a feature's uses), each read against a draft as the game
+   * reads it: its mistake, or its value for the sample character with each name it reads.
+   */
+  router.post('/preview-formulas', gm, (req, res) => {
+    const { definition, formulas } = req.body || {};
+    const checked = checkDefinition(definition);
+    if (checked.fatal) return res.status(400).json({ error: checked.fatal });
+    res.json({ results: previewFormulas(definition, formulas), sampleLevel: SAMPLE_LEVEL });
   });
 
   /**

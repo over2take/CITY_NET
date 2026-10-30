@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { Definition } from '../sheets/systemsApi';
+import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   featureList, levelOf, kindsOf, withNewFeature, withFeature, withoutFeature, modifierTargets, refillRests, rollChoices, choiceLists, pickedOf, unlocksByLevel, LIMITS,
   type ChoiceList, type ChoiceOption, type Feature, type FeatureKind, type FeaturePatch,
@@ -7,6 +7,7 @@ import {
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
 import { ToggleSwitch } from './ToggleSwitch';
+import { useFormulaBox } from '../hooks/useFormulaBox';
 
 // An option's features on the CHOICES page (7a2b2; approved mockup docs/mockups/builder-choices.html,
 // 2026-10-27): what a pick gives, grouped by the level each unlocks at in a levelled list. Each row
@@ -20,6 +21,8 @@ interface Props {
   edit: (next: Definition) => void;
   list: ChoiceList;
   option: ChoiceOption;
+  /** The server, for the formula boxes' words and sample values; none when looking at an example. */
+  api?: ReturnType<typeof systemsApi>;
 }
 
 const small: React.CSSProperties = { fontSize: 10, letterSpacing: 2, opacity: 0.75 };
@@ -45,7 +48,33 @@ const Tag = ({ kind }: { kind: FeatureKind }) => (
   <span style={{ fontSize: 9, letterSpacing: 1, border: '1px solid currentColor', padding: '0 4px', color: TAGS[kind][1], whiteSpace: 'nowrap' }}>{TAGS[kind][0]}</span>
 );
 
-function FeatureForm({ definition, edit, list, option, feature }: Props & { feature: Feature }) {
+type Modifier = NonNullable<Feature['modifiers']>[number];
+
+/** One modifier: what it changes, by how much (a formula box), and × in red; the box's words and help under the row. */
+function ModifierRow({ definition, api, i, m, targets, onChange, onRemove }: {
+  definition: Definition; api?: Props['api']; i: number; m: Modifier; targets: ReturnType<typeof modifierTargets>;
+  onChange: (next: Modifier) => void; onRemove: () => void;
+}) {
+  const amount = useFormulaBox({
+    definition, api, kind: 'amount', value: m.amount, onChange: (text) => onChange({ ...m, amount: text }),
+    label: `Modifier ${i + 1}: by`, placeholder: '1 · @mage_level', inputStyle: input,
+  });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <span style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 3fr) auto', gap: 6, alignItems: 'center' }}>
+        <select aria-label={`Modifier ${i + 1}: changes`} value={m.target} style={input} onChange={(e) => onChange({ ...m, target: e.target.value })}>
+          {!targets.some((g) => g.items.some((t) => t.id === m.target)) && <option value={m.target}>{m.target || 'PICK ONE'}</option>}
+          {targets.map((g) => <optgroup key={g.group} label={g.group}>{g.items.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</optgroup>)}
+        </select>
+        {amount.field}
+        <button type="button" className="utility-btn" style={{ ...xBtn, color: 'var(--danger)', borderColor: 'var(--danger)' }} aria-label={`Remove modifier ${i + 1}`} onClick={onRemove}>×</button>
+      </span>
+      {amount.help}
+    </div>
+  );
+}
+
+function FeatureForm({ definition, edit, list, option, feature, api }: Props & { feature: Feature }) {
   const [asking, setAsking] = useState(false);
   const set = (patch: FeaturePatch) => edit(withFeature(definition, list.id, option.id, feature.id, patch));
   // The level is set when the box is left (or on Enter), not as it is typed: a new level moves the
@@ -67,6 +96,11 @@ function FeatureForm({ definition, edit, list, option, feature }: Props & { feat
   const given = new Set(feature.rolls ?? []);
   const id = (part: string) => `feature-${feature.id}-${part}`;
   const name = feature.label.trim() || 'this feature';
+  // Made whether or not it has uses (a hook can't wait behind HAS USES); shown only when it does.
+  const usesBox = useFormulaBox({
+    definition, api, kind: 'uses', value: feature.uses?.count ?? '', onChange: (text) => { if (feature.uses) set({ uses: { ...feature.uses, count: text } }); },
+    label: 'How many uses', placeholder: '1 · @level', inputStyle: input,
+  });
   return (
     <div role="group" aria-label={`Feature ${feature.label || feature.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 12px', border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--green) 4%, transparent)' }}>
       <div style={grid}>
@@ -85,17 +119,9 @@ function FeatureForm({ definition, edit, list, option, feature }: Props & { feat
         <FieldName boxStyle={END} hint={HINTS['choices.modifiers']} style={small}>MODIFIERS</FieldName>
         <div role="group" aria-label="Modifiers" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           {mods.map((m, i) => (
-            <span key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto', gap: 6, alignItems: 'center' }}>
-              <select aria-label={`Modifier ${i + 1}: changes`} value={m.target} style={input}
-                onChange={(e) => set({ modifiers: mods.map((x, j) => (j === i ? { ...x, target: e.target.value } : x)) })}>
-                {!targets.some((g) => g.items.some((t) => t.id === m.target)) && <option value={m.target}>{m.target || 'PICK ONE'}</option>}
-                {targets.map((g) => <optgroup key={g.group} label={g.group}>{g.items.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</optgroup>)}
-              </select>
-              <input type="text" aria-label={`Modifier ${i + 1}: by`} maxLength={1000} value={m.amount} placeholder="1 · @mage_level" style={input}
-                onChange={(e) => set({ modifiers: mods.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)) })} />
-              <button type="button" className="utility-btn" style={xBtn} aria-label={`Remove modifier ${i + 1}`}
-                onClick={() => set({ modifiers: mods.filter((_, j) => j !== i) })}>×</button>
-            </span>
+            <ModifierRow key={i} definition={definition} api={api} i={i} m={m} targets={targets}
+              onChange={(next) => set({ modifiers: mods.map((x, j) => (j === i ? next : x)) })}
+              onRemove={() => set({ modifiers: mods.filter((_, j) => j !== i) })} />
           ))}
           <div><button type="button" className="utility-btn" style={btn} disabled={mods.length >= LIMITS.modifiers || !targets.length}
             onClick={() => set({ modifiers: [...mods, { target: targets[0].items[0].id, amount: '1' }] })}>+ MODIFIER</button></div>
@@ -108,8 +134,7 @@ function FeatureForm({ definition, edit, list, option, feature }: Props & { feat
             onChange={(has) => set({ uses: has ? { count: '1', refill: rests[0]?.id } : null })} />
           {feature.uses && (
             <span style={row}>
-              <input type="text" aria-label="How many uses" maxLength={1000} value={feature.uses.count} placeholder="1 · @level" style={{ ...input, width: 120 }}
-                onChange={(e) => set({ uses: { ...feature.uses!, count: e.target.value } })} />
+              <span style={{ width: 170 }}>{usesBox.field}</span>
               <span style={small}>REFILLED BY</span>
               <select aria-label="Refilled by" value={feature.uses.refill ?? ''} style={input}
                 onChange={(e) => set({ uses: { count: feature.uses!.count, refill: e.target.value } })}>
@@ -118,6 +143,7 @@ function FeatureForm({ definition, edit, list, option, feature }: Props & { feat
               </select>
             </span>
           )}
+          {feature.uses && usesBox.help}
         </div>
 
         <FieldName boxStyle={END} hint={HINTS['choices.rolls']} style={small}>GIVES ROLLS</FieldName>
@@ -188,7 +214,7 @@ function FeatureForm({ definition, edit, list, option, feature }: Props & { feat
   );
 }
 
-export function FeaturesEditor({ definition, edit, list, option }: Props) {
+export function FeaturesEditor({ definition, edit, list, option, api }: Props) {
   const features = featureList(option);
   const [open, setOpen] = useState<string | null>(null);
   // In a levelled list (or one everyone has), by the level each unlocks at; otherwise all together.
@@ -217,7 +243,7 @@ export function FeaturesEditor({ definition, edit, list, option }: Props) {
                 <span>{open === f.id ? '▾' : '▸'} {(f.label.trim() || 'NEEDS A NAME').toUpperCase()}</span>
                 {kindsOf(f).map((k) => <Tag key={k} kind={k} />)}
               </button>
-              {open === f.id && <FeatureForm key={`form:${f.id}`} definition={definition} edit={edit} list={list} option={option} feature={f} />}
+              {open === f.id && <FeatureForm key={`form:${f.id}`} definition={definition} edit={edit} list={list} option={option} feature={f} api={api} />}
             </React.Fragment>
           ))}
         </section>

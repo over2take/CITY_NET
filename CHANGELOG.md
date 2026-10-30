@@ -53,6 +53,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Formulas on CHOICES say what they do, and help you write them.** Under a modifier's amount, a
+  feature's USES and an option's REQUIRES, a line now says the formula in words with what it comes
+  to for the sample character: "+2 for each level · sample Level 3: +6", "needs Strength 13 or
+  more · the sample (Strength 16) meets it". A mistake shows in red before you publish, including a
+  name the system hasn't got: `@lvl` offers USE @level to fix it. The new formula button beside each
+  box opens SHAPE, which writes common ones for you (A NUMBER, PER LEVEL, PER CLASS LEVEL, HALF
+  LEVEL; AT LEAST and LEVEL AT LEAST on a requirement), and INSERT, the names the box can read, put
+  where your cursor is. The × that removes a modifier is now red.
 - **Features that add to the token's maximum (7a5a3).** A feature whose modifier is on HP MAX (or
   WOUNDS, under a wound count) now moves the token's real maximum, not just the number the sheet
   names: a level 3 fighter picking Tough (`2 * @level`) goes from 20 to 26 of 26, the current

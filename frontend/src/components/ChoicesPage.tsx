@@ -9,6 +9,7 @@ import { FieldName } from './HelpHint';
 import { FeaturesEditor } from './FeaturesEditor';
 import { ChoicesImport } from './ChoicesImport';
 import { ToggleSwitch } from './ToggleSwitch';
+import { useFormulaBox } from '../hooks/useFormulaBox';
 
 // The builder's CHOICES page (7a2b1; approved mockup docs/mockups/builder-choices.html, 2026-10-27):
 // the lists a character picks from (classes, backgrounds, feats), named in the game's own words. The
@@ -21,7 +22,7 @@ import { ToggleSwitch } from './ToggleSwitch';
 interface Props {
   definition: Definition;
   edit: (next: Definition) => void;
-  /** The server, for IMPORT's PREVIEW; none when looking at an example. */
+  /** The server, for IMPORT's PREVIEW and the formula boxes; none when looking at an example. */
   api?: ReturnType<typeof systemsApi>;
 }
 
@@ -158,10 +159,14 @@ function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, st
   );
 }
 
-function OptionPanel({ list, option, definition, edit }: Props & { list: ChoiceList; option: ChoiceOption }) {
+function OptionPanel({ list, option, definition, edit, api }: Props & { list: ChoiceList; option: ChoiceOption }) {
   const set = (patch: Parameters<typeof withOption>[3]) => edit(withOption(definition, list.id, option.id, patch));
   const features = (option.features ?? []).filter((f): f is { id: string; label?: string } => !!f && typeof f === 'object' && typeof (f as { id?: unknown }).id === 'string');
   const id = (part: string) => `choice-${list.id}-${option.id}-${part}`;
+  const requires = useFormulaBox({
+    definition, api, kind: 'requires', value: option.requires ?? '', onChange: (text) => set({ requires: text }),
+    label: 'REQUIRES', id: id('requires'), placeholder: 'NOTHING · @int >= 13', inputStyle: input,
+  });
   return (
     <section aria-label={`${option.label || option.id} option`} style={panel}>
       <div style={{ ...row, justifyContent: 'space-between' }}>
@@ -177,11 +182,10 @@ function OptionPanel({ list, option, definition, edit }: Props & { list: ChoiceL
         <textarea id={id('description')} rows={2} maxLength={LIMITS.description} value={option.description ?? ''}
           style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }} onChange={(e) => set({ description: e.target.value })} />
         <FieldName boxStyle={END} htmlFor={id('requires')} hint={HINTS['choices.requires']} style={small}>REQUIRES</FieldName>
-        <input id={id('requires')} type="text" maxLength={1000} value={option.requires ?? ''} placeholder="NOTHING · @int >= 13" style={input}
-          onChange={(e) => set({ requires: e.target.value })} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>{requires.field}{requires.help}</div>
       </div>
       {list.levelled && <p style={{ ...why, fontSize: 11, opacity: 0.7 }}>Its level reads as {levelNames(list).options[option.id]} in formulas: 0 for a character without it.</p>}
-      <FeaturesEditor definition={definition} edit={edit} list={list} option={option} />
+      <FeaturesEditor definition={definition} edit={edit} list={list} option={option} api={api} />
     </section>
   );
 }
@@ -240,7 +244,7 @@ export function ChoicesPage({ definition, edit, api }: Props) {
           onImport={() => { setImporting(list.id); setApplied(null); }}
           fresh={applied?.list === list.id ? applied.added : NONE} status={applied?.list === list.id ? applied.text : null} />
       )}
-      {list && option && importing !== list.id && <OptionPanel key={`${list.id}:${option.id}`} list={list} option={option} definition={definition} edit={edit} />}
+      {list && option && importing !== list.id && <OptionPanel key={`${list.id}:${option.id}`} list={list} option={option} definition={definition} edit={edit} api={api} />}
     </div>
   );
 }
