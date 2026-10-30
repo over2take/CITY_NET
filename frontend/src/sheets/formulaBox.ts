@@ -117,11 +117,11 @@ export const ROLL_TOKENS = [
 /**
  * What INSERT offers a box: the stat being rolled (a roll's), its levels, stats, formulas (never for
  * an amount, which reads the sheet as typed and levels), tables and the workings. A rest's amount
- * reads no levels or tables. Empty groups left out.
+ * reads no tables. Empty groups left out.
  */
 export const insertGroups = (def: Definition, kind: FormulaKind): InsertGroup[] => [
   { title: 'THIS ROLL', items: kind === 'add' || kind === 'against' ? ROLL_TOKENS : [] },
-  { title: 'LEVELS', items: kind === 'refill' ? [] : levelTokens(def) },
+  { title: 'LEVELS', items: levelTokens(def) },
   { title: 'STATS', items: allStats(def).map((s) => ({ token: `@${s.id}`, label: (s.label || s.id).toUpperCase() })) },
   { title: 'FORMULAS', items: kind === 'amount' ? [] : formulaList(def).map((f) => ({ token: `@${f.id}`, label: (f.label || f.id).toUpperCase() })) },
   { title: 'TABLES', items: kind === 'refill' ? [] : tableList(def).map((t) => ({ token: `${t.id}()`, label: 'A TABLE' })) },

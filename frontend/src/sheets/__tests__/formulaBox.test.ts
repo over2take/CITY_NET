@@ -140,10 +140,10 @@ describe('a roll\'s ADD and AGAINST, and a rest\'s amount (formula box 2)', () =
     expect(sampleLine('refill', { ok: true, value: 5, reads: [] })).toBe('5');
   });
 
-  it('INSERT: the stat rolled first in a roll, no levels or tables in a rest', () => {
+  it('INSERT: the stat rolled first in a roll, no tables in a rest', () => {
     expect(insertGroups(DEF, 'add').map((g) => g.title)).toEqual(['THIS ROLL', 'LEVELS', 'STATS', 'FORMULAS', 'TABLES', 'WORKINGS']);
     expect(insertGroups(DEF, 'against')[0].items.map((i) => i.token)).toEqual(['@this', '@this_mod', '@tie', '@tie_mod']);
-    expect(insertGroups(DEF, 'refill').map((g) => g.title)).toEqual(['STATS', 'FORMULAS', 'WORKINGS']);
+    expect(insertGroups(DEF, 'refill').map((g) => g.title)).toEqual(['LEVELS', 'STATS', 'FORMULAS', 'WORKINGS']);
   });
 
   it('SHAPES: the stat rolled and its modifier, a target, dice', () => {

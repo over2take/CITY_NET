@@ -13,7 +13,7 @@
 // pending ("9 + 1d8 + @con_mod") until a later refill settles it.
 
 const { restsOf, reachOf, amountNames, SECTION } = require('./rests');
-const { usesOf, USES_KEY } = require('./choices');
+const { usesOf, USES_KEY, effectiveData } = require('./choices');
 const { conditionsOf } = require('./conditions');
 const { applyHealthAction } = require('./health');
 const { effectiveSheet, fieldsOf } = require('./sheet');
@@ -101,9 +101,12 @@ const restOn = ({ definition, restId, sheet = {}, token = null, conditions = [],
   const pending = new Map(); // what -> the dice still to roll, in a preview
   const rolls = [];
 
-  /** The numbers an amount may read: the sheet's, with fields linked to the token read from it. */
+  /**
+   * The numbers an amount may read: the sheet as rolls read it (stats with their features'
+   * modifiers, and the levels), with fields linked to the token read from it.
+   */
   const values = () => {
-    const v = { ...data };
+    const v = effectiveData(definition, data);
     for (const [id, f] of fields) {
       if (f.source === 'token_hp' && t) v[id] = t.current;
       if (f.source === 'token_hp_max' && t) v[id] = t.max;
