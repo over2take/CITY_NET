@@ -63,10 +63,10 @@ test('the formula box says a formula in words, catches a misspelt name, and writ
   await expect(fighter.getByRole('textbox', { name: 'REQUIRES' })).toHaveValue('@str >= 13');
   await expect(fighter.getByTestId('formula-words')).toHaveText('needs Strength 13 or more · the sample (Strength 16) meets it');
 
-  // Saved as written, with no problems.
-  await expect.poll(async () => {
-    const { draft } = await asGm(request, token, 'get', `/api/systems/${id}`);
-    return [draft.choices[1].options[0].features[0].modifiers[0].amount, draft.choices[0].options[0].requires];
-  }).toEqual(['3 * @fighter_level + @con', '@str >= 13']);
-  expect((await asGm(request, token, 'get', `/api/systems/${id}`)).problems).toEqual([]);
+  // Saved as written, with no problems: the draft saves itself a few seconds after the last change.
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  const { draft, problems } = await asGm(request, token, 'get', `/api/systems/${id}`);
+  expect([draft.choices[1].options[0].features[0].modifiers[0].amount, draft.choices[0].options[0].requires])
+    .toEqual(['3 * @fighter_level + @con', '@str >= 13']);
+  expect(problems).toEqual([]);
 });
