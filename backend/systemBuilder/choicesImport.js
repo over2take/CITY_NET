@@ -23,7 +23,7 @@
 // PUBLISH, through the version preview like any other change.
 
 const { parse, references, NAME } = require('./expression');
-const { LIMITS, choicesOf, levelNamesOf, namesOf } = require('./choices');
+const { LIMITS, choicesOf, levelNamesOf, namesOf, unlocksByLevelOf } = require('./choices');
 const { restIdsOf, restsOf } = require('./rests');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { tablesOf } = require('./derived');
@@ -124,7 +124,7 @@ const rowsOf = (text, levelled, many) => {
       }
       columns = named;
       for (const c of named.filter((x) => x && !COLUMNS[part].read.includes(x))) notes.push({ line, message: `The ${c} column isn't read: only ${COLUMNS[part].read.join(', ')}` });
-      if (part === 'features' && named.includes('level') && !levelled) notes.push({ line, message: `${many} isn't levelled, so the level column is ignored` });
+      if (part === 'features' && named.includes('level') && !levelled) notes.push({ line, message: `${many} has no levels, so the level column is ignored` });
       return;
     }
     const cols = columns;
@@ -148,7 +148,9 @@ const readChoicesFile = (definition, listId, input) => {
 
   const next = JSON.parse(JSON.stringify(source));
   next.options = list(next.options).filter((o) => isPlainObject(o) && typeof o.id === 'string');
-  const levelled = next.levelled === true;
+  // A level column wherever features unlock at a level: a levelled list, one everyone has, or one
+  // following the level of what opened it (7a5d).
+  const levelled = unlocksByLevelOf(definition).has(next.id);
   const many = (next.many || next.id).toUpperCase();
   const { rows, skipped, notes } = rowsOf(stripBom(input), levelled, many);
   const added = { options: [], features: [] };

@@ -61,6 +61,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   list opened by a feat with no levels still has everything at once. The archetype never adds to the
   character's level. The list's page says whose level it follows, and the sheet's NEXT line counts
   toward it. A pick offer for a word starting with a vowel now reads "Pick an Archetype".
+  IMPORT reads and writes these levels too: the level column is now offered and read for any list
+  whose features unlock at a level, an archetype list or one everyone has, where before it was read
+  only for a LEVELLED list and dropped for the rest. A system file carries them as well.
 - **Formulas on CHOICES say what they do, and help you write them.** Under a modifier's amount, a
   feature's USES and an option's REQUIRES, a line now says the formula in words with what it comes
   to for the sample character: "+2 for each level · sample Level 3: +6", "needs Strength 13 or

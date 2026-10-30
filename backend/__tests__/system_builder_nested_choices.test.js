@@ -12,6 +12,7 @@ const require_ = createRequire(import.meta.url);
 const { PICKS_KEY, heldOf, picksOf, workedOf, overlayOf, choicesShown, loopsOf, unlockedOf, unlocksByLevelOf } = require_('../systemBuilder/choices');
 const { pickAction } = require_('../systemBuilder/picking');
 const { checkDefinition } = require_('../systemBuilder/definition');
+const citysys = require_('../systemBuilder/citysys');
 
 const HEARTH = {
   format: 1, name: 'Hearth',
@@ -346,6 +347,13 @@ describe('a list under a feature takes the level of what opened it (7a5d)', () =
     expect(unlockedOf(picksOf(def, at(9))).map((u) => u.feature.id).sort()).toEqual(['adept_pick', 'flourish_1', 'flourish_9']);
     expect(unlockedOf(picksOf(def, at(8))).map((u) => u.feature.id).sort()).toEqual(['adept_pick', 'flourish_1']);
     expect(problems(def)).toEqual([]);
+  });
+
+  it('travels in a system file: exported and installed with its levels and no problems', () => {
+    const def = { ...FIGHTER, choices: FIGHTER.choices.filter((c) => c.id !== 'feats' && c.id !== 'tricks') };
+    const read = citysys.readFile(JSON.stringify(citysys.buildFile({ definition: def, version: 1, origin: 'forge' })));
+    expect(read.problems).toEqual([]);
+    expect(read.file.definition.choices[1].options[0].features.map((f) => f.at)).toEqual([3, 7, 15]);
   });
 
   it('which lists unlock by a level, and the sheet is told each feature\'s', () => {

@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
-import type { ChoiceList } from '../sheets/choices';
+import { unlocksByLevel, type ChoiceList } from '../sheets/choices';
 import {
   MAX_BYTES, exampleFile, listFile, fileName, withImported, lineRange, partText, addedFeatureText, type ImportPreview,
 } from '../sheets/choicesImport';
@@ -49,6 +49,7 @@ function Group({ title, items, tone }: { title: string; items: React.ReactNode[]
 
 export function ChoicesImport({ definition, list, api, edit, onClose, onApplied }: Props) {
   const [text, setText] = useState('');
+  const byLevel = unlocksByLevel(definition, list);
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   /** The text that preview was of: APPLY is offered only while the box still matches it. */
   const [previewed, setPreviewed] = useState<string | null>(null);
@@ -112,7 +113,7 @@ export function ChoicesImport({ definition, list, api, edit, onClose, onApplied 
       </div>
       <p style={why}>
         Options and their features for {many}, matched by name: a name already here is updated, a new one is added, and nothing is
-        deleted. Words, {list.levelled ? 'levels, ' : ''}requirements and uses come from the file; what else a feature does stays as
+        deleted. Words, {byLevel ? 'levels, ' : ''}requirements and uses come from the file; what else a feature does stays as
         the builder has it. There is no undo, so download this list first to keep a copy.
       </p>
       <div style={row}>
@@ -139,7 +140,7 @@ export function ChoicesImport({ definition, list, api, edit, onClose, onApplied 
           })}
         </div>
         <textarea ref={box} value={text} aria-label="Text to import" spellCheck={false} className="cyber-scroll"
-          placeholder={`Paste a table here, or upload a file.\n\n[options]\nname, description, requires\n\n[features]\n${list.levelled ? 'option, feature, level, words, uses, refill' : 'option, feature, words, uses, refill'}`}
+          placeholder={`Paste a table here, or upload a file.\n\n[options]\nname, description, requires\n\n[features]\n${byLevel ? 'option, feature, level, words, uses, refill' : 'option, feature, words, uses, refill'}`}
           onChange={(e) => change(e.target.value)}
           onScroll={(e) => { if (gutter.current) gutter.current.scrollTop = e.currentTarget.scrollTop; }}
           style={{ ...lines, background: 'var(--black)', color: 'var(--green)', border: 0, resize: 'none', whiteSpace: 'pre', overflow: 'auto', height: '100%', width: '100%', outline: 'none' }} />
