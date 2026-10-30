@@ -85,14 +85,17 @@ npx playwright test --debug
   npx playwright show-trace test-results/<the test's folder>/trace.zip
   ```
 
-- In CI the same files, and an HTML report, are attached to the run as an artifact
-  (**e2e-report**), downloadable from the run's summary page on GitHub.
+- In CI the same files, and an HTML report, are attached to the run as an artifact, one per part
+  (**e2e-report-1** to **e2e-report-4**), downloadable from the run's summary page on GitHub.
 
 ## In CI
 
-`.github/workflows/ci.yml` runs these on every pull request, in the **Browser Journeys** job, with
-Playwright's own Chromium (`CI` is set there). They are part of the same check as the backend and
-frontend suites.
+`.github/workflows/ci.yml` runs these on every pull request with Playwright's own Chromium (`CI`
+is set there), split across four machines at once: **Browser Journeys (1/4)** to **(4/4)**, each with
+its own servers and database, the tests shared out one by one (`--shard=N/4 --fully-parallel`), each
+part still one test at a time. About 12 minutes in place of 27. A last job named **Browser Journeys**
+passes only when all four did, so the check keeps its name. On a developer's machine nothing changes:
+one machine, files in order.
 
 ## Writing a journey
 
@@ -107,6 +110,11 @@ frontend suites.
   player journey does, so each has their own sign-in.
 - The tests share one database and run in order, one at a time, files alphabetically. A journey that needs a
   fresh state (the tour unseen) sets it up through the API first, rather than counting on running first.
+- Every test stands alone. In CI each part gets its own fresh database and only some of the tests,
+  split one by one, so a test may run without the tests before it in its file: never lean on what
+  an earlier test made, and keep `beforeAll` to what the test itself sets up.
+- Look a status up within its panel, never on the whole page: the formula box's words line is a
+  `role="status"` under every formula, so `page.getByRole('status')` finds more than one.
 - In CI a failed journey is tried once more, on the same database, so a journey that makes something
   named gives the retry a name of its own (`Hearthfall 2`).
 - The builder's rail widens over the page while the pointer is on it. Click it with `clickRail` (or
@@ -121,8 +129,8 @@ frontend suites.
   to narrow, and on CI the clicks sweep once measured the page under the rail still closing; so
   `clickRail` also waits for `getAnimations()` on the rail to be empty. Do the same for anything
   that slides or fades over the page before checking what's under it.
-- When a journey fails only on CI, the run's **e2e-report** download (bottom of the run's Summary
-  page) holds each failure's `trace.zip`; its screencast frames show the page at the failing step.
+- When a journey fails only on CI, the failing part's **e2e-report-N** download (bottom of the run's
+  Summary page) holds each failure's `trace.zip`; its screencast frames show the page at the failing step.
 - Put shared steps (signing in, opening the builder) in `tests/helpers.ts`.
 
 ## Files

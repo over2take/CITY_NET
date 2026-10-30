@@ -693,6 +693,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The browser journeys run in four parts at once on CI.** Each pull request's journeys were run
+  one after another on one machine, about 27 minutes. They now run on four machines at once, each with
+  its own servers and database and a share of the tests, about 12 minutes. The check is still called
+  Browser Journeys and passes only when all four parts do; a failed part uploads its own report
+  (e2e-report-1 to 4). Nothing changes when they are run on a developer's machine. The builder's
+  journey now finds PUBLISH's message by its words, as the formula box added a second status line.
 - **Browser tests.** The first tests in a real browser (e2e/, Playwright): the real app started on a throwaway
   database, the GM signing in, building a system through the builder's screens, publishing it twice and switching
   the game to it; and a custom game played in two browsers at once, a player making a character in its words

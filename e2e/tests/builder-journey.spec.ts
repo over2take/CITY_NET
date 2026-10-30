@@ -83,7 +83,7 @@ test('the GM builds a system, publishes it twice, switches the game to it, and a
 
   // PUBLISH: the first version goes straight through.
   await clickRail(page, 'PUBLISH');
-  await expect(page.getByRole('status')).toContainText('Published v1.');
+  await expect(page.getByRole('status').filter({ hasText: 'Published v1.' })).toBeVisible();
   await expect(page.getByTestId('builder-system')).toContainText('PUBLISHED v1');
 
   // A change, then PUBLISH again: the version preview first, then v2.

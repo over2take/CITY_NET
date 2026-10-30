@@ -190,10 +190,18 @@ jobs:
 
   # The browser journeys (e2e/, 4l): the real backend and frontend started on a throwaway database,
   # driven in Playwright's own headless Chromium. On a developer's machine they run only when asked
-  # (e2e/README.md); here, on every pull request.
-  test-e2e:
-    name: Browser Journeys
+  # (e2e/README.md); here, on every pull request, split across four machines at once (Playwright's
+  # --shard), each with its own servers and database. Split test by test (--fully-parallel; each
+  # machine still runs one at a time) so the long graph file is shared out too: about 12 minutes in
+  # place of 27.
+  test-e2e-part:
+    name: Browser Journeys (${{ matrix.part }}/4)
     runs-on: ubuntu-latest
+    strategy:
+      # Every part runs to the end, so one failure never hides another's.
+      fail-fast: false
+      matrix:
+        part: [1, 2, 3, 4]
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -226,15 +234,26 @@ jobs:
 
       - name: Run the journeys
         working-directory: ./e2e
-        run: npx playwright test
+        run: npx playwright test --shard=${{ matrix.part }}/4 --fully-parallel
 
-      # What failed and why: screenshots, a trace of every step, and the HTML report.
+      # What failed and why: screenshots, a trace of every step, and the HTML report, one per part.
       - name: Keep the report of a failed run
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-report
+          name: e2e-report-${{ matrix.part }}
           path: |
             e2e/playwright-report
             e2e/test-results
           retention-days: 14
+
+  # The one check named Browser Journeys, as before the split: it passes only when every part did,
+  # so a branch rule asking for that name keeps working.
+  test-e2e:
+    name: Browser Journeys
+    runs-on: ubuntu-latest
+    needs: test-e2e-part
+    if: always()
+    steps:
+      - name: Every part passed
+        run: test "${{ needs.test-e2e-part.result }}" = "success"
