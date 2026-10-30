@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
-import { workedOn, listShown, spentAfterClick, featureDoes, choiceEffects, pickedOf, listsOnTheirOwn, underFeature, keptAside, WORKED_KEY, type ChoiceListShown } from '../choicesShown';
+import { pickLabel, workedOn, listShown, spentAfterClick, featureDoes, choiceEffects, pickedOf, listsOnTheirOwn, underFeature, keptAside, WORKED_KEY, type ChoiceListShown } from '../choicesShown';
 
 /**
  * A character's picks on their sheet, as logic (7a3b1): the server's worked-out view read safely, each
@@ -185,5 +185,37 @@ describe('lists inside lists, and a list everyone has (7a5a2)', () => {
     expect(at3.open.map((o) => [o.option.id, o.unmet])).toEqual([['strong', 'INTELLECT >= 13']]);
     const at4 = listShown(list('commons'), seen({ classes: [{ option: 'soldier', level: 4 }] }));
     expect(at4.picks[0].unlocked.map((f) => f.id)).toEqual(['b1', 'b4']);
+  });
+});
+
+describe('a pick under a feature, at the level of what opened it (7a5d)', () => {
+  const FORGE = {
+    format: 1, name: 'Forge',
+    choices: [
+      { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [
+        { id: 'fighter', label: 'Fighter', features: [{ id: 'martial_archetype', label: 'Martial Archetype', at: 3, choice: 'archetypes' }] },
+      ] },
+      { id: 'archetypes', one: 'Archetype', many: 'Archetypes', picked: 'features', options: [
+        { id: 'champion', label: 'Champion', features: [
+          { id: 'superior_critical', label: 'Superior Critical', at: 15 },
+          { id: 'improved_critical', label: 'Improved Critical', at: 3 },
+          { id: 'remarkable_athlete', label: 'Remarkable Athlete', at: 7 },
+        ] },
+      ] },
+    ],
+  };
+  const forgeLists = backend.choicesShown(FORGE) as ChoiceListShown[];
+  const opener = forgeLists[0].options[0].features[0];
+  const at = (level: number) => underFeature(opener, forgeLists, workedOn({ [WORKED_KEY]: backend.workedOf(FORGE, {
+    _choices: { classes: [{ option: 'fighter', level }], archetypes: [{ option: 'champion', from: 'martial_archetype' }] } }) }))!.picks[0];
+
+  it('is offered as Pick an Archetype', () => {
+    expect([pickLabel('Archetype'), pickLabel('Class'), pickLabel(' item')]).toEqual(['Pick an Archetype', 'Pick a Class', 'Pick an  item']);
+  });
+
+  it('has the features up to the Fighter\'s level and names the next, with no level of its own shown', () => {
+    expect([at(3).level, at(3).unlocked.map((f) => f.id), at(3).next?.id]).toEqual([null, ['improved_critical'], 'remarkable_athlete']);
+    expect([at(7).unlocked.map((f) => f.id), at(7).next?.id]).toEqual([['improved_critical', 'remarkable_athlete'], 'superior_critical']);
+    expect([at(15).unlocked.length, at(15).next]).toEqual([3, null]);
   });
 });

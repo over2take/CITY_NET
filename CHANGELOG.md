@@ -53,6 +53,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Subclasses follow their class's level.** A list a feature opens, like Fighter's Martial
+  Archetype opening the archetypes at 3, now takes the level of the pick that opened it. Champion's
+  features get AT LEVEL on CHOICES, grouped by level, and unlock by the Fighter's level: Improved
+  Critical at 3, Remarkable Athlete at 7. Before, every feature of an archetype unlocked the moment
+  it was picked. This goes down the lists (a Battle Master's maneuvers follow the Fighter too), and a
+  list opened by a feat with no levels still has everything at once. The archetype never adds to the
+  character's level. The list's page says whose level it follows, and the sheet's NEXT line counts
+  toward it. A pick offer for a word starting with a vowel now reads "Pick an Archetype".
 - **Formulas on CHOICES say what they do, and help you write them.** Under a modifier's amount, a
   feature's USES and an option's REQUIRES, a line now says the formula in words with what it comes
   to for the sample character: "+2 for each level · sample Level 3: +6", "needs Strength 13 or

@@ -67,8 +67,21 @@ const takenIds = (def: Definition): string[] => [
 /** How a list is picked: on its own when it says nothing. */
 export const pickedOf = (c: ChoiceList): Picked => (c.picked === 'features' || c.picked === 'both' || c.picked === 'everyone' ? c.picked : 'own');
 
-/** Whether a list's features unlock at a level: a levelled list's, by its pick's; one everyone has, by the character's. */
-export const unlocksByLevel = (c: ChoiceList): boolean => c.levelled === true || pickedOf(c) === 'everyone';
+/**
+ * Whether a list's features unlock at a level (backend choices.js unlocksByLevelOf): a levelled list's,
+ * by its pick's; one everyone has, by the character's; one picked through features and opened from one
+ * of those, by the level of the pick that opened it (7a5d: Champion by the Fighter's).
+ */
+export const unlocksByLevel = (def: Definition, c: ChoiceList, seen: ReadonlySet<string> = new Set()): boolean => {
+  if (c.levelled === true || pickedOf(c) === 'everyone') return true;
+  if (pickedOf(c) === 'own' || seen.has(c.id)) return false;
+  const next = new Set(seen).add(c.id);
+  return openedBy(def, c.id).some((o) => unlocksByLevel(def, o.list, next));
+};
+
+/** The picks a list's levels follow, when it has none of its own (7a5d): the options opening it from a list with levels. */
+export const followedBy = (def: Definition, c: ChoiceList): ChoiceOption[] => (c.levelled === true || pickedOf(c) === 'everyone' || pickedOf(c) === 'own' ? []
+  : [...new Map(openedBy(def, c.id).filter((o) => unlocksByLevel(def, o.list, new Set([c.id]))).map((o) => [o.option.id, o.option])).values()]);
 
 /** Every feature, in another list, that opens this one: OPENED BY on its page. */
 export const openedBy = (def: Definition, listId: string): { list: ChoiceList; option: ChoiceOption; feature: Feature }[] => choiceLists(def)
@@ -173,7 +186,7 @@ export const withNewFeature = (def: Definition, listId: string, optionId: string
   if (!option || featureList(option).length >= LIMITS.features) return null;
   const id = idFor('new feature', takenIds(def));
   return {
-    definition: withFeatures(def, listId, optionId, (fs, c) => [...fs, { id, label: 'NEW FEATURE', ...(unlocksByLevel(c) && at && at > 1 ? { at: Math.min(at, LIMITS.level) } : {}) }]),
+    definition: withFeatures(def, listId, optionId, (fs, c) => [...fs, { id, label: 'NEW FEATURE', ...(unlocksByLevel(def, c) && at && at > 1 ? { at: Math.min(at, LIMITS.level) } : {}) }]),
     id,
   };
 };
@@ -188,7 +201,7 @@ export const withFeature = (def: Definition, listId: string, optionId: string, f
     if (f.id !== featureId) return f;
     const next = { ...f, ...patch } as Feature & { uses?: Uses | null; choice?: string | null };
     if (typeof next.text === 'string' && !next.text.trim()) delete next.text;
-    if (!unlocksByLevel(c) || !(Number.isInteger(next.at) && (next.at as number) > 1)) delete next.at;
+    if (!unlocksByLevel(def, c) || !(Number.isInteger(next.at) && (next.at as number) > 1)) delete next.at;
     else next.at = Math.min(next.at as number, LIMITS.level);
     for (const k of ['modifiers', 'rolls', 'changes'] as const) if (!next[k]?.length) delete next[k];
     if (!next.uses) delete next.uses;

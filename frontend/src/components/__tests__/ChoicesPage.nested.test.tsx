@@ -6,7 +6,7 @@ import { createRequire } from 'module';
 
 import { ChoicesPage } from '../ChoicesPage';
 import type { Definition } from '../../sheets/systemsApi';
-import { choiceLists, featureList, openedBy, pickedOf, unlocksByLevel, withList, withFeature, LIMITS } from '../../sheets/choices';
+import { choiceLists, featureList, followedBy, openedBy, pickedOf, unlocksByLevel, withList, withFeature, LIMITS } from '../../sheets/choices';
 
 /**
  * Lists inside lists on the CHOICES page (7a5a2). Approved mockup nested-choices (2026-10-28): PICKED,
@@ -70,7 +70,7 @@ describe('PICKED and OPENED BY', () => {
     expect(problems(last())).toEqual([]);
     await userEvent.click(way.getByRole('button', { name: 'BOTH' }));
     expect(panel('Paths').getByRole('group', { name: 'A character picks' })).toBeTruthy();
-    expect(panel('Paths').getByText('One Path per character at the start.')).toBeTruthy();
+    expect(panel('Paths').getByText('One Path per character at the start. Each one\'s features unlock by the level of the pick that opened it: SOLDIER.')).toBeTruthy();
     await userEvent.click(way.getByRole('button', { name: 'ON ITS OWN' }));
     expect(paths(last())).not.toHaveProperty('picked');
   });
@@ -85,9 +85,49 @@ describe('PICKED and OPENED BY', () => {
     expect(panel('Classes').queryByRole('group', { name: 'A character picks' })).toBeNull();
     expect(panel('Classes').getByText(/Nothing to pick: every character has each option/)).toBeTruthy();
     // Its features still unlock at a level: SPECIALTY keeps its 3.
-    expect(unlocksByLevel(classes)).toBe(true);
+    expect(unlocksByLevel(last(), classes)).toBe(true);
     expect(featureList(classes.options[0])[0].at).toBe(3);
     expect(problems(last())).toEqual([]);
+  });
+});
+
+describe('a list a feature opens takes its opener\'s level (7a5d)', () => {
+  it('its features get AT LEVEL, grouped, once picked through features from a levelled list, and say whose level', async () => {
+    const { last } = open();
+    await toList(/PATHS/);
+    // Picked on its own: no opener's level to follow, so no AT LEVEL, and nothing said of one.
+    expect(followedBy(HEARTH, paths(HEARTH))).toEqual([]);
+    expect(panel('Paths').queryByText(/Each one's features unlock/)).toBeNull();
+    await userEvent.click(panel('Paths').getByRole('button', { name: 'DUELIST' }));
+    await userEvent.click(screen.getByRole('button', { name: /RIPOSTE/ }));
+    expect(screen.queryByRole('spinbutton', { name: 'AT LEVEL' })).toBeNull();
+    await userEvent.click(within(panel('Paths').getByRole('group', { name: 'Picked' })).getByRole('button', { name: 'THROUGH FEATURES' }));
+    expect(panel('Paths').getByText(/Each one's features unlock by the level of the pick that opened it: SOLDIER\./)).toBeTruthy();
+    const level = screen.getByRole('spinbutton', { name: 'AT LEVEL' });
+    fireEvent.change(level, { target: { value: '7' } });
+    fireEvent.blur(level);
+    expect(featureList(paths(last()).options[0])[0]).toMatchObject({ id: 'riposte', at: 7 });
+    expect(within(screen.getByRole('region', { name: 'Level 7' })).getByRole('button', { name: /RIPOSTE/ })).toBeTruthy();
+    expect(problems(last())).toEqual([]);
+  });
+
+  it('follows down the lists, never round, and not from a list with no levels', () => {
+    const deeper = {
+      format: 1, name: 'Deep',
+      choices: [
+        { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter', features: [{ id: 'arch', label: 'Archetype', at: 3, choice: 'archetypes' }] }] },
+        { id: 'archetypes', one: 'Archetype', many: 'Archetypes', picked: 'features', options: [{ id: 'bm', label: 'Battle Master', features: [{ id: 'sup', label: 'Superiority', choice: 'maneuvers' }] }] },
+        { id: 'maneuvers', one: 'Maneuver', many: 'Maneuvers', picked: 'both', options: [] },
+        { id: 'feats', one: 'Feat', many: 'Feats', options: [{ id: 'adept', label: 'Adept', features: [{ id: 'pick', label: 'Pick', choice: 'tricks' }] }] },
+        { id: 'tricks', one: 'Trick', many: 'Tricks', picked: 'features', options: [{ id: 'flip', label: 'Flip', features: [{ id: 'twice', label: 'Twice', choice: 'tricks2' }] }] },
+        { id: 'tricks2', one: 'Trick', many: 'Tricks', picked: 'features', options: [{ id: 'flop', label: 'Flop', features: [{ id: 'back', label: 'Back', choice: 'tricks' }] }] },
+      ],
+    } as unknown as Definition;
+    const by = (id: string) => choiceLists(deeper).find((c) => c.id === id)!;
+    expect(choiceLists(deeper).map((c) => unlocksByLevel(deeper, c))).toEqual([true, true, true, false, false, false]);
+    expect(followedBy(deeper, by('maneuvers')).map((o) => o.id)).toEqual(['bm']);
+    expect(followedBy(deeper, by('classes'))).toEqual([]);
+    expect(followedBy(deeper, by('tricks'))).toEqual([]);
   });
 });
 

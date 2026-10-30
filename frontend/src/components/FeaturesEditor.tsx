@@ -107,7 +107,7 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
         <FieldName boxStyle={END} htmlFor={id('name')} hint={HINTS['choices.featureName']} style={small}>NAME</FieldName>
         <input id={id('name')} type="text" maxLength={LIMITS.label} value={feature.label} style={input}
           aria-invalid={!feature.label.trim() ? true : undefined} onChange={(e) => set({ label: e.target.value })} />
-        {unlocksByLevel(list) && <>
+        {unlocksByLevel(definition, list) && <>
           <FieldName boxStyle={END} htmlFor={id('at')} hint={HINTS['choices.at']} style={small}>AT LEVEL</FieldName>
           <input id={id('at')} type="number" min={1} max={LIMITS.level} step={1} value={levelText} style={{ ...input, width: 64 }}
             onChange={(e) => setLevelText(e.target.value)} onBlur={commitLevel} onKeyDown={(e) => { if (e.key === 'Enter') commitLevel(); }} />
@@ -217,10 +217,10 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
 export function FeaturesEditor({ definition, edit, list, option, api }: Props) {
   const features = featureList(option);
   const [open, setOpen] = useState<string | null>(null);
-  // In a levelled list (or one everyone has), by the level each unlocks at; otherwise all together.
-  const levels = unlocksByLevel(list) ? [...new Set(features.map(levelOf))].sort((a, b) => a - b) : [null];
+  // In a list with levels (levelled, everyone's, or opened from one of those), by the level each unlocks at; otherwise all together.
+  const levels = unlocksByLevel(definition, list) ? [...new Set(features.map(levelOf))].sort((a, b) => a - b) : [null];
   const add = () => {
-    const made = withNewFeature(definition, list.id, option.id, unlocksByLevel(list) && features.length ? Math.max(...features.map(levelOf)) : undefined);
+    const made = withNewFeature(definition, list.id, option.id, unlocksByLevel(definition, list) && features.length ? Math.max(...features.map(levelOf)) : undefined);
     if (!made) return;
     edit(made.definition);
     setOpen(made.id);
