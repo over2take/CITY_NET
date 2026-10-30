@@ -9,6 +9,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **A rest can read the character's levels.** A builder system's rest amounts could only name sheet
+  fields, stats and formulas, so "heal by your level" (`@level`, `@fighter_level d10 + @con_mod`) was
+  refused, though the box's own example suggested it. Levels now work in every rest amount. An amount
+  also reads a stat the way rolls do, with what the character's features add to it. The formula box
+  on RESTS lists the levels under INSERT, and works a level out at the sample's 3.
 - **DICE_TRAY.EXE in every theme.** The tray's board, its rim and danger color, and the building
   window's spinning render were drawn in Classic's green whatever theme was picked: they sat
   outside the app's theme. They follow it now. A roll's dice and its line in the record take the

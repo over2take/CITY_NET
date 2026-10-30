@@ -110,6 +110,7 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 | A condition's modifier | on a stat, a formula, every roll | `conditions`, `table_rolls` | | **GAP** |
 | A condition's end | when removed, after rounds, at a rest | `condition_rounds`, `resting` | | **GAP** |
 | Rests | a refill up to a value | `rests`, `resting`, `call_rest` | `player-journey` (LONG REST: Resolve up to Grit) | **AT THE TABLE** |
+| Rests | an amount reading the levels and a stat with its features' modifiers | `rests`, `resting` | `sheet-rest-levels` (LONG REST: Resolve to Fighter level + Grit with Tough) | **AT THE TABLE** |
 | Rests | by an amount, to the max, full health, a section; counts as another; a standard rest off; the system's own | `rests`, `resting`, `try_rest` | | **GAP** |
 | House rules | starts on / off, switched at the table | `house_rules`, `house_rules_routes` | `builder-graph` (TRY ON THE MAP only) | **GAP** |
 | Under a house rule | a part, a sheet section, a condition, a formula's alternative | `house_rules`, `house_rules_routes` | | **GAP** |

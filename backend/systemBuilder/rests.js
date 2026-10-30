@@ -17,7 +17,8 @@
 //   a two-track system may say which track), a number on the character sheet (to its maximum
 //   when it has one, up or down by an amount, or set to one), or a whole sheet section, every
 //   number in it to its maximum (spell slots by level in one row);
-// - an amount is a number, a formula or dice, naming the character's own numbers (tierRolls.js);
+// - an amount is a number, a formula or dice, naming the character's own numbers (tierRolls.js),
+//   its levels included (@level, @fighter_level: rest levels, 2026-10-30);
 // - a rest that counts as another does that one's refills first, then its own; never itself;
 // - conditions end at a rest (conditions.js `ends: 'rest', at: [...]`);
 // - a rest turned off is neither called nor counted; nothing it holds is deleted.
@@ -59,9 +60,11 @@ const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
 /**
  * What a system's rests can reach: its health model, the sheet numbers a rest may refill (by id,
  * each with its maximum's id or null), its sections that hold any with a maximum, and the names
- * an amount may use.
+ * an amount may use: the sheet's fields, stats, formulas and levels.
  */
 const reachOf = (definition) => {
+  // Here, not at the top: choices.js needs this file to load first (its features refill by rests).
+  const { levelNamesOf } = require('./choices');
   const def = isPlainObject(definition) ? definition : {};
   // No answer is one pool, as the starter sheet draws it (core.js healthLayout); token health off is none.
   const health = !partOn(def, 'token_health') ? null
@@ -78,7 +81,7 @@ const reachOf = (definition) => {
     .filter((s) => s && typeof s.id === 'string' && Array.isArray(s.fields))
     .map((s) => [s.id, s.fields.filter((f) => f && numbers.get(f.id)).map((f) => f.id)])
     .filter(([, ids]) => ids.length));
-  const names = new Set([...all.map((f) => f.id), ...statIdsOf(def), ...derived]);
+  const names = new Set([...all.map((f) => f.id), ...statIdsOf(def), ...derived, ...levelNamesOf(def)]);
   return { health, numbers, sections, names };
 };
 

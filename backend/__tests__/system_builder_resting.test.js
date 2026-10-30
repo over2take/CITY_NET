@@ -228,3 +228,28 @@ describe('health under each model', () => {
     expect(off.changes).toEqual([]);
   });
 });
+
+describe('an amount reads the levels and what features add (rest levels)', () => {
+  const FORGE = {
+    name: 'Forge',
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'con', label: 'Con' }] }],
+    core: { health: { model: 'pool' } },
+    choices: [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [
+      { id: 'fighter', label: 'Fighter', features: [{ id: 'tough', label: 'Tough', at: 2, modifiers: [{ target: 'con', amount: '2' }] }] },
+    ] }],
+    rests: { short_rest: { refills: [{ what: 'health', how: 'by', amount: '@fighter_level + @con' }] } },
+  };
+  const rest = (level) => restOn({ definition: FORGE, restId: 'short_rest', rng: () => 0,
+    sheet: { con: 10, _choices: { classes: [{ option: 'fighter', level }] } }, token: { current: 1, max: 40 } });
+
+  it('heals by the class level and the stat with its feature\'s bonus', () => {
+    expect(checkDefinition(FORGE).problems).toEqual([]);
+    expect(rest(1).token.current).toBe(1 + 1 + 10);
+    expect(rest(3).token.current).toBe(1 + 3 + 12);
+    expect(rest(3).rolls).toEqual([{ amount: '@fighter_level + @con', value: 15, dice: [] }]);
+  });
+
+  it('reads 0 for a level the character hasn\'t got', () => {
+    expect(restOn({ definition: FORGE, restId: 'short_rest', rng: () => 0, sheet: { con: 10 }, token: { current: 1, max: 40 } }).token.current).toBe(11);
+  });
+});

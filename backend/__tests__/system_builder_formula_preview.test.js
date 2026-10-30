@@ -124,6 +124,8 @@ describe('a roll\'s ADD and AGAINST, and a rest\'s amount (formula box 2)', () =
     expect(previewFormula(ROLLING, '2d6', 'refill')).toEqual({ ok: true, value: 2, most: 12, reads: [] });
     expect(previewFormula(ROLLING, '@athletics d4', 'refill')).toMatchObject({ value: 2, most: 8 });
     expect(previewFormula(ROLLING, '5', 'refill')).toEqual({ ok: true, value: 5, reads: [] });
+    // Levels too (rest levels), at the sample level.
+    expect(previewFormula(ROLLING, '@level d6', 'refill')).toEqual({ ok: true, value: 3, most: 18, reads: [{ id: 'level', label: 'Level', value: 3 }] });
     // A sheet field reads by its label too.
     expect(previewFormula(ROLLING, '@hp_max', 'refill').reads).toEqual([{ id: 'hp_max', label: expect.any(String), value: 0 }]);
   });
