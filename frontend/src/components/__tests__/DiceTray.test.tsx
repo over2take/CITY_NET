@@ -278,6 +278,28 @@ describe('DiceTrayWindow', () => {
     }
   });
 
+  it('puts a quiet line (a rest that rolled no dice) in the record at once, leaving a throw under way to land (quiet rests)', async () => {
+    const user = userEvent.setup();
+    const socketRef = makeSocketRef();
+    render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} />);
+    await user.click(screen.getByTitle('TOGGLE_HISTORY'));
+    const broadcast = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'diceRollBroadcast')[1];
+    vi.useFakeTimers();
+    try {
+      const rook = { total: 15, results: { 20: [15] }, color: '#0f0', historyString: 'rook rolled', group: 'a', throw: { seed: 11, dice: [{ key: '20', sides: 20, landed: [14] }] } };
+      const rest = { total: 0, results: {}, color: '#0f0', historyString: 'END OF SESSION · Ash: nothing changes', quiet: true, board: { label: 'END OF SESSION' } };
+      act(() => { broadcast(rook); });
+      act(() => { broadcast(rest); });
+      expect(screen.getByText(/END OF SESSION · Ash/)).toBeInTheDocument();
+      // Rook's throw wasn't cut short: told only when its dice stop.
+      expect(screen.queryByText(/rook rolled/)).not.toBeInTheDocument();
+      act(() => { vi.advanceTimersByTime(revealAfter(throwDice(diceOfRoll(rook), 11, trayCamera()))); });
+      expect(screen.getByText(/rook rolled/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("throws one group's rolls together, an attack's to-hit and damage, each die in its roller's color, and tells both as they stop", async () => {
     const scene = new THREE.Scene();
     three.current = { scene, camera: new THREE.PerspectiveCamera() };

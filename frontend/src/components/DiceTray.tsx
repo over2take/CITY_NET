@@ -240,6 +240,8 @@ interface RollBroadcast {
   criticalGlitch?: boolean;
   /** What the board says of it: what it was for, its words, what it came to (6c4d1-3 on the server). */
   board?: BoardRoll['board'];
+  /** A line for the log with nothing to throw: a rest that rolled no dice. */
+  quiet?: boolean;
 }
 
 interface DiceTrayWindowProps {
@@ -310,6 +312,8 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
     };
 
     const handleBroadcast = (data: RollBroadcast) => {
+      // Nothing to throw: the line joins the record, and the board keeps what it shows.
+      if (data.quiet) { record([data]); return; }
       const now = playing.current;
       // The same group as the throw under way: thrown with it.
       if (now && !now.told && data.group && now.group === data.group) {

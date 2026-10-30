@@ -6,6 +6,9 @@ import { signInAsGm, signInAsPlayer, openGameSystem, gmToken, asGm, runningSyste
 // long rest sets Resolve to the Fighter's level plus Grit, Grit read with what a feature adds, as a
 // roll reads it. The player raises FIGHTER to 3 (Tough, at 2, adds 2 Grit) and the GM calls the rest
 // from the GAME tab: Resolve becomes 3 + 5. Set up through the API, as player-journey is.
+//
+// Quiet rests (2026-10-30): that long rest rolls no dice, so the player's dice tray stays shut, its
+// line only in the log; a short rest that rolls 1d4 opens it, as a roll of theirs does.
 
 const definition = (name: string) => ({
   format: 1,
@@ -19,7 +22,10 @@ const definition = (name: string) => ({
     id: 'classes', one: 'Class', many: 'Classes', levelled: true,
     options: [{ id: 'fighter', label: 'Fighter', features: [{ id: 'tough', label: 'Tough', at: 2, modifiers: [{ target: 'grit', amount: '2' }] }] }],
   }],
-  rests: { long_rest: { refills: [{ what: 'resolve', how: 'to', amount: '@fighter_level + @grit' }] } },
+  rests: {
+    long_rest: { refills: [{ what: 'resolve', how: 'to', amount: '@fighter_level + @grit' }] },
+    short_rest: { refills: [{ what: 'resolve', how: 'by', amount: '1d4' }] },
+  },
 });
 
 test('a long rest sets a number from the character\'s class level and a stat with its feature\'s bonus', async ({ page: gmPage, browser, request }, info) => {
@@ -62,5 +68,13 @@ test('a long rest sets a number from the character\'s class level and a stat wit
   // Resolve is the Fighter's 3 plus Grit 3 with Tough's 2.
   await expect.poll(async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data.resolve, { timeout: 15_000 }).toBe(8);
   await expect(sheet.getByLabel('Resolve', { exact: true })).toHaveValue('8');
+  // No dice were rolled, so no tray opened for it.
+  await expect(sheet.getByText('DICE_TRAY.EXE', { exact: true })).toBeHidden();
+
+  // A short rest rolls 1d4 for Rook: the tray opens on the player's screen.
+  await rests.getByLabel('Rest', { exact: true }).selectOption('short_rest');
+  await rests.getByRole('button', { name: 'CALL SHORT REST', exact: true }).click();
+  await expect(rests.getByRole('status')).toHaveText('SHORT REST CALLED · 1 CHARACTER');
+  await expect(sheet.getByText('DICE_TRAY.EXE', { exact: true })).toBeVisible();
   await context.close();
 });

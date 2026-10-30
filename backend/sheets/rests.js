@@ -134,8 +134,10 @@ const callRest = async (db, io, { system, definition, rest, players, npcs, rng =
     const { results, total } = restDice(result);
     const account = c.kind === 'player' ? c.username : c.name;
     await run(db, 'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)', [account, total, JSON.stringify(results), LOG_COLOR, historyString]);
-    // The tray's board names the rest (6c4d3).
-    io.emit('diceRollBroadcast', withThrow({ userName: c.name, account, results, modifiers: [], color: LOG_COLOR, total, historyString, board: boardOf(String(rest.name).toUpperCase()) }));
+    // The tray's board names the rest (6c4d3). A rest that rolled nothing is quiet (quiet rests,
+    // 2026-10-30): its line goes into the log, but no tray opens, flashes or throws for it.
+    const quiet = Object.keys(results).length ? {} : { quiet: true };
+    io.emit('diceRollBroadcast', withThrow({ userName: c.name, account, results, modifiers: [], color: LOG_COLOR, total, historyString, board: boardOf(String(rest.name).toUpperCase()), ...quiet }));
     if (c.kind === 'player') io.emit('sheetUpdated', { username: c.username });
     done.push({ ...shown(definition, c, result), line: historyString });
   }

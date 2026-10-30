@@ -602,6 +602,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **A rest that rolls no dice no longer pops the dice tray.** When the GM called a rest, every
+  character's line opened the dice tray for that player, and flashed it for everyone else, even when
+  the rest rolled nothing and the tray had only an empty board to show. Now only a rest that rolls
+  dice opens the tray and throws them. One that rolls none still puts its line in the dice log, so
+  everyone can see what it did, and the stream overlay leaves it out.
 - **The same switch at the table.** The dice tray's ANIMATION, the choices a roll asks about before
   it is rolled (ADVANTAGE, PUSH and the like), and TRY ON THE MAP on a house rule in the builder's
   graph now use the one switch the builder has: a pill whose knob slides across and lights up when
