@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
-  wordsOf, sampleLine, insertGroups, shapesOf, writeShape, levelTokens,
+  wordsOf, sampleLine, insertGroups, shapesOf, writeShape, levelTokens, DIE_SIDES,
   type FormulaKind, type FormulaRead, type Shape,
 } from '../sheets/formulaBox';
-import { allStats, insertToken } from '../sheets/statsRules';
+import { allStats, formulaList, insertToken } from '../sheets/statsRules';
 import { FormulaIcon } from '../components/FormulaIcon';
 import { PREVIEW_DELAY_MS } from './usePreviewValues';
 
@@ -14,12 +14,15 @@ import { PREVIEW_DELAY_MS } from './usePreviewValues';
 // a name nearly right. The button opens SHAPE (a common formula written for you) and INSERT (the
 // names it can read, put at the cursor); only the button opens them, so typing is never covered.
 // The words, shapes and names are sheets/formulaBox.ts; the server reads the formula. The
-// button's mark is components/FormulaIcon.tsx.
+// button's mark is components/FormulaIcon.tsx. Formula box 2 puts it on a roll's ADD and AGAINST
+// (which name their roll, for the stat the sample rolls) and a rest's amounts (dice and all).
 
 interface Options {
   definition: Definition;
-  api?: ReturnType<typeof systemsApi>;
+  api?: Pick<ReturnType<typeof systemsApi>, 'previewFormulas'>;
   kind: FormulaKind;
+  /** A roll's box: which roll, so the sample rolls its first ROLLED BY stat. */
+  roll?: string;
   value: string;
   onChange: (text: string) => void;
   /** The box's name: `Modifier 1: by`. */
@@ -27,6 +30,8 @@ interface Options {
   /** The text box's id, for a label beside it. */
   id?: string;
   placeholder?: string;
+  /** The most characters it takes: 1000 unless the box says less. */
+  maxLength?: number;
   inputStyle: React.CSSProperties;
 }
 
@@ -37,18 +42,21 @@ const chip = (on: boolean): React.CSSProperties => ({
 });
 const askBox: React.CSSProperties = { background: 'var(--black)', color: 'var(--cyan)', border: '1px solid var(--cyan)', fontFamily: 'monospace', fontSize: 11, padding: '2px 5px' };
 
-/** What a shape starts at: 1 to add, 13 for a stat, 5 for a level. */
-const startOf = (s: Shape) => (s.id === 'at_least' ? 13 : s.id === 'level_at_least' ? 5 : s.id === 'per_level' || s.id === 'per_class_level' ? 2 : 1);
+/** What a shape starts at: 1 to add, 13 for a stat or a target, 5 for a level. */
+const startOf = (s: Shape, kind: FormulaKind) => (s.id === 'at_least' || (kind === 'against' && s.id === 'number') ? 13
+  : s.id === 'level_at_least' ? 5 : s.id === 'per_level' || s.id === 'per_class_level' ? 2 : 1);
+/** What a shape's ask row starts with. */
+const LEAD: Partial<Record<FormulaKind, string>> = { requires: 'NEEDS', amount: 'ADD', add: 'ADD', against: 'AGAINST' };
 
 /**
  * The box, as two parts the caller places: `field`, the text and its FORMULA button, where the
  * text box was; and `help`, the words line and (while open) SHAPE and INSERT, under the row.
  */
-export function useFormulaBox({ definition, api, kind, value, onChange, label, id, placeholder, inputStyle }: Options): { field: React.ReactElement; help: React.ReactElement } {
+export function useFormulaBox({ definition, api, kind, roll, value, onChange, label, id, placeholder, maxLength = 1000, inputStyle }: Options): { field: React.ReactElement; help: React.ReactElement } {
   const [open, setOpen] = useState(false);
   // What the server said, kept with the text it was said of: an answer for older text is never shown.
   const [read, setRead] = useState<{ text: string; result: FormulaRead } | null>(null);
-  const [shape, setShape] = useState<{ id: string; n: number; name: string } | null>(null);
+  const [shape, setShape] = useState<{ id: string; n: number; name: string; sides: number } | null>(null);
   const input = useRef<HTMLInputElement | null>(null);
   const cursor = useRef(value.length);
   const placeAt = useRef<number | null>(null);
@@ -58,10 +66,10 @@ export function useFormulaBox({ definition, api, kind, value, onChange, label, i
     if (!api || !value.trim()) return undefined;
     let live = true;
     const timer = setTimeout(() => {
-      api.previewFormulas(definition, [{ text: value, kind }]).then((r) => { if (live && r.ok && r.value.results[0]) setRead({ text: value, result: r.value.results[0] }); });
+      api.previewFormulas(definition, [{ text: value, kind, ...(roll ? { roll } : {}) }]).then((r) => { if (live && r.ok && r.value.results[0]) setRead({ text: value, result: r.value.results[0] }); });
     }, PREVIEW_DELAY_MS);
     return () => { live = false; clearTimeout(timer); };
-  }, [api, definition, value, kind]);
+  }, [api, definition, value, kind, roll]);
 
   // After INSERT, the cursor goes after what was put in.
   useEffect(() => {
@@ -75,10 +83,13 @@ export function useFormulaBox({ definition, api, kind, value, onChange, label, i
   const shapes = shapesOf(definition, kind);
   const levels = levelTokens(definition);
   const stats = allStats(definition).map((s) => ({ token: `@${s.id}`, label: (s.label || s.id).toUpperCase() }));
-  const write = (s: { id: string; n: number; name: string }) => { setShape(s); onChange(writeShape(s.id, s.n, s.name)); };
+  // DICE AND A STAT may add a formula too: a CON modifier more often than CON.
+  const statsAndFormulas = [...stats, ...formulaList(definition).map((f) => ({ token: `@${f.id}`, label: (f.label || f.id).toUpperCase() }))];
+  const write = (s: { id: string; n: number; name: string; sides: number }) => { setShape(s); onChange(writeShape(s.id, s.n, s.name, s.sides)); };
   const pick = (s: Shape) => {
-    const names = s.asks === 'number-and-stat' ? stats : s.asks === 'number-and-level' ? levels.filter((l) => s.id !== 'per_class_level' || l.token !== '@level') : [];
-    write({ id: s.id, n: startOf(s), name: names[0]?.token ?? '@level' });
+    const names = s.asks === 'number-and-stat' ? stats : s.asks === 'dice-and-stat' ? statsAndFormulas
+      : s.asks === 'number-and-level' ? levels.filter((l) => s.id !== 'per_class_level' || l.token !== '@level') : [];
+    write({ id: s.id, n: startOf(s, kind), name: names[0]?.token ?? '@level', sides: 8 });
   };
   const current = shapes.find((s) => s.id === shape?.id);
   const shown = value.trim() && read?.text === value ? read.result : null;
@@ -86,7 +97,7 @@ export function useFormulaBox({ definition, api, kind, value, onChange, label, i
 
   const field = (
     <span style={{ display: 'flex', gap: 6, minWidth: 0 }}>
-      <input ref={input} id={id} type="text" aria-label={label} maxLength={1000} value={value} placeholder={placeholder} spellCheck={false}
+      <input ref={input} id={id} type="text" aria-label={label} maxLength={maxLength} value={value} placeholder={placeholder} spellCheck={false}
         aria-invalid={bad ? true : undefined}
         style={{ ...inputStyle, flex: 1, minWidth: 0, ...(bad ? { borderColor: 'var(--danger)' } : {}) }}
         onChange={(e) => { setShape(null); onChange(e.target.value); cursor.current = e.target.selectionStart ?? e.target.value.length; }}
@@ -129,7 +140,7 @@ export function useFormulaBox({ definition, api, kind, value, onChange, label, i
           </div>
           {shape && current && current.asks !== 'none' && (
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center', color: 'var(--cyan)' }}>
-              {kind === 'requires' ? 'NEEDS' : kind === 'amount' ? 'ADD' : ''}
+              {LEAD[kind] ?? ''}
               {kind === 'requires' && (
                 <select aria-label="Which" value={shape.name} style={askBox} onChange={(e) => write({ ...shape, name: e.target.value })}>
                   {(current.asks === 'number-and-stat' ? stats : levels).map((o) => <option key={o.token} value={o.token}>{o.label}</option>)}
@@ -138,6 +149,17 @@ export function useFormulaBox({ definition, api, kind, value, onChange, label, i
               {kind === 'requires' && 'OF AT LEAST'}
               <input type="number" aria-label="How many" value={shape.n} style={{ ...askBox, width: 56 }} onChange={(e) => write({ ...shape, n: Number(e.target.value) })} />
               {kind === 'uses' && shape.id === 'number' && 'USES'}
+              {(current.asks === 'dice' || current.asks === 'dice-and-stat') && (
+                <select aria-label="Which die" value={shape.sides} style={askBox} onChange={(e) => write({ ...shape, sides: Number(e.target.value) })}>
+                  {DIE_SIDES.map((n) => <option key={n} value={n}>D{n}</option>)}
+                </select>
+              )}
+              {current.asks === 'dice-and-stat' && <>
+                +
+                <select aria-label="Which" value={shape.name} style={askBox} onChange={(e) => write({ ...shape, name: e.target.value })}>
+                  {statsAndFormulas.map((o) => <option key={o.token} value={o.token}>{o.label}</option>)}
+                </select>
+              </>}
               {shape.id === 'per_level' && 'FOR EACH LEVEL'}
               {shape.id === 'per_class_level' && <>
                 FOR EACH

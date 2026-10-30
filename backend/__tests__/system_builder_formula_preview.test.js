@@ -89,6 +89,56 @@ describe('a formula read for the box', () => {
   });
 });
 
+describe('a roll\'s ADD and AGAINST, and a rest\'s amount (formula box 2)', () => {
+  const ROLLING = {
+    ...DEF,
+    stats: [...DEF.stats, { id: 'skills', label: 'SKILLS', stats: [{ id: 'athletics', label: 'Athletics', tie: 'str' }] }],
+    samples: { ...DEF.samples, athletics: 2 },
+    derived: [...DEF.derived, { id: 'str_mod', label: 'STR modifier', formula: 'mod(@str)' }],
+    rolls: [
+      { id: 'save', label: 'Save', dice: [{ count: '1', sides: 20 }], add: '@this_mod', by: ['con'] },
+      { id: 'skill', label: 'Skill', dice: [{ count: '2', sides: 6 }], add: '@this + @tie_mod', by: ['skills'] },
+    ],
+  };
+
+  it('reads the first stat a roll is ROLLED BY as @this, with its modifier, and a skill\'s tie', () => {
+    expect(previewFormula(ROLLING, '@this_mod + 1', 'add', undefined, 'save')).toEqual({
+      ok: true, value: 3, reads: [{ id: 'this_mod', label: 'rolled stat\'s modifier', value: 2 }], rolling: 'Constitution',
+    });
+    expect(previewFormula(ROLLING, '@this + @tie_mod', 'add', undefined, 'skill')).toEqual({
+      ok: true, value: 4, reads: [{ id: 'this', label: 'rolled stat', value: 2 }, { id: 'tie_mod', label: 'tied stat\'s modifier', value: 2 }], rolling: 'Athletics',
+    });
+    expect(previewFormula(ROLLING, '@tie', 'against', undefined, 'skill').value).toBe(16);
+    // Stats, formulas and levels read as in any formula.
+    expect(previewFormula(ROLLING, '@str_mod + @level', 'add', undefined, 'save').value).toBe(5);
+  });
+
+  it('knows a roll\'s own names only in a roll, and samples nothing for a roll it can\'t find', () => {
+    expect(previewFormula(ROLLING, '@thsi', 'against', undefined, 'save')).toEqual({ ok: false, problem: '@thsi isn\'t one of this system\'s names', name: 'thsi', suggest: 'this' });
+    expect(previewFormula(ROLLING, '@this', 'amount')).toMatchObject({ ok: false, name: 'this' });
+    expect(previewFormula(ROLLING, '@this + 13', 'against', undefined, 'gone')).toEqual({ ok: true, value: 13, reads: [{ id: 'this', label: 'rolled stat', value: 0 }] });
+  });
+
+  it('works a rest\'s amount out with its dice as the least and the most, naming the character\'s own numbers', () => {
+    expect(previewFormula(ROLLING, '1d8 + @con_mod', 'refill')).toEqual({ ok: true, value: 3, most: 10, reads: [{ id: 'con_mod', label: 'CON modifier', value: 2 }] });
+    expect(previewFormula(ROLLING, '2d6', 'refill')).toEqual({ ok: true, value: 2, most: 12, reads: [] });
+    expect(previewFormula(ROLLING, '@athletics d4', 'refill')).toMatchObject({ value: 2, most: 8 });
+    expect(previewFormula(ROLLING, '5', 'refill')).toEqual({ ok: true, value: 5, reads: [] });
+    // A sheet field reads by its label too.
+    expect(previewFormula(ROLLING, '@hp_max', 'refill').reads).toEqual([{ id: 'hp_max', label: expect.any(String), value: 0 }]);
+  });
+
+  it('says a rest amount\'s mistakes: a name it hasn\'t got, a table, dice that don\'t read', () => {
+    expect(previewFormula(ROLLING, '@con_md', 'refill')).toEqual({ ok: false, problem: '@con_md isn\'t one of this system\'s names', name: 'con_md', suggest: 'con_mod' });
+    expect(previewFormula(ROLLING, 'mod(@con)', 'refill').ok).toBe(false);
+    expect(previewFormula(ROLLING, '1d1', 'refill')).toEqual({ ok: false, problem: 'A die has 2 to 1000 sides' });
+  });
+
+  it('takes the new kinds and a roll in a request', () => {
+    expect(previewFormulas(ROLLING, [{ text: '@this', kind: 'add', roll: 'save' }, { text: '1d4', kind: 'refill' }]).map((r) => [r.value, r.most])).toEqual([[14, undefined], [1, 4]]);
+  });
+});
+
 describe('the route', () => {
   let app;
   beforeEach(async () => {

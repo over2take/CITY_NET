@@ -239,7 +239,7 @@ export function GraphPanel({ definition, edit, node, preview, tried, onClose, on
     const roll = rollList(definition).find((r) => `roll:${r.id}` === node.id);
     body = roll && (
       <>
-        <RollEditor definition={definition} edit={edit} roll={roll} onRemoved={onClose} />
+        <RollEditor definition={definition} edit={edit} roll={roll} api={api} onRemoved={onClose} />
         <TestRoll key={roll.id} definition={definition} api={api} roll={roll} />
       </>
     );

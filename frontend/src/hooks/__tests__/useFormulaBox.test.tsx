@@ -22,9 +22,9 @@ const apiAnswering = (answer: (text: string) => FormulaRead) => ({
   previewFormulas: vi.fn(async (_d: Definition, formulas: { text: string }[]) => ({ ok: true, value: { results: formulas.map((f) => answer(f.text)), sampleLevel: 3 } })),
 }) as unknown as ReturnType<typeof systemsApi> & { previewFormulas: ReturnType<typeof vi.fn> };
 
-function Harness({ kind = 'amount', start = '', api }: { kind?: FormulaKind; start?: string; api?: ReturnType<typeof systemsApi> }) {
+function Harness({ kind = 'amount', start = '', api, roll }: { kind?: FormulaKind; start?: string; api?: ReturnType<typeof systemsApi>; roll?: string }) {
   const [text, setText] = useState(start);
-  const box = useFormulaBox({ definition: DEF, api, kind, value: text, onChange: setText, label: 'Modifier 1: by', inputStyle: {} });
+  const box = useFormulaBox({ definition: DEF, api, kind, roll, value: text, onChange: setText, label: 'Modifier 1: by', inputStyle: {} });
   return <div>{box.field}{box.help}</div>;
 }
 const textbox = () => screen.getByRole('textbox', { name: 'Modifier 1: by' }) as HTMLInputElement;
@@ -114,5 +114,48 @@ describe('the formula box', () => {
     await userEvent.click(screen.getByRole('button', { name: /^@fighter_level/ }));
     expect(textbox().value).toBe('2 * @fighter_level + 1');
     expect(textbox().selectionStart).toBe(18);
+  });
+});
+
+describe('on a roll and a rest (formula box 2)', () => {
+  it('names its roll to the server, which says the stat the sample rolls', async () => {
+    const api = apiAnswering(() => ({ ok: true, value: 13, reads: [{ id: 'this', label: 'rolled stat', value: 13 }], rolling: 'Strength' }));
+    render(<Harness kind="against" start="@this" roll="save" api={api} />);
+    await waitFor(() => expect(words().textContent).toBe('against your rolled stat · sample, rolling Strength, rolled stat 13: target 13'));
+    expect(api.previewFormulas).toHaveBeenCalledWith(DEF, [{ text: '@this', kind: 'against', roll: 'save' }]);
+  });
+
+  it('AGAINST\'s A NUMBER starts at 13; THE STAT ROLLED writes @this', async () => {
+    render(<Harness kind="against" />);
+    await userEvent.click(screen.getByRole('button', { name: 'Help writing Modifier 1: by' }));
+    const help = within(screen.getByRole('group', { name: 'Help writing Modifier 1: by' }));
+    await userEvent.click(help.getByRole('button', { name: 'A NUMBER' }));
+    expect(textbox().value).toBe('13');
+    expect(help.getByText(/AGAINST/)).toBeTruthy();
+    await userEvent.click(help.getByRole('button', { name: 'THE STAT ROLLED' }));
+    expect(textbox().value).toBe('@this');
+  });
+
+  it('a rest\'s DICE and DICE AND A STAT, with how many, which die and which stat or formula', async () => {
+    const def = { ...DEF, derived: [{ id: 'con_mod', label: 'CON modifier', formula: '1' }] } as unknown as Definition;
+    function Rest() {
+      const [text, setText] = useState('');
+      const box = useFormulaBox({ definition: def, kind: 'refill', value: text, onChange: setText, label: 'Modifier 1: by', inputStyle: {}, maxLength: 200 });
+      return <div>{box.field}{box.help}</div>;
+    }
+    render(<Rest />);
+    expect(textbox().maxLength).toBe(200);
+    await userEvent.click(screen.getByRole('button', { name: 'Help writing Modifier 1: by' }));
+    const help = within(screen.getByRole('group', { name: 'Help writing Modifier 1: by' }));
+    await userEvent.click(help.getByRole('button', { name: 'DICE' }));
+    expect(textbox().value).toBe('1d8');
+    fireEvent.change(help.getByRole('spinbutton', { name: 'How many' }), { target: { value: '2' } });
+    await userEvent.selectOptions(help.getByRole('combobox', { name: 'Which die' }), 'D6');
+    expect(textbox().value).toBe('2d6');
+    await userEvent.click(help.getByRole('button', { name: 'DICE AND A STAT' }));
+    expect(textbox().value).toBe('1d8 + @str');
+    await userEvent.selectOptions(help.getByRole('combobox', { name: 'Which' }), 'CON MODIFIER');
+    expect(textbox().value).toBe('1d8 + @con_mod');
+    expect(words().textContent).toBe('1d8 + con_mod');
   });
 });

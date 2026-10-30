@@ -70,3 +70,58 @@ test('the formula box says a formula in words, catches a misspelt name, and writ
     .toEqual(['3 * @fighter_level + @con', '@str >= 13']);
   expect(problems).toEqual([]);
 });
+
+// Formula box 2: a roll's AGAINST with a misspelt @this, fixed and read for the sample rolling its
+// first ROLLED BY stat; ADD written with ITS MODIFIER; a rest's amount written with DICE AND A STAT,
+// said with the least and most it comes to. Saved as written.
+test('the formula box on a roll\'s ADD and AGAINST and a rest\'s amount', async ({ page, request }, info) => {
+  const name = `Formula Rolls ${info.retry + 1}`;
+  const token = await gmToken(request);
+  const { id } = await asGm(request, token, 'post', '/api/systems', { definition: {
+    format: 1, name,
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'str', label: 'Strength' }, { id: 'con', label: 'Constitution' }] }],
+    samples: { str: 16, con: 14 },
+    derived: [{ id: 'con_mod', label: 'CON modifier', formula: 'floor((@con - 10) / 2)' }],
+    core: { health: { model: 'pool' } },
+    rolls: [{ id: 'save', label: 'Save', dice: [{ count: '1', sides: 20 }], by: ['abilities'] }],
+    rests: { short_rest: { refills: [{ what: 'health', how: 'by', amount: '1' }] } },
+  } });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'forms' });
+  await signInAsGm(page);
+  await openBuilder(page);
+  const card = page.getByTestId(/^system-/).filter({ hasText: name.toUpperCase() });
+  if (!(await card.getByRole('button', { name: 'OPEN', exact: true }).isVisible())) await card.getByRole('button').first().click();
+  await card.getByRole('button', { name: 'OPEN', exact: true }).click();
+  await builderPage(page, 'STATS & RULES');
+  await page.getByRole('tab', { name: 'ROLLS' }).click();
+  const compare = page.getByTestId('roll-save').getByRole('region', { name: 'ADD AND COMPARE' });
+
+  // AGAINST: @thsi in red, USE @this, then the sample rolling Strength.
+  const against = compare.getByRole('textbox', { name: 'Against' });
+  await against.fill('@thsi');
+  await expect(compare.getByText("@thsi isn't one of this system's names")).toBeVisible();
+  await compare.getByRole('button', { name: 'USE @this' }).click();
+  await expect(against).toHaveValue('@this');
+  await expect(compare.getByTestId('formula-words')).toHaveText('against your rolled stat · sample, rolling Strength, rolled stat 16: target 16');
+
+  // ADD: ITS MODIFIER from SHAPE.
+  await compare.getByRole('button', { name: 'Help writing Add' }).click();
+  await compare.getByRole('group', { name: 'Help writing Add' }).getByRole('button', { name: 'ITS MODIFIER', exact: true }).click();
+  await expect(compare.getByRole('textbox', { name: 'Add' })).toHaveValue('@this_mod');
+
+  // A short rest heals 1d8 + CON modifier: 3 to 10 for the sample.
+  await builderPage(page, 'RESTS');
+  await page.getByRole('button', { name: /^SHORT REST/ }).click();
+  const rest = page.getByRole('region', { name: 'Short rest rest' });
+  await rest.getByRole('button', { name: 'Help writing Refill 1: amount' }).click();
+  const help = rest.getByRole('group', { name: 'Help writing Refill 1: amount' });
+  await help.getByRole('button', { name: 'DICE AND A STAT' }).click();
+  await help.getByRole('combobox', { name: 'Which', exact: true }).selectOption({ label: 'CON MODIFIER' });
+  await expect(rest.getByRole('textbox', { name: 'Refill 1: amount' })).toHaveValue('1d8 + @con_mod');
+  await expect(rest.getByTestId('formula-words')).toHaveText('1d8 + CON modifier · sample CON modifier 2: 3 to 10');
+
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  const { draft, problems } = await asGm(request, token, 'get', `/api/systems/${id}`);
+  expect([draft.rolls[0].add, draft.rolls[0].against, draft.rests.short_rest.refills[0].amount]).toEqual(['@this_mod', '@this', '1d8 + @con_mod']);
+  expect(problems).toEqual([]);
+});

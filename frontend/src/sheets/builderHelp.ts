@@ -229,8 +229,8 @@ export const HINTS = {
   'rolls.dice': 'What is rolled: how many, as a number or a formula like @this, and of which size, or the system\'s own dice. Name a kind, like Hunger, to show it apart and give it effects.',
   'rolls.read': 'How the dice become a number: SUM them, KEEP the HIGHEST or LOWEST few, COUNT SUCCESSES at or over a face, or COUNT THE SYMBOLS on the system\'s own dice.',
   'rolls.compare': 'What is added to the dice, the target the total is held against, and words for where it lands. Each is optional: with none, the roll is its total.',
-  'rolls.add': 'A formula added to what the dice come to, like @this + @tie_mod. At the table, conditions that change every roll are added on top.',
-  'rolls.against': 'The target the total must meet or beat to succeed, like 13 or @this. ROLL UNDER turns it round: at or under succeeds. Empty: no success or failure.',
+  'rolls.add': 'A formula added to what the dice come to, like @this + @tie_mod. At the table, conditions that change every roll are added on top. The line under it says it in words with what it comes to for the sample, rolling the first stat in ROLLED BY; the formula button beside it writes common ones (THE STAT ROLLED, ITS MODIFIER) and lists the names it can read.',
+  'rolls.against': 'The target the total must meet or beat to succeed, like 13 or @this. ROLL UNDER turns it round: at or under succeeds. Empty: no success or failure. The line under it says the target the sample would roll against; the formula button writes A NUMBER or THE STAT ROLLED for you.',
   'rolls.seen': 'How much of a roll\'s target your players see, for every roll in the system. SHOWN: "vs 12: SUCCESS". VERDICT ONLY: "SUCCESS", never the number. GM ONLY: their total alone; you see it all. HELP\'s WHO SEES THE TARGET shows each.',
   'rolls.rollSeen': 'This roll\'s own, when it shouldn\'t follow the system\'s: a save whose number is on the player\'s sheet anyway can be SHOWN in a GM ONLY game. Needs a target to keep.',
   'rolls.bands': 'Words for the total, read top to bottom like a table: the first band the total isn\'t above is the one shown, like 6− MISS, 7–9 A COST, 10+ A HIT.',
@@ -264,7 +264,7 @@ export const HINTS = {
   'conditions.description': 'What it means at the table, shown under the chips in the token\'s HEALTH folder to everyone who sees them.',
   'conditions.ends': 'WHEN REMOVED: it stays until someone who may change the token\'s health takes it off. AFTER ROUNDS: it counts down with the initiative rounds. AT A REST: it comes off at the rests you pick.',
   // RESTS
-  'rests.refills': 'What the rest puts back, line by line in order: health, a number on the sheet, or a whole section, to its maximum, by an amount or to a number. Rolled for each character.',
+  'rests.refills': 'What the rest puts back, line by line in order: health, a number on the sheet, or a whole section, to its maximum, by an amount or to a number. Rolled for each character. Under an amount, a line says it in words with the least and most it comes to for the sample; the formula button writes DICE or DICE AND A STAT for you.',
   'rests.sample': 'This rest on the sample character, its token hurt to half, worked out the way the game would. Nothing is saved.',
   // ONLY WITH, on PARTS, CHARACTER SHEET (and the NPC stat block) and CONDITIONS
   'only.alternative': 'A house rule under which this formula is worked out another way, like fewer hit points with GRITTY WOUNDS. Off, it is worked out as written.',

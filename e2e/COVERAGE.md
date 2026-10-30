@@ -88,7 +88,7 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 | A bonus named on the field it changes | a stat as typed and with it; a formula with it | `choices_numbers` | `sheet-choices` (10 → 11, Guard Stance +1) | **AT THE TABLE** |
 | A rest refilling a feature's uses | the rest itself; one it counts as | `picking` | `sheet-choices` (a short rest) | **AT THE TABLE** (the rest itself) |
 | A list filled from a file | IMPORT: new and changed options and features, empty cells and `-`, skipped lines, same-named features | `choices_import` | `builder-choices-import` (this list downloaded, changed with one wrong line, uploaded, warned of, applied; played on a sheet) | **AT THE TABLE** |
-| Writing a formula | the formula box on REQUIRES, modifier amounts and USES: words and the sample's value, a mistake with its fix, SHAPE, INSERT | `formula_preview` | `builder-formula-box` | **BUILDER ONLY** (a builder aid: what it writes is played at the table by `sheet-choices` and `sheet-token-max`) |
+| Writing a formula | the formula box on REQUIRES, modifier amounts and USES, a roll's ADD and AGAINST, and a rest's amounts: words and the sample's value, a mistake with its fix, SHAPE, INSERT | `formula_preview` | `builder-formula-box` | **BUILDER ONLY** (a builder aid: what it writes is played at the table by `sheet-choices`, `sheet-token-max`, `sheet-rolls` and the rests' own journeys) |
 
 ## Sheets and NPCs
 

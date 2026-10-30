@@ -165,7 +165,7 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
     previewValues: (definition: Definition) =>
       call<{ values: Record<string, number>; problems: Problem[] }>(fetcher, token, '/api/systems/preview-values', 'POST', { definition }),
     /** The formula box (formula box 1): each formula read as the game reads it, for the sample character. */
-    previewFormulas: (definition: Definition, formulas: { text: string; kind: FormulaKind }[]) =>
+    previewFormulas: (definition: Definition, formulas: { text: string; kind: FormulaKind; roll?: string }[]) =>
       call<{ results: FormulaRead[]; sampleLevel: number }>(fetcher, token, '/api/systems/preview-formulas', 'POST', { definition, formulas }),
     /**
      * TEST ROLL (6b1a): one of a draft's rolls made for its sample character by the table's own

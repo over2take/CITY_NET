@@ -15,6 +15,7 @@ import { FieldName, HelpHint } from './HelpHint';
 import { HINTS } from '../sheets/builderHelp';
 import { SEEN_LEVELS, systemSeen, rollSeen, seenLabel, seenLine, withSystemSeen, withRollSeen, previewOf, type Seen } from '../sheets/targetSeen';
 import { ToggleSwitch } from './ToggleSwitch';
+import { useFormulaBox } from '../hooks/useFormulaBox';
 
 // STATS & RULES' ROLLS tab (Phase 6, 6b1a; approved mockup docs/mockups/builder-rolls.html,
 // 2026-10-19, on the builder design's Dice page): the system's rolls on the left; the one picked in
@@ -170,20 +171,30 @@ function ReadStep({ definition, edit, roll }: { definition: Definition; edit: (n
   );
 }
 
-/** Step 3: what is added, a target met at or over it (or under), and the bands the total is read on. */
-function CompareStep({ definition, edit, roll }: { definition: Definition; edit: (next: Definition) => void; roll: Roll }) {
+/**
+ * Step 3: what is added, a target met at or over it (or under), and the bands the total is read on.
+ * ADD and AGAINST are formula boxes (formula box 2): said in words, worked out for the sample
+ * rolling the roll's first ROLLED BY stat, a mistake in red with its fix.
+ */
+function CompareStep({ definition, edit, roll, api }: { definition: Definition; edit: (next: Definition) => void; roll: Roll; api?: ReturnType<typeof systemsApi> }) {
   const bands = roll.bands ?? [];
+  const add = useFormulaBox({
+    definition, api, kind: 'add', roll: roll.id, value: roll.add ?? '', onChange: (text) => edit(withRollAdd(definition, roll.id, text)),
+    label: 'Add', placeholder: 'NOTHING · @this + @tie_mod', inputStyle: field,
+  });
+  const against = useFormulaBox({
+    definition, api, kind: 'against', roll: roll.id, value: roll.against ?? '', onChange: (text) => edit(withRollAgainst(definition, roll.id, text)),
+    label: 'Against', placeholder: 'NOTHING · @this, 13', inputStyle: field,
+  });
   return (
     <>
       <div style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: 6, alignItems: 'center' }}>
         <FieldName hint={HINTS['rolls.add']}>ADD</FieldName>
-        <input type="text" aria-label="Add" maxLength={1000} value={roll.add ?? ''} placeholder="NOTHING · @this + @tie_mod" style={{ ...field, width: '100%' }}
-          onChange={(e) => edit(withRollAdd(definition, roll.id, e.target.value))} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>{add.field}{add.help}</div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: 6, alignItems: 'center' }}>
         <FieldName hint={HINTS['rolls.against']}>AGAINST</FieldName>
-        <input type="text" aria-label="Against" maxLength={1000} value={roll.against ?? ''} placeholder="NOTHING · @this, 13" style={{ ...field, width: '100%' }}
-          onChange={(e) => edit(withRollAgainst(definition, roll.id, e.target.value))} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>{against.field}{against.help}</div>
         <span />
         <ToggleSwitch label="ROLL UNDER: AT OR UNDER SUCCEEDS" on={!!roll.under} disabled={roll.against === undefined}
           onChange={(under) => edit(withRollAgainst(definition, roll.id, roll.against ?? '', under))} />
@@ -435,7 +446,7 @@ function ChangesStep({ definition, edit, roll }: { definition: Definition; edit:
 }
 
 /** The roll picked: its name, its preset, its five steps, ROLLED BY and REMOVE. */
-export function RollEditor({ definition, edit, roll, onRemoved }: Props & { roll: Roll; onRemoved: () => void }) {
+export function RollEditor({ definition, edit, roll, onRemoved, api }: Props & { roll: Roll; onRemoved: () => void }) {
   const [replacing, setReplacing] = useState<string | null>(null);
   const choices = rollables(definition);
   const by = new Set(roll.by ?? []);
@@ -462,7 +473,7 @@ export function RollEditor({ definition, edit, roll, onRemoved }: Props & { roll
       </div>
       <Step n={1} hint={HINTS['rolls.dice']} title="DICE"><DiceStep definition={definition} edit={edit} roll={roll} /></Step>
       <Step n={2} hint={HINTS['rolls.read']} title="READ THE DICE"><ReadStep definition={definition} edit={edit} roll={roll} /></Step>
-      <Step n={3} hint={HINTS['rolls.compare']} title="ADD AND COMPARE"><CompareStep definition={definition} edit={edit} roll={roll} /></Step>
+      <Step n={3} hint={HINTS['rolls.compare']} title="ADD AND COMPARE"><CompareStep definition={definition} edit={edit} roll={roll} api={api} /></Step>
       <Step n={4} hint={HINTS['rolls.special']} title="SPECIAL RESULTS"><SpecialStep definition={definition} edit={edit} roll={roll} /></Step>
       <Step n={5} hint={HINTS['rolls.changes']} title="CHANGE A ROLL" note="ASKED BEFORE ROLLING"><ChangesStep definition={definition} edit={edit} roll={roll} /></Step>
       <section aria-label="Rolled by" style={{ border: '1px solid var(--dark-green)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
@@ -629,7 +640,7 @@ export function RollsTab({ definition, edit, api, onHelp }: Props) {
             {roll && <div><button type="button" className="utility-btn" style={btn} onClick={() => setAdding(false)}>CANCEL</button></div>}
           </div>
         ) : (
-          <RollEditor key={`edit:${roll.id}`} definition={definition} edit={edit} roll={roll} onRemoved={() => setPicked(null)} />
+          <RollEditor key={`edit:${roll.id}`} definition={definition} edit={edit} roll={roll} api={api} onRemoved={() => setPicked(null)} />
         )}
         {roll && !adding ? <TestRoll key={`test:${roll.id}`} definition={definition} api={api} roll={roll} /> : <span />}
       </div>

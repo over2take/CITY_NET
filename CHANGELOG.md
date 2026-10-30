@@ -53,6 +53,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **The formula box on ROLLS and RESTS.** A roll's ADD and AGAINST, and a rest's refill amounts,
+  now get the same box as CHOICES. A line under each says it in words with what it comes to for
+  the sample character: "against your rolled stat · sample, rolling Strength, rolled stat 16:
+  target 16", "1d8 + CON modifier · sample CON modifier 2: 3 to 10". A roll's box rolls the first
+  stat in ROLLED BY. Dice in a rest are said as the least and most they can come to. A misspelt
+  name shows in red with a fix (`@thsi` offers USE @this). A typo in ADD or AGAINST used to count
+  as 0 at the table without a word. The formula button writes common ones for you: THE STAT
+  ROLLED and ITS MODIFIER on a roll, DICE and DICE AND A STAT on a rest (pick how many, which die
+  and which stat or formula). INSERT lists what each box can read, the stat being rolled first on
+  a roll.
 - **Subclasses follow their class's level.** A list a feature opens, like Fighter's Martial
   Archetype opening the archetypes at 3, now takes the level of the pick that opened it. Champion's
   features get AT LEVEL on CHOICES, grouped by level, and unlock by the Fighter's level: Improved
