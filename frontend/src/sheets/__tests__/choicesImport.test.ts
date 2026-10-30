@@ -97,9 +97,28 @@ describe('DOWNLOAD EXAMPLE', () => {
     expect(levelled).toContain('\noption, feature, level, words, uses, refill\n');
     expect(levelled).toContain('\nScholar, Training, 8, Raise one stat., , \n');
     const flat = exampleFile(HEARTH, list(HEARTH, 'backgrounds'));
-    expect(flat).toContain('# BACKGROUNDS isn\'t levelled, so features have no level.');
+    expect(flat).toContain('# BACKGROUNDS has no levels, so features have no level.');
     expect(flat).toContain('\noption, feature, words, uses, refill\nVeteran, Hard to Rattle, Keeps a cool head when it counts., , \n');
     expect(flat).not.toContain('Training');
+  });
+
+  it('gives a list following its opener\'s level a level column, saying whose, and reads it back (7a5d)', () => {
+    const forge = { format: 1, name: 'Forge', choices: [
+      { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter', features: [{ id: 'arch', label: 'Martial Archetype', at: 3, choice: 'archetypes' }] }] },
+      { id: 'archetypes', one: 'Archetype', many: 'Archetypes', picked: 'features', options: [{ id: 'champion', label: 'Champion', features: [
+        { id: 'improved_critical', label: 'Improved Critical', at: 3 }, { id: 'remarkable_athlete', label: 'Remarkable Athlete', at: 7 },
+      ] }] },
+    ] } as unknown as Definition;
+    const example = exampleFile(forge, list(forge, 'archetypes'));
+    expect(example).toContain('# level is when a feature unlocks, 1 to 30: the level of the pick that opened it (FIGHTER). Features of one name');
+    expect(example).toContain('\noption, feature, level, words, uses, refill\n');
+    expect(example).toContain('\nScholar, Training, 8, Raise one stat., , \n');
+    const text = listFile(forge, list(forge, 'archetypes'));
+    expect(text).toContain('\nChampion, Remarkable Athlete, 7, , , \n');
+    const r = readChoicesFile(forge, 'archetypes', text);
+    expect([r.skipped, r.changes]).toEqual([[], 0]);
+    expect(r.list).toEqual(list(forge, 'archetypes'));
+    expect(problems(withImported(forge, r.list))).toEqual([]);
   });
 
   it('still reads for a system with no stats and no rests on', () => {

@@ -199,6 +199,28 @@ describe('a file read against a list', () => {
     expect(r.notes).toEqual([{ line: 3, message: 'Soldier · Guard Stance keeps its modifiers, set in the builder' }]);
   });
 
+  it('reads levels into a list that follows its opener\'s level, and one everyone has (7a5d)', () => {
+    const FORGE = { ...HEARTH, choices: [
+      { ...HEARTH.choices[0], options: [{ ...HEARTH.choices[0].options[0], features: [...HEARTH.choices[0].options[0].features, { id: 'path', label: 'Path', at: 3, choice: 'archetypes' }] }, HEARTH.choices[0].options[1]] },
+      HEARTH.choices[1],
+      { id: 'archetypes', one: 'Archetype', many: 'Archetypes', picked: 'features', options: [] },
+      { id: 'commons', one: 'Common', many: 'Commons', picked: 'everyone', options: [] },
+    ] };
+    const file = (option) => FILE('[options]', 'name', option, '[features]', 'option, feature, level, words',
+      `${option}, Improved Critical, 3, Crits on 19.`, `${option}, Remarkable Athlete, 7, Half proficiency.`);
+    for (const [list, option] of [['archetypes', 'Champion'], ['commons', 'Second Wind']]) {
+      const r = read(file(option), list, FORGE);
+      expect(r.notes).toEqual([]);
+      expect(optionIn(r, option).features.map((f) => [f.label, f.at])).toEqual([['Improved Critical', 3], ['Remarkable Athlete', 7]]);
+      expect(checkDefinition(withList(r, list, FORGE)).problems).toEqual([]);
+    }
+    // Picked on its own, the same list has no opener to follow: the column is ignored.
+    const own = { ...FORGE, choices: FORGE.choices.map((c) => (c.id === 'archetypes' ? { ...c, picked: undefined } : c)) };
+    const r = read(file('Champion'), 'archetypes', own);
+    expect(r.notes).toEqual([{ line: 5, message: 'ARCHETYPES has no levels, so the level column is ignored' }]);
+    expect(optionIn(r, 'Champion').features.map((f) => f.at)).toEqual([undefined, undefined]);
+  });
+
   it('reads a list that isn\'t levelled without levels, and says the column is ignored', () => {
     const r = read(FILE(
       '[options]', 'name, description',
@@ -207,7 +229,7 @@ describe('a file read against a list', () => {
       'Acolyte, Shelter of the Faithful, 3, Temples take you in., 1, Long rest',
       'Sailor, Sea Legs, 9, Never thrown by a moving deck., ,',
     ), 'backgrounds');
-    expect(r.notes).toEqual([{ line: 5, message: 'BACKGROUNDS isn\'t levelled, so the level column is ignored' }]);
+    expect(r.notes).toEqual([{ line: 5, message: 'BACKGROUNDS has no levels, so the level column is ignored' }]);
     expect(featureIn(r, 'Acolyte', 'Shelter of the Faithful')[0]).toEqual({ id: 'shelter_of_the_faithful', label: 'Shelter of the Faithful', text: 'Temples take you in.', uses: { count: '1', refill: 'long_rest' } });
     expect(r.changed.features).toEqual([{ line: 7, option: 'Sailor', feature: 'Sea Legs', parts: [{ part: 'words', from: 'Never thrown by a deck.', to: 'Never thrown by a moving deck.' }] }]);
     expect(checkDefinition(withList(r, 'backgrounds')).problems).toEqual([]);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import {
+import { pickLabel,
   workedOn, listShown, spentAfterClick, featureDoes, pickedOf, listsOnTheirOwn, underFeature, keptAside,
   type ChoiceListShown, type ChoicesAction, type FeatureShown, type OptionShown, type PickShown, type Worked,
 } from '../sheets/choicesShown';
@@ -127,7 +127,7 @@ function Under({ f, unlocked, ctx }: { f: FeatureShown; unlocked: boolean; ctx: 
         </div>
       ))}
       {unlocked && under.room > 0 && ctx.can && under.open.length > 0 && (
-        <Offer label={`Pick a ${under.list.one}`} open={under.open} ctx={ctx}
+        <Offer label={pickLabel(under.list.one)} open={under.open} ctx={ctx}
           onPick={(option) => ctx.ask({ kind: 'pick', list: under.list.id, option, from: f.id })} />
       )}
       {unlocked && under.room > 0 && !ctx.can && <span style={{ ...small, color: 'var(--warning)', opacity: 1 }}>A {under.list.one.toUpperCase()} TO PICK</span>}
@@ -198,7 +198,7 @@ export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm =
             ))}
             {!everyone && !view.picks.length && <span style={small}>No {list.one || list.many} picked yet.</span>}
             {can && view.room && view.open.length > 0 && (
-              <Offer label={`Pick a ${list.one}`} open={view.open} ctx={ctx}
+              <Offer label={pickLabel(list.one)} open={view.open} ctx={ctx}
                 onPick={(option) => ctx.ask({ kind: 'pick', list: list.id, option })} />
             )}
           </section>

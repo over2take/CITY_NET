@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
-  choiceLists, picksOf, pickedOf, openedBy, withNewList, withList, withoutList, withNewOption, withOption, withoutOption, levelNames, LIMITS,
+  choiceLists, picksOf, pickedOf, openedBy, followedBy, unlocksByLevel, withNewList, withList, withoutList, withNewOption, withOption, withoutOption, levelNames, LIMITS,
   type ChoiceList, type ChoiceOption, type Picked,
 } from '../sheets/choices';
 import { HINTS } from '../sheets/builderHelp';
@@ -72,6 +72,7 @@ function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, st
   const picks = picksOf(list);
   const way = pickedOf(list);
   const openers = openedBy(definition, list.id);
+  const followed = followedBy(definition, list);
   const ownPicks = way === 'own' || way === 'both';
   const name = list.many.trim() || 'this list';
   const add = () => {
@@ -93,7 +94,7 @@ function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, st
       {status && <p role="status" style={{ ...why, color: 'var(--cyan)', opacity: 1, letterSpacing: 1 }}>{status}</p>}
       {openers.length > 0 && (
         <p aria-label="Opened by" style={{ ...why, color: 'var(--warning)', border: '1px dashed var(--warning)', padding: '4px 8px', opacity: 1, letterSpacing: 1 }}>
-          OPENED BY · {openers.map((o) => `${(o.option.label || o.option.id).toUpperCase()}: ${(o.feature.label || o.feature.id).toUpperCase()}${o.list.levelled && o.feature.at ? ` (LV ${o.feature.at})` : ''}`).join(' · ')}
+          OPENED BY · {openers.map((o) => `${(o.option.label || o.option.id).toUpperCase()}: ${(o.feature.label || o.feature.id).toUpperCase()}${unlocksByLevel(definition, o.list) && o.feature.at ? ` (LV ${o.feature.at})` : ''}`).join(' · ')}
         </p>
       )}
       <div style={grid}>
@@ -140,6 +141,7 @@ function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, st
       <p style={{ ...why, fontSize: 11, opacity: 0.7 }}>
         {!ownPicks ? '' : picks === 'any' ? 'Any number of these, picked whenever.' : `${picks === 1 ? 'One' : picks} ${picks === 1 ? list.one || 'pick' : list.many || 'picks'}${list.again ? ', and more can be added later' : ' per character'}${way === 'both' ? ' at the start' : ''}.`}
         {list.levelled ? ` Each has its own level; together they read as ${levelNames(list).list}.` : ''}
+        {followed.length ? ` Each one's features unlock by the level of the pick that opened it: ${followed.map((o) => (o.label || o.id).toUpperCase()).join(', ')}.` : ''}
       </p>
       <div style={{ ...row, justifyContent: 'space-between' }}>
         <FieldName hint={HINTS['choices.options']} style={small}>OPTIONS · {list.options.length} OF {LIMITS.options}</FieldName>

@@ -5,12 +5,12 @@
 // back by that reader in a test, so a downloaded list imported unchanged changes nothing.
 //
 //   DOWNLOAD EXAMPLE   a .csv for one list, made from the system: the @names its formulas read, its
-//                      rests by name, a level column only for a levelled list, and made-up rows.
+//                      rests by name, a level column only where features unlock at a level, and made-up rows.
 //   DOWNLOAD THIS LIST what the list holds now, in the same shape; what a feature does beyond words
 //                      and uses is a # note, as an import never touches it.
 
 import type { Definition } from './systemsApi';
-import { choiceLists, featureList, kindsOf, levelOf, type ChoiceList } from './choices';
+import { choiceLists, featureList, followedBy, kindsOf, levelOf, unlocksByLevel, type ChoiceList } from './choices';
 import { allStats, formulaList } from './statsRules';
 import { restList } from './rests';
 
@@ -82,6 +82,7 @@ const readable = (def: Definition, list: ChoiceList): string[] => {
 const head = (def: Definition, list: ChoiceList, rests: string[], intro: string[]): string[] => {
   const many = (list.many || list.id).toUpperCase();
   const names = readable(def, list);
+  const followed = followedBy(def, list).map((o) => (o.label || o.id).toUpperCase());
   return [
     ...intro,
     '# Lines starting with # are notes and are skipped. A cell with a comma in it needs "quotes".',
@@ -90,14 +91,14 @@ const head = (def: Definition, list: ChoiceList, rests: string[], intro: string[
     '#',
     `# requires and uses are formulas, as in the builder. They can read ${names.length ? names.join(', ') : 'numbers only (this system has no stats yet)'}.`,
     `# refill is one of this system's rests, by name: ${rests.length ? rests.join(', ') : 'none (it has none on)'}. It needs uses.`,
-    list.levelled
-      ? '# level is when a feature unlocks, 1 to 30. Features of one name at several levels are told apart by level.'
-      : `# ${many} isn't levelled, so features have no level.`,
+    unlocksByLevel(def, list)
+      ? `# level is when a feature unlocks, 1 to 30${followed.length ? `: the level of the pick that opened it (${followed.join(', ')})` : ''}. Features of one name at several levels are told apart by level.`
+      : `# ${many} has no levels, so features have no level.`,
     '# Modifiers, rolls and the lists a feature opens are set in the builder; an import never changes them.',
   ];
 };
 
-const featureColumns = (list: ChoiceList) => (list.levelled ? 'option, feature, level, words, uses, refill' : 'option, feature, words, uses, refill');
+const featureColumns = (def: Definition, list: ChoiceList) => (unlocksByLevel(def, list) ? 'option, feature, level, words, uses, refill' : 'option, feature, words, uses, refill');
 
 /** DOWNLOAD EXAMPLE: a file in the right shape for this list, with made-up rows to replace. */
 export const exampleFile = (def: Definition, list: ChoiceList): string => {
@@ -105,8 +106,9 @@ export const exampleFile = (def: Definition, list: ChoiceList): string => {
   const rests = restNames(def).offered;
   const [first, second] = [rests[0] ?? '', rests[1] ?? rests[0] ?? ''];
   const stat = allStats(def).map((s) => s.id).find((id) => typeof id === 'string');
+  const byLevel = unlocksByLevel(def, list);
   const f = (option: string, feature: string, level: number, words: string, uses = '', refill = '') =>
-    (list.levelled ? row(option, feature, level, words, uses, uses ? refill : '') : row(option, feature, words, uses, uses ? refill : ''));
+    (byLevel ? row(option, feature, level, words, uses, uses ? refill : '') : row(option, feature, words, uses, uses ? refill : ''));
   return [
     ...head(def, list, rests, [
       `# ${many} for ${def.name || 'this system'}, to import on the builder's CHOICES page (IMPORT on the ${many} list).`,
@@ -119,11 +121,11 @@ export const exampleFile = (def: Definition, list: ChoiceList): string => {
     row('Scholar', 'Reads everything twice.', ''),
     '',
     '[features]',
-    featureColumns(list),
+    featureColumns(def, list),
     f('Veteran', 'Hard to Rattle', 1, 'Keeps a cool head when it counts.'),
     f('Veteran', 'Second Wind', 2, 'Catch your breath and keep going.', '1', first),
     f('Scholar', 'Flash of Insight', 1, 'Know the answer, once.', '2', second),
-    ...(list.levelled ? [f('Scholar', 'Training', 4, 'Raise one stat.'), f('Scholar', 'Training', 8, 'Raise one stat.')] : []),
+    ...(byLevel ? [f('Scholar', 'Training', 4, 'Raise one stat.'), f('Scholar', 'Training', 8, 'Raise one stat.')] : []),
     '',
   ].join('\n');
 };
@@ -134,6 +136,7 @@ const ALSO: Record<string, string> = { modifier: 'modifiers', roll: 'rolls it gi
 export const listFile = (def: Definition, list: ChoiceList): string => {
   const many = (list.many || list.id).toUpperCase();
   const rests = restNames(def);
+  const byLevel = unlocksByLevel(def, list);
   const lines = [
     ...head(def, list, rests.offered, [
       `# ${many} in ${def.name || 'this system'} as it is now. Edit it and import it back on the same list; rows left as they are change nothing.`,
@@ -144,7 +147,7 @@ export const listFile = (def: Definition, list: ChoiceList): string => {
     ...list.options.map((o) => row(o.label, o.description ?? '', o.requires ?? '')),
     '',
     '[features]',
-    featureColumns(list),
+    featureColumns(def, list),
   ];
   for (const o of list.options) {
     for (const f of featureList(o)) {
@@ -152,7 +155,7 @@ export const listFile = (def: Definition, list: ChoiceList): string => {
       if (also.length) lines.push(`# ${o.label} · ${f.label} also has ${also.join(', ')}, set in the builder`);
       const uses = isObject(f.uses) && f.uses.count !== undefined ? String(f.uses.count) : '';
       const refill = uses && typeof f.uses?.refill === 'string' ? rests.of(f.uses.refill) : '';
-      lines.push(list.levelled ? row(o.label, f.label, levelOf(f), f.text ?? '', uses, refill) : row(o.label, f.label, f.text ?? '', uses, refill));
+      lines.push(byLevel ? row(o.label, f.label, levelOf(f), f.text ?? '', uses, refill) : row(o.label, f.label, f.text ?? '', uses, refill));
     }
   }
   return [...lines, ''].join('\n');

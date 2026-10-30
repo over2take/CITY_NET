@@ -89,14 +89,14 @@ export interface ListShown {
 export const pickedOf = (list: ChoiceListShown): Picked => list.picked ?? 'own';
 
 /**
- * One pick as the block draws it. Its features unlock by its level: a levelled list's own, or the
- * character's level for a list everyone has (the server sends it); a list without levels has them all.
+ * One pick as the block draws it. Its features unlock by its level: a levelled list's own, the
+ * character's level for a list everyone has, or the level of the pick that opened it (7a5d; the server
+ * sends both); a pick with no level has them all.
  */
 const pickShown = (list: ChoiceListShown, p: Worked['picks'][number]): PickShown | null => {
   const option = list.options.find((o) => o.id === p.option);
   if (!option) return null;
-  const everyone = pickedOf(list) === 'everyone';
-  const gate = list.levelled ? (Number.isInteger(p.level) ? p.level as number : 1) : everyone && Number.isInteger(p.level) ? p.level as number : null;
+  const gate = list.levelled ? (Number.isInteger(p.level) ? p.level as number : 1) : Number.isInteger(p.level) ? p.level as number : null;
   const sorted = [...option.features].sort((a, b) => atOf(a) - atOf(b));
   return {
     option,
@@ -171,6 +171,9 @@ export const keptAside = (lists: ChoiceListShown[], worked: Worked): { list: Cho
 };
 
 /** A use pip clicked: one spent up to it, or, clicked again on one already spent, back to before it. */
+/** What a pick offer is called: Pick a Class, Pick an Archetype (by the first letter; Pick a Unit stays a guess). */
+export const pickLabel = (one: string): string => `Pick ${/^[aeiou]/i.test(one.trim()) ? 'an' : 'a'} ${one}`;
+
 export const spentAfterClick = (pip: number, spent: number): number => (pip < spent ? pip : pip + 1);
 
 /** What a feature does, in a few words: MODIFIES DEFENSE, ROLL SPARK, ADVANTAGE ON MIND SAVE, OPENS SPECIALTY. */
