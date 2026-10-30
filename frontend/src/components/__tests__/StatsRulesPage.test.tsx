@@ -87,12 +87,16 @@ describe('STATS', () => {
 describe('FORMULAS', () => {
   const req = createRequire(import.meta.url);
   const { previewDerived } = req('../../../../backend/systemBuilder/derived.js');
-  /** The route's own work, done here with the server's engine. */
-  const server = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
-    const { definition } = JSON.parse(String(init!.body));
-    const body = previewDerived({ lookups: definition.lookups, derived: definition.derived }, definition.samples || {});
+  const { previewFormulas } = req('../../../../backend/systemBuilder/formulaPreview.js');
+  /** The routes' own work, done here with the server's engine: the values, and each formula read for the box (formula box 3). */
+  const server = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    const { definition, formulas } = JSON.parse(String(init!.body));
+    const body = String(url).includes('preview-formulas')
+      ? { results: previewFormulas(definition, formulas), sampleLevel: 3 }
+      : previewDerived({ lookups: definition.lookups, derived: definition.derived }, definition.samples || {});
     return { ok: true, status: 200, json: async () => body } as unknown as Response;
   });
+  const valueCalls = () => server.mock.calls.filter((c) => String(c[0]).includes('preview-values')).length;
   const SYSTEM: Definition = { ...HEARTH, samples: { str: 16, dex: 14 },
     lookups: { mod: { bands: [{ upTo: 7, value: -1 }, { upTo: 13, value: 0 }, { value: 1 }] } },
     derived: [{ id: 'str_mod', label: 'Strength mod', formula: 'mod(@str)' }, { id: 'save', label: 'Save', formula: '16 - @str_mod' }] };
@@ -118,20 +122,51 @@ describe('FORMULAS', () => {
   it('works the values out again a moment after typing stops', async () => {
     await openFormulas();
     await waitFor(() => expect(value('save')).toBe('15'));
-    const calls = server.mock.calls.length;
+    const calls = valueCalls();
     const formula = screen.getByLabelText('Save formula');
     await userEvent.clear(formula);
     await userEvent.type(formula, '20 - @str_mod');
     await waitFor(() => expect(value('save')).toBe('19'));
     // Asked once for the whole burst of typing, not once a key.
-    expect(server.mock.calls.length - calls).toBeLessThanOrEqual(2);
+    expect(valueCalls() - calls).toBeLessThanOrEqual(2);
+  });
+
+  it('says each formula in words under it, and a name the system hasn\'t got in red with its fix (formula box 3)', async () => {
+    const { last } = await openFormulas({ ...SYSTEM, derived: [...(SYSTEM.derived as object[]), { id: 'grip', label: 'Grip', formula: '@strr' }] });
+    const row = within(screen.getByTestId('formula-grip'));
+    await waitFor(() => expect(row.getByTestId('formula-words').textContent).toBe("@strr isn't one of this system's names" + 'USE @str'));
+    const box = screen.getByLabelText('Grip formula');
+    expect(box.getAttribute('aria-invalid')).toBe('true');
+    expect(box.getAttribute('aria-describedby')).toBe(row.getByTestId('formula-words').id);
+    // Read with its box, not called out as it changes: twenty of them sit on this page.
+    expect(row.getByTestId('formula-words').getAttribute('role')).toBeNull();
+    await userEvent.click(row.getByRole('button', { name: 'USE @str' }));
+    expect((last().derived as { id: string; formula: string }[]).find((f) => f.id === 'grip')!.formula).toBe('@str');
+    await waitFor(() => expect(row.getByTestId('formula-words').textContent).toBe('your Strength'));
+    expect(box.hasAttribute('aria-invalid')).toBe(false);
+    expect(within(screen.getByTestId('formula-save')).getByTestId('formula-words').textContent).toBe('worked out from Strength mod');
+  });
+
+  it('marks only the part of a condition with a misspelt name, its fix under that part', async () => {
+    const { last } = await openFormulas({ ...SYSTEM, derived: [...(SYSTEM.derived as object[]), { id: 'hurt', label: 'Hurt', kind: 'condition', when: '@str < 5', then: '1', else: '@str_md' }] });
+    const row = within(screen.getByTestId('formula-hurt'));
+    await waitFor(() => expect(row.getByRole('button', { name: 'USE @str_mod' })).toBeInTheDocument());
+    expect(row.getAllByTestId('formula-words')).toHaveLength(1);
+    expect(screen.getByLabelText('Hurt else').getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByLabelText('Hurt if').hasAttribute('aria-invalid')).toBe(false);
+    await userEvent.click(row.getByRole('button', { name: 'USE @str_mod' }));
+    expect((last().derived as { id: string; else: string }[]).find((f) => f.id === 'hurt')!.else).toBe('@str_mod');
+    await waitFor(() => expect(row.queryByTestId('formula-words')).toBeNull());
   });
 
   it('never lets a late answer for an older formula overwrite a newer one', async () => {
     const answers: ((body: object) => void)[] = [];
-    const slow = vi.fn(() => new Promise<Response>((resolve) => {
-      answers.push((body) => resolve({ ok: true, status: 200, json: async () => body } as unknown as Response));
-    }));
+    // Only the values are held back; the words (formula box 3) come at once, and say nothing here.
+    const slow = vi.fn((url: RequestInfo | URL) => (String(url).includes('preview-values')
+      ? new Promise<Response>((resolve) => {
+        answers.push((body) => resolve({ ok: true, status: 200, json: async () => body } as unknown as Response));
+      })
+      : Promise.resolve({ ok: true, status: 200, json: async () => ({ results: [], sampleLevel: 3 }) } as unknown as Response)));
     const Harness = () => {
       const [def, setDef] = useState<Definition>(SYSTEM);
       return <StatsRulesPage definition={def} api={systemsApi('gm', slow as unknown as typeof fetch)} edit={setDef} />;

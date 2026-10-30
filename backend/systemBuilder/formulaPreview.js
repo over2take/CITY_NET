@@ -29,9 +29,9 @@ const { effectiveSheet, fieldsOf } = require('./sheet');
 const SAMPLE_LEVEL = 3;
 /**
  * What a formula box holds: a modifier's amount, an option's requirement, a feature's uses; a roll's
- * ADD and AGAINST; a rest's refill amount.
+ * ADD and AGAINST; a rest's refill amount; a formula of STATS & RULES (formula box 3).
  */
-const KINDS = new Set(['amount', 'requires', 'uses', 'add', 'against', 'refill']);
+const KINDS = new Set(['amount', 'requires', 'uses', 'add', 'against', 'refill', 'formula']);
 /** What a roll's own names are called in words. */
 const ROLL_OWN = new Map([['this', 'rolled stat'], ['this_mod', 'rolled stat\'s modifier'], ['tie', 'tied stat'], ['tie_mod', 'tied stat\'s modifier']]);
 /** The most formulas one request reads. */

@@ -125,3 +125,35 @@ test('the formula box on a roll\'s ADD and AGAINST and a rest\'s amount', async 
   expect([draft.rolls[0].add, draft.rolls[0].against, draft.rests.short_rest.refills[0].amount]).toEqual(['@this_mod', '@this', '1d8 + @con_mod']);
   expect(problems).toEqual([]);
 });
+
+// Formula box 3: on STATS & RULES, a formula with a misspelt name, which used to read 0 without a
+// word, in red under its box with the fix; fixed, it says what it reads, and the VALUE follows.
+test('the words and fixes under STATS & RULES formulas', async ({ page, request }, info) => {
+  const name = `Formula Rules ${info.retry + 1}`;
+  const token = await gmToken(request);
+  const { id } = await asGm(request, token, 'post', '/api/systems', { definition: {
+    format: 1, name,
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'str', label: 'Strength' }] }],
+    samples: { str: 16 },
+    derived: [{ id: 'grip', label: 'Grip', formula: '@strr + 1' }],
+  } });
+  await asGm(request, token, 'put', '/api/systems/view', { page: 'rules', view: 'forms' });
+  await signInAsGm(page);
+  await openBuilder(page);
+  const card = page.getByTestId(/^system-/).filter({ hasText: name.toUpperCase() });
+  if (!(await card.getByRole('button', { name: 'OPEN', exact: true }).isVisible())) await card.getByRole('button').first().click();
+  await card.getByRole('button', { name: 'OPEN', exact: true }).click();
+  await builderPage(page, 'STATS & RULES');
+  await page.getByRole('tab', { name: 'FORMULAS' }).click();
+  const grip = page.getByTestId('formula-grip');
+  await expect(grip.getByTestId('formula-words')).toContainText("@strr isn't one of this system's names");
+  await expect(page.getByTestId('value-grip')).toHaveText('1');
+  await grip.getByRole('button', { name: 'USE @str' }).click();
+  await expect(grip.getByLabel('Grip formula')).toHaveValue('@str + 1');
+  await expect(grip.getByTestId('formula-words')).toHaveText('worked out from Strength');
+  await expect(page.getByTestId('value-grip')).toHaveText('17');
+
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  const { draft } = await asGm(request, token, 'get', `/api/systems/${id}`);
+  expect(draft.derived[0].formula).toBe('@str + 1');
+});

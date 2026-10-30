@@ -184,7 +184,7 @@ export const HINTS = {
   'rules.highest': 'The highest it should be, shown with the lowest under the box on the sheet. Empty: no highest.',
   'rules.tiedTo': 'The stat this one goes with, like a skill with its ability (Shoot with Dexterity). A formula still names every stat it reads.',
   'rules.sample': 'A made-up character\'s value, for checking formulas: FORMULAS works every value out from these. Saved with the draft; players never see it.',
-  'rules.formula': 'Written the way the rulebook says it: @ and an id for a stat or another formula, a table by its id like mod(@str), and the functions under INSERT.',
+  'rules.formula': 'Written the way the rulebook says it: @ and an id for a stat or another formula, a table by its id like mod(@str), and the functions under INSERT. The line under it says it in words; a name the system hasn\'t got shows there in red with the nearest one to use, since it would count as 0.',
   'rules.value': 'What the formula comes to for the sample character, worked out by the game\'s own engine a moment after you stop typing.',
   'rules.upTo': 'The highest number this row covers. Rows are read top to bottom, and the last one catches anything higher.',
   'rules.gives': 'What a number in this row turns into: the table\'s answer.',

@@ -9,11 +9,14 @@
 // what dice decide as a range, the least to the most.
 
 import type { Definition } from './systemsApi';
-import { allStats, formulaList, tableList, FUNCTIONS } from './statsRules';
+import { allStats, formulaList, tableList, isCondition, partOf, CONDITION_PARTS, FUNCTIONS, type Formula } from './statsRules';
 import { choiceLists } from './choices';
 
-/** What a box holds: a modifier's amount, an option's requirement, a feature's uses; a roll's ADD and AGAINST; a rest's amount. */
-export type FormulaKind = 'amount' | 'requires' | 'uses' | 'add' | 'against' | 'refill';
+/**
+ * What a box holds: a modifier's amount, an option's requirement, a feature's uses; a roll's ADD and
+ * AGAINST; a rest's amount; a formula of STATS & RULES (formula box 3).
+ */
+export type FormulaKind = 'amount' | 'requires' | 'uses' | 'add' | 'against' | 'refill' | 'formula';
 
 /** One name a formula reads, as the server worked it out for the sample. */
 export interface FormulaReads { id: string; label: string; value: number }
@@ -27,6 +30,9 @@ export type FormulaRead =
     rolling?: string;
   }
   | { ok: false; problem: string; name?: string; suggest?: string };
+
+/** Whether the server's answer says the formula has a mistake. */
+export const isMistake = (read: FormulaRead | null | undefined): read is FormulaRead & { ok: false } => !!read && !read.ok;
 
 const signed = (n: number) => (n < 0 ? `−${-n}` : `+${n}`);
 const word = (id: string, reads: FormulaReads[]) => reads.find((r) => r.id === id)?.label ?? id;
@@ -56,16 +62,18 @@ export const wordsOf = (kind: FormulaKind, text: string, reads: FormulaReads[] =
     if ((m = t.match(/^@([a-z][a-z0-9_]*)\s*>\s*(-?\d+)$/))) return `needs ${word(m[1], reads)} over ${m[2]}`;
     return `needs ${t.replace(/@([a-z][a-z0-9_]*)/g, (_, id: string) => word(id, reads))}`;
   }
-  const unit = kind === 'uses' ? (n: string) => `${n} use${n === '1' ? '' : 's'}` : (n: string) => signed(Number(n));
+  // A formula of STATS & RULES is a value, not something added: no sign.
+  const plain = kind === 'uses' || kind === 'formula';
+  const unit = kind === 'uses' ? (n: string) => `${n} use${n === '1' ? '' : 's'}` : kind === 'formula' ? (n: string) => n : (n: string) => signed(Number(n));
   if ((m = t.match(/^(-?\d+)$/))) return `${unit(m[1])}, always`;
   // N * @name, or @name * N.
   const per = t.match(/^(\d+)\s*\*\s*@([a-z][a-z0-9_]*)$/) ?? t.match(/^@([a-z][a-z0-9_]*)\s*\*\s*(\d+)$/);
   if (per) {
     const [n, id] = /^\d+$/.test(per[1]) ? [per[1], per[2]] : [per[2], per[1]];
-    return `${kind === 'uses' ? n : signed(Number(n))} for each ${word(id, reads).toLowerCase()}`;
+    return `${plain ? n : signed(Number(n))} for each ${word(id, reads).toLowerCase()}`;
   }
-  if ((m = t.match(/^@([a-z][a-z0-9_]*)$/))) return `${kind === 'uses' ? 'as many as' : '+'} your ${word(m[1], reads)}`;
-  if ((m = t.match(/^floor\(\s*@([a-z][a-z0-9_]*)\s*\/\s*2\s*\)$/))) return `${kind === 'uses' ? 'half' : '+ half'} your ${word(m[1], reads).toLowerCase()}, rounded down`;
+  if ((m = t.match(/^@([a-z][a-z0-9_]*)$/))) return `${kind === 'uses' ? 'as many as your' : kind === 'formula' ? 'your' : '+ your'} ${word(m[1], reads)}`;
+  if ((m = t.match(/^floor\(\s*@([a-z][a-z0-9_]*)\s*\/\s*2\s*\)$/))) return `${plain ? 'half' : '+ half'} your ${word(m[1], reads).toLowerCase()}, rounded down`;
   return named();
 };
 
@@ -85,6 +93,14 @@ export const sampleLine = (kind: FormulaKind, read: FormulaRead & { ok: true }):
   const sample = read.rolling ? `sample, rolling ${read.rolling}${names ? ',' : ''}` : 'sample';
   return names || read.rolling ? `${sample}${names ? ` ${names}` : ''}: ${said}` : said;
 };
+
+/**
+ * What STATS & RULES asks the server to read (formula box 3): each formula's text, or a condition's
+ * IF, THEN and ELSE, keyed `id:box` as the page binds its boxes.
+ */
+export const formulaTexts = (formulas: Formula[]): { key: string; text: string; kind: FormulaKind }[] => formulas.flatMap((f) => (isCondition(f)
+  ? CONDITION_PARTS.map((part) => ({ key: `${f.id}:${part}`, text: partOf(f, part), kind: 'formula' as const }))
+  : [{ key: `${f.id}:formula`, text: f.formula ?? '', kind: 'formula' as const }]));
 
 /** One list of names INSERT offers, under a title. */
 export interface InsertGroup { title: string; items: { token: string; label: string }[] }

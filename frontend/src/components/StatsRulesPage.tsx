@@ -8,6 +8,8 @@ import { RollsTab } from './RollsTab';
 import { DiceTab } from './DiceTab';
 import { groupOf } from '../sheets/graphGroups';
 import { useFormulaInsert } from '../hooks/useFormulaInsert';
+import { useFormulaReads } from '../hooks/useFormulaReads';
+import { formulaTexts } from '../sheets/formulaBox';
 import { usePreviewValues } from '../hooks/usePreviewValues';
 import { HINTS } from '../sheets/builderHelp';
 import { ColumnHead } from './HelpHint';
@@ -104,6 +106,8 @@ function FormulasTab({ definition, edit, api, onEditInGraph }: Props) {
   const formulas = formulaList(definition);
   const { preview, tried } = usePreviewValues(definition, api);
   const insert = useFormulaInsert(definition, edit);
+  // Formula box 3: every formula read at once, for its words and a name the system hasn't got.
+  const reads = useFormulaReads(definition, api, formulaTexts(formulas));
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 230px', gap: 16, alignItems: 'start' }}>
@@ -127,7 +131,8 @@ function FormulasTab({ definition, edit, api, onEditInGraph }: Props) {
                     <tr data-testid={`formula-${f.id}`}>
                       <td style={td}><FormulaName definition={definition} edit={edit} f={f} /></td>
                       <td style={td}>
-                        <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried} bind={(box) => insert.bind(f.id, box)} />
+                        <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried} bind={(box) => insert.bind(f.id, box)}
+                          reads={(box) => reads[`${f.id}:${box}`] ?? null} />
                       </td>
                       <td data-testid={`value-${f.id}`} style={{ ...td, textAlign: 'right', color: 'var(--cyan)', fontSize: 13 }}>
                         {value !== undefined ? value : '·'}

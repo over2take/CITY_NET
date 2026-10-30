@@ -10,6 +10,8 @@ import { houseRuleList } from '../sheets/houseRules';
 import type { Tried } from '../hooks/usePreviewValues';
 import type { FormulaBox } from '../hooks/useFormulaInsert';
 import { OnlyWith } from './OnlyWith';
+import { FormulaWords } from './FormulaWords';
+import { isMistake, type FormulaRead } from '../sheets/formulaBox';
 import { HINTS } from '../sheets/builderHelp';
 import { ColumnHead, FieldName } from './HelpHint';
 import { small, why, btn, field, th, td, box, head } from './statsRulesStyles';
@@ -182,11 +184,11 @@ export function FormulaName({ definition, edit, f }: Edits & { f: Formula }) {
 /** Where INSERT puts a name in one box: the box's input, and where its cursor is. */
 export type InsertBinding = { inputRef?: (el: HTMLInputElement | null) => void; onCursor?: (at: number) => void };
 
-/** One box of formula text, its cursor told to INSERT. */
-function TextBox({ label, value, bad, onText, inputRef, onCursor }: InsertBinding & { label: string; value: string; bad: boolean; onText: (text: string) => void }) {
+/** One box of formula text, its cursor told to INSERT, described by its words line. */
+function TextBox({ label, value, bad, onText, inputRef, onCursor, describedBy }: InsertBinding & { label: string; value: string; bad: boolean; onText: (text: string) => void; describedBy?: string }) {
   return (
     <input ref={inputRef} type="text" aria-label={label} maxLength={1000} value={value}
-      aria-invalid={bad ? true : undefined}
+      aria-invalid={bad ? true : undefined} aria-describedby={describedBy}
       style={{ ...field, width: '100%', borderColor: bad ? 'var(--danger)' : 'var(--green)' }}
       onChange={(e) => { onText(e.target.value); onCursor?.(e.target.selectionStart ?? e.target.value.length); }}
       onSelect={(e) => onCursor?.((e.target as HTMLInputElement).selectionStart ?? 0)}
@@ -199,12 +201,16 @@ const PART_WORD: Record<ConditionPart, string> = { when: 'IF', then: 'THEN', els
 /**
  * A formula's text, or a condition's IF, THEN and ELSE (5b6a: IF something isn't 0, THEN one
  * number, ELSE another); its mistake under it, and a formula's alternative under a house rule.
- * `bind` lets INSERT put a name where the cursor is, in whichever box.
+ * `bind` lets INSERT put a name where the cursor is, in whichever box. `reads` (formula box 3)
+ * is what the server made of each box: a formula said in words under it, and a name the system
+ * hasn't got in red with its fix, under each box it is in. The VALUE beside it says the sample's.
  */
-export function FormulaBody({ definition, edit, f, problem, tried, bind }: Edits & {
+export function FormulaBody({ definition, edit, f, problem, tried, bind, reads }: Edits & {
   f: Formula; problem?: string; tried: Record<string, Tried>; bind?: (box: FormulaBox) => InsertBinding;
+  reads?: (box: FormulaBox) => FormulaRead | null;
 }) {
   const name = f.label || f.id;
+  const wordsId = (box: FormulaBox) => `formula-words-${f.id}-${box}`;
   return (
     <>
       {isCondition(f)
@@ -213,14 +219,26 @@ export function FormulaBody({ definition, edit, f, problem, tried, bind }: Edits
             {CONDITION_PARTS.map((part) => (
               <React.Fragment key={part}>
                 <span style={{ ...small, color: 'var(--cyan)', opacity: 1 }}>{PART_WORD[part]}</span>
-                <TextBox label={`${name} ${PART_WORD[part].toLowerCase()}`} value={partOf(f, part)} bad={!!problem}
+                <TextBox label={`${name} ${PART_WORD[part].toLowerCase()}`} value={partOf(f, part)} bad={!!problem || isMistake(reads?.(part))}
+                  describedBy={isMistake(reads?.(part)) ? wordsId(part) : undefined}
                   onText={(text) => edit(withCondition(definition, f.id, { [part]: text }))} {...bind?.(part)} />
+                {/* A condition's parts get a line only for a mistake: their words would say little. */}
+                {isMistake(reads?.(part)) && <>
+                  <span />
+                  <FormulaWords id={wordsId(part)} kind="formula" text={partOf(f, part)} read={reads?.(part)} live={false}
+                    onFix={(text) => edit(withCondition(definition, f.id, { [part]: text }))} />
+                </>}
               </React.Fragment>
             ))}
           </div>
         )
-        : <TextBox label={`${name} formula`} value={f.formula ?? ''} bad={!!problem}
-            onText={(text) => edit(withFormula(definition, f.id, { formula: text }))} {...bind?.('formula')} />}
+        : <>
+            <TextBox label={`${name} formula`} value={f.formula ?? ''} bad={!!problem || isMistake(reads?.('formula'))}
+              describedBy={reads ? wordsId('formula') : undefined}
+              onText={(text) => edit(withFormula(definition, f.id, { formula: text }))} {...bind?.('formula')} />
+            {reads && <FormulaWords id={wordsId('formula')} kind="formula" text={f.formula ?? ''} read={reads('formula')} sample={false} live={false}
+              onFix={(text) => edit(withFormula(definition, f.id, { formula: text }))} />}
+          </>}
       {problem && <div role="alert" style={{ ...why, color: 'var(--danger)', opacity: 1, fontSize: 11 }}>{problem}</div>}
       {!isCondition(f) && <Alternative f={f} definition={definition} edit={edit} tried={tried} />}
     </>

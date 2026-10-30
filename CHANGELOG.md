@@ -58,6 +58,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **STATS & RULES' formulas say what they read, and catch a misspelt name.** A name the system
+  hasn't got (`@strr` for `@str`) used to count as 0 without a word, on STATS & RULES and in the
+  graph view's panel, and PUBLISH let it through. Now each formula has a line under it saying it in
+  words ("worked out from Strength", "2 for each level", "your Strength"), and a misspelt name shows
+  there in red with a USE @str button that fixes it. In a condition, the IF, THEN or ELSE with the
+  mistake gets the line. The page's own INSERT panel and VALUE column stay as they were, and all its
+  formulas are read in one request a moment after typing stops.
 - **The formula box on ROLLS and RESTS.** A roll's ADD and AGAINST, and a rest's refill amounts,
   now get the same box as CHOICES. A line under each says it in words with what it comes to for
   the sample character: "against your rolled stat · sample, rolling Strength, rolled stat 16:

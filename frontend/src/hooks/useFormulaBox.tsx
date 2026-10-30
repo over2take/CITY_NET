@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
-  wordsOf, sampleLine, insertGroups, shapesOf, writeShape, levelTokens, DIE_SIDES,
+  insertGroups, shapesOf, writeShape, levelTokens, DIE_SIDES, isMistake,
   type FormulaKind, type FormulaRead, type Shape,
 } from '../sheets/formulaBox';
+import { FormulaWords } from '../components/FormulaWords';
 import { allStats, formulaList, insertToken } from '../sheets/statsRules';
 import { FormulaIcon } from '../components/FormulaIcon';
 import { PREVIEW_DELAY_MS } from './usePreviewValues';
@@ -93,7 +94,7 @@ export function useFormulaBox({ definition, api, kind, roll, value, onChange, la
   };
   const current = shapes.find((s) => s.id === shape?.id);
   const shown = value.trim() && read?.text === value ? read.result : null;
-  const bad = !!shown && !shown.ok;
+  const bad = isMistake(shown);
 
   const field = (
     <span style={{ display: 'flex', gap: 6, minWidth: 0 }}>
@@ -113,22 +114,9 @@ export function useFormulaBox({ definition, api, kind, roll, value, onChange, la
     </span>
   );
 
-  const words = wordsOf(kind, value, shown && shown.ok ? shown.reads : []);
   const help = (
     <>
-      {value.trim() && (
-        <div role="status" data-testid="formula-words" style={{ textAlign: 'left', fontSize: 11, lineHeight: 1.5, color: bad ? 'var(--danger)' : 'var(--cyan)', display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-          {bad && shown && !shown.ok
-            ? <>
-                <span>{shown.problem}</span>
-                {shown.name && shown.suggest && (
-                  <button type="button" style={chip(false)}
-                    onClick={() => onChange(value.replace(new RegExp(`@${shown.name}(?![a-z0-9_])`), `@${shown.suggest}`))}>USE @{shown.suggest}</button>
-                )}
-              </>
-            : <span>{words}{shown && shown.ok && <span style={{ color: 'var(--green)', opacity: 0.75 }}> · {sampleLine(kind, shown)}</span>}</span>}
-        </div>
-      )}
+      <FormulaWords kind={kind} text={value} read={shown || null} onFix={onChange} />
       {open && (
         <div role="group" aria-label={`Help writing ${label}`} style={{ textAlign: 'left', border: '1px solid var(--cyan)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11 }}>
           <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
