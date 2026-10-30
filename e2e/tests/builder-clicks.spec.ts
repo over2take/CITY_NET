@@ -67,6 +67,9 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await feature.getByRole('button', { name: '+ MODIFIER' }).click();
       await feature.getByRole('combobox', { name: 'OPENS A LIST' }).selectOption({ label: 'NEW CHOICE' });
       await expect(feature.getByRole('spinbutton', { name: 'HOW MANY' })).toBeVisible();
+      // The modifier's formula box with its help open, so SHAPE and INSERT are there (formula box 1).
+      await feature.getByRole('button', { name: 'Help writing Modifier 1: by' }).click();
+      await expect(feature.getByRole('group', { name: 'Help writing Modifier 1: by' })).toBeVisible();
     }
     missed[p] = await unreachable(page);
     if (p === 'CHOICES') {
