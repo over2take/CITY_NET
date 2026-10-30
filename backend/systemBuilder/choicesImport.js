@@ -3,8 +3,8 @@
 // and their features against the draft and shows what would change; nothing here saves.
 //
 //   [options]
-//   name, description, requires
-//   Ranger, "At home past the last road.", @dex >= 13
+//   name, description, requires, die
+//   Ranger, "At home past the last road.", @dex >= 13, d10
 //
 //   [features]
 //   option, feature, level, words, uses, refill
@@ -14,7 +14,8 @@
 // new one is added, and nothing is deleted or renamed. A feature is found within its option by name,
 // and by level too only when that option has the name at more than one level, in the list or in the
 // file (ABILITY SCORE IMPROVEMENT at 4 and 8). An empty cell leaves that part as it is; `-` clears it.
-// Only words, levels, requirements and uses come from a file: modifiers, rolls, roll changes and the
+// A levelled list's options take their die too (R1a: d10, or 10). Only words, levels, requirements,
+// dice and uses come from a file: modifiers, rolls, roll changes and the
 // list a feature opens stay as the builder has them. A row with a mistake is skipped and said, by its
 // line, and the rest goes in (the user asked for the GM to be warned of each, 2026-10-28).
 //
@@ -33,7 +34,7 @@ const { splitRow, delimiterOf, stripBom } = require('../shops/catalogueParse');
 const MAX_BYTES = 200_000;
 /** The columns each part reads; the first ones named are required. */
 const COLUMNS = {
-  options: { required: ['name'], read: ['name', 'description', 'requires'] },
+  options: { required: ['name'], read: ['name', 'description', 'requires', 'die'] },
   features: { required: ['option', 'feature'], read: ['option', 'feature', 'level', 'words', 'uses', 'refill'] },
 };
 /** What a cell says to clear its part. */
@@ -91,7 +92,7 @@ const formulaProblem = (text, known, isTable) => {
  * The rows of a file by part, each with its line and its cells by column; the problems with whole
  * parts (a missing column, a part this doesn't read) as skipped lines; and notes about columns.
  */
-const rowsOf = (text, levelled, many) => {
+const rowsOf = (text, levelled, many, ownLevels = levelled) => {
   const delimiter = delimiterOf(text);
   const rows = { options: [], features: [] };
   const skipped = [];
@@ -125,6 +126,7 @@ const rowsOf = (text, levelled, many) => {
       columns = named;
       for (const c of named.filter((x) => x && !COLUMNS[part].read.includes(x))) notes.push({ line, message: `The ${c} column isn't read: only ${COLUMNS[part].read.join(', ')}` });
       if (part === 'features' && named.includes('level') && !levelled) notes.push({ line, message: `${many} has no levels, so the level column is ignored` });
+      if (part === 'options' && named.includes('die') && !ownLevels) notes.push({ line, message: `${many} isn't levelled, so the die column is ignored` });
       return;
     }
     const cols = columns;
@@ -152,7 +154,9 @@ const readChoicesFile = (definition, listId, input) => {
   // following the level of what opened it (7a5d).
   const levelled = unlocksByLevelOf(definition).has(next.id);
   const many = (next.many || next.id).toUpperCase();
-  const { rows, skipped, notes } = rowsOf(stripBom(input), levelled, many);
+  // A die only where the list has levels of its own (a class), not one it follows.
+  const ownLevels = next.levelled === true;
+  const { rows, skipped, notes } = rowsOf(stripBom(input), levelled, many, ownLevels);
   const added = { options: [], features: [] };
   const changed = { options: [], features: [] };
   let unchanged = 0;
@@ -185,7 +189,14 @@ const readChoicesFile = (definition, listId, input) => {
     const name = row.get('name');
     const description = row.get('description');
     const requires = row.get('requires');
+    // A die as d10 or 10, read only in a levelled list; '-' takes it away.
+    const dieText = ownLevels ? row.get('die') : '';
+    const dieMatch = /^d?(\d+)$/i.exec(dieText);
+    const die = dieMatch ? Number(dieMatch[1]) : null;
     if (!name || clearing(name)) { skip(row.line, 'No name'); continue; }
+    if (dieText && !clearing(dieText) && (die === null || die < LIMITS.dieLeast || die > LIMITS.dieMost)) {
+      skip(row.line, `${name}: die: a die like d10, ${LIMITS.dieLeast} to ${LIMITS.dieMost} sides`); continue;
+    }
     if (name.length > LIMITS.label) { skip(row.line, `${name.slice(0, 20)}…: a name is ${LIMITS.label} characters at most`); continue; }
     if (description.length > LIMITS.description) { skip(row.line, `${name}: the description is longer than ${LIMITS.description} characters`); continue; }
     if (requires && !clearing(requires)) {
@@ -200,8 +211,9 @@ const readChoicesFile = (definition, listId, input) => {
       const made = { id: idFrom(name, taken), label: name, features: [] };
       if (description && !clearing(description)) made.description = description;
       if (requires && !clearing(requires)) made.requires = requires;
+      if (die !== null) made.die = die;
       next.options.push(made);
-      added.options.push({ line: row.line, option: name, ...(made.requires ? { requires: made.requires } : {}) });
+      added.options.push({ line: row.line, option: name, ...(made.requires ? { requires: made.requires } : {}), ...(made.die ? { die: `d${made.die}` } : {}) });
       continue;
     }
     const parts = [];
@@ -212,6 +224,14 @@ const readChoicesFile = (definition, listId, input) => {
       if (sameWords(from, to)) continue;
       parts.push({ part: key, from, to });
       if (to) option[key] = to; else delete option[key];
+    }
+    if (dieText) {
+      const from = Number.isInteger(option.die) ? `d${option.die}` : '';
+      const to = clearing(dieText) ? '' : `d${die}`;
+      if (from !== to) {
+        parts.push({ part: 'die', from, to });
+        if (to) option.die = die; else delete option.die;
+      }
     }
     if (parts.length) changed.options.push({ line: row.line, option: option.label, parts });
     else unchanged += 1;

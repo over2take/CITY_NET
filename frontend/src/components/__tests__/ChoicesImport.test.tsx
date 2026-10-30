@@ -103,7 +103,7 @@ describe('IMPORT on a list', () => {
     expect(listName).toBe('hearth-classes.csv');
     expect(list).toContain('\nSoldier, Second Wind, 1, , 1, Short rest\n');
     expect(exampleName).toBe('hearth-classes-example.csv');
-    expect(example).toContain('\nVeteran, "Has seen worse, and says so.", @dex >= 13\n');
+    expect(example).toContain('\nVeteran, "Has seen worse, and says so.", @dex >= 13, d10\n');
   });
 });
 
