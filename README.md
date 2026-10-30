@@ -1297,7 +1297,8 @@ CITY_NET/
 ├── .claude/skills/             # Skills for Claude Code, shared with the repo (the rest of .claude/ is local and ignored)
 │   ├── builder-piece/SKILL.md  # The steps for one builder piece: branch, tests, mutation check, upload paths, docs, then a compare link and what to try
 │   └── mutation-check/SKILL.md # Breaking new code on purpose to see the tests catch it: picking the breaks, writing the plan, acting on what survives
-├── CLAUDE.md                   # Notes for Claude Code: what the project is, its commands, and the house rules (git, spelling, themes, windows, line endings, CI journeys)
+├── AGENTS.md                   # Notes for any AI coding tool (Cursor, Copilot, Codex, Claude Code...): what the project is, its commands, and the house rules (git, spelling, themes, windows, line endings, CI journeys); docs/ is only on the main developer's machine
+├── CLAUDE.md                   # Claude Code's way in: it loads AGENTS.md (@AGENTS.md), so there is one copy of the rules
 ├── scripts/                    # Helpers for working on the repo, run from its root
 │   ├── mutation-check.js       # Runs a mutation plan: tests pass first, each break run against its tests and put back, a backup so --restore undoes a killed run, exit 1 on a survivor
 │   └── changelog-add.js        # Adds an entry from a file under a heading of CHANGELOG.md's [Unreleased], keeping its line endings
