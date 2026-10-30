@@ -1294,6 +1294,13 @@ CITY_NET/
 ├── Dockerfile.backend
 ├── Dockerfile.frontend
 ├── .github/workflows/          # CI Tests on PRs and main; Release to Docker Hub on green main; Dev Build to Docker Hub on dispatch or a push to dev. Includes Updater on Real Docker (docker-test/updater-journey.mjs), and Nginx Proxy Behaviour, which runs the real nginx against the repository config and a stub upstream — a 40MB body through, the caller's address forwarded, the socket upgrading — because every other test mounts a router directly and never sees the proxy. And Browser Journeys, the e2e/ Playwright tests in a real browser
+├── .claude/skills/             # Skills for Claude Code, shared with the repo (the rest of .claude/ is local and ignored)
+│   ├── builder-piece/SKILL.md  # The steps for one builder piece: branch, tests, mutation check, upload paths, docs, then a compare link and what to try
+│   └── mutation-check/SKILL.md # Breaking new code on purpose to see the tests catch it: picking the breaks, writing the plan, acting on what survives
+├── CLAUDE.md                   # Notes for Claude Code: what the project is, its commands, and the house rules (git, spelling, themes, windows, line endings, CI journeys)
+├── scripts/                    # Helpers for working on the repo, run from its root
+│   ├── mutation-check.js       # Runs a mutation plan: tests pass first, each break run against its tests and put back, a backup so --restore undoes a killed run, exit 1 on a survivor
+│   └── changelog-add.js        # Adds an entry from a file under a heading of CHANGELOG.md's [Unreleased], keeping its line endings
 ├── docker-compose.yml          # Image tags read ${IMAGE_TAG:-latest}, so the release channel is a setting rather than an edit
 ├── nginx.conf                  # Proxies /api and the socket to the backend. Forwards X-Forwarded-For, without which every request reaches the app from this container's address and anything counting per caller counts the whole table as one; and allows a body at least as large as the biggest upload the app accepts, or a large map is refused by the proxy before the app ever sees it. A backend test asserts the second
 └── .env.example

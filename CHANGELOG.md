@@ -693,6 +693,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Notes and skills for Claude Code in the repo.** `CLAUDE.md` holds the project's commands and house
+  rules; `.claude/skills/` holds two shared skills, `builder-piece` (the steps for each builder piece)
+  and `mutation-check` (breaking new code on purpose to see the tests catch it). Two helpers moved
+  into `scripts/`: `mutation-check.js`, which runs the tests first, puts every file back and can
+  undo a killed run with `--restore`, and `changelog-add.js`. The rest of `.claude/` (local
+  settings) stays out of the repo.
 - **The browser journeys run in four parts at once on CI.** Each pull request's journeys were run
   one after another on one machine, about 27 minutes. They now run on four machines at once, each with
   its own servers and database and a share of the tests, about 12 minutes. The check is still called

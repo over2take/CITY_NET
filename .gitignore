@@ -32,7 +32,9 @@ backend/nodemon.json
 .idea/
 .DS_Store
 Thumbs.db
-.claude/
+# Claude Code: local settings stay private; the repo's skills are shared.
+.claude/*
+!.claude/skills/
 .agents/
 
 # Tunnel Configs and Certificates
