@@ -710,6 +710,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Recovery dice and resting, as a system says them (R1a).** The first piece of resting on the
+  sheet: a levelled list's option (a class) can have a die, and a system can have recovery dice,
+  named as it likes (Hit Dice, Recoveries): how many each character has, what one heals, the rests
+  they're spent at, and what each rest gives back. It can also say whether a rest the GM calls applies
+  at once or opens on each player's sheet. These are checked like the rest of a system, travel in a
+  system file, and the CHOICES IMPORT reads and writes a class's die. The builder's pages for them
+  and the sheet come in the next pieces.
 - **Notes and skills for AI coding tools in the repo.** `AGENTS.md` holds the project's commands and
   house rules for any AI coding tool that reads it (Cursor, Copilot, Codex and others), and `CLAUDE.md`
   loads it for Claude Code, so there is one copy. `.claude/skills/` holds two shared skills, `builder-piece` (the steps for each builder piece)

@@ -48,6 +48,25 @@ describe('held to the server', () => {
   });
 });
 
+describe('a levelled list\'s die in the files (R1a)', () => {
+  it('has a die column, the example\'s dice and the list\'s own, and comes back unchanged', () => {
+    const def = { ...HEARTH, choices: (HEARTH.choices as { id: string; options: object[] }[]).map((c) => (c.id === 'classes' ? { ...c, options: c.options.map((o, i) => (i ? o : { ...o, die: 10 })) } : c)) } as unknown as Definition;
+    const example = exampleFile(def, list(def, 'classes'));
+    expect(example).toContain('\nname, description, requires, die\n');
+    expect(example).toContain('# die is an option\'s die, like d10');
+    expect(example).toMatch(/\nVeteran, .*, d10\n/);
+    const text = listFile(def, list(def, 'classes'));
+    expect(text).toContain('\nname, description, requires, die\n');
+    // The list's own die, written as d10; an option without one has an empty cell.
+    expect(text).toMatch(/\nSoldier, .*, d10\n/);
+    const r = readChoicesFile(def, 'classes', text);
+    expect([r.skipped, r.changes]).toEqual([[], 0]);
+    expect(r.list).toEqual(list(def, 'classes'));
+    // Not where the list isn't levelled.
+    expect(listFile(def, list(def, 'backgrounds'))).toContain('\nname, description, requires\n');
+  });
+});
+
 describe('DOWNLOAD THIS LIST', () => {
   it('imported back unchanged changes nothing, words with commas, quotes, #, spaces and line breaks included', () => {
     for (const id of ['classes', 'backgrounds']) {
@@ -61,7 +80,7 @@ describe('DOWNLOAD THIS LIST', () => {
 
   it('writes the list as it is, rests by name where the reader finds them by name, a note for what else a feature does', () => {
     const text = listFile(HEARTH, list(HEARTH, 'classes'));
-    expect(text).toContain('\n[options]\nname, description, requires\nSoldier, "Holds a line, a wall, ""anything"".", \n"#1 Fan", "  Spaces at the ends  ", @int >= 13\n');
+    expect(text).toContain('\n[options]\nname, description, requires, die\nSoldier, "Holds a line, a wall, ""anything"".", , \n"#1 Fan", "  Spaces at the ends  ", @int >= 13, \n');
     expect(text).toContain('\noption, feature, level, words, uses, refill\nSoldier, Second Wind, 1, "Breathe; then keep going.", @soldier_level + 1, Short rest\n');
     expect(text).toContain('\n# Soldier · Guard Stance also has modifiers, set in the builder\nSoldier, Guard Stance, 2, , , \n');
     // A rest turned off is found by its id only.
@@ -93,7 +112,7 @@ describe('DOWNLOAD EXAMPLE', () => {
     expect(levelled).toContain('# CLASSES for Hearth & Home, to import on the builder\'s CHOICES page (IMPORT on the CLASSES list).');
     expect(levelled).toContain('They can read @str, @int, @guard, @level, @classes_level, each option\'s own level, like @soldier_level.');
     expect(levelled).toContain('# refill is one of this system\'s rests, by name: Short rest, Long rest, End of session, Dawn prayer. It needs uses.');
-    expect(levelled).toContain('\nVeteran, "Has seen worse, and says so.", @str >= 13\n');
+    expect(levelled).toContain('\nVeteran, "Has seen worse, and says so.", @str >= 13, d10\n');
     expect(levelled).toContain('\noption, feature, level, words, uses, refill\n');
     expect(levelled).toContain('\nScholar, Training, 8, Raise one stat., , \n');
     const flat = exampleFile(HEARTH, list(HEARTH, 'backgrounds'));
@@ -127,7 +146,7 @@ describe('DOWNLOAD EXAMPLE', () => {
     const text = exampleFile(bare, list(bare, 'paths'));
     expect(text).toContain('They can read @level, @paths_level, each option\'s own level, like @soldier_level.');
     expect(text).toContain('by name: none (it has none on).');
-    expect(text).toContain('\nVeteran, "Has seen worse, and says so.", \n');
+    expect(text).toContain('\nVeteran, "Has seen worse, and says so.", , d10\n');
     const r = readChoicesFile(bare, 'paths', text);
     expect(r.skipped).toEqual([]);
     expect(problems(withImported(bare, r.list))).toEqual([]);

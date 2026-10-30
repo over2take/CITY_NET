@@ -140,7 +140,7 @@ export function ChoicesImport({ definition, list, api, edit, onClose, onApplied 
           })}
         </div>
         <textarea ref={box} value={text} aria-label="Text to import" spellCheck={false} className="cyber-scroll"
-          placeholder={`Paste a table here, or upload a file.\n\n[options]\nname, description, requires\n\n[features]\n${byLevel ? 'option, feature, level, words, uses, refill' : 'option, feature, words, uses, refill'}`}
+          placeholder={`Paste a table here, or upload a file.\n\n[options]\nname, description, requires${list.levelled ? ', die' : ''}\n\n[features]\n${byLevel ? 'option, feature, level, words, uses, refill' : 'option, feature, words, uses, refill'}`}
           onChange={(e) => change(e.target.value)}
           onScroll={(e) => { if (gutter.current) gutter.current.scrollTop = e.currentTarget.scrollTop; }}
           style={{ ...lines, background: 'var(--black)', color: 'var(--green)', border: 0, resize: 'none', whiteSpace: 'pre', overflow: 'auto', height: '100%', width: '100%', outline: 'none' }} />

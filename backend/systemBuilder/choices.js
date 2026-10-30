@@ -13,6 +13,8 @@
 //       options: [
 //         { id: 'soldier', label: 'Soldier', description: '...',
 //           requires: '@str >= 13',          // optional: a formula, met when it isn't 0
+//           die: 10,                         // optional, a levelled list's: its die, by its sides
+//                                            // (R1a: recovery dice; level-up health in 7d)
 //           features: [
 //             { id: 'guard_stance', label: 'Guard Stance', text: 'Words for the table.',
 //               at: 1,                                          // the pick's level it unlocks at (levelled lists)
@@ -96,11 +98,14 @@ const LIMITS = {
   description: 1000,
   /** How many picks one feature opening a list gives (7a5a). */
   opens: 10,
+  /** A levelled option's die, by its sides (R1a). */
+  dieLeast: 2,
+  dieMost: 100,
 };
 /** How a list is picked (7a5a): on its own, only under the features that open it, both, or not at all (everyone has it). */
 const PICKED = ['own', 'features', 'both', 'everyone'];
 const LIST_KEYS = new Set(['id', 'one', 'many', 'picks', 'levelled', 'again', 'picked', 'options']);
-const OPTION_KEYS = new Set(['id', 'label', 'description', 'requires', 'features']);
+const OPTION_KEYS = new Set(['id', 'label', 'description', 'requires', 'die', 'features']);
 const FEATURE_KEYS = new Set(['id', 'label', 'text', 'at', 'modifiers', 'uses', 'rolls', 'changes', 'choice', 'choice_count']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -304,6 +309,10 @@ const checkChoices = (definition, problems) => {
       text(o.label, `${at}, label`, LIMITS.label, { required: true });
       text(o.description, `${at}, description`, LIMITS.description);
       if (o.requires !== undefined) formula(o.requires, `${at}, requires`);
+      if (o.die !== undefined) {
+        if (c.levelled !== true) problems.push({ where: `${at}, die`, message: 'Only an option of a levelled list has a die' });
+        else if (!Number.isInteger(o.die) || o.die < LIMITS.dieLeast || o.die > LIMITS.dieMost) problems.push({ where: `${at}, die`, message: `A die of ${LIMITS.dieLeast} to ${LIMITS.dieMost} sides` });
+      }
       if (o.features === undefined) return;
       if (!Array.isArray(o.features)) { problems.push({ where: `${at}, features`, message: 'Must be a list of features' }); return; }
       if (o.features.length > LIMITS.features) problems.push({ where: `${at}, features`, message: `At most ${LIMITS.features} features` });

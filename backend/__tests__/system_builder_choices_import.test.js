@@ -293,7 +293,7 @@ describe('a line with a mistake is skipped, named by its line, and the rest goes
     ));
     expect(r.skipped).toEqual([
       { line: 1, message: '[spells] isn\'t read here: a file has [options] and [features]' },
-      { line: 5, message: '[options] needs a name column: its first line names the columns (name, description, requires)' },
+      { line: 5, message: '[options] needs a name column: its first line names the columns (name, description, requires, die)' },
     ]);
     expect(r.notes).toEqual([{ line: 8, message: 'The cost column isn\'t read: only option, feature, level, words, uses, refill' }]);
     expect(featureIn(r, 'Mage', 'Spellbook')).toHaveLength(1);
@@ -318,6 +318,35 @@ describe('a line with a mistake is skipped, named by its line, and the rest goes
       { line: 3, message: 'Ranger: CLASSES has 100 options, the most a list holds' },
       { line: 6, message: 'One more: O0 has 40 features, the most an option holds' },
     ]);
+  });
+});
+
+describe('a levelled list\'s die (R1a)', () => {
+  it('adds, changes and clears an option\'s die, as d10 or 10, and says one it can\'t read', () => {
+    const r = read(FILE(
+      '[options]', 'name, die',
+      'Soldier, d10',
+      'Mage, 6',
+      'Ranger, d1',
+      'Bard, d8',
+    ));
+    expect(optionIn(r, 'Soldier').die).toBe(10);
+    expect(optionIn(r, 'Mage').die).toBe(6);
+    expect(optionIn(r, 'Bard').die).toBe(8);
+    expect(r.added.options.find((o) => o.option === 'Bard')).toMatchObject({ die: 'd8' });
+    expect(r.changed.options.map((o) => [o.option, o.parts])).toEqual([
+      ['Soldier', [{ part: 'die', from: '', to: 'd10' }]], ['Mage', [{ part: 'die', from: '', to: 'd6' }]],
+    ]);
+    expect(r.skipped).toEqual([{ line: 5, message: 'Ranger: die: a die like d10, 2 to 100 sides' }]);
+    expect(checkDefinition(withList(r)).problems).toEqual([]);
+    const cleared = read(FILE('[options]', 'name, die', 'Soldier, -'), 'classes', withList(r));
+    expect(optionIn(cleared, 'Soldier')).not.toHaveProperty('die');
+  });
+
+  it('ignores the column, and says so, where the list isn\'t levelled', () => {
+    const r = read(FILE('[options]', 'name, die', 'Sailor, d10'), 'backgrounds');
+    expect(r.notes).toEqual([{ line: 2, message: 'BACKGROUNDS isn\'t levelled, so the die column is ignored' }]);
+    expect(optionIn(r, 'Sailor')).not.toHaveProperty('die');
   });
 });
 

@@ -90,6 +90,7 @@ const head = (def: Definition, list: ChoiceList, rests: string[], intro: string[
     '# An empty cell leaves that part as it is; write - to clear it.',
     '#',
     `# requires and uses are formulas, as in the builder. They can read ${names.length ? names.join(', ') : 'numbers only (this system has no stats yet)'}.`,
+    ...(list.levelled ? ['# die is an option\'s die, like d10: what it heals with as recovery dice, and rolls for health on level-up.'] : []),
     `# refill is one of this system's rests, by name: ${rests.length ? rests.join(', ') : 'none (it has none on)'}. It needs uses.`,
     unlocksByLevel(def, list)
       ? `# level is when a feature unlocks, 1 to 30${followed.length ? `: the level of the pick that opened it (${followed.join(', ')})` : ''}. Features of one name at several levels are told apart by level.`
@@ -97,6 +98,9 @@ const head = (def: Definition, list: ChoiceList, rests: string[], intro: string[
     '# Modifiers, rolls and the lists a feature opens are set in the builder; an import never changes them.',
   ];
 };
+
+/** The options' columns: a levelled list's have a die (R1a). */
+const optionColumns = (list: ChoiceList) => (list.levelled ? 'name, description, requires, die' : 'name, description, requires');
 
 const featureColumns = (def: Definition, list: ChoiceList) => (unlocksByLevel(def, list) ? 'option, feature, level, words, uses, refill' : 'option, feature, words, uses, refill');
 
@@ -116,9 +120,9 @@ export const exampleFile = (def: Definition, list: ChoiceList): string => {
     ]),
     '',
     '[options]',
-    'name, description, requires',
-    row('Veteran', 'Has seen worse, and says so.', stat ? `@${stat} >= 13` : ''),
-    row('Scholar', 'Reads everything twice.', ''),
+    optionColumns(list),
+    row('Veteran', 'Has seen worse, and says so.', stat ? `@${stat} >= 13` : '', ...(list.levelled ? ['d10'] : [])),
+    row('Scholar', 'Reads everything twice.', '', ...(list.levelled ? ['d6'] : [])),
     '',
     '[features]',
     featureColumns(def, list),
@@ -143,8 +147,8 @@ export const listFile = (def: Definition, list: ChoiceList): string => {
     ]),
     '',
     '[options]',
-    'name, description, requires',
-    ...list.options.map((o) => row(o.label, o.description ?? '', o.requires ?? '')),
+    optionColumns(list),
+    ...list.options.map((o) => row(o.label, o.description ?? '', o.requires ?? '', ...(list.levelled ? [Number.isInteger(o.die) ? `d${o.die}` : ''] : []))),
     '',
     '[features]',
     featureColumns(def, list),
