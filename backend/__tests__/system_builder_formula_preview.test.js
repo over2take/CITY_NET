@@ -170,3 +170,13 @@ describe('the route', () => {
     expect((await request(app).post('/api/systems/preview-formulas').send({ definition: DEF })).status).toBe(401);
   });
 });
+
+describe('a formula of STATS & RULES (formula box 3)', () => {
+  it('reads stats, other formulas and tables, and says a name the system hasn\'t got with the nearest', () => {
+    expect(previewFormula(DEF, '@con_mod + @str', 'formula')).toEqual({ ok: true, value: 18, reads: [
+      { id: 'con_mod', label: 'CON modifier', value: 2 }, { id: 'str', label: 'Strength', value: 16 },
+    ] });
+    expect(previewFormula(DEF, '@strr + 1', 'formula')).toEqual({ ok: false, problem: '@strr isn\'t one of this system\'s names', name: 'strr', suggest: 'str' });
+    expect(previewFormulas(DEF, [{ text: '@con_mod', kind: 'formula' }])[0].ok).toBe(true);
+  });
+});

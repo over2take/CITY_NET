@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { wordsOf, sampleLine, insertGroups, levelTokens, shapesOf, writeShape } from '../formulaBox';
+import { wordsOf, sampleLine, insertGroups, levelTokens, shapesOf, writeShape, formulaTexts, isMistake } from '../formulaBox';
 import type { Definition } from '../systemsApi';
 
 /**
@@ -154,5 +154,31 @@ describe('a roll\'s ADD and AGAINST, and a rest\'s amount (formula box 2)', () =
     expect(shapesOf({ format: 1, name: 'B' } as Definition, 'add')[3].needs).toBe('No levels yet: make a list levelled on CHOICES');
     expect([writeShape('rolled', 1), writeShape('rolled_mod', 1)]).toEqual(['@this', '@this_mod']);
     expect([writeShape('dice', 2, '@level', 6), writeShape('dice', 0), writeShape('dice_and_stat', 1, '@con_mod', 10)]).toEqual(['2d6', '1d8', '1d10 + @con_mod']);
+  });
+});
+
+describe('a formula of STATS & RULES (formula box 3)', () => {
+  it('says it as a value, with no sign', () => {
+    expect(wordsOf('formula', '10')).toBe('10, always');
+    expect(wordsOf('formula', '2 * @level', LEVEL)).toBe('2 for each level');
+    expect(wordsOf('formula', '@str', [{ id: 'str', label: 'Strength', value: 16 }])).toBe('your Strength');
+    expect(wordsOf('formula', 'floor(@level / 2)', LEVEL)).toBe('half your level, rounded down');
+    expect(wordsOf('formula', '10 + @dex + @armor')).toBe('worked out from dex, armor');
+  });
+
+  it('asks for a formula\'s text, or a condition\'s three parts, keyed as the page binds them', () => {
+    expect(formulaTexts([
+      { id: 'save', label: 'Save', formula: '16 - @str_mod' },
+      { id: 'hurt', label: 'Hurt', kind: 'condition', when: '@str < 5', then: '1', else: '@str_mod' },
+      { id: 'blank', label: 'Blank' },
+    ] as never)).toEqual([
+      { key: 'save:formula', text: '16 - @str_mod', kind: 'formula' },
+      { key: 'hurt:when', text: '@str < 5', kind: 'formula' }, { key: 'hurt:then', text: '1', kind: 'formula' }, { key: 'hurt:else', text: '@str_mod', kind: 'formula' },
+      { key: 'blank:formula', text: '', kind: 'formula' },
+    ]);
+  });
+
+  it('tells a mistake from an answer, and from no answer yet', () => {
+    expect([isMistake({ ok: false, problem: 'x' }), isMistake({ ok: true, value: 1, reads: [] }), isMistake(null)]).toEqual([true, false, false]);
   });
 });
