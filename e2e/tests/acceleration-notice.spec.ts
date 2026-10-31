@@ -28,4 +28,13 @@ test('a browser drawing in software is told how to turn acceleration on, until i
   await page.reload();
   await signInAsGm(page);
   await expect(notice).toBeHidden();
+
+  // SYSTEM_INFO: MAP SLOW? has the steps, and WARN ME, off since DISMISS, brings it back.
+  await page.getByRole('button', { name: 'SYSTEM_INFO', exact: true }).click();
+  await page.getByRole('button', { name: '▸ MAP SLOW?' }).click();
+  await expect(page.getByRole('region', { name: 'Map slow?' })).toContainText('A slow 3D map usually means hardware acceleration is off');
+  const warn = page.getByRole('switch', { name: /WARN ME IF HARDWARE ACCELERATION IS OFF/ });
+  await expect(warn).toHaveAttribute('aria-checked', 'false');
+  await warn.click();
+  await expect(notice).toBeVisible();
 });

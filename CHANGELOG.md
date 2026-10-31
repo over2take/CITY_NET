@@ -71,11 +71,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
-- **A slow map says why.** A browser with hardware acceleration turned off draws the 3D map on the
-  processor, and everything crawls with no word of why (Firefox, for one, can be set that way). Now
-  the GM and players see a small notice when it is off: HARDWARE ACCELERATION IS OFF: THE 3D MAP WILL
-  BE SLOW, with the steps to turn it on in their browser (Firefox, Chrome or Edge). DISMISS hides it
-  for good in that browser.
+- **A slow map says why.** A browser with hardware acceleration turned off draws the 3D map slowly,
+  with no word of why. Now the GM and players see a small notice when the browser itself says it
+  draws in software: HARDWARE ACCELERATION IS OFF: THE 3D MAP WILL BE SLOW, with the steps to turn
+  it on in their browser (Firefox, Chrome or Edge). It never shows from a guess. DISMISS stops it
+  for good in that browser. SYSTEM_INFO has MAP SLOW?, the same steps to open any time (some
+  browsers, Firefox among them, draw slowly without saying so), and a WARN ME IF HARDWARE
+  ACCELERATION IS OFF switch, kept in the browser, that turns the warning back on.
 - **Recovery dice on the sheet (R2b).** A character's recovery dice now head their sheet's CHOICES
   block: the system's name for them, what one heals and where they're spent, and each pool (a d10
   for each Fighter level, say) as pips lit while left. SPEND rolls as many as − and + say: the dice

@@ -86,8 +86,35 @@ export const stepsFor = (browser: Browser): string[] => {
   }
 };
 
-/** Where a dismissed notice is remembered, in this browser. */
+/** Where a dismissed notice is remembered, in this browser: the WARN ME switch off. */
 export const DISMISSED_KEY = 'citynet:accelNoticeDismissed';
+/** Said on the window whenever the WARN ME setting changes, so the notice and the switch agree. */
+export const WARN_EVENT = 'citynet:accelWarnChanged';
+
+/**
+ * Whether this browser wants the notice (SYSTEM_INFO's WARN ME IF HARDWARE ACCELERATION IS OFF):
+ * yes until dismissed or switched off; kept in this browser's local storage, never on the server.
+ */
+export const warnOn = (): boolean => {
+  try { return window.localStorage.getItem(DISMISSED_KEY) !== '1'; } catch { return true; }
+};
+
+/** The WARN ME setting changed: DISMISS, or the switch. */
+export const setWarn = (on: boolean) => {
+  try {
+    if (on) window.localStorage.removeItem(DISMISSED_KEY); else window.localStorage.setItem(DISMISSED_KEY, '1');
+  } catch { /* a private window: for now only */ }
+  window.dispatchEvent(new Event(WARN_EVENT));
+};
+
+/** The check's answer, asked once per page: the browser's drawing doesn't change while it is open. */
+let checked: Acceleration | null = null;
+export const accelerationOnce = (check: () => { state: Acceleration } = accelerationOf): Acceleration => {
+  if (checked === null) checked = check().state;
+  return checked;
+};
+/** For tests: ask again next time. */
+export const forgetAcceleration = () => { checked = null; };
 /**
  * Automated browsers (navigator.webdriver) draw in software and are never told, so the browser
  * tests' clicks aren't covered; this key in localStorage asks for the check all the same, for the

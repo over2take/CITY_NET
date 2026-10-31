@@ -12,6 +12,7 @@ import { InitiativeNavPanel } from '../modules/initiative/components/InitiativeN
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { CurrencyIcon } from './BankWindows';
 import { THEMES } from '../theme/themes';
+import { MapSlowHelp } from './MapSlowHelp';
 import type { ThemeName } from '../theme/themes';
 import { getTemplate } from '../sheets';
 import { useWords, asLabel } from '../sheets/words';
@@ -489,6 +490,8 @@ export function SystemInfoMenu({ userName, token, currentTheme, onThemeChange }:
             <span style={{ color: 'var(--green)' }}>{THEMES[currentTheme || 'classic']?.name || 'Classic'}</span>
           )}
         </div>
+        {/* A slow map's likely cause and its fix, and the warning's setting (2026-10-31). */}
+        <MapSlowHelp />
         <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '15px', fontSize: '0.7rem' }}>
           <span style={{ opacity: 0.6 }}>LICENSE:</span><br />
           <span style={{ color: 'var(--green)' }}>AGPL-3.0 — open source</span><br />

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { accelerationOf, browserOf, stepsFor, SOFTWARE_RENDERER } from '../hardwareAccel';
+import { accelerationOf, accelerationOnce, forgetAcceleration, browserOf, stepsFor, warnOn, setWarn, SOFTWARE_RENDERER, DISMISSED_KEY, WARN_EVENT } from '../hardwareAccel';
 
 /**
  * Whether the browser draws the 3D map on the graphics card (2026-10-31): off when only a slow WebGL
@@ -52,6 +52,43 @@ describe('whether drawing is accelerated', () => {
   it('unknown with no WebGL at all, or a canvas that throws', () => {
     expect(accelerationOf(canvases({ fast: false, any: false }).make)).toEqual({ state: 'unknown', renderer: null });
     expect(accelerationOf(canvases({ throws: true }).make)).toEqual({ state: 'unknown', renderer: null });
+  });
+});
+
+describe('the WARN ME setting, and asking once', () => {
+  it('on until switched off, kept in local storage, each change said on the window', () => {
+    window.localStorage.clear();
+    const heard = vi.fn();
+    window.addEventListener(WARN_EVENT, heard);
+    expect(warnOn()).toBe(true);
+    setWarn(false);
+    expect(warnOn()).toBe(false);
+    expect(window.localStorage.getItem(DISMISSED_KEY)).toBe('1');
+    setWarn(true);
+    expect(warnOn()).toBe(true);
+    expect(window.localStorage.getItem(DISMISSED_KEY)).toBeNull();
+    expect(heard).toHaveBeenCalledTimes(2);
+    window.removeEventListener(WARN_EVENT, heard);
+  });
+
+  it('on where the browser keeps nothing', () => {
+    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
+    expect(warnOn()).toBe(true);
+    expect(() => setWarn(false)).not.toThrow();
+    get.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  it('the check asked once per page, until forgotten', () => {
+    forgetAcceleration();
+    const check = vi.fn(() => ({ state: 'off' as const }));
+    expect(accelerationOnce(check)).toBe('off');
+    expect(accelerationOnce(() => ({ state: 'on' as const }))).toBe('off');
+    expect(check).toHaveBeenCalledTimes(1);
+    forgetAcceleration();
+    expect(accelerationOnce(() => ({ state: 'on' as const }))).toBe('on');
+    forgetAcceleration();
   });
 });
 
