@@ -176,14 +176,14 @@ function Detail({ rest, definition, edit, targets, api }: { rest: Rest; definiti
               </span>
             : <button type="button" className="utility-btn danger-btn" style={btn} onClick={() => setConfirm(true)}>DELETE</button>}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '110px minmax(0, 1fr)', gap: '10px 12px', alignItems: 'start' }}>
-        <label style={{ ...small, textAlign: 'right', paddingTop: 6 }} htmlFor={`rest-name-${rest.id}`}>NAME</label>
+      <div style={{ display: 'grid', gridTemplateColumns: '130px minmax(0, 1fr)', gap: '10px 12px', alignItems: 'start' }}>
+        <FieldName beside htmlFor={`rest-name-${rest.id}`} style={small}>NAME</FieldName>
         <input id={`rest-name-${rest.id}`} type="text" maxLength={LIMITS.name} value={typedName} style={input}
           placeholder={rest.standard ? restList({ format: 1, name: '' }).find((r) => r.id === rest.id)?.name : 'Name'}
           aria-invalid={!rest.standard && !rest.name.trim() ? true : undefined}
           onChange={(e) => edit(withRest(definition, rest.id, { name: e.target.value }))} />
 
-        <span style={{ ...small, textAlign: 'right', paddingTop: 6 }}>ALSO COUNTS AS</span>
+        <FieldName beside style={small}>ALSO COUNTS AS</FieldName>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           <div role="group" aria-label="Also counts as" style={{ ...row, gap: 4 }}>
             {others.map((o) => {
@@ -202,10 +202,10 @@ function Detail({ rest, definition, edit, targets, api }: { rest: Rest; definiti
           <p style={{ ...why, fontSize: 11 }}>Everything those rests do happens first, then this one&apos;s own.</p>
         </div>
 
-        <FieldName boxStyle={{ justifySelf: 'end', paddingTop: 6 }} hint={HINTS['rests.refills']} style={small}>REFILLS</FieldName>
+        <FieldName beside hint={HINTS['rests.refills']} style={small}>REFILLS</FieldName>
         <Refills rest={rest} definition={definition} edit={edit} targets={targets} api={api} />
 
-        <span style={{ ...small, textAlign: 'right', paddingTop: 6 }}>WEARS OFF</span>
+        <FieldName beside style={small}>WEARS OFF</FieldName>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           <div role="group" aria-label="Wears off" style={{ ...row, gap: 4 }}>
             {conditions.map((c) => {
@@ -228,7 +228,7 @@ function Detail({ rest, definition, edit, targets, api }: { rest: Rest; definiti
         </div>
 
         {api && <>
-          <FieldName boxStyle={{ justifySelf: 'end', paddingTop: 6 }} hint={HINTS['rests.sample']} style={small}>ON THE SAMPLE</FieldName>
+          <FieldName beside hint={HINTS['rests.sample']} style={small}>ON THE SAMPLE</FieldName>
           <Sample rest={rest} definition={definition} api={api} />
         </>}
       </div>
@@ -240,8 +240,7 @@ const seg = (on: boolean): React.CSSProperties => ({
   background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)', border: 0, fontFamily: 'monospace', fontSize: 11, padding: '3px 12px', cursor: 'pointer',
 });
 const segs: React.CSSProperties = { display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--green)', justifySelf: 'start', alignSelf: 'flex-start' };
-const settings: React.CSSProperties = { display: 'grid', gridTemplateColumns: '150px minmax(0, 1fr)', gap: '10px 12px', alignItems: 'start' };
-const END = { justifySelf: 'end', paddingTop: 4 } as const;
+const settings: React.CSSProperties = { display: 'grid', gridTemplateColumns: '180px minmax(0, 1fr)', gap: '10px 12px', alignItems: 'start' };
 /** What a rest gives back, as its buttons say it; nothing is no entry. */
 const BACK_WAYS: { id: BackHow | null; label: string }[] = [{ id: null, label: 'NOTHING' }, { id: 'all', label: 'ALL' }, { id: 'half', label: 'HALF, AT LEAST 1' }, { id: 'by', label: 'BY AN AMOUNT' }];
 
@@ -288,16 +287,16 @@ function RecoveryFields({ recovery, definition, edit, api }: { recovery: Recover
   const shown = rests.filter((r) => r.on || (spent !== 'any' && spent.includes(r.id)) || recovery.back.some((b) => b.rest === r.id));
   return (
     <div style={settings}>
-      <label htmlFor="recovery-name" style={{ ...small, ...END, textAlign: 'right' }}>NAME</label>
+      <FieldName beside htmlFor="recovery-name" style={small}>NAME</FieldName>
       <input id="recovery-name" type="text" maxLength={RECOVERY_LIMITS.name} value={recovery.name} style={{ ...input, width: 200, justifySelf: 'start' }}
         aria-invalid={!recovery.name.trim() ? true : undefined} onChange={(e) => set({ name: e.target.value })} />
 
-      <span style={{ ...small, ...END }}>DICE</span>
+      <FieldName beside style={small}>DICE</FieldName>
       {dice.length
         ? <span style={{ ...why, fontSize: 11 }}>{dice.map((d) => `${d.label.toUpperCase()} D${d.die}`).join(' · ')}</span>
         : <span role="alert" style={{ ...why, color: 'var(--danger)' }}>No option has a die to roll: give a levelled list&apos;s options a HIT DIE on CHOICES.</span>}
 
-      <FieldName boxStyle={END} hint={HINTS['rests.recoveryCount']} style={small}>EACH HAS</FieldName>
+      <FieldName beside hint={HINTS['rests.recoveryCount']} style={small}>EACH HAS</FieldName>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
         <div style={row}>
           <span role="group" aria-label="Each has" style={segs}>
@@ -309,7 +308,7 @@ function RecoveryFields({ recovery, definition, edit, api }: { recovery: Recover
         {!byLevel && count.help}
       </div>
 
-      <FieldName boxStyle={END} hint={HINTS['rests.recoveryHeals']} style={small}>ONE HEALS</FieldName>
+      <FieldName beside hint={HINTS['rests.recoveryHeals']} style={small}>ONE HEALS</FieldName>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
         <div style={row}>
           <span role="group" aria-label="One heals" style={segs}>
@@ -322,7 +321,7 @@ function RecoveryFields({ recovery, definition, edit, api }: { recovery: Recover
         {plus.help}
       </div>
 
-      <FieldName boxStyle={END} hint={HINTS['rests.recoverySpent']} style={small}>SPENT AT</FieldName>
+      <FieldName beside hint={HINTS['rests.recoverySpent']} style={small}>SPENT AT</FieldName>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
         <div role="group" aria-label="Spent at" style={{ ...row, gap: 4 }}>
           {shown.map((r) => {
@@ -339,7 +338,7 @@ function RecoveryFields({ recovery, definition, edit, api }: { recovery: Recover
         {spent !== 'any' && !spent.length && <span role="alert" style={{ ...why, color: 'var(--danger)' }}>Tick the rests they are spent at, or ANY TIME.</span>}
       </div>
 
-      <FieldName boxStyle={END} hint={HINTS['rests.recoveryBack']} style={small}>GIVES BACK</FieldName>
+      <FieldName beside hint={HINTS['rests.recoveryBack']} style={small}>GIVES BACK</FieldName>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
         {shown.map((r) => <BackRow key={r.id} rest={r} back={recovery.back.find((b) => b.rest === r.id)} definition={definition} edit={edit} api={api} />)}
       </div>
@@ -366,7 +365,7 @@ function Resting({ definition, edit, api }: Props) {
         ? <RecoveryFields recovery={recovery} definition={definition} edit={edit} api={api} />
         : <p style={why}>None. A pool each character spends to heal at a rest, like D&amp;D&apos;s hit dice or 13th Age&apos;s recoveries: turn it on to name it and choose how it works.</p>}
       <div style={settings}>
-        <FieldName boxStyle={END} hint={HINTS['rests.finish']} style={small}>RESTS ARE FINISHED</FieldName>
+        <FieldName beside hint={HINTS['rests.finish']} style={small}>RESTS ARE FINISHED</FieldName>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           <span role="group" aria-label="Rests are finished" style={segs}>
             <button type="button" aria-pressed={finish === 'call'} style={seg(finish === 'call')} onClick={() => edit(withFinish(definition, 'call'))}>AT THE GM&apos;S CALL</button>

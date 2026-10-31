@@ -46,6 +46,8 @@ for tests. The journeys start their own servers on ports 5055 and 5174.
   `--black`, `--dark-green`, `--danger`, `--warning`, `--grid-section`, `--grid-cell`,
   `--panel-bg`. Portal floating UI into `themeRoot()` (`frontend/src/utils/themeRoot.ts`), never
   `document.body`, or it falls outside the theme.
+- **Builder names:** a name beside its field in a grid is `<FieldName beside>` (`HelpHint.tsx`), never
+  placed by hand with padding. The clicks sweep fails a name or column head more than 4px out of line.
 - **Windows:** use `DraggableWindow`, named like a program (`SHOP.EXE · VIC'S ARMS`), and
   `TerminalWindow` for a window with several parts. Prefer folders in an existing window over new
   windows. Keep rules in tested pure modules.

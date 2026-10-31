@@ -9,6 +9,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Names, "?" and column heads line up across the builder.** A setting's name sat above or below
+  its field by up to 50px on some pages (CONDITIONS' ICON, a feature's MODIFIERS, RESTS' WEARS OFF,
+  ROLLS' AGAINST), as each page placed its own by hand. Every name now sits level with the first
+  line of its field, the same way on every page, and the longest ones no longer wrap onto two lines.
+  The builder's pages also inherited centred text from the app, so a table's words (WORDS' terms,
+  READS AS) and the notes under fields were centred while their column heads and names weren't;
+  they are left-aligned now. A check in the browser tests fails any name or head out of line.
 - **A rest can read the character's levels.** A builder system's rest amounts could only name sheet
   fields, stats and formulas, so "heal by your level" (`@level`, `@fighter_level d10 + @con_mod`) was
   refused, though the box's own example suggested it. Levels now work in every rest amount. An amount
