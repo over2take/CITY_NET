@@ -15,7 +15,7 @@
 
 const { compileSystem } = require('./derived');
 const { overlayOf, choicesOf, workedOf, choicesShown, WORKED_KEY } = require('./choices');
-const { poolsOf } = require('./recovery');
+const { poolsOf, recoveryShown } = require('./recovery');
 const { fieldsRolledBy } = require('./tableRolls');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf, LIMITS: NPC_LIMITS } = require('./npc');
@@ -72,9 +72,9 @@ const metaOf = (definition) => {
         const changed = compiled.system.apply(data, overlayOf(definition, data));
         if (choicesOf(definition).length) {
           data[WORKED_KEY] = workedOf(definition, data);
-          // The recovery dice (R2a): each pool's die, how many and how many spent.
+          // The recovery dice (R2a, R2b): in the sheet's words, with each pool's die, how many and how many spent.
           const pools = poolsOf(definition, data);
-          if (pools.length) data[WORKED_KEY].recovery = pools.map(({ id, label, die, total, spent }) => ({ id, label, die, total, spent }));
+          if (pools.length) data[WORKED_KEY].recovery = { ...recoveryShown(definition), pools: pools.map(({ id, label, die, total, spent }) => ({ id, label, die, total, spent })) };
         } else delete data[WORKED_KEY];
         return changed;
       } catch (err) {

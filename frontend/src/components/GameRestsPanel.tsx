@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ToggleSwitch } from './ToggleSwitch';
 import {
   restCalls, chosenOf, requestFor, changeText, keyOf, WHO_LABELS, type Rested, type Who,
 } from '../sheets/restCalls';
@@ -8,6 +9,9 @@ import {
 // CALL it. The server rolls, writes and logs (backend/sheets/rests.js); everyone sees one dice-log
 // line per character. Everyone the panel could choose is previewed once, so ticking who rests asks
 // the server nothing. The GM and granted editors, as the route allows.
+//
+// A game whose recovery dice wait on the GM (R2b) has OPEN SPENDING here: while it is on, players
+// spend and tick them off from their sheets; off, theirs wait. Opened for a rest, closed after.
 
 const label: React.CSSProperties = { fontSize: '0.65rem', opacity: 0.7, letterSpacing: '1px' };
 const why: React.CSSProperties = { fontSize: '0.6rem', opacity: 0.6, margin: 0 };
@@ -31,6 +35,8 @@ export function GameRestsPanel({ token, system, npcs }: {
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [recovery, setRecovery] = useState<{ name: string; spend: 'any' | 'gm' } | null>(null);
+  const [open, setOpen] = useState(false);
   const npcIds = npcs.map((n) => n.id);
   const npcKey = npcIds.join(',');
 
@@ -42,7 +48,9 @@ export function GameRestsPanel({ token, system, npcs }: {
       const list = r.value && Array.isArray(r.value.rests) ? r.value.rests : [];
       setRests(list);
       setRestId((id) => (list.some((x) => x.id === id) ? id : list[0]?.id ?? ''));
+      setRecovery(r.value && r.value.recovery ? r.value.recovery : null);
     });
+    api.spendingOpen().then((r) => { if (live && r.ok) setOpen(r.value); });
     return () => { live = false; };
   }, [api, system]);
 
@@ -77,6 +85,12 @@ export function GameRestsPanel({ token, system, npcs }: {
     const n = r.value.characters.length;
     setSaid(`${rest.name.toUpperCase()} CALLED · ${n} CHARACTER${n === 1 ? '' : 'S'}`);
     setRound((x) => x + 1);
+  };
+  const spending = async (next: boolean) => {
+    const r = await api.setSpending(next);
+    if (!r.ok) { setError(r.error); return; }
+    setError(null);
+    setOpen(next);
   };
 
   return (
@@ -128,6 +142,13 @@ export function GameRestsPanel({ token, system, npcs }: {
         {busy ? 'CALLING…' : `CALL ${rest.name.toUpperCase()}`}
       </button>
       <p style={why}>Dice are rolled for each character when it is called; everyone sees a line each in the dice log.</p>
+      {recovery?.spend === 'gm' && (
+        <div role="group" aria-label="Spending recovery dice" style={{ display: 'flex', flexDirection: 'column', gap: 3, borderTop: '1px solid color-mix(in srgb, var(--dark-green) 70%, transparent)', paddingTop: 5 }}>
+          <span style={label}>{(recovery.name.trim() || 'RECOVERY DICE').toUpperCase()}</span>
+          <ToggleSwitch name="Spending recovery dice" label={open ? 'SPENDING OPEN' : 'SPENDING CLOSED'} on={open} onChange={spending} style={{ fontSize: '0.6rem' }} />
+          <p style={why}>{open ? 'Players can spend and tick them off from their sheets now. Close it when the rest is over.' : 'Players wait to spend them. Open it for a rest; you can spend them on any sheet any time.'}</p>
+        </div>
+      )}
       {said && <span role="status" style={{ fontSize: '0.6rem', color: 'var(--green)', letterSpacing: '1px' }}>{said}</span>}
       {error && <span role="alert" style={{ color: 'var(--danger)', fontSize: '0.6rem' }}>{error}</span>}
     </section>

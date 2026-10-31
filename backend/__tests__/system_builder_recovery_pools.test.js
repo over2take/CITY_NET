@@ -134,6 +134,17 @@ describe('spending', () => {
   });
 });
 
+describe('in the sheet\'s words (R2b)', () => {
+  it('the name, what one heals with its formula named, the rests by name, and who says when', () => {
+    const { recoveryShown } = require_('../systemBuilder/recovery');
+    expect(recoveryShown(FORGE)).toEqual({ name: 'Hit Dice', heals: 'its die + CON MODIFIER', spentAt: ['Short rest'], spend: 'any' });
+    expect(recoveryShown(AGE)).toEqual({ name: 'Recoveries', heals: 'its die for each level', spentAt: 'any', spend: 'any' });
+    const own = { ...withRecovery({ spend: 'gm', plus: ' ', spent_at: ['camp', 'short_rest'] }), rests: { camp: { name: 'Camp' }, short_rest: { name: 'Breather' } } };
+    expect(recoveryShown(own)).toEqual({ name: 'Hit Dice', heals: 'its die', spentAt: ['Camp', 'Breather'], spend: 'gm' });
+    expect(recoveryShown({ ...FORGE, resting: undefined })).toBeNull();
+  });
+});
+
 describe('ticking off and putting right', () => {
   it('a pool\'s spent set from none to all of them, by the player or the GM', () => {
     expect(pickAction(FORGE, ROOK, { kind: 'recovery', pool: 'fighter', spent: 3 }).data[RECOVERY_KEY]).toEqual({ fighter: 3 });
@@ -230,9 +241,9 @@ describe('through the socket', () => {
     const { rook, shared } = await table();
     rook.handlers.choicesAction({ kind: 'recovery', pool: 'wizard', spent: 0 });
     await until(async () => !!(await stored())[WORKED_KEY]?.recovery, { label: 'the pools shown' });
-    expect((await stored())[WORKED_KEY].recovery).toEqual([
+    expect((await stored())[WORKED_KEY].recovery).toEqual({ name: 'Hit Dice', heals: 'its die + CON MODIFIER', spentAt: ['Short rest'], spend: 'any', pools: [
       { id: 'fighter', label: 'Fighter', die: 10, total: 3, spent: 0 }, { id: 'wizard', label: 'Wizard', die: 6, total: 2, spent: 0 },
-    ]);
+    ] });
     rook.handlers.recoverySpend({ pool: 'fighter', count: 2 });
     await until(async () => (await stored())[RECOVERY_KEY]?.fighter === 2, { label: 'spent' });
     await until(() => shared.some((e) => e.event === 'diceRollBroadcast'), { label: 'the roll' });
@@ -246,7 +257,7 @@ describe('through the socket', () => {
     expect(tokens.map((t) => t.hp_current)).toEqual(Array(2).fill(Math.min(37, 21 + roll.total)));
     expect((await get(db, 'SELECT historyString FROM dice_rolls')).historyString).toBe(roll.historyString);
     expect(shared.filter((e) => e.event === 'sheetUpdated').map((e) => e.data)).toContainEqual({ username: 'rook', system: ID });
-    expect((await stored())[WORKED_KEY].recovery[0].spent).toBe(2);
+    expect((await stored())[WORKED_KEY].recovery.pools[0].spent).toBe(2);
     expect(rook.refused()).toEqual([]);
   });
 

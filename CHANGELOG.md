@@ -65,6 +65,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Recovery dice on the sheet (R2b).** A character's recovery dice now head their sheet's CHOICES
+  block: the system's name for them, what one heals and where they're spent, and each pool (a d10
+  for each Fighter level, say) as pips lit while left. SPEND rolls as many as − and + say: the dice
+  tray opens, the heal goes onto the character's tokens, and everyone sees the line in the log. For
+  real dice, click a pip to tick one off, or back. A rest that gives them back lights them again.
+  In a system that leaves spending to the GM, the GAME tab's RESTS has OPEN SPENDING: while it is
+  off, players' dice wait ("THE GM OPENS SPENDING"); the GM can spend them on any sheet any time.
 - **Recovery dice can be left to the GM (R2a).** RESTS' RECOVERY DICE has SPENDING: ANY TIME, where
   players spend them from their sheet whenever they like, or WHEN THE GM OPENS IT, for a GM who wants
   control, where players spend or tick them off only while the GM has spending open. Under it, the

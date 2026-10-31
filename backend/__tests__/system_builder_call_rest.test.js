@@ -112,10 +112,19 @@ const named = (characters) => characters.map((c) => c.name);
 describe('the rests the GAME tab offers', () => {
   it('are the running custom system\'s that are on; a built-in game has none here', async () => {
     const res = await request(app).get('/api/sheets/rests').set('Authorization', `Bearer ${GM}`);
-    expect(res.body).toEqual({ system: HEARTH, rests: [{ id: 'short_rest', name: 'Short rest' }, { id: 'long_rest', name: 'Long rest' }, { id: 'end_of_session', name: 'End of session' }] });
+    expect(res.body).toEqual({ system: HEARTH, rests: [{ id: 'short_rest', name: 'Short rest' }, { id: 'long_rest', name: 'Long rest' }, { id: 'end_of_session', name: 'End of session' }], recovery: null });
     await run(db, `UPDATE global_settings SET value = 'cities_without_number' WHERE key = 'game_system'`);
-    expect((await request(app).get('/api/sheets/rests').set('Authorization', `Bearer ${EDITOR}`)).body).toEqual({ system: 'cities_without_number', rests: [] });
+    expect((await request(app).get('/api/sheets/rests').set('Authorization', `Bearer ${EDITOR}`)).body).toEqual({ system: 'cities_without_number', rests: [], recovery: null });
     expect((await request(app).get('/api/sheets/rests').set('Authorization', `Bearer ${PLAYER}`)).status).toBe(403);
+  });
+
+  it('say the recovery dice\'s name and who says when they\'re spent, for OPEN SPENDING (R2b)', async () => {
+    const def = JSON.stringify({ ...HEARTH_DEF,
+      choices: [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter', die: 10 }] }],
+      resting: { recovery: { name: 'Hit Dice', spent_at: 'any', spend: 'gm' } } });
+    await run(db, 'UPDATE custom_systems SET draft = ?, published = ? WHERE id = ?', [def, def, HEARTH]);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    expect((await request(app).get('/api/sheets/rests').set('Authorization', `Bearer ${GM}`)).body.recovery).toEqual({ name: 'Hit Dice', spend: 'gm' });
   });
 });
 
