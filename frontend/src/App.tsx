@@ -65,6 +65,7 @@ import { useEnemyVehicles } from './hooks/useEnemyVehicles';
 import { hasVehicles } from './sheets/vehicleSystems';
 import { NpcLibrary } from './components/NpcLibrary';
 import { BuilderScreen } from './components/BuilderScreen';
+import { AccelerationNotice } from './components/AccelerationNotice';
 import { isCustomSystem } from './sheets/customTemplates';
 import type { BuilderPage } from './sheets/builderSession';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
@@ -2142,6 +2143,8 @@ function App() {
             )}
             {/* A gift from the GM (4g4c): only the player given it is sent one. */}
             <GiftNotices socket={socketRef.current} system={gameSystem} />
+            {/* Hardware acceleration off: the map will be slow, and how to turn it on (GM and players alike). */}
+            <AccelerationNotice />
             <BankWindow
                 pos={bankPos}
                 setPos={setBankPos}
