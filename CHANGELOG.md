@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- The copy of the database taken before a startup migration is tried again while other startup work is still running, instead of being skipped. A slow machine could start the bank move with no copy made.
 - **Linked HP opens the character's health, for the GM too.** On a player's own sheet, HP and HP
   MAX open their health window when clicked. On the sheet the GM opens from the dashboard, and on an
   NPC's sheet, they did nothing; now they select that character's token on the map and open its

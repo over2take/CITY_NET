@@ -207,6 +207,25 @@ describe('the database copy before a migration', () => {
   it('has nothing to copy for an in-memory database', async () => {
     expect(await cb2p(backupDatabase, db, ':memory:', 'test')).toEqual({ skipped: 'in-memory database' });
   });
+
+  it('tries again while the database is busy, gives up after enough tries, and fails at once on anything else', async () => {
+    const file = path.join(dir, 'city.db');
+    const answering = (errors) => {
+      const runs = [];
+      return { runs, run: (sql, params, done) => { runs.push(sql); const e = errors.shift(); done(e ? new Error(e) : null); } };
+    };
+    const busy = 'SQLITE_ERROR: cannot VACUUM - SQL statements in progress';
+    const copy = (fake, tries = 5) => new Promise((resolve) => backupDatabase(fake, file, 'test', (err, r) => resolve(err ? err.message : r.path), { retry: { tries, ms: 1 } }));
+    const twice = answering([busy, 'SQLITE_BUSY: database is locked']);
+    expect(await copy(twice)).toMatch(/city\.db\.before-test-.*\.bak$/);
+    expect(twice.runs).toEqual(['VACUUM INTO ?', 'VACUUM INTO ?', 'VACUUM INTO ?']);
+    const always = answering([busy, busy, busy, busy]);
+    expect(await copy(always, 3)).toBe(busy);
+    expect(always.runs).toHaveLength(3);
+    const broken = answering(['SQLITE_CANTOPEN: unable to open database file']);
+    expect(await copy(broken)).toBe('SQLITE_CANTOPEN: unable to open database file');
+    expect(broken.runs).toHaveLength(1);
+  });
 });
 
 describe('money in play, with more than one system', () => {
@@ -289,20 +308,23 @@ describe('the real startup path', () => {
         seedDb.serialize(() => { for (const s of ${JSON.stringify(seed)}) seedDb.run(s); });
         seedDb.close(() => {
           process.env.DB_PATH = ${JSON.stringify(file)};
-          console.log = () => {}; console.warn = () => {};
+          // Warnings kept, so a copy not made says why in the failure.
+          const warned = [];
+          console.log = () => {}; console.warn = (...a) => warned.push(a.join(' '));
           const db = require(${JSON.stringify(require_.resolve('../db.js'))});
           const accounts = require(${JSON.stringify(require_.resolve('../bank/accounts.js'))});
           accounts.get(db, 'GHOST', '${CPR}', (err, cpr) => {
             accounts.get(db, 'GHOST', '${CWN}', (err2, cwn) => {
               // Exit rather than close: db.js's other startup work may still be queued.
-              process.stdout.write(JSON.stringify({ err: err && err.message, cpr, cwn }), () => process.exit(0));
+              process.stdout.write(JSON.stringify({ err: err && err.message, cpr, cwn, warned }), () => process.exit(0));
             });
           });
         });`;
       const out = JSON.parse(execFileSync(process.execPath, ['-e', script], { encoding: 'utf8', timeout: 60000 }));
       const moved = { balance: 750, debt: 25, first_pay_done: 1, high_roller_done: 0 };
-      expect(out).toEqual({ err: null, cpr: moved, cwn: moved });
       const copies = fs.readdirSync(dir).filter((f) => /^city\.db\.before-bank-accounts-.*\.bak$/.test(f));
+      expect(out.warned.filter((w) => w.startsWith('[bank]')), 'what the move warned').toEqual([]);
+      expect({ err: out.err, cpr: out.cpr, cwn: out.cwn }).toEqual({ err: null, cpr: moved, cwn: moved });
       expect(copies).toHaveLength(1);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
