@@ -82,6 +82,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Where a game's rests are finished on each sheet, the GAME tab's RESTS shows who has finished the rest the GM called: WAITING ON 1 OF 3, a line for each player (finished, or finished by the GM, with what it changed and the dice spent; resting; not finished yet), and the NPCs it rested at once. FINISH FOR one player, or FOR EVERYONE still resting, finishes it as they would have, asked first. The list follows the players as they finish (R4).
 - **Resting on the sheet (R3b).** A system whose rests are finished on each sheet gives every
   character sheet a RESTS section, after CHOICES: a button for each of the game's rests. Each asks
   first, so a stray click rests nobody. A rest the recovery dice are spent at opens its panel, with

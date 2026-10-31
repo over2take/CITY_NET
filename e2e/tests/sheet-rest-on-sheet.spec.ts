@@ -6,7 +6,8 @@ import { signInAsGm, signInAsPlayer, openGameSystem, gmToken, asGm, runningSyste
 // has a button for each rest. SHORT REST asks first, then opens its panel with the Hit Dice; one is
 // spent, and FINISH, which asks too, takes the rest: Second Wind comes back. Then the GM calls a long
 // rest from the GAME tab, which asks first and opens it on the player's sheet, CALLED BY THE GM; the
-// player finishes it and the dice come back. Set up through the API, as player-journey is.
+// player finishes it and the dice come back. The GM's list follows who has finished (R4), and the
+// GM finishes a short rest for Rook, asked first. Set up through the API, as player-journey is.
 
 const definition = (name: string) => ({
   format: 1,
@@ -67,13 +68,31 @@ test('a player rests from their sheet, asked first, and finishes a long rest the
   await expect(asking).toContainText('It opens on 1 player\'s sheet for them to finish.');
   await asking.getByRole('button', { name: 'CALL', exact: true }).click();
   await expect(gameRests.getByRole('status')).toHaveText('LONG REST CALLED · OPEN ON 1 SHEET');
+  // The GM's list of who has finished (R4): Rook, not yet.
+  const list = gameRests.getByRole('region', { name: 'Called rest' });
+  await expect(list.getByText('WAITING ON 1 OF 1')).toBeVisible();
+  await expect(list.getByRole('listitem', { name: 'Rook' })).toContainText('not finished yet');
 
-  // THE PLAYER finishes it: the Hit Dice come back.
+  // THE PLAYER finishes it: the Hit Dice come back, and the GM's list follows.
   const called = sheet.getByRole('region', { name: 'Long rest panel' });
   await expect(called.getByText('CALLED BY THE GM')).toBeVisible({ timeout: 15_000 });
   await called.getByRole('button', { name: 'FINISH LONG REST' }).click();
   await sheet.getByRole('group', { name: 'Finish the Long rest?' }).getByRole('button', { name: 'FINISH' }).click();
-  await expect.poll(async () => { const d = await stored(); return [d._recovery?.fighter, d._rest_call]; }, { timeout: 15_000 }).toEqual([0, undefined]);
+  await expect.poll(async () => { const d = await stored(); return [d._recovery?.fighter, d._rest_call?.done, d._rest_call?.by]; }, { timeout: 15_000 }).toEqual([0, true, 'player']);
   await expect(called).toBeHidden();
+  await expect(list.getByText('EVERYONE FINISHED')).toBeVisible({ timeout: 15_000 });
+  await expect(list.getByRole('listitem', { name: 'Rook' })).toContainText(/^ROOK finished( · |$)/);
+
+  // THE GM calls a short rest, then finishes it for Rook, asked first: it closes on Rook's sheet.
+  await gameRests.getByLabel('Rest', { exact: true }).selectOption('short_rest');
+  await gameRests.getByRole('button', { name: 'CALL SHORT REST', exact: true }).click();
+  await gameRests.getByRole('group', { name: 'Call a Short rest?' }).getByRole('button', { name: 'CALL', exact: true }).click();
+  await expect(sheet.getByRole('region', { name: 'Short rest panel' }).getByText('CALLED BY THE GM')).toBeVisible({ timeout: 15_000 });
+  await expect(list.getByText('WAITING ON 1 OF 1')).toBeVisible();
+  await list.getByRole('button', { name: 'FINISH FOR ROOK' }).click();
+  await list.getByRole('group', { name: 'Finish Rook\'s rest?' }).getByRole('button', { name: 'FINISH', exact: true }).click();
+  await expect(list.getByText('EVERYONE FINISHED')).toBeVisible({ timeout: 15_000 });
+  await expect(list.getByRole('listitem', { name: 'Rook' })).toContainText('finished by the GM');
+  await expect(sheet.getByRole('region', { name: 'Short rest panel' })).toBeHidden({ timeout: 15_000 });
   await context.close();
 });

@@ -12,6 +12,7 @@
 // user's calls of 2026-10-30): a player takes their own with takeRest, from their sheet's REST
 // section; the GM may for anyone. In such a system the GM's call rests the NPCs at once and opens the
 // rest on each player's sheet instead (REST_CALL_KEY, recovery.js), finished there with takeRest.
+// The GM sees who has finished, and may finish it for one or for everyone left (R4, finishCalled).
 
 const crypto = require('crypto');
 const { mutateSheet } = require('./mutate');
@@ -19,7 +20,7 @@ const { applyDerived } = require('./templates');
 const { parseTokenConditions } = require('../tokens/conditions');
 const { restOn, restLine, restDice } = require('../systemBuilder/resting');
 const { conditionsOf } = require('../systemBuilder/conditions');
-const { restingOf, REST_CALL_KEY } = require('../systemBuilder/recovery');
+const { restingOf, REST_CALL_KEY, restCallOf, callOn, finishedCall, restCallsShown } = require('../systemBuilder/recovery');
 const { restsOf } = require('../systemBuilder/rests');
 const { withThrow, boardOf } = require('../utils/diceThrow');
 
@@ -106,18 +107,23 @@ const previewRest = async (db, { system, definition, rest, players, npcs }) => {
 
 /**
  * Work one character's rest out at write time, and write its sheet. A rest the GM called on it,
- * the same one, is finished with it (R3a).
+ * the same one, is finished with it (R3a), kept as finished by `by` for the GM's list (R4).
  */
-const restSheet = (db, system, definition, rest, c, rng) => new Promise((ok, no) => {
+const restSheet = (db, system, definition, rest, c, rng, by) => new Promise((ok, no) => {
   const args = { definition, restId: rest.id, token: tokenOf(c.token), conditions: parseTokenConditions(c.token && c.token.conditions), rng };
   if (!c.sheetId) { ok(restOn({ ...args, sheet: {} })); return; }
   let result = null;
   mutateSheet(db, c.sheetId, (data) => {
     result = restOn({ ...args, sheet: worked(system, data) });
-    const called = data[REST_CALL_KEY] && data[REST_CALL_KEY].rest === rest.id;
+    const call = restCallOf(data);
+    const called = !!call && call.rest === rest.id;
     if (!result.ok || (!Object.keys(result.sheetPatch).length && !called)) return undefined;
     const next = { ...data, ...result.sheetPatch };
-    if (called) delete next[REST_CALL_KEY];
+    // A call from before the GM's list (R3b) had no id: there's nothing to keep it for.
+    if (called) {
+      if (typeof data[REST_CALL_KEY].id === 'string') next[REST_CALL_KEY] = finishedCall(definition, data, by, result.changes);
+      else delete next[REST_CALL_KEY];
+    }
     applyDerived(system, next);
     return next;
   }, (err) => (err ? no(err) : ok(result)));
@@ -127,8 +133,8 @@ const restSheet = (db, system, definition, rest, c, rng) => new Promise((ok, no)
  * One character's rest, rolled and written: its sheet, then its token's health and conditions, then
  * a dice-log line for everyone. What it got, as the GAME tab shows it, or null when it couldn't.
  */
-const restCharacter = async (db, io, { system, definition, rest, c, rng }) => {
-  const result = await restSheet(db, system, definition, rest, c, rng);
+const restCharacter = async (db, io, { system, definition, rest, c, rng, by = 'gm' }) => {
+  const result = await restSheet(db, system, definition, rest, c, rng, by);
   if (!result || !result.ok) return null;
   if (c.token) {
     const t = result.token;
@@ -157,8 +163,8 @@ const restCharacter = async (db, io, { system, definition, rest, c, rng }) => {
  * Open a called rest on a player's sheet, for them to finish (R3b): it waits there, under
  * REST_CALL_KEY, until they do. A sheet with one waiting already has it replaced.
  */
-const openOnSheet = (db, io, rest, c) => new Promise((ok, no) => {
-  mutateSheet(db, c.sheetId, (data) => ({ ...data, [REST_CALL_KEY]: { rest: rest.id, name: rest.name } }), (err) => {
+const openOnSheet = (db, io, definition, rest, c, call) => new Promise((ok, no) => {
+  mutateSheet(db, c.sheetId, (data) => ({ ...data, [REST_CALL_KEY]: callOn(definition, rest, call, data) }), (err) => {
     if (err) { no(err); return; }
     io.emit('sheetUpdated', { username: c.username });
     ok();
@@ -173,10 +179,12 @@ const openOnSheet = (db, io, rest, c) => new Promise((ok, no) => {
 const callRest = async (db, io, { system, definition, rest, players, npcs, rng = cryptoRng }) => {
   const characters = await gather(db, system, players, npcs);
   const onSheets = restingOf(definition).finish === 'sheet';
+  // The call, kept on each sheet it opens on: the GM's list reads the latest one (R4).
+  const call = { id: crypto.randomUUID(), at: new Date().toISOString(), npcs: characters.filter((c) => c.kind === 'npc').length };
   const done = [];
   for (const c of characters) {
     if (onSheets && c.kind === 'player') {
-      await openOnSheet(db, io, rest, c);
+      await openOnSheet(db, io, definition, rest, c, call);
       done.push({ kind: 'player', username: c.username, name: c.name, changes: [], gone: [], called: true });
       continue;
     }
@@ -191,15 +199,38 @@ const callRest = async (db, io, { system, definition, rest, players, npcs, rng =
  * One player character's rest, taken from their sheet (R3a): `rest` one the game offers. A rest
  * the GM called on that sheet is finished with it. Answers what it got, or { error } in words.
  */
-const takeRest = async (db, io, { system, definition, restId, username, rng = cryptoRng }) => {
+const takeRest = async (db, io, { system, definition, restId, username, by = 'player', rng = cryptoRng }) => {
   const rest = restsOf(definition).find((r) => r.id === restId);
   if (!rest) return { error: 'Not one of this game\'s rests' };
   const [c] = await gather(db, system, [username], []);
   if (!c) return { error: 'That character has no sheet yet' };
-  const got = await restCharacter(db, io, { system, definition, rest, c, rng });
+  const got = await restCharacter(db, io, { system, definition, rest, c, rng, by });
   if (!got) return { error: 'The rest could not be taken' };
   io.emit('dataUpdated', { isRhombusOnly: true });
   return got;
 };
 
-module.exports = { LIMITS, whoProblem, gather, previewRest, callRest, takeRest };
+/** The GM's view of the latest rest called on the players' sheets (recovery.js restCallsShown), or null. */
+const calledShown = async (db, system, definition) => {
+  const sheets = await all(db, 'SELECT username, data FROM character_sheets WHERE system = ? AND is_npc = 0', [system]);
+  return restCallsShown(definition, sheets.map((s) => ({ username: s.username, data: parse(s.data) })));
+};
+
+/**
+ * The GM finishes the latest called rest for those still resting (R4): `players` true for everyone
+ * left, or the ones named. Each is taken as the player would, kept as finished by the GM. Answers
+ * how many were finished and the view after.
+ */
+const finishCalled = async (db, io, { system, definition, players, rng = cryptoRng }) => {
+  const view = await calledShown(db, system, definition);
+  if (!view) return { error: 'No rest is waiting to be finished' };
+  const named = Array.isArray(players) ? new Set(players.map((p) => p.toLowerCase())) : null;
+  const left = view.players.filter((p) => p.state !== 'finished' && (!named || named.has(p.username.toLowerCase())));
+  for (const p of left) await takeRest(db, io, { system, definition, restId: view.rest, username: p.username, by: 'gm', rng });
+  // Counted from what the sheets say now, so one that couldn't be taken isn't counted.
+  const after = await calledShown(db, system, definition);
+  const done = new Set((after ? after.players : []).filter((p) => p.state === 'finished').map((p) => p.username));
+  return { finished: left.filter((p) => done.has(p.username)).length, call: after };
+};
+
+module.exports = { LIMITS, whoProblem, gather, previewRest, callRest, takeRest, calledShown, finishCalled };

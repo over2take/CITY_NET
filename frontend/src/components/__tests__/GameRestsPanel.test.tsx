@@ -1,10 +1,11 @@
 import React from 'react';
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, screen, cleanup, within, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, within, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { GameRestsPanel } from '../GameRestsPanel';
 import { AdminPanel } from '../AdminPanel';
+import type { CalledRest, CalledPlayer } from '../../sheets/restCalls';
 
 /**
  * The GAME tab's RESTS panel under a custom game (4f5). Approved mockup builder-rests, stage 3
@@ -27,8 +28,20 @@ let recovery: { name: string; spend: 'any' | 'gm' } | null;
 let settings: { key: string; value: string }[];
 let refuseSettings: string | null;
 let finish: 'call' | 'sheet';
+/** The latest rest called on the sheets, as the list answers it (R4), and a refusal to finish it. */
+let called: CalledRest | null;
+let refuseFinish: string | null;
+const CALLED = (): CalledRest => ({
+  id: 'c1', rest: 'short_rest', name: 'Short rest', at: '2026-10-31T10:00:00.000Z', npcs: 2, waiting: 2, players: [
+    { username: 'ash', name: 'Ash', state: 'finished', by: 'player', changes: [{ what: 'health', label: 'HP', from: 9, to: 11 }], spent: 1 },
+    { username: 'rook', name: 'Rook', state: 'resting', changes: [], spent: 1 },
+    { username: 'vex', name: 'Vex', state: 'waiting', changes: [], spent: 0 },
+  ],
+});
 
 beforeEach(() => {
+  called = null;
+  refuseFinish = null;
   asked = [];
   refuseCall = null;
   rests = RESTS;
@@ -42,7 +55,14 @@ beforeEach(() => {
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     asked.push({ url, body });
     const answer = (status: number, json: unknown) => ({ ok: status < 300, status, json: async () => json }) as Response;
-    if (url === '/api/sheets/rests') return answer(200, { system: running, rests: running === HEARTH ? rests : [], recovery, finish });
+    if (url === '/api/sheets/rests') return answer(200, { system: running, rests: running === HEARTH ? rests : [], recovery, finish, call: called });
+    if (url === '/api/sheets/rest/finish') {
+      if (refuseFinish) return answer(409, { error: refuseFinish });
+      const left = called!.players.filter((x) => x.state !== 'finished' && (body.players === true || body.players.includes(x.username)));
+      const players = called!.players.map((x): CalledPlayer => (left.includes(x) ? { ...x, state: 'finished', by: 'gm' } : x));
+      called = { ...called!, players, waiting: players.filter((x) => x.state !== 'finished').length };
+      return answer(200, { finished: left.length, call: called });
+    }
     if (url === '/api/settings') {
       if (body && refuseSettings) return answer(401, { error: refuseSettings });
       if (body) settings = [...settings.filter((s) => s.key !== body.key), body];
@@ -235,6 +255,94 @@ describe('OPEN SPENDING for recovery dice the GM has the say over (R2b)', () => 
     await userEvent.click(switchOf());
     expect((await screen.findByRole('alert')).textContent).toBe('Sign in again');
     expect(switchOf().getAttribute('aria-checked')).toBe('true');
+  });
+});
+
+describe('a rest called on the sheets: who has finished (R4)', () => {
+  const list = () => within(screen.getByRole('region', { name: 'Called rest' }));
+  const line = (name: string) => within(list().getByRole('listitem', { name })).getByText((_, el) => el?.tagName === 'SPAN' && el.parentElement?.tagName === 'SPAN').textContent;
+  const finishes = () => asked.filter((a) => a.url === '/api/sheets/rest/finish').map((a) => a.body);
+  beforeEach(() => {
+    finish = 'sheet';
+    called = CALLED();
+    recovery = { name: 'Hit Dice', spend: 'any' };
+  });
+
+  it('shows the latest call: how many are left, what each has done, and the NPCs rested at once', async () => {
+    await open();
+    expect(await screen.findByText('SHORT REST CALLED')).toBeTruthy();
+    expect(list().getByText('WAITING ON 2 OF 3')).toBeTruthy();
+    expect(line('Ash')).toBe('finished · HP 9 → 11 · 1 die spent');
+    expect(line('Rook')).toBe('resting · 1 die spent');
+    expect(line('Vex')).toBe('not finished yet');
+    expect(list().queryByRole('button', { name: 'FINISH FOR ASH' })).toBeNull();
+    expect(list().getByRole('button', { name: 'FINISH FOR ROOK' })).toBeTruthy();
+    expect(list().getByText('NPCs: finished at once (2)')).toBeTruthy();
+  });
+
+  it('FINISH FOR one asks first; CANCEL asks nothing; FINISH finishes them as the GM', async () => {
+    await open();
+    await userEvent.click(await screen.findByRole('button', { name: 'FINISH FOR VEX' }));
+    const asking = within(screen.getByRole('group', { name: 'Finish Vex\'s rest?' }));
+    expect(asking.getByText('FINISH VEX\'S SHORT REST?')).toBeTruthy();
+    expect(list().queryByRole('button', { name: 'FINISH FOR EVERYONE' })).toBeNull();
+    await userEvent.click(asking.getByRole('button', { name: 'CANCEL' }));
+    expect(screen.queryByRole('group', { name: 'Finish Vex\'s rest?' })).toBeNull();
+    expect(finishes()).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: 'FINISH FOR VEX' }));
+    await userEvent.click(within(screen.getByRole('group', { name: 'Finish Vex\'s rest?' })).getByRole('button', { name: 'FINISH' }));
+    await waitFor(() => expect(line('Vex')).toBe('finished by the GM · no dice spent'));
+    expect(finishes()).toEqual([{ players: ['vex'] }]);
+    expect(list().getByText('WAITING ON 1 OF 3')).toBeTruthy();
+    expect(list().queryByRole('button', { name: 'FINISH FOR VEX' })).toBeNull();
+  });
+
+  it('FINISH FOR EVERYONE asks how many first, then finishes everyone left', async () => {
+    await open();
+    await userEvent.click(await screen.findByRole('button', { name: 'FINISH FOR EVERYONE' }));
+    const asking = within(screen.getByRole('group', { name: 'Finish it for everyone?' }));
+    expect(asking.getByText('FINISH THE SHORT REST FOR 2 STILL RESTING?')).toBeTruthy();
+    await userEvent.click(asking.getByRole('button', { name: 'FINISH' }));
+    await waitFor(() => expect(list().getByText('EVERYONE FINISHED')).toBeTruthy());
+    expect(finishes()).toEqual([{ players: true }]);
+    expect(list().queryAllByRole('button')).toEqual([]);
+  });
+
+  it('says why the server said no', async () => {
+    refuseFinish = 'No rest is waiting to be finished';
+    await open();
+    await userEvent.click(await screen.findByRole('button', { name: 'FINISH FOR EVERYONE' }));
+    await userEvent.click(within(screen.getByRole('group', { name: 'Finish it for everyone?' })).getByRole('button', { name: 'FINISH' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('No rest is waiting to be finished');
+    expect(list().getByText('WAITING ON 2 OF 3')).toBeTruthy();
+  });
+
+  it('is read again when a sheet changes, and after a call; the listener goes with the panel', async () => {
+    const heard: Record<string, () => void> = {};
+    const socket = { on: vi.fn((e: string, fn: () => void) => { heard[e] = fn; }), off: vi.fn() };
+    const { unmount } = render(<GameRestsPanel token="admintoken" system={HEARTH} npcs={[]} socket={socket} />);
+    expect(await screen.findByText('WAITING ON 2 OF 3')).toBeTruthy();
+    called = { ...called!, waiting: 1, players: called!.players.map((x): CalledPlayer => (x.username === 'rook' ? { ...x, state: 'finished', by: 'player' } : x)) };
+    await act(async () => { heard.sheetUpdated(); });
+    expect(await screen.findByText('WAITING ON 1 OF 3')).toBeTruthy();
+    expect(line('Rook')).toBe('finished · 1 die spent');
+    called = { ...CALLED(), id: 'c2', name: 'Long rest', npcs: 0 };
+    await callIt();
+    expect(await screen.findByText('LONG REST CALLED')).toBeTruthy();
+    expect(screen.queryByText(/NPCs: finished at once/)).toBeNull();
+    unmount();
+    expect(socket.off).toHaveBeenCalledWith('sheetUpdated', heard.sheetUpdated);
+  });
+
+  it('isn\'t shown where rests are at the GM\'s call, nor with no call kept', async () => {
+    finish = 'call';
+    await open();
+    expect(screen.queryByRole('region', { name: 'Called rest' })).toBeNull();
+    cleanup();
+    finish = 'sheet';
+    called = null;
+    await open();
+    expect(screen.queryByRole('region', { name: 'Called rest' })).toBeNull();
   });
 });
 

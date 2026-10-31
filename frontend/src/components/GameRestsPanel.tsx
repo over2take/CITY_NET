@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ToggleSwitch } from './ToggleSwitch';
 import {
-  restCalls, chosenOf, requestFor, changeText, keyOf, confirmText, calledText, WHO_LABELS, type Rested, type Who,
+  restCalls, chosenOf, requestFor, changeText, keyOf, confirmText, calledText, waitingText, calledLine, WHO_LABELS,
+  type Rested, type Who, type CalledRest,
 } from '../sheets/restCalls';
 
 // The GAME tab's RESTS panel under a custom game (4f5; approved mockup docs/mockups/builder-rests.html,
@@ -14,18 +15,25 @@ import {
 // on, players spend and tick them off from their sheets; off, theirs wait. Opened for a rest, closed
 // after. The panel sits in the GAME tab's RESTS folder (GameFolder.tsx), out of TTRPG_SYSTEM: it is
 // for play, not setup (the user, 2026-10-30).
+//
+// Where rests are finished on each sheet (R4; approved mockup rest-on-sheet, pane 4), the latest
+// call stays here: who has finished it and what they got, who is still resting, FINISH FOR one of
+// them or FOR EVERYONE left (each asked first), and the NPCs it rested at once. It is read again
+// whenever a sheet changes.
 
 const label: React.CSSProperties = { fontSize: '0.65rem', opacity: 0.7, letterSpacing: '1px' };
 const why: React.CSSProperties = { fontSize: '0.6rem', opacity: 0.6, margin: 0 };
 const btn: React.CSSProperties = { fontSize: '0.65rem' };
 const select: React.CSSProperties = { fontSize: '0.65rem', background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--green)', padding: '3px 4px' };
 
-export function GameRestsPanel({ token, system, npcs }: {
+export function GameRestsPanel({ token, system, npcs, socket }: {
   token: string;
   /** The running game, so the list is asked for again when it changes. */
   system: string;
   /** The NPC tokens on the map being viewed (restCalls.npcsOnMap). */
   npcs: { id: number; name: string }[];
+  /** Heard for sheetUpdated, so a called rest's list follows the players finishing it (R4). */
+  socket?: { on: (event: string, fn: () => void) => void; off: (event: string, fn: () => void) => void } | null;
 }) {
   const api = useMemo(() => restCalls(token), [token]);
   const [rests, setRests] = useState<{ id: string; name: string }[]>([]);
@@ -43,8 +51,19 @@ export function GameRestsPanel({ token, system, npcs }: {
   // CALL asks first (the user, 2026-10-30: "so no miss clicks happen").
   const [confirming, setConfirming] = useState(false);
   const [open, setOpen] = useState(false);
+  // The latest rest called on the sheets, and whose FINISH is being asked (a username, or everyone).
+  const [called, setCalled] = useState<CalledRest | null>(null);
+  const [asking, setAsking] = useState<string | true | null>(null);
+  const [heard, setHeard] = useState(0);
   const npcIds = npcs.map((n) => n.id);
   const npcKey = npcIds.join(',');
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const changed = () => setHeard((x) => x + 1);
+    socket.on('sheetUpdated', changed);
+    return () => { socket.off('sheetUpdated', changed); };
+  }, [socket]);
 
   useEffect(() => {
     let live = true;
@@ -56,10 +75,11 @@ export function GameRestsPanel({ token, system, npcs }: {
       setRestId((id) => (list.some((x) => x.id === id) ? id : list[0]?.id ?? ''));
       setRecovery(r.value && r.value.recovery ? r.value.recovery : null);
       setFinish(r.value && r.value.finish === 'sheet' ? 'sheet' : 'call');
+      setCalled(r.value && r.value.call ? r.value.call : null);
     });
     api.spendingOpen().then((r) => { if (live && r.ok) setOpen(r.value); });
     return () => { live = false; };
-  }, [api, system]);
+  }, [api, system, heard]);
 
   // Everyone the panel could choose, previewed: every player character and the map's NPCs.
   useEffect(() => {
@@ -91,6 +111,17 @@ export function GameRestsPanel({ token, system, npcs }: {
     if (!r.ok) { setError(r.error); return; }
     setError(null);
     setSaid(calledText(rest.name, r.value.characters));
+    setRound((x) => x + 1);
+    setHeard((x) => x + 1);
+  };
+  const finishFor = async (who: true | string[]) => {
+    setAsking(null);
+    setBusy(true);
+    const r = await api.finish(who);
+    setBusy(false);
+    if (!r.ok) { setError(r.error); return; }
+    setError(null);
+    setCalled(r.value.call);
     setRound((x) => x + 1);
   };
   const players = chosen.filter((r) => r.kind === 'player').length;
@@ -173,7 +204,65 @@ export function GameRestsPanel({ token, system, npcs }: {
         : 'Dice are rolled for each character when it is called; everyone sees a line each in the dice log.'}</p>
 
       {said && <span role="status" style={{ fontSize: '0.6rem', color: 'var(--green)', letterSpacing: '1px' }}>{said}</span>}
+      {finish === 'sheet' && called && called.players.length > 0 && (
+        <CalledList called={called} dice={!!recovery} busy={busy} asking={asking} setAsking={setAsking} onFinish={finishFor} />
+      )}
       {error && <span role="alert" style={{ color: 'var(--danger)', fontSize: '0.6rem' }}>{error}</span>}
+    </section>
+  );
+}
+
+/**
+ * The latest rest called on the sheets (R4; approved mockup rest-on-sheet, pane 4): how many are
+ * left, a line for each player with FINISH FOR them while they rest, FINISH FOR EVERYONE, and the
+ * NPCs it rested at once. Each FINISH asks first.
+ */
+function CalledList({ called, dice, busy, asking, setAsking, onFinish }: {
+  called: CalledRest; dice: boolean; busy: boolean;
+  asking: string | true | null; setAsking: (who: string | true | null) => void;
+  onFinish: (who: true | string[]) => void;
+}) {
+  const one = asking === null || asking === true ? null : called.players.find((p) => p.username === asking) ?? null;
+  const rest = called.name.toUpperCase();
+  return (
+    <section aria-label="Called rest" style={{ display: 'flex', flexDirection: 'column', gap: 5, borderTop: '1px solid color-mix(in srgb, var(--dark-green) 70%, transparent)', paddingTop: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 6, alignItems: 'baseline' }}>
+        <b style={{ fontSize: '0.62rem', letterSpacing: '1px', color: 'var(--green)' }}>{rest} CALLED</b>
+        <span aria-live="polite" style={{ fontSize: '0.6rem', letterSpacing: '1px', color: called.waiting ? 'var(--warning)' : 'var(--green)' }}>{waitingText(called)}</span>
+      </div>
+      <ul aria-label="Who has finished" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {called.players.map((p) => (
+          <li key={p.username} aria-label={p.name} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: '2px 8px', alignItems: 'center', fontSize: '0.6rem' }}>
+            <span style={{ minWidth: 0 }}>
+              <b style={{ color: 'var(--green)', letterSpacing: '1px' }}>{p.name.toUpperCase()}</b>{' '}
+              <span style={{ opacity: 0.7 }}>{calledLine(p, dice)}</span>
+            </span>
+            {p.state !== 'finished' && (
+              <button type="button" className="utility-btn" style={btn} disabled={busy} onClick={() => setAsking(p.username)}>
+                FINISH FOR {p.name.toUpperCase()}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {asking !== null && (
+        <div role="group" aria-label={one ? `Finish ${one.name}'s rest?` : 'Finish it for everyone?'} style={{ display: 'flex', flexDirection: 'column', gap: 4, border: '1px solid var(--warning)', padding: '5px 6px' }}>
+          <span style={{ fontSize: '0.62rem', color: 'var(--warning)', letterSpacing: '1px' }}>
+            {one ? `FINISH ${one.name.toUpperCase()}'S ${rest}?` : `FINISH THE ${rest} FOR ${called.waiting} STILL RESTING?`}
+          </span>
+          <span style={why}>As if they had pressed FINISH: dice they haven&apos;t spent stay unspent.</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button type="button" className="utility-btn" style={btn} onClick={() => onFinish(one ? [one.username] : true)}>FINISH</button>
+            <button type="button" className="utility-btn" style={btn} onClick={() => setAsking(null)}>CANCEL</button>
+          </div>
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        {called.waiting > 0 && asking === null && (
+          <button type="button" className="utility-btn" style={btn} disabled={busy} onClick={() => setAsking(true)}>FINISH FOR EVERYONE</button>
+        )}
+        {called.npcs > 0 && <span style={why}>NPCs: finished at once ({called.npcs})</span>}
+      </div>
     </section>
   );
 }

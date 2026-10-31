@@ -158,16 +158,21 @@ const recoveryShown = (definition) => {
 };
 
 /**
- * Where a player's sheet keeps a rest the GM has called and they have yet to finish (R3a): { rest,
- * name }. Written when the GM calls a rest in a system whose rests are finished on each sheet;
- * cleared when they finish it. Players can't write it (no _ field is theirs).
+ * Where a player's sheet keeps a rest the GM has called (R3a, R4): { id, at, rest, name, npcs,
+ * before }, the call it came from (when, and how many NPCs it rested at once) and the recovery dice
+ * already spent then. Written when the GM calls a rest in a system whose rests are finished on each
+ * sheet. Once finished it stays, `done`, with who finished it (`by`), what it changed and the dice
+ * spent since, for the GM's list, until the next call replaces it. Players can't write it (no _
+ * field is theirs).
  */
 const REST_CALL_KEY = '_rest_call';
 
+const callRecord = (data) => (isPlainObject(data) && isPlainObject(data[REST_CALL_KEY]) ? data[REST_CALL_KEY] : null);
+
 /** The rest a sheet was called to and hasn't finished: { rest, name }, or null. */
 const restCallOf = (data) => {
-  const c = isPlainObject(data) && isPlainObject(data[REST_CALL_KEY]) ? data[REST_CALL_KEY] : null;
-  return c && typeof c.rest === 'string' ? { rest: c.rest, name: typeof c.name === 'string' ? c.name : c.rest } : null;
+  const c = callRecord(data);
+  return c && typeof c.rest === 'string' && c.done !== true ? { rest: c.rest, name: typeof c.name === 'string' ? c.name : c.rest } : null;
 };
 
 /**
@@ -274,6 +279,48 @@ const givenBack = (definition, data, ends) => {
   return changes.length ? { spent, changes } : null;
 };
 
+/** The recovery dice a character has spent, every pool together. */
+const spentNow = (definition, data) => poolsOf(definition, data).reduce((n, p) => n + p.spent, 0);
+
+/** A call of `rest` as a sheet keeps it: `call` is { id, at, npcs }, the dice spent counted now. */
+const callOn = (definition, rest, call, data) => ({
+  id: call.id, at: call.at, rest: rest.id, name: rest.name, npcs: call.npcs, before: spentNow(definition, data),
+});
+
+/**
+ * A called rest finished (R4): kept, with who finished it ('player' or 'gm'), what it changed and
+ * the dice spent since the call, worked out on the sheet as it was before the rest gave any back.
+ */
+const finishedCall = (definition, data, by, changes) => {
+  const c = callRecord(data);
+  return { ...c, done: true, by, changes, spent: Math.max(0, spentNow(definition, data) - whole(Number(c.before))) };
+};
+
+/**
+ * The GM's view of the latest rest they called on the players' sheets (R4; approved mockup
+ * rest-on-sheet, pane 4), from every player sheet: each player in it finished (and by whom, what it
+ * changed, the dice spent), resting (dice spent since, not finished), or waiting; how many are left;
+ * and how many NPCs rested at once. Null with no call kept.
+ */
+const restCallsShown = (definition, sheets) => {
+  const kept = sheets.map((s) => ({ s, c: callRecord(s.data) })).filter(({ c }) => c && typeof c.id === 'string' && typeof c.at === 'string');
+  if (!kept.length) return null;
+  const latest = kept.reduce((a, b) => (b.c.at > a.c.at ? b : a)).c;
+  const players = kept.filter(({ c }) => c.id === latest.id).map(({ s, c }) => {
+    const name = (isPlainObject(s.data) && typeof s.data.name === 'string' && s.data.name.trim()) || s.username;
+    if (c.done === true) {
+      return { username: s.username, name, state: 'finished', by: c.by === 'gm' ? 'gm' : 'player', changes: list(c.changes), spent: whole(Number(c.spent)) };
+    }
+    const spent = Math.max(0, spentNow(definition, s.data) - whole(Number(c.before)));
+    return { username: s.username, name, state: spent ? 'resting' : 'waiting', changes: [], spent };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    id: latest.id, rest: latest.rest, name: typeof latest.name === 'string' ? latest.name : latest.rest,
+    at: latest.at, npcs: whole(Number(latest.npcs)), players, waiting: players.filter((p) => p.state !== 'finished').length,
+  };
+};
+
 module.exports = {
   FINISH, HOWS, SPEND, LIMITS, RECOVERY_KEY, ALL_POOL, MOST, OPEN_SETTING, REST_CALL_KEY, checkResting, restingOf, recoveryShown, restingShown, restCallOf, diceOptionsOf, maySpend, poolsOf, spendFrom, givenBack,
+  spentNow, callOn, finishedCall, restCallsShown,
 };

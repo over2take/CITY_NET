@@ -889,9 +889,31 @@ module.exports = (db, io) => {
       const definition = customSystems.definitionOf(system);
       // The recovery dice's name and who says when they're spent (R2b): the GAME tab's OPEN SPENDING.
       const shown = definition ? recoveryShown(definition) : null;
-      // And who finishes a called rest (R3b): on each sheet, CALL opens it there.
-      res.json({ system, rests: definition ? restsOf(definition).map((r) => ({ id: r.id, name: r.name })) : [], recovery: shown ? { name: shown.name, spend: shown.spend } : null,
-        finish: definition ? restingOf(definition).finish : 'call' });
+      // And who finishes a called rest (R3b): on each sheet, CALL opens it there; with the latest
+      // call, who has finished it (R4).
+      const answer = (call) => res.json({ system, rests: definition ? restsOf(definition).map((r) => ({ id: r.id, name: r.name })) : [], recovery: shown ? { name: shown.name, spend: shown.spend } : null,
+        finish: definition ? restingOf(definition).finish : 'call', call });
+      if (!definition) return answer(null);
+      return rests.calledShown(db, system, definition).then(answer).catch((e) => res.status(500).json({ error: e.message }));
+    });
+  });
+
+  /**
+   * Finish the latest rest called on the players' sheets for those still resting (R4): { players:
+   * true | [names] }. The GM and granted editors, as calling it is.
+   */
+  router.post('/rest/finish', authenticate, requireAdmin, (req, res) => {
+    const { players } = req.body || {};
+    if (players !== true && (!Array.isArray(players) || !players.length || rests.whoProblem(players))) {
+      return res.status(400).json({ error: `players: true, or a list of up to ${rests.LIMITS.players} player names` });
+    }
+    getGameSystem((err, system) => {
+      if (err) return res.status(500).json({ error: err.message });
+      const definition = customSystems.definitionOf(system);
+      if (!definition) return res.status(409).json({ error: 'This game\'s rests are its own buttons' });
+      return rests.finishCalled(db, io, { system, definition, players })
+        .then((done) => (done.error ? res.status(409).json({ error: done.error }) : res.json(done)))
+        .catch((e) => res.status(500).json({ error: e.message }));
     });
   });
 
