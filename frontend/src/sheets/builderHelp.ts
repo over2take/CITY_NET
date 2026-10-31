@@ -271,6 +271,7 @@ export const HINTS = {
   'rests.recoveryCount': 'ONE PER LEVEL: a die for each level of each option with a die, so a Fighter 3 / Wizard 2 has three d10s and two d6s. A FORMULA: that many for each character, like 8, or one reading the sheet.',
   'rests.recoveryHeals': 'What spending one heals: its die rolled, once, or once for each level (as 13th Age does), plus a formula like @con_mod. The line under it says the formula in words for the sample.',
   'rests.recoverySpent': 'The rests at which a player may spend them, or ANY TIME, a fight included.',
+  'rests.recoverySpend': 'ANY TIME: players spend them from their sheet whenever they like, and SPENT AT is for the table to keep. WHEN THE GM OPENS IT: players spend or tick them off only while the GM has spending open in the GAME tab, for a GM who wants control. The GM can always.',
   'rests.recoveryBack': 'What each rest puts back into the pool: nothing, all of them, half (at least 1), or by an amount, a formula like @level.',
   'rests.finish': 'AT THE GM\'S CALL: a rest the GM calls applies to everyone at once. ON EACH SHEET: it opens a REST panel on each player\'s sheet, where they spend recovery dice, and applies when they press FINISH; NPCs finish at once.',
   // ONLY WITH, on PARTS, CHARACTER SHEET (and the NPC stat block) and CONDITIONS

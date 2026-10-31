@@ -41,7 +41,7 @@ describe('reading what a system says', () => {
   it('fills in the defaults, the same as the server', () => {
     const def = { ...FORGE, resting: { finish: 'sheet', recovery: { name: 'Hit Dice', spent_at: ['short_rest'], back: [{ rest: 'long_rest', how: 'by', amount: '2' }, { rest: 'end_of_session', how: 'half' }] } } } as unknown as Definition;
     expect(restingOf(def)).toEqual(backend.restingOf(def));
-    expect(restingOf(def).recovery).toEqual({ name: 'Hit Dice', count: 'levels', perLevel: false, plus: null, spentAt: ['short_rest'], back: [{ rest: 'long_rest', how: 'by', amount: '2' }, { rest: 'end_of_session', how: 'half' }] });
+    expect(restingOf(def).recovery).toEqual({ name: 'Hit Dice', count: 'levels', perLevel: false, plus: null, spentAt: ['short_rest'], spend: 'any', back: [{ rest: 'long_rest', how: 'by', amount: '2' }, { rest: 'end_of_session', how: 'half' }] });
     const any = { ...FORGE, resting: { recovery: { name: 'Recoveries', count: '8', per_level: true, plus: '@con_mod', spent_at: 'any' } } } as unknown as Definition;
     expect(restingOf(any)).toEqual(backend.restingOf(any));
     // Only true heals once per level.
@@ -83,6 +83,14 @@ describe('writing it', () => {
     expect('resting' in withRecovery(def, null)).toBe(false);
     // Changing dice that aren't on does nothing.
     expect(withRecovery(FORGE, { name: 'Hit Dice' })).toEqual(FORGE);
+  });
+
+  it('spent any time stores nothing; when the GM opens it stores gm, which the server takes', () => {
+    const gm = withRecovery(on(), { spend: 'gm' });
+    expect((gm.resting as { recovery: object }).recovery).toMatchObject({ spend: 'gm' });
+    expect(restingOf(gm)).toEqual(backend.restingOf(gm));
+    expect(problems(gm)).toEqual([]);
+    expect(withRecovery(gm, { spend: 'any' }).resting).toEqual(on().resting);
   });
 
   it('keeps a blank name as typed, a problem the server names', () => {

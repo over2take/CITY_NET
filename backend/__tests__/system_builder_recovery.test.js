@@ -93,9 +93,9 @@ describe('what a system says, filled in', () => {
 
   it('one per level, the die once, nothing added, unless it says', () => {
     expect(restingOf({ resting: { recovery: { name: 'Hit Dice', spent_at: ['short_rest'] } } }).recovery)
-      .toEqual({ name: 'Hit Dice', count: 'levels', perLevel: false, plus: null, spentAt: ['short_rest'], back: [] });
+      .toEqual({ name: 'Hit Dice', count: 'levels', perLevel: false, plus: null, spentAt: ['short_rest'], spend: 'any', back: [] });
     expect(restingOf(withRecovery({ count: '8', per_level: true, spent_at: 'any', back: [{ rest: 'long_rest', how: 'by', amount: '2' }] })))
-      .toEqual({ finish: 'sheet', recovery: { name: 'Hit Dice', count: '8', perLevel: true, plus: '@con_mod', spentAt: 'any', back: [{ rest: 'long_rest', how: 'by', amount: '2' }] } });
+      .toEqual({ finish: 'sheet', recovery: { name: 'Hit Dice', count: '8', perLevel: true, plus: '@con_mod', spentAt: 'any', spend: 'any', back: [{ rest: 'long_rest', how: 'by', amount: '2' }] } });
   });
 
   it('the options with a die are a levelled list\'s', () => {

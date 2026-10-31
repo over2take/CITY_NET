@@ -38,6 +38,7 @@ test('hit dice made on CHOICES and RESTS, kept after a reload', async ({ page, r
   await resting.getByLabel('NAME', { exact: true }).fill('Hit Dice');
   await resting.getByRole('textbox', { name: 'Added to each' }).fill('@con_mod');
   await resting.getByRole('group', { name: 'LONG REST gives back' }).getByRole('button', { name: 'HALF, AT LEAST 1' }).click();
+  await resting.getByRole('group', { name: 'Spending' }).getByRole('button', { name: 'WHEN THE GM OPENS IT' }).click();
   await resting.getByRole('group', { name: 'Rests are finished' }).getByRole('button', { name: 'ON EACH SHEET' }).click();
   await expect(resting.getByText(/COMING NEXT/)).toBeVisible();
 
@@ -47,7 +48,7 @@ test('hit dice made on CHOICES and RESTS, kept after a reload', async ({ page, r
   expect(saved.problems).toEqual([]);
   expect(saved.draft.resting).toEqual({
     finish: 'sheet',
-    recovery: { name: 'Hit Dice', plus: '@con_mod', spent_at: ['short_rest'], back: [{ rest: 'long_rest', how: 'half' }] },
+    recovery: { name: 'Hit Dice', plus: '@con_mod', spent_at: ['short_rest'], spend: 'gm', back: [{ rest: 'long_rest', how: 'half' }] },
   });
   expect(saved.draft.choices[0].options.map((o: { die?: number }) => o.die)).toEqual([10, 6]);
 

@@ -11,6 +11,8 @@
 //       per_level: true,            // optional: each heals the die once per level (13th Age)
 //       plus: '@con_mod',           // optional: a formula added to each die
 //       spent_at: ['short_rest'],   // the rests they may be spent at, or 'any' (a fight too)
+//       spend: 'gm',                // optional: players spend them only while the GM has spending
+//                                   // open (the GAME tab); 'any' (as when absent): any time
 //       back: [{ rest: 'long_rest', how: 'all' }],  // what a rest gives back: all, half (at least
 //                                                   // 1), or 'by' an amount (a formula)
 //     },
@@ -19,19 +21,29 @@
 // The die is the option's own: a levelled list's option (a class) says its `die` (choices.js),
 // the same die the level-up flow (7d) will roll for health. Generic, with no presets (the user:
 // "give them the tools"): the builder's hint names the games it is like, D&D's hit dice and 13th
-// Age's recoveries. The pools on the sheet, spending them and finishing a rest come in later pieces
-// (R2 to R4); this is what the system says, and its checks.
+// Age's recoveries.
+//
+// At the table (R2a): a character's pools, worked out from their picks (poolsOf). Counted by levels,
+// a pool for each class with a die, as many as its level (a Fighter 3 / Wizard 2 has three d10s and
+// two d6s); counted by a formula, one pool of that many, of the largest die they have. How many of
+// each are spent is kept on the sheet under RECOVERY_KEY, by pool. Spending rolls them (spendFrom):
+// each one's die, once or once per level, plus the formula. Spent any time, SPENT AT the table's to
+// keep (the user, 2026-10-30: "any time, trust the table"); or, for a GM who wants control (`spend:
+// 'gm'`, the user the same day), only while the GM has spending open (OPEN_SETTING, a game-wide
+// setting the GAME tab switches), the GM always. A rest giving them back sets them back (givenBack,
+// read by resting.js). Ticking them off, for real dice, is picking.js's.
 
 const { parse, references } = require('./expression');
 const { tablesOf } = require('./derived');
-const { namesOf, levelNamesOf, choicesOf } = require('./choices');
+const { namesOf, levelNamesOf, choicesOf, picksOf, valueOn } = require('./choices');
 const { restIdsOf } = require('./rests');
 
 const FINISH = ['call', 'sheet'];
+const SPEND = ['any', 'gm'];
 const HOWS = ['all', 'half', 'by'];
 const LIMITS = { name: 30, formula: 200, back: 12 };
 const RESTING_KEYS = new Set(['finish', 'recovery']);
-const RECOVERY_KEYS = new Set(['name', 'count', 'per_level', 'plus', 'spent_at', 'back']);
+const RECOVERY_KEYS = new Set(['name', 'count', 'per_level', 'plus', 'spent_at', 'spend', 'back']);
 const BACK_KEYS = new Set(['rest', 'how', 'amount']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -73,6 +85,7 @@ const checkResting = (definition, problems) => {
     if (wrong) problems.push({ where: `${where}, count`, message: `levels, or a formula: ${wrong}` });
   }
   if (r.per_level !== undefined && typeof r.per_level !== 'boolean') problems.push({ where: `${where}, per_level`, message: 'true or false' });
+  if (r.spend !== undefined && !SPEND.includes(r.spend)) problems.push({ where: `${where}, spend`, message: 'any (any time) or gm (while the GM has spending open)' });
   if (r.plus !== undefined) {
     const wrong = formulaProblem(definition, r.plus);
     if (wrong) problems.push({ where: `${where}, plus`, message: wrong });
@@ -121,9 +134,101 @@ const restingOf = (definition) => {
       perLevel: r.per_level === true,
       plus: typeof r.plus === 'string' ? r.plus : null,
       spentAt: r.spent_at === 'any' ? 'any' : list(r.spent_at).filter((id) => typeof id === 'string'),
+      spend: r.spend === 'gm' ? 'gm' : 'any',
       back: list(r.back).filter(isPlainObject).map((b) => ({ rest: b.rest, how: b.how, ...(b.how === 'by' ? { amount: b.amount } : {}) })),
     },
   };
 };
 
-module.exports = { FINISH, HOWS, LIMITS, checkResting, restingOf, diceOptionsOf };
+/** The game-wide setting the GM opens spending with ('1' open), for recovery dice spent at the GM's say. */
+const OPEN_SETTING = 'recovery_open';
+
+/**
+ * Whether a player may spend recovery dice, or tick them off, now: always, unless the system leaves
+ * it to the GM and `open` (the GM's setting) is off. The GM always may.
+ */
+const maySpend = (definition, { gm = false, open = false } = {}) => {
+  const r = restingOf(definition).recovery;
+  return !!r && (gm || r.spend !== 'gm' || open);
+};
+
+/** Where a sheet keeps how many of each pool are spent, by pool id. */
+const RECOVERY_KEY = '_recovery';
+/** The one pool a formula's count makes. */
+const ALL_POOL = '_all';
+/** The most dice a pool holds, and one spend rolls. */
+const MOST = { pool: 100, rolled: 1000 };
+
+const whole = (v) => (Number.isFinite(v) ? Math.floor(v) : 0);
+const spentStored = (data) => (isPlainObject(data) && isPlainObject(data[RECOVERY_KEY]) ? data[RECOVERY_KEY] : {});
+
+/**
+ * A character's recovery dice: [{ id, label, die, total, spent, times }], `times` how many of its die
+ * one heals (its level, when they heal once per level). None without recovery dice, or a class with a die.
+ */
+const poolsOf = (definition, data) => {
+  const r = restingOf(definition).recovery;
+  if (!r) return [];
+  const picks = picksOf(definition, data).filter((p) => p.list.levelled === true && Number.isInteger(p.option.die) && p.level >= 1);
+  if (!picks.length) return [];
+  const stored = spentStored(data);
+  const spentOf = (id, total) => {
+    const n = Number(stored[id]);
+    return Number.isInteger(n) ? Math.max(0, Math.min(total, n)) : 0;
+  };
+  if (r.count === 'levels') {
+    return picks.map((p) => {
+      // A level is at most 30 (choices.js LIMITS), well inside a pool's most.
+      return { id: p.option.id, label: p.option.label || p.option.id, die: p.option.die, total: p.level, spent: spentOf(p.option.id, p.level), times: r.perLevel ? p.level : 1 };
+    });
+  }
+  const total = Math.max(0, Math.min(MOST.pool, whole(valueOn(definition, data, r.count))));
+  const levels = picks.reduce((sum, p) => sum + p.level, 0);
+  return [{ id: ALL_POOL, label: r.name, die: Math.max(...picks.map((p) => p.option.die)), total, spent: spentOf(ALL_POOL, total), times: r.perLevel ? levels : 1 }];
+};
+
+/**
+ * `count` spent from one pool and rolled: its die `times` over for each, the plus formula added for
+ * each. `{ ok: true, pool, count, rolls, plus, heal, data }`, `data` the sheet with them spent; or
+ * `{ ok: false, error }`. A heal is never below 0.
+ */
+const spendFrom = (definition, data, poolId, count, rng) => {
+  const pool = poolsOf(definition, data).find((p) => p.id === poolId);
+  if (!pool) return { ok: false, error: 'No such recovery dice on this character' };
+  const left = pool.total - pool.spent;
+  if (!Number.isInteger(count) || count < 1) return { ok: false, error: 'Spend at least one' };
+  if (count > left) return { ok: false, error: `Only ${left} left` };
+  const r = restingOf(definition).recovery;
+  const plus = r.plus ? Math.round(valueOn(definition, data, r.plus) ?? 0) * count : 0;
+  const rolls = Array.from({ length: Math.min(MOST.rolled, count * pool.times) }, () => Math.floor(rng() * pool.die) + 1);
+  const heal = Math.max(0, rolls.reduce((a, b) => a + b, 0) + plus);
+  return { ok: true, pool, count, rolls, plus, heal, data: { ...data, [RECOVERY_KEY]: { ...spentStored(data), [pool.id]: pool.spent + count } } };
+};
+
+/**
+ * What the rests in `ends` give back, each pool on its own: all spent, half its dice (at least 1),
+ * or an amount worked out on the sheet. `{ spent, changes: [{ pool, from, to }] }` with the dice
+ * left before and after, or null when nothing comes back.
+ */
+const givenBack = (definition, data, ends) => {
+  const r = restingOf(definition).recovery;
+  const backs = r ? r.back.filter((b) => ends.has(b.rest)) : [];
+  if (!backs.length) return null;
+  const spent = { ...spentStored(data) };
+  const changes = [];
+  for (const pool of poolsOf(definition, data)) {
+    let now = pool.spent;
+    for (const b of backs) {
+      const n = b.how === 'all' ? now : b.how === 'half' ? Math.max(1, Math.floor(pool.total / 2)) : Math.max(0, whole(valueOn(definition, data, b.amount)));
+      now = Math.max(0, now - n);
+    }
+    if (now === pool.spent) continue;
+    spent[pool.id] = now;
+    changes.push({ pool, from: pool.total - pool.spent, to: pool.total - now });
+  }
+  return changes.length ? { spent, changes } : null;
+};
+
+module.exports = {
+  FINISH, HOWS, SPEND, LIMITS, RECOVERY_KEY, ALL_POOL, MOST, OPEN_SETTING, checkResting, restingOf, diceOptionsOf, maySpend, poolsOf, spendFrom, givenBack,
+};

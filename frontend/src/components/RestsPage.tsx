@@ -338,6 +338,19 @@ function RecoveryFields({ recovery, definition, edit, api }: { recovery: Recover
         {spent !== 'any' && !spent.length && <span role="alert" style={{ ...why, color: 'var(--danger)' }}>Tick the rests they are spent at, or ANY TIME.</span>}
       </div>
 
+      <FieldName beside hint={HINTS['rests.recoverySpend']} style={small}>SPENDING</FieldName>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+        <span role="group" aria-label="Spending" style={segs}>
+          <button type="button" aria-pressed={recovery.spend === 'any'} style={seg(recovery.spend === 'any')} onClick={() => set({ spend: 'any' })}>ANY TIME</button>
+          <button type="button" aria-pressed={recovery.spend === 'gm'} style={seg(recovery.spend === 'gm')} onClick={() => set({ spend: 'gm' })}>WHEN THE GM OPENS IT</button>
+        </span>
+        <span style={{ ...why, fontSize: 11 }}>
+          {recovery.spend === 'gm'
+            ? 'Players spend them, or tick them off, only while the GM has spending open in the GAME tab. The GM can any time.'
+            : 'Players spend them from their sheet whenever they like: SPENT AT is for the table to keep.'}
+        </span>
+      </div>
+
       <FieldName beside hint={HINTS['rests.recoveryBack']} style={small}>GIVES BACK</FieldName>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
         {shown.map((r) => <BackRow key={r.id} rest={r} back={recovery.back.find((b) => b.rest === r.id)} definition={definition} edit={edit} api={api} />)}

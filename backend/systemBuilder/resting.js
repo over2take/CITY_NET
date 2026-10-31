@@ -19,6 +19,7 @@ const { applyHealthAction } = require('./health');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { ownWords } = require('./terms');
 const { rollAmount } = require('./tierRolls');
+const { givenBack, restingOf, RECOVERY_KEY, ALL_POOL } = require('./recovery');
 
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -205,6 +206,13 @@ const restOn = ({ definition, restId, sheet = {}, token = null, conditions = [],
       note(`uses:${u.feature.id}`, `${u.feature.label || u.feature.id} uses`, u.max - u.spent, u.max);
     }
     setField(USES_KEY, spent);
+  }
+  // Recovery dice it gives back, or one it counts as gives back (R2a): each pool as left after.
+  const back = givenBack(definition, data, ends);
+  if (back) {
+    const name = restingOf(definition).recovery.name;
+    for (const c of back.changes) note(`recovery:${c.pool.id}`, `${name}${c.pool.id === ALL_POOL ? '' : ` ${c.pool.label}`} d${c.pool.die}`, c.from, c.to);
+    setField(RECOVERY_KEY, back.spent);
   }
   const wearsOff = new Set(conditionsOf(definition).filter((c) => c.ends === 'rest' && c.at.some((a) => ends.has(a))).map((c) => c.id));
   const kept = list(conditions).filter((c) => !wearsOff.has(c.id));
