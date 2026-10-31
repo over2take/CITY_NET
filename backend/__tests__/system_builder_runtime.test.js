@@ -96,7 +96,7 @@ describe('the sheet format', () => {
         { id: 'one', label: '', layout: 'list', fields: [] },
       ],
     }, ['f'])).toEqual([
-      'sheet section one, layout: One of list, grid, notes, inventory, choices',
+      'sheet section one, layout: One of list, grid, notes, inventory, choices, rests',
       'sheet section one, tab: Not one of the sheet\'s tabs',
       'sheet section one, columns: A whole number from 1 to 8',
       'sheet field a, type: One of number, text, textarea, select',

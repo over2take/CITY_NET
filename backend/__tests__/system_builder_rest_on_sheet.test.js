@@ -62,6 +62,18 @@ describe('what the sheet is told', () => {
     expect(runtime.renderOf('sys_x', FORGE).resting).toEqual(restingShown(FORGE));
   });
 
+  it('the starter sheet has a RESTS section after CHOICES, with recovery dice or rests on each sheet (R3b)', () => {
+    const { starterSheet } = require_('../systemBuilder/sheet');
+    const ids = (def) => starterSheet(def).sections.map((s) => s.id);
+    expect(ids(FORGE).slice(0, 3)).toEqual(['identity', 'choices', 'rests']);
+    expect(starterSheet(FORGE).sections[2]).toEqual({ id: 'rests', label: 'RESTS', layout: 'rests', tab: 'STATS', fields: [] });
+    expect(ids({ ...FORGE, resting: { finish: 'sheet' } })).toContain('rests');
+    expect(ids({ ...FORGE, resting: { recovery: FORGE.resting.recovery } })).toContain('rests');
+    expect(ids({ ...FORGE, resting: { finish: 'call' } })).not.toContain('rests');
+    expect(ids({ ...FORGE, resting: undefined })).not.toContain('rests');
+    expect(checkDefinition({ ...FORGE, sheet: starterSheet(FORGE) }).problems).toEqual([]);
+  });
+
   it('a rest called on a sheet, read safely', () => {
     expect(restCallOf({ [REST_CALL_KEY]: { rest: 'short_rest', name: 'Short rest' } })).toEqual({ rest: 'short_rest', name: 'Short rest' });
     expect(restCallOf({ [REST_CALL_KEY]: { rest: 'camp' } })).toEqual({ rest: 'camp', name: 'camp' });
@@ -172,6 +184,33 @@ describe('through the socket', () => {
     await drain(db);
     expect(rook.refused()).toHaveLength(2);
     expect(await lines()).toEqual([]);
+  });
+
+  it('the GM\'s call, on each sheet: opened on every player\'s sheet, nothing applied; NPCs at once (R3b)', async () => {
+    const { callRest } = require_('../sheets/rests');
+    await run(db, 'INSERT INTO locations (name, x, y, z, shape, owner, hp_current, hp_max, hp_temp, conditions) VALUES (?, 0, 0, 0, ?, ?, ?, ?, 0, ?)', ['DOG', 'enemy_rhombus', null, 3, 9, '[]']);
+    const dog = (await get(db, `SELECT id FROM locations WHERE name = 'DOG'`)).id;
+    const shared = [];
+    const io = { emit: (event, data) => shared.push({ event, data }) };
+    const rest = { id: 'short_rest', name: 'Short rest' };
+    const done = await callRest(db, io, { system: ID, definition: FORGE, rest, players: true, npcs: [dog] });
+    expect(done.map((d) => [d.name, !!d.called])).toEqual([['Ash', true], ['Rook', true], ['DOG', false]]);
+    expect((await stored())[REST_CALL_KEY]).toEqual({ rest: 'short_rest', name: 'Short rest' });
+    expect((await stored('ash'))[REST_CALL_KEY]).toEqual({ rest: 'short_rest', name: 'Short rest' });
+    expect((await stored())._uses.second_wind).toBe(1);
+    expect(await token()).toBe(10);
+    expect((await get(db, 'SELECT hp_current FROM locations WHERE id = ?', [dog])).hp_current).toBe(5);
+    expect((await lines()).map((l) => l.username)).toEqual(['DOG']);
+    expect(shared.filter((e) => e.event === 'sheetUpdated').map((e) => e.data.username).sort()).toEqual(['ash', 'rook']);
+    expect(shared.some((e) => e.event === 'dataUpdated')).toBe(true);
+    // At the GM's call, it applies to the players at once, as before.
+    const atOnce = await callRest(db, { emit: () => {} }, { system: ID, definition: atCall, rest, players: ['rook'], npcs: [] });
+    expect(atOnce.map((d) => !!d.called)).toEqual([false]);
+    expect((await stored())._uses.second_wind).toBe(0);
+    // Only players called, on each sheet: no map redraw for nothing changed.
+    shared.length = 0;
+    await callRest(db, io, { system: ID, definition: FORGE, rest, players: ['ash'], npcs: [] });
+    expect(shared.some((e) => e.event === 'dataUpdated')).toBe(false);
   });
 
   it('a game on a built-in system has no rests to take here', async () => {

@@ -102,7 +102,7 @@ describe('the format', () => {
     npcSheet.sections[0].fields.push({ id: 'might', label: 'Again', type: 'number' });
     npcSheet.sections[0].fields[1].source = 'bank_balance';
     expect(problems({ ...VAULT, npc: { sheet: npcSheet } })).toEqual([
-      'npc sheet section block, layout: One of list, grid, notes, inventory, choices',
+      'npc sheet section block, layout: One of list, grid, notes, inventory, choices, rests',
       'npc sheet field might: Defined twice',
       'npc sheet field might: Linked differently on the character sheet',
     ]);

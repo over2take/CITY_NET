@@ -71,6 +71,7 @@ test('hit dice wait for the GM, are spent and ticked off on the sheet, and come 
   // THE GM calls a long rest: all back.
   await rests.getByLabel('Rest', { exact: true }).selectOption('long_rest');
   await rests.getByRole('button', { name: 'CALL LONG REST', exact: true }).click();
+  await rests.getByRole('group', { name: 'Call a Long rest?' }).getByRole('button', { name: 'CALL', exact: true }).click();
   await expect(rests.getByRole('status')).toHaveText('LONG REST CALLED · 1 CHARACTER');
   await expect(pool.getByText('2 OF 2 LEFT')).toBeVisible({ timeout: 15_000 });
 

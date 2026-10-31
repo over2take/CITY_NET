@@ -71,6 +71,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Resting on the sheet (R3b).** A system whose rests are finished on each sheet gives every
+  character sheet a RESTS section, after CHOICES: a button for each of the game's rests. Each asks
+  first, so a stray click rests nobody. A rest the recovery dice are spent at opens its panel, with
+  the dice to spend and FINISH, which asks too; a rest with nothing to spend applies once asked.
+  FINISH does everything a called rest does: refills, uses, dice back, health and a line in the log.
+  The GM can rest anyone from their sheet. In the GAME tab, CALL now asks first; in such a system it
+  opens the rest on each player's sheet, CALLED BY THE GM, for them to finish, and NPCs rest at once.
+  The recovery dice move from CHOICES into the rest panel; dice spent any time, or in a system whose
+  rests are at the GM's call, stay in view in the RESTS section. CUSTOMIZE keeps RESTS as a section
+  to move like any other.
 - **WHAT PLAYERS GET on RESTS (R3a).** Under the recovery dice, a box says in the system's own words
   what the settings give a player on their sheet, and what they give the GM: REST buttons or none,
   when and where the recovery dice are spent, and who opens spending. It changes as the settings

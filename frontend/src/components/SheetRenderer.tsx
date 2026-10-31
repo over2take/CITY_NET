@@ -24,6 +24,7 @@ import {
   carriedToStashed, compactCarried, type StashedWeapon,
 } from '../sheets/cwnWeaponStash';
 import { ChoicesSection } from './ChoicesSection';
+import { RestSection } from './RestSection';
 import { choiceEffects, type ChoicesAction } from '../sheets/choicesShown';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
@@ -121,6 +122,8 @@ interface SheetRendererProps {
   onRecoverySpend?: (pool: string, count: number) => void;
   /** Whether the GM has spending recovery dice open. */
   recoveryOpen?: boolean;
+  /** Takes one of the game's rests on this character, from its RESTS section (R3b). */
+  onRestTake?: (rest: string) => void;
 }
 
 /** Whether the viewer is the GM, for FieldInput's GM-only lock, without threading a prop
@@ -1817,7 +1820,7 @@ function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection 
   return fields.length === 0 ? null : { ...section, fields };
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onRecoverySpend, recoveryOpen }: SheetRendererProps) {
+export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onRecoverySpend, recoveryOpen, onRestTake }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   const [activeTab, setActiveTab] = useState(tabs[0]);
   // What the character's chrome is doing to their numbers. Computed once for the whole
@@ -2042,7 +2045,11 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
                   {section.layout === 'weapon_stash' && <WeaponStashSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} rows={weaponRows} />}
                   {section.layout === 'encumbrance' && <EncumbranceSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} enforced={encumbranceEnforced} />}
                   {section.layout === 'cyberware' && <CyberwareSection section={section} template={template} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
-                  {section.layout === 'choices' && <ChoicesSection lists={template.choices ?? []} data={data as Record<string, unknown>} readOnly={readOnly} gm={gm} onChoices={onChoices} refused={choicesRefused} onRecoverySpend={onRecoverySpend} recoveryOpen={recoveryOpen} />}
+                  {section.layout === 'choices' && <ChoicesSection lists={template.choices ?? []} data={data as Record<string, unknown>} readOnly={readOnly} gm={gm} onChoices={onChoices} refused={choicesRefused} onRecoverySpend={onRecoverySpend} recoveryOpen={recoveryOpen}
+                    recoveryElsewhere={template.sections.some((s) => s.layout === 'rests')} />}
+                  {section.layout === 'rests' && <RestSection resting={template.resting} data={data as Record<string, unknown>} readOnly={readOnly} gm={gm} onChoices={onChoices}
+                    onRecoverySpend={onRecoverySpend} recoveryOpen={recoveryOpen} onRestTake={onRestTake}
+                    refused={template.sections.some((s) => s.layout === 'choices') ? null : choicesRefused} />}
                   {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />}
                 </div>
               )}

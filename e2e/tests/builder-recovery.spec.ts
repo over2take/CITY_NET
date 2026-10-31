@@ -40,7 +40,7 @@ test('hit dice made on CHOICES and RESTS, kept after a reload', async ({ page, r
   await resting.getByRole('group', { name: 'LONG REST gives back' }).getByRole('button', { name: 'HALF, AT LEAST 1' }).click();
   await resting.getByRole('group', { name: 'Spending' }).getByRole('button', { name: 'WHEN THE GM OPENS IT' }).click();
   await resting.getByRole('group', { name: 'Rests are finished' }).getByRole('button', { name: 'ON EACH SHEET' }).click();
-  await expect(resting.getByText(/COMING NEXT/)).toBeVisible();
+  await expect(resting.getByRole('region', { name: 'What players get' })).toContainText('A REST button for each rest on their sheet');
 
   // Saved, and nothing for PROBLEMS.
   await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });

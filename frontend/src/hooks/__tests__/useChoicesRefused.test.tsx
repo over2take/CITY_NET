@@ -14,8 +14,13 @@ describe('the server\'s refusal to spend recovery dice (R2b)', () => {
     const onRefused = socket.on.mock.calls.find((c) => c[0] === 'recoveryRefused')![1];
     act(() => onRefused({ error: 'The GM hasn\'t opened spending recovery dice' }));
     expect(result.current).toBe('The GM hasn\'t opened spending recovery dice');
+    // And taking a rest (R3b).
+    const onRest = socket.on.mock.calls.find((c) => c[0] === 'restRefused')![1];
+    act(() => onRest({ error: 'In this game, rests are taken when the GM calls them' }));
+    expect(result.current).toBe('In this game, rests are taken when the GM calls them');
     unmount();
     expect(socket.off).toHaveBeenCalledWith('recoveryRefused', onRefused);
+    expect(socket.off).toHaveBeenCalledWith('restRefused', onRest);
   });
 });
 

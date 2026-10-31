@@ -63,6 +63,7 @@ test('a long rest sets a number from the character\'s class level and a stat wit
   await rests.getByLabel('Rest', { exact: true }).selectOption('long_rest');
   await expect(rests.getByRole('list', { name: 'What each one gets' })).toContainText('ROOK');
   await rests.getByRole('button', { name: 'CALL LONG REST', exact: true }).click();
+  await rests.getByRole('group', { name: 'Call a Long rest?' }).getByRole('button', { name: 'CALL', exact: true }).click();
   await expect(rests.getByRole('status')).toHaveText('LONG REST CALLED · 1 CHARACTER');
 
   // Resolve is the Fighter's 3 plus Grit 3 with Tough's 2.
@@ -74,6 +75,7 @@ test('a long rest sets a number from the character\'s class level and a stat wit
   // A short rest rolls 1d4 for Rook: the tray opens on the player's screen.
   await rests.getByLabel('Rest', { exact: true }).selectOption('short_rest');
   await rests.getByRole('button', { name: 'CALL SHORT REST', exact: true }).click();
+  await rests.getByRole('group', { name: 'Call a Short rest?' }).getByRole('button', { name: 'CALL', exact: true }).click();
   await expect(rests.getByRole('status')).toHaveText('SHORT REST CALLED · 1 CHARACTER');
   await expect(sheet.getByText('DICE_TRAY.EXE', { exact: true })).toBeVisible();
   await context.close();

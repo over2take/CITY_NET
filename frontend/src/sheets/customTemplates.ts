@@ -63,6 +63,8 @@ export interface CustomRender {
   rolls?: (CustomFieldRoll & { fields: string[] })[];
   /** Its lists to pick from, in words, never a formula (7a3b1). */
   choices?: import('./choicesShown').ChoiceListShown[];
+  /** How a sheet rests (R3a): who finishes a called rest, and each rest by name. */
+  resting?: import('./choicesShown').RestingShown;
 }
 
 /** Fired on window when a custom template has been loaded, so the app can redraw. */
@@ -137,6 +139,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.distance ? { distance: render.distance } : {}),
     ...(render.house_rules?.length ? { houseRules: render.house_rules } : {}),
     ...(render.choices?.length ? { choices: render.choices } : {}),
+    ...(render.resting ? { resting: render.resting } : {}),
     ...tiers,
     ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived, rolls), ...tiers } } : {}),
   };

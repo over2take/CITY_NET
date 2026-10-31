@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ToggleSwitch } from './ToggleSwitch';
 import {
-  restCalls, chosenOf, requestFor, changeText, keyOf, WHO_LABELS, type Rested, type Who,
+  restCalls, chosenOf, requestFor, changeText, keyOf, confirmText, calledText, WHO_LABELS, type Rested, type Who,
 } from '../sheets/restCalls';
 
 // The GAME tab's RESTS panel under a custom game (4f5; approved mockup docs/mockups/builder-rests.html,
@@ -38,6 +38,10 @@ export function GameRestsPanel({ token, system, npcs }: {
   const [said, setSaid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [recovery, setRecovery] = useState<{ name: string; spend: 'any' | 'gm' } | null>(null);
+  // Who finishes a called rest (R3b): on each sheet, CALL opens it there for players to finish.
+  const [finish, setFinish] = useState<'call' | 'sheet'>('call');
+  // CALL asks first (the user, 2026-10-30: "so no miss clicks happen").
+  const [confirming, setConfirming] = useState(false);
   const [open, setOpen] = useState(false);
   const npcIds = npcs.map((n) => n.id);
   const npcKey = npcIds.join(',');
@@ -51,6 +55,7 @@ export function GameRestsPanel({ token, system, npcs }: {
       setRests(list);
       setRestId((id) => (list.some((x) => x.id === id) ? id : list[0]?.id ?? ''));
       setRecovery(r.value && r.value.recovery ? r.value.recovery : null);
+      setFinish(r.value && r.value.finish === 'sheet' ? 'sheet' : 'call');
     });
     api.spendingOpen().then((r) => { if (live && r.ok) setOpen(r.value); });
     return () => { live = false; };
@@ -77,6 +82,7 @@ export function GameRestsPanel({ token, system, npcs }: {
     setWho(next);
   };
   const call = async () => {
+    setConfirming(false);
     setBusy(true);
     setSaid(null);
     const { players, npcs: ids } = requestFor(who, chosen, npcIds);
@@ -84,10 +90,11 @@ export function GameRestsPanel({ token, system, npcs }: {
     setBusy(false);
     if (!r.ok) { setError(r.error); return; }
     setError(null);
-    const n = r.value.characters.length;
-    setSaid(`${rest.name.toUpperCase()} CALLED · ${n} CHARACTER${n === 1 ? '' : 'S'}`);
+    setSaid(calledText(rest.name, r.value.characters));
     setRound((x) => x + 1);
   };
+  const players = chosen.filter((r) => r.kind === 'player').length;
+  const npcCount = chosen.length - players;
   const spending = async (next: boolean) => {
     const r = await api.setSpending(next);
     if (!r.ok) { setError(r.error); return; }
@@ -147,10 +154,23 @@ export function GameRestsPanel({ token, system, npcs }: {
         ))}
       </ul>
       {!chosen.length && <p style={why}>Nobody chosen.</p>}
-      <button type="button" className="utility-btn" style={btn} disabled={busy || !chosen.length} onClick={call}>
-        {busy ? 'CALLING…' : `CALL ${rest.name.toUpperCase()}`}
-      </button>
-      <p style={why}>Dice are rolled for each character when it is called; everyone sees a line each in the dice log.</p>
+      {confirming ? (
+        <div role="group" aria-label={`Call a ${rest.name}?`} style={{ display: 'flex', flexDirection: 'column', gap: 4, border: '1px solid var(--warning)', padding: '5px 6px' }}>
+          <span style={{ fontSize: '0.62rem', color: 'var(--warning)', letterSpacing: '1px' }}>CALL A {rest.name.toUpperCase()} FOR {chosen.length} CHARACTER{chosen.length === 1 ? '' : 'S'}?</span>
+          <span style={why}>{confirmText(finish, players, npcCount)}</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button type="button" className="utility-btn" style={btn} onClick={call}>CALL</button>
+            <button type="button" className="utility-btn" style={btn} onClick={() => setConfirming(false)}>CANCEL</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="utility-btn" style={btn} disabled={busy || !chosen.length} onClick={() => setConfirming(true)}>
+          {busy ? 'CALLING…' : `CALL ${rest.name.toUpperCase()}`}
+        </button>
+      )}
+      <p style={why}>{finish === 'sheet'
+        ? 'Each player finishes it on their own sheet, spending any dice first; NPCs rest at once. Everyone sees a line each in the dice log.'
+        : 'Dice are rolled for each character when it is called; everyone sees a line each in the dice log.'}</p>
 
       {said && <span role="status" style={{ fontSize: '0.6rem', color: 'var(--green)', letterSpacing: '1px' }}>{said}</span>}
       {error && <span role="alert" style={{ color: 'var(--danger)', fontSize: '0.6rem' }}>{error}</span>}

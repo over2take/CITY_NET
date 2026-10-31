@@ -91,6 +91,7 @@ test('a player makes a character on a custom game, and gets what the GM gives an
   await rests.getByLabel('Rest', { exact: true }).selectOption('long_rest');
   await expect(rests.getByRole('list', { name: 'What each one gets' })).toContainText('ASH');
   await rests.getByRole('button', { name: 'CALL LONG REST', exact: true }).click();
+  await rests.getByRole('group', { name: 'Call a Long rest?' }).getByRole('button', { name: 'CALL', exact: true }).click();
   await expect(rests.getByRole('status')).toHaveText('LONG REST CALLED · 1 CHARACTER');
 
   // Ash's Resolve is back up to their Grit, on the sheet they have open.

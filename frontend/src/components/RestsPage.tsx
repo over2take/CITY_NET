@@ -416,11 +416,6 @@ function Resting({ definition, edit, api }: Props) {
         </div>
       </div>
       <WhatPlayersGet definition={definition} />
-      {finish === 'sheet' && (
-        <p style={{ ...why, fontSize: 11, color: 'var(--warning)', opacity: 1 }}>
-          COMING NEXT: the REST section on each sheet. Until then, rests apply when the GM calls them.
-        </p>
-      )}
     </section>
   );
 }

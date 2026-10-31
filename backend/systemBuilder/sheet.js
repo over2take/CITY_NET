@@ -19,8 +19,9 @@ const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
 const LIMITS = { sections: 50, fields: 500, perSection: 100, tabs: 12, label: 60, hint: 300, options: 100 };
 // 'choices' (7a3b1) is the block where a character's picks are: like 'inventory', drawn by the sheet
-// itself rather than from fields.
-const LAYOUTS = ['list', 'grid', 'notes', 'inventory', 'choices'];
+// itself rather than from fields. 'rests' (R3b) is the REST section: a button for each rest, its
+// panel, and the recovery dice.
+const LAYOUTS = ['list', 'grid', 'notes', 'inventory', 'choices', 'rests'];
 const TYPES = ['number', 'text', 'textarea', 'select'];
 /** Values that live elsewhere and are overlaid at read time (sheets/templates.js linkedFields). */
 const SOURCES = ['token_hp', 'token_hp_max', 'token_ac', 'bank_balance'];
@@ -218,6 +219,10 @@ const designedOrStarter = (definition) => {
     // there is one. Read here rather than through choices.js, which would make a circle (rests.js).
     ...(Array.isArray(definition && definition.choices) && definition.choices.some((c) => isPlainObject(c) && typeof c.id === 'string')
       ? [{ id: 'choices', label: choicesLabel(definition.choices), layout: 'choices', tab: 'STATS', fields: [] }] : []),
+    // The REST section (R3b), when rests are finished on each sheet or there are recovery dice to
+    // spend. Read here rather than through recovery.js, for the same circle.
+    ...(isPlainObject(definition && definition.resting) && (definition.resting.finish === 'sheet' || isPlainObject(definition.resting.recovery))
+      ? [{ id: 'rests', label: 'RESTS', layout: 'rests', tab: 'STATS', fields: [] }] : []),
     ...health.sections,
     // What players fill in, a section per group (stats.js, 4b2a).
     ...statSections(definition),

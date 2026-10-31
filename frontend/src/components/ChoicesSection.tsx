@@ -18,7 +18,8 @@ import { RecoveryDice } from './RecoveryDice';
 // whose feature locked again shows there greyed, kept; one with nothing left to wait under shows at the
 // foot, KEPT, WAITING. A list everyone has shows what every character has, nothing to pick.
 //
-// The recovery dice head the block (R2b, RecoveryDice.tsx): what the classes' dice make.
+// The recovery dice head the block (R2b, RecoveryDice.tsx): what the classes' dice make. A sheet
+// with a RESTS section has them there instead (R3b); one made before it keeps them here.
 
 interface Props {
   lists: ChoiceListShown[];
@@ -34,6 +35,8 @@ interface Props {
   onRecoverySpend?: (pool: string, count: number) => void;
   /** Whether the GM has spending recovery dice open. */
   recoveryOpen?: boolean;
+  /** The sheet has a RESTS section, where the dice are instead (R3b). */
+  recoveryElsewhere?: boolean;
 }
 
 const small: React.CSSProperties = { fontSize: '0.55rem', letterSpacing: '1px', opacity: 0.7 };
@@ -174,7 +177,7 @@ function Pick({ list, p, ctx, fixed = false }: { list: ChoiceListShown; p: PickS
   );
 }
 
-export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm = false, onRecoverySpend, recoveryOpen = false }: Props) {
+export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm = false, onRecoverySpend, recoveryOpen = false, recoveryElsewhere = false }: Props) {
   const worked = workedOn(data);
   // The pick the GM asked to take away, waiting for YES: "list:option".
   const [dropping, setDropping] = useState<string | null>(null);
@@ -185,7 +188,7 @@ export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm =
   const aside = keptAside(lists, worked);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      {worked.recovery && <RecoveryDice recovery={worked.recovery} can={can} gm={gm} open={recoveryOpen} ask={ctx.ask} onSpend={onRecoverySpend} />}
+      {worked.recovery && !recoveryElsewhere && <RecoveryDice recovery={worked.recovery} can={can} gm={gm} open={recoveryOpen} ask={ctx.ask} onSpend={onRecoverySpend} />}
       {listsOnTheirOwn(lists).map((list) => {
         const view = listShown(list, worked);
         const everyone = pickedOf(list) === 'everyone';

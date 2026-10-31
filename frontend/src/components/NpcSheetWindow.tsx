@@ -302,6 +302,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
           {...(playerUsername && socket ? {
             onChoices: (action: ChoicesAction) => socket.emit('choicesAction', { ...action, username: playerUsername }), choicesRefused,
             onRecoverySpend: (pool: string, count: number) => socket.emit('recoverySpend', { pool, count, username: playerUsername }), recoveryOpen,
+            onRestTake: (rest: string) => socket.emit('restTake', { rest, username: playerUsername }),
           } : {})}
         />
       ) : (
