@@ -223,6 +223,17 @@ describe('DiceTrayWindow', () => {
     } finally { vi.useRealTimers(); }
   });
 
+  it('the roll that opened it lands even when React starts the tray twice (strict mode)', () => {
+    vi.useFakeTimers();
+    try {
+      const opening = { total: 6, results: { 6: [6] }, color: '#0f0', historyString: 'RECOVERY DICE · cody: spent 1 Fighter d6, 6 = 6' };
+      render(<React.StrictMode><DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={makeSocketRef()} openingRoll={opening} /></React.StrictMode>);
+      expect(screen.getByTestId('dice-board').getAttribute('aria-label')).toBe('Rolling');
+      act(() => { vi.advanceTimersByTime(10_000); });
+      expect(screen.getByTestId('dice-board').getAttribute('aria-label')).not.toBe('Rolling');
+    } finally { vi.useRealTimers(); }
+  });
+
   it('a quiet opening roll is not thrown', () => {
     const socketRef = makeSocketRef();
     render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} openHistory

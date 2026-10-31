@@ -343,10 +343,11 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
     if (!socket) return;
     socket.on('diceRollBroadcast', handleBroadcast);
     socket.on('diceRollHistory', handleHistory);
-    // The roll that opened the tray, thrown now that it is listening; already in the history asked for.
+    // The roll that opened the tray, thrown now that it is listening; already in the history asked
+    // for. Kept, not used up: React starting this twice (strict mode) throws it again rather than
+    // leaving the board on ROLLING with its timer gone.
     const first = opener.current;
     if (first && !first.quiet) {
-      opener.current = null;
       playing.current = { group: first.group, rolls: [first], told: false, inHistory: true };
       play(playing.current);
     }
@@ -356,6 +357,8 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
       if (rollTimer.current) clearTimeout(rollTimer.current);
       rollTimer.current = null;
       playing.current = null;
+      // A throw cut off here never lands: the board isn't left rolling.
+      setIsRolling(false);
     };
   }, [socketRef.current]);
 
