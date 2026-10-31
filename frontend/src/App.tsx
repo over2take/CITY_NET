@@ -65,6 +65,7 @@ import { useEnemyVehicles } from './hooks/useEnemyVehicles';
 import { hasVehicles } from './sheets/vehicleSystems';
 import { NpcLibrary } from './components/NpcLibrary';
 import { BuilderScreen } from './components/BuilderScreen';
+import { AccelerationNotice } from './components/AccelerationNotice';
 import { isCustomSystem } from './sheets/customTemplates';
 import type { BuilderPage } from './sheets/builderSession';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
@@ -1692,7 +1693,8 @@ function App() {
       {showBattleMapManager && (selectedLocation || activeEditLocation || editId) && (
         <BattleMapManager locationId={selectedLocation ? selectedLocation.id : (activeEditLocation ? activeEditLocation.id : (editId as number))} token={token} onClose={() => setShowBattleMapManager(false)} onMapsChanged={fetchCurrentLocBattleMaps} />
       )}
-      {view === 'battle_map' && activeBattleMapData && (
+      {/* The floor's name and EXIT, at the windows' height: gone while the builder takes over the screen. */}
+      {view === 'battle_map' && activeBattleMapData && !builder && (
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 2000 }}>
           <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'auto' }}>
             <h2 style={{ margin: 0, textShadow: 'var(--glow)', fontSize: '2em' }}>{activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation?.toUpperCase() || 'UNKNOWN FLOOR'}</h2>
@@ -2141,6 +2143,8 @@ function App() {
             )}
             {/* A gift from the GM (4g4c): only the player given it is sent one. */}
             <GiftNotices socket={socketRef.current} system={gameSystem} />
+            {/* Hardware acceleration off: the map will be slow, and how to turn it on (GM and players alike). */}
+            <AccelerationNotice />
             <BankWindow
                 pos={bankPos}
                 setPos={setBankPos}

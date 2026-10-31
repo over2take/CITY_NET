@@ -9,6 +9,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **The map's windows stay on the map.** Any window open on the map (a sheet, the dice tray, a
+  shop) came over the system builder when the GM opened it, drawn on top of the builder's pages.
+  Now the builder takes over the screen: the map's windows are hidden while it is open, never
+  closed, Esc in the builder leaves them alone, and EXIT TO MAP brings each back as it was. A
+  roll that arrives meanwhile waits in the tray rather than opening over the builder, and a
+  battle map's floor name and EXIT stay off the builder too.
 - **Names, "?" and column heads line up across the builder.** A setting's name sat above or below
   its field by up to 50px on some pages (CONDITIONS' ICON, a feature's MODIFIERS, RESTS' WEARS OFF,
   ROLLS' AGAINST), as each page placed its own by hand. Every name now sits level with the first
@@ -65,6 +71,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **A slow map says why.** A browser with hardware acceleration turned off draws the 3D map slowly,
+  with no word of why. Now the GM and players see a small notice when the browser itself says it
+  draws in software: HARDWARE ACCELERATION IS OFF: THE 3D MAP WILL BE SLOW, with the steps to turn
+  it on in their browser (Firefox, Chrome or Edge). It never shows from a guess. DISMISS stops it
+  for good in that browser. SYSTEM_INFO has MAP SLOW?, the same steps to open any time (some
+  browsers, Firefox among them, draw slowly without saying so), and a WARN ME IF HARDWARE
+  ACCELERATION IS OFF switch, kept in the browser, that turns the warning back on.
 - **Recovery dice on the sheet (R2b).** A character's recovery dice now head their sheet's CHOICES
   block: the system's name for them, what one heals and where they're spent, and each pool (a d10
   for each Fighter level, say) as pips lit while left. SPEND rolls as many as − and + say: the dice

@@ -13,6 +13,7 @@ vi.mock('../DraggableWindow', () => ({
 }));
 
 import { BuilderScreen } from '../BuilderScreen';
+import { isBuilderOpen } from '../windowFocus';
 import { AdminPanel } from '../AdminPanel';
 import { SYSTEMS_CHANGED_EVENT } from '../../sheets/systemsLibrary';
 import type { SystemCopies } from '../../sheets/systemsApi';
@@ -144,6 +145,14 @@ const sidebar = () => screen.getByRole('navigation', { name: 'Builder' });
 const ready = () => waitFor(() => expect(screen.getByTestId('save-status')).toBeTruthy());
 
 describe('the builder', () => {
+  it('hides the map\'s windows while it is open, and lets them back once it shuts', async () => {
+    open();
+    await ready();
+    expect(isBuilderOpen()).toBe(true);
+    cleanup();
+    expect(isBuilderOpen()).toBe(false);
+  });
+
   it('takes over the window, naming the system, on the page it was opened at', async () => {
     open({ startPage: 'setup' });
     await ready();

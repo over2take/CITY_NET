@@ -24,6 +24,7 @@ import { TryItPage } from './TryItPage';
 import { PublishPreviewPage } from './PublishPreviewPage';
 import { HelpPage } from './HelpPage';
 import { BuilderTour } from './BuilderTour';
+import { setBuilderOpen } from './windowFocus';
 import { TOUR, type TourPlace } from '../sheets/builderHelp';
 import type { PublishPreview } from '../sheets/versionPreview';
 
@@ -97,7 +98,10 @@ const PUBLISH_PAGE = { id: 'publish' as const, label: 'PUBLISH', what: 'What the
 const HELP_PAGE = { id: 'help' as const, label: 'HELP', what: 'How the builder works, page by page, with formulas and dice explained.' };
 type Page = BuilderPage | 'systems' | 'publish' | 'help';
 
-/** Above the map and its panels, below the windows (DraggableWindow starts at 2000). */
+/**
+ * Above the map and its panels, below the windows (DraggableWindow starts at 2000), which hide
+ * while the builder is open (windowFocus.ts setBuilderOpen, below).
+ */
 const Z = 1900;
 const mono: React.CSSProperties = { fontFamily: "'Courier New', Courier, monospace" };
 const sideBtn = (active = false): React.CSSProperties => ({
@@ -220,6 +224,9 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
   /** A note FORMS' EDIT IN GRAPH asked to open the map on (5b5). */
   const [graphStart, setGraphStart] = useState<string | undefined>(undefined);
   const rootRef = useRef<HTMLDivElement>(null);
+  // The map's windows hide while the builder is open, and come back as they were (windowFocus.ts).
+  // Before paint, so switching systems (a new builder, keyed) never shows them for a frame.
+  useLayoutEffect(() => { setBuilderOpen(true); return () => setBuilderOpen(false); }, []);
   const tourRoot = useCallback(() => rootRef.current, []);
 
   const load = useCallback(async () => {
