@@ -253,12 +253,14 @@ function FieldInput({ field, data, readOnly: sheetReadOnly, onFieldChange, onFie
   }
   if (field.source) {
     // Linked field: value lives in another system (bank, token HP). Display
-    // only - clicking jumps to the window that owns it, when available.
+    // only - clicking jumps to the window that owns it, when available. The
+    // dashed border says it is kept elsewhere; a small ⇗ marks a click opening
+    // it, where a LINKED beside every number crowded a health row (2026-10-31).
     const clickable = !!onOpenLink;
     return (
       <div
         role={clickable ? 'button' : undefined}
-        title={clickable ? 'Open linked window' : 'Synced from the linked system'}
+        title={clickable ? 'Kept on the token or in the bank: click to open it' : 'Kept on the token or in the bank: changed there, not here'}
         onClick={clickable ? () => onOpenLink!(field.source!) : undefined}
         style={{
           ...inputStyle, border: '1px dashed var(--green)', cursor: clickable ? 'pointer' : 'default',
@@ -266,7 +268,7 @@ function FieldInput({ field, data, readOnly: sheetReadOnly, onFieldChange, onFie
         }}
       >
         <span>{value === '' || value === null || value === undefined ? '—' : String(value)}</span>
-        <span style={{ opacity: 0.6, fontSize: '0.6rem' }}>{clickable ? '⇗ LINKED' : 'LINKED'}</span>
+        {clickable && <span aria-hidden style={{ opacity: 0.6, fontSize: '0.7rem' }}>⇗</span>}
       </div>
     );
   }

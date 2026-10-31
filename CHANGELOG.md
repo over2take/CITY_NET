@@ -9,6 +9,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Linked HP opens the character's health, for the GM too.** On a player's own sheet, HP and HP
+  MAX open their health window when clicked. On the sheet the GM opens from the dashboard, and on an
+  NPC's sheet, they did nothing; now they select that character's token on the map and open its
+  health, as clicking the token would (a player's cash opens their bank). And the LINKED word beside
+  every linked number is gone: the dashed border says it is kept on the token or in the bank, a small
+  ⇗ marks one that opens its window, and hovering says which.
 - **A roll that opens the dice tray is thrown in it.** The tray opens by itself for a roll of yours
   made elsewhere: spending recovery dice, a rest the GM called, a roll from a sheet in its own tab.
   But that roll arrived before the tray was there to hear it, so its dice were never thrown: it only
