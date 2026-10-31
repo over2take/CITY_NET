@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('../DraggableWindow', () => ({
@@ -206,6 +206,44 @@ describe('DiceTrayWindow', () => {
     unmount();
     render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={makeSocketRef()} openHistory />);
     expect(screen.getByTestId('dice-history')).toBeInTheDocument();
+  });
+
+  it('a roll that opened the tray is thrown as it opens, and not added to the record twice (2026-10-31)', () => {
+    vi.useFakeTimers();
+    try {
+    const socketRef = makeSocketRef();
+    const opening = { total: 11, results: { 6: [6, 2, 3] }, color: '#0f0', historyString: 'RECOVERY DICE · cody: spent 3 Fighter d6, 6 + 2 + 3 = 11' };
+    render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} openHistory openingRoll={opening} />);
+    // Thrown: the board says it is rolling, as for any roll that arrives.
+    expect(screen.getByTestId('dice-board').getAttribute('aria-label')).toBe('Rolling');
+    const histHandler = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'diceRollHistory')[1];
+    act(() => { histHandler([opening]); });
+    act(() => { vi.advanceTimersByTime(10_000); });
+    expect(within(screen.getByTestId('dice-history')).getAllByText(/RECOVERY DICE · cody: spent 3 Fighter d6/)).toHaveLength(1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('a quiet opening roll is not thrown', () => {
+    const socketRef = makeSocketRef();
+    render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} openHistory
+      openingRoll={{ total: 0, results: {}, color: '#0f0', historyString: 'LONG REST · cody: nothing changed', quiet: true }} />);
+    expect(screen.getByTestId('dice-board').getAttribute('aria-label')).toBe('Ready');
+  });
+
+  it('bolds who rolled, but leaves a rest\'s line with its own colon as written', () => {
+    const socketRef = makeSocketRef();
+    render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} openHistory />);
+    const histHandler = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'diceRollHistory')[1];
+    act(() => {
+      histHandler([
+        { total: 8, results: { 6: [3, 5] }, color: '#0f0', historyString: 'cody rolled 2d6 [(3+5) = 8]' },
+        { total: 4, results: { 4: [4] }, color: '#0f0', historyString: 'SHORT REST · cody: rolled 1d4 + @might = 4 (1d4: 4)' },
+      ]);
+    });
+    const history = screen.getByTestId('dice-history');
+    expect(within(history).getByText('cody:').tagName).toBe('STRONG');
+    expect(history.textContent).toContain('SHORT REST · cody: rolled 1d4 + @might = 4 (1d4: 4)');
+    expect(history.textContent).not.toContain('cody::');
   });
 
   it('renders the Canvas for 3D dice', () => {

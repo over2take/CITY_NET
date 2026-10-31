@@ -240,6 +240,11 @@ function App() {
   const [currentController, setCurrentController] = useState<string>('');
   const [activeSidebarMenu, setActiveSidebarMenu] = useState<SidebarMenu>('none');
   const [isDiceTrayOpen, setIsDiceTrayOpen] = useState(false);
+  // The roll that opened the tray (2026-10-31): it arrives before the tray is there to hear it, so the
+  // tray is handed it to throw. Read through a ref by the socket handler, which outlives renders.
+  const [trayOpener, setTrayOpener] = useState<unknown>(null);
+  const trayOpenRef = useRef(false);
+  useEffect(() => { trayOpenRef.current = isDiceTrayOpen; }, [isDiceTrayOpen]);
   const [isCustomDieBuilderOpen, setIsCustomDieBuilderOpen] = useState(false);
   const [editingCustomDie, setEditingCustomDie] = useState<CustomDie | null>(null);
   const [customDieBuilderPos, setCustomDieBuilderPos] = useState(() => ({
@@ -945,6 +950,7 @@ function App() {
       // display name (handle), which may differ.
       // A quiet line (a rest that rolled nothing) only joins the log.
       if (rollOpensTray(data, userName)) {
+        if (!trayOpenRef.current) setTrayOpener(data);
         setIsDiceTrayOpen(true);
         setActiveSidebarMenu('dice_menu');
       } else {
@@ -2461,12 +2467,13 @@ function App() {
                 <DiceTrayWindow
                     pos={diceTrayPos} 
                     setPos={setDiceTrayPos} 
-                    onClose={() => setIsDiceTrayOpen(false)}
+                    onClose={() => { setIsDiceTrayOpen(false); setTrayOpener(null); }}
                     socketRef={socketRef}
                     authToken={token || playerToken}
                     bell={trayBell === 'on'}
                     onToggleBell={() => setTrayBell(trayBell === 'on' ? 'off' : 'on')}
                     openHistory={rollFlash.openOnHistory}
+                    openingRoll={trayOpener}
                 />
             )}
             {(() => {

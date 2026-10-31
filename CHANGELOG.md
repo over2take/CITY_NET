@@ -9,6 +9,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **A roll that opens the dice tray is thrown in it.** The tray opens by itself for a roll of yours
+  made elsewhere: spending recovery dice, a rest the GM called, a roll from a sheet in its own tab.
+  But that roll arrived before the tray was there to hear it, so its dice were never thrown: it only
+  showed in the history. Now the tray throws it as it opens, and lists it once. And a rest's line in
+  the history ("SHORT REST · cody: rolled 1d4 ...") no longer shows its name with two colons.
 - **The map's windows stay on the map.** Any window open on the map (a sheet, the dice tray, a
   shop) came over the system builder when the GM opened it, drawn on top of the builder's pages.
   Now the builder takes over the screen: the map's windows are hidden while it is open, never

@@ -59,6 +59,8 @@ test('hit dice wait for the GM, are spent and ticked off on the sheet, and come 
   await expect(dice.getByText(/THE GM OPENS SPENDING/)).toBeHidden({ timeout: 15_000 });
   await pool.getByRole('button', { name: 'SPEND 1D10' }).click();
   await expect(sheet.getByText('DICE_TRAY.EXE', { exact: true })).toBeVisible();
+  // And throws the roll that opened it: the board shows it, not READY (2026-10-31).
+  await expect(sheet.getByTestId('dice-board')).not.toHaveAttribute('aria-label', 'Ready', { timeout: 15_000 });
   await expect(pool.getByText('1 OF 2 LEFT')).toBeVisible({ timeout: 15_000 });
   // The tray, on top, goes with Escape, as any window does.
   await sheet.keyboard.press('Escape');
