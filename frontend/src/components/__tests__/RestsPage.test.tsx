@@ -395,11 +395,29 @@ describe('recovery dice and how rests are finished (R1b)', () => {
     expect(page.last().resting).toEqual({ finish: 'sheet' });
     publishes(page.last());
     expect(resting().getByText(/opens a REST panel on every player's sheet, and applies to each when they press FINISH. NPCs finish at once./)).toBeTruthy();
-    expect(resting().getByText(/COMING NEXT: the pools on each sheet and the REST panel/)).toBeTruthy();
+    expect(resting().getByText('COMING NEXT: the REST section on each sheet. Until then, rests apply when the GM calls them.')).toBeTruthy();
     await userEvent.click(finish.getByRole('button', { name: 'AT THE GM\'S CALL' }));
     expect(page.last().resting).toBeUndefined();
+    // The dice are on the sheets now (R2b): only rests on each sheet are still to come.
     await turnOn();
-    expect(resting().getByText(/COMING NEXT/)).toBeTruthy();
+    expect(resting().queryByText(/COMING NEXT/)).toBeNull();
+  });
+
+  it('WHAT PLAYERS GET says what the settings give players and the GM, changing with them (R3a)', async () => {
+    open(R, null);
+    const box = () => within(resting().getByRole('region', { name: 'What players get' }));
+    expect(box().getByText('No REST buttons: a rest happens when you call it from the GAME tab\'s RESTS.')).toBeTruthy();
+    expect(box().getByText('You call rests from the GAME tab\'s RESTS: they apply at once to everyone you choose.')).toBeTruthy();
+    await userEvent.click(within(resting().getByRole('group', { name: 'Rests are finished' })).getByRole('button', { name: 'ON EACH SHEET' }));
+    expect(box().getByText(/^A REST button for each rest on their sheet \(SHORT REST, LONG REST, END OF SCENE and END OF SESSION\)/)).toBeTruthy();
+    await turnOn();
+    expect(box().getByText(/^Recovery dice on their sheet, spent with a roll or ticked off for real dice whenever they like \(SPENT AT SHORT REST is for the table to keep\)\.$/)).toBeTruthy();
+    expect(box().getByText('In the panel of SHORT REST, Recovery dice to spend before FINISH.')).toBeTruthy();
+    await userEvent.click(within(resting().getByRole('group', { name: 'Spending' })).getByRole('button', { name: 'WHEN THE GM OPENS IT' }));
+    expect(box().getByText(/only while you have OPEN SPENDING on\.$/)).toBeTruthy();
+    // A rest turned off has no button.
+    await userEvent.click(list().getByRole('switch', { name: 'End of scene on' }));
+    expect(box().getByText(/^A REST button for each rest on their sheet \(SHORT REST, LONG REST and END OF SESSION\)/)).toBeTruthy();
   });
 
   it('deleting a rest of its own takes it out of the recovery dice', async () => {
@@ -422,7 +440,7 @@ describe('the "?"', () => {
   };
     open({ ...H, resting: { recovery: { name: 'Hit Dice', spent_at: 'any' } } } as unknown as Definition);
     await screen.findByTestId('rest-sample');
-    allShown('rests', 9);
+    allShown('rests', 10);
   });
 
   it('has nothing to say about the sample without the server to try it', () => {

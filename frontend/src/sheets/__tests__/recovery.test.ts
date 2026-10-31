@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
 import {
-  LIMITS, restingOf, withFinish, withRecovery, withRecoveryOn, withBack, withBackAmount, withSpentAt, withoutRestInResting, diceOptions, healsText,
+  LIMITS, restingOf, withFinish, withRecovery, withRecoveryOn, withBack, withBackAmount, withSpentAt, withoutRestInResting, diceOptions, healsText, whatPlayersGet,
 } from '../recovery';
 import { withOption, withList } from '../choices';
 import { withNewRest, withoutRest, restList } from '../rests';
@@ -152,6 +152,48 @@ describe('writing it', () => {
     expect(healsText(r)).toBe('its die');
     expect(healsText({ ...r, perLevel: true, plus: ' @con_mod ' })).toBe('its die once for each level + @con_mod');
     expect(healsText({ ...r, plus: ' ' })).toBe('its die');
+  });
+});
+
+describe('WHAT PLAYERS GET (R3a)', () => {
+  const RESTS = [{ id: 'short_rest', name: 'Short rest' }, { id: 'long_rest', name: 'Long rest' }, { id: 'camp', name: 'Camp' }];
+
+  it('at the GM\'s call with no recovery dice: no REST buttons, the GM calls them', () => {
+    expect(whatPlayersGet(FORGE, RESTS)).toEqual({
+      players: ['No REST buttons: a rest happens when you call it from the GAME tab\'s RESTS.'],
+      gm: ['You call rests from the GAME tab\'s RESTS: they apply at once to everyone you choose.'],
+    });
+  });
+
+  it('on each sheet: a REST button for each rest, named; the GM\'s call opens it on the sheets', () => {
+    const w = whatPlayersGet(withFinish(FORGE, 'sheet'), RESTS);
+    expect(w.players).toEqual(['A REST button for each rest on their sheet (SHORT REST, LONG REST and CAMP). Pressing one asks first, then opens that rest; FINISH takes it.']);
+    expect(w.gm).toEqual([
+      'You call a rest from the GAME tab\'s RESTS: it opens on each player\'s sheet for them to finish. NPCs rest at once.',
+      'You can rest any player from their sheet.',
+    ]);
+    expect(whatPlayersGet(withFinish(FORGE, 'sheet'), [RESTS[0]]).players[0]).toMatch(/^A REST button for each rest on their sheet \(SHORT REST\)\./);
+    expect(whatPlayersGet(withFinish(FORGE, 'sheet'), []).players[0]).toMatch(/^A REST button for each rest on their sheet\. /);
+  });
+
+  it('the recovery dice by their name: when they are spent, where, and the GM\'s say', () => {
+    const named = withRecovery(on(), { name: 'Hit Dice', spentAt: ['short_rest', 'camp'] });
+    expect(whatPlayersGet(named, RESTS)).toEqual({
+      players: [
+        'No REST buttons: a rest happens when you call it from the GAME tab\'s RESTS.',
+        'Hit Dice on their sheet, spent with a roll or ticked off for real dice whenever they like (SPENT AT SHORT REST and CAMP is for the table to keep).',
+      ],
+      gm: ['You call rests from the GAME tab\'s RESTS: they apply at once to everyone you choose.', 'You can spend or tick Hit Dice on any sheet too.'],
+    });
+    const sheet = whatPlayersGet(withFinish(named, 'sheet'), RESTS).players;
+    expect(sheet.at(-1)).toBe('In the panel of SHORT REST and CAMP, Hit Dice to spend before FINISH.');
+    const any = whatPlayersGet(withFinish(withRecovery(named, { spentAt: 'any' }), 'sheet'), RESTS).players;
+    expect(any.at(-1)).toBe('Hit Dice on their sheet, spent with a roll or ticked off for real dice whenever they like.');
+    const gm = whatPlayersGet(withRecovery(named, { spend: 'gm', name: ' ' }), RESTS);
+    expect(gm.players.at(-1)).toBe('Recovery dice on their sheet, spent with a roll or ticked off for real dice only while you have OPEN SPENDING on.');
+    expect(gm.gm.at(-1)).toBe('OPEN SPENDING in the GAME tab\'s RESTS lets players spend their Recovery dice; you can spend or tick them on any sheet any time.');
+    // A rest no longer on is named by its id.
+    expect(whatPlayersGet(withRecovery(named, { spentAt: ['gone'] }), RESTS).players.at(-1)).toMatch(/SPENT AT GONE is/);
   });
 });
 

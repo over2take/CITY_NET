@@ -273,6 +273,7 @@ export const HINTS = {
   'rests.recoverySpent': 'The rests at which a player may spend them, or ANY TIME, a fight included.',
   'rests.recoverySpend': 'ANY TIME: players spend them from their sheet whenever they like, and SPENT AT is for the table to keep. WHEN THE GM OPENS IT: players spend or tick them off only while the GM has spending open in the GAME tab, for a GM who wants control. The GM can always.',
   'rests.recoveryBack': 'What each rest puts back into the pool: nothing, all of them, half (at least 1), or by an amount, a formula like @level.',
+  'rests.whatPlayersGet': 'What the settings above give a player on their sheet, and you, in this system\'s own words. It changes as you change them.',
   'rests.finish': 'AT THE GM\'S CALL: a rest the GM calls applies to everyone at once. ON EACH SHEET: it opens a REST panel on each player\'s sheet, where they spend recovery dice, and applies when they press FINISH; NPCs finish at once.',
   // ONLY WITH, on PARTS, CHARACTER SHEET (and the NPC stat block) and CONDITIONS
   'only.alternative': 'A house rule under which this formula is worked out another way, like fewer hit points with GRITTY WOUNDS. Off, it is worked out as written.',
