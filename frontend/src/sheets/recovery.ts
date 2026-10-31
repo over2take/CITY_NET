@@ -181,5 +181,18 @@ export const whatPlayersGet = (def: Definition, rests: { id: string; name: strin
   return { players, gm };
 };
 
+/**
+ * What one rest does with the recovery dice, for its own panel on RESTS (the user, 2026-10-31): "Hit
+ * Dice: spent at this rest · gives back half, at least 1". Null without recovery dice.
+ */
+export const restDiceLine = (def: Definition, restId: string): string | null => {
+  const r = restingOf(def).recovery;
+  if (!r) return null;
+  const spent = r.spentAt === 'any' ? 'spent any time' : r.spentAt.includes(restId) ? 'spent at this rest' : 'not spent at this rest';
+  const b = r.back.find((x) => x.rest === restId);
+  const back = !b ? 'gives back nothing' : b.how === 'all' ? 'gives back all' : b.how === 'half' ? 'gives back half, at least 1' : `gives back ${b.amount?.trim() || '0'}`;
+  return `${r.name.trim() || 'Recovery dice'}: ${spent} · ${back}`;
+};
+
 /** What one heals, in words: `its die + @con_mod`, `its die once for each level`. */
 export const healsText = (r: Recovery): string => `its die${r.perLevel ? ' once for each level' : ''}${r.plus?.trim() ? ` + ${r.plus.trim()}` : ''}`;

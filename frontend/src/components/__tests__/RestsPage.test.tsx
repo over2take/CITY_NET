@@ -401,6 +401,22 @@ describe('recovery dice and how rests are finished (R1b)', () => {
     expect(page.last().resting).toBeUndefined();
   });
 
+  it('set once FOR EVERY REST, and each rest says what it does with the dice, with a way to the settings', async () => {
+    const page = open(R, null);
+    expect(resting().getByText('FOR EVERY REST')).toBeTruthy();
+    const longRest = () => detail('Long rest rest');
+    expect(longRest().getByText('None in this system: turn them on below, under FOR EVERY REST.')).toBeTruthy();
+    await turnOn();
+    expect(longRest().getByText('Recovery dice: not spent at this rest · gives back all')).toBeTruthy();
+    await userEvent.click(list().getByRole('button', { name: 'SHORT REST' }));
+    expect(detail('Short rest rest').getByText('Recovery dice: spent at this rest · gives back nothing')).toBeTruthy();
+    expect(recoveryOf(page.last())).toBeTruthy();
+    const scrolled = vi.fn();
+    document.getElementById('rests-for-every-rest')!.scrollIntoView = scrolled;
+    await userEvent.click(detail('Short rest rest').getByRole('button', { name: 'SETTINGS ↓' }));
+    expect(scrolled).toHaveBeenCalled();
+  });
+
   it('WHAT PLAYERS GET says what the settings give players and the GM, changing with them (R3a)', async () => {
     open(R, null);
     const box = () => within(resting().getByRole('region', { name: 'What players get' }));
@@ -438,7 +454,7 @@ describe('the "?"', () => {
   };
     open({ ...H, resting: { recovery: { name: 'Hit Dice', spent_at: 'any' } } } as unknown as Definition);
     await screen.findByTestId('rest-sample');
-    allShown('rests', 10);
+    allShown('rests', 11);
   });
 
   it('has nothing to say about the sample without the server to try it', () => {

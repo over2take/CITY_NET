@@ -81,6 +81,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   The recovery dice move from CHOICES into the rest panel; dice spent any time, or in a system whose
   rests are at the GM's call, stay in view in the RESTS section. CUSTOMIZE keeps RESTS as a section
   to move like any other.
+  On the builder's RESTS page, the panel below the rests is headed FOR EVERY REST, as its recovery
+  dice and RESTS ARE FINISHED are the same whichever rest is picked; and each rest's own panel says
+  what it does with the dice ("Hit Dice: spent at this rest · gives back nothing"), with SETTINGS
+  taking you to them.
 - **WHAT PLAYERS GET on RESTS (R3a).** Under the recovery dice, a box says in the system's own words
   what the settings give a player on their sheet, and what they give the GM: REST buttons or none,
   when and where the recovery dice are spent, and who opens spending. It changes as the settings
