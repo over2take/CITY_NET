@@ -58,8 +58,12 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await page.getByRole('button', { name: '+ LIST' }).click();
       await page.getByRole('button', { name: '+ LIST' }).click();
       await page.getByRole('group', { name: 'A character picks' }).getByRole('button', { name: 'SEVERAL' }).click();
+      // Levelled, so the option has its HIT DIE, OTHER open for its sides (R1b).
+      await page.getByRole('switch', { name: /LEVELLED/ }).click();
       await page.getByRole('button', { name: '+ OPTION' }).click();
       await expect(page.getByRole('region', { name: 'NEW OPTION option' })).toBeVisible();
+      await page.getByRole('group', { name: 'Hit die' }).getByRole('button', { name: 'OTHER' }).click();
+      await expect(page.getByRole('spinbutton', { name: 'Sides' })).toBeVisible();
       // A feature open, with uses and a modifier, so every box of the features editor is there (7a2b2).
       await page.getByRole('button', { name: '+ FEATURE' }).click();
       const feature = page.getByRole('group', { name: 'Feature NEW FEATURE' });
@@ -70,6 +74,14 @@ test('every control in the builder takes a click, on every page', async ({ page 
       // The modifier's formula box with its help open, so SHAPE and INSERT are there (formula box 1).
       await feature.getByRole('button', { name: 'Help writing Modifier 1: by' }).click();
       await expect(feature.getByRole('group', { name: 'Help writing Modifier 1: by' })).toBeVisible();
+    }
+    if (p === 'RESTS') {
+      // Recovery dice on, counted by a formula and given back by an amount, so every box is there (R1b).
+      const resting = page.getByRole('region', { name: 'Resting' });
+      await resting.getByRole('switch', { name: 'Recovery dice' }).click();
+      await resting.getByRole('group', { name: 'Each has' }).getByRole('button', { name: 'A FORMULA' }).click();
+      await resting.getByRole('group', { name: 'LONG REST gives back' }).getByRole('button', { name: 'BY AN AMOUNT' }).click();
+      await expect(resting.getByRole('textbox', { name: 'LONG REST gives back by' })).toBeVisible();
     }
     missed[p] = await unreachable(page);
     if (p === 'CHOICES') {

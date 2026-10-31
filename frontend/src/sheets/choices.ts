@@ -28,7 +28,8 @@ export interface ChoiceOption { id: string; label: string; description?: string;
 export type Picked = 'own' | 'features' | 'both' | 'everyone';
 export interface ChoiceList { id: string; one: string; many: string; picks?: number | 'any'; levelled?: boolean; again?: boolean; picked?: Picked; options: ChoiceOption[] }
 export type ListPatch = Partial<Pick<ChoiceList, 'one' | 'many' | 'picks' | 'levelled' | 'again' | 'picked'>>;
-export type OptionPatch = Partial<Pick<ChoiceOption, 'label' | 'description' | 'requires'>>;
+/** A change to an option: `die: null` takes its die away. */
+export type OptionPatch = Partial<Pick<ChoiceOption, 'label' | 'description' | 'requires'>> & { die?: number | null };
 export interface Modifier { target: string; amount: string }
 export interface Uses { count: string; refill?: string }
 export interface RollChange { roll: string; change: string }
@@ -114,6 +115,8 @@ export const withList = (def: Definition, id: string, patch: ListPatch): Definit
   // On its own stores nothing; a list everyone has has no levels of its own (the server refuses both).
   if (pickedOf(next) === 'own') delete next.picked;
   if (next.picked === 'everyone') delete next.levelled;
+  // A list without levels has no dice (R1b): turning LEVELLED off takes its options' with it.
+  if (next.levelled !== true && next.options.some((o) => o.die !== undefined)) next.options = next.options.map((o) => { const copy = { ...o }; delete copy.die; return copy; });
   return next;
 }));
 
@@ -133,14 +136,20 @@ export const withNewOption = (def: Definition, listId: string): { definition: De
   return { definition: withLists(def, choiceLists(def).map((c) => (c.id === listId ? { ...c, options: [...c.options, { id, label: 'NEW OPTION' }] } : c))), id };
 };
 
-/** The definition with one option changed; its id stays. Empty words and requirement store nothing. */
+/**
+ * The definition with one option changed; its id stays. Empty words and requirement store nothing;
+ * a die is kept to its 2 to 100 sides, and only on a levelled list's option.
+ */
 export const withOption = (def: Definition, listId: string, optionId: string, patch: OptionPatch): Definition => withLists(def, choiceLists(def).map((c) => (c.id !== listId ? c : {
   ...c,
   options: c.options.map((o) => {
     if (o.id !== optionId) return o;
-    const next: ChoiceOption = { ...o, ...patch };
+    const { die, ...rest } = patch;
+    const next: ChoiceOption = { ...o, ...rest };
     if (typeof next.description === 'string' && !next.description.trim()) delete next.description;
     if (typeof next.requires === 'string' && !next.requires.trim()) delete next.requires;
+    if (die === null) delete next.die;
+    else if (die !== undefined && c.levelled === true && Number.isInteger(die)) next.die = Math.min(Math.max(die, LIMITS.dieLeast), LIMITS.dieMost);
     return next;
   }),
 })));

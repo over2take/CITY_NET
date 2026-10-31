@@ -14,13 +14,18 @@ import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
 import { ToggleSwitch } from './ToggleSwitch';
 import { useFormulaBox } from '../hooks/useFormulaBox';
+import {
+  restingOf, withFinish, withRecovery, withRecoveryOn, withBack, withBackAmount, withSpentAt, diceOptions,
+  LIMITS as RECOVERY_LIMITS, type BackHow, type Recovery,
+} from '../sheets/recovery';
 
 // The builder's RESTS page (4f4a; approved mockup docs/mockups/builder-rests.html, 2026-10-09): the
 // moments the game refills things and wears things off. The standard four, each with a switch,
 // renamed or turned off; the system's own, added and deleted; each one's name, the rests it also
 // counts as, its refills in order, the conditions it wears off, and what it does to the sample
 // character (4f6c, the server running it as the game would). What it reads and writes is
-// sheets/rests.ts; every change goes through the builder's `edit`.
+// sheets/rests.ts; every change goes through the builder's `edit`. Under them, the system's recovery
+// dice and who finishes a called rest (R1b, sheets/recovery.ts).
 
 interface Props {
   definition: Definition;
@@ -231,6 +236,158 @@ function Detail({ rest, definition, edit, targets, api }: { rest: Rest; definiti
   );
 }
 
+const seg = (on: boolean): React.CSSProperties => ({
+  background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)', border: 0, fontFamily: 'monospace', fontSize: 11, padding: '3px 12px', cursor: 'pointer',
+});
+const segs: React.CSSProperties = { display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--green)', justifySelf: 'start', alignSelf: 'flex-start' };
+const settings: React.CSSProperties = { display: 'grid', gridTemplateColumns: '150px minmax(0, 1fr)', gap: '10px 12px', alignItems: 'start' };
+const END = { justifySelf: 'end', paddingTop: 4 } as const;
+/** What a rest gives back, as its buttons say it; nothing is no entry. */
+const BACK_WAYS: { id: BackHow | null; label: string }[] = [{ id: null, label: 'NOTHING' }, { id: 'all', label: 'ALL' }, { id: 'half', label: 'HALF, AT LEAST 1' }, { id: 'by', label: 'BY AN AMOUNT' }];
+
+/** One rest's line of GIVES BACK: nothing, all, half, or by an amount in a formula box. */
+function BackRow({ rest, back, definition, edit, api }: { rest: Rest; back: Recovery['back'][number] | undefined; definition: Definition; edit: Props['edit']; api?: Props['api'] }) {
+  const name = (rest.name.trim() || rest.id).toUpperCase();
+  const amount = useFormulaBox({
+    definition, api, kind: 'formula', value: back?.amount ?? '', label: `${name} gives back by`, inputStyle: { ...input, width: '100%' }, maxLength: RECOVERY_LIMITS.formula,
+    placeholder: '1, @level', onChange: (text) => edit(withBackAmount(definition, rest.id, text)),
+  });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+      <div style={row}>
+        <span style={{ minWidth: 120, fontSize: 11, letterSpacing: 1, opacity: rest.on ? 1 : 0.5 }}>{name}{rest.on ? '' : ' (OFF)'}</span>
+        <span role="group" aria-label={`${name} gives back`} style={segs}>
+          {BACK_WAYS.map((w) => (
+            <button key={w.label} type="button" aria-pressed={(back?.how ?? null) === w.id} style={seg((back?.how ?? null) === w.id)}
+              onClick={() => edit(withBack(definition, rest.id, w.id))}>{w.label}</button>
+          ))}
+        </span>
+        {back?.how === 'by' && <span style={{ flex: '1 1 140px', minWidth: 0 }}>{amount.field}</span>}
+      </div>
+      {back?.how === 'by' && amount.help}
+    </div>
+  );
+}
+
+/** The recovery dice's settings, once they are on: hooks for the formula boxes, so a component of its own. */
+function RecoveryFields({ recovery, definition, edit, api }: { recovery: Recovery; definition: Definition; edit: Props['edit']; api?: Props['api'] }) {
+  const rests = restList(definition);
+  const dice = diceOptions(definition);
+  const set = (patch: Partial<Recovery>) => edit(withRecovery(definition, patch));
+  const byLevel = recovery.count === 'levels';
+  const count = useFormulaBox({
+    definition, api, kind: 'formula', value: byLevel ? '' : recovery.count, label: 'How many each has', inputStyle: input, maxLength: RECOVERY_LIMITS.formula,
+    placeholder: '8, @level', onChange: (text) => set({ count: text }),
+  });
+  const plus = useFormulaBox({
+    definition, api, kind: 'formula', value: recovery.plus ?? '', label: 'Added to each', inputStyle: input, maxLength: RECOVERY_LIMITS.formula,
+    placeholder: 'NOTHING · @con_mod', onChange: (text) => set({ plus: text }),
+  });
+  const spent = recovery.spentAt;
+  // Every rest that is on, and any the dice still name that has been turned off.
+  const shown = rests.filter((r) => r.on || (spent !== 'any' && spent.includes(r.id)) || recovery.back.some((b) => b.rest === r.id));
+  return (
+    <div style={settings}>
+      <label htmlFor="recovery-name" style={{ ...small, ...END, textAlign: 'right' }}>NAME</label>
+      <input id="recovery-name" type="text" maxLength={RECOVERY_LIMITS.name} value={recovery.name} style={{ ...input, width: 200, justifySelf: 'start' }}
+        aria-invalid={!recovery.name.trim() ? true : undefined} onChange={(e) => set({ name: e.target.value })} />
+
+      <span style={{ ...small, ...END }}>DICE</span>
+      {dice.length
+        ? <span style={{ ...why, fontSize: 11 }}>{dice.map((d) => `${d.label.toUpperCase()} D${d.die}`).join(' · ')}</span>
+        : <span role="alert" style={{ ...why, color: 'var(--danger)' }}>No option has a die to roll: give a levelled list&apos;s options a HIT DIE on CHOICES.</span>}
+
+      <FieldName boxStyle={END} hint={HINTS['rests.recoveryCount']} style={small}>EACH HAS</FieldName>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+        <div style={row}>
+          <span role="group" aria-label="Each has" style={segs}>
+            <button type="button" aria-pressed={byLevel} style={seg(byLevel)} onClick={() => set({ count: 'levels' })}>ONE PER LEVEL</button>
+            <button type="button" aria-pressed={!byLevel} style={seg(!byLevel)} onClick={() => { if (byLevel) set({ count: '1' }); }}>A FORMULA</button>
+          </span>
+          {!byLevel && <span style={{ flex: '1 1 140px', minWidth: 0 }}>{count.field}</span>}
+        </div>
+        {!byLevel && count.help}
+      </div>
+
+      <FieldName boxStyle={END} hint={HINTS['rests.recoveryHeals']} style={small}>ONE HEALS</FieldName>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+        <div style={row}>
+          <span role="group" aria-label="One heals" style={segs}>
+            <button type="button" aria-pressed={!recovery.perLevel} style={seg(!recovery.perLevel)} onClick={() => set({ perLevel: false })}>ITS DIE</button>
+            <button type="button" aria-pressed={recovery.perLevel} style={seg(recovery.perLevel)} onClick={() => set({ perLevel: true })}>ITS DIE FOR EACH LEVEL</button>
+          </span>
+          <span>+</span>
+          <span style={{ flex: '1 1 140px', minWidth: 0 }}>{plus.field}</span>
+        </div>
+        {plus.help}
+      </div>
+
+      <FieldName boxStyle={END} hint={HINTS['rests.recoverySpent']} style={small}>SPENT AT</FieldName>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+        <div role="group" aria-label="Spent at" style={{ ...row, gap: 4 }}>
+          {shown.map((r) => {
+            const at = spent !== 'any' && spent.includes(r.id);
+            return (
+              <button key={r.id} type="button" role="checkbox" aria-checked={at} style={tick(at)} onClick={() => edit(withSpentAt(definition, r.id, !at))}>
+                {(r.name.trim() || r.id).toUpperCase()}{r.on ? '' : ' (OFF)'}
+              </button>
+            );
+          })}
+          <button type="button" role="checkbox" aria-checked={spent === 'any'} style={tick(spent === 'any')}
+            onClick={() => set({ spentAt: spent === 'any' ? [] : 'any' })}>ANY TIME</button>
+        </div>
+        {spent !== 'any' && !spent.length && <span role="alert" style={{ ...why, color: 'var(--danger)' }}>Tick the rests they are spent at, or ANY TIME.</span>}
+      </div>
+
+      <FieldName boxStyle={END} hint={HINTS['rests.recoveryBack']} style={small}>GIVES BACK</FieldName>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+        {shown.map((r) => <BackRow key={r.id} rest={r} back={recovery.back.find((b) => b.rest === r.id)} definition={definition} edit={edit} api={api} />)}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * RECOVERY DICE and RESTS ARE FINISHED (R1b; approved mockup docs/mockups/rest-on-sheet.html,
+ * 2026-10-30), under the rests: the system's pool to heal from at a rest, named as the game names
+ * it, and who finishes a rest the GM calls. What it reads and writes is sheets/recovery.ts.
+ */
+function Resting({ definition, edit, api }: Props) {
+  const { finish, recovery } = restingOf(definition);
+  const onRests = restList(definition).filter((r) => r.on).map((r) => r.id);
+  return (
+    <section aria-label="Resting" style={{ gridColumn: '1 / -1', border: '1px solid var(--dark-green)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0, textAlign: 'left' }}>
+      <div style={{ ...row, justifyContent: 'space-between' }}>
+        <FieldName hint={HINTS['rests.recovery']} style={small}>RECOVERY DICE{recovery?.name.trim() ? ` · ${recovery.name.trim().toUpperCase()}` : ''}</FieldName>
+        <ToggleSwitch label={recovery ? 'ON' : 'OFF'} name="Recovery dice" on={!!recovery}
+          onChange={(on) => edit(on ? withRecoveryOn(definition, onRests) : withRecovery(definition, null))} />
+      </div>
+      {recovery
+        ? <RecoveryFields recovery={recovery} definition={definition} edit={edit} api={api} />
+        : <p style={why}>None. A pool each character spends to heal at a rest, like D&amp;D&apos;s hit dice or 13th Age&apos;s recoveries: turn it on to name it and choose how it works.</p>}
+      <div style={settings}>
+        <FieldName boxStyle={END} hint={HINTS['rests.finish']} style={small}>RESTS ARE FINISHED</FieldName>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+          <span role="group" aria-label="Rests are finished" style={segs}>
+            <button type="button" aria-pressed={finish === 'call'} style={seg(finish === 'call')} onClick={() => edit(withFinish(definition, 'call'))}>AT THE GM&apos;S CALL</button>
+            <button type="button" aria-pressed={finish === 'sheet'} style={seg(finish === 'sheet')} onClick={() => edit(withFinish(definition, 'sheet'))}>ON EACH SHEET</button>
+          </span>
+          <span style={{ ...why, fontSize: 11 }}>
+            {finish === 'sheet'
+              ? 'A called rest opens a REST panel on every player\'s sheet, and applies to each when they press FINISH. NPCs finish at once.'
+              : 'A called rest applies to everyone at once.'}
+          </span>
+        </div>
+      </div>
+      {(recovery || finish === 'sheet') && (
+        <p style={{ ...why, fontSize: 11, color: 'var(--warning)', opacity: 1 }}>
+          COMING NEXT: the pools on each sheet and the REST panel. Until then these are saved with the system, and rests apply at the GM&apos;s call.
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function RestsPage({ definition, edit, api }: Props) {
   const list = restList(definition);
   const [picked, setPicked] = useState<string>(list[1]?.id ?? list[0]?.id ?? '');
@@ -283,6 +440,7 @@ export function RestsPage({ definition, edit, api }: Props) {
         </ul>
       </div>
       {current && <Detail key={current.id} rest={current} definition={definition} edit={edit} targets={targets} api={api} />}
+      <Resting definition={definition} edit={edit} api={api} />
     </div>
   );
 }
