@@ -15,7 +15,7 @@
 
 const { compileSystem } = require('./derived');
 const { overlayOf, choicesOf, workedOf, choicesShown, WORKED_KEY } = require('./choices');
-const { poolsOf, recoveryShown } = require('./recovery');
+const { poolsOf, recoveryShown, restingShown } = require('./recovery');
 const { fieldsRolledBy } = require('./tableRolls');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf, LIMITS: NPC_LIMITS } = require('./npc');
@@ -159,6 +159,9 @@ const renderOf = (id, definition, on = new Set()) => ({
   })),
   // Its lists to pick from (7a3a): names, options and features in words, never a formula.
   choices: choicesShown(definition),
+  // How a sheet rests (R3a): who finishes a called rest, and each rest by name, with whether the
+  // recovery dice are spent at it.
+  resting: restingShown(definition),
 });
 
 /**

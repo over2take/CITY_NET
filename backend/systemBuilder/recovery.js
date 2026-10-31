@@ -157,6 +157,34 @@ const recoveryShown = (definition) => {
   };
 };
 
+/**
+ * Where a player's sheet keeps a rest the GM has called and they have yet to finish (R3a): { rest,
+ * name }. Written when the GM calls a rest in a system whose rests are finished on each sheet;
+ * cleared when they finish it. Players can't write it (no _ field is theirs).
+ */
+const REST_CALL_KEY = '_rest_call';
+
+/** The rest a sheet was called to and hasn't finished: { rest, name }, or null. */
+const restCallOf = (data) => {
+  const c = isPlainObject(data) && isPlainObject(data[REST_CALL_KEY]) ? data[REST_CALL_KEY] : null;
+  return c && typeof c.rest === 'string' ? { rest: c.rest, name: typeof c.name === 'string' ? c.name : c.rest } : null;
+};
+
+/**
+ * How a sheet rests (R3a), for the sheet's REST section: who finishes a called rest, and each rest
+ * the game offers by name, with whether the recovery dice are spent at it.
+ */
+const restingShown = (definition) => {
+  const { finish, recovery } = restingOf(definition);
+  return {
+    finish,
+    rests: restsOf(definition).map((r) => ({
+      id: r.id, name: r.name,
+      spends: !!recovery && (recovery.spentAt === 'any' || recovery.spentAt.includes(r.id)),
+    })),
+  };
+};
+
 /** The game-wide setting the GM opens spending with ('1' open), for recovery dice spent at the GM's say. */
 const OPEN_SETTING = 'recovery_open';
 
@@ -247,5 +275,5 @@ const givenBack = (definition, data, ends) => {
 };
 
 module.exports = {
-  FINISH, HOWS, SPEND, LIMITS, RECOVERY_KEY, ALL_POOL, MOST, OPEN_SETTING, checkResting, restingOf, recoveryShown, diceOptionsOf, maySpend, poolsOf, spendFrom, givenBack,
+  FINISH, HOWS, SPEND, LIMITS, RECOVERY_KEY, ALL_POOL, MOST, OPEN_SETTING, REST_CALL_KEY, checkResting, restingOf, recoveryShown, restingShown, restCallOf, diceOptionsOf, maySpend, poolsOf, spendFrom, givenBack,
 };

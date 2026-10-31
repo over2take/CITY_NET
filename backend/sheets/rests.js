@@ -7,6 +7,10 @@
 // from the sheet as it stands at write time, so a player typing into it then loses nothing. The
 // token's health and conditions are written after: a player's onto every token of theirs, as the
 // health route does, an NPC's onto its own. One dice-log line per character, for everyone.
+//
+// Rests finished on each sheet (R3a; approved mockup docs/mockups/rest-on-sheet.html, and the user's
+// calls of 2026-10-30): a player takes their own with takeRest, from their sheet's REST section; the
+// GM may for anyone. A rest the GM called on a sheet (REST_CALL_KEY, recovery.js) is finished with it.
 
 const crypto = require('crypto');
 const { mutateSheet } = require('./mutate');
@@ -14,6 +18,8 @@ const { applyDerived } = require('./templates');
 const { parseTokenConditions } = require('../tokens/conditions');
 const { restOn, restLine, restDice } = require('../systemBuilder/resting');
 const { conditionsOf } = require('../systemBuilder/conditions');
+const { REST_CALL_KEY } = require('../systemBuilder/recovery');
+const { restsOf } = require('../systemBuilder/rests');
 const { withThrow, boardOf } = require('../utils/diceThrow');
 
 const LIMITS = { players: 100, npcs: 100 };
@@ -97,19 +103,54 @@ const previewRest = async (db, { system, definition, rest, players, npcs }) => {
   })));
 };
 
-/** Work one character's rest out at write time, and write its sheet. */
+/**
+ * Work one character's rest out at write time, and write its sheet. A rest the GM called on it,
+ * the same one, is finished with it (R3a).
+ */
 const restSheet = (db, system, definition, rest, c, rng) => new Promise((ok, no) => {
   const args = { definition, restId: rest.id, token: tokenOf(c.token), conditions: parseTokenConditions(c.token && c.token.conditions), rng };
   if (!c.sheetId) { ok(restOn({ ...args, sheet: {} })); return; }
   let result = null;
   mutateSheet(db, c.sheetId, (data) => {
     result = restOn({ ...args, sheet: worked(system, data) });
-    if (!result.ok || !Object.keys(result.sheetPatch).length) return undefined;
+    const called = data[REST_CALL_KEY] && data[REST_CALL_KEY].rest === rest.id;
+    if (!result.ok || (!Object.keys(result.sheetPatch).length && !called)) return undefined;
     const next = { ...data, ...result.sheetPatch };
+    if (called) delete next[REST_CALL_KEY];
     applyDerived(system, next);
     return next;
   }, (err) => (err ? no(err) : ok(result)));
 });
+
+/**
+ * One character's rest, rolled and written: its sheet, then its token's health and conditions, then
+ * a dice-log line for everyone. What it got, as the GAME tab shows it, or null when it couldn't.
+ */
+const restCharacter = async (db, io, { system, definition, rest, c, rng }) => {
+  const result = await restSheet(db, system, definition, rest, c, rng);
+  if (!result || !result.ok) return null;
+  if (c.token) {
+    const t = result.token;
+    const conditions = JSON.stringify(result.conditions);
+    if (c.kind === 'player') {
+      await run(db, `UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ?, conditions = ? WHERE shape = 'rhombus' AND owner = ?`, [t.current, t.max, t.temp, conditions, c.username]);
+    } else {
+      await run(db, 'UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ?, conditions = ? WHERE id = ?', [t.current, t.max, t.temp, conditions, c.location_id]);
+    }
+  }
+  const historyString = restLine(definition, rest.name, c.name, result);
+  const { results, total } = restDice(result);
+  const account = c.kind === 'player' ? c.username : c.name;
+  await run(db, 'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)', [account, total, JSON.stringify(results), LOG_COLOR, historyString]);
+  // The tray's board names the rest (6c4d3). A rest that rolled nothing is quiet (quiet rests,
+  // 2026-10-30): its line goes into the log, but no tray opens, flashes or throws for it.
+  const quiet = Object.keys(results).length ? {} : { quiet: true };
+  io.emit('diceRollBroadcast', withThrow({ userName: c.name, account, results, modifiers: [], color: LOG_COLOR, total, historyString, board: boardOf(String(rest.name).toUpperCase()), ...quiet }));
+  if (c.kind === 'player') io.emit('sheetUpdated', { username: c.username });
+  return { ...shown(definition, c, result), line: historyString };
+};
+
+
 
 /**
  * Call a rest: each character worked out and written in turn, a dice-log line each, and every
@@ -119,30 +160,26 @@ const callRest = async (db, io, { system, definition, rest, players, npcs, rng =
   const characters = await gather(db, system, players, npcs);
   const done = [];
   for (const c of characters) {
-    const result = await restSheet(db, system, definition, rest, c, rng);
-    if (!result || !result.ok) continue;
-    if (c.token) {
-      const t = result.token;
-      const conditions = JSON.stringify(result.conditions);
-      if (c.kind === 'player') {
-        await run(db, `UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ?, conditions = ? WHERE shape = 'rhombus' AND owner = ?`, [t.current, t.max, t.temp, conditions, c.username]);
-      } else {
-        await run(db, 'UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ?, conditions = ? WHERE id = ?', [t.current, t.max, t.temp, conditions, c.location_id]);
-      }
-    }
-    const historyString = restLine(definition, rest.name, c.name, result);
-    const { results, total } = restDice(result);
-    const account = c.kind === 'player' ? c.username : c.name;
-    await run(db, 'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)', [account, total, JSON.stringify(results), LOG_COLOR, historyString]);
-    // The tray's board names the rest (6c4d3). A rest that rolled nothing is quiet (quiet rests,
-    // 2026-10-30): its line goes into the log, but no tray opens, flashes or throws for it.
-    const quiet = Object.keys(results).length ? {} : { quiet: true };
-    io.emit('diceRollBroadcast', withThrow({ userName: c.name, account, results, modifiers: [], color: LOG_COLOR, total, historyString, board: boardOf(String(rest.name).toUpperCase()), ...quiet }));
-    if (c.kind === 'player') io.emit('sheetUpdated', { username: c.username });
-    done.push({ ...shown(definition, c, result), line: historyString });
+    const got = await restCharacter(db, io, { system, definition, rest, c, rng });
+    if (got) done.push(got);
   }
   if (done.length) io.emit('dataUpdated', { isRhombusOnly: true });
   return done;
 };
 
-module.exports = { LIMITS, whoProblem, gather, previewRest, callRest };
+/**
+ * One player character's rest, taken from their sheet (R3a): `rest` one the game offers. A rest
+ * the GM called on that sheet is finished with it. Answers what it got, or { error } in words.
+ */
+const takeRest = async (db, io, { system, definition, restId, username, rng = cryptoRng }) => {
+  const rest = restsOf(definition).find((r) => r.id === restId);
+  if (!rest) return { error: 'Not one of this game\'s rests' };
+  const [c] = await gather(db, system, [username], []);
+  if (!c) return { error: 'That character has no sheet yet' };
+  const got = await restCharacter(db, io, { system, definition, rest, c, rng });
+  if (!got) return { error: 'The rest could not be taken' };
+  io.emit('dataUpdated', { isRhombusOnly: true });
+  return got;
+};
+
+module.exports = { LIMITS, whoProblem, gather, previewRest, callRest, takeRest };

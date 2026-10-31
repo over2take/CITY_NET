@@ -144,5 +144,42 @@ export const withoutRestInResting = (def: Definition, rest: string): Definition 
   });
 };
 
+/** Names joined as words: "A", "A and B", "A, B and C". */
+const listed = (names: string[]) => (names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
+
+/**
+ * WHAT PLAYERS GET under these settings (R3a; the user, 2026-10-30: "inform the builder of the
+ * system what the users have access to when these are set"), in the system's own words: what a
+ * player can do on their sheet, and what the GM can. `rests` are the rests that are on, by id.
+ */
+export const whatPlayersGet = (def: Definition, rests: { id: string; name: string }[]): { players: string[]; gm: string[] } => {
+  const { finish, recovery } = restingOf(def);
+  const nameOf = (id: string) => rests.find((r) => r.id === id)?.name ?? id;
+  const names = rests.map((r) => r.name.toUpperCase());
+  const players: string[] = [];
+  const gm: string[] = [];
+  if (finish === 'sheet') {
+    players.push(`A REST button for each rest on their sheet${names.length ? ` (${listed(names)})` : ''}. Pressing one asks first, then opens that rest; FINISH takes it.`);
+    gm.push('You call a rest from the GAME tab\'s RESTS: it opens on each player\'s sheet for them to finish. NPCs rest at once.');
+    gm.push('You can rest any player from their sheet.');
+  } else {
+    players.push('No REST buttons: a rest happens when you call it from the GAME tab\'s RESTS.');
+    gm.push('You call rests from the GAME tab\'s RESTS: they apply at once to everyone you choose.');
+  }
+  if (recovery) {
+    const dice = recovery.name.trim() || 'Recovery dice';
+    const at = recovery.spentAt === 'any' ? null : listed(recovery.spentAt.map((id) => nameOf(id).toUpperCase()));
+    if (recovery.spend === 'gm') {
+      players.push(`${dice} on their sheet, spent with a roll or ticked off for real dice only while you have OPEN SPENDING on.`);
+      gm.push(`OPEN SPENDING in the GAME tab's RESTS lets players spend their ${dice}; you can spend or tick them on any sheet any time.`);
+    } else {
+      players.push(`${dice} on their sheet, spent with a roll or ticked off for real dice whenever they like${at ? ` (SPENT AT ${at} is for the table to keep)` : ''}.`);
+      gm.push(`You can spend or tick ${dice} on any sheet too.`);
+    }
+    if (finish === 'sheet' && at) players.push(`In the panel of ${at}, ${dice} to spend before FINISH.`);
+  }
+  return { players, gm };
+};
+
 /** What one heals, in words: `its die + @con_mod`, `its die once for each level`. */
 export const healsText = (r: Recovery): string => `its die${r.perLevel ? ' once for each level' : ''}${r.plus?.trim() ? ` + ${r.plus.trim()}` : ''}`;

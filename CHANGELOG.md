@@ -71,6 +71,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **WHAT PLAYERS GET on RESTS (R3a).** Under the recovery dice, a box says in the system's own words
+  what the settings give a player on their sheet, and what they give the GM: REST buttons or none,
+  when and where the recovery dice are spent, and who opens spending. It changes as the settings
+  change. Under it, the server side of resting from the sheet: a player takes one of the game's
+  rests on their own character, doing everything a called rest does (refills, uses, recovery dice
+  back, health, a line in the log), in a system whose rests are finished on each sheet; the GM may
+  for anyone. The sheet's REST section comes next.
 - **A slow map says why.** A browser with hardware acceleration turned off draws the 3D map slowly,
   with no word of why. Now the GM and players see a small notice when the browser itself says it
   draws in software: HARDWARE ACCELERATION IS OFF: THE 3D MAP WILL BE SLOW, with the steps to turn

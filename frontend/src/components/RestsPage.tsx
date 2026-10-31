@@ -15,7 +15,7 @@ import { FieldName } from './HelpHint';
 import { ToggleSwitch } from './ToggleSwitch';
 import { useFormulaBox } from '../hooks/useFormulaBox';
 import {
-  restingOf, withFinish, withRecovery, withRecoveryOn, withBack, withBackAmount, withSpentAt, diceOptions,
+  restingOf, withFinish, withRecovery, withRecoveryOn, withBack, withBackAmount, withSpentAt, diceOptions, whatPlayersGet,
   LIMITS as RECOVERY_LIMITS, type BackHow, type Recovery,
 } from '../sheets/recovery';
 
@@ -360,6 +360,30 @@ function RecoveryFields({ recovery, definition, edit, api }: { recovery: Recover
 }
 
 /**
+ * WHAT PLAYERS GET (R3a): what these settings give a player on their sheet, and the GM, in the
+ * system's own words (sheets/recovery.ts whatPlayersGet), changing as they change.
+ */
+function WhatPlayersGet({ definition }: { definition: Definition }) {
+  const rests = restList(definition).filter((r) => r.on && r.name.trim()).map((r) => ({ id: r.id, name: r.name }));
+  const { players, gm } = whatPlayersGet(definition, rests);
+  const part = (title: string, lines: string[]) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+      <span style={small}>{title}</span>
+      <ul style={{ margin: 0, paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {lines.map((l) => <li key={l} style={{ ...why, fontSize: 11 }}>{l}</li>)}
+      </ul>
+    </div>
+  );
+  return (
+    <div role="region" aria-label="What players get" style={{ border: '1px dashed var(--cyan)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <FieldName hint={HINTS['rests.whatPlayersGet']} style={{ ...small, color: 'var(--cyan)', opacity: 1 }}>WHAT PLAYERS GET</FieldName>
+      {part('PLAYERS', players)}
+      {part('YOU, THE GM', gm)}
+    </div>
+  );
+}
+
+/**
  * RECOVERY DICE and RESTS ARE FINISHED (R1b; approved mockup docs/mockups/rest-on-sheet.html,
  * 2026-10-30), under the rests: the system's pool to heal from at a rest, named as the game names
  * it, and who finishes a rest the GM calls. What it reads and writes is sheets/recovery.ts.
@@ -391,9 +415,10 @@ function Resting({ definition, edit, api }: Props) {
           </span>
         </div>
       </div>
-      {(recovery || finish === 'sheet') && (
+      <WhatPlayersGet definition={definition} />
+      {finish === 'sheet' && (
         <p style={{ ...why, fontSize: 11, color: 'var(--warning)', opacity: 1 }}>
-          COMING NEXT: the pools on each sheet and the REST panel. Until then these are saved with the system, and rests apply at the GM&apos;s call.
+          COMING NEXT: the REST section on each sheet. Until then, rests apply when the GM calls them.
         </p>
       )}
     </section>
