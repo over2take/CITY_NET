@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { signInAsGm, signInAsPlayer, openBuilder, openGameSystem, builderPage, clickRail, gmToken, asGm, approvedPlayer } from './helpers';
+import { signInAsGm, signInAsPlayer, openBuilder, openGameSystem, builderPage, clickRail, gmToken, asGm, approvedPlayer, sheetTab } from './helpers';
 
 // The builder journey, the GM's half (4l2a; plan row 4l browser-journey): a system built through
 // the builder's own screens from + NEW (its words, a part off, a stat and a formula worked out on
@@ -119,7 +119,9 @@ test('the GM builds a system, publishes it twice, switches the game to it, and a
   await signInAsPlayer(playerPage, player);
   await playerPage.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
   await playerPage.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+  await sheetTab(playerPage, 'CHARACTER');
   await playerPage.getByLabel('Name', { exact: true }).fill('Wren');
+  await sheetTab(playerPage, 'STATS');
   await playerPage.getByLabel('Grit', { exact: true }).fill('3');
   // Saved first, so the server reads Grit from the stored sheet: waited for there, not for a time.
   await expect.poll(async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data.new_stat).toBe(3);

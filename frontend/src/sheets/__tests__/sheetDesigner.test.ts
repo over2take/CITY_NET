@@ -29,7 +29,16 @@ const H: Definition = {
   derived: [{ id: 'save', label: 'Save', formula: '16 - @str' }],
 };
 const STARTER: CustomRenderSheet = starterSheet(H);
-const custom = (def: Definition = H) => withCustomized(def, starterSheet(def));
+/**
+ * The starter as it was before its CHARACTER tab (2026-10-31), the fixed sheet the tab and section
+ * steps below are worked on: what they do doesn't hang on how the starter is laid out.
+ */
+const threeTabs = (sheet: CustomRenderSheet): CustomRenderSheet => ({
+  ...sheet,
+  tabs: (sheet.tabs ?? []).filter((t) => t !== 'CHARACTER'),
+  sections: sheet.sections.map((s) => (s.tab === 'CHARACTER' ? { ...s, tab: 'STATS' } : s)),
+});
+const custom = (def: Definition = H) => withCustomized(def, threeTabs(starterSheet(def)));
 const problems = (def: Definition) => checkDefinition(def).problems.map((p: { where: string; message: string }) => `${p.where}: ${p.message}`);
 const ids = (def: Definition) => fieldsOn(sheetOf(def)).map((f) => f.id);
 const sections = (def: Definition) => sheetOf(def)!.sections.map((s) => `${s.tab ?? '-'}/${s.id}`);
@@ -37,8 +46,9 @@ const sections = (def: Definition) => sheetOf(def)!.sections.map((s) => `${s.tab
 describe('automatic and customized', () => {
   it('copies the starter in, which the server accepts and draws as it was', () => {
     expect(sheetOf(H)).toBeNull();
-    const def = custom();
+    const def = withCustomized(H, starterSheet(H));
     expect(sheetOf(def)).toEqual(STARTER);
+    expect(STARTER.tabs).toEqual(['STATS', 'CHARACTER', 'GEAR', 'NOTES']);
     expect(problems(def)).toEqual([]);
     expect(effectiveSheet(def)).toEqual(effectiveSheet(H));
   });

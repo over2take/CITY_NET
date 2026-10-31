@@ -31,7 +31,16 @@ const HEARTH: Definition = {
   stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'str', label: 'Strength' }, { id: 'dex', label: 'Dexterity' }] }],
   derived: [{ id: 'save', label: 'Save', formula: '16 - @str' }],
 };
-const STARTER: CustomRenderSheet = starterSheet(HEARTH);
+/**
+ * The starter as it was before its CHARACTER tab (2026-10-31): the fixed sheet the page's tab,
+ * section and field steps are worked on, so what they do doesn't hang on the starter's layout.
+ */
+const threeTabs = (sheet: CustomRenderSheet): CustomRenderSheet => ({
+  ...sheet,
+  tabs: (sheet.tabs ?? []).filter((t) => t !== 'CHARACTER'),
+  sections: sheet.sections.map((s) => (s.tab === 'CHARACTER' ? { ...s, tab: 'STATS' } : s)),
+});
+const STARTER: CustomRenderSheet = threeTabs(starterSheet(HEARTH));
 
 type Api = ReturnType<typeof systemsApi>;
 /** The server's preview, answered by its own code. */
@@ -50,7 +59,7 @@ const open = (start: Definition = HEARTH, api: { previewSheet: unknown } | null 
   return { edits, last: () => edits[edits.length - 1], api };
 };
 const customized = async (start: Definition = HEARTH) => {
-  const opened = open({ ...start, sheet: starterSheet(start) });
+  const opened = open({ ...start, sheet: threeTabs(starterSheet(start)) });
   await screen.findByText('CUSTOMIZED');
   return opened;
 };
@@ -66,9 +75,10 @@ describe('automatic', () => {
     const { edits } = open();
     expect(screen.getByText('AUTOMATIC')).toBeTruthy();
     expect(await screen.findByTestId('sheet-tree')).toBeTruthy();
-    expect(groupNames()).toEqual(['STATS tab', 'GEAR tab', 'NOTES tab']);
+    expect(groupNames()).toEqual(['STATS tab', 'CHARACTER tab', 'GEAR tab', 'NOTES tab']);
+    expect(within(screen.getByRole('group', { name: 'CHARACTER tab' })).getByText('IDENTITY')).toBeTruthy();
     const stats = within(screen.getByRole('group', { name: 'STATS tab' }));
-    expect(stats.getByText('IDENTITY')).toBeTruthy();
+    expect(stats.queryByText('IDENTITY')).toBeNull();
     expect(stats.getByText('ABILITIES')).toBeTruthy();
     expect(stats.getByText('Strength')).toBeTruthy();
     expect(stats.getByText('WORKED OUT')).toBeTruthy();
@@ -102,7 +112,7 @@ describe('automatic', () => {
   it('CUSTOMIZE copies the starter in and picks its first section', async () => {
     const { last } = open();
     await userEvent.click(await screen.findByRole('button', { name: 'CUSTOMIZE THIS SHEET' }));
-    expect(last().sheet).toEqual(STARTER);
+    expect(last().sheet).toEqual(starterSheet(HEARTH));
     expect(problems(last())).toEqual([]);
     expect(screen.getByText('CUSTOMIZED')).toBeTruthy();
     expect(node('IDENTITY section').getAttribute('aria-current')).toBe('true');
@@ -549,8 +559,10 @@ describe('the preview', () => {
   it('draws the sheet with the game\'s own renderer, filled with the sample character', async () => {
     open(SAMPLED);
     await screen.findByTestId('sheet-preview');
-    expect(preview().getByDisplayValue(SAMPLE_NAME)).toBeTruthy();
     expect(preview().getByDisplayValue('10')).toBeTruthy();
+    await userEvent.click(preview().getByText('CHARACTER', { selector: 'button' }));
+    expect(preview().getByDisplayValue(SAMPLE_NAME)).toBeTruthy();
+    await userEvent.click(preview().getByText('STATS', { selector: 'button' }));
     // Save is 16 - @str, worked out by the server from the sample.
     await waitFor(() => expect((preview().getByLabelText('Save') as HTMLInputElement).value).toBe('6'));
     expect(preview().getByText(/─── ABILITIES ───/)).toBeTruthy();
@@ -581,6 +593,7 @@ describe('the preview', () => {
   it('can be typed in to try it, saving nothing', async () => {
     const { edits } = open(SAMPLED);
     await screen.findByTestId('sheet-preview');
+    await userEvent.click(preview().getByText('CHARACTER', { selector: 'button' }));
     const nameBox = preview().getByDisplayValue(SAMPLE_NAME);
     fireEvent.change(nameBox, { target: { value: 'Vex' } });
     expect(preview().getByDisplayValue('Vex')).toBeTruthy();

@@ -686,6 +686,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- A built system's automatic character sheet has a CHARACTER tab beside STATS: the name, concept, description and the picks (classes, feats) are there, and STATS keeps the numbers, health and RESTS. A customized sheet keeps its own layout.
 - **The GAME tab's RESTS and BANK are folders.** A custom game's RESTS moved out of TTRPG_SYSTEM,
   which is for setting the game up, into a folder of its own on the GAME tab, with OPEN SPENDING at
   its top when the GM has the say over recovery dice. The bank's CURRENCY_ICON, PAY_PLAYERS and

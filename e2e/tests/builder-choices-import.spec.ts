@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'fs/promises';
-import { signInAsGm, signInAsPlayer, openBuilder, builderPage, gmToken, asGm, approvedPlayer } from './helpers';
+import { signInAsGm, signInAsPlayer, openBuilder, builderPage, gmToken, asGm, approvedPlayer, sheetTab } from './helpers';
 
 // IMPORT on a CHOICES list (choices import 2; approved mockup docs/mockups/choices-import.html,
 // 2026-10-28): the GM downloads the list as it is, adds a class and a feature to the file, with one
@@ -86,6 +86,7 @@ test('a list downloaded, changed and imported, warned of its one wrong line, and
   await signInAsPlayer(playerPage, player);
   await playerPage.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
   await playerPage.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+  await sheetTab(playerPage, 'CHARACTER');
   const block = playerPage.getByRole('region', { name: 'Classes' });
   const pick = block.getByRole('group', { name: 'Pick a Class' });
   await expect(pick.getByText('NEEDS INTELLECT >= 13')).toBeVisible();

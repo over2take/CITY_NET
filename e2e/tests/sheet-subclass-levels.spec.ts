@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { signInAsGm, signInAsPlayer, openBuilder, builderPage, gmToken, asGm, approvedPlayer } from './helpers';
+import { signInAsGm, signInAsPlayer, openBuilder, builderPage, gmToken, asGm, approvedPlayer, sheetTab } from './helpers';
 
 // A list a feature opens takes the level of what opened it (7a5d; the user on Fighter's Martial
 // Archetype, 2026-10-29). In the builder the GM sets ARCHETYPES to THROUGH FEATURES, is told its
@@ -66,6 +66,7 @@ test('an archetype picked at Fighter 3 unlocks its later features by the Fighter
   await signInAsPlayer(sheet, player);
   await sheet.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
   await sheet.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+  await sheetTab(sheet, 'CHARACTER');
 
   // FIGHTER to 3, CHAMPION picked under Martial Archetype: Improved Critical now, Remarkable Athlete next.
   const classes = sheet.getByRole('region', { name: 'Classes' });

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { signInAsGm, signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer } from './helpers';
+import { signInAsGm, signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
 
 // A feature's modifier on the token's maximum (7a5a3; decision 10 of the approved mockup
 // docs/mockups/nested-choices.html, 2026-10-28): a player with a 20 HP token, a FIGHTER at level 3,
@@ -46,7 +46,8 @@ test('a feature adding to HP MAX moves the token\'s real maximum, and back when 
   await mine.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
   await mine.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
 
-  // A FIGHTER at level 3 picks TOUGH: 6 more, on the token and named on the sheet.
+  // A FIGHTER at level 3 picks TOUGH, on CHARACTER: 6 more, on the token and named on STATS.
+  await sheetTab(mine, 'CHARACTER');
   const classes = mine.getByRole('region', { name: 'Classes' });
   await classes.getByRole('group', { name: 'Pick a Class' }).getByRole('button', { name: 'FIGHTER' }).click();
   const fighter = classes.getByRole('group', { name: 'Fighter' });
@@ -56,20 +57,24 @@ test('a feature adding to HP MAX moves the token\'s real maximum, and back when 
   const feats = mine.getByRole('region', { name: 'Feats' });
   await feats.getByRole('group', { name: 'Pick a Feat' }).getByRole('button', { name: 'TOUGH' }).click();
   await expect(mine.getByText('26 / 26')).toBeVisible();
+  await sheetTab(mine, 'STATS');
   await expect(mine.getByTitle('20 → 26 (Tough +6)')).toBeVisible();
   // CHARACTER_CONTROLS' MAX HEALTH follows, so SAVE_STATS never writes the old 20 back.
   const maxHealth = mine.locator('label', { hasText: /^MAX HEALTH$/ }).locator('xpath=following-sibling::input');
   await expect(maxHealth).toHaveValue('26');
 
   // A level down: 4, not 6.
+  await sheetTab(mine, 'CHARACTER');
   await fighter.getByRole('button', { name: 'Fighter level down' }).click();
   await expect(mine.getByText('24 / 24')).toBeVisible();
+  await sheetTab(mine, 'STATS');
   await expect(mine.getByTitle('20 → 24 (Tough +4)')).toBeVisible();
 
   // THE GM takes TOUGH away from the player's sheet: the token is back where it started.
   await signInAsGm(page);
   await lookUp(page, player.username);
   await page.getByRole('button', { name: 'OPEN_SHEET', exact: true }).click();
+  await sheetTab(page, 'CHARACTER');
   const tough = page.getByRole('region', { name: 'Feats' }).getByRole('group', { name: 'Tough' });
   await tough.getByRole('button', { name: 'Drop Tough' }).click();
   await tough.getByRole('button', { name: 'YES, DROP' }).click();

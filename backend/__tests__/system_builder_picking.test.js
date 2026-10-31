@@ -277,10 +277,11 @@ describe('through the socket', () => {
 describe('the sheet\'s CHOICES block (7a3b1)', () => {
   const block = (def) => effectiveSheet(def).sections.find((s) => s.layout === 'choices');
 
-  it('the starter sheet has one when the system has lists, on STATS after IDENTITY, named for the one list', () => {
+  it('the starter sheet has one when the system has lists, on CHARACTER after IDENTITY, named for the one list', () => {
     const sheet = effectiveSheet({ ...HEARTH, choices: [HEARTH.choices[0]] });
     expect(sheet.sections.slice(0, 2).map((s) => s.id)).toEqual(['identity', 'choices']);
-    expect(block({ ...HEARTH, choices: [HEARTH.choices[0]] })).toEqual({ id: 'choices', label: 'CLASSES', layout: 'choices', tab: 'STATS', fields: [] });
+    expect(sheet.tabs).toEqual(['STATS', 'CHARACTER', 'GEAR', 'NOTES']);
+    expect(block({ ...HEARTH, choices: [HEARTH.choices[0]] })).toEqual({ id: 'choices', label: 'CLASSES', layout: 'choices', tab: 'CHARACTER', fields: [] });
     expect(block(HEARTH).label).toBe('CHOICES');
     expect(block({ ...HEARTH, choices: undefined })).toBeUndefined();
     expect(block({ ...HEARTH, choices: ['junk'] })).toBeUndefined();

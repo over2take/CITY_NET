@@ -38,10 +38,11 @@ const MODELS = {
 describe('a system that answers nothing', () => {
   it('gets exactly the starter sheet it always had', () => {
     const expected = {
-      tabs: ['STATS', 'GEAR', 'NOTES'],
+      // A CHARACTER tab of its own for who they are (the user, 2026-10-31); the values stay as they were.
+      tabs: ['STATS', 'CHARACTER', 'GEAR', 'NOTES'],
       header: { nameField: 'name', subtitleFields: ['concept'], hpField: 'hp', hpMaxField: 'hp_max' },
       sections: [
-        { id: 'identity', label: 'IDENTITY', layout: 'list', tab: 'STATS', fields: [
+        { id: 'identity', label: 'IDENTITY', layout: 'list', tab: 'CHARACTER', fields: [
           { id: 'name', label: 'Name', type: 'text', visibility: 'public' },
           { id: 'concept', label: 'Concept', type: 'text' },
           { id: 'description', label: 'Description', type: 'textarea', visibility: 'public' },

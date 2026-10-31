@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { signInAsGm, signInAsPlayer, openGameSystem, gmToken, asGm, runningSystem, approvedPlayer } from './helpers';
+import { signInAsGm, signInAsPlayer, openGameSystem, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
 
 // The builder journey, the player's half (4l2b; plan row 4l browser-journey): a published custom
 // system running as the game, played. A player makes a character on it and sees the system's own
@@ -49,7 +49,10 @@ test('a player makes a character on a custom game, and gets what the GM gives an
   await playerPage.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
   await playerPage.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
   await expect(playerPage.getByText(`LANTERNFALL${again.toUpperCase()}`, { exact: true })).toBeVisible();
+  // The name on the CHARACTER tab, the numbers on STATS.
+  await sheetTab(playerPage, 'CHARACTER');
   await playerPage.getByLabel('Name', { exact: true }).fill('Ash');
+  await sheetTab(playerPage, 'STATS');
   await playerPage.getByLabel('Grit', { exact: true }).fill('3');
   await expect(playerPage.getByLabel('Toughness', { exact: true })).toHaveValue('13');
   await expect(playerPage.getByLabel('Resolve', { exact: true })).toHaveValue('0');
@@ -82,7 +85,7 @@ test('a player makes a character on a custom game, and gets what the GM gives an
   const notice = playerPage.getByTestId('gift-notices');
   await expect(notice).toContainText('THE KEEPER GAVE YOU LANTERN OIL ×1');
   await expect(notice).toContainText('For the dark below.');
-  await playerPage.getByRole('button', { name: 'GEAR', exact: true }).click();
+  await sheetTab(playerPage, 'GEAR');
   await expect(playerPage.getByText('Lantern Oil')).toBeVisible();
 
   // A LONG REST, from the GAME tab's rests: the preview says what Ash gets, and calling it does it.
@@ -95,7 +98,7 @@ test('a player makes a character on a custom game, and gets what the GM gives an
   await expect(rests.getByRole('status')).toHaveText('LONG REST CALLED · 1 CHARACTER');
 
   // Ash's Resolve is back up to their Grit, on the sheet they have open.
-  await playerPage.getByRole('button', { name: 'STATS', exact: true }).click();
+  await sheetTab(playerPage, 'STATS');
   await expect(playerPage.getByLabel('Resolve', { exact: true })).toHaveValue('3');
 
   await playerContext.close();

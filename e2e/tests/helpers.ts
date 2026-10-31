@@ -55,6 +55,13 @@ export const approvedPlayer = async (request: APIRequestContext, token: string, 
   await asGm(request, token, 'post', `/api/player/admin/players/${player.username}/approve`);
 };
 
+/**
+ * A tab of an open character sheet. A built system's starter has STATS (the numbers, and RESTS),
+ * CHARACTER (the name and the picks: CLASSES, FEATS), GEAR and NOTES; only the open tab is drawn.
+ */
+export const sheetTab = (page: Page, tab: 'STATS' | 'CHARACTER' | 'GEAR' | 'NOTES') =>
+  page.getByRole('button', { name: tab, exact: true }).click();
+
 /** The dashboard's GAME tab, open at TTRPG_SYSTEM. */
 export const openGameSystem = async (page: Page) => {
   await page.getByRole('button', { name: 'GAME', exact: true }).click();

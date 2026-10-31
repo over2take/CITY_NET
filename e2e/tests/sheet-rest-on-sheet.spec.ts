@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { signInAsGm, signInAsPlayer, openGameSystem, gmToken, asGm, runningSystem, approvedPlayer } from './helpers';
+import { signInAsGm, signInAsPlayer, openGameSystem, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
 
 // Resting on the sheet (R3b; approved mockup docs/mockups/rest-on-sheet.html, and the user's calls of
 // 2026-10-30 and -31): in a system whose rests are finished on each sheet, a Fighter's RESTS section
@@ -27,19 +27,22 @@ test('a player rests from their sheet, asked first, and finishes a long rest the
   await approvedPlayer(request, gm, player);
   const stored = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data;
 
-  // THE PLAYER: FIGHTER, with Second Wind used.
+  // THE PLAYER: FIGHTER, with Second Wind used, on the CHARACTER tab.
   const context = await browser.newContext({ baseURL: info.project.use.baseURL });
   const sheet = await context.newPage();
   await signInAsPlayer(sheet, player);
   await sheet.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
   await sheet.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+  await sheetTab(sheet, 'CHARACTER');
   await sheet.getByLabel('Name', { exact: true }).fill('Rook');
   const classes = sheet.getByRole('region', { name: 'Classes' });
   await classes.getByRole('group', { name: 'Pick a Class' }).getByRole('button', { name: 'FIGHTER' }).click();
   await classes.getByRole('group', { name: 'Second Wind uses' }).getByRole('button', { name: 'Second Wind use 1' }).click();
   await expect.poll(async () => (await stored())._uses?.second_wind, { timeout: 15_000 }).toBe(1);
 
-  // SHORT REST: asked first, then its panel with the Hit Dice, one spent, then FINISH, asked too.
+  // SHORT REST, from RESTS on STATS: asked first, then its panel with the Hit Dice, one spent, then
+  // FINISH, asked too.
+  await sheetTab(sheet, 'STATS');
   const rests = sheet.getByRole('group', { name: 'Rests' });
   await rests.getByRole('button', { name: 'SHORT REST' }).click();
   await sheet.getByRole('group', { name: 'Take a Short rest?' }).getByRole('button', { name: 'REST' }).click();

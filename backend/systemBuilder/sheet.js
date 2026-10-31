@@ -210,7 +210,9 @@ const designedOrStarter = (definition) => {
     : definition && isPlainObject(definition.core) ? definition.core.health : undefined;
   const health = healthLayout(model, hp ? hp.short : 'HP');
   const sections = [
-    { id: 'identity', label: 'IDENTITY', layout: 'list', tab: 'STATS', fields: [
+    // Who the character is, on a CHARACTER tab of its own with their picks (the user, 2026-10-31):
+    // the numbers stay on STATS.
+    { id: 'identity', label: 'IDENTITY', layout: 'list', tab: 'CHARACTER', fields: [
       { id: 'name', label: 'Name', type: 'text', visibility: 'public' },
       { id: 'concept', label: 'Concept', type: 'text' },
       { id: 'description', label: 'Description', type: 'textarea', visibility: 'public' },
@@ -218,7 +220,7 @@ const designedOrStarter = (definition) => {
     // The character's picks (7a3b1), when the system has lists to pick from: named for the list when
     // there is one. Read here rather than through choices.js, which would make a circle (rests.js).
     ...(Array.isArray(definition && definition.choices) && definition.choices.some((c) => isPlainObject(c) && typeof c.id === 'string')
-      ? [{ id: 'choices', label: choicesLabel(definition.choices), layout: 'choices', tab: 'STATS', fields: [] }] : []),
+      ? [{ id: 'choices', label: choicesLabel(definition.choices), layout: 'choices', tab: 'CHARACTER', fields: [] }] : []),
     // The REST section (R3b), when rests are finished on each sheet or there are recovery dice to
     // spend. Read here rather than through recovery.js, for the same circle.
     ...(isPlainObject(definition && definition.resting) && (definition.resting.finish === 'sheet' || isPlainObject(definition.resting.recovery))
@@ -236,7 +238,8 @@ const designedOrStarter = (definition) => {
     { id: 'money', label: 'MONEY', layout: 'list', tab: 'GEAR', fields: [{ id: 'cash', label: 'Cash', type: 'number', source: 'bank_balance' }] },
     { id: 'notes', label: 'NOTES', layout: 'notes', tab: 'NOTES', fields: [{ id: 'notes', label: 'Notes', type: 'textarea' }] },
   );
-  return { tabs: ['STATS', 'GEAR', 'NOTES'], header: { nameField: 'name', subtitleFields: ['concept'], ...health.header }, sections };
+  // Opens on STATS, the numbers used in play; CHARACTER beside it (the user, 2026-10-31).
+  return { tabs: ['STATS', 'CHARACTER', 'GEAR', 'NOTES'], header: { nameField: 'name', subtitleFields: ['concept'], ...health.header }, sections };
 };
 
 /**

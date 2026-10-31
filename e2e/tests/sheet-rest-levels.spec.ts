@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { signInAsGm, signInAsPlayer, openGameSystem, gmToken, asGm, runningSystem, approvedPlayer } from './helpers';
+import { signInAsGm, signInAsPlayer, openGameSystem, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
 
 // A rest's amount reads the character's levels (rest levels, 2026-10-30): before, a builder system's
 // rests could only name sheet fields, stats and formulas, so "heal by your level" was refused. Here a
@@ -41,8 +41,9 @@ test('a long rest sets a number from the character\'s class level and a stat wit
   await signInAsPlayer(sheet, player);
   await sheet.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
   await sheet.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
-  await sheet.getByLabel('Name', { exact: true }).fill('Rook');
   await sheet.getByLabel('Grit', { exact: true }).fill('3');
+  await sheetTab(sheet, 'CHARACTER');
+  await sheet.getByLabel('Name', { exact: true }).fill('Rook');
   const classes = sheet.getByRole('region', { name: 'Classes' });
   await classes.getByRole('group', { name: 'Pick a Class' }).getByRole('button', { name: 'FIGHTER' }).click();
   const fighter = classes.getByRole('group', { name: 'Fighter' });
@@ -54,6 +55,7 @@ test('a long rest sets a number from the character\'s class level and a stat wit
     const { data } = await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`);
     return [data.name, data.grit, data._worked?.levels?.fighter_level];
   }, { timeout: 15_000 }).toEqual(['Rook', 3, 3]);
+  await sheetTab(sheet, 'STATS');
 
   // THE GM calls a long rest from the GAME tab.
   await signInAsGm(gmPage);
