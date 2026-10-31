@@ -25,6 +25,7 @@ import {
 } from '../sheets/cwnWeaponStash';
 import { ChoicesSection } from './ChoicesSection';
 import { RestSection } from './RestSection';
+import { withTempHp } from '../sheets/tempHp';
 import { choiceEffects, type ChoicesAction } from '../sheets/choicesShown';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
@@ -1210,21 +1211,11 @@ function GridSection({ section, allFields, data, readOnly, onFieldChange, onRoll
           <div key={field.id} title={field.hint} style={{ border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--black) 35%, transparent)', textAlign: 'center', display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '4px 2px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
               {field.label}
-              {/* The pair's maximum too: a feature adding to the token's (7a5a3) is named here. */}
-              {[field, maxField].map((f) => (f && effects.fields[f.id]?.delta ? <ChromeBadge key={f.id} effect={effects.fields[f.id]} /> : null))}
+              {/* A pair's bonus is named on its maximum below, not as a second number by the name. */}
+              {!maxField && effects.fields[field.id]?.delta ? <ChromeBadge effect={effects.fields[field.id]} /> : null}
             </div>
             {maxField ? (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', padding: '0 2px' }}>
-                  <FieldInput field={field} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={numInput} />
-                  <span style={{ opacity: 0.5 }}>/</span>
-                  <FieldInput field={maxField} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={numInput} />
-                </div>
-                <div style={{ display: 'flex', fontSize: '0.45rem', opacity: 0.5, letterSpacing: '1px', padding: '0 6px 2px' }}>
-                  <span style={{ flex: 1 }}>CUR</span>
-                  <span style={{ flex: 1 }}>MAX</span>
-                </div>
-              </>
+              <PairCells field={field} maxField={maxField} data={data} readOnly={readOnly} onFieldChange={onFieldChange} effects={effects} numInput={numInput} />
             ) : (
               <FieldInput field={field} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={numInput} />
             )}
@@ -1287,6 +1278,42 @@ function GridSection({ section, allFields, data, readOnly, onFieldChange, onRoll
  * So the augmented number is shown next to it instead, with what produced it in the
  * tooltip, and the BASE the row rolls at already includes it.
  */
+/**
+ * A pool's CURRENT / MAX, each centered over its name (2026-10-31): the token's temporary HP is
+ * added to the current, in the warning color, and a feature adding to the maximum (7a5a3) colors
+ * it, naming itself on hover.
+ */
+function PairCells({ field, maxField, data, readOnly, onFieldChange, effects, numInput }: {
+  field: SheetField; maxField: SheetField; data: SheetData; readOnly: boolean;
+  onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
+  effects: SheetEffects; numInput: React.CSSProperties;
+}) {
+  const { data: shown, temp } = withTempHp(field, data);
+  const bonus = effects.fields[maxField.id]?.delta ? effects.fields[maxField.id] : undefined;
+  const row: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 12px 1fr', alignItems: 'center', padding: '0 6px', textAlign: 'center' };
+  const centered = { ...numInput, justifyContent: 'center', gap: '3px' };
+  return (
+    <>
+      <div style={row}>
+        <div title={temp ? `${data[field.id]} + ${temp} temporary` : undefined}>
+          <FieldInput field={field} data={shown} readOnly={readOnly} onFieldChange={onFieldChange}
+            style={{ ...centered, ...(temp ? { color: 'var(--warning)' } : {}) }} />
+        </div>
+        <span style={{ opacity: 0.5 }}>/</span>
+        <div title={bonus ? `${bonus.base} → ${bonus.value} (${describeSources(bonus)})` : undefined}>
+          <FieldInput field={maxField} data={data} readOnly={readOnly} onFieldChange={onFieldChange}
+            style={{ ...centered, ...(bonus ? { color: 'var(--cyan)' } : {}) }} />
+        </div>
+      </div>
+      <div style={{ ...row, fontSize: '0.45rem', opacity: 0.5, letterSpacing: '1px', paddingBottom: '3px' }}>
+        <span style={temp ? { color: 'var(--warning)' } : undefined}>{temp ? `CURRENT +${temp} TEMP` : 'CURRENT'}</span>
+        <span />
+        <span>MAX</span>
+      </div>
+    </>
+  );
+}
+
 function ChromeBadge({ effect }: { effect: FieldEffect }) {
   return (
     <span
@@ -1824,7 +1851,10 @@ function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection 
 
 export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onRecoverySpend, recoveryOpen, onRestTake }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
-  const [activeTab, setActiveTab] = useState(tabs[0]);
+  // The tab it opens on: the one the template names (a built system's starter opens on STATS,
+  // with CHARACTER first in the row), else the first.
+  const firstTab = template.opens && tabs.includes(template.opens) ? template.opens : tabs[0];
+  const [activeTab, setActiveTab] = useState(firstTab);
   // What the character's chrome is doing to their numbers. Computed once for the whole
   // sheet rather than per field: it reads the cyberware list, which every stat and skill
   // would otherwise re-read and re-scan for itself.
@@ -1841,7 +1871,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
   // If the active tab gets hidden (house rule toggled off), fall back to the
   // first visible one.
   useEffect(() => {
-    if (!tabs.includes(activeTab) && tabs.length > 0) setActiveTab(tabs[0]);
+    if (!tabs.includes(activeTab) && tabs.length > 0) setActiveTab(firstTab);
   }, [tabs.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   // LUCK declared for the next roll (CP:R: declare before rolling; any spend
   // also negates a natural-1 fumble). Consumed and reset by the next roll.

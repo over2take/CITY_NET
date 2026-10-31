@@ -75,7 +75,7 @@ describe('automatic', () => {
     const { edits } = open();
     expect(screen.getByText('AUTOMATIC')).toBeTruthy();
     expect(await screen.findByTestId('sheet-tree')).toBeTruthy();
-    expect(groupNames()).toEqual(['STATS tab', 'CHARACTER tab', 'GEAR tab', 'NOTES tab']);
+    expect(groupNames()).toEqual(['CHARACTER tab', 'STATS tab', 'GEAR tab', 'NOTES tab']);
     expect(within(screen.getByRole('group', { name: 'CHARACTER tab' })).getByText('IDENTITY')).toBeTruthy();
     const stats = within(screen.getByRole('group', { name: 'STATS tab' }));
     expect(stats.queryByText('IDENTITY')).toBeNull();

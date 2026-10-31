@@ -28,6 +28,8 @@ export interface CustomRenderField {
 
 export interface CustomRenderSheet {
   tabs?: string[];
+  /** The tab it opens on, when not the first (the starter lists CHARACTER first, opening on STATS). */
+  opens?: string;
   header?: { nameField?: string; subtitleFields?: string[]; hpField?: string; hpMaxField?: string; chips?: { field: string; label: string }[] };
   sections: { id: string; label: string; layout: SectionLayout; tab?: string; columns?: number; only_with?: string; fields: CustomRenderField[] }[];
 }
@@ -118,6 +120,7 @@ const layoutTemplate = (id: string, name: string, sheet: CustomRenderSheet | und
     id,
     name,
     tabs: sheet?.tabs,
+    ...(sheet?.opens ? { opens: sheet.opens } : {}),
     ...(header && header.nameField ? { header: { ...header, nameField: header.nameField } } : { header: { nameField: 'name' } }),
     sections,
   };

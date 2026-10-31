@@ -330,7 +330,7 @@ describe('RULES (4j5b)', () => {
     derived: [{ id: 'save', label: 'Save', formula: '16 - (@level + @str)', alternative: { rule: 'gritty', formula: '10 - @str' } }],
     sheet: (() => {
       const sheet = starterSheet(H);
-      sheet.sections.push({ id: 'spells', label: 'SPELLS', layout: 'list', tab: sheet.tabs?.[0], only_with: 'magic', fields: [{ id: 'spell', label: 'Spell', type: 'text' }] });
+      sheet.sections.push({ id: 'spells', label: 'SPELLS', layout: 'list', tab: 'STATS', only_with: 'magic', fields: [{ id: 'spell', label: 'Spell', type: 'text' }] });
       return sheet;
     })(),
   } as unknown as Definition;

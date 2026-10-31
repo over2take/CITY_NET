@@ -280,7 +280,8 @@ describe('the sheet\'s CHOICES block (7a3b1)', () => {
   it('the starter sheet has one when the system has lists, on CHARACTER after IDENTITY, named for the one list', () => {
     const sheet = effectiveSheet({ ...HEARTH, choices: [HEARTH.choices[0]] });
     expect(sheet.sections.slice(0, 2).map((s) => s.id)).toEqual(['identity', 'choices']);
-    expect(sheet.tabs).toEqual(['STATS', 'CHARACTER', 'GEAR', 'NOTES']);
+    expect(sheet.tabs).toEqual(['CHARACTER', 'STATS', 'GEAR', 'NOTES']);
+    expect(sheet.opens).toBe('STATS');
     expect(block({ ...HEARTH, choices: [HEARTH.choices[0]] })).toEqual({ id: 'choices', label: 'CLASSES', layout: 'choices', tab: 'CHARACTER', fields: [] });
     expect(block(HEARTH).label).toBe('CHOICES');
     expect(block({ ...HEARTH, choices: undefined })).toBeUndefined();

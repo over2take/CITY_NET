@@ -312,6 +312,8 @@ export interface SheetTemplate {
   tokenDefense?: TokenDefense;
   /** Bottom tab bar, in order. Sections map to tabs via section.tab. */
   tabs?: string[];
+  /** The tab the sheet opens on, when it isn't the first. */
+  opens?: string;
   sections: SheetSection[];
 }
 

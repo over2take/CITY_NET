@@ -39,7 +39,8 @@ describe('a system that answers nothing', () => {
   it('gets exactly the starter sheet it always had', () => {
     const expected = {
       // A CHARACTER tab of its own for who they are (the user, 2026-10-31); the values stay as they were.
-      tabs: ['STATS', 'CHARACTER', 'GEAR', 'NOTES'],
+      tabs: ['CHARACTER', 'STATS', 'GEAR', 'NOTES'],
+      opens: 'STATS',
       header: { nameField: 'name', subtitleFields: ['concept'], hpField: 'hp', hpMaxField: 'hp_max' },
       sections: [
         { id: 'identity', label: 'IDENTITY', layout: 'list', tab: 'CHARACTER', fields: [

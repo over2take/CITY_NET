@@ -181,6 +181,13 @@ export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm =
   const worked = workedOn(data);
   // The pick the GM asked to take away, waiting for YES: "list:option".
   const [dropping, setDropping] = useState<string | null>(null);
+  // The lists folded away, each on its own, so a long run of classes or feats can be put aside.
+  const [folded, setFolded] = useState<Set<string>>(new Set());
+  const fold = (id: string) => setFolded((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const can = !readOnly && !!onChoices;
   // In the builder's previews nothing is published yet: the block says what will be here.
   if (!lists.length) return <div style={small}>A character&apos;s picks from the system&apos;s lists show here: classes, backgrounds, feats.</div>;
@@ -192,10 +199,15 @@ export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm =
       {listsOnTheirOwn(lists).map((list) => {
         const view = listShown(list, worked);
         const everyone = pickedOf(list) === 'everyone';
+        const shut = folded.has(list.id);
         return (
           <section key={list.id} aria-label={list.many} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'baseline' }}>
-              <span style={{ fontSize: '0.65rem', letterSpacing: '2px' }}>{list.many.toUpperCase()}</span>
+              <button type="button" aria-expanded={!shut} aria-label={`${list.many}: ${shut ? 'show' : 'fold away'}`} onClick={() => fold(list.id)}
+                style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '2px', padding: 0, textAlign: 'left' }}>
+                <span aria-hidden>{shut ? '▸' : '▾'} </span><span>{list.many.toUpperCase()}</span>
+              </button>
+              {shut && !everyone && <span style={small}>{view.picks.length} PICKED</span>}
               {everyone && <span style={small}>EVERY CHARACTER HAS THESE</span>}
               {view.level !== null && view.picks.length > 0 && (
                 <span title={view.breakdown} aria-label={`Level ${view.level}: ${view.breakdown}`} style={{ ...small, cursor: 'help', borderBottom: '1px dotted currentColor' }}>
@@ -203,15 +215,17 @@ export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm =
                 </span>
               )}
             </div>
-            {view.picks.map((p) => <Pick key={p.option.id} list={list} p={p} ctx={ctx} fixed={everyone} />)}
-            {everyone && view.open.filter((o) => o.unmet).map(({ option, unmet }) => (
-              <span key={option.id} style={{ ...small, opacity: 0.45 }}>{option.label.toUpperCase()} · NEEDS {unmet}</span>
-            ))}
-            {!everyone && !view.picks.length && <span style={small}>No {list.one || list.many} picked yet.</span>}
-            {can && view.room && view.open.length > 0 && (
-              <Offer label={pickLabel(list.one)} open={view.open} ctx={ctx}
-                onPick={(option) => ctx.ask({ kind: 'pick', list: list.id, option })} />
-            )}
+            {!shut && <>
+              {view.picks.map((p) => <Pick key={p.option.id} list={list} p={p} ctx={ctx} fixed={everyone} />)}
+              {everyone && view.open.filter((o) => o.unmet).map(({ option, unmet }) => (
+                <span key={option.id} style={{ ...small, opacity: 0.45 }}>{option.label.toUpperCase()} · NEEDS {unmet}</span>
+              ))}
+              {!everyone && !view.picks.length && <span style={small}>No {list.one || list.many} picked yet.</span>}
+              {can && view.room && view.open.length > 0 && (
+                <Offer label={pickLabel(list.one)} open={view.open} ctx={ctx}
+                  onPick={(option) => ctx.ask({ kind: 'pick', list: list.id, option })} />
+              )}
+            </>}
           </section>
         );
       })}

@@ -52,7 +52,7 @@ const checkSheet = (sheet, derivedIds, problems) => {
   if (sheet === undefined) return;
   if (!isPlainObject(sheet)) { problems.push({ where: 'sheet', message: 'Must be a layout' }); return; }
   for (const key of Object.keys(sheet)) {
-    if (!['tabs', 'header', 'sections'].includes(key)) problems.push({ where: `sheet ${key}`, message: 'Not part of a sheet' });
+    if (!['tabs', 'opens', 'header', 'sections'].includes(key)) problems.push({ where: `sheet ${key}`, message: 'Not part of a sheet' });
   }
 
   let tabs = null;
@@ -63,6 +63,11 @@ const checkSheet = (sheet, derivedIds, problems) => {
       sheet.tabs.forEach((t, i) => text(t, `sheet tab ${i + 1}`, 20, problems, { required: true }));
       tabs = new Set(sheet.tabs);
     }
+  }
+  // The tab the sheet opens on, when it isn't the first (the starter lists CHARACTER first and
+  // opens on STATS, 2026-10-31).
+  if (sheet.opens !== undefined && !(tabs && tabs.has(sheet.opens))) {
+    problems.push({ where: 'sheet opens', message: 'Not one of the sheet\'s tabs' });
   }
 
   const fieldIds = new Set();
@@ -238,8 +243,8 @@ const designedOrStarter = (definition) => {
     { id: 'money', label: 'MONEY', layout: 'list', tab: 'GEAR', fields: [{ id: 'cash', label: 'Cash', type: 'number', source: 'bank_balance' }] },
     { id: 'notes', label: 'NOTES', layout: 'notes', tab: 'NOTES', fields: [{ id: 'notes', label: 'Notes', type: 'textarea' }] },
   );
-  // Opens on STATS, the numbers used in play; CHARACTER beside it (the user, 2026-10-31).
-  return { tabs: ['STATS', 'CHARACTER', 'GEAR', 'NOTES'], header: { nameField: 'name', subtitleFields: ['concept'], ...health.header }, sections };
+  // CHARACTER listed first, but the sheet opens on STATS, the numbers used in play (the user, 2026-10-31).
+  return { tabs: ['CHARACTER', 'STATS', 'GEAR', 'NOTES'], opens: 'STATS', header: { nameField: 'name', subtitleFields: ['concept'], ...health.header }, sections };
 };
 
 /**

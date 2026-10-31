@@ -48,7 +48,8 @@ describe('automatic and customized', () => {
     expect(sheetOf(H)).toBeNull();
     const def = withCustomized(H, starterSheet(H));
     expect(sheetOf(def)).toEqual(STARTER);
-    expect(STARTER.tabs).toEqual(['STATS', 'CHARACTER', 'GEAR', 'NOTES']);
+    expect(STARTER.tabs).toEqual(['CHARACTER', 'STATS', 'GEAR', 'NOTES']);
+    expect(STARTER.opens).toBe('STATS');
     expect(problems(def)).toEqual([]);
     expect(effectiveSheet(def)).toEqual(effectiveSheet(H));
   });
@@ -328,5 +329,28 @@ describe('problems', () => {
       sections: { derived: 'A whole number from 1 to 8' },
       other: ['sheet tabs: Must be a list of tab names'],
     });
+  });
+});
+
+describe('the tab a sheet opens on (2026-10-31)', () => {
+  const opening = (def: Definition) => (def.sheet as CustomRenderSheet).opens;
+  const started = () => withCustomized(H, starterSheet(H));
+
+  it('follows its tab when renamed, and not another', () => {
+    expect(opening(withTabName(started(), 'STATS', 'NUMBERS'))).toBe('NUMBERS');
+    expect(opening(withTabName(started(), 'GEAR', 'KIT'))).toBe('STATS');
+  });
+
+  it('goes back to the first when its tab is removed, and stays when another is', () => {
+    expect((withoutTab(started(), 'STATS').sheet as CustomRenderSheet)).not.toHaveProperty('opens');
+    expect(opening(withoutTab(started(), 'GEAR'))).toBe('STATS');
+    let one = started();
+    for (const t of ['CHARACTER', 'GEAR', 'NOTES']) one = withoutTab(one, t);
+    expect(opening(one)).toBe('STATS');
+    // The last tab gone, the sheet is one page, opening on nothing.
+    const page = withoutTab(one, 'STATS');
+    expect(page.sheet as CustomRenderSheet).not.toHaveProperty('tabs');
+    expect(page.sheet as CustomRenderSheet).not.toHaveProperty('opens');
+    expect(problems(page)).toEqual([]);
   });
 });
