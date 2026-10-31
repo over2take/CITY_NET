@@ -26,6 +26,7 @@ let running: string;
 let recovery: { name: string; spend: 'any' | 'gm' } | null;
 let settings: { key: string; value: string }[];
 let refuseSettings: string | null;
+let finish: 'call' | 'sheet';
 
 beforeEach(() => {
   asked = [];
@@ -35,12 +36,13 @@ beforeEach(() => {
   recovery = null;
   settings = [];
   refuseSettings = null;
+  finish = 'call';
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     asked.push({ url, body });
     const answer = (status: number, json: unknown) => ({ ok: status < 300, status, json: async () => json }) as Response;
-    if (url === '/api/sheets/rests') return answer(200, { system: running, rests: running === HEARTH ? rests : [], recovery });
+    if (url === '/api/sheets/rests') return answer(200, { system: running, rests: running === HEARTH ? rests : [], recovery, finish });
     if (url === '/api/settings') {
       if (body && refuseSettings) return answer(401, { error: refuseSettings });
       if (body) settings = [...settings.filter((s) => s.key !== body.key), body];
@@ -55,7 +57,7 @@ beforeEach(() => {
           p === 'vex' && body.rest === 'long_rest' ? ['Exhausted'] : [])),
         ...body.npcs.map((id: number) => person('npc', id, id === 7 ? 'GANGER' : 'DOG')),
       ];
-      return answer(200, { rest: RESTS.find((r) => r.id === body.rest), preview: !!body.preview, characters: body.preview ? characters : characters.map((c) => ({ ...c, line: `${body.rest} · ${c.name}` })) });
+      return answer(200, { rest: RESTS.find((r) => r.id === body.rest), preview: !!body.preview, characters: body.preview ? characters : characters.map((c) => (finish === 'sheet' && c.kind === 'player' ? { ...c, called: true } : { ...c, line: `${body.rest} · ${c.name}` })) });
     }
     if (url.includes('/api/sheets/system')) return answer(200, { system: running, systems: [{ id: HEARTH, name: 'Hearth', custom: true, version: 1 }, { id: 'cities_without_number', name: 'Cities Without Number' }] });
     return answer(200, []);
@@ -72,6 +74,11 @@ const open = async (npcs = NPCS) => {
 };
 const previews = () => asked.filter((a) => a.url === '/api/sheets/rest' && a.body.preview);
 const calls = () => asked.filter((a) => a.url === '/api/sheets/rest' && !a.body.preview);
+/** CALL, then CALL again in the step that asks first (R3b). */
+const callIt = async (rest = 'Short rest') => {
+  await userEvent.click(screen.getByRole('button', { name: `CALL ${rest.toUpperCase()}` }));
+  await userEvent.click(within(screen.getByRole('group', { name: `Call a ${rest}?` })).getByRole('button', { name: 'CALL' }));
+};
 const gets = () => within(screen.getByRole('list', { name: 'What each one gets' })).queryAllByRole('listitem')
   .map((li) => ({ name: li.querySelector('b')!.textContent, text: li.textContent }));
 
@@ -112,7 +119,7 @@ describe('the rests panel', () => {
   it('calls the rest for who is chosen, says so, and previews again', async () => {
     await open();
     await waitFor(() => expect(gets()).toHaveLength(2));
-    await userEvent.click(screen.getByRole('button', { name: 'CALL SHORT REST' }));
+    await callIt();
     expect(await screen.findByRole('status')).toHaveTextContent('SHORT REST CALLED · 2 CHARACTERS');
     expect(calls().map((c) => c.body)).toEqual([{ rest: 'short_rest', players: true, npcs: [] }]);
     await waitFor(() => expect(previews()).toHaveLength(2));
@@ -120,16 +127,16 @@ describe('the rests panel', () => {
     await userEvent.click(screen.getByRole('radio', { name: /CHOOSE/ }));
     await userEvent.click(within(screen.getByRole('group', { name: 'Characters' })).getByRole('checkbox', { name: 'ASH' }));
     await userEvent.click(within(screen.getByRole('group', { name: 'Characters' })).getByRole('checkbox', { name: 'GANGER' }));
-    await userEvent.click(screen.getByRole('button', { name: 'CALL SHORT REST' }));
+    await callIt();
     await waitFor(() => expect(calls()).toHaveLength(2));
     expect(calls()[1].body).toEqual({ rest: 'short_rest', players: ['vex'], npcs: [7] });
     expect(await screen.findByText('SHORT REST CALLED · 2 CHARACTERS')).toBeTruthy();
     await userEvent.click(within(screen.getByRole('group', { name: 'Characters' })).getByRole('checkbox', { name: 'GANGER' }));
-    await userEvent.click(screen.getByRole('button', { name: 'CALL SHORT REST' }));
+    await callIt();
     expect(await screen.findByText('SHORT REST CALLED · 1 CHARACTER')).toBeTruthy();
 
     await userEvent.click(screen.getByRole('radio', { name: /PLAYERS AND THE NPCS ON THIS MAP/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'CALL SHORT REST' }));
+    await callIt();
     await waitFor(() => expect(calls()).toHaveLength(4));
     expect(calls()[3].body).toEqual({ rest: 'short_rest', players: true, npcs: [7, 9] });
     expect(await screen.findByRole('status')).toHaveTextContent('SHORT REST CALLED · 4 CHARACTERS');
@@ -144,9 +151,33 @@ describe('the rests panel', () => {
     expect((screen.getByRole('button', { name: 'CALL SHORT REST' }) as HTMLButtonElement).disabled).toBe(true);
     await userEvent.click(within(screen.getByRole('group', { name: 'Characters' })).getByRole('checkbox', { name: 'VEX' }));
     refuseCall = 'Not one of this game\'s rests';
-    await userEvent.click(screen.getByRole('button', { name: 'CALL SHORT REST' }));
+    await callIt();
     expect(await screen.findByRole('alert')).toHaveTextContent('Not one of this game\'s rests');
     expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('CALL asks first, saying what will happen; CANCEL calls nothing (R3b)', async () => {
+    await open();
+    await waitFor(() => expect(gets()).toHaveLength(2));
+    await userEvent.click(screen.getByRole('button', { name: 'CALL SHORT REST' }));
+    const asking = within(screen.getByRole('group', { name: 'Call a Short rest?' }));
+    expect(asking.getByText('CALL A SHORT REST FOR 2 CHARACTERS?')).toBeTruthy();
+    expect(asking.getByText('It applies now, dice rolled for each.')).toBeTruthy();
+    await userEvent.click(asking.getByRole('button', { name: 'CANCEL' }));
+    expect(calls()).toEqual([]);
+    expect(screen.getByRole('button', { name: 'CALL SHORT REST' })).toBeTruthy();
+  });
+
+  it('on each sheet: CALL opens it on the players\' sheets, NPCs at once, and says so (R3b)', async () => {
+    finish = 'sheet';
+    await open();
+    await waitFor(() => expect(gets()).toHaveLength(2));
+    expect(screen.getByText(/Each player finishes it on their own sheet, spending any dice first; NPCs rest at once\./)).toBeTruthy();
+    await userEvent.click(screen.getByRole('radio', { name: /PLAYERS AND THE NPCS ON THIS MAP/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'CALL SHORT REST' }));
+    expect(screen.getByText('It opens on 2 players\' sheets for them to finish. 2 NPCs rest at once.')).toBeTruthy();
+    await userEvent.click(within(screen.getByRole('group', { name: 'Call a Short rest?' })).getByRole('button', { name: 'CALL' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('SHORT REST CALLED · OPEN ON 2 SHEETS · 2 NPCS RESTED');
   });
 
   it('shows nothing for an answer that isn\'t a list of rests', async () => {

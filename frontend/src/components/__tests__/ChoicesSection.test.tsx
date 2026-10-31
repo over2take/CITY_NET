@@ -89,6 +89,23 @@ describe('the CHOICES block', () => {
     expect(onChoices).toHaveBeenCalledWith({ kind: 'pick', list: 'classes', option: 'scout' });
   });
 
+  it('each list folds away on its own, saying how many are picked, and opens again (2026-10-31)', async () => {
+    draw({ int: 10, _choices: { classes: [{ option: 'soldier', level: 3 }] } });
+    const block = within(screen.getByRole('region', { name: 'Classes' }));
+    const head = block.getByRole('button', { name: 'Classes: fold away' });
+    expect(head.getAttribute('aria-expanded')).toBe('true');
+    expect(block.queryByText('1 PICKED')).toBeNull();
+    await userEvent.click(head);
+    expect(screen.queryByRole('group', { name: 'Soldier' })).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Pick a Class' })).toBeNull();
+    expect(block.getByText('1 PICKED')).toBeTruthy();
+    expect(block.getByText('LEVEL 3')).toBeTruthy();
+    const shut = block.getByRole('button', { name: 'Classes: show' });
+    expect(shut.getAttribute('aria-expanded')).toBe('false');
+    await userEvent.click(shut);
+    expect(soldier().getByText('LV 3')).toBeTruthy();
+  });
+
   it('a full list offers nothing more to pick', () => {
     const once = [{ ...lists[0], again: false }];
     render(<SheetRenderer template={{ ...template, choices: once }} data={sheet({ _choices: { classes: [{ option: 'soldier', level: 1 }] } }) as never} onFieldChange={() => {}} onChoices={vi.fn()} />);

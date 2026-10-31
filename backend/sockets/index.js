@@ -961,14 +961,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const wantsToken = Object.values(linked).some(s => sheetTemplates.TOKEN_SOURCES.has(s));
       const wantsCash = Object.values(linked).includes('bank_balance');
       const afterToken = (tokenRow) => {
-        Object.entries(linked).forEach(([fieldId, source]) => {
-          if (source === 'token_hp') out[fieldId] = tokenRow ? tokenRow.hp_current : null;
-          if (source === 'token_hp_max') out[fieldId] = tokenRow ? tokenRow.hp_max : null;
-          // Unset token AC falls back to 10, matching the attack engine's
-          // default - the sheet shows the AC attacks actually resolve against.
-          if (source === 'token_ac') out[fieldId] = tokenRow ? (tokenRow.melee_ac ?? 10) : null;
-          if (source === 'token_ac_ranged') out[fieldId] = tokenRow ? sheetTemplates.rangedAcOf(tokenRow) : null;
-        });
+        sheetTemplates.fillTokenFields(linked, tokenRow, out);
         if (!wantsCash) return done(out);
         // The account in this sheet's own system: a sheet shows the money of its game.
         bank.get(db, username, system, (err, account) => {
@@ -980,7 +973,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       };
       if (!wantsToken) return afterToken(null);
       db.get(
-        `SELECT hp_current, hp_max, melee_ac, ranged_ac FROM locations WHERE shape = 'rhombus' AND owner = ?
+        `SELECT hp_current, hp_max, hp_temp, melee_ac, ranged_ac FROM locations WHERE shape = 'rhombus' AND owner = ?
          ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`,
         [username],
         (err, tokenRow) => afterToken(err ? null : tokenRow)

@@ -395,12 +395,26 @@ describe('recovery dice and how rests are finished (R1b)', () => {
     expect(page.last().resting).toEqual({ finish: 'sheet' });
     publishes(page.last());
     expect(resting().getByText(/opens a REST panel on every player's sheet, and applies to each when they press FINISH. NPCs finish at once./)).toBeTruthy();
-    expect(resting().getByText('COMING NEXT: the REST section on each sheet. Until then, rests apply when the GM calls them.')).toBeTruthy();
+    // The REST section is on the sheets (R3b): nothing more is coming.
+    expect(resting().queryByText(/COMING NEXT/)).toBeNull();
     await userEvent.click(finish.getByRole('button', { name: 'AT THE GM\'S CALL' }));
     expect(page.last().resting).toBeUndefined();
-    // The dice are on the sheets now (R2b): only rests on each sheet are still to come.
+  });
+
+  it('set once FOR EVERY REST, and each rest says what it does with the dice, with a way to the settings', async () => {
+    const page = open(R, null);
+    expect(resting().getByText('FOR EVERY REST')).toBeTruthy();
+    const longRest = () => detail('Long rest rest');
+    expect(longRest().getByText('None in this system: turn them on below, under FOR EVERY REST.')).toBeTruthy();
     await turnOn();
-    expect(resting().queryByText(/COMING NEXT/)).toBeNull();
+    expect(longRest().getByText('Recovery dice: not spent at this rest · gives back all')).toBeTruthy();
+    await userEvent.click(list().getByRole('button', { name: 'SHORT REST' }));
+    expect(detail('Short rest rest').getByText('Recovery dice: spent at this rest · gives back nothing')).toBeTruthy();
+    expect(recoveryOf(page.last())).toBeTruthy();
+    const scrolled = vi.fn();
+    document.getElementById('rests-for-every-rest')!.scrollIntoView = scrolled;
+    await userEvent.click(detail('Short rest rest').getByRole('button', { name: 'SETTINGS ↓' }));
+    expect(scrolled).toHaveBeenCalled();
   });
 
   it('WHAT PLAYERS GET says what the settings give players and the GM, changing with them (R3a)', async () => {
@@ -440,7 +454,7 @@ describe('the "?"', () => {
   };
     open({ ...H, resting: { recovery: { name: 'Hit Dice', spent_at: 'any' } } } as unknown as Definition);
     await screen.findByTestId('rest-sample');
-    allShown('rests', 10);
+    allShown('rests', 11);
   });
 
   it('has nothing to say about the sample without the server to try it', () => {

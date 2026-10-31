@@ -370,6 +370,29 @@ const rangedAcOf = (row) => {
   return row.melee_ac ?? 10;
 };
 
+// The token's temporary hit points, beside the HP a sheet links to, so the sheet can show them
+// added to it (2026-10-31). Read on the way out with the linked values, never stored.
+const HP_TEMP_KEY = '_hp_temp';
+
+/**
+ * A sheet's token-linked fields filled in from its token's row (null with no token), and the
+ * token's temporary HP when it has some and the sheet shows its HP. The three reads of a sheet
+ * share it, so they can't drift apart.
+ */
+const fillTokenFields = (linked, row, data) => {
+  Object.entries(linked).forEach(([fieldId, source]) => {
+    if (source === 'token_hp') data[fieldId] = row ? row.hp_current : null;
+    if (source === 'token_hp_max') data[fieldId] = row ? row.hp_max : null;
+    // Unset token AC falls back to 10, matching the attack engine's
+    // default - the sheet shows the AC attacks actually resolve against.
+    if (source === 'token_ac') data[fieldId] = row ? (row.melee_ac ?? 10) : null;
+    if (source === 'token_ac_ranged') data[fieldId] = row ? rangedAcOf(row) : null;
+  });
+  if (row && row.hp_temp > 0 && Object.values(linked).includes('token_hp')) data[HP_TEMP_KEY] = row.hp_temp;
+  else delete data[HP_TEMP_KEY];
+  return data;
+};
+
 /**
  * Which token AC columns a sheet patch should write, and to what.
  *
@@ -446,5 +469,5 @@ const applyDerived = (system, data, changedFieldId) => {
 module.exports = {
   TEMPLATES, DEFAULT_SYSTEM, isValidSystem, isBuiltIn, metaFor, setCustomMeta, filterPublicData, getLinkedFields, getMaxPairs, playerMayEdit, PICKS_KEY,
   applyDerived, cwnEffectiveAc, cwnImplantAc, cwnMoveBonus, CWN_BASE_MOVE,
-  TOKEN_SOURCES, rangedAcOf, acColumns,
+  TOKEN_SOURCES, rangedAcOf, acColumns, HP_TEMP_KEY, fillTokenFields,
 };

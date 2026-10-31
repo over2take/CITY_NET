@@ -19,6 +19,8 @@ import { themeRoot } from '../utils/themeRoot';
 // player mode: GET/PUT /api/sheets/user/:username (set playerUsername)
 
 interface NpcSheetWindowProps {
+  /** A linked field (HP, cash) opens the window that owns it: the character's health, a player's bank. */
+  onOpenLink?: (source: import('../sheets/types').SheetLinkSource) => void;
   token: string;
   /** NPC mode: sheet id in the NPC library. Ignored when playerUsername is set. */
   npcId: number;
@@ -42,7 +44,7 @@ interface NpcSheetWindowProps {
   locationId?: number;
 }
 
-export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headshots = ALL_HEADSHOTS, pos, setPos, onClose, socket, onRollInitiative, locationId }: NpcSheetWindowProps) {
+export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headshots = ALL_HEADSHOTS, pos, setPos, onClose, socket, onRollInitiative, locationId, onOpenLink }: NpcSheetWindowProps) {
   const apiPath = playerUsername
     ? `/api/sheets/user/${encodeURIComponent(playerUsername)}`
     : `/api/sheets/npcs/${npcId}`;
@@ -288,6 +290,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
           data={sheet.data}
           portraitUrl={sheet.portrait_url}
           onFieldChange={handleFieldChange}
+          onOpenLink={onOpenLink}
           // GM-only in both modes: the GM sets the values a system keeps for the GM.
           gm
           {...(!playerUsername && socket && locationId !== undefined ? {
@@ -302,6 +305,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
           {...(playerUsername && socket ? {
             onChoices: (action: ChoicesAction) => socket.emit('choicesAction', { ...action, username: playerUsername }), choicesRefused,
             onRecoverySpend: (pool: string, count: number) => socket.emit('recoverySpend', { pool, count, username: playerUsername }), recoveryOpen,
+            onRestTake: (rest: string) => socket.emit('restTake', { rest, username: playerUsername }),
           } : {})}
         />
       ) : (

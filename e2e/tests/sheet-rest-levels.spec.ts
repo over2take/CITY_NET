@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { signInAsGm, signInAsPlayer, openGameSystem, gmToken, asGm, runningSystem, approvedPlayer } from './helpers';
+import { signInAsGm, signInAsPlayer, openGameSystem, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
 
 // A rest's amount reads the character's levels (rest levels, 2026-10-30): before, a builder system's
 // rests could only name sheet fields, stats and formulas, so "heal by your level" was refused. Here a
@@ -41,8 +41,9 @@ test('a long rest sets a number from the character\'s class level and a stat wit
   await signInAsPlayer(sheet, player);
   await sheet.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
   await sheet.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
-  await sheet.getByLabel('Name', { exact: true }).fill('Rook');
   await sheet.getByLabel('Grit', { exact: true }).fill('3');
+  await sheetTab(sheet, 'CHARACTER');
+  await sheet.getByLabel('Name', { exact: true }).fill('Rook');
   const classes = sheet.getByRole('region', { name: 'Classes' });
   await classes.getByRole('group', { name: 'Pick a Class' }).getByRole('button', { name: 'FIGHTER' }).click();
   const fighter = classes.getByRole('group', { name: 'Fighter' });
@@ -54,6 +55,7 @@ test('a long rest sets a number from the character\'s class level and a stat wit
     const { data } = await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`);
     return [data.name, data.grit, data._worked?.levels?.fighter_level];
   }, { timeout: 15_000 }).toEqual(['Rook', 3, 3]);
+  await sheetTab(sheet, 'STATS');
 
   // THE GM calls a long rest from the GAME tab.
   await signInAsGm(gmPage);
@@ -63,6 +65,7 @@ test('a long rest sets a number from the character\'s class level and a stat wit
   await rests.getByLabel('Rest', { exact: true }).selectOption('long_rest');
   await expect(rests.getByRole('list', { name: 'What each one gets' })).toContainText('ROOK');
   await rests.getByRole('button', { name: 'CALL LONG REST', exact: true }).click();
+  await rests.getByRole('group', { name: 'Call a Long rest?' }).getByRole('button', { name: 'CALL', exact: true }).click();
   await expect(rests.getByRole('status')).toHaveText('LONG REST CALLED · 1 CHARACTER');
 
   // Resolve is the Fighter's 3 plus Grit 3 with Tough's 2.
@@ -74,6 +77,7 @@ test('a long rest sets a number from the character\'s class level and a stat wit
   // A short rest rolls 1d4 for Rook: the tray opens on the player's screen.
   await rests.getByLabel('Rest', { exact: true }).selectOption('short_rest');
   await rests.getByRole('button', { name: 'CALL SHORT REST', exact: true }).click();
+  await rests.getByRole('group', { name: 'Call a Short rest?' }).getByRole('button', { name: 'CALL', exact: true }).click();
   await expect(rests.getByRole('status')).toHaveText('SHORT REST CALLED · 1 CHARACTER');
   await expect(sheet.getByText('DICE_TRAY.EXE', { exact: true })).toBeVisible();
   await context.close();

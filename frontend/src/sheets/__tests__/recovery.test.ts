@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
 import {
-  LIMITS, restingOf, withFinish, withRecovery, withRecoveryOn, withBack, withBackAmount, withSpentAt, withoutRestInResting, diceOptions, healsText, whatPlayersGet,
+  LIMITS, restingOf, withFinish, withRecovery, withRecoveryOn, withBack, withBackAmount, withSpentAt, withoutRestInResting, diceOptions, healsText, whatPlayersGet, restDiceLine,
 } from '../recovery';
 import { withOption, withList } from '../choices';
 import { withNewRest, withoutRest, restList } from '../rests';
@@ -152,6 +152,21 @@ describe('writing it', () => {
     expect(healsText(r)).toBe('its die');
     expect(healsText({ ...r, perLevel: true, plus: ' @con_mod ' })).toBe('its die once for each level + @con_mod');
     expect(healsText({ ...r, plus: ' ' })).toBe('its die');
+  });
+});
+
+describe('what one rest does with the dice', () => {
+  it('spent at it or not, or any time; what it gives back; none without dice', () => {
+    const def = withBackAmount(withBack(withBack(on(), 'end_of_session', 'half'), 'end_of_scene', 'by'), 'end_of_scene', '@level');
+    expect(restDiceLine(def, 'short_rest')).toBe('Recovery dice: spent at this rest · gives back nothing');
+    expect(restDiceLine(def, 'long_rest')).toBe('Recovery dice: not spent at this rest · gives back all');
+    expect(restDiceLine(def, 'end_of_session')).toBe('Recovery dice: not spent at this rest · gives back half, at least 1');
+    expect(restDiceLine(def, 'end_of_scene')).toBe('Recovery dice: not spent at this rest · gives back @level');
+    expect(restDiceLine(withBackAmount(def, 'end_of_scene', ' '), 'end_of_scene')).toMatch(/gives back 0$/);
+    expect(restDiceLine(withRecovery(def, { spentAt: 'any', name: 'Hit Dice' }), 'long_rest')).toBe('Hit Dice: spent any time · gives back all');
+    expect(restDiceLine(FORGE, 'short_rest')).toBeNull();
+    // A name not given yet reads as Recovery dice.
+    expect(restDiceLine(withRecovery(def, { name: ' ' }), 'short_rest')).toBe('Recovery dice: spent at this rest · gives back nothing');
   });
 });
 

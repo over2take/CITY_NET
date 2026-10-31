@@ -8,9 +8,10 @@
 // token's health and conditions are written after: a player's onto every token of theirs, as the
 // health route does, an NPC's onto its own. One dice-log line per character, for everyone.
 //
-// Rests finished on each sheet (R3a; approved mockup docs/mockups/rest-on-sheet.html, and the user's
-// calls of 2026-10-30): a player takes their own with takeRest, from their sheet's REST section; the
-// GM may for anyone. A rest the GM called on a sheet (REST_CALL_KEY, recovery.js) is finished with it.
+// Rests finished on each sheet (R3a, R3b; approved mockup docs/mockups/rest-on-sheet.html, and the
+// user's calls of 2026-10-30): a player takes their own with takeRest, from their sheet's REST
+// section; the GM may for anyone. In such a system the GM's call rests the NPCs at once and opens the
+// rest on each player's sheet instead (REST_CALL_KEY, recovery.js), finished there with takeRest.
 
 const crypto = require('crypto');
 const { mutateSheet } = require('./mutate');
@@ -18,7 +19,7 @@ const { applyDerived } = require('./templates');
 const { parseTokenConditions } = require('../tokens/conditions');
 const { restOn, restLine, restDice } = require('../systemBuilder/resting');
 const { conditionsOf } = require('../systemBuilder/conditions');
-const { REST_CALL_KEY } = require('../systemBuilder/recovery');
+const { restingOf, REST_CALL_KEY } = require('../systemBuilder/recovery');
 const { restsOf } = require('../systemBuilder/rests');
 const { withThrow, boardOf } = require('../utils/diceThrow');
 
@@ -153,17 +154,36 @@ const restCharacter = async (db, io, { system, definition, rest, c, rng }) => {
 
 
 /**
+ * Open a called rest on a player's sheet, for them to finish (R3b): it waits there, under
+ * REST_CALL_KEY, until they do. A sheet with one waiting already has it replaced.
+ */
+const openOnSheet = (db, io, rest, c) => new Promise((ok, no) => {
+  mutateSheet(db, c.sheetId, (data) => ({ ...data, [REST_CALL_KEY]: { rest: rest.id, name: rest.name } }), (err) => {
+    if (err) { no(err); return; }
+    io.emit('sheetUpdated', { username: c.username });
+    ok();
+  });
+});
+
+/**
  * Call a rest: each character worked out and written in turn, a dice-log line each, and every
- * screen told. Answers what each one got.
+ * screen told. Answers what each one got. Where rests are finished on each sheet (R3b), a player
+ * character's is opened on their sheet instead, answered as `called`, nothing changed yet.
  */
 const callRest = async (db, io, { system, definition, rest, players, npcs, rng = cryptoRng }) => {
   const characters = await gather(db, system, players, npcs);
+  const onSheets = restingOf(definition).finish === 'sheet';
   const done = [];
   for (const c of characters) {
+    if (onSheets && c.kind === 'player') {
+      await openOnSheet(db, io, rest, c);
+      done.push({ kind: 'player', username: c.username, name: c.name, changes: [], gone: [], called: true });
+      continue;
+    }
     const got = await restCharacter(db, io, { system, definition, rest, c, rng });
     if (got) done.push(got);
   }
-  if (done.length) io.emit('dataUpdated', { isRhombusOnly: true });
+  if (done.some((d) => !d.called)) io.emit('dataUpdated', { isRhombusOnly: true });
   return done;
 };
 

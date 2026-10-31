@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { signInAsGm, signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer, openGameSystem } from './helpers';
+import { signInAsGm, signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer, openGameSystem, sheetTab } from './helpers';
 
 // Parts switched off, at the table (coverage family 3, e2e/COVERAGE.md; the parts from 3b, approved
 // mockup docs/mockups/builder-words-features.html): a custom system running with every part on shows
@@ -25,6 +25,7 @@ const playerSees = async (page: Page, on: boolean) => {
   await shown(page.getByText(/^ARMOR(_CLASS)?$/));
   await shown(page.getByRole('button', { name: 'SAVE_STATS', exact: true }));
   await page.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+  await sheetTab(page, 'CHARACTER');
   await expect(page.getByLabel('Name', { exact: true })).toBeVisible();
   await shown(page.getByRole('button', { name: 'IMPORT', exact: true }));
 };

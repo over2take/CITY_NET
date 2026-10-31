@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { signInAsPlayer, signInAsGm, gmToken, asGm, runningSystem, approvedPlayer } from './helpers';
+import { signInAsPlayer, signInAsGm, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
 
 // A custom system's CHOICES block at the table (7a3b1; approved mockup docs/mockups/builder-choices.html,
 // 2026-10-27): a player opens their sheet and picks a class from it. One they don't meet is off, saying
@@ -39,11 +39,12 @@ test('a player picks a class on their sheet, levels it, and ticks a use a short 
   await signInAsPlayer(page, player);
   await page.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
   await page.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
-  await page.getByLabel('Name', { exact: true }).fill('Wren');
   await page.getByLabel('Intellect', { exact: true }).fill('10');
   await expect.poll(async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data.int).toBe(10);
 
-  // Nothing picked: MAGE is off and says why; SOLDIER is picked.
+  // On the CHARACTER tab, nothing picked: MAGE is off and says why; SOLDIER is picked.
+  await sheetTab(page, 'CHARACTER');
+  await page.getByLabel('Name', { exact: true }).fill('Wren');
   const block = page.getByRole('region', { name: 'Classes' });
   await expect(block.getByText('No Class picked yet.')).toBeVisible();
   const pick = block.getByRole('group', { name: 'Pick a Class' });
@@ -51,12 +52,14 @@ test('a player picks a class on their sheet, levels it, and ticks a use a short 
   await expect(pick.getByText('NEEDS INTELLECT >= 13')).toBeVisible();
   await pick.getByRole('button', { name: 'SOLDIER' }).click();
 
-  // Its features, and its bonus on the formula: Defense 10 + 1.
+  // Its features, and its bonus on the formula, back on STATS: Defense 10 + 1.
   const soldier = block.getByRole('group', { name: 'Soldier' });
   await expect(soldier.getByText('LV 1')).toBeVisible();
   await expect(soldier.getByText('Guard Stance')).toBeVisible();
   await expect(soldier.getByText('NEXT · LV 2: Veteran')).toBeVisible();
+  await sheetTab(page, 'STATS');
   await expect(page.getByLabel('Defense', { exact: true })).toHaveValue('11');
+  await sheetTab(page, 'CHARACTER');
 
   // Level 2: Veteran unlocks; the total says so.
   await soldier.getByRole('button', { name: 'Soldier level up' }).click();
@@ -86,10 +89,11 @@ test('the GM picks past a requirement, sees the bonus on the stat, and takes a p
   await signInAsGm(page);
   await page.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
   await page.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
-  await page.getByLabel('Name', { exact: true }).fill('The Keeper');
   await page.getByLabel('Intellect', { exact: true }).fill('10');
 
   // MAGE isn't met, and the GM may add it anyway.
+  await sheetTab(page, 'CHARACTER');
+  await page.getByLabel('Name', { exact: true }).fill('The Keeper');
   const block = page.getByRole('region', { name: 'Classes' });
   const pick = block.getByRole('group', { name: 'Pick a Class' });
   await expect(pick.getByText('NEEDS INTELLECT >= 13 · ADD ANYWAY')).toBeVisible();
@@ -98,8 +102,10 @@ test('the GM picks past a requirement, sees the bonus on the stat, and takes a p
   await block.getByRole('group', { name: 'Pick a Class' }).getByRole('button', { name: 'MAGE' }).click();
   await expect(block.getByRole('group', { name: 'Mage' })).toBeVisible();
 
-  // Guard Stance's bonus, named on Defense: 10 before it, 11 with it.
+  // Guard Stance's bonus, named on Defense on STATS: 10 before it, 11 with it.
+  await sheetTab(page, 'STATS');
   await expect(page.getByTitle('10 → 11 (Guard Stance +1)')).toBeVisible();
+  await sheetTab(page, 'CHARACTER');
 
   // MAGE taken away, asked first; KEEP first keeps it.
   const mage = block.getByRole('group', { name: 'Mage' });

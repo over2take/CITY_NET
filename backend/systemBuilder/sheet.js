@@ -19,8 +19,9 @@ const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
 const LIMITS = { sections: 50, fields: 500, perSection: 100, tabs: 12, label: 60, hint: 300, options: 100 };
 // 'choices' (7a3b1) is the block where a character's picks are: like 'inventory', drawn by the sheet
-// itself rather than from fields.
-const LAYOUTS = ['list', 'grid', 'notes', 'inventory', 'choices'];
+// itself rather than from fields. 'rests' (R3b) is the REST section: a button for each rest, its
+// panel, and the recovery dice.
+const LAYOUTS = ['list', 'grid', 'notes', 'inventory', 'choices', 'rests'];
 const TYPES = ['number', 'text', 'textarea', 'select'];
 /** Values that live elsewhere and are overlaid at read time (sheets/templates.js linkedFields). */
 const SOURCES = ['token_hp', 'token_hp_max', 'token_ac', 'bank_balance'];
@@ -51,7 +52,7 @@ const checkSheet = (sheet, derivedIds, problems) => {
   if (sheet === undefined) return;
   if (!isPlainObject(sheet)) { problems.push({ where: 'sheet', message: 'Must be a layout' }); return; }
   for (const key of Object.keys(sheet)) {
-    if (!['tabs', 'header', 'sections'].includes(key)) problems.push({ where: `sheet ${key}`, message: 'Not part of a sheet' });
+    if (!['tabs', 'opens', 'header', 'sections'].includes(key)) problems.push({ where: `sheet ${key}`, message: 'Not part of a sheet' });
   }
 
   let tabs = null;
@@ -62,6 +63,11 @@ const checkSheet = (sheet, derivedIds, problems) => {
       sheet.tabs.forEach((t, i) => text(t, `sheet tab ${i + 1}`, 20, problems, { required: true }));
       tabs = new Set(sheet.tabs);
     }
+  }
+  // The tab the sheet opens on, when it isn't the first (the starter lists CHARACTER first and
+  // opens on STATS, 2026-10-31).
+  if (sheet.opens !== undefined && !(tabs && tabs.has(sheet.opens))) {
+    problems.push({ where: 'sheet opens', message: 'Not one of the sheet\'s tabs' });
   }
 
   const fieldIds = new Set();
@@ -209,7 +215,9 @@ const designedOrStarter = (definition) => {
     : definition && isPlainObject(definition.core) ? definition.core.health : undefined;
   const health = healthLayout(model, hp ? hp.short : 'HP');
   const sections = [
-    { id: 'identity', label: 'IDENTITY', layout: 'list', tab: 'STATS', fields: [
+    // Who the character is, on a CHARACTER tab of its own with their picks (the user, 2026-10-31):
+    // the numbers stay on STATS.
+    { id: 'identity', label: 'IDENTITY', layout: 'list', tab: 'CHARACTER', fields: [
       { id: 'name', label: 'Name', type: 'text', visibility: 'public' },
       { id: 'concept', label: 'Concept', type: 'text' },
       { id: 'description', label: 'Description', type: 'textarea', visibility: 'public' },
@@ -217,7 +225,11 @@ const designedOrStarter = (definition) => {
     // The character's picks (7a3b1), when the system has lists to pick from: named for the list when
     // there is one. Read here rather than through choices.js, which would make a circle (rests.js).
     ...(Array.isArray(definition && definition.choices) && definition.choices.some((c) => isPlainObject(c) && typeof c.id === 'string')
-      ? [{ id: 'choices', label: choicesLabel(definition.choices), layout: 'choices', tab: 'STATS', fields: [] }] : []),
+      ? [{ id: 'choices', label: choicesLabel(definition.choices), layout: 'choices', tab: 'CHARACTER', fields: [] }] : []),
+    // The REST section (R3b), when rests are finished on each sheet or there are recovery dice to
+    // spend. Read here rather than through recovery.js, for the same circle.
+    ...(isPlainObject(definition && definition.resting) && (definition.resting.finish === 'sheet' || isPlainObject(definition.resting.recovery))
+      ? [{ id: 'rests', label: 'RESTS', layout: 'rests', tab: 'STATS', fields: [] }] : []),
     ...health.sections,
     // What players fill in, a section per group (stats.js, 4b2a).
     ...statSections(definition),
@@ -231,7 +243,8 @@ const designedOrStarter = (definition) => {
     { id: 'money', label: 'MONEY', layout: 'list', tab: 'GEAR', fields: [{ id: 'cash', label: 'Cash', type: 'number', source: 'bank_balance' }] },
     { id: 'notes', label: 'NOTES', layout: 'notes', tab: 'NOTES', fields: [{ id: 'notes', label: 'Notes', type: 'textarea' }] },
   );
-  return { tabs: ['STATS', 'GEAR', 'NOTES'], header: { nameField: 'name', subtitleFields: ['concept'], ...health.header }, sections };
+  // CHARACTER listed first, but the sheet opens on STATS, the numbers used in play (the user, 2026-10-31).
+  return { tabs: ['CHARACTER', 'STATS', 'GEAR', 'NOTES'], opens: 'STATS', header: { nameField: 'name', subtitleFields: ['concept'], ...health.header }, sections };
 };
 
 /**

@@ -96,7 +96,7 @@ describe('the sheet format', () => {
         { id: 'one', label: '', layout: 'list', fields: [] },
       ],
     }, ['f'])).toEqual([
-      'sheet section one, layout: One of list, grid, notes, inventory, choices',
+      'sheet section one, layout: One of list, grid, notes, inventory, choices, rests',
       'sheet section one, tab: Not one of the sheet\'s tabs',
       'sheet section one, columns: A whole number from 1 to 8',
       'sheet field a, type: One of number, text, textarea, select',
@@ -118,6 +118,31 @@ describe('the sheet format', () => {
   it('refuses a sheet that is not a layout', () => {
     expect(problemsOf('columns')).toEqual(['sheet: Must be a layout']);
     expect(problemsOf({ sections: 'x' })).toEqual(['sheet sections: Must be a list of sections']);
+  });
+
+  it('opens on one of its own tabs, when it names one (2026-10-31)', () => {
+    expect(problemsOf({ tabs: ['A', 'B'], opens: 'B', sections: [] })).toEqual([]);
+    expect(problemsOf({ tabs: ['A', 'B'], opens: 'C', sections: [] })).toEqual(['sheet opens: Not one of the sheet\'s tabs']);
+    expect(problemsOf({ opens: 'A', sections: [] })).toEqual(['sheet opens: Not one of the sheet\'s tabs']);
+  });
+});
+
+describe('a sheet\'s token-linked values (fillTokenFields)', () => {
+  const linked = { hp: 'token_hp', hp_max: 'token_hp_max', armor: 'token_ac', far: 'token_ac_ranged' };
+  const row = { hp_current: 21, hp_max: 35, hp_temp: 5, melee_ac: 14, ranged_ac: null };
+
+  it('reads each from the token, with its temporary HP beside the HP', () => {
+    expect(templates.fillTokenFields(linked, row, { name: 'Ash' })).toEqual({
+      name: 'Ash', hp: 21, hp_max: 35, armor: 14, far: 14, [templates.HP_TEMP_KEY]: 5,
+    });
+    expect(templates.HP_TEMP_KEY).toBe('_hp_temp');
+  });
+
+  it('gives no temporary HP when there is none, nor without an HP field, and nulls with no token', () => {
+    expect(templates.fillTokenFields(linked, { ...row, hp_temp: 0 }, { _hp_temp: 9 })).not.toHaveProperty('_hp_temp');
+    expect(templates.fillTokenFields({ armor: 'token_ac' }, row, {})).toEqual({ armor: 14 });
+    expect(templates.fillTokenFields(linked, null, {})).toEqual({ hp: null, hp_max: null, armor: null, far: null });
+    expect(templates.fillTokenFields({ armor: 'token_ac' }, { ...row, melee_ac: null }, {})).toEqual({ armor: 10 });
   });
 });
 

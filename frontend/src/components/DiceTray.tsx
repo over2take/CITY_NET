@@ -256,9 +256,14 @@ interface DiceTrayWindowProps {
   onToggleBell?: () => void;
   /** Open with the roll history showing: the tray was opened on a flash, so there are rolls to catch up on. */
   openHistory?: boolean;
+  /**
+   * The roll that opened the tray (2026-10-31): it came before the tray was listening, so it is
+   * thrown as the tray opens. It is in the history the tray asks for already, so never added again.
+   */
+  openingRoll?: unknown;
 }
 
-export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bell, onToggleBell, openHistory = false }: DiceTrayWindowProps) {
+export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bell, onToggleBell, openHistory = false, openingRoll = null }: DiceTrayWindowProps) {
   const theme = useContext(ThemeContext);
   const [motion, setMotion] = useTrayMotion(authToken);
   // Read when a roll arrives, inside the socket handlers set up once.
@@ -275,8 +280,10 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
   // No queue (6c4c): a new roll cuts straight in, and the one it cut short goes into the record at
   // once. Rolls the server puts in one group (one person's within a moment, as an attack's to-hit
   // and damage) land in one throw together. Dice-less rolls (shock damage) show briefly.
-  const playing = useRef<{ group?: string; rolls: RollBroadcast[]; told: boolean } | null>(null);
+  // `inHistory`: the rolls are in the history the tray asked for already (the roll that opened it).
+  const playing = useRef<{ group?: string; rolls: RollBroadcast[]; told: boolean; inHistory?: boolean } | null>(null);
   const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const opener = useRef(openingRoll as RollBroadcast | null);
 
   useEffect(() => {
     if (!socketRef.current) return;
@@ -289,7 +296,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
     });
 
     /** Throw a group's dice, all its rolls' together, from its first roll's seed; tell its result as they stop. */
-    const play = (group: { rolls: RollBroadcast[]; told: boolean }) => {
+    const play = (group: { rolls: RollBroadcast[]; told: boolean; inHistory?: boolean }) => {
       if (rollTimer.current) clearTimeout(rollTimer.current);
       const first = group.rolls[0];
       const last = group.rolls[group.rolls.length - 1];
@@ -307,7 +314,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
         if (group.rolls.some((r) => r.criticalGlitch)) setGlitchState('critical');
         else if (group.rolls.some((r) => r.glitch)) setGlitchState('glitch');
         group.told = true;
-        record(group.rolls);
+        if (!group.inHistory) record(group.rolls);
       }, thrown && motionNow.current === 'roll' ? revealAfter(thrown) : 800);
     };
 
@@ -322,7 +329,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
         return;
       }
       // Another: it cuts in, and what it cut short is told in the record at once.
-      if (now && !now.told) { now.told = true; record(now.rolls); }
+      if (now && !now.told) { now.told = true; if (!now.inHistory) record(now.rolls); }
       playing.current = { group: data.group, rolls: [data], told: false };
       play(playing.current);
     };
@@ -336,12 +343,22 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
     if (!socket) return;
     socket.on('diceRollBroadcast', handleBroadcast);
     socket.on('diceRollHistory', handleHistory);
+    // The roll that opened the tray, thrown now that it is listening; already in the history asked
+    // for. Kept, not used up: React starting this twice (strict mode) throws it again rather than
+    // leaving the board on ROLLING with its timer gone.
+    const first = opener.current;
+    if (first && !first.quiet) {
+      playing.current = { group: first.group, rolls: [first], told: false, inHistory: true };
+      play(playing.current);
+    }
     return () => {
       socket.off('diceRollBroadcast', handleBroadcast);
       socket.off('diceRollHistory', handleHistory);
       if (rollTimer.current) clearTimeout(rollTimer.current);
       rollTimer.current = null;
       playing.current = null;
+      // A throw cut off here never lands: the board isn't left rolling.
+      setIsRolling(false);
     };
   }, [socketRef.current]);
 
@@ -414,7 +431,9 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
             }}
           >
             {history.map((h, i) => {
-              const match = h.historyString.match(/^(.*?) rolled (.*)$/);
+              // "cody rolled 2d6 [...]" bolds who rolled; a line with its own colon first (a rest's
+              // "SHORT REST · cody: rolled 1d4 ...") is shown as written, never "cody::".
+              const match = h.historyString.match(/^([^:]*?) rolled (.*)$/);
               return (
                 <React.Fragment key={i}>
                   <div style={{ marginBottom: '8px', color: themedRollColor(h.color, theme), textShadow: '1px 1px 2px #000, 0 0 8px #000, 0 0 4px #000', wordBreak: 'break-word' }}>

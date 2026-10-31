@@ -58,6 +58,9 @@ export type ChoicesAction =
   | { kind: 'use'; feature: string; spent: number }
   | { kind: 'recovery'; pool: string; spent: number };
 
+/** How a sheet rests (backend recovery.js restingShown): who finishes a called rest, each rest by name. */
+export interface RestingShown { finish: 'call' | 'sheet'; rests: { id: string; name: string; spends: boolean }[] }
+
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 
@@ -105,6 +108,33 @@ export const maySpendRecovery = (r: RecoveryWorked, gm: boolean, open: boolean) 
 /** Where the dice are spent, as the sheet says it: "SPENT AT A SHORT REST OR CAMP", "SPENT ANY TIME". */
 export const spentAtText = (r: RecoveryWorked) => (r.spentAt === 'any' || !r.spentAt.length ? 'SPENT ANY TIME'
   : `SPENT AT A ${r.spentAt.map((n) => n.toUpperCase()).join(' OR ')}`);
+
+/** Where a sheet keeps a rest the GM called on it (backend recovery.js REST_CALL_KEY). */
+export const REST_CALL_KEY = '_rest_call';
+
+/**
+ * The REST section as logic (R3b; approved mockup rest-on-sheet, and the user's calls of 2026-10-30
+ * and -31): the rest buttons the viewer gets (players where rests are finished on each sheet, the
+ * GM always), a rest the GM called on this sheet, waiting to be finished, and where the recovery
+ * dice show: always when spent any time, else only in the panel of a rest they are spent at.
+ */
+export const restSection = (resting: RestingShown | undefined, data: Obj | null | undefined, gm: boolean) => {
+  const rests = resting?.rests ?? [];
+  const c = isObject(data) && isObject(data[REST_CALL_KEY]) ? data[REST_CALL_KEY] as Obj : null;
+  const call = c ? rests.find((r) => r.id === c.rest) ?? null : null;
+  const recovery = workedOn(data).recovery;
+  return {
+    /** The rests this viewer may take from here. */
+    buttons: gm || resting?.finish === 'sheet' ? rests : [],
+    call,
+    recovery,
+    /**
+     * The dice shown outside any panel: spent any time, or where rests are at the GM's call, which
+     * has no panels on the sheet ("any time, trust the table").
+     */
+    diceAlways: !!recovery && (recovery.spentAt === 'any' || resting?.finish !== 'sheet'),
+  };
+};
 
 /** How many a spend rolls, kept to what is left (and at least 1 while any are). */
 export const spendCount = (wanted: number, left: number) => Math.max(left > 0 ? 1 : 0, Math.min(left, Math.trunc(wanted) || 0));

@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { signInAsGm, signInAsPlayer, openBuilder, builderPage, gmToken, asGm, approvedPlayer } from './helpers';
+import { signInAsGm, signInAsPlayer, openBuilder, builderPage, gmToken, asGm, approvedPlayer, sheetTab } from './helpers';
 
 // Lists inside lists, and a list everyone has (7a5a2; approved mockup docs/mockups/nested-choices.html,
 // 2026-10-28). In the builder the GM sees SPECIALTIES opened by the SOLDIER's Specialty and sets it to
@@ -62,10 +62,12 @@ test('a specialty picked under its class feature, kept while it waits; what ever
   await signInAsPlayer(sheet, player);
   await sheet.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
   await sheet.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+  await sheetTab(sheet, 'CHARACTER');
 
   // SPECIALTIES isn't a list of its own; COMMONS is every character's, Improvement at level 2.
-  await expect(sheet.getByRole('region', { name: 'Specialties' })).toHaveCount(0);
   const commons = sheet.getByRole('region', { name: 'Commons' });
+  await expect(commons).toBeVisible();
+  await expect(sheet.getByRole('region', { name: 'Specialties' })).toHaveCount(0);
   await expect(commons.getByText('EVERY CHARACTER HAS THESE')).toBeVisible();
   await expect(commons.getByRole('group', { name: 'Second Wind' }).getByText('NEXT · LV 2: Improvement')).toBeVisible();
 

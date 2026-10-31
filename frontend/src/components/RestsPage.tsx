@@ -15,7 +15,7 @@ import { FieldName } from './HelpHint';
 import { ToggleSwitch } from './ToggleSwitch';
 import { useFormulaBox } from '../hooks/useFormulaBox';
 import {
-  restingOf, withFinish, withRecovery, withRecoveryOn, withBack, withBackAmount, withSpentAt, diceOptions, whatPlayersGet,
+  restingOf, withFinish, withRecovery, withRecoveryOn, withBack, withBackAmount, withSpentAt, diceOptions, whatPlayersGet, restDiceLine,
   LIMITS as RECOVERY_LIMITS, type BackHow, type Recovery,
 } from '../sheets/recovery';
 
@@ -227,6 +227,14 @@ function Detail({ rest, definition, edit, targets, api }: { rest: Rest; definiti
           <p style={{ ...why, fontSize: 11 }}>The same switch as AT A REST on the CONDITIONS page. A condition that ends after rounds keeps counting them.</p>
         </div>
 
+        {/* What this rest does with the recovery dice, set once for every rest below (2026-10-31). */}
+        <FieldName beside hint={HINTS['rests.diceHere']} style={small}>RECOVERY DICE</FieldName>
+        <div style={row}>
+          <span style={{ ...why, fontSize: 11 }}>{restDiceLine(definition, rest.id) ?? 'None in this system: turn them on below, under FOR EVERY REST.'}</span>
+          <button type="button" className="utility-btn" style={btn}
+            onClick={() => document.getElementById(RESTING_ID)?.scrollIntoView?.({ block: 'start', behavior: 'smooth' })}>SETTINGS ↓</button>
+        </div>
+
         {api && <>
           <FieldName beside hint={HINTS['rests.sample']} style={small}>ON THE SAMPLE</FieldName>
           <Sample rest={rest} definition={definition} api={api} />
@@ -235,6 +243,9 @@ function Detail({ rest, definition, edit, targets, api }: { rest: Rest; definiti
     </section>
   );
 }
+
+/** Where the settings for every rest are, for a rest's SETTINGS ↓. */
+const RESTING_ID = 'rests-for-every-rest';
 
 const seg = (on: boolean): React.CSSProperties => ({
   background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)', border: 0, fontFamily: 'monospace', fontSize: 11, padding: '3px 12px', cursor: 'pointer',
@@ -392,7 +403,12 @@ function Resting({ definition, edit, api }: Props) {
   const { finish, recovery } = restingOf(definition);
   const onRests = restList(definition).filter((r) => r.on).map((r) => r.id);
   return (
-    <section aria-label="Resting" style={{ gridColumn: '1 / -1', border: '1px solid var(--dark-green)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0, textAlign: 'left' }}>
+    <section id={RESTING_ID} aria-label="Resting" style={{ gridColumn: '1 / -1', marginTop: 12, border: '1px solid var(--dark-green)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0, textAlign: 'left' }}>
+      {/* Not the rest picked above: the same whichever it is (the user, 2026-10-31). */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, borderBottom: '1px solid var(--dark-green)', paddingBottom: 8 }}>
+        <span style={{ fontSize: 11, letterSpacing: 3, color: 'var(--cyan)' }}>FOR EVERY REST</span>
+        <span style={{ ...why, fontSize: 11 }}>Recovery dice and how rests are finished: set once here for all of this system&apos;s rests, whichever is picked above.</span>
+      </div>
       <div style={{ ...row, justifyContent: 'space-between' }}>
         <FieldName hint={HINTS['rests.recovery']} style={small}>RECOVERY DICE{recovery?.name.trim() ? ` · ${recovery.name.trim().toUpperCase()}` : ''}</FieldName>
         <ToggleSwitch label={recovery ? 'ON' : 'OFF'} name="Recovery dice" on={!!recovery}
@@ -416,11 +432,6 @@ function Resting({ definition, edit, api }: Props) {
         </div>
       </div>
       <WhatPlayersGet definition={definition} />
-      {finish === 'sheet' && (
-        <p style={{ ...why, fontSize: 11, color: 'var(--warning)', opacity: 1 }}>
-          COMING NEXT: the REST section on each sheet. Until then, rests apply when the GM calls them.
-        </p>
-      )}
     </section>
   );
 }

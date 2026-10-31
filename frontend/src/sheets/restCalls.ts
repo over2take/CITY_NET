@@ -18,8 +18,32 @@ export interface Rested {
   gone: string[];
   /** The dice-log line, once called. */
   line?: string;
+  /** Opened on their sheet for them to finish, nothing changed yet (rests on each sheet, R3b). */
+  called?: true;
 }
 export interface RestAnswer { rest: { id: string; name: string }; preview: boolean; characters: Rested[] }
+
+/**
+ * What CALL's confirm says will happen (R3b): at the GM's call it applies now; on each sheet it opens
+ * on the players' sheets for them to finish, and the NPCs rest at once.
+ */
+export const confirmText = (finish: 'call' | 'sheet', players: number, npcs: number): string => {
+  if (finish !== 'sheet') return 'It applies now, dice rolled for each.';
+  const s = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  return [
+    players ? `It opens on ${s(players, 'player\'s sheet', 'players\' sheets')} for them to finish.` : '',
+    npcs ? `${s(npcs, 'NPC rests', 'NPCs rest')} at once.` : '',
+  ].filter(Boolean).join(' ');
+};
+
+/** What the panel says once a rest is called: those it reached, and those it opened on a sheet. */
+export const calledText = (rest: string, characters: Rested[]): string => {
+  const opened = characters.filter((c) => c.called).length;
+  const rested = characters.length - opened;
+  const n = (k: number, what: string) => `${k} ${what}${k === 1 ? '' : 'S'}`;
+  if (!opened) return `${rest.toUpperCase()} CALLED · ${n(rested, 'CHARACTER')}`;
+  return `${rest.toUpperCase()} CALLED · OPEN ON ${n(opened, 'SHEET')}${rested ? ` · ${n(rested, 'NPC')} RESTED` : ''}`;
+};
 
 /** Who rests: every player character; them and the NPCs on the map being viewed; or the ones ticked. */
 export type Who = 'players' | 'map' | 'choose';
@@ -54,7 +78,7 @@ export const restCalls = (token: string, fetcher: typeof fetch = fetch) => {
   };
   return {
     /** The running game's rests that are on, none for a built-in game; and its recovery dice's name and who says when they're spent (R2b). */
-    list: () => ask<{ system: string; rests: { id: string; name: string }[]; recovery?: { name: string; spend: 'any' | 'gm' } | null }>('/api/sheets/rests'),
+    list: () => ask<{ system: string; rests: { id: string; name: string }[]; recovery?: { name: string; spend: 'any' | 'gm' } | null; finish?: 'call' | 'sheet' }>('/api/sheets/rests'),
     /** Whether the GM has spending recovery dice open (R2b): the recovery_open setting. */
     spendingOpen: async () => {
       const r = await ask<unknown>('/api/settings');

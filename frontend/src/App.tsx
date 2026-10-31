@@ -32,7 +32,7 @@ import { TokenWindow, type TokenFolder } from './components/TokenWindow';
 import { BootScreen } from './components/BootScreen';
 import { createBootSounds, type BootSounds } from './sounds/bootSounds';
 import { useAmbientHum } from './sounds/useAmbientHum';
-import { buildTokenActions, createPlayerTokenRow, hitPointsTarget, isTokenShape, tokenView, type TokenViewer } from './components/tokenActions';
+import { buildTokenActions, createPlayerTokenRow, hitPointsTarget, linkedHealthTarget, isTokenShape, tokenView, type TokenViewer } from './components/tokenActions';
 import { QuickActions } from './components/QuickActions';
 import { buildBuildingActions } from './components/buildingActions';
 import { TERMINAL_PREVIEW, type TerminalAction } from './components/TerminalWindow';
@@ -240,6 +240,11 @@ function App() {
   const [currentController, setCurrentController] = useState<string>('');
   const [activeSidebarMenu, setActiveSidebarMenu] = useState<SidebarMenu>('none');
   const [isDiceTrayOpen, setIsDiceTrayOpen] = useState(false);
+  // The roll that opened the tray (2026-10-31): it arrives before the tray is there to hear it, so the
+  // tray is handed it to throw. Read through a ref by the socket handler, which outlives renders.
+  const [trayOpener, setTrayOpener] = useState<unknown>(null);
+  const trayOpenRef = useRef(false);
+  useEffect(() => { trayOpenRef.current = isDiceTrayOpen; }, [isDiceTrayOpen]);
   const [isCustomDieBuilderOpen, setIsCustomDieBuilderOpen] = useState(false);
   const [editingCustomDie, setEditingCustomDie] = useState<CustomDie | null>(null);
   const [customDieBuilderPos, setCustomDieBuilderPos] = useState(() => ({
@@ -945,6 +950,7 @@ function App() {
       // display name (handle), which may differ.
       // A quiet line (a rest that rolled nothing) only joins the log.
       if (rollOpensTray(data, userName)) {
+        if (!trayOpenRef.current) setTrayOpener(data);
         setIsDiceTrayOpen(true);
         setActiveSidebarMenu('dice_menu');
       } else {
@@ -1579,6 +1585,13 @@ function App() {
     if (selectedLocation?.id !== found.token.id) setSelectedLocation(found.token);
     setTokenFolderRequest((r) => ({ folder: 'health', seq: (r?.seq ?? 0) + 1 }));
   };
+  /** The GM's view of a sheet: its linked HP opens that character's health window (2026-10-31). */
+  const openHealthOf = (who: { username?: string | null; locationId?: number | null }) => {
+    const found = linkedHealthTarget(locations, who);
+    if ('notice' in found) { setNotification(found.notice); return; }
+    if (selectedLocation?.id !== found.token.id) setSelectedLocation(found.token);
+    setTokenFolderRequest((r) => ({ folder: 'health', seq: (r?.seq ?? 0) + 1 }));
+  };
   const healthShowing = !!selectedLocation && isTokenShape(selectedLocation.shape) && tokenFolder === 'health';
 
   const handleLogout = () => {
@@ -2176,8 +2189,10 @@ function App() {
                 playerToken={playerToken}
                 adminToken={token}
                 onOpenLink={(source) => {
-                  // Linked fields jump to the window that owns the value
+                  // Linked fields jump to the window that owns the value: this sheet's own
+                  // character's health, for the GM too, never "select a token first" (2026-10-31).
                   if (source === 'bank_balance') setIsBankOpen(true);
+                  else if (token) openHealthOf({ username: userName });
                   else openHealth();
                 }}
                 onRolled={() => setIsDiceTrayOpen(true)}
@@ -2406,6 +2421,10 @@ function App() {
                 pos={npcSheetPos}
                 setPos={setNpcSheetPos}
                 onClose={() => setOpenPlayerSheetUser(null)}
+                onOpenLink={(source) => {
+                  if (source === 'bank_balance') setAdminBankPlayer(openPlayerSheetUser);
+                  else openHealthOf({ username: openPlayerSheetUser });
+                }}
               />
             )}
             {controlledNpc && (playerToken || token) && (
@@ -2426,6 +2445,7 @@ function App() {
                 npcId={openNpcSheet.id}
                 npcLabel={openNpcSheet.npc_label}
                 locationId={openNpcSheet.locationId}
+                onOpenLink={openNpcSheet.locationId ? (source) => { if (source !== 'bank_balance') openHealthOf({ locationId: openNpcSheet.locationId }); } : undefined}
                 headshots={headshotsForShape(openNpcSheet.token_shape)}
                 pos={npcSheetPos}
                 setPos={setNpcSheetPos}
@@ -2461,12 +2481,13 @@ function App() {
                 <DiceTrayWindow
                     pos={diceTrayPos} 
                     setPos={setDiceTrayPos} 
-                    onClose={() => setIsDiceTrayOpen(false)}
+                    onClose={() => { setIsDiceTrayOpen(false); setTrayOpener(null); }}
                     socketRef={socketRef}
                     authToken={token || playerToken}
                     bell={trayBell === 'on'}
                     onToggleBell={() => setTrayBell(trayBell === 'on' ? 'off' : 'on')}
                     openHistory={rollFlash.openOnHistory}
+                    openingRoll={trayOpener}
                 />
             )}
             {(() => {

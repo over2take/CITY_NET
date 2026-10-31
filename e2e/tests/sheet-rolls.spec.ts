@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer } from './helpers';
+import { signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
 
 // A custom system's own rolls at the table (6b2; approved mockup docs/mockups/builder-rolls.html,
 // 2026-10-19): a published system running as the game. A player opens their sheet and a die button
@@ -45,7 +45,9 @@ test('a player rolls a custom system\'s rolls from their sheet, picking first wh
   await signInAsPlayer(page, player);
   await page.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
   await page.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+  await sheetTab(page, 'CHARACTER');
   await page.getByLabel('Name', { exact: true }).fill('Rook');
+  await sheetTab(page, 'STATS');
   await page.getByLabel('Grit', { exact: true }).fill('3');
   await page.getByLabel('Wits', { exact: true }).fill('2');
   await page.getByLabel('Stress', { exact: true }).fill('1');

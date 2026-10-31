@@ -27,7 +27,7 @@ export const LIMITS = { tabs: 12, tabName: 20, label: 60, hint: 300, options: 10
 /** How a section looks (sheet.js LAYOUTS), with the page's names for them. */
 export const LAYOUTS = [
   { id: 'list', label: 'LIST' }, { id: 'grid', label: 'GRID' }, { id: 'notes', label: 'NOTES' }, { id: 'inventory', label: 'ITEMS' },
-  { id: 'choices', label: 'CHOICES' },
+  { id: 'choices', label: 'CHOICES' }, { id: 'rests', label: 'RESTS' },
 ] as const;
 /** What a field holds (sheet.js TYPES), with the page's names for them. */
 export const TYPES = [
@@ -128,6 +128,7 @@ export const withTabName = (def: Definition, current: string, name: string): Def
   return withSheet(def, {
     ...sheet,
     tabs: sheet.tabs.map((t) => (t === current ? next : t)),
+    ...(sheet.opens === current ? { opens: next } : {}),
     sections: sheet.sections.map((s) => (s.tab === current ? { ...s, tab: next } : s)),
   });
 };
@@ -148,12 +149,15 @@ export const withoutTab = (def: Definition, name: string, to?: string): Definiti
   const sheet = sheetOf(def);
   if (!sheet?.tabs?.includes(name)) return def;
   const others = sheet.tabs.filter((t) => t !== name);
+  // Opening on the tab removed, it opens on the first again.
+  const { opens, ...kept } = sheet;
+  const still = opens !== undefined && opens !== name ? { opens } : {};
   if (!others.length) {
-    const { tabs: _gone, ...rest } = sheet;
+    const { tabs: _gone, ...rest } = kept;
     return withSheet(def, { ...rest, sections: sheet.sections.map(({ tab: _t, ...s }) => s) });
   }
   const dest = to && others.includes(to) ? to : others[0];
-  return withSheet(def, { ...sheet, tabs: others, sections: sheet.sections.map((s) => (s.tab === name ? { ...s, tab: dest } : s)) });
+  return withSheet(def, { ...kept, ...still, tabs: others, sections: sheet.sections.map((s) => (s.tab === name ? { ...s, tab: dest } : s)) });
 };
 
 // ─── SECTIONS ───────────────────────────────────────────────────────────────

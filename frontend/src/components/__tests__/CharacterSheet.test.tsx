@@ -116,12 +116,22 @@ describe('SheetRenderer', () => {
     expect(screen.getAllByText(/MOVE/).length).toBeGreaterThan(0);
   });
 
-  it('renders linked fields read-only with a LINKED marker (cash on GEAR tab)', async () => {
+  it('renders linked fields read-only, saying where they are kept (cash on GEAR tab)', async () => {
     render(<SheetRenderer template={template} data={{ cash: 250 }} onFieldChange={vi.fn()} />);
     await userEvent.click(screen.getByText('GEAR'));
     expect(screen.getByText('250')).toBeInTheDocument();
-    expect(screen.getByText('LINKED')).toBeInTheDocument();
+    expect(screen.getByTitle('Kept on the token or in the bank: changed there, not here')).toBeInTheDocument();
+    // Not a word beside every number (2026-10-31), and nothing to click when nothing opens.
+    expect(screen.queryByText(/LINKED/)).not.toBeInTheDocument();
+    expect(screen.queryByText('⇗')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Cash (eb)')).not.toBeInTheDocument(); // no input
+  });
+
+  it('a linked field that opens its window has a ⇗ and says so', async () => {
+    render(<SheetRenderer template={template} data={{ cash: 250 }} onFieldChange={vi.fn()} onOpenLink={vi.fn()} />);
+    await userEvent.click(screen.getByText('GEAR'));
+    expect(screen.getByRole('button', { name: /250/ }).getAttribute('title')).toBe('Kept on the token or in the bank: click to open it');
+    expect(screen.getByText('⇗')).toBeInTheDocument();
   });
 
   it('linked field click calls onOpenLink with its source', async () => {

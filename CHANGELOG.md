@@ -9,6 +9,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Linked HP opens the character's health, for the GM too.** On a player's own sheet, HP and HP
+  MAX open their health window when clicked. On the sheet the GM opens from the dashboard, and on an
+  NPC's sheet, they did nothing; now they select that character's token on the map and open its
+  health, as clicking the token would (a player's cash opens their bank). And the LINKED word beside
+  every linked number is gone: the dashed border says it is kept on the token or in the bank, a small
+  ⇗ marks one that opens its window, and hovering says which.
+- **A roll that opens the dice tray is thrown in it.** The tray opens by itself for a roll of yours
+  made elsewhere: spending recovery dice, a rest the GM called, a roll from a sheet in its own tab.
+  But that roll arrived before the tray was there to hear it, so its dice were never thrown: it only
+  showed in the history. Now the tray throws it as it opens, and lists it once. And a rest's line in
+  the history ("SHORT REST · cody: rolled 1d4 ...") no longer shows its name with two colons.
 - **The map's windows stay on the map.** Any window open on the map (a sheet, the dice tray, a
   shop) came over the system builder when the GM opened it, drawn on top of the builder's pages.
   Now the builder takes over the screen: the map's windows are hidden while it is open, never
@@ -71,6 +82,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Resting on the sheet (R3b).** A system whose rests are finished on each sheet gives every
+  character sheet a RESTS section, after CHOICES: a button for each of the game's rests. Each asks
+  first, so a stray click rests nobody. A rest the recovery dice are spent at opens its panel, with
+  the dice to spend and FINISH, which asks too; a rest with nothing to spend applies once asked.
+  FINISH does everything a called rest does: refills, uses, dice back, health and a line in the log.
+  The GM can rest anyone from their sheet. In the GAME tab, CALL now asks first; in such a system it
+  opens the rest on each player's sheet, CALLED BY THE GM, for them to finish, and NPCs rest at once.
+  The recovery dice move from CHOICES into the rest panel; dice spent any time, or in a system whose
+  rests are at the GM's call, stay in view in the RESTS section. CUSTOMIZE keeps RESTS as a section
+  to move like any other.
+  On the builder's RESTS page, the panel below the rests is headed FOR EVERY REST, as its recovery
+  dice and RESTS ARE FINISHED are the same whichever rest is picked; and each rest's own panel says
+  what it does with the dice ("Hit Dice: spent at this rest · gives back nothing"), with SETTINGS
+  taking you to them.
 - **WHAT PLAYERS GET on RESTS (R3a).** Under the recovery dice, a box says in the system's own words
   what the settings give a player on their sheet, and what they give the GM: REST buttons or none,
   when and where the recovery dice are spent, and who opens spending. It changes as the settings
@@ -661,6 +686,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- The character sheet lists CHARACTER first and still opens on STATS. A built sheet can name the tab it opens on; renaming that tab in the builder keeps it, removing it opens on the first.
+- On a sheet's CHOICES, each list (CLASSES, FEATS) folds away on its own, saying how many are picked.
+- The HEALTH box shows its name alone, with CURRENT and MAX each under its number. Temporary HP is added to the current, in the warning color, and a bonus to the maximum (like Tough) colors it and names itself on hover.
+- A built system's automatic character sheet has a CHARACTER tab beside STATS: the name, concept, description and the picks (classes, feats) are there, and STATS keeps the numbers, health and RESTS. A customized sheet keeps its own layout.
 - **The GAME tab's RESTS and BANK are folders.** A custom game's RESTS moved out of TTRPG_SYSTEM,
   which is for setting the game up, into a folder of its own on the GAME tab, with OPEN SPENDING at
   its top when the GM has the say over recovery dice. The bank's CURRENCY_ICON, PAY_PLAYERS and

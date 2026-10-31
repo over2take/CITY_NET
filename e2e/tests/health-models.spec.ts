@@ -1,5 +1,5 @@
 import { test, expect, type Page, type APIRequestContext, type Browser, type BrowserContext, type TestInfo } from '@playwright/test';
-import { signInAsGm, signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer } from './helpers';
+import { signInAsGm, signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
 
 // Every health model at the table (coverage family 2, e2e/COVERAGE.md; the models from 2g2, the
 // HEALTH folder from the approved mockup docs/mockups/health-windows.html): for each, a custom system
@@ -36,6 +36,7 @@ const watch = async (page: Page, username: string) => {
 const giveSheet = async (page: Page, request: APIRequestContext, token: string, username: string) => {
   await page.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
   await page.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+  await sheetTab(page, 'CHARACTER');
   await page.getByLabel('Name', { exact: true }).fill('Rook');
   await expect.poll(async () => (await asGm(request, token, 'get', `/api/sheets/user/${username}`).catch(() => null))?.data?.name).toBe('Rook');
   // Closed with its own ×: the nearest window round the Name box.
