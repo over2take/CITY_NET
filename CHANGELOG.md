@@ -9,6 +9,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **The map's windows stay on the map.** Any window open on the map (a sheet, the dice tray, a
+  shop) came over the system builder when the GM opened it, drawn on top of the builder's pages.
+  Now the builder takes over the screen: the map's windows are hidden while it is open, never
+  closed, Esc in the builder leaves them alone, and EXIT TO MAP brings each back as it was. A
+  roll that arrives meanwhile waits in the tray rather than opening over the builder, and a
+  battle map's floor name and EXIT stay off the builder too.
 - **Names, "?" and column heads line up across the builder.** A setting's name sat above or below
   its field by up to 50px on some pages (CONDITIONS' ICON, a feature's MODIFIERS, RESTS' WEARS OFF,
   ROLLS' AGAINST), as each page placed its own by hand. Every name now sits level with the first
