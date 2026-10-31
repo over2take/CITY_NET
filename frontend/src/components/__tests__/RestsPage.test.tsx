@@ -351,6 +351,20 @@ describe('recovery dice and how rests are finished (R1b)', () => {
     expect(resting().queryByLabelText('LONG REST gives back by')).toBeNull();
   });
 
+  it('are spent any time, or only while the GM opens it, said in words (R2a)', async () => {
+    const page = open(R, null);
+    await turnOn();
+    const spending = within(resting().getByRole('group', { name: 'Spending' }));
+    expect(spending.getByRole('button', { name: 'ANY TIME' }).getAttribute('aria-pressed')).toBe('true');
+    expect(resting().getByText(/whenever they like: SPENT AT is for the table to keep/)).toBeTruthy();
+    await userEvent.click(spending.getByRole('button', { name: 'WHEN THE GM OPENS IT' }));
+    expect(recoveryOf(page.last())!.spend).toBe('gm');
+    publishes(page.last());
+    expect(resting().getByText(/only while the GM has spending open in the GAME tab/)).toBeTruthy();
+    await userEvent.click(spending.getByRole('button', { name: 'ANY TIME' }));
+    expect(recoveryOf(page.last())).not.toHaveProperty('spend');
+  });
+
   it('still show a rest turned off that they name, to take it away', async () => {
     const page = open({ ...R, rests: { ...H.rests, long_rest: { ...(H.rests as Record<string, object>).long_rest, on: false } } } as Definition, null);
     await turnOn();
@@ -408,7 +422,7 @@ describe('the "?"', () => {
   };
     open({ ...H, resting: { recovery: { name: 'Hit Dice', spent_at: 'any' } } } as unknown as Definition);
     await screen.findByTestId('rest-sample');
-    allShown('rests', 8);
+    allShown('rests', 9);
   });
 
   it('has nothing to say about the sample without the server to try it', () => {

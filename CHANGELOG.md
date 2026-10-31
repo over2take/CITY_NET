@@ -65,6 +65,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Recovery dice can be left to the GM (R2a).** RESTS' RECOVERY DICE has SPENDING: ANY TIME, where
+  players spend them from their sheet whenever they like, or WHEN THE GM OPENS IT, for a GM who wants
+  control, where players spend or tick them off only while the GM has spending open. Under it, the
+  server side of recovery dice at the table: each character's pools from their classes (one per
+  class with a die, as many as its level, or one pool of a formula's count), spending them with a
+  roll that heals through the system's health model onto every token of theirs with a dice-log line
+  for everyone, ticking them off for real dice, and rests giving them back. The pools on the sheet
+  and the GM's switch come next.
 - **Recovery dice and HIT DIE in the builder (R1b).** A class (any option of a levelled list) now
   has a HIT DIE on CHOICES: NONE, D4 to D20, or OTHER for any size from 2 to 100 sides. RESTS has
   RECOVERY DICE under the rests, off until turned on: a pool each character spends to heal at a

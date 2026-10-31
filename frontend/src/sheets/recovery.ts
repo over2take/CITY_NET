@@ -13,6 +13,7 @@ export const LIMITS = { name: 30, formula: 200, back: 12 } as const;
 
 export type Finish = 'call' | 'sheet';
 export type BackHow = 'all' | 'half' | 'by';
+export type Spend = 'any' | 'gm';
 /** A rest giving recovery dice back: all, half (at least 1), or by an amount. */
 export interface Back { rest: string; how: BackHow; amount?: string }
 export interface Recovery {
@@ -24,6 +25,8 @@ export interface Recovery {
   /** A formula added to each die, or null. */
   plus: string | null;
   spentAt: string[] | 'any';
+  /** Spent any time, or by players only while the GM has spending open (R2a). */
+  spend: Spend;
   back: Back[];
 }
 export type RecoveryPatch = Partial<Recovery>;
@@ -54,6 +57,7 @@ export const restingOf = (def: Definition): { finish: Finish; recovery: Recovery
       perLevel: r.per_level === true,
       plus: typeof r.plus === 'string' ? r.plus : null,
       spentAt: r.spent_at === 'any' ? 'any' : (Array.isArray(r.spent_at) ? r.spent_at.filter((id): id is string => typeof id === 'string') : []),
+      spend: r.spend === 'gm' ? 'gm' : 'any',
       back: (Array.isArray(r.back) ? r.back : []).filter(isObject).map((b) => ({
         rest: typeof b.rest === 'string' ? b.rest : '',
         how: HOWS.includes(b.how as BackHow) ? b.how as BackHow : 'all',
@@ -70,6 +74,7 @@ const storedOf = (r: Recovery): Obj => ({
   ...(r.perLevel ? { per_level: true } : {}),
   ...(r.plus !== null && r.plus.trim() ? { plus: r.plus } : {}),
   spent_at: r.spentAt,
+  ...(r.spend === 'gm' ? { spend: 'gm' } : {}),
   ...(r.back.length ? { back: r.back.map((b) => (b.how === 'by' ? { rest: b.rest, how: b.how, amount: b.amount ?? '' } : { rest: b.rest, how: b.how })) } : {}),
 });
 
@@ -88,7 +93,7 @@ export const withFinish = (def: Definition, finish: Finish): Definition => withR
  * a long rest, whichever of those is on (any time, and nothing back, when neither is).
  */
 export const withRecoveryOn = (def: Definition, onRests: string[]): Definition => withResting(def, restingOf(def).finish, {
-  name: 'Recovery dice', count: 'levels', perLevel: false, plus: null,
+  name: 'Recovery dice', count: 'levels', perLevel: false, plus: null, spend: 'any',
   spentAt: onRests.includes('short_rest') ? ['short_rest'] : 'any',
   back: onRests.includes('long_rest') ? [{ rest: 'long_rest', how: 'all' }] : [],
 });

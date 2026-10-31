@@ -10,12 +10,15 @@
 //   drop   only the GM takes a pick away
 //   level  a pick's level in a levelled list, from 1 to the highest: the player or the GM
 //   use    how many of a feature's uses are spent, from none to all of them: the player or the GM
+//   recovery  how many of a pool of recovery dice are spent, from none to all (R2a): ticked off for
+//          real dice, or put right; the player or the GM. Spending them with a roll is sheets/recover.js's
 //
 // Pure: takes the running definition and the sheet's data, and gives back the data to store or why
 // not. The socket (sockets/choices.js) stores it through the sheet queue and works the numbers out
 // again. Picks and spent uses are kept where choices.js says (PICKS_KEY, USES_KEY).
 
 const { choicesOf, heldOf, pickedOf, openingsOf, capOf, meets, needsText, usesOf, PICKS_KEY, USES_KEY, LIMITS } = require('./choices');
+const { poolsOf, RECOVERY_KEY } = require('./recovery');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const fail = (error) => ({ ok: false, error });
@@ -41,6 +44,14 @@ const pickAction = (definition, data, action, { gm = false } = {}) => {
     const spent = Number(action.spent);
     if (!Number.isInteger(spent) || spent < 0 || spent > u.max) return fail(`Between none and all ${u.max} of its uses`);
     return { ok: true, data: { ...sheet, [USES_KEY]: { ...(isPlainObject(sheet[USES_KEY]) ? sheet[USES_KEY] : {}), [u.feature.id]: spent } } };
+  }
+
+  if (action.kind === 'recovery') {
+    const pool = poolsOf(definition, sheet).find((p) => p.id === action.pool);
+    if (!pool) return fail('This character has no such recovery dice');
+    const spent = Number(action.spent);
+    if (!Number.isInteger(spent) || spent < 0 || spent > pool.total) return fail(`Between none and all ${pool.total} of them`);
+    return { ok: true, data: { ...sheet, [RECOVERY_KEY]: { ...(isPlainObject(sheet[RECOVERY_KEY]) ? sheet[RECOVERY_KEY] : {}), [pool.id]: spent } } };
   }
 
   const c = choicesOf(definition).find((x) => x.id === action.list);
