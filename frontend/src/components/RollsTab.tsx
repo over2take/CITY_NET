@@ -189,16 +189,16 @@ function CompareStep({ definition, edit, roll, api }: { definition: Definition; 
   return (
     <>
       <div style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: 6, alignItems: 'center' }}>
-        <FieldName hint={HINTS['rolls.add']}>ADD</FieldName>
+        <FieldName beside hint={HINTS['rolls.add']}>ADD</FieldName>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>{add.field}{add.help}</div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: 6, alignItems: 'center' }}>
-        <FieldName hint={HINTS['rolls.against']}>AGAINST</FieldName>
+        <FieldName beside hint={HINTS['rolls.against']}>AGAINST</FieldName>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>{against.field}{against.help}</div>
         <span />
         <ToggleSwitch label="ROLL UNDER: AT OR UNDER SUCCEEDS" on={!!roll.under} disabled={roll.against === undefined}
           onChange={(under) => edit(withRollAgainst(definition, roll.id, roll.against ?? '', under))} />
-        <FieldName hint={HINTS['rolls.rollSeen']}>PLAYERS SEE</FieldName>
+        <FieldName beside hint={HINTS['rolls.rollSeen']}>PLAYERS SEE</FieldName>
         {/* Off until there is a target: with nothing to beat there is nothing to keep (6c4h). */}
         <div role="group" aria-label="This roll: players see" style={{ display: 'flex', flexWrap: 'wrap', gap: 5, opacity: roll.against === undefined ? 0.4 : 1 }}>
           {[{ id: null, label: `AS THE SYSTEM (${seenLabel(systemSeen(definition))})` }, ...SEEN_LEVELS].map((c) => {

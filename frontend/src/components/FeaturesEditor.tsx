@@ -33,8 +33,7 @@ const input: React.CSSProperties = {
   background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'monospace', fontSize: 12, padding: '4px 6px', minWidth: 0, boxSizing: 'border-box',
 };
 const row: React.CSSProperties = { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' };
-const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '110px minmax(0, 1fr)', gap: '8px 10px', alignItems: 'start' };
-const END = { justifySelf: 'end', paddingTop: 4 } as const;
+const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '150px minmax(0, 1fr)', gap: '8px 10px', alignItems: 'start' };
 const choice = (on: boolean): React.CSSProperties => ({
   background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)', border: '1px solid var(--dark-green)', fontFamily: 'monospace', fontSize: 11, padding: '2px 8px', cursor: 'pointer',
 });
@@ -104,19 +103,19 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
   return (
     <div role="group" aria-label={`Feature ${feature.label || feature.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 12px', border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--green) 4%, transparent)' }}>
       <div style={grid}>
-        <FieldName boxStyle={END} htmlFor={id('name')} hint={HINTS['choices.featureName']} style={small}>NAME</FieldName>
+        <FieldName beside htmlFor={id('name')} hint={HINTS['choices.featureName']} style={small}>NAME</FieldName>
         <input id={id('name')} type="text" maxLength={LIMITS.label} value={feature.label} style={input}
           aria-invalid={!feature.label.trim() ? true : undefined} onChange={(e) => set({ label: e.target.value })} />
         {unlocksByLevel(definition, list) && <>
-          <FieldName boxStyle={END} htmlFor={id('at')} hint={HINTS['choices.at']} style={small}>AT LEVEL</FieldName>
+          <FieldName beside htmlFor={id('at')} hint={HINTS['choices.at']} style={small}>AT LEVEL</FieldName>
           <input id={id('at')} type="number" min={1} max={LIMITS.level} step={1} value={levelText} style={{ ...input, width: 64 }}
             onChange={(e) => setLevelText(e.target.value)} onBlur={commitLevel} onKeyDown={(e) => { if (e.key === 'Enter') commitLevel(); }} />
         </>}
-        <FieldName boxStyle={END} htmlFor={id('text')} hint={HINTS['choices.text']} style={small}>WORDS</FieldName>
+        <FieldName beside htmlFor={id('text')} hint={HINTS['choices.text']} style={small}>WORDS</FieldName>
         <textarea id={id('text')} rows={2} maxLength={LIMITS.description} value={feature.text ?? ''} style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }}
           onChange={(e) => set({ text: e.target.value })} />
 
-        <FieldName boxStyle={END} hint={HINTS['choices.modifiers']} style={small}>MODIFIERS</FieldName>
+        <FieldName beside hint={HINTS['choices.modifiers']} style={small}>MODIFIERS</FieldName>
         <div role="group" aria-label="Modifiers" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           {mods.map((m, i) => (
             <ModifierRow key={i} definition={definition} api={api} i={i} m={m} targets={targets}
@@ -128,7 +127,7 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
           {!targets.length && <span style={{ ...why, fontSize: 11 }}>No stats or formulas yet to change: make them on STATS &amp; RULES.</span>}
         </div>
 
-        <FieldName boxStyle={END} hint={HINTS['choices.uses']} style={small}>USES</FieldName>
+        <FieldName beside hint={HINTS['choices.uses']} style={small}>USES</FieldName>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           <ToggleSwitch label="HAS USES" on={!!feature.uses} style={{ alignSelf: 'start' }}
             onChange={(has) => set({ uses: has ? { count: '1', refill: rests[0]?.id } : null })} />
@@ -146,7 +145,7 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
           {feature.uses && usesBox.help}
         </div>
 
-        <FieldName boxStyle={END} hint={HINTS['choices.rolls']} style={small}>GIVES ROLLS</FieldName>
+        <FieldName beside hint={HINTS['choices.rolls']} style={small}>GIVES ROLLS</FieldName>
         {rolls.length
           ? <div role="group" aria-label="Gives rolls" style={row}>
               {rolls.map((r) => (
@@ -157,7 +156,7 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
             </div>
           : <span style={{ ...why, fontSize: 11 }}>No rolls yet: make them on STATS &amp; RULES&apos; ROLLS tab.</span>}
 
-        <FieldName boxStyle={END} hint={HINTS['choices.changes']} style={small}>CHANGES A ROLL</FieldName>
+        <FieldName beside hint={HINTS['choices.changes']} style={small}>CHANGES A ROLL</FieldName>
         <div role="group" aria-label="Changes a roll" style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           {changes.map((ch, i) => {
             const roll = withChanges.find((r) => r.id === ch.roll);
@@ -183,13 +182,13 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
           {!withChanges.length && <span style={{ ...why, fontSize: 11 }}>None of the system&apos;s rolls has a change to pick yet, like ADVANTAGE: add one in a roll&apos;s step 5.</span>}
         </div>
 
-        <FieldName boxStyle={END} htmlFor={id('choice')} hint={HINTS['choices.choice']} style={small}>OPENS A LIST</FieldName>
+        <FieldName beside htmlFor={id('choice')} hint={HINTS['choices.choice']} style={small}>OPENS A LIST</FieldName>
         <select id={id('choice')} value={feature.choice ?? ''} style={{ ...input, justifySelf: 'start' }} onChange={(e) => set({ choice: e.target.value || null })}>
           <option value="">NOTHING</option>
           {otherLists.map((c) => <option key={c.id} value={c.id}>{(c.one || c.id).toUpperCase()}</option>)}
         </select>
         {feature.choice && <>
-          <FieldName boxStyle={END} htmlFor={id('count')} hint={HINTS['choices.opensCount']} style={small}>HOW MANY</FieldName>
+          <FieldName beside htmlFor={id('count')} hint={HINTS['choices.opensCount']} style={small}>HOW MANY</FieldName>
           <span style={row}>
             <input id={id('count')} type="number" min={1} max={LIMITS.opens} step={1} value={feature.choice_count ?? 1} style={{ ...input, width: 64 }}
               onChange={(e) => { const n = Math.trunc(Number(e.target.value)); if (Number.isFinite(n) && n >= 1) set({ choice_count: n }); }} />

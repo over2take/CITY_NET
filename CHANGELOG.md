@@ -9,6 +9,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Names, "?" and column heads line up across the builder.** A setting's name sat above or below
+  its field by up to 50px on some pages (CONDITIONS' ICON, a feature's MODIFIERS, RESTS' WEARS OFF,
+  ROLLS' AGAINST), as each page placed its own by hand. Every name now sits level with the first
+  line of its field, the same way on every page, and the longest ones no longer wrap onto two lines.
+  The builder's pages also inherited centred text from the app, so a table's words (WORDS' terms,
+  READS AS) and the notes under fields were centred while their column heads and names weren't;
+  they are left-aligned now. A check in the browser tests fails any name or head out of line.
 - **A rest can read the character's levels.** A builder system's rest amounts could only name sheet
   fields, stats and formulas, so "heal by your level" (`@level`, `@fighter_level d10 + @con_mod`) was
   refused, though the box's own example suggested it. Levels now work in every rest amount. An amount
@@ -58,6 +65,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Recovery dice and HIT DIE in the builder (R1b).** A class (any option of a levelled list) now
+  has a HIT DIE on CHOICES: NONE, D4 to D20, or OTHER for any size from 2 to 100 sides. RESTS has
+  RECOVERY DICE under the rests, off until turned on: a pool each character spends to heal at a
+  rest, like D&D's hit dice or 13th Age's recoveries, with no presets. Name it, then choose how many
+  each has (one per level, or a formula like 8), what one heals (its die, or its die for each level,
+  plus a formula like `@con_mod`), the rests it is spent at (or any time), and what each rest gives
+  back (nothing, all, half with at least 1, or an amount). RESTS ARE FINISHED says whether a rest the
+  GM calls applies at once or opens on each player's sheet. Turning LEVELLED off takes a list's dice
+  with it, and deleting a rest takes it out of the recovery dice. The pools on the sheet and the REST
+  panel come next; until then these are saved with the system and rests apply at the GM's call.
 - **STATS & RULES' formulas say what they read, and catch a misspelt name.** A name the system
   hasn't got (`@strr` for `@str`) used to count as 0 without a word, on STATS & RULES and in the
   graph view's panel, and PUBLISH let it through. Now each formula has a line under it saying it in

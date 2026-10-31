@@ -210,6 +210,7 @@ export const HINTS = {
   'choices.picks': 'How many options a character picks from this list: ONE (a class), a number (two backgrounds), or ANY (feats).',
   'choices.again': 'More can be added later, past what was picked first. With levels, this is multiclassing: a second class, each with its own level.',
   'choices.levelled': 'Each pick has a level, and its features unlock by it, like a class. Formulas read it as @<option>_level.',
+  'choices.die': 'Optional, on a levelled list\'s options, like a class\'s hit die: the die its recovery dice roll at a rest (set up on RESTS). D4 to D20, or OTHER for any size from 2 to 100 sides.',
   'choices.options': 'What a character can pick from this list. A big list, like forty feats, is fine: up to a hundred.',
   'choices.optionName': 'What players see for this option: SOLDIER, DOCKHAND, TOUGH.',
   'choices.description': 'Words for the table about this option, shown when a player picks.',
@@ -266,6 +267,12 @@ export const HINTS = {
   // RESTS
   'rests.refills': 'What the rest puts back, line by line in order: health, a number on the sheet, or a whole section, to its maximum, by an amount or to a number. Rolled for each character. Under an amount, a line says it in words with the least and most it comes to for the sample; the formula button writes DICE or DICE AND A STAT for you.',
   'rests.sample': 'This rest on the sample character, its token hurt to half, worked out the way the game would. Nothing is saved.',
+  'rests.recovery': 'A pool each character spends to heal at a rest, like D&D\'s hit dice or 13th Age\'s recoveries. Name it, then choose how many each has, what one heals, where they are spent and what gives them back. The die rolled is the one each class (an option of a levelled list) has as its HIT DIE on CHOICES.',
+  'rests.recoveryCount': 'ONE PER LEVEL: a die for each level of each option with a die, so a Fighter 3 / Wizard 2 has three d10s and two d6s. A FORMULA: that many for each character, like 8, or one reading the sheet.',
+  'rests.recoveryHeals': 'What spending one heals: its die rolled, once, or once for each level (as 13th Age does), plus a formula like @con_mod. The line under it says the formula in words for the sample.',
+  'rests.recoverySpent': 'The rests at which a player may spend them, or ANY TIME, a fight included.',
+  'rests.recoveryBack': 'What each rest puts back into the pool: nothing, all of them, half (at least 1), or by an amount, a formula like @level.',
+  'rests.finish': 'AT THE GM\'S CALL: a rest the GM calls applies to everyone at once. ON EACH SHEET: it opens a REST panel on each player\'s sheet, where they spend recovery dice, and applies when they press FINISH; NPCs finish at once.',
   // ONLY WITH, on PARTS, CHARACTER SHEET (and the NPC stat block) and CONDITIONS
   'only.alternative': 'A house rule under which this formula is worked out another way, like fewer hit points with GRITTY WOUNDS. Off, it is worked out as written.',
   'only.instead': 'The formula used while the rule is on, written like any other. The sample character\'s value with the rule on shows under it.',

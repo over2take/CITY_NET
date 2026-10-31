@@ -29,8 +29,6 @@ const row: React.CSSProperties = { display: 'flex', gap: 6, flexWrap: 'wrap', al
 const seg = (on: boolean): React.CSSProperties => ({
   background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)', border: 0, fontFamily: 'monospace', fontSize: 11, padding: '3px 12px', cursor: 'pointer',
 });
-/** A name in the right-aligned column of the settings grid. */
-const END = { justifySelf: 'end' } as const;
 
 function Detail({ rule, definition, edit, onGoTo }: Props & { rule: HouseRule }) {
   const [confirm, setConfirm] = useState(false);
@@ -52,13 +50,13 @@ function Detail({ rule, definition, edit, onGoTo }: Props & { rule: HouseRule })
           : <button type="button" className="utility-btn danger-btn" style={btn} onClick={() => setConfirm(true)}>DELETE</button>}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '120px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' }}>
-        <FieldName boxStyle={END} htmlFor={`house-name-${rule.id}`} hint={HINTS['house.name']} style={small}>NAME</FieldName>
+        <FieldName beside htmlFor={`house-name-${rule.id}`} hint={HINTS['house.name']} style={small}>NAME</FieldName>
         <input id={`house-name-${rule.id}`} type="text" maxLength={LIMITS.name} value={rule.name} style={input}
           aria-invalid={!rule.name.trim() ? true : undefined} onChange={(e) => set({ name: e.target.value })} />
-        <FieldName boxStyle={END} htmlFor={`house-desc-${rule.id}`} hint={HINTS['house.description']} style={small}>WHAT IT MEANS</FieldName>
+        <FieldName beside htmlFor={`house-desc-${rule.id}`} hint={HINTS['house.description']} style={small}>WHAT IT MEANS</FieldName>
         <textarea id={`house-desc-${rule.id}`} rows={2} maxLength={LIMITS.description} value={rule.description ?? ''}
           style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }} onChange={(e) => set({ description: e.target.value })} />
-        <FieldName boxStyle={END} hint={HINTS['house.starts']} style={small}>STARTS</FieldName>
+        <FieldName beside hint={HINTS['house.starts']} style={small}>STARTS</FieldName>
         <span role="group" aria-label="Starts" style={{ display: 'inline-flex', border: '1px solid var(--green)', justifySelf: 'start' }}>
           <button type="button" aria-pressed={rule.starts === true} style={seg(rule.starts === true)} onClick={() => set({ starts: true })}>ON</button>
           <button type="button" aria-pressed={rule.starts !== true} style={seg(rule.starts !== true)} onClick={() => set({ starts: false })}>OFF</button>

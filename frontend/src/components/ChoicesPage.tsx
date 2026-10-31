@@ -10,12 +10,13 @@ import { FeaturesEditor } from './FeaturesEditor';
 import { ChoicesImport } from './ChoicesImport';
 import { ToggleSwitch } from './ToggleSwitch';
 import { useFormulaBox } from '../hooks/useFormulaBox';
+import { restingOf, DIE_CHOICES } from '../sheets/recovery';
 
 // The builder's CHOICES page (7a2b1; approved mockup docs/mockups/builder-choices.html, 2026-10-27):
 // the lists a character picks from (classes, backgrounds, feats), named in the game's own words. The
 // lists down the left; the open one in the middle, with its names, how many a character picks,
 // MORE THAN ONCE and LEVELLED, and its options; the open option on the right, with its name, words
-// and requirement, and its features (7a2b2, FeaturesEditor.tsx). What it reads and writes is
+// and requirement, a levelled list's HIT DIE (R1b), and its features (7a2b2, FeaturesEditor.tsx). What it reads and writes is
 // sheets/choices.ts; every change goes through the builder's `edit`. IMPORT on a list (choices import 2,
 // ChoicesImport.tsx) opens over the list and option columns.
 
@@ -37,7 +38,7 @@ const panel: React.CSSProperties = { border: '1px solid var(--dark-green)', padd
 const seg = (on: boolean): React.CSSProperties => ({
   background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)', border: 0, fontFamily: 'monospace', fontSize: 11, padding: '3px 12px', cursor: 'pointer',
 });
-const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '130px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' };
+const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '160px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' };
 /** How a list is picked, as the page offers it (7a5a2; approved mockup nested-choices), with what each means. */
 const PICKED_WAYS: { id: Picked; label: string; why: string }[] = [
   { id: 'own', label: 'ON ITS OWN', why: 'A list of its own on the sheet. A feature opening it only names it.' },
@@ -48,8 +49,6 @@ const PICKED_WAYS: { id: Picked; label: string; why: string }[] = [
 
 /** No options outlined as new. */
 const NONE = new Set<string>();
-/** A name in the right-aligned column of the settings grid. */
-const END = { justifySelf: 'end' } as const;
 
 /** Asks before deleting: DELETE, then DELETE / KEEP with what goes. */
 function DeleteButton({ what, gone, onDelete }: { what: string; gone: string; onDelete: () => void }) {
@@ -98,14 +97,14 @@ function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, st
         </p>
       )}
       <div style={grid}>
-        <FieldName boxStyle={END} hint={HINTS['choices.names']} style={small}>ONE / MANY</FieldName>
+        <FieldName beside hint={HINTS['choices.names']} style={small}>ONE / MANY</FieldName>
         <span style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 6 }}>
           <input type="text" aria-label="One" maxLength={LIMITS.label} value={list.one} style={input}
             aria-invalid={!list.one.trim() ? true : undefined} onChange={(e) => set({ one: e.target.value })} />
           <input type="text" aria-label="Many" maxLength={LIMITS.label} value={list.many} style={input}
             aria-invalid={!list.many.trim() ? true : undefined} onChange={(e) => set({ many: e.target.value })} />
         </span>
-        <FieldName boxStyle={END} hint={HINTS['choices.picked']} style={small}>PICKED</FieldName>
+        <FieldName beside hint={HINTS['choices.picked']} style={small}>PICKED</FieldName>
         <span role="group" aria-label="Picked" style={{ display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--green)', justifySelf: 'start' }}>
           {PICKED_WAYS.map((w) => (
             <button key={w.id} type="button" aria-pressed={way === w.id} title={w.why} style={seg(way === w.id)} onClick={() => set({ picked: w.id })}>{w.label}</button>
@@ -117,7 +116,7 @@ function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, st
           {openers.length > 0 && way === 'own' ? ' Features open this list: THROUGH FEATURES or BOTH puts their picks under them.' : ''}
         </span>
         {ownPicks && <>
-        <FieldName boxStyle={END} hint={HINTS['choices.picks']} style={small}>A CHARACTER PICKS</FieldName>
+        <FieldName beside hint={HINTS['choices.picks']} style={small}>A CHARACTER PICKS</FieldName>
         <span style={row}>
           <span role="group" aria-label="A character picks" style={{ display: 'inline-flex', border: '1px solid var(--green)' }}>
             <button type="button" aria-pressed={picks === 1} style={seg(picks === 1)} onClick={() => set({ picks: 1 })}>ONE</button>
@@ -130,11 +129,11 @@ function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, st
               onChange={(e) => { const n = Math.trunc(Number(e.target.value)); if (Number.isFinite(n) && n >= 2) set({ picks: n }); }} />
           )}
         </span>
-        <FieldName boxStyle={END} hint={HINTS['choices.again']} style={small}>MORE LATER</FieldName>
+        <FieldName beside hint={HINTS['choices.again']} style={small}>MORE LATER</FieldName>
         <ToggleSwitch label="MORE THAN ONCE" on={list.again === true} disabled={picks === 'any'} onChange={() => set({ again: list.again !== true })} />
         </>}
         {way !== 'everyone' && <>
-        <FieldName boxStyle={END} hint={HINTS['choices.levelled']} style={small}>LEVELS</FieldName>
+        <FieldName beside hint={HINTS['choices.levelled']} style={small}>LEVELS</FieldName>
         <ToggleSwitch label="LEVELLED" on={list.levelled === true} onChange={() => set({ levelled: list.levelled !== true })} />
         </>}
       </div>
@@ -161,6 +160,34 @@ function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, st
   );
 }
 
+/**
+ * HIT DIE (R1b; approved mockup rest-on-sheet): none, the usual dice, or OTHER with its sides typed.
+ * OTHER stays open while typing, so 1 on the way to 10 doesn't close it.
+ */
+/** A die's button: narrower than the other settings' so all eight fit the option's column on one line. */
+const dieSeg = (on: boolean): React.CSSProperties => ({ ...seg(on), padding: '3px 7px' });
+
+function DiePicker({ die, onChange }: { die?: number; onChange: (die: number | null) => void }) {
+  const other = die !== undefined && !(DIE_CHOICES as readonly number[]).includes(die);
+  const [typing, setTyping] = useState(other);
+  const pick = (next: number | null) => { setTyping(false); onChange(next); };
+  return (
+    <span style={row}>
+      <span role="group" aria-label="Hit die" style={{ display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--green)' }}>
+        <button type="button" aria-pressed={die === undefined && !typing} style={dieSeg(die === undefined && !typing)} onClick={() => pick(null)}>NONE</button>
+        {DIE_CHOICES.map((n) => (
+          <button key={n} type="button" aria-pressed={die === n && !typing} style={dieSeg(die === n && !typing)} onClick={() => pick(n)}>D{n}</button>
+        ))}
+        <button type="button" aria-pressed={other || typing} style={dieSeg(other || typing)} onClick={() => { setTyping(true); if (!other) onChange(3); }}>OTHER</button>
+      </span>
+      {(other || typing) && (
+        <input type="number" aria-label="Sides" min={LIMITS.dieLeast} max={LIMITS.dieMost} step={1} value={die ?? ''} style={{ ...input, width: 64 }}
+          onChange={(e) => { const n = Math.trunc(Number(e.target.value)); if (n >= LIMITS.dieLeast && n <= LIMITS.dieMost) onChange(n); }} />
+      )}
+    </span>
+  );
+}
+
 function OptionPanel({ list, option, definition, edit, api }: Props & { list: ChoiceList; option: ChoiceOption }) {
   const set = (patch: Parameters<typeof withOption>[3]) => edit(withOption(definition, list.id, option.id, patch));
   const features = (option.features ?? []).filter((f): f is { id: string; label?: string } => !!f && typeof f === 'object' && typeof (f as { id?: unknown }).id === 'string');
@@ -169,6 +196,7 @@ function OptionPanel({ list, option, definition, edit, api }: Props & { list: Ch
     definition, api, kind: 'requires', value: option.requires ?? '', onChange: (text) => set({ requires: text }),
     label: 'REQUIRES', id: id('requires'), placeholder: 'NOTHING · @int >= 13', inputStyle: input,
   });
+  const recovery = restingOf(definition).recovery;
   return (
     <section aria-label={`${option.label || option.id} option`} style={panel}>
       <div style={{ ...row, justifyContent: 'space-between' }}>
@@ -177,16 +205,23 @@ function OptionPanel({ list, option, definition, edit, api }: Props & { list: Ch
           onDelete={() => edit(withoutOption(definition, list.id, option.id))} />
       </div>
       <div style={grid}>
-        <FieldName boxStyle={END} htmlFor={id('name')} hint={HINTS['choices.optionName']} style={small}>NAME</FieldName>
+        <FieldName beside htmlFor={id('name')} hint={HINTS['choices.optionName']} style={small}>NAME</FieldName>
         <input id={id('name')} type="text" maxLength={LIMITS.label} value={option.label} style={input}
           aria-invalid={!option.label.trim() ? true : undefined} onChange={(e) => set({ label: e.target.value })} />
-        <FieldName boxStyle={END} htmlFor={id('description')} hint={HINTS['choices.description']} style={small}>WHAT IT IS</FieldName>
+        <FieldName beside htmlFor={id('description')} hint={HINTS['choices.description']} style={small}>WHAT IT IS</FieldName>
         <textarea id={id('description')} rows={2} maxLength={LIMITS.description} value={option.description ?? ''}
           style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }} onChange={(e) => set({ description: e.target.value })} />
-        <FieldName boxStyle={END} htmlFor={id('requires')} hint={HINTS['choices.requires']} style={small}>REQUIRES</FieldName>
+        <FieldName beside htmlFor={id('requires')} hint={HINTS['choices.requires']} style={small}>REQUIRES</FieldName>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>{requires.field}{requires.help}</div>
+        {list.levelled && <>
+        <FieldName beside hint={HINTS['choices.die']} style={small}>HIT DIE</FieldName>
+        <DiePicker die={option.die} onChange={(die) => set({ die })} />
+        </>}
       </div>
-      {list.levelled && <p style={{ ...why, fontSize: 11, opacity: 0.7 }}>Its level reads as {levelNames(list).options[option.id]} in formulas: 0 for a character without it.</p>}
+      {list.levelled && <p style={{ ...why, fontSize: 11, opacity: 0.7 }}>
+        Its level reads as {levelNames(list).options[option.id]} in formulas: 0 for a character without it.
+        {option.die !== undefined && (recovery ? ` Its d${option.die} is what its ${(recovery.name.trim() || 'recovery dice').toLowerCase()} roll at a rest.` : ` Turn on RECOVERY DICE on RESTS to spend its d${option.die} at a rest.`)}
+      </p>}
       <FeaturesEditor definition={definition} edit={edit} list={list} option={option} api={api} />
     </section>
   );

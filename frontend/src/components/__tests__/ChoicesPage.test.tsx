@@ -144,11 +144,68 @@ describe('the options', () => {
     expect(choiceLists(last())[0].options.map((o) => o.id)).toEqual(['mage']);
   });
 
-  it('a list that isn\'t levelled says no level name', async () => {
+  it('a list that isn\'t levelled says no level name, and has no HIT DIE', async () => {
     open();
     await userEvent.click(lists().getByRole('button', { name: /^FEATS/ }));
     await userEvent.click(listPanel('Feats').getByRole('button', { name: '+ OPTION' }));
     expect(optionPanel('NEW OPTION').queryByText(/Its level reads as/)).toBeNull();
+    expect(optionPanel('NEW OPTION').queryByRole('group', { name: 'Hit die' })).toBeNull();
+  });
+});
+
+describe('HIT DIE (R1b)', () => {
+  const die = () => within(optionPanel('Soldier').getByRole('group', { name: 'Hit die' }));
+  const pressed = () => die().getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent);
+
+  it('none, the usual dice, or OTHER with its sides typed, saying what rolls it', async () => {
+    const { last } = open();
+    expect(die().getAllByRole('button').map((b) => b.textContent)).toEqual(['NONE', 'D4', 'D6', 'D8', 'D10', 'D12', 'D20', 'OTHER']);
+    expect(pressed()).toEqual(['NONE']);
+    await userEvent.click(die().getByRole('button', { name: 'D10' }));
+    expect(choiceLists(last())[0].options[0].die).toBe(10);
+    expect(pressed()).toEqual(['D10']);
+    expect(optionPanel('Soldier').getByText(/Turn on RECOVERY DICE on RESTS to spend its d10 at a rest\./)).toBeTruthy();
+    // OTHER starts at 3 and stays open while typing, through 1 on the way to 10.
+    await userEvent.click(die().getByRole('button', { name: 'OTHER' }));
+    expect(choiceLists(last())[0].options[0].die).toBe(3);
+    const sides = optionPanel('Soldier').getByRole('spinbutton', { name: 'Sides' });
+    fireEvent.change(sides, { target: { value: '1' } });
+    expect(choiceLists(last())[0].options[0].die).toBe(3);
+    fireEvent.change(sides, { target: { value: '10' } });
+    expect(choiceLists(last())[0].options[0].die).toBe(10);
+    expect(pressed()).toEqual(['OTHER']);
+    fireEvent.change(sides, { target: { value: '101' } });
+    expect(choiceLists(last())[0].options[0].die).toBe(10);
+    fireEvent.change(sides, { target: { value: '100' } });
+    expect(choiceLists(last())[0].options[0].die).toBe(100);
+    await userEvent.click(die().getByRole('button', { name: 'NONE' }));
+    expect(choiceLists(last())[0].options[0]).not.toHaveProperty('die');
+    expect(optionPanel('Soldier').queryByRole('spinbutton', { name: 'Sides' })).toBeNull();
+  });
+
+  it('an uncommon die opens on OTHER; with recovery dice on, says they roll it', () => {
+    open({ ...HEARTH, choices: [{ ...(HEARTH.choices as object[])[0], options: [{ id: 'soldier', label: 'Soldier', die: 7 }] }], resting: { recovery: { name: 'Hit Dice', spent_at: 'any' } } } as unknown as Definition);
+    expect(pressed()).toEqual(['OTHER']);
+    expect(optionPanel('Soldier').getByRole('spinbutton', { name: 'Sides' })).toHaveProperty('value', '7');
+    expect(optionPanel('Soldier').getByText(/Its d7 is what its hit dice roll at a rest\./)).toBeTruthy();
+    // Typing a usual die keeps OTHER open: it was open from the start.
+    fireEvent.change(optionPanel('Soldier').getByRole('spinbutton', { name: 'Sides' }), { target: { value: '12' } });
+    expect(pressed()).toEqual(['OTHER']);
+    expect(optionPanel('Soldier').getByRole('spinbutton', { name: 'Sides' })).toHaveProperty('value', '12');
+  });
+
+  it('pressing OTHER again keeps the die typed: no edit at all', async () => {
+    const { edits } = open({ ...HEARTH, choices: [{ ...(HEARTH.choices as object[])[0], options: [{ id: 'soldier', label: 'Soldier', die: 7 }] }] } as unknown as Definition);
+    await userEvent.click(die().getByRole('button', { name: 'OTHER' }));
+    expect(edits).toEqual([]);
+    expect(pressed()).toEqual(['OTHER']);
+  });
+
+  it('turning LEVELLED off takes the list\'s dice', async () => {
+    const { last } = open({ ...HEARTH, choices: [{ ...(HEARTH.choices as object[])[0], options: [{ id: 'soldier', label: 'Soldier', die: 8 }] }] } as unknown as Definition);
+    await userEvent.click(listPanel('Classes').getByRole('switch', { name: /LEVELLED/ }));
+    expect(choiceLists(last())[0].options[0]).not.toHaveProperty('die');
+    expect(optionPanel('Soldier').queryByRole('group', { name: 'Hit die' })).toBeNull();
   });
 });
 
@@ -156,8 +213,8 @@ describe('help', () => {
   it('a "?" beside every setting, each named for screen readers', () => {
     open();
     // The page's own; a feature's are FeaturesEditor.test's, shown once one is open.
-    const keys = ['choices.lists', 'choices.names', 'choices.picked', 'choices.picks', 'choices.again', 'choices.levelled', 'choices.options', 'choices.optionName', 'choices.description', 'choices.requires', 'choices.features'] as (keyof typeof HINTS)[];
-    expect(Object.keys(HINTS).filter((k) => k.startsWith('choices.'))).toHaveLength(21);
+    const keys = ['choices.lists', 'choices.names', 'choices.picked', 'choices.picks', 'choices.again', 'choices.levelled', 'choices.options', 'choices.optionName', 'choices.description', 'choices.requires', 'choices.die', 'choices.features'] as (keyof typeof HINTS)[];
+    expect(Object.keys(HINTS).filter((k) => k.startsWith('choices.'))).toHaveLength(22);
     for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
   });
 

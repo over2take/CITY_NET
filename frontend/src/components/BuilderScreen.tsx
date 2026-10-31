@@ -479,7 +479,10 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
           <span style={{ opacity: 0.6, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current.what}</span>
         </header>
 
-        <section aria-label={current.label} className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: graphOn ? 'hidden' : 'auto', padding: graphOn ? 0 : 24, fontSize: 13, lineHeight: 1.5 }}>
+        {/* Left-aligned: #root centres its text (index.css), and every page inheriting that put
+            words a page didn't align itself (a table's cells, a note under a field) out of line
+            with the names and column heads that are. */}
+        <section aria-label={current.label} className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: graphOn ? 'hidden' : 'auto', padding: graphOn ? 0 : 24, fontSize: 13, lineHeight: 1.5, textAlign: 'left' }}>
           {loadError && <p role="alert" style={{ color: 'var(--danger)' }}>{loadError}</p>}
           {(systemId ? !system : looking && !definition) && !loadError && <p style={{ opacity: 0.7 }}>LOADING…</p>}
           {page === 'systems' && (systemId === null || system) && (
