@@ -26,6 +26,7 @@ const identity = require('../sheets/identity');
 const tokenAccess = require('../tokens/tokenAccess');
 const rests = require('../sheets/rests');
 const { restsOf } = require('../systemBuilder/rests');
+const { recoveryShown } = require('../systemBuilder/recovery');
 const { jsonTemplate } = require('../systemBuilder/sheetImport');
 
 // Admin-facing character sheet routes. Player self-service (open/edit own
@@ -898,7 +899,9 @@ module.exports = (db, io) => {
     getGameSystem((err, system) => {
       if (err) return res.status(500).json({ error: err.message });
       const definition = customSystems.definitionOf(system);
-      res.json({ system, rests: definition ? restsOf(definition).map((r) => ({ id: r.id, name: r.name })) : [] });
+      // The recovery dice's name and who says when they're spent (R2b): the GAME tab's OPEN SPENDING.
+      const shown = definition ? recoveryShown(definition) : null;
+      res.json({ system, rests: definition ? restsOf(definition).map((r) => ({ id: r.id, name: r.name })) : [], recovery: shown ? { name: shown.name, spend: shown.spend } : null });
     });
   });
 

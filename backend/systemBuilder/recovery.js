@@ -35,8 +35,8 @@
 
 const { parse, references } = require('./expression');
 const { tablesOf } = require('./derived');
-const { namesOf, levelNamesOf, choicesOf, picksOf, valueOn } = require('./choices');
-const { restIdsOf } = require('./rests');
+const { namesOf, levelNamesOf, choicesOf, picksOf, valueOn, needsText } = require('./choices');
+const { restIdsOf, restsOf } = require('./rests');
 
 const FINISH = ['call', 'sheet'];
 const SPEND = ['any', 'gm'];
@@ -140,6 +140,23 @@ const restingOf = (definition) => {
   };
 };
 
+/**
+ * The recovery dice in the sheet's words (R2b), never a formula: their name, what one heals ("its die
+ * for each level + CON MODIFIER"), the rests they're spent at by name (or 'any'), and who says when.
+ * Null for a system without them.
+ */
+const recoveryShown = (definition) => {
+  const r = restingOf(definition).recovery;
+  if (!r) return null;
+  const restName = new Map(restsOf(definition).map((x) => [x.id, x.name]));
+  return {
+    name: r.name,
+    heals: `its die${r.perLevel ? ' for each level' : ''}${typeof r.plus === 'string' && r.plus.trim() ? ` + ${needsText(definition, r.plus)}` : ''}`,
+    spentAt: r.spentAt === 'any' ? 'any' : r.spentAt.map((id) => restName.get(id) || id),
+    spend: r.spend,
+  };
+};
+
 /** The game-wide setting the GM opens spending with ('1' open), for recovery dice spent at the GM's say. */
 const OPEN_SETTING = 'recovery_open';
 
@@ -230,5 +247,5 @@ const givenBack = (definition, data, ends) => {
 };
 
 module.exports = {
-  FINISH, HOWS, SPEND, LIMITS, RECOVERY_KEY, ALL_POOL, MOST, OPEN_SETTING, checkResting, restingOf, diceOptionsOf, maySpend, poolsOf, spendFrom, givenBack,
+  FINISH, HOWS, SPEND, LIMITS, RECOVERY_KEY, ALL_POOL, MOST, OPEN_SETTING, checkResting, restingOf, recoveryShown, diceOptionsOf, maySpend, poolsOf, spendFrom, givenBack,
 };

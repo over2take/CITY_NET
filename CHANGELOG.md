@@ -65,6 +65,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Recovery dice on the sheet (R2b).** A character's recovery dice now head their sheet's CHOICES
+  block: the system's name for them, what one heals and where they're spent, and each pool (a d10
+  for each Fighter level, say) as pips lit while left. SPEND rolls as many as − and + say: the dice
+  tray opens, the heal goes onto the character's tokens, and everyone sees the line in the log. For
+  real dice, click a pip to tick one off, or back. A rest that gives them back lights them again.
+  In a system that leaves spending to the GM, the GAME tab's RESTS has OPEN SPENDING: while it is
+  off, players' dice wait ("THE GM OPENS SPENDING"); the GM can spend them on any sheet any time.
 - **Recovery dice can be left to the GM (R2a).** RESTS' RECOVERY DICE has SPENDING: ANY TIME, where
   players spend them from their sheet whenever they like, or WHEN THE GM OPENS IT, for a GM who wants
   control, where players spend or tick them off only while the GM has spending open. Under it, the
@@ -634,6 +641,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **The GAME tab's RESTS and BANK are folders.** A custom game's RESTS moved out of TTRPG_SYSTEM,
+  which is for setting the game up, into a folder of its own on the GAME tab, with OPEN SPENDING at
+  its top when the GM has the say over recovery dice. The bank's CURRENCY_ICON, PAY_PLAYERS and
+  sounds are a folder too, with a line under it before GIVE_ITEM and what the GM hands out. Each
+  folder starts open and stays open or shut as the GM leaves it, in that browser. Folder buttons
+  have a solid border, TTRPG_SYSTEM's too, where the buttons inside are dashed.
 - **A rest that rolls no dice no longer pops the dice tray.** When the GM called a rest, every
   character's line opened the dice tray for that player, and flashed it for everyone else, even when
   the rest rolled nothing and the tray had only an empty board to show. Now only a rest that rolls

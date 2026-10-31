@@ -3,6 +3,7 @@ import { pickLabel,
   workedOn, listShown, spentAfterClick, featureDoes, pickedOf, listsOnTheirOwn, underFeature, keptAside,
   type ChoiceListShown, type ChoicesAction, type FeatureShown, type OptionShown, type PickShown, type Worked,
 } from '../sheets/choicesShown';
+import { RecoveryDice } from './RecoveryDice';
 
 // A character sheet's CHOICES block (7a3b1; approved mockup docs/mockups/builder-choices.html,
 // 2026-10-27): each list the system has, the character's picks in it with their levels (the list's
@@ -16,6 +17,8 @@ import { pickLabel,
 // list picked through features has its picks right under it, and PICK A <ONE> while it has room; a pick
 // whose feature locked again shows there greyed, kept; one with nothing left to wait under shows at the
 // foot, KEPT, WAITING. A list everyone has shows what every character has, nothing to pick.
+//
+// The recovery dice head the block (R2b, RecoveryDice.tsx): what the classes' dice make.
 
 interface Props {
   lists: ChoiceListShown[];
@@ -27,6 +30,10 @@ interface Props {
   refused?: string | null;
   /** The viewer is the GM: DROP, and ADD ANYWAY for an option not met. */
   gm?: boolean;
+  /** Spends and rolls recovery dice (R2b). Absent: no SPEND. */
+  onRecoverySpend?: (pool: string, count: number) => void;
+  /** Whether the GM has spending recovery dice open. */
+  recoveryOpen?: boolean;
 }
 
 const small: React.CSSProperties = { fontSize: '0.55rem', letterSpacing: '1px', opacity: 0.7 };
@@ -167,7 +174,7 @@ function Pick({ list, p, ctx, fixed = false }: { list: ChoiceListShown; p: PickS
   );
 }
 
-export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm = false }: Props) {
+export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm = false, onRecoverySpend, recoveryOpen = false }: Props) {
   const worked = workedOn(data);
   // The pick the GM asked to take away, waiting for YES: "list:option".
   const [dropping, setDropping] = useState<string | null>(null);
@@ -178,6 +185,7 @@ export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm =
   const aside = keptAside(lists, worked);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {worked.recovery && <RecoveryDice recovery={worked.recovery} can={can} gm={gm} open={recoveryOpen} ask={ctx.ask} onSpend={onRecoverySpend} />}
       {listsOnTheirOwn(lists).map((list) => {
         const view = listShown(list, worked);
         const everyone = pickedOf(list) === 'everyone';

@@ -1,5 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import { useChoicesRefused } from '../hooks/useChoicesRefused';
+import { useRecoveryOpen } from '../hooks/useRecoveryOpen';
 import ReactDOM from 'react-dom';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
@@ -41,6 +42,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
     usePlayerSheet(socket, userName, { onRolled });
   // Why the server last said no to a pick, a level or a use (7a3b1), under the CHOICES block.
   const refused = useChoicesRefused(socket);
+  const recoveryOpen = useRecoveryOpen(socket);
 
   const handlePortraitUpload = useCallback(
     (file: File) => uploadSheetPortrait(adminToken || playerToken, file),
@@ -131,6 +133,8 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           hiddenTabs={hiddenTabs}
           onChoices={(action) => socket?.emit('choicesAction', action)}
           choicesRefused={refused}
+          onRecoverySpend={(pool, count) => socket?.emit('recoverySpend', { pool, count })}
+          recoveryOpen={recoveryOpen}
         />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>ACCESSING RECORD...</div>

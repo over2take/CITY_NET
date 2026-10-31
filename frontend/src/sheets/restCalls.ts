@@ -31,6 +31,13 @@ export const WHO_LABELS: Record<Who, string> = {
 
 const UNREACHABLE = 'Could not reach the server.';
 
+/** The game-wide setting the GM opens spending recovery dice with (backend recovery.js OPEN_SETTING). */
+export const OPEN_SETTING = 'recovery_open';
+
+/** Whether rows from /api/settings have spending recovery dice open. */
+export const isOpen = (rows: unknown): boolean => Array.isArray(rows)
+  && rows.some((r) => !!r && typeof r === 'object' && (r as { key?: unknown }).key === OPEN_SETTING && (r as { value?: unknown }).value === '1');
+
 export const restCalls = (token: string, fetcher: typeof fetch = fetch) => {
   const ask = async <T>(url: string, body?: unknown): Promise<Answer<T>> => {
     let res: Response;
@@ -46,8 +53,15 @@ export const restCalls = (token: string, fetcher: typeof fetch = fetch) => {
     return { ok: false, status: res.status, error: json && typeof json.error === 'string' ? json.error : UNREACHABLE };
   };
   return {
-    /** The running game's rests that are on; none for a built-in game. */
-    list: () => ask<{ system: string; rests: { id: string; name: string }[] }>('/api/sheets/rests'),
+    /** The running game's rests that are on, none for a built-in game; and its recovery dice's name and who says when they're spent (R2b). */
+    list: () => ask<{ system: string; rests: { id: string; name: string }[]; recovery?: { name: string; spend: 'any' | 'gm' } | null }>('/api/sheets/rests'),
+    /** Whether the GM has spending recovery dice open (R2b): the recovery_open setting. */
+    spendingOpen: async () => {
+      const r = await ask<unknown>('/api/settings');
+      return r.ok ? { ok: true as const, value: isOpen(r.value) } : r;
+    },
+    /** Opens or closes spending recovery dice for players. */
+    setSpending: (open: boolean) => ask<unknown>('/api/settings', { key: OPEN_SETTING, value: open ? '1' : '0' }),
     /** What a rest would do: nothing rolled or written. */
     preview: (rest: string, players: true | string[] | false, npcs: number[]) => ask<RestAnswer>('/api/sheets/rest', { rest, players, npcs, preview: true }),
     /** Call it: rolled, written, and one dice-log line each. */

@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
-import { pickLabel, workedOn, listShown, spentAfterClick, featureDoes, choiceEffects, pickedOf, listsOnTheirOwn, underFeature, keptAside, WORKED_KEY, type ChoiceListShown } from '../choicesShown';
+import {
+  pickLabel, workedOn, listShown, spentAfterClick, featureDoes, choiceEffects, pickedOf, listsOnTheirOwn, underFeature, keptAside, maySpendRecovery, spentAtText, spendCount,
+  WORKED_KEY, type ChoiceListShown,
+} from '../choicesShown';
 
 /**
  * A character's picks on their sheet, as logic (7a3b1): the server's worked-out view read safely, each
@@ -42,9 +45,56 @@ describe('the server\'s worked-out view', () => {
   });
 
   it('empty when a sheet has none yet, or something else is there', () => {
-    expect(workedOn({})).toEqual({ picks: [], opens: [], levels: {}, from: {}, uses: {}, unmet: [] });
+    expect(workedOn({})).toEqual({ picks: [], opens: [], levels: {}, from: {}, uses: {}, unmet: [], recovery: null });
     expect(workedOn(null).picks).toEqual([]);
-    expect(workedOn({ [WORKED_KEY]: { picks: 'soldier', opens: [{ feature: 3 }], uses: [], unmet: [1, 'mage'] } })).toEqual({ picks: [], opens: [], levels: {}, from: {}, uses: {}, unmet: ['mage'] });
+    expect(workedOn({ [WORKED_KEY]: { picks: 'soldier', opens: [{ feature: 3 }], uses: [], unmet: [1, 'mage'] } })).toEqual({ picks: [], opens: [], levels: {}, from: {}, uses: {}, unmet: ['mage'], recovery: null });
+  });
+});
+
+describe('the recovery dice, as a save writes them (R2b)', () => {
+  const recovery = req('../../../../backend/systemBuilder/recovery.js');
+  const FORGE = { ...HEARTH, choices: [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, again: true, options: [{ id: 'fighter', label: 'Fighter', die: 10 }, { id: 'wizard', label: 'Wizard', die: 6 }] }],
+    resting: { recovery: { name: 'Hit Dice', plus: '@int', spent_at: ['short_rest', 'long_rest'], spend: 'gm' } } };
+  /** What runtime.js writes on a save. */
+  const saved = (def: object, data: object) => ({ [WORKED_KEY]: { recovery: { ...recovery.recoveryShown(def), pools: recovery.poolsOf(def, data).map(({ id, label, die, total, spent }: Record<string, unknown>) => ({ id, label, die, total, spent })) } } });
+  const ROOK = { int: 10, _choices: { classes: [{ option: 'fighter', level: 3 }, { option: 'wizard', level: 2 }] }, _recovery: { fighter: 1 } };
+
+  it('read as the server writes it', () => {
+    expect(workedOn(saved(FORGE, ROOK)).recovery).toEqual({
+      name: 'Hit Dice', heals: 'its die + INTELLECT', spentAt: ['Short rest', 'Long rest'], spend: 'gm',
+      pools: [{ id: 'fighter', label: 'Fighter', die: 10, total: 3, spent: 1 }, { id: 'wizard', label: 'Wizard', die: 6, total: 2, spent: 0 }],
+    });
+  });
+
+  it('none without pools; a pool not well formed left out; the rest filled in', () => {
+    expect(workedOn({ [WORKED_KEY]: { recovery: { name: 'Hit Dice', pools: [] } } }).recovery).toBeNull();
+    expect(workedOn({ [WORKED_KEY]: { recovery: [{ id: 'fighter' }] } }).recovery).toBeNull();
+    expect(workedOn({ [WORKED_KEY]: { recovery: { name: 'Hit Dice', pools: 'fighter' } } }).recovery).toBeNull();
+    const odd = workedOn({ [WORKED_KEY]: { recovery: { spentAt: 'short_rest', spend: 'player', pools: [
+      { id: 'fighter', die: 10, total: 3, spent: 9 }, { id: 'bad', die: 1, total: 2 }, { id: 'neg', die: 6, total: -1 }, { die: 8, total: 1 }, { id: 'odd', die: 8, total: 2, spent: -2 },
+    ] } } }).recovery!;
+    expect(odd).toEqual({ name: 'Recovery dice', heals: 'its die', spentAt: 'any', spend: 'any',
+      pools: [{ id: 'fighter', label: 'fighter', die: 10, total: 3, spent: 3 }, { id: 'odd', label: 'odd', die: 8, total: 2, spent: 0 }] });
+  });
+
+  it('who may spend now, the same as the server', () => {
+    const r = workedOn(saved(FORGE, ROOK)).recovery!;
+    for (const spend of ['any', 'gm'] as const) {
+      for (const gm of [false, true]) {
+        for (const open of [false, true]) {
+          const def = { ...FORGE, resting: { recovery: { ...FORGE.resting.recovery, spend } } };
+          expect(maySpendRecovery({ ...r, spend }, gm, open), `${spend} ${gm} ${open}`).toBe(recovery.maySpend(def, { gm, open }));
+        }
+      }
+    }
+  });
+
+  it('where they are spent, in words; how many a spend rolls, kept to what is left', () => {
+    const r = workedOn(saved(FORGE, ROOK)).recovery!;
+    expect(spentAtText(r)).toBe('SPENT AT A SHORT REST OR LONG REST');
+    expect(spentAtText({ ...r, spentAt: 'any' })).toBe('SPENT ANY TIME');
+    expect(spentAtText({ ...r, spentAt: [] })).toBe('SPENT ANY TIME');
+    expect([spendCount(1, 3), spendCount(5, 3), spendCount(0, 3), spendCount(-2, 3), spendCount(2.7, 3), spendCount(2, 0), spendCount(Number.NaN, 2)]).toEqual([1, 3, 1, 1, 2, 0, 1]);
   });
 });
 

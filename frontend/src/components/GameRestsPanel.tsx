@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ToggleSwitch } from './ToggleSwitch';
 import {
   restCalls, chosenOf, requestFor, changeText, keyOf, WHO_LABELS, type Rested, type Who,
 } from '../sheets/restCalls';
@@ -8,6 +9,11 @@ import {
 // CALL it. The server rolls, writes and logs (backend/sheets/rests.js); everyone sees one dice-log
 // line per character. Everyone the panel could choose is previewed once, so ticking who rests asks
 // the server nothing. The GM and granted editors, as the route allows.
+//
+// A game whose recovery dice wait on the GM (R2b) has OPEN SPENDING here, at the top: while it is
+// on, players spend and tick them off from their sheets; off, theirs wait. Opened for a rest, closed
+// after. The panel sits in the GAME tab's RESTS folder (GameFolder.tsx), out of TTRPG_SYSTEM: it is
+// for play, not setup (the user, 2026-10-30).
 
 const label: React.CSSProperties = { fontSize: '0.65rem', opacity: 0.7, letterSpacing: '1px' };
 const why: React.CSSProperties = { fontSize: '0.6rem', opacity: 0.6, margin: 0 };
@@ -31,6 +37,8 @@ export function GameRestsPanel({ token, system, npcs }: {
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [recovery, setRecovery] = useState<{ name: string; spend: 'any' | 'gm' } | null>(null);
+  const [open, setOpen] = useState(false);
   const npcIds = npcs.map((n) => n.id);
   const npcKey = npcIds.join(',');
 
@@ -42,7 +50,9 @@ export function GameRestsPanel({ token, system, npcs }: {
       const list = r.value && Array.isArray(r.value.rests) ? r.value.rests : [];
       setRests(list);
       setRestId((id) => (list.some((x) => x.id === id) ? id : list[0]?.id ?? ''));
+      setRecovery(r.value && r.value.recovery ? r.value.recovery : null);
     });
+    api.spendingOpen().then((r) => { if (live && r.ok) setOpen(r.value); });
     return () => { live = false; };
   }, [api, system]);
 
@@ -57,7 +67,7 @@ export function GameRestsPanel({ token, system, npcs }: {
     return () => { live = false; };
   }, [api, restId, npcKey, round]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!rests.length) return null;
+  if (!rests.length) return <p style={why}>No rests are on in this game: turn them on in the builder&apos;s RESTS.</p>;
   const rest = rests.find((r) => r.id === restId) ?? rests[0];
   const chosen = chosenOf(everyone, who, ticked);
 
@@ -78,10 +88,23 @@ export function GameRestsPanel({ token, system, npcs }: {
     setSaid(`${rest.name.toUpperCase()} CALLED · ${n} CHARACTER${n === 1 ? '' : 'S'}`);
     setRound((x) => x + 1);
   };
+  const spending = async (next: boolean) => {
+    const r = await api.setSpending(next);
+    if (!r.ok) { setError(r.error); return; }
+    setError(null);
+    setOpen(next);
+  };
 
   return (
-    <section aria-label="Rests" style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderTop: '1px solid var(--green)', paddingTop: '6px', marginTop: '2px' }}>
-      <label style={label} htmlFor="game-rest">RESTS</label>
+    <section aria-label="Rests" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {recovery?.spend === 'gm' && (
+        <div role="group" aria-label="Spending recovery dice" style={{ display: 'flex', flexDirection: 'column', gap: 3, borderBottom: '1px solid color-mix(in srgb, var(--dark-green) 70%, transparent)', paddingBottom: 6 }}>
+          <span style={label}>{(recovery.name.trim() || 'RECOVERY DICE').toUpperCase()}</span>
+          <ToggleSwitch name="Spending recovery dice" label={open ? 'SPENDING OPEN' : 'SPENDING CLOSED'} on={open} onChange={spending} style={{ fontSize: '0.6rem' }} />
+          <p style={why}>{open ? 'Players can spend and tick them off from their sheets now. Close it when the rest is over.' : 'Players wait to spend them. Open it for a rest; you can spend them on any sheet any time.'}</p>
+        </div>
+      )}
+      <label style={label} htmlFor="game-rest">REST TO CALL</label>
       <select id="game-rest" aria-label="Rest" value={rest.id} style={select} onChange={(e) => { setRestId(e.target.value); setSaid(null); }}>
         {rests.map((r) => <option key={r.id} value={r.id}>{r.name.toUpperCase()}</option>)}
       </select>
@@ -128,6 +151,7 @@ export function GameRestsPanel({ token, system, npcs }: {
         {busy ? 'CALLING…' : `CALL ${rest.name.toUpperCase()}`}
       </button>
       <p style={why}>Dice are rolled for each character when it is called; everyone sees a line each in the dice log.</p>
+
       {said && <span role="status" style={{ fontSize: '0.6rem', color: 'var(--green)', letterSpacing: '1px' }}>{said}</span>}
       {error && <span role="alert" style={{ color: 'var(--danger)', fontSize: '0.6rem' }}>{error}</span>}
     </section>

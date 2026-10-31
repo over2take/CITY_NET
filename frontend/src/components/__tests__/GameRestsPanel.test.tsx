@@ -22,18 +22,30 @@ let asked: { url: string; body: any }[];
 let refuseCall: string | null;
 let rests: typeof RESTS;
 let running: string;
+/** The game's recovery dice as the rests list says them (R2b), and the settings rows. */
+let recovery: { name: string; spend: 'any' | 'gm' } | null;
+let settings: { key: string; value: string }[];
+let refuseSettings: string | null;
 
 beforeEach(() => {
   asked = [];
   refuseCall = null;
   rests = RESTS;
   running = HEARTH;
+  recovery = null;
+  settings = [];
+  refuseSettings = null;
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     asked.push({ url, body });
     const answer = (status: number, json: unknown) => ({ ok: status < 300, status, json: async () => json }) as Response;
-    if (url === '/api/sheets/rests') return answer(200, { system: running, rests: running === HEARTH ? rests : [] });
+    if (url === '/api/sheets/rests') return answer(200, { system: running, rests: running === HEARTH ? rests : [], recovery });
+    if (url === '/api/settings') {
+      if (body && refuseSettings) return answer(401, { error: refuseSettings });
+      if (body) settings = [...settings.filter((s) => s.key !== body.key), body];
+      return answer(200, body ? { message: 'Settings updated' } : settings);
+    }
     if (url === '/api/sheets/rest') {
       if (!body.preview && refuseCall) return answer(400, { error: refuseCall });
       const players = body.players === true ? ['ash', 'vex'] : body.players || [];
@@ -153,6 +165,48 @@ describe('the rests panel', () => {
   });
 });
 
+describe('OPEN SPENDING for recovery dice the GM has the say over (R2b)', () => {
+  const group = () => within(screen.getByRole('group', { name: 'Spending recovery dice' }));
+  const switchOf = () => group().getByRole('switch', { name: 'Spending recovery dice' });
+
+  it('is there only when the game leaves spending to the GM', async () => {
+    recovery = { name: 'Hit Dice', spend: 'any' };
+    await open();
+    expect(screen.queryByRole('group', { name: 'Spending recovery dice' })).toBeNull();
+    cleanup();
+    recovery = null;
+    await open();
+    expect(screen.queryByRole('group', { name: 'Spending recovery dice' })).toBeNull();
+  });
+
+  it('opens and closes spending for players, saying what each means', async () => {
+    recovery = { name: 'Hit Dice', spend: 'gm' };
+    await open();
+    expect(group().getByText('HIT DICE')).toBeTruthy();
+    expect(switchOf().getAttribute('aria-checked')).toBe('false');
+    expect(group().getByText(/Players wait to spend them\. Open it for a rest/)).toBeTruthy();
+    await userEvent.click(switchOf());
+    await waitFor(() => expect(switchOf().getAttribute('aria-checked')).toBe('true'));
+    expect(asked.filter((a) => a.url === '/api/settings' && a.body)).toEqual([{ url: '/api/settings', body: { key: 'recovery_open', value: '1' } }]);
+    expect(group().getByText(/Players can spend and tick them off from their sheets now/)).toBeTruthy();
+    await userEvent.click(switchOf());
+    await waitFor(() => expect(switchOf().getAttribute('aria-checked')).toBe('false'));
+    expect(settings).toEqual([{ key: 'recovery_open', value: '0' }]);
+  });
+
+  it('starts as the setting stands, and says so when the server refuses', async () => {
+    recovery = { name: '', spend: 'gm' };
+    settings = [{ key: 'recovery_open', value: '1' }];
+    await open();
+    await waitFor(() => expect(switchOf().getAttribute('aria-checked')).toBe('true'));
+    expect(group().getByText('RECOVERY DICE')).toBeTruthy();
+    refuseSettings = 'Sign in again';
+    await userEvent.click(switchOf());
+    expect((await screen.findByRole('alert')).textContent).toBe('Sign in again');
+    expect(switchOf().getAttribute('aria-checked')).toBe('true');
+  });
+});
+
 describe('the GAME tab', () => {
   const props = (system: string, view = 'list'): any => ({
     socketRef: { current: { emit: vi.fn(), on: vi.fn(), off: vi.fn() } }, token: 'admintoken', onLogout: vi.fn(),
@@ -179,6 +233,21 @@ describe('the GAME tab', () => {
     await gameTab(HEARTH);
     expect(await screen.findByRole('region', { name: 'Rests' })).toBeTruthy();
     await waitFor(() => expect(previews().at(-1)?.body.npcs).toEqual([7]));
+  });
+
+  it('in a RESTS folder of the GAME tab\'s own, out of TTRPG_SYSTEM: there with it shut (R2b)', async () => {
+    window.localStorage.clear();
+    running = HEARTH;
+    render(<AdminPanel {...props(HEARTH)} />);
+    await userEvent.click(screen.getByText('GAME'));
+    expect(screen.getByText(/TTRPG_SYSTEM$/).textContent).toMatch(/^▸/);
+    const folder = screen.getByRole('button', { name: '▾ RESTS' });
+    expect(folder.getAttribute('aria-expanded')).toBe('true');
+    expect(await screen.findByRole('region', { name: 'Rests' })).toBeTruthy();
+    await userEvent.click(folder);
+    expect(screen.queryByRole('region', { name: 'Rests' })).toBeNull();
+    expect(screen.getByRole('button', { name: '▸ RESTS' }).getAttribute('aria-expanded')).toBe('false');
+    window.localStorage.clear();
   });
 
   it('has none under a built-in game, whose rests are its own buttons', async () => {

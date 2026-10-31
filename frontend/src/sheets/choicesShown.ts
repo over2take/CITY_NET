@@ -38,7 +38,14 @@ export interface Worked {
   from: Record<string, { feature: string; amount: number }[]>;
   uses: Record<string, { max: number; spent: number }>;
   unmet: string[];
+  /** The recovery dice (R2b), in the sheet's words, with the character's pools; null without. */
+  recovery: RecoveryWorked | null;
 }
+
+/** One pool of recovery dice: a class's die and how many, or a formula's count of the largest die. */
+export interface RecoveryPool { id: string; label: string; die: number; total: number; spent: number }
+/** The recovery dice as a save writes them (backend recovery.js recoveryShown, runtime.js). */
+export interface RecoveryWorked { name: string; heals: string; spentAt: string[] | 'any'; spend: 'any' | 'gm'; pools: RecoveryPool[] }
 
 /** Where a save writes it (backend choices.js WORKED_KEY). */
 export const WORKED_KEY = '_worked';
@@ -48,7 +55,8 @@ export type ChoicesAction =
   | { kind: 'pick'; list: string; option: string; from?: string }
   | { kind: 'drop'; list: string; option: string }
   | { kind: 'level'; list: string; option: string; level: number }
-  | { kind: 'use'; feature: string; spent: number };
+  | { kind: 'use'; feature: string; spent: number }
+  | { kind: 'recovery'; pool: string; spent: number };
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -63,8 +71,43 @@ export const workedOn = (data: Obj | null | undefined): Worked => {
     from: isObject(w.from) ? w.from as Worked['from'] : {},
     uses: isObject(w.uses) ? w.uses as Worked['uses'] : {},
     unmet: Array.isArray(w.unmet) ? (w.unmet as unknown[]).filter((x): x is string => typeof x === 'string') : [],
+    recovery: recoveryOn(w.recovery),
   };
 };
+
+const whole = (v: unknown, least: number) => (Number.isInteger(v) && (v as number) >= least ? v as number : null);
+
+/** The recovery dice a save wrote, those pools well formed enough to draw; null when there are none. */
+const recoveryOn = (v: unknown): RecoveryWorked | null => {
+  if (!isObject(v) || !Array.isArray(v.pools)) return null;
+  const pools = (v.pools as unknown[]).filter(isObject).flatMap((p) => {
+    const die = whole(p.die, 2);
+    const total = whole(p.total, 0);
+    if (typeof p.id !== 'string' || die === null || total === null) return [];
+    return [{ id: p.id, label: typeof p.label === 'string' ? p.label : p.id, die, total, spent: Math.min(total, whole(p.spent, 0) ?? 0) }];
+  });
+  if (!pools.length) return null;
+  return {
+    name: typeof v.name === 'string' && v.name.trim() ? v.name : 'Recovery dice',
+    heals: typeof v.heals === 'string' ? v.heals : 'its die',
+    spentAt: Array.isArray(v.spentAt) ? (v.spentAt as unknown[]).filter((x): x is string => typeof x === 'string') : 'any',
+    spend: v.spend === 'gm' ? 'gm' : 'any',
+    pools,
+  };
+};
+
+/**
+ * Whether a viewer may spend or tick recovery dice now: the GM always; a player unless the system
+ * leaves it to the GM and spending is closed (backend recovery.js maySpend).
+ */
+export const maySpendRecovery = (r: RecoveryWorked, gm: boolean, open: boolean) => gm || r.spend !== 'gm' || open;
+
+/** Where the dice are spent, as the sheet says it: "SPENT AT A SHORT REST OR CAMP", "SPENT ANY TIME". */
+export const spentAtText = (r: RecoveryWorked) => (r.spentAt === 'any' || !r.spentAt.length ? 'SPENT ANY TIME'
+  : `SPENT AT A ${r.spentAt.map((n) => n.toUpperCase()).join(' OR ')}`);
+
+/** How many a spend rolls, kept to what is left (and at least 1 while any are). */
+export const spendCount = (wanted: number, left: number) => Math.max(left > 0 ? 1 : 0, Math.min(left, Math.trunc(wanted) || 0));
 
 /** The level a feature unlocks at: 1 when it says none. */
 const atOf = (f: FeatureShown) => (Number.isInteger(f.at) && (f.at as number) >= 1 ? f.at as number : 1);

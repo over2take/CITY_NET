@@ -7,6 +7,18 @@ import { useChoicesRefused, REFUSED_MS } from '../useChoicesRefused';
 
 const makeSocket = () => ({ on: vi.fn(), off: vi.fn() });
 
+describe('the server\'s refusal to spend recovery dice (R2b)', () => {
+  it('is shown the same way', () => {
+    const socket = makeSocket();
+    const { result, unmount } = renderHook(() => useChoicesRefused(socket));
+    const onRefused = socket.on.mock.calls.find((c) => c[0] === 'recoveryRefused')![1];
+    act(() => onRefused({ error: 'The GM hasn\'t opened spending recovery dice' }));
+    expect(result.current).toBe('The GM hasn\'t opened spending recovery dice');
+    unmount();
+    expect(socket.off).toHaveBeenCalledWith('recoveryRefused', onRefused);
+  });
+});
+
 describe('the server\'s refusal of a pick', () => {
   it('is shown, and goes after a few seconds; a new one starts the clock again', () => {
     vi.useFakeTimers();
