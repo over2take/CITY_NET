@@ -235,6 +235,21 @@ describe('the GAME tab', () => {
     await waitFor(() => expect(previews().at(-1)?.body.npcs).toEqual([7]));
   });
 
+  it('in a RESTS folder of the GAME tab\'s own, out of TTRPG_SYSTEM: there with it shut (R2b)', async () => {
+    window.localStorage.clear();
+    running = HEARTH;
+    render(<AdminPanel {...props(HEARTH)} />);
+    await userEvent.click(screen.getByText('GAME'));
+    expect(screen.getByText(/TTRPG_SYSTEM$/).textContent).toMatch(/^▸/);
+    const folder = screen.getByRole('button', { name: '▾ RESTS' });
+    expect(folder.getAttribute('aria-expanded')).toBe('true');
+    expect(await screen.findByRole('region', { name: 'Rests' })).toBeTruthy();
+    await userEvent.click(folder);
+    expect(screen.queryByRole('region', { name: 'Rests' })).toBeNull();
+    expect(screen.getByRole('button', { name: '▸ RESTS' }).getAttribute('aria-expanded')).toBe('false');
+    window.localStorage.clear();
+  });
+
   it('has none under a built-in game, whose rests are its own buttons', async () => {
     await gameTab('cities_without_number');
     await screen.findByText('LONG_REST (STRAIN −1)');

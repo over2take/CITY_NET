@@ -10,8 +10,10 @@ import {
 // line per character. Everyone the panel could choose is previewed once, so ticking who rests asks
 // the server nothing. The GM and granted editors, as the route allows.
 //
-// A game whose recovery dice wait on the GM (R2b) has OPEN SPENDING here: while it is on, players
-// spend and tick them off from their sheets; off, theirs wait. Opened for a rest, closed after.
+// A game whose recovery dice wait on the GM (R2b) has OPEN SPENDING here, at the top: while it is
+// on, players spend and tick them off from their sheets; off, theirs wait. Opened for a rest, closed
+// after. The panel sits in the GAME tab's RESTS folder (GameFolder.tsx), out of TTRPG_SYSTEM: it is
+// for play, not setup (the user, 2026-10-30).
 
 const label: React.CSSProperties = { fontSize: '0.65rem', opacity: 0.7, letterSpacing: '1px' };
 const why: React.CSSProperties = { fontSize: '0.6rem', opacity: 0.6, margin: 0 };
@@ -65,7 +67,7 @@ export function GameRestsPanel({ token, system, npcs }: {
     return () => { live = false; };
   }, [api, restId, npcKey, round]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!rests.length) return null;
+  if (!rests.length) return <p style={why}>No rests are on in this game: turn them on in the builder&apos;s RESTS.</p>;
   const rest = rests.find((r) => r.id === restId) ?? rests[0];
   const chosen = chosenOf(everyone, who, ticked);
 
@@ -94,8 +96,15 @@ export function GameRestsPanel({ token, system, npcs }: {
   };
 
   return (
-    <section aria-label="Rests" style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderTop: '1px solid var(--green)', paddingTop: '6px', marginTop: '2px' }}>
-      <label style={label} htmlFor="game-rest">RESTS</label>
+    <section aria-label="Rests" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+      {recovery?.spend === 'gm' && (
+        <div role="group" aria-label="Spending recovery dice" style={{ display: 'flex', flexDirection: 'column', gap: 3, borderBottom: '1px solid color-mix(in srgb, var(--dark-green) 70%, transparent)', paddingBottom: 6 }}>
+          <span style={label}>{(recovery.name.trim() || 'RECOVERY DICE').toUpperCase()}</span>
+          <ToggleSwitch name="Spending recovery dice" label={open ? 'SPENDING OPEN' : 'SPENDING CLOSED'} on={open} onChange={spending} style={{ fontSize: '0.6rem' }} />
+          <p style={why}>{open ? 'Players can spend and tick them off from their sheets now. Close it when the rest is over.' : 'Players wait to spend them. Open it for a rest; you can spend them on any sheet any time.'}</p>
+        </div>
+      )}
+      <label style={label} htmlFor="game-rest">REST TO CALL</label>
       <select id="game-rest" aria-label="Rest" value={rest.id} style={select} onChange={(e) => { setRestId(e.target.value); setSaid(null); }}>
         {rests.map((r) => <option key={r.id} value={r.id}>{r.name.toUpperCase()}</option>)}
       </select>
@@ -142,13 +151,7 @@ export function GameRestsPanel({ token, system, npcs }: {
         {busy ? 'CALLING…' : `CALL ${rest.name.toUpperCase()}`}
       </button>
       <p style={why}>Dice are rolled for each character when it is called; everyone sees a line each in the dice log.</p>
-      {recovery?.spend === 'gm' && (
-        <div role="group" aria-label="Spending recovery dice" style={{ display: 'flex', flexDirection: 'column', gap: 3, borderTop: '1px solid color-mix(in srgb, var(--dark-green) 70%, transparent)', paddingTop: 5 }}>
-          <span style={label}>{(recovery.name.trim() || 'RECOVERY DICE').toUpperCase()}</span>
-          <ToggleSwitch name="Spending recovery dice" label={open ? 'SPENDING OPEN' : 'SPENDING CLOSED'} on={open} onChange={spending} style={{ fontSize: '0.6rem' }} />
-          <p style={why}>{open ? 'Players can spend and tick them off from their sheets now. Close it when the rest is over.' : 'Players wait to spend them. Open it for a rest; you can spend them on any sheet any time.'}</p>
-        </div>
-      )}
+
       {said && <span role="status" style={{ fontSize: '0.6rem', color: 'var(--green)', letterSpacing: '1px' }}>{said}</span>}
       {error && <span role="alert" style={{ color: 'var(--danger)', fontSize: '0.6rem' }}>{error}</span>}
     </section>

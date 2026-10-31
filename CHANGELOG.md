@@ -641,6 +641,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **The GAME tab's RESTS and BANK are folders.** A custom game's RESTS moved out of TTRPG_SYSTEM,
+  which is for setting the game up, into a folder of its own on the GAME tab, with OPEN SPENDING at
+  its top when the GM has the say over recovery dice. The bank's CURRENCY_ICON, PAY_PLAYERS and
+  sounds are a folder too, with a line under it before GIVE_ITEM and what the GM hands out. Each
+  folder starts open and stays open or shut as the GM leaves it, in that browser. Folder buttons
+  have a solid border, TTRPG_SYSTEM's too, where the buttons inside are dashed.
 - **A rest that rolls no dice no longer pops the dice tray.** When the GM called a rest, every
   character's line opened the dice tray for that player, and flashed it for everyone else, even when
   the rest rolled nothing and the tray had only an empty board to show. Now only a rest that rolls
