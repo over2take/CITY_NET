@@ -82,7 +82,7 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
     withCaller(payload, 'restRefused', async ({ gm, username, system, definition, refuse }) => {
       if (!gm && restingOf(definition).finish !== 'sheet') return refuse(REST_AT_CALL);
       try {
-        const done = await takeRest(db, io, { system, definition, restId: payload.rest, username });
+        const done = await takeRest(db, io, { system, definition, restId: payload.rest, username, by: gm ? 'gm' : 'player' });
         if (done.error) refuse(done.error);
       } catch (e) {
         console.error('[rests] rest not taken:', e.message);

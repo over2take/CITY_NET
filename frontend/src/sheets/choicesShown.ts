@@ -109,7 +109,10 @@ export const maySpendRecovery = (r: RecoveryWorked, gm: boolean, open: boolean) 
 export const spentAtText = (r: RecoveryWorked) => (r.spentAt === 'any' || !r.spentAt.length ? 'SPENT ANY TIME'
   : `SPENT AT A ${r.spentAt.map((n) => n.toUpperCase()).join(' OR ')}`);
 
-/** Where a sheet keeps a rest the GM called on it (backend recovery.js REST_CALL_KEY). */
+/**
+ * Where a sheet keeps a rest the GM called on it (backend recovery.js REST_CALL_KEY). Once finished
+ * it stays, marked done, for the GM's list (R4): only one not done waits on the sheet.
+ */
 export const REST_CALL_KEY = '_rest_call';
 
 /**
@@ -121,7 +124,7 @@ export const REST_CALL_KEY = '_rest_call';
 export const restSection = (resting: RestingShown | undefined, data: Obj | null | undefined, gm: boolean) => {
   const rests = resting?.rests ?? [];
   const c = isObject(data) && isObject(data[REST_CALL_KEY]) ? data[REST_CALL_KEY] as Obj : null;
-  const call = c ? rests.find((r) => r.id === c.rest) ?? null : null;
+  const call = c && c.done !== true ? rests.find((r) => r.id === c.rest) ?? null : null;
   const recovery = workedOn(data).recovery;
   return {
     /** The rests this viewer may take from here. */

@@ -13,6 +13,14 @@ const path = require('path');
 /** Room to leave free beyond the copy itself, so the copy never fills the disk. */
 const HEADROOM = 50 * 1024 * 1024;
 
+/**
+ * SQLite refuses a VACUUM while other statements on the connection are still running, which they
+ * can be at startup, where several migrations start at once. That is only "not yet": the copy is
+ * tried again a moment later, up to RETRY.tries times, rather than skipped (a CI run, 2026-10-31).
+ */
+const BUSY = /statements in progress|SQLITE_BUSY|SQLITE_LOCKED/i;
+const RETRY = { tries: 50, ms: 100 };
+
 /** Free bytes on the disk holding `dir`, or null when the platform cannot say. */
 const freeBytes = (dir) => {
   try {
@@ -34,7 +42,7 @@ const backupPath = (dbPath, label, now = new Date()) => {
  * `{ path }` when a copy was made, or `{ skipped: reason }` when it was not (in-memory
  * database, not enough room). An error means the copy was attempted and failed.
  */
-const backupDatabase = (db, dbPath, label, cb, { now, free = freeBytes } = {}) => {
+const backupDatabase = (db, dbPath, label, cb, { now, free = freeBytes, retry = RETRY } = {}) => {
   if (!dbPath || dbPath === ':memory:') return cb(null, { skipped: 'in-memory database' });
   let size;
   try { size = fs.statSync(dbPath).size; } catch (err) { return cb(null, { skipped: `cannot read ${dbPath}: ${err.message}` }); }
@@ -44,7 +52,11 @@ const backupDatabase = (db, dbPath, label, cb, { now, free = freeBytes } = {}) =
     return cb(null, { skipped: `not enough disk space for a copy (${mb(available)} free, ${mb(size + HEADROOM)} needed)` });
   }
   const target = backupPath(dbPath, label, now);
-  db.run('VACUUM INTO ?', [target], (err) => (err ? cb(err) : cb(null, { path: target })));
+  const attempt = (left) => db.run('VACUUM INTO ?', [target], (err) => {
+    if (err && BUSY.test(err.message) && left > 1) return setTimeout(() => attempt(left - 1), retry.ms);
+    return err ? cb(err) : cb(null, { path: target });
+  });
+  return attempt(retry.tries);
 };
 
-module.exports = { backupDatabase, backupPath, freeBytes, HEADROOM };
+module.exports = { backupDatabase, backupPath, freeBytes, HEADROOM, RETRY };

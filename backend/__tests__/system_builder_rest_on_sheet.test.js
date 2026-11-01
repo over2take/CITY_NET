@@ -195,8 +195,11 @@ describe('through the socket', () => {
     const rest = { id: 'short_rest', name: 'Short rest' };
     const done = await callRest(db, io, { system: ID, definition: FORGE, rest, players: true, npcs: [dog] });
     expect(done.map((d) => [d.name, !!d.called])).toEqual([['Ash', true], ['Rook', true], ['DOG', false]]);
-    expect((await stored())[REST_CALL_KEY]).toEqual({ rest: 'short_rest', name: 'Short rest' });
-    expect((await stored('ash'))[REST_CALL_KEY]).toEqual({ rest: 'short_rest', name: 'Short rest' });
+    // Kept with the call it came from, for the GM's list (R4): one call, on both sheets.
+    const rookCall = (await stored())[REST_CALL_KEY];
+    expect(rookCall).toMatchObject({ rest: 'short_rest', name: 'Short rest', npcs: 1, before: 2 });
+    expect((await stored('ash'))[REST_CALL_KEY]).toEqual({ ...rookCall });
+    expect(typeof rookCall.id).toBe('string');
     expect((await stored())._uses.second_wind).toBe(1);
     expect(await token()).toBe(10);
     expect((await get(db, 'SELECT hp_current FROM locations WHERE id = ?', [dog])).hp_current).toBe(5);

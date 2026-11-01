@@ -65,7 +65,7 @@ function BattleAdminPanel({
   token, isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly,
   tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, locations, refreshLocations,
   handleSaveDefault, handleLoadDefault, setIsAdminPayOpen, setIsAdminXpOpen, setIsCatalogueOpen, setIsGiveOpen, secureModeEnabled, onLogout,
-  globalSettings, fetchGlobalSettings, onOpenNpcLibrary, onOpenSystems, activeUsers, isPrimaryAdmin,
+  globalSettings, fetchGlobalSettings, onOpenNpcLibrary, onOpenSystems, activeUsers, isPrimaryAdmin, socket,
 }: any) {
   const [tab, setTab] = useState<'battle_map' | 'game'>('battle_map');
   // A custom system with the bank off has no pay or currency (3b2b).
@@ -154,7 +154,7 @@ function BattleAdminPanel({
         {/* A custom game's rests (4f5), in play rather than setup, so out of TTRPG_SYSTEM (R2b). */}
         {isCustomSystem(globalSettings?.game_system) && (
           <GameFolder id="rests" name="RESTS">
-            <GameRestsPanel token={token} system={globalSettings.game_system} npcs={npcsOnMap(locations || [], 'battle_map', activeBattleMapData)} />
+            <GameRestsPanel token={token} system={globalSettings.game_system} npcs={npcsOnMap(locations || [], 'battle_map', activeBattleMapData)} socket={socket} />
           </GameFolder>
         )}
         {/* Money, which a custom system with the bank off does not have (3b2b). */}
@@ -225,7 +225,7 @@ export function AdminPanel({
         handleSaveDefault={handleSaveDefault} handleLoadDefault={handleLoadDefault}
         setIsAdminPayOpen={setIsAdminPayOpen} setIsAdminXpOpen={setIsAdminXpOpen} setIsCatalogueOpen={setIsCatalogueOpen} setIsGiveOpen={setIsGiveOpen} secureModeEnabled={secureModeEnabled} onLogout={onLogout}
         globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings}
-        onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} isPrimaryAdmin={isPrimaryAdmin}
+        onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} isPrimaryAdmin={isPrimaryAdmin} socket={socketRef.current}
       />
     );
   }
@@ -1071,7 +1071,7 @@ export function AdminPanel({
               {/* A custom game's rests (4f5), in play rather than setup, so out of TTRPG_SYSTEM (R2b). */}
               {isCustomSystem(gameSystem) && (
                 <GameFolder id="rests" name="RESTS">
-                  <GameRestsPanel token={token} system={gameSystem} npcs={npcsOnMap(locations || [], view, activeBattleMapData)} />
+                  <GameRestsPanel token={token} system={gameSystem} npcs={npcsOnMap(locations || [], view, activeBattleMapData)} socket={socketRef.current} />
                 </GameFolder>
               )}
               {/* Money, which a custom system with the bank off does not have (3b2b): a folder, the

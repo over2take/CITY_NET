@@ -153,6 +153,9 @@ describe('who gets what', () => {
 
 describe('the logic', () => {
   it('a called rest the game no longer has is no call; nothing at all reads safely', () => {
+    // A finished call stays on the sheet for the GM's list (R4), waiting no more.
+    expect(restSection(RESTING, { [REST_CALL_KEY]: { rest: 'short_rest', done: true } }, false).call).toBeNull();
+    expect(restSection(RESTING, { [REST_CALL_KEY]: { rest: 'short_rest', done: false } }, false).call).not.toBeNull();
     expect(restSection(RESTING, { [REST_CALL_KEY]: { rest: 'nap' } }, false).call).toBeNull();
     expect(restSection(RESTING, { [REST_CALL_KEY]: 'short_rest' }, false).call).toBeNull();
     expect(restSection(undefined, null, false)).toEqual({ buttons: [], call: null, recovery: null, diceAlways: false });
