@@ -799,6 +799,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- A Browser Journeys part that hangs on CI now fails after 25 minutes, with its report kept, and the job stops at 30, instead of holding a machine for GitHub's default six hours.
 - **Recovery dice and resting, as a system says them (R1a).** The first piece of resting on the
   sheet: a levelled list's option (a class) can have a die, and a system can have recovery dice,
   named as it likes (Hit Dice, Recoveries): how many each character has, what one heals, the rests
