@@ -197,6 +197,11 @@ jobs:
   test-e2e-part:
     name: Browser Journeys (${{ matrix.part }}/4)
     runs-on: ubuntu-latest
+    # A part takes about 9 to 12 minutes. One hung once (2026-10-31) and would have held its machine
+    # for GitHub's default six hours. Playwright's own limit (playwright.config.ts globalTimeout, 25
+    # minutes) ends a hung run first, as a failure, so its report is still kept; this one catches a
+    # hang outside the tests.
+    timeout-minutes: 30
     strategy:
       # Every part runs to the end, so one failure never hides another's.
       fail-fast: false

@@ -97,6 +97,10 @@ part still one test at a time. About 12 minutes in place of 27. A last job named
 passes only when all four did, so the check keeps its name. On a developer's machine nothing changes:
 one machine, files in order.
 
+A part that hangs fails after 25 minutes (Playwright's `globalTimeout`, CI only), with its report
+kept; the job itself stops at 30 (`timeout-minutes`), for a hang outside the tests. Either way,
+**Re-run failed jobs** runs just that part again.
+
 ## Writing a journey
 
 - One file per journey in `tests/`, named `<what>.spec.ts`.
