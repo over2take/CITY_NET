@@ -209,12 +209,92 @@ describe('HIT DIE (R1b)', () => {
   });
 });
 
+describe('A TABLE TO ROLL ON (7a5b)', () => {
+  const BGS = {
+    format: 1, name: 'Hearth', core: { dice: ['d8', '4dF', '3d6'] },
+    choices: [{ id: 'bgs', one: 'Background', many: 'Backgrounds', options: [
+      { id: 'dock', label: 'Dockhand' }, { id: 'scribe', label: 'Scribe' }, { id: 'thief', label: '' },
+    ] }],
+  } as unknown as Definition;
+  const panel = () => listPanel('Backgrounds');
+  const dieBox = () => panel().getByRole('combobox', { name: 'Table die' }) as HTMLSelectElement;
+  const rollOf = (name: string) => panel().getByRole('textbox', { name: `${name} roll` }) as HTMLInputElement;
+  const bgs = (def: Definition) => choiceLists(def)[0];
+
+  it('offers NONE, the usual dice and the system\'s own a table can roll; NONE shows no table and no PLAYERS PICK', () => {
+    open(BGS);
+    expect([...dieBox().options].map((o) => o.textContent)).toEqual(['NONE', 'd6', '2d6', 'd20', 'd100', 'd8', '3d6']);
+    expect(dieBox().value).toBe('');
+    expect(panel().queryByRole('group', { name: 'Table' })).toBeNull();
+    expect(panel().queryByRole('group', { name: 'Players pick' })).toBeNull();
+    expect(screen.getByRole('note', { name: HINTS['choices.table'] })).toBeTruthy();
+  });
+
+  it('picking dice shares the rolls out evenly, BY HAND OR ROLL to start, each with what it means', async () => {
+    const { last } = open(BGS);
+    fireEvent.change(dieBox(), { target: { value: 'd6' } });
+    expect(bgs(last())).toMatchObject({ table: 'd6', options: [{ id: 'dock', roll: '1-2' }, { id: 'scribe', roll: '3-4' }, { id: 'thief', roll: '5-6' }] });
+    expect(bgs(last()).players).toBeUndefined();
+    expect(panel().getByText('THE TABLE · D6 · 1 TO 6')).toBeTruthy();
+    expect(rollOf('Dockhand').value).toBe('1-2');
+    // A nameless option is named by its id.
+    expect(rollOf('thief').value).toBe('5-6');
+    const players = within(panel().getByRole('group', { name: 'Players pick' }));
+    expect(players.getByRole('button', { name: 'BY HAND OR ROLL' }).getAttribute('aria-pressed')).toBe('true');
+    expect(panel().getByText(/ROLL FOR IT beside picking/)).toBeTruthy();
+    expect(screen.getByRole('note', { name: HINTS['choices.players'] })).toBeTruthy();
+    await userEvent.click(players.getByRole('button', { name: 'BY ROLL ONLY' }));
+    expect(bgs(last()).players).toBe('roll');
+    expect(panel().getByText(/picking by hand is off for them/)).toBeTruthy();
+    await userEvent.click(players.getByRole('button', { name: 'BY HAND' }));
+    expect(bgs(last()).players).toBe('hand');
+    expect(panel().getByText(/the table only shows in the builder/)).toBeTruthy();
+    // Other dice share them out again.
+    fireEvent.change(dieBox(), { target: { value: '2d6' } });
+    expect(bgs(last()).options.map((o) => o.roll)).toEqual(['2-5', '6-9', '10-12']);
+  });
+
+  it('says what is wrong beside the option, and rolls left on none under the table', () => {
+    const { last } = open(BGS);
+    fireEvent.change(dieBox(), { target: { value: 'd6' } });
+    fireEvent.change(rollOf('Scribe'), { target: { value: '2-3' } });
+    fireEvent.change(rollOf('thief'), { target: { value: '9' } });
+    expect(bgs(last()).options.map((o) => o.roll)).toEqual(['1-2', '2-3', '9']);
+    expect(panel().getByText('2 is both Dockhand and Scribe')).toBeTruthy();
+    expect(panel().getByText('A roll from 1 to 6, or a range like 1-2')).toBeTruthy();
+    expect(panel().getByText('Nothing on 4, 5, 6')).toBeTruthy();
+    expect(rollOf('Scribe').getAttribute('aria-invalid')).toBe('true');
+    expect(rollOf('Dockhand').getAttribute('aria-invalid')).toBeNull();
+    // Cleared, it has no roll.
+    fireEvent.change(rollOf('thief'), { target: { value: '  ' } });
+    expect(bgs(last()).options[2]).not.toHaveProperty('roll');
+  });
+
+  it('NONE takes the table, how players pick and every roll away; so does EVERYONE HAS IT, which has no table', async () => {
+    const { last } = open(BGS);
+    fireEvent.change(dieBox(), { target: { value: 'd6' } });
+    await userEvent.click(within(panel().getByRole('group', { name: 'Players pick' })).getByRole('button', { name: 'BY ROLL ONLY' }));
+    fireEvent.change(dieBox(), { target: { value: '' } });
+    expect(bgs(last())).toEqual({ id: 'bgs', one: 'Background', many: 'Backgrounds', options: [{ id: 'dock', label: 'Dockhand' }, { id: 'scribe', label: 'Scribe' }, { id: 'thief', label: '' }] });
+    fireEvent.change(dieBox(), { target: { value: 'd6' } });
+    await userEvent.click(within(panel().getByRole('group', { name: 'Picked' })).getByRole('button', { name: 'EVERYONE HAS IT' }));
+    expect(bgs(last())).not.toHaveProperty('table');
+    expect(bgs(last()).options.some((o) => o.roll !== undefined)).toBe(false);
+    expect(panel().queryByRole('combobox', { name: 'Table die' })).toBeNull();
+  });
+
+  it('a table it can\'t roll still shows as its dice, to be changed', () => {
+    open({ ...BGS, choices: [{ ...(BGS.choices as object[])[0], table: '9d6' }] } as unknown as Definition);
+    expect(dieBox().value).toBe('9d6');
+  });
+});
+
 describe('help', () => {
   it('a "?" beside every setting, each named for screen readers', () => {
     open();
     // The page's own; a feature's are FeaturesEditor.test's, shown once one is open.
-    const keys = ['choices.lists', 'choices.names', 'choices.picked', 'choices.picks', 'choices.again', 'choices.levelled', 'choices.options', 'choices.optionName', 'choices.description', 'choices.requires', 'choices.die', 'choices.features'] as (keyof typeof HINTS)[];
-    expect(Object.keys(HINTS).filter((k) => k.startsWith('choices.'))).toHaveLength(22);
+    const keys = ['choices.lists', 'choices.names', 'choices.picked', 'choices.picks', 'choices.again', 'choices.levelled', 'choices.table', 'choices.options', 'choices.optionName', 'choices.description', 'choices.requires', 'choices.die', 'choices.features'] as (keyof typeof HINTS)[];
+    expect(Object.keys(HINTS).filter((k) => k.startsWith('choices.'))).toHaveLength(24);
     for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
   });
 

@@ -10,11 +10,15 @@
 //       picked: 'features',  // 7a5a: own (on its own, as when absent), features (only under the
 //                            // features that open it), both (its own picks, and those) or everyone
 //                            // (7a5a2: every character has its options, nothing picked)
+//       table: '2d6',        // 7a5b: a table to roll on, as dice: up to 4 of 2 to 100 sides
+//       players: 'roll',     // with a table, how players pick: hand, either (by hand or rolled, as
+//                            // when absent) or roll (rolled only; the GM may still pick any)
 //       options: [
 //         { id: 'soldier', label: 'Soldier', description: '...',
 //           requires: '@str >= 13',          // optional: a formula, met when it isn't 0
 //           die: 10,                         // optional, a levelled list's: its die, by its sides
 //                                            // (R1a: recovery dice; level-up health in 7d)
+//           roll: '4-5',                     // a list with a table's: the roll, or range, that gives it
 //           features: [
 //             { id: 'guard_stance', label: 'Guard Stance', text: 'Words for the table.',
 //               at: 1,                                          // the pick's level it unlocks at (levelled lists)
@@ -51,6 +55,11 @@
 // opened it (7a5d, the user on Fighter's Martial Archetype): Champion, opened at Fighter 3, has
 // Remarkable Athlete at Fighter 7. Opened by a pick with no level (a feat), it has everything at once.
 // Its level is never added to @level or any list's: it is the opener's, counted there already.
+//
+// A list may have a table to roll on (7a5b; approved mockup nested-choices, version 2): its dice,
+// and the roll or range each option is on, every roll from the lowest to the highest on exactly one
+// option. The GM says how players pick from it: by hand only, by hand or rolled (as when unsaid), or
+// rolled only. Rolling for it at the table is 7a5b2's.
 //
 // Levels are read in formulas, rolls and modifier amounts: @<option>_level (0 when not taken),
 // @<list>_level, a levelled list's sum, and @level, every levelled list's sum, unless the system
@@ -101,11 +110,15 @@ const LIMITS = {
   /** A levelled option's die, by its sides (R1a). */
   dieLeast: 2,
   dieMost: 100,
+  /** How many dice a list's table rolls (7a5b): 2d6, 3d6. */
+  tableDice: 4,
 };
 /** How a list is picked (7a5a): on its own, only under the features that open it, both, or not at all (everyone has it). */
 const PICKED = ['own', 'features', 'both', 'everyone'];
-const LIST_KEYS = new Set(['id', 'one', 'many', 'picks', 'levelled', 'again', 'picked', 'options']);
-const OPTION_KEYS = new Set(['id', 'label', 'description', 'requires', 'die', 'features']);
+/** How players pick from a list with a table (7a5b): by hand only, by hand or rolled, or rolled only. */
+const PLAYERS = ['hand', 'either', 'roll'];
+const LIST_KEYS = new Set(['id', 'one', 'many', 'picks', 'levelled', 'again', 'picked', 'table', 'players', 'options']);
+const OPTION_KEYS = new Set(['id', 'label', 'description', 'requires', 'die', 'roll', 'features']);
 const FEATURE_KEYS = new Set(['id', 'label', 'text', 'at', 'modifiers', 'uses', 'rolls', 'changes', 'choice', 'choice_count']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -132,6 +145,28 @@ const tokenMaxFieldOf = (definition) => {
 };
 
 const optionsOf = (c) => list(c.options).filter((o) => isPlainObject(o) && typeof o.id === 'string');
+
+/** A list's table as dice (7a5b): { count, sides, low, high }, or null without one or with dice it can't roll. */
+const tableOf = (c) => {
+  const m = typeof c.table === 'string' ? /^([1-9]\d*)?d(\d+)$/.exec(c.table.trim().toLowerCase()) : null;
+  if (!m) return null;
+  const count = m[1] ? Number(m[1]) : 1;
+  const sides = Number(m[2]);
+  if (count > LIMITS.tableDice || sides < LIMITS.dieLeast || sides > LIMITS.dieMost) return null;
+  return { count, sides, low: count, high: count * sides };
+};
+
+/** An option's roll on a table, `4` or `4-5`, as [from, to], or null when it isn't one. */
+const rollRangeOf = (roll) => {
+  const m = typeof roll === 'string' ? /^\s*(\d+)\s*(?:-\s*(\d+)\s*)?$/.exec(roll) : null;
+  if (!m) return null;
+  const from = Number(m[1]);
+  const to = m[2] === undefined ? from : Number(m[2]);
+  return from <= to ? [from, to] : null;
+};
+
+/** How players pick from a list: by hand without a table; with one, as the list says, by hand or rolled when it says nothing. */
+const playersOf = (c) => (!tableOf(c) ? 'hand' : PLAYERS.includes(c.players) ? c.players : 'either');
 const levelledOf = (definition) => choicesOf(definition).filter((c) => c.levelled === true);
 
 /** The level names a system's formulas can read: each option's, each list's sum, and @level unless it has its own. */
@@ -200,6 +235,29 @@ const checkChoices = (definition, problems) => {
   };
   const keys = (obj, allowed, where, what) => {
     for (const key of Object.keys(obj)) if (!allowed.has(key)) problems.push({ where: `${where}, ${key}`, message: `Not part of ${what}` });
+  };
+
+  /**
+   * A list's table (7a5b): each option on a roll or range within the dice, no roll on two options,
+   * and none left with nothing on it (the first few named).
+   */
+  const checkTable = (c, table, where) => {
+    const on = new Map();
+    for (const o of optionsOf(c).slice(0, LIMITS.options)) {
+      const range = rollRangeOf(o.roll);
+      const name = typeof o.label === 'string' && o.label.trim() ? o.label.trim() : o.id;
+      if (!range || range[0] < table.low || range[1] > table.high) {
+        problems.push({ where: `${where}, option ${o.id}, roll`, message: `A roll from ${table.low} to ${table.high}, or a range like ${table.low}-${table.low + 1}` });
+        continue;
+      }
+      for (let n = range[0]; n <= range[1]; n += 1) {
+        if (on.has(n)) problems.push({ where: `${where}, option ${o.id}, roll`, message: `${n} is both ${on.get(n)} and ${name}` });
+        else on.set(n, name);
+      }
+    }
+    const gaps = [];
+    for (let n = table.low; n <= table.high; n += 1) if (!on.has(n)) gaps.push(n);
+    if (gaps.length) problems.push({ where: `${where}, table`, message: `Nothing on ${gaps.slice(0, 6).join(', ')}${gaps.length > 6 ? '…' : ''}` });
   };
 
   const checkFeature = (f, where, levelled, ownList) => {
@@ -297,7 +355,13 @@ const checkChoices = (definition, problems) => {
     if (c.levelled === true && typeof c.id === 'string' && (targets.has(`${c.id}_level`) || optionLevels.has(`${c.id}_level`))) {
       problems.push({ where, message: `Its levels add up as @${c.id}_level, which a stat, formula or option already has` });
     }
+    const table = tableOf(c);
+    if (c.table !== undefined && !table) problems.push({ where: `${where}, table`, message: `Dice like d6, 2d6, d20 or d100: up to ${LIMITS.tableDice} dice of ${LIMITS.dieLeast} to ${LIMITS.dieMost} sides` });
+    if (c.table !== undefined && c.picked === 'everyone') problems.push({ where: `${where}, table`, message: 'A list everyone has is never picked, so never rolled for' });
+    if (c.players !== undefined && !PLAYERS.includes(c.players)) problems.push({ where: `${where}, players`, message: 'hand (by hand), either (by hand or rolled) or roll (rolled only)' });
+    else if (c.players !== undefined && c.players !== 'hand' && c.table === undefined) problems.push({ where: `${where}, players`, message: 'Only a list with a table to roll on is rolled for' });
     if (!Array.isArray(c.options)) { problems.push({ where: `${where}, options`, message: 'Must be a list of options' }); return; }
+    if (table) checkTable(c, table, where);
     if (c.options.length > LIMITS.options) problems.push({ where: `${where}, options`, message: `At most ${LIMITS.options} options` });
     c.options.slice(0, LIMITS.options).forEach((o, j) => {
       const at = isPlainObject(o) && typeof o.id === 'string' && NAME.test(o.id) ? `${where}, option ${o.id}` : `${where}, option ${j + 1}`;
@@ -309,6 +373,7 @@ const checkChoices = (definition, problems) => {
       text(o.label, `${at}, label`, LIMITS.label, { required: true });
       text(o.description, `${at}, description`, LIMITS.description);
       if (o.requires !== undefined) formula(o.requires, `${at}, requires`);
+      if (o.roll !== undefined && c.table === undefined) problems.push({ where: `${at}, roll`, message: 'Only an option of a list with a table to roll on has a roll' });
       if (o.die !== undefined) {
         if (c.levelled !== true) problems.push({ where: `${at}, die`, message: 'Only an option of a levelled list has a die' });
         else if (!Number.isInteger(o.die) || o.die < LIMITS.dieLeast || o.die > LIMITS.dieMost) problems.push({ where: `${at}, die`, message: `A die of ${LIMITS.dieLeast} to ${LIMITS.dieMost} sides` });
@@ -663,6 +728,7 @@ const choicesShown = (definition) => {
 };
 
 module.exports = {
-  LIMITS, PICKED, PICKS_KEY, USES_KEY, WORKED_KEY, checkChoices, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
+  LIMITS, PICKED, PLAYERS, PICKS_KEY, USES_KEY, WORKED_KEY, checkChoices, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
+  tableOf, rollRangeOf, playersOf,
   capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, choicesShown, tokenMaxFieldOf,
 };

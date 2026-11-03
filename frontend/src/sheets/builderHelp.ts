@@ -210,6 +210,8 @@ export const HINTS = {
   'choices.picks': 'How many options a character picks from this list: ONE (a class), a number (two backgrounds), or ANY (feats).',
   'choices.again': 'More can be added later, past what was picked first. With levels, this is multiclassing: a second class, each with its own level.',
   'choices.levelled': 'Each pick has a level, and its features unlock by it, like a class. Formulas read it as @<option>_level.',
+  'choices.table': 'Optional: dice to roll on for this list, like a book\'s "roll your background" table. Picking the dice shares the rolls out evenly over the options; change any of them below. Every roll needs exactly one option.',
+  'choices.players': 'How players pick from a list with a table. BY HAND: as any list, the table only here. BY HAND OR ROLL: ROLL FOR IT beside picking. BY ROLL ONLY: players roll and take what comes up; the GM can still pick any option for them.',
   'choices.die': 'Optional, on a levelled list\'s options, like a class\'s hit die: the die its recovery dice roll at a rest (set up on RESTS). D4 to D20, or OTHER for any size from 2 to 100 sides.',
   'choices.options': 'What a character can pick from this list. A big list, like forty feats, is fine: up to a hundred.',
   'choices.optionName': 'What players see for this option: SOLDIER, DOCKHAND, TOUGH.',

@@ -7,7 +7,8 @@
 // backend/systemBuilder/choices.js,
 // which checks what is written and works out what picks do; the tests hold the two together.
 // 7a5a2: how a list is picked (on its own, through the features that open it, both, or everyone has
-// it) and how many picks a feature opening a list gives.
+// it) and how many picks a feature opening a list gives. 7a5b: a list's table to roll on, each
+// option's roll on it, and how players pick from it.
 
 import type { Definition } from './systemsApi';
 import { idFor } from './setup';
@@ -17,19 +18,25 @@ import { restList } from './rests';
 import { rollList } from './rolls';
 
 /** backend choices.js LIMITS, held equal by a test. */
-export const LIMITS = { lists: 20, options: 100, features: 40, modifiers: 10, rolls: 10, level: 30, picks: 100, label: 40, description: 1000, opens: 10, dieLeast: 2, dieMost: 100 } as const;
+export const LIMITS = { lists: 20, options: 100, features: 40, modifiers: 10, rolls: 10, level: 30, picks: 100, label: 40, description: 1000, opens: 10, dieLeast: 2, dieMost: 100, tableDice: 4 } as const;
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 
-/** An option of a list; a levelled list's may have a die, by its sides (R1a: recovery dice, level-up health). */
-export interface ChoiceOption { id: string; label: string; description?: string; requires?: string; die?: number; features?: unknown[] }
+/**
+ * An option of a list; a levelled list's may have a die, by its sides (R1a: recovery dice, level-up
+ * health); a list with a table's has the roll, or range, that gives it (7a5b: '4', '4-5').
+ */
+export interface ChoiceOption { id: string; label: string; description?: string; requires?: string; die?: number; roll?: string; features?: unknown[] }
 /** How a list is picked (backend choices.js PICKED); on its own when it says nothing. */
 export type Picked = 'own' | 'features' | 'both' | 'everyone';
-export interface ChoiceList { id: string; one: string; many: string; picks?: number | 'any'; levelled?: boolean; again?: boolean; picked?: Picked; options: ChoiceOption[] }
-export type ListPatch = Partial<Pick<ChoiceList, 'one' | 'many' | 'picks' | 'levelled' | 'again' | 'picked'>>;
-/** A change to an option: `die: null` takes its die away. */
-export type OptionPatch = Partial<Pick<ChoiceOption, 'label' | 'description' | 'requires'>> & { die?: number | null };
+/** How players pick from a list with a table (backend choices.js PLAYERS): by hand, by hand or rolled, rolled only. */
+export type Players = 'hand' | 'either' | 'roll';
+export interface ChoiceList { id: string; one: string; many: string; picks?: number | 'any'; levelled?: boolean; again?: boolean; picked?: Picked; table?: string; players?: Players; options: ChoiceOption[] }
+/** A change to a list: `table: null` takes its table away, and its options' rolls with it. */
+export type ListPatch = Partial<Pick<ChoiceList, 'one' | 'many' | 'picks' | 'levelled' | 'again' | 'picked' | 'players'>> & { table?: string | null };
+/** A change to an option: `die: null` takes its die away; an empty roll takes its roll away. */
+export type OptionPatch = Partial<Pick<ChoiceOption, 'label' | 'description' | 'requires' | 'roll'>> & { die?: number | null };
 export interface Modifier { target: string; amount: string }
 export interface Uses { count: string; refill?: string }
 export interface RollChange { roll: string; change: string }
@@ -69,6 +76,73 @@ const takenIds = (def: Definition): string[] => [
 /** How a list is picked: on its own when it says nothing. */
 export const pickedOf = (c: ChoiceList): Picked => (c.picked === 'features' || c.picked === 'both' || c.picked === 'everyone' ? c.picked : 'own');
 
+/** A list's table as dice (backend choices.js tableOf): { count, sides, low, high }, or null. */
+export const tableOf = (c: Pick<ChoiceList, 'table'>): { count: number; sides: number; low: number; high: number } | null => {
+  const m = typeof c.table === 'string' ? /^([1-9]\d*)?d(\d+)$/.exec(c.table.trim().toLowerCase()) : null;
+  if (!m) return null;
+  const count = m[1] ? Number(m[1]) : 1;
+  const sides = Number(m[2]);
+  if (count > LIMITS.tableDice || sides < LIMITS.dieLeast || sides > LIMITS.dieMost) return null;
+  return { count, sides, low: count, high: count * sides };
+};
+
+/** An option's roll, `4` or `4-5`, as [from, to] (backend choices.js rollRangeOf), or null. */
+export const rollRangeOf = (roll: unknown): [number, number] | null => {
+  const m = typeof roll === 'string' ? /^\s*(\d+)\s*(?:-\s*(\d+)\s*)?$/.exec(roll) : null;
+  if (!m) return null;
+  const from = Number(m[1]);
+  const to = m[2] === undefined ? from : Number(m[2]);
+  return from <= to ? [from, to] : null;
+};
+
+/** How players pick from a list (backend choices.js playersOf): by hand without a table, by hand or rolled when unsaid. */
+export const playersOf = (c: ChoiceList): Players => (!tableOf(c) ? 'hand' : c.players === 'hand' || c.players === 'roll' ? c.players : 'either');
+
+/** The dice a table may be, as the page offers them: d6, 2d6, d20, d100, and the system's own that a table can roll. */
+export const tableDiceChoices = (def: Definition): string[] => {
+  const own = isObject(def.core) && Array.isArray(def.core.dice) ? def.core.dice.filter((d): d is string => typeof d === 'string') : [];
+  return [...new Set(['d6', '2d6', 'd20', 'd100', ...own.map((d) => d.trim().toLowerCase())])].filter((d) => tableOf({ table: d }));
+};
+
+/** Each option's roll on `table`, the rolls shared out evenly in order (the mockup's fill): d6 over three is 1-2, 3-4, 5-6. */
+export const evenRolls = (options: Pick<ChoiceOption, 'id'>[], table: string): Record<string, string> => {
+  const t = tableOf({ table });
+  if (!t || !options.length) return {};
+  const span = t.high - t.low + 1;
+  const out: Record<string, string> = {};
+  let at = t.low;
+  options.forEach((o, i) => {
+    const n = Math.floor(span / options.length) + (i < span % options.length ? 1 : 0);
+    out[o.id] = n <= 0 ? '' : n === 1 ? `${at}` : `${at}-${at + n - 1}`;
+    at += n;
+  });
+  return out;
+};
+
+/**
+ * What is wrong with a list's table, in the server's words (backend choices.js checkTable), each
+ * with the option it is about: a roll out of the dice, a roll on two options, and rolls on none.
+ */
+export const tableProblems = (c: ChoiceList): { option?: string; message: string }[] => {
+  const t = tableOf(c);
+  if (!t) return [];
+  const out: { option?: string; message: string }[] = [];
+  const on = new Map<number, string>();
+  for (const o of c.options.slice(0, LIMITS.options)) {
+    const range = rollRangeOf(o.roll);
+    const name = o.label.trim() || o.id;
+    if (!range || range[0] < t.low || range[1] > t.high) { out.push({ option: o.id, message: `A roll from ${t.low} to ${t.high}, or a range like ${t.low}-${t.low + 1}` }); continue; }
+    for (let n = range[0]; n <= range[1]; n += 1) {
+      if (on.has(n)) out.push({ option: o.id, message: `${n} is both ${on.get(n)} and ${name}` });
+      else on.set(n, name);
+    }
+  }
+  const gaps: number[] = [];
+  for (let n = t.low; n <= t.high; n += 1) if (!on.has(n)) gaps.push(n);
+  if (gaps.length) out.push({ message: `Nothing on ${gaps.slice(0, 6).join(', ')}${gaps.length > 6 ? '…' : ''}` });
+  return out;
+};
+
 /**
  * Whether a list's features unlock at a level (backend choices.js unlocksByLevelOf): a levelled list's,
  * by its pick's; one everyone has, by the character's; one picked through features and opened from one
@@ -107,7 +181,20 @@ export const withNewList = (def: Definition): { definition: Definition; id: stri
  */
 export const withList = (def: Definition, id: string, patch: ListPatch): Definition => withLists(def, choiceLists(def).map((c) => {
   if (c.id !== id) return c;
-  const next: ChoiceList = { ...c, ...patch };
+  const { table, ...rest } = patch;
+  const next: ChoiceList = { ...c, ...rest };
+  // A table picked (7a5b): its rolls shared out evenly over the options, as the mockup fills them;
+  // taken away, or a list everyone has (never rolled for), the rolls and how players pick go too.
+  if (typeof table === 'string' && tableOf({ table }) && table !== c.table) {
+    const rolls = evenRolls(next.options, table);
+    next.table = table;
+    next.options = next.options.map((o) => ({ ...o, roll: rolls[o.id] }));
+  }
+  if (table === null || next.picked === 'everyone' || !tableOf(next)) {
+    delete next.table;
+    delete next.players;
+    if (next.options.some((o) => o.roll !== undefined)) next.options = next.options.map((o) => { const copy = { ...o }; delete copy.roll; return copy; });
+  } else if (next.players === 'either') delete next.players;
   if (next.picks !== 'any' && !(Number.isInteger(next.picks) && (next.picks as number) > 1)) delete next.picks;
   else if (typeof next.picks === 'number') next.picks = Math.min(next.picks, LIMITS.picks);
   if (next.levelled !== true) delete next.levelled;
@@ -148,6 +235,9 @@ export const withOption = (def: Definition, listId: string, optionId: string, pa
     const next: ChoiceOption = { ...o, ...rest };
     if (typeof next.description === 'string' && !next.description.trim()) delete next.description;
     if (typeof next.requires === 'string' && !next.requires.trim()) delete next.requires;
+    // A roll only on a list with a table (7a5b), trimmed; empty takes it away.
+    if (typeof next.roll === 'string') next.roll = next.roll.trim();
+    if (!tableOf(c) || next.roll === '') delete next.roll;
     if (die === null) delete next.die;
     else if (die !== undefined && c.levelled === true && Number.isInteger(die)) next.die = Math.min(Math.max(die, LIMITS.dieLeast), LIMITS.dieMost);
     return next;

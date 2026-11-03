@@ -113,6 +113,9 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await expect(page.getByRole('region', { name: 'NEW OPTION option' })).toBeVisible();
       await page.getByRole('group', { name: 'Hit die' }).getByRole('button', { name: 'OTHER' }).click();
       await expect(page.getByRole('spinbutton', { name: 'Sides' })).toBeVisible();
+      // A table to roll on, so PLAYERS PICK and each option's roll are there (7a5b).
+      await page.getByRole('combobox', { name: 'Table die' }).selectOption('d6');
+      await expect(page.getByRole('group', { name: 'Players pick' })).toBeVisible();
       // A feature open, with uses and a modifier, so every box of the features editor is there (7a2b2).
       await page.getByRole('button', { name: '+ FEATURE' }).click();
       const feature = page.getByRole('group', { name: 'Feature NEW FEATURE' });

@@ -10,7 +10,7 @@
 //                      and uses is a # note, as an import never touches it.
 
 import type { Definition } from './systemsApi';
-import { choiceLists, featureList, followedBy, kindsOf, levelOf, unlocksByLevel, type ChoiceList } from './choices';
+import { choiceLists, evenRolls, featureList, followedBy, kindsOf, levelOf, tableOf, unlocksByLevel, type ChoiceList } from './choices';
 import { allStats, formulaList } from './statsRules';
 import { restList } from './rests';
 
@@ -91,6 +91,7 @@ const head = (def: Definition, list: ChoiceList, rests: string[], intro: string[
     '#',
     `# requires and uses are formulas, as in the builder. They can read ${names.length ? names.join(', ') : 'numbers only (this system has no stats yet)'}.`,
     ...(list.levelled ? ['# die is an option\'s die, like d10: what it heals with as recovery dice, and rolls for health on level-up.'] : []),
+    ...(tableOf(list) ? [`# roll is what a ${list.table} roll gives it on the table: a number, or a range like 3-4.`] : []),
     `# refill is one of this system's rests, by name: ${rests.length ? rests.join(', ') : 'none (it has none on)'}. It needs uses.`,
     unlocksByLevel(def, list)
       ? `# level is when a feature unlocks, 1 to 30${followed.length ? `: the level of the pick that opened it (${followed.join(', ')})` : ''}. Features of one name at several levels are told apart by level.`
@@ -99,8 +100,17 @@ const head = (def: Definition, list: ChoiceList, rests: string[], intro: string[
   ];
 };
 
-/** The options' columns: a levelled list's have a die (R1a). */
-const optionColumns = (list: ChoiceList) => (list.levelled ? 'name, description, requires, die' : 'name, description, requires');
+/** The options' columns: a levelled list's have a die (R1a), a list with a table's a roll (7a5b). */
+const optionColumns = (list: ChoiceList) => ['name, description, requires', ...(list.levelled ? ['die'] : []), ...(tableOf(list) ? ['roll'] : [])].join(', ');
+
+/** An option's die and roll cells, where its list has them. */
+const optionExtras = (list: ChoiceList, die: string, roll: string) => [...(list.levelled ? [die] : []), ...(tableOf(list) ? [roll] : [])];
+
+/** The example's two options' rolls: the table shared between them. */
+const evenTwo = (list: ChoiceList): [string, string] => {
+  const rolls = list.table ? evenRolls([{ id: 'a' }, { id: 'b' }], list.table) : {};
+  return [rolls.a ?? '', rolls.b ?? ''];
+};
 
 const featureColumns = (def: Definition, list: ChoiceList) => (unlocksByLevel(def, list) ? 'option, feature, level, words, uses, refill' : 'option, feature, words, uses, refill');
 
@@ -121,8 +131,8 @@ export const exampleFile = (def: Definition, list: ChoiceList): string => {
     '',
     '[options]',
     optionColumns(list),
-    row('Veteran', 'Has seen worse, and says so.', stat ? `@${stat} >= 13` : '', ...(list.levelled ? ['d10'] : [])),
-    row('Scholar', 'Reads everything twice.', '', ...(list.levelled ? ['d6'] : [])),
+    row('Veteran', 'Has seen worse, and says so.', stat ? `@${stat} >= 13` : '', ...optionExtras(list, 'd10', evenTwo(list)[0])),
+    row('Scholar', 'Reads everything twice.', '', ...optionExtras(list, 'd6', evenTwo(list)[1])),
     '',
     '[features]',
     featureColumns(def, list),
@@ -148,7 +158,7 @@ export const listFile = (def: Definition, list: ChoiceList): string => {
     '',
     '[options]',
     optionColumns(list),
-    ...list.options.map((o) => row(o.label, o.description ?? '', o.requires ?? '', ...(list.levelled ? [Number.isInteger(o.die) ? `d${o.die}` : ''] : []))),
+    ...list.options.map((o) => row(o.label, o.description ?? '', o.requires ?? '', ...optionExtras(list, Number.isInteger(o.die) ? `d${o.die}` : '', o.roll ?? ''))),
     '',
     '[features]',
     featureColumns(def, list),

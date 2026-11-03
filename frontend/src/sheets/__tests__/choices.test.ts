@@ -4,6 +4,7 @@ import { createRequire } from 'module';
 import {
   LIMITS, choiceLists, picksOf, withNewList, withList, withoutList, withNewOption, withOption, withoutOption, levelNames,
   featureList, levelOf, kindsOf, withNewFeature, withFeature, withoutFeature, modifierTargets, refillRests, rollChoices,
+  tableOf, rollRangeOf, playersOf, tableDiceChoices, evenRolls, tableProblems, type ChoiceList,
 } from '../choices';
 import type { Definition } from '../systemsApi';
 
@@ -46,6 +47,84 @@ describe('held to the server', () => {
     expect(problems(def)).toEqual([]);
     expect(problems(withoutOption(def, 'classes', 'soldier'))).toEqual([]);
     expect(problems(withoutList(def, 'feats'))).toEqual([]);
+  });
+});
+
+describe('a list\'s table to roll on (7a5b)', () => {
+  const BGS = { id: 'bgs', one: 'Background', many: 'Backgrounds', options: [{ id: 'dock', label: 'Dockhand' }, { id: 'scribe', label: 'Scribe' }, { id: 'thief', label: 'Thief' }] };
+  const def = (c: object = BGS, core: object = { dice: ['d8', '4dF', '2d6', 'd10'] }) => ({ format: 1, name: 'Hearth', core, choices: [c] }) as unknown as Definition;
+  const bgs = (d: Definition) => choiceLists(d)[0];
+
+  it('reads dice, rolls and how players pick as the server does', () => {
+    for (const table of ['d6', '2d6', ' D20 ', '4d100', '5d6', 'd1', 'd101', 'dF', '0d6', '2d', undefined]) {
+      expect(tableOf({ table }), String(table)).toEqual(backend.tableOf({ table }));
+    }
+    for (const roll of ['4', ' 4 - 5 ', '5-4', '4-', '', 4]) expect(rollRangeOf(roll), String(roll)).toEqual(backend.rollRangeOf(roll));
+    for (const c of [{ table: '2d6', players: 'roll' }, { table: '2d6' }, { table: '2d6', players: 'nope' }, { players: 'roll' }, { table: 'd6', players: 'hand' }]) {
+      expect(playersOf({ ...BGS, ...c } as ChoiceList), JSON.stringify(c)).toBe(backend.playersOf(c));
+    }
+  });
+
+  it('offers d6, 2d6, d20, d100 and the system\'s own that a table can roll, each once', () => {
+    expect(tableDiceChoices(def())).toEqual(['d6', '2d6', 'd20', 'd100', 'd8', 'd10']);
+    expect(tableDiceChoices(def(BGS, { dice: [' D12 ', '5d6'] }))).toEqual(['d6', '2d6', 'd20', 'd100', 'd12']);
+    expect(tableDiceChoices(def(BGS, {}))).toEqual(['d6', '2d6', 'd20', 'd100']);
+  });
+
+  it('shares the rolls out evenly, in order, the first ones a roll more', () => {
+    expect(evenRolls(BGS.options, 'd6')).toEqual({ dock: '1-2', scribe: '3-4', thief: '5-6' });
+    expect(evenRolls(BGS.options, 'd20')).toEqual({ dock: '1-7', scribe: '8-14', thief: '15-20' });
+    expect(evenRolls(BGS.options, '2d6')).toEqual({ dock: '2-5', scribe: '6-9', thief: '10-12' });
+    expect(evenRolls([{ id: 'a' }, { id: 'b' }, { id: 'c' }], 'd2')).toEqual({ a: '1', b: '2', c: '' });
+    expect([evenRolls([], 'd6'), evenRolls(BGS.options, 'dF')]).toEqual([{}, {}]);
+  });
+
+  it('says what is wrong with a table as the server does, each by its option', () => {
+    const cases = [
+      [{ id: 'dock', label: 'Dockhand', roll: '1-2' }, { id: 'scribe', label: 'Scribe', roll: '2-3' }, { id: 'thief', label: 'Thief', roll: '9' }],
+      // A nameless option is named by its id.
+      [{ id: 'dock', label: 'Dockhand', roll: '1-3' }, { id: 'scribe', label: '', roll: '3-6' }],
+      [{ id: 'dock', label: 'Dockhand', roll: '1-6' }],
+      [{ id: 'dock', label: 'Dockhand' }, { id: 'scribe', label: 'Scribe', roll: 'x' }],
+      [{ id: 'dock', label: 'Dockhand', roll: '1' }],
+    ];
+    for (const options of cases) {
+      const c = { ...BGS, table: 'd6', options };
+      const server = problems(def(c)).filter((p) => /^list bgs, (table|option \w+, roll):/.test(p));
+      const mine = tableProblems(c as ChoiceList).map((p) => (p.option ? `list bgs, option ${p.option}, roll: ${p.message}` : `list bgs, table: ${p.message}`));
+      expect(mine, JSON.stringify(options)).toEqual(server);
+    }
+    expect(tableProblems(BGS as ChoiceList)).toEqual([]);
+  });
+
+  it('a table picked shares the rolls out; other dice share them again; NONE takes table, players and rolls away', () => {
+    let d = withList(def(), 'bgs', { table: 'd6' });
+    expect(bgs(d)).toMatchObject({ table: 'd6', options: [{ roll: '1-2' }, { roll: '3-4' }, { roll: '5-6' }] });
+    expect(problems(d)).toEqual([]);
+    d = withList(d, 'bgs', { players: 'roll' });
+    expect(bgs(d).players).toBe('roll');
+    d = withOption(d, 'bgs', 'dock', { roll: ' 1-3 ' });
+    expect(bgs(d).options[0].roll).toBe('1-3');
+    // The same dice again keeps the rolls typed; another table shares them out again.
+    expect(bgs(withList(d, 'bgs', { table: 'd6' })).options[0].roll).toBe('1-3');
+    expect(bgs(withList(d, 'bgs', { table: 'd20' })).options.map((o) => o.roll)).toEqual(['1-7', '8-14', '15-20']);
+    // Dice it can't roll aren't taken.
+    expect(bgs(withList(d, 'bgs', { table: 'dF' })).table).toBe('d6');
+    // BY HAND OR ROLL is stored as nothing, as the server reads it.
+    expect(bgs(withList(d, 'bgs', { players: 'either' }))).not.toHaveProperty('players');
+    const gone = withList(d, 'bgs', { table: null });
+    expect(bgs(gone)).toEqual(BGS);
+    expect(problems(gone)).toEqual([]);
+    expect(bgs(withList(d, 'bgs', { picked: 'everyone' }))).toEqual({ ...BGS, picked: 'everyone' });
+    // Other changes leave the table and its rolls alone.
+    expect(bgs(withList(d, 'bgs', { many: 'Origins' }))).toMatchObject({ table: 'd6', players: 'roll', options: [{ roll: '1-3' }, { roll: '3-4' }, { roll: '5-6' }] });
+  });
+
+  it('an option\'s roll only on a list with a table; empty takes it away', () => {
+    expect(bgs(withOption(def(), 'bgs', 'dock', { roll: '2' })).options[0]).not.toHaveProperty('roll');
+    const d = withList(def(), 'bgs', { table: 'd6' });
+    expect(bgs(withOption(d, 'bgs', 'dock', { roll: '' })).options[0]).not.toHaveProperty('roll');
+    expect(bgs(withOption(d, 'bgs', 'dock', { label: 'Docker' })).options[0]).toMatchObject({ label: 'Docker', roll: '1-2' });
   });
 });
 

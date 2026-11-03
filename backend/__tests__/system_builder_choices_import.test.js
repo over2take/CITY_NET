@@ -293,7 +293,7 @@ describe('a line with a mistake is skipped, named by its line, and the rest goes
     ));
     expect(r.skipped).toEqual([
       { line: 1, message: '[spells] isn\'t read here: a file has [options] and [features]' },
-      { line: 5, message: '[options] needs a name column: its first line names the columns (name, description, requires, die)' },
+      { line: 5, message: '[options] needs a name column: its first line names the columns (name, description, requires, die, roll)' },
     ]);
     expect(r.notes).toEqual([{ line: 8, message: 'The cost column isn\'t read: only option, feature, level, words, uses, refill' }]);
     expect(featureIn(r, 'Mage', 'Spellbook')).toHaveLength(1);
@@ -347,6 +347,37 @@ describe('a levelled list\'s die (R1a)', () => {
     const r = read(FILE('[options]', 'name, die', 'Sailor, d10'), 'backgrounds');
     expect(r.notes).toEqual([{ line: 2, message: 'BACKGROUNDS isn\'t levelled, so the die column is ignored' }]);
     expect(optionIn(r, 'Sailor')).not.toHaveProperty('die');
+  });
+
+  describe('a table\'s rolls (7a5b)', () => {
+    const TABLED = { ...HEARTH, choices: HEARTH.choices.map((c) => (c.id === 'backgrounds' ? { ...c, table: 'd6', options: [{ ...c.options[0], roll: '1-3' }] } : c)) };
+    const readT = (...lines) => read(FILE(...lines), 'backgrounds', TABLED);
+
+    it('adds, changes, tidies and clears an option\'s roll, and says one off the table', () => {
+      const r = readT('[options]', 'name, roll', 'Sailor, 1 - 2', 'Scribe, 3-4', 'Thief, 5 - 6', 'Ghost, 7', 'Cook, 4-3');
+      expect(optionIn(r, 'Sailor').roll).toBe('1-2');
+      expect(optionIn(r, 'Scribe').roll).toBe('3-4');
+      expect(optionIn(r, 'Thief').roll).toBe('5-6');
+      expect(r.added.options.find((o) => o.option === 'Scribe')).toMatchObject({ roll: '3-4' });
+      expect(r.changed.options).toEqual([{ line: 3, option: 'Sailor', parts: [{ part: 'roll', from: '1-3', to: '1-2' }] }]);
+      expect(r.skipped).toEqual([
+        { line: 6, message: 'Ghost: roll: a roll from 1 to 6, or a range like 1-2' },
+        { line: 7, message: 'Cook: roll: a roll from 1 to 6, or a range like 1-2' },
+      ]);
+      expect(checkDefinition(withList(r, 'backgrounds', TABLED)).problems).toEqual([]);
+      const single = readT('[options]', 'name, roll', 'Sailor, 6');
+      expect(optionIn(single, 'Sailor').roll).toBe('6');
+      const cleared = read(FILE('[options]', 'name, roll', 'Sailor, -'), 'backgrounds', withList(r, 'backgrounds', TABLED));
+      expect(optionIn(cleared, 'Sailor')).not.toHaveProperty('roll');
+      // The same roll again changes nothing.
+      expect(readT('[options]', 'name, roll', 'Sailor, 1-3').changed.options).toEqual([]);
+    });
+
+    it('ignores the column, and says so, where the list has no table', () => {
+      const r = read(FILE('[options]', 'name, roll', 'Sailor, 2'), 'backgrounds');
+      expect(r.notes).toEqual([{ line: 2, message: 'BACKGROUNDS has no table to roll on, so the roll column is ignored' }]);
+      expect(optionIn(r, 'Sailor')).not.toHaveProperty('roll');
+    });
   });
 });
 
