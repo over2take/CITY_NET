@@ -23,10 +23,14 @@ export interface FeatureShown {
   /** How many picks it opens (7a5a): 1 when it says nothing. */
   opensCount?: number;
 }
-export interface OptionShown { id: string; label: string; description?: string; needs?: string; features: FeatureShown[] }
+/** An option as the sheet draws it; on a list with a table, the roll that gives it (7a5b2). */
+export interface OptionShown { id: string; label: string; description?: string; needs?: string; roll?: string; features: FeatureShown[] }
 /** How a list is picked (backend choices.js PICKED). */
 export type Picked = 'own' | 'features' | 'both' | 'everyone';
-export interface ChoiceListShown { id: string; one: string; many: string; picks: number | 'any'; again: boolean; levelled: boolean; picked?: Picked; options: OptionShown[] }
+/** How players pick from a list with a table (backend choices.js PLAYERS). */
+export type Players = 'hand' | 'either' | 'roll';
+/** A list as the sheet draws it; with a table to roll on, its dice, and how players pick (7a5b2). */
+export interface ChoiceListShown { id: string; one: string; many: string; picks: number | 'any'; again: boolean; levelled: boolean; picked?: Picked; table?: string; players?: Players; options: OptionShown[] }
 
 /** What the server worked out of a character's picks on their last save (backend choices.js workedOf). */
 export interface Worked {
@@ -56,7 +60,38 @@ export type ChoicesAction =
   | { kind: 'drop'; list: string; option: string }
   | { kind: 'level'; list: string; option: string; level: number }
   | { kind: 'use'; feature: string; spent: number }
-  | { kind: 'recovery'; pool: string; spent: number };
+  | { kind: 'recovery'; pool: string; spent: number }
+  | { kind: 'roll'; list: string; from?: string };
+
+/** Where a sheet keeps what ROLL FOR IT last rolled on each list (backend choices.js ROLLED_KEY). */
+export const ROLLED_KEY = '_rolled';
+
+/** What ROLL FOR IT last rolled on a list (under the feature `from`), as the sheet keeps it, or null. */
+export const rolledOf = (data: unknown, list: string, from?: string): { option: string | null; roll: number } | null => {
+  const all = isObject(data) && isObject(data[ROLLED_KEY]) ? data[ROLLED_KEY] as Record<string, unknown> : {};
+  const r = all[from ? `${list}@${from}` : list];
+  return isObject(r) && Number.isInteger(r.roll) ? { option: typeof r.option === 'string' ? r.option : null, roll: r.roll as number } : null;
+};
+
+/**
+ * ROLL FOR IT on a list's offer (7a5b2; approved mockup nested-choices, version 2), for this viewer:
+ * whether there is a button and what it says (ROLL AGAIN for the GM once rolled), whether a player
+ * has already had their one roll of a list rolled only, the option rolled (marked TAKE IT), whether
+ * picking by hand is off for a player, and what the last roll said.
+ */
+export const rollOffer = (list: ChoiceListShown, rolled: { option: string | null; roll: number } | null, gm: boolean) => {
+  const players = list.table ? list.players ?? 'either' : 'hand';
+  const byRoll = !gm && players === 'roll';
+  const hit = rolled && rolled.option ? list.options.find((o) => o.id === rolled.option) ?? null : null;
+  return {
+    roll: !!list.table && (gm || players !== 'hand'),
+    label: gm && rolled ? 'ROLL AGAIN' : 'ROLL FOR IT',
+    spent: byRoll && !!rolled,
+    marked: hit ? hit.id : null,
+    byRoll,
+    said: rolled ? `ROLLED ${rolled.roll} → ${hit ? hit.label.toUpperCase() : 'NOTHING ON THE TABLE'}` : null,
+  };
+};
 
 /** How a sheet rests (backend recovery.js restingShown): who finishes a called rest, each rest by name. */
 export interface RestingShown { finish: 'call' | 'sheet'; rests: { id: string; name: string; spends: boolean }[] }
