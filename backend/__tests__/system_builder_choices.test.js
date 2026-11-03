@@ -180,3 +180,53 @@ describe('choices in PUBLISH\'s preview', () => {
     expect(changes).toEqual([{ kind: 'other', change: 'changed', id: 'choices' }]);
   });
 });
+
+describe('a list\'s table to roll on (7a5b)', () => {
+  const { tableOf, rollRangeOf, playersOf } = require_('../systemBuilder/choices');
+  const BGS = {
+    id: 'bgs', one: 'Background', many: 'Backgrounds', table: '2d6', players: 'roll', options: [
+      { id: 'dock', label: 'Dockhand', roll: '2-6' }, { id: 'scribe', label: 'Scribe', roll: '7' }, { id: 'thief', label: 'Thief', roll: '8-12' },
+    ],
+  };
+
+  it('reads dice up to four of 2 to 100 sides, a roll or range, and how players pick', () => {
+    expect(tableOf(BGS)).toEqual({ count: 2, sides: 6, low: 2, high: 12 });
+    expect(tableOf({ table: ' D20 ' })).toEqual({ count: 1, sides: 20, low: 1, high: 20 });
+    expect(tableOf({ table: '4d100' })).toMatchObject({ low: 4, high: 400 });
+    for (const bad of ['5d6', 'd1', 'd101', 'dF', '0d6', '2d', 6, undefined]) expect(tableOf({ table: bad }), String(bad)).toBeNull();
+    expect([rollRangeOf('4'), rollRangeOf(' 4 - 5 '), rollRangeOf('5-4'), rollRangeOf('4-'), rollRangeOf(4)]).toEqual([[4, 4], [4, 5], null, null, null]);
+    expect([playersOf(BGS), playersOf({ ...BGS, players: undefined }), playersOf({ ...BGS, players: 'nope' }), playersOf({ ...BGS, table: undefined })]).toEqual(['roll', 'either', 'either', 'hand']);
+  });
+
+  it('checks clean, and travels in the system file unchanged', () => {
+    expect(problems([BGS])).toEqual([]);
+    expect(problems([{ ...BGS, players: 'hand' }])).toEqual([]);
+    const file = citysys.buildFile({ definition: withChoices([BGS]), version: 1, origin: 'sys_abcdefabcdefabcd' });
+    const read = citysys.readFile(JSON.stringify(file));
+    expect([read.file.definition.choices, read.problems]).toEqual([[BGS], []]);
+  });
+
+  it('says what is wrong: dice it can\'t roll, how players pick, a roll off the table, on two options, none at all', () => {
+    expect(problems([{ ...BGS, table: '9d6' }])).toEqual(['list bgs, table: Dice like d6, 2d6, d20 or d100: up to 4 dice of 2 to 100 sides']);
+    expect(problems([{ ...BGS, players: 'dice' }])).toEqual(['list bgs, players: hand (by hand), either (by hand or rolled) or roll (rolled only)']);
+    const { table: _t, ...untabled } = BGS;
+    expect(problems([{ ...untabled, options: untabled.options.map(({ roll: _r, ...o }) => o) }])).toEqual(['list bgs, players: Only a list with a table to roll on is rolled for']);
+    expect(problems([{ ...untabled, players: 'hand', options: untabled.options.map(({ roll: _r, ...o }) => o) }])).toEqual([]);
+    expect(problems([{ ...untabled, players: 'hand' }])).toEqual([
+      'list bgs, option dock, roll: Only an option of a list with a table to roll on has a roll',
+      'list bgs, option scribe, roll: Only an option of a list with a table to roll on has a roll',
+      'list bgs, option thief, roll: Only an option of a list with a table to roll on has a roll',
+    ]);
+    // Off the table, or none: said, and the rolls they'd have had left on nothing.
+    expect(problems([{ ...BGS, options: [{ id: 'dock', label: 'Dockhand', roll: '1-7' }, { id: 'scribe', label: 'Scribe', roll: '6-7' }, { id: 'thief', label: 'Thief' }] }])).toEqual([
+      'list bgs, option dock, roll: A roll from 2 to 12, or a range like 2-3',
+      'list bgs, option thief, roll: A roll from 2 to 12, or a range like 2-3',
+      'list bgs, table: Nothing on 2, 3, 4, 5, 8, 9…',
+    ]);
+    expect(problems([{ ...BGS, options: [{ id: 'dock', label: 'Dockhand', roll: '2-7' }, { id: 'scribe', label: 'Scribe', roll: '7' }, { id: 'thief', label: 'Thief', roll: '8-11' }] }])).toEqual([
+      'list bgs, option scribe, roll: 7 is both Dockhand and Scribe',
+      'list bgs, table: Nothing on 12',
+    ]);
+    expect(problems([{ ...BGS, picked: 'everyone', players: undefined }])).toEqual(['list bgs, table: A list everyone has is never picked, so never rolled for']);
+  });
+});

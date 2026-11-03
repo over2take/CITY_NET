@@ -67,6 +67,28 @@ describe('a levelled list\'s die in the files (R1a)', () => {
   });
 });
 
+describe('a table\'s rolls in the files (7a5b)', () => {
+  it('has a roll column where the list has a table, the example\'s shared evenly, and comes back unchanged', () => {
+    const def = { ...HEARTH, choices: (HEARTH.choices as { id: string; options: object[] }[]).map((c) => (c.id === 'backgrounds'
+      ? { ...c, table: 'd6', options: [...c.options.map((o) => ({ ...o, roll: '1-3' })), { id: 'scribe', label: 'Scribe', roll: '4-6' }] } : c)) } as unknown as Definition;
+    const example = exampleFile(def, list(def, 'backgrounds'));
+    expect(example).toContain('\nname, description, requires, roll\n');
+    expect(example).toContain('# roll is what a d6 roll gives it on the table: a number, or a range like 3-4.');
+    expect(example).toMatch(/\nVeteran, .*, 1-3\n/);
+    expect(example).toMatch(/\nScholar, .*, 4-6\n/);
+    const text = listFile(def, list(def, 'backgrounds'));
+    expect(text).toContain('\nname, description, requires, roll\n');
+    expect(text).toMatch(/\nScribe, , , 4-6\n/);
+    const r = readChoicesFile(def, 'backgrounds', text);
+    expect([r.skipped, r.notes, r.changes]).toEqual([[], [], 0]);
+    expect(r.list).toEqual(list(def, 'backgrounds'));
+    // A levelled list with a table has both, die first; one without a table, neither roll nor its note.
+    const both = { ...def, choices: (def.choices as object[]).map((c) => ((c as { id: string }).id === 'classes' ? { ...c, table: 'd20' } : c)) } as unknown as Definition;
+    expect(listFile(both, list(both, 'classes'))).toContain('\nname, description, requires, die, roll\n');
+    expect(listFile(def, list(def, 'classes'))).not.toMatch(/, roll\n|# roll is/);
+  });
+});
+
 describe('DOWNLOAD THIS LIST', () => {
   it('imported back unchanged changes nothing, words with commas, quotes, #, spaces and line breaks included', () => {
     for (const id of ['classes', 'backgrounds']) {

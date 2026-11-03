@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   choiceLists, picksOf, pickedOf, openedBy, followedBy, unlocksByLevel, withNewList, withList, withoutList, withNewOption, withOption, withoutOption, levelNames, LIMITS,
-  type ChoiceList, type ChoiceOption, type Picked,
+  tableOf, playersOf, tableDiceChoices, tableProblems,
+  type ChoiceList, type ChoiceOption, type Picked, type Players,
 } from '../sheets/choices';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
@@ -16,7 +17,9 @@ import { restingOf, DIE_CHOICES } from '../sheets/recovery';
 // the lists a character picks from (classes, backgrounds, feats), named in the game's own words. The
 // lists down the left; the open one in the middle, with its names, how many a character picks,
 // MORE THAN ONCE and LEVELLED, and its options; the open option on the right, with its name, words
-// and requirement, a levelled list's HIT DIE (R1b), and its features (7a2b2, FeaturesEditor.tsx). What it reads and writes is
+// and requirement, a levelled list's HIT DIE (R1b), and its features (7a2b2, FeaturesEditor.tsx). A
+// list may have A TABLE TO ROLL ON, each option's roll on it, and how PLAYERS PICK from it (7a5b;
+// approved mockup nested-choices, version 2). What it reads and writes is
 // sheets/choices.ts; every change goes through the builder's `edit`. IMPORT on a list (choices import 2,
 // ChoicesImport.tsx) opens over the list and option columns.
 
@@ -47,6 +50,49 @@ const PICKED_WAYS: { id: Picked; label: string; why: string }[] = [
   { id: 'everyone', label: 'EVERYONE HAS IT', why: 'Nothing to pick: every character has each option whose requirement they meet, its features unlocking by their level.' },
 ];
 
+/** How players pick from a list with a table (7a5b; the mockup's words), with what each means. */
+const PLAYER_WAYS: { id: Players; label: string; why: string }[] = [
+  { id: 'hand', label: 'BY HAND', why: 'No ROLL FOR IT on the sheet; the table only shows in the builder.' },
+  { id: 'either', label: 'BY HAND OR ROLL', why: 'ROLL FOR IT beside picking: the roll marks a result to TAKE, and any other can still be picked by hand.' },
+  { id: 'roll', label: 'BY ROLL ONLY', why: 'Players roll, and take what comes up: picking by hand is off for them. The GM can still pick any option for a player, or let them roll again.' },
+];
+
+/**
+ * A list's table (7a5b): each option's roll, typed as a number or a range, and what is wrong with
+ * them as the server would say it, each next to its option.
+ */
+function RollTable({ list, definition, edit }: Props & { list: ChoiceList }) {
+  const table = tableOf(list);
+  if (!table) return null;
+  const problems = tableProblems(list);
+  const gaps = problems.filter((p) => !p.option);
+  return (
+    <div role="group" aria-label="Table" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span style={small}>THE TABLE · {list.table!.toUpperCase()} · {table.low} TO {table.high}</span>
+      <div style={{ display: 'grid', gridTemplateColumns: '80px minmax(0, 1fr)', gap: '4px 10px', alignItems: 'center' }}>
+        <span style={small}>ROLL</span>
+        <span style={small}>OPTION</span>
+        {list.options.map((o) => {
+          const wrong = problems.filter((p) => p.option === o.id);
+          const name = o.label.trim() || o.id;
+          return (
+            <React.Fragment key={o.id}>
+              <input type="text" aria-label={`${name} roll`} value={o.roll ?? ''} placeholder={`${table.low}-${table.high}`} style={input}
+                aria-invalid={wrong.length ? true : undefined} onChange={(e) => edit(withOption(definition, list.id, o.id, { roll: e.target.value }))} />
+              <span style={{ minWidth: 0 }}>
+                <span style={{ fontSize: 12, letterSpacing: 1 }}>{name.toUpperCase()}</span>
+                {wrong.map((p) => <span key={p.message} style={{ ...why, display: 'block', fontSize: 11, color: 'var(--danger)', opacity: 1 }}>{p.message}</span>)}
+              </span>
+            </React.Fragment>
+          );
+        })}
+      </div>
+      {gaps.map((p) => <p key={p.message} style={{ ...why, fontSize: 11, color: 'var(--danger)', opacity: 1 }}>{p.message}</p>)}
+      <p style={{ ...why, fontSize: 11, opacity: 0.7 }}>Each option&apos;s ROLL is a number or a range (3, 4-5). Every roll from {table.low} to {table.high} needs exactly one option.</p>
+    </div>
+  );
+}
+
 /** No options outlined as new. */
 const NONE = new Set<string>();
 
@@ -74,6 +120,8 @@ function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, st
   const followed = followedBy(definition, list);
   const ownPicks = way === 'own' || way === 'both';
   const name = list.many.trim() || 'this list';
+  const dice = tableDiceChoices(definition);
+  const players = playersOf(list);
   const add = () => {
     const made = withNewOption(definition, list.id);
     if (!made) return;
@@ -135,6 +183,22 @@ function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, st
         {way !== 'everyone' && <>
         <FieldName beside hint={HINTS['choices.levelled']} style={small}>LEVELS</FieldName>
         <ToggleSwitch label="LEVELLED" on={list.levelled === true} onChange={() => set({ levelled: list.levelled !== true })} />
+        <FieldName beside hint={HINTS['choices.table']} style={small}>A TABLE TO ROLL ON</FieldName>
+        <select aria-label="Table die" value={list.table ?? ''} style={{ ...input, justifySelf: 'start' }} onChange={(e) => set({ table: e.target.value || null })}>
+          <option value="">NONE</option>
+          {dice.map((d) => <option key={d} value={d}>{d}</option>)}
+          {list.table && !dice.includes(list.table) && <option value={list.table}>{list.table}</option>}
+        </select>
+        {tableOf(list) && <>
+        <FieldName beside hint={HINTS['choices.players']} style={small}>PLAYERS PICK</FieldName>
+        <span role="group" aria-label="Players pick" style={{ display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--green)', justifySelf: 'start' }}>
+          {PLAYER_WAYS.map((w) => (
+            <button key={w.id} type="button" aria-pressed={players === w.id} title={w.why} style={seg(players === w.id)} onClick={() => set({ players: w.id })}>{w.label}</button>
+          ))}
+        </span>
+        <span />
+        <span style={{ ...why, fontSize: 11, opacity: 0.7 }}>{PLAYER_WAYS.find((w) => w.id === players)!.why}</span>
+        </>}
         </>}
       </div>
       <p style={{ ...why, fontSize: 11, opacity: 0.7 }}>
@@ -156,6 +220,7 @@ function ListPanel({ list, definition, edit, picked, onPick, onImport, fresh, st
           ))}
         </div>
       ) : <p style={why}>No options yet. + OPTION makes one: a class, a background, a feat.</p>}
+      <RollTable list={list} definition={definition} edit={edit} />
     </section>
   );
 }

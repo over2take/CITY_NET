@@ -14,8 +14,9 @@
 // new one is added, and nothing is deleted or renamed. A feature is found within its option by name,
 // and by level too only when that option has the name at more than one level, in the list or in the
 // file (ABILITY SCORE IMPROVEMENT at 4 and 8). An empty cell leaves that part as it is; `-` clears it.
-// A levelled list's options take their die too (R1a: d10, or 10). Only words, levels, requirements,
-// dice and uses come from a file: modifiers, rolls, roll changes and the
+// A levelled list's options take their die too (R1a: d10, or 10), and a list with a table to roll
+// on, each option's roll (7a5b: 4, or a range, 4-5). Only words, levels, requirements, dice, table
+// rolls and uses come from a file: modifiers, rolls, roll changes and the
 // list a feature opens stay as the builder has them. A row with a mistake is skipped and said, by its
 // line, and the rest goes in (the user asked for the GM to be warned of each, 2026-10-28).
 //
@@ -24,7 +25,7 @@
 // PUBLISH, through the version preview like any other change.
 
 const { parse, references, NAME } = require('./expression');
-const { LIMITS, choicesOf, levelNamesOf, namesOf, unlocksByLevelOf } = require('./choices');
+const { LIMITS, choicesOf, levelNamesOf, namesOf, unlocksByLevelOf, tableOf, rollRangeOf } = require('./choices');
 const { restIdsOf, restsOf } = require('./rests');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { tablesOf } = require('./derived');
@@ -34,7 +35,7 @@ const { splitRow, delimiterOf, stripBom } = require('../shops/catalogueParse');
 const MAX_BYTES = 200_000;
 /** The columns each part reads; the first ones named are required. */
 const COLUMNS = {
-  options: { required: ['name'], read: ['name', 'description', 'requires', 'die'] },
+  options: { required: ['name'], read: ['name', 'description', 'requires', 'die', 'roll'] },
   features: { required: ['option', 'feature'], read: ['option', 'feature', 'level', 'words', 'uses', 'refill'] },
 };
 /** What a cell says to clear its part. */
@@ -92,7 +93,7 @@ const formulaProblem = (text, known, isTable) => {
  * The rows of a file by part, each with its line and its cells by column; the problems with whole
  * parts (a missing column, a part this doesn't read) as skipped lines; and notes about columns.
  */
-const rowsOf = (text, levelled, many, ownLevels = levelled) => {
+const rowsOf = (text, levelled, many, ownLevels = levelled, rolled = false) => {
   const delimiter = delimiterOf(text);
   const rows = { options: [], features: [] };
   const skipped = [];
@@ -127,6 +128,7 @@ const rowsOf = (text, levelled, many, ownLevels = levelled) => {
       for (const c of named.filter((x) => x && !COLUMNS[part].read.includes(x))) notes.push({ line, message: `The ${c} column isn't read: only ${COLUMNS[part].read.join(', ')}` });
       if (part === 'features' && named.includes('level') && !levelled) notes.push({ line, message: `${many} has no levels, so the level column is ignored` });
       if (part === 'options' && named.includes('die') && !ownLevels) notes.push({ line, message: `${many} isn't levelled, so the die column is ignored` });
+      if (part === 'options' && named.includes('roll') && !rolled) notes.push({ line, message: `${many} has no table to roll on, so the roll column is ignored` });
       return;
     }
     const cols = columns;
@@ -156,7 +158,9 @@ const readChoicesFile = (definition, listId, input) => {
   const many = (next.many || next.id).toUpperCase();
   // A die only where the list has levels of its own (a class), not one it follows.
   const ownLevels = next.levelled === true;
-  const { rows, skipped, notes } = rowsOf(stripBom(input), levelled, many, ownLevels);
+  // A roll only where the list has a table to roll on (7a5b).
+  const table = tableOf(next);
+  const { rows, skipped, notes } = rowsOf(stripBom(input), levelled, many, ownLevels, !!table);
   const added = { options: [], features: [] };
   const changed = { options: [], features: [] };
   let unchanged = 0;
@@ -193,9 +197,16 @@ const readChoicesFile = (definition, listId, input) => {
     const dieText = ownLevels ? row.get('die') : '';
     const dieMatch = /^d?(\d+)$/i.exec(dieText);
     const die = dieMatch ? Number(dieMatch[1]) : null;
+    // A roll as 4 or 4-5, within the table's dice; '-' takes it away.
+    const rollText = table ? row.get('roll') : '';
+    const range = rollRangeOf(rollText);
+    const roll = range ? (range[0] === range[1] ? `${range[0]}` : `${range[0]}-${range[1]}`) : null;
     if (!name || clearing(name)) { skip(row.line, 'No name'); continue; }
     if (dieText && !clearing(dieText) && (die === null || die < LIMITS.dieLeast || die > LIMITS.dieMost)) {
       skip(row.line, `${name}: die: a die like d10, ${LIMITS.dieLeast} to ${LIMITS.dieMost} sides`); continue;
+    }
+    if (rollText && !clearing(rollText) && (!range || range[0] < table.low || range[1] > table.high)) {
+      skip(row.line, `${name}: roll: a roll from ${table.low} to ${table.high}, or a range like ${table.low}-${table.low + 1}`); continue;
     }
     if (name.length > LIMITS.label) { skip(row.line, `${name.slice(0, 20)}…: a name is ${LIMITS.label} characters at most`); continue; }
     if (description.length > LIMITS.description) { skip(row.line, `${name}: the description is longer than ${LIMITS.description} characters`); continue; }
@@ -212,8 +223,9 @@ const readChoicesFile = (definition, listId, input) => {
       if (description && !clearing(description)) made.description = description;
       if (requires && !clearing(requires)) made.requires = requires;
       if (die !== null) made.die = die;
+      if (roll !== null) made.roll = roll;
       next.options.push(made);
-      added.options.push({ line: row.line, option: name, ...(made.requires ? { requires: made.requires } : {}), ...(made.die ? { die: `d${made.die}` } : {}) });
+      added.options.push({ line: row.line, option: name, ...(made.requires ? { requires: made.requires } : {}), ...(made.die ? { die: `d${made.die}` } : {}), ...(made.roll ? { roll: made.roll } : {}) });
       continue;
     }
     const parts = [];
@@ -231,6 +243,14 @@ const readChoicesFile = (definition, listId, input) => {
       if (from !== to) {
         parts.push({ part: 'die', from, to });
         if (to) option.die = die; else delete option.die;
+      }
+    }
+    if (rollText) {
+      const from = typeof option.roll === 'string' ? option.roll : '';
+      const to = clearing(rollText) ? '' : roll;
+      if (from !== to) {
+        parts.push({ part: 'roll', from, to });
+        if (to) option.roll = to; else delete option.roll;
       }
     }
     if (parts.length) changed.options.push({ line: row.line, option: option.label, parts });
