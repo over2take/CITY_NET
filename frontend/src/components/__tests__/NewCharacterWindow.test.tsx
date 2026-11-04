@@ -8,9 +8,10 @@ import { CharacterSheetWindow } from '../CharacterSheetWindow';
 import { registerCustomTemplate, clearCustomTemplates, type CustomRender } from '../../sheets/customTemplates';
 
 /**
- * NEW_CHARACTER.EXE (7c2). Approved mockup new-character (2026-11-03): START offers an upload and the
- * blank form; each step asks, NEXT off until it is answered; a place kept on the sheet, so leaving
- * loses nothing; finished or uploaded, it closes on the sheet.
+ * NEW_CHARACTER.EXE (7c2). Approved mockup new-character (2026-11-03), a terminal window (the user's call,
+ * 2026-11-04): it starts with the ways in as folders, each saying what it is with a button to go ahead;
+ * making one, the steps are the folders, opening once those before are answered, NEXT off until it is; a
+ * place kept on the sheet, so leaving loses nothing; finished or uploaded, it closes on the sheet.
  */
 
 const ID = 'sys_0123456789abcdef';
@@ -50,38 +51,57 @@ const open = async (data: Record<string, unknown> = { _creating: {} }, parts?: R
   const onLeave = vi.fn();
   const onDone = vi.fn();
   render(<NewCharacterWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={socket as never} userName="WREN" onLeave={onLeave} onDone={onDone} />);
-  await screen.findByRole('list', { name: 'The steps' });
+  await screen.findByRole('tablist', { name: 'Folders' });
   return { socket, onLeave, onDone };
 };
 
 afterEach(() => { cleanup(); clearCustomTemplates(); vi.unstubAllGlobals(); });
 
-const crumbs = () => within(screen.getByRole('list', { name: 'The steps' })).getAllByRole('listitem');
+const folders = () => within(screen.getByRole('tablist', { name: 'Folders' })).getAllByRole('tab') as HTMLButtonElement[];
+const shape = () => folders().map((t) => [t.textContent, t.getAttribute('aria-selected') === 'true', t.disabled]);
+const answers = (over: object = {}) => ({ picks: [], opens: [], levels: {}, from: {}, uses: {}, unmet: [], recovery: null, ...over });
+const ALL_BEFORE_CLASS = { name: 'Wren', grit: 12 };
+const way = (name: string) => userEvent.click(screen.getByRole('tab', { name }));
 const button = (name: string) => screen.getByRole('button', { name }) as HTMLButtonElement;
 
 describe('START', () => {
-  it('names itself as a program, and offers the three ways in', async () => {
+  it('names itself as a program, with the three ways in as its folders and no steps to walk yet', async () => {
     await open();
     expect(screen.getByText('NEW_CHARACTER.EXE · HEARTH')).toBeTruthy();
     expect(screen.getByText(/HOW DO YOU WANT TO START/)).toBeTruthy();
-    expect(button('MAKE ONE HERE')).toBeTruthy();
-    expect(button('UPLOAD A SHEET')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'THE BLANK FORM' }).getAttribute('href')).toBe('/api/sheets/import/template.pdf');
+    expect(shape()).toEqual([['MAKE ONE HERE', true, false], ['UPLOAD A SHEET', false, false], ['THE BLANK FORM', false, false]]);
     expect(screen.queryByRole('button', { name: 'NEXT' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'BACK' })).toBeNull();
+    expect(button('LEAVE FOR NOW')).toBeTruthy();
   });
 
-  it('MAKE ONE HERE goes to the first step, and saves that', async () => {
+  it('each way says what it is; nothing happens until its button is pressed', async () => {
     const { socket } = await open();
-    await userEvent.click(button('MAKE ONE HERE'));
+    expect(screen.getByRole('tabpanel').textContent).toContain('Step by step');
+    expect(screen.getByRole('tabpanel').textContent).toContain('WHO THEY ARE · THE STATS · CLASS');
+    await way('UPLOAD A SHEET');
+    expect(screen.getByRole('tabpanel').textContent).toContain('taken as it is');
+    expect(screen.queryByText('IMPORT.EXE')).toBeNull();
+    await way('THE BLANK FORM');
+    expect(screen.getByRole('tabpanel').textContent).toContain('outside the game');
+    expect(socket.said('creationAction')).toEqual([]);
+  });
+
+  it('BEGIN goes to the first step, saves that, and the steps become the folders', async () => {
+    const { socket } = await open();
+    await userEvent.click(button('BEGIN'));
     expect(socket.said('creationAction')).toEqual([{ kind: 'at', step: 'who' }]);
     expect(screen.getByRole('textbox', { name: 'Name' })).toBeTruthy();
+    expect(shape()).toEqual([['WHO THEY ARE', true, false], ['THE STATS', false, true], ['CLASS', false, true]]);
+    expect(screen.getByText('WHO THEY ARE · STEP 1 OF 3')).toBeTruthy();
   });
 
-  it('THE BLANK FORM says what to do with it', async () => {
+  it('THE BLANK FORM hands it over and says what to do with it', async () => {
     await open();
+    await way('THE BLANK FORM');
     expect(screen.queryByRole('status')).toBeNull();
-    const link = screen.getByRole('link', { name: 'THE BLANK FORM' });
+    const link = screen.getByRole('link', { name: 'DOWNLOAD THE FORM' });
+    expect(link.getAttribute('href')).toBe('/api/sheets/import/template.pdf');
     link.addEventListener('click', (e) => e.preventDefault());
     await userEvent.click(link);
     expect(screen.getByRole('status').textContent).toContain('UPLOAD A SHEET');
@@ -89,8 +109,9 @@ describe('START', () => {
 
   it('UPLOAD A SHEET opens today\'s IMPORT', async () => {
     await open();
+    await way('UPLOAD A SHEET');
     expect(screen.queryByText('IMPORT.EXE')).toBeNull();
-    await userEvent.click(button('UPLOAD A SHEET'));
+    await userEvent.click(button('CHOOSE A SHEET'));
     expect(screen.getByText('IMPORT.EXE')).toBeTruthy();
     await userEvent.click(within(screen.getByText('IMPORT.EXE').parentElement!).getByRole('button', { name: '×' }));
     expect(screen.queryByText('IMPORT.EXE')).toBeNull();
@@ -100,27 +121,61 @@ describe('START', () => {
     await open({ _creating: {} }, { sheet_import: { on: false } });
     expect(screen.queryByText(/HOW DO YOU WANT TO START/)).toBeNull();
     expect(screen.getByRole('textbox', { name: 'Name' })).toBeTruthy();
-    expect(crumbs()[0].getAttribute('aria-current')).toBe('step');
+    expect(screen.getByRole('tab', { name: 'WHO THEY ARE' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.queryByRole('tab', { name: 'MAKE ONE HERE' })).toBeNull();
   });
 });
 
 describe('the steps', () => {
-  it('opens where they left it, the ones before ticked', async () => {
-    await open({ _creating: { at: 'list:classes' } });
-    expect(crumbs().map((li) => li.textContent)).toEqual(['✓ WHO THEY ARE', '✓ THE STATS', 'CLASS']);
-    expect(crumbs()[2].getAttribute('aria-current')).toBe('step');
-    expect(crumbs()[0].getAttribute('aria-current')).toBeNull();
+  it('opens where they left it, those answered ticked, saying which step of how many', async () => {
+    await open({ ...ALL_BEFORE_CLASS, _creating: { at: 'list:classes' } });
+    expect(shape()).toEqual([['✓ WHO THEY ARE', false, false], ['✓ THE STATS', false, false], ['CLASS', true, false]]);
+    expect(screen.getByText('CLASS · STEP 3 OF 3')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'THE STATS, answered' })).toBeTruthy();
   });
 
-  it('marks no step while on START', async () => {
+  it('a name opens the next folder, and a folder opened is saved as their place', async () => {
+    const { socket } = await open({ name: 'Wren', _creating: { at: 'who' } });
+    expect(shape().map((f) => f[2])).toEqual([false, false, true]);
+    await way('THE STATS');
+    expect(socket.said('creationAction')).toEqual([{ kind: 'at', step: 'stats' }]);
+    expect(screen.getByRole('spinbutton', { name: 'Grit' })).toBeTruthy();
+  });
+
+  it('the arrow keys walk the ways in, and the steps, passing over those shut', async () => {
     await open();
-    expect(crumbs().map((li) => [li.textContent, li.getAttribute('aria-current')])).toEqual([['WHO THEY ARE', null], ['THE STATS', null], ['CLASS', null]]);
+    screen.getByRole('tab', { name: 'MAKE ONE HERE' }).focus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(screen.getByRole('tab', { name: 'UPLOAD A SHEET' }).getAttribute('aria-selected')).toBe('true');
+    cleanup();
+    await open({ name: 'Wren', _creating: { at: 'stats' } });
+    screen.getByRole('tab', { name: 'THE STATS' }).focus();
+    await userEvent.keyboard('{ArrowDown}');
+    expect(screen.getByRole('tab', { name: /^WHO THEY ARE/ }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('with a step before it unanswered again, FINISH waits', async () => {
+    const { socket } = await open({ ...ALL_BEFORE_CLASS, _creating: { at: 'list:classes' }, _worked: answers({ picks: [{ list: 'classes', option: 'soldier' }] }) });
+    expect(button('FINISH').disabled).toBe(false);
+    socket.fire('sheetData', { username: 'WREN', system: ID, data: { grit: 12, _creating: { at: 'list:classes' }, _worked: answers({ picks: [{ list: 'classes', option: 'soldier' }] }) } });
+    expect(button('FINISH').disabled).toBe(true);
+    expect(button('FINISH').title).toBe('Finish this step first');
+  });
+
+  it('shows their portrait above the folders when they have one', async () => {
+    registerCustomTemplate(render_());
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })));
+    const socket = makeSocket({ _creating: {} });
+    const { container } = render(<NewCharacterWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={socket as never} userName="WREN" onLeave={vi.fn()} onDone={vi.fn()} />);
+    await screen.findByRole('tablist', { name: 'Folders' });
+    expect(container.querySelector('img')).toBeNull();
+    socket.fire('sheetData', { username: 'WREN', system: ID, portrait_url: '/uploads/wren.png', data: { _creating: {} } });
+    expect(container.querySelector('img')?.getAttribute('src')).toBe('/uploads/wren.png');
   });
 
   it('WHO THEY ARE writes the sheet\'s own fields, with NEXT off until there is a name', async () => {
     const timers = vi.spyOn(globalThis, 'setTimeout');
     const { socket } = await open({ _creating: { at: 'who' } });
-    expect(button('BACK').disabled).toBe(true);
     expect(button('NEXT').disabled).toBe(true);
     expect(button('NEXT').title).toBe('Finish this step first');
     await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'W');
@@ -148,15 +203,22 @@ describe('the steps', () => {
     expect(button('NEXT').disabled).toBe(false);
   });
 
-  it('BACK goes back, saved', async () => {
+  it('BACK goes back, saved; from the first step to the ways in; and with none, nowhere', async () => {
     const { socket } = await open({ _creating: { at: 'stats' } });
     await userEvent.click(button('BACK'));
     expect(socket.said('creationAction')).toEqual([{ kind: 'at', step: 'who' }]);
     expect(screen.getByRole('textbox', { name: 'Name' })).toBeTruthy();
+    await userEvent.click(button('BACK'));
+    expect(screen.getByText(/HOW DO YOU WANT TO START/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'BACK' })).toBeNull();
+    expect(socket.said('creationAction')).toHaveLength(1);
+    cleanup();
+    await open({ _creating: { at: 'who' } }, { sheet_import: { on: false } });
+    expect(button('BACK').disabled).toBe(true);
   });
 
   it('a list\'s step is today\'s picking of that list, asking the server; one not met is off', async () => {
-    const { socket } = await open({ _creating: { at: 'list:classes' }, _worked: { picks: [], opens: [], levels: {}, from: {}, uses: {}, unmet: ['mage'], recovery: null } });
+    const { socket } = await open({ ...ALL_BEFORE_CLASS, _creating: { at: 'list:classes' }, _worked: answers({ unmet: ['mage'] }) });
     await userEvent.click(button('SOLDIER'));
     expect(socket.said('choicesAction')).toEqual([{ kind: 'pick', list: 'classes', option: 'soldier' }]);
     expect(button('MAGE').disabled).toBe(true);
@@ -164,9 +226,7 @@ describe('the steps', () => {
   });
 
   it('on a list\'s step, a pick made can be taken back, the last step saying FINISH', async () => {
-    const { socket, onDone } = await open({
-      _creating: { at: 'list:classes' }, _worked: { picks: [{ list: 'classes', option: 'soldier' }], opens: [], levels: {}, from: {}, uses: {}, unmet: [], recovery: null },
-    });
+    const { socket, onDone } = await open({ ...ALL_BEFORE_CLASS, _creating: { at: 'list:classes' }, _worked: answers({ picks: [{ list: 'classes', option: 'soldier' }] }) });
     expect(screen.queryByRole('button', { name: 'NEXT' })).toBeNull();
     await userEvent.click(button('Drop Soldier'));
     await userEvent.click(button('YES, DROP'));

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { DraggableWindow } from './DraggableWindow';
+import { TerminalWindow, TERMINAL_PREVIEW, type TerminalAction, type TerminalFolder } from './TerminalWindow';
 import { ChoicesSection } from './ChoicesSection';
 import type { Socket } from 'socket.io-client';
 import { ImportSheetDialog } from './ImportSheetDialog';
@@ -12,12 +12,14 @@ import {
 } from '../sheets/newCharacterFlow';
 import { themeRoot } from '../utils/themeRoot';
 
-// NEW_CHARACTER.EXE (7c2; approved mockup docs/mockups/new-character.html, 2026-11-03): a player with
-// a blank sheet walked through the steps their GM set, each answer written to the sheet as they go.
-// START offers an upload, today's IMPORT, taken as it is with no steps after it, and THE BLANK FORM.
-// Closing it, or LEAVE FOR NOW, loses nothing: the place is on the sheet (backend creation.js), and
-// the sheet's CREATING · CONTINUE opens it there again. What a step asks and whether it is answered
-// is sheets/newCharacterFlow.ts.
+// NEW_CHARACTER.EXE (7c2; approved mockup docs/mockups/new-character.html, 2026-11-03; a terminal
+// window, as ID.EXE is, the user's call of 2026-11-04). It starts with the ways in as its folders, each
+// saying what it is with a button to go ahead: MAKE ONE HERE, UPLOAD A SHEET (today's IMPORT, taken as
+// it is with no steps after it) and THE BLANK FORM. Making one, the folders become the steps their GM
+// set, every answer written to the sheet as they go; a step opens once those before it are answered,
+// as one may need an earlier one (a class, a stat). Closing it, or LEAVE FOR NOW, loses nothing: the
+// place is on the sheet (backend creation.js), and the sheet's CREATING · CONTINUE opens it there
+// again. What a step asks and whether it is answered is sheets/newCharacterFlow.ts.
 
 interface Props {
   pos: { x: number; y: number };
@@ -30,25 +32,34 @@ interface Props {
   onDone: () => void;
 }
 
+/** Before the steps, while there is a choice of how to start. */
+const START = 'start';
+const WAYS: TerminalFolder[] = [
+  { id: 'make', label: 'MAKE ONE HERE', name: 'MAKE ONE HERE' },
+  { id: 'upload', label: 'UPLOAD A SHEET', name: 'UPLOAD A SHEET' },
+  { id: 'form', label: 'THE BLANK FORM', name: 'THE BLANK FORM' },
+];
+
 const small: React.CSSProperties = { fontSize: '0.6rem', letterSpacing: '1px', opacity: 0.75 };
 const why: React.CSSProperties = { fontSize: '0.7rem', lineHeight: 1.45, opacity: 0.85, margin: 0 };
 const btn: React.CSSProperties = {
-  background: 'none', border: '1px solid var(--dark-green)', color: 'var(--green)', cursor: 'pointer',
-  fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', padding: '3px 9px',
+  background: 'none', border: '1px solid var(--dark-green)', color: 'var(--green)', cursor: 'pointer', whiteSpace: 'nowrap',
+  fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', padding: '3px 9px', textAlign: 'center', boxSizing: 'border-box', lineHeight: 'normal',
 };
-const go: React.CSSProperties = { ...btn, borderColor: 'var(--green)' };
 const box: React.CSSProperties = {
   background: 'color-mix(in srgb, var(--green) 6%, var(--black))', border: '1px solid var(--dark-green)', color: 'var(--green)',
   fontFamily: 'inherit', fontSize: '0.75rem', padding: '3px 6px', boxSizing: 'border-box', width: '100%',
 };
-/** A way to start, its button in a column of its own so the three line up. */
-const option: React.CSSProperties = { display: 'grid', gridTemplateColumns: '130px minmax(0, 1fr)', gap: '10px', alignItems: 'center' };
+const confirm: React.CSSProperties = { ...btn, borderColor: 'var(--green)', alignSelf: 'flex-start', padding: '5px 14px' };
+const page: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '10px' };
 
 export function NewCharacterWindow({ pos, setPos, socket, userName, onLeave, onDone }: Props) {
   const { sheet, template, handleFieldChange } = usePlayerSheet(socket, userName);
   const refused = useChoicesRefused(socket);
-  // The step shown, ahead of the server's answer so NEXT doesn't wait on it. Null: as the sheet says.
+  // The folder shown, ahead of the server's answer so NEXT doesn't wait on it. Null: as the sheet says.
   const [moved, setMoved] = useState<string | null>(null);
+  // The way in shown, on START.
+  const [way, setWay] = useState(WAYS[0].id);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   const [formTaken, setFormTaken] = useState(false);
@@ -57,52 +68,88 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, onLeave, onD
   useEffect(() => { if (done) onDone(); }, [done]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const title = `NEW_CHARACTER.EXE · ${(template?.name ?? '').toUpperCase()}`;
-  const windowStyle: React.CSSProperties = { width: '480px', maxWidth: '92vw' };
-  const contentStyle: React.CSSProperties = { maxHeight: '76vh', padding: 0, textAlign: 'left' };
 
   if (!sheet || !template?.creation) {
     return (
-      <DraggableWindow title={title} pos={pos} setPos={setPos} onClose={onLeave} windowStyle={windowStyle} contentStyle={contentStyle}>
-        <div style={{ ...why, padding: '12px' }}>ACCESSING RECORD...</div>
-      </DraggableWindow>
+      <TerminalWindow title={title} pos={pos} setPos={setPos} onClose={onLeave} panelMode="controls"
+        folders={[{ id: START, label: 'START' }]} open={START} onOpen={() => {}}>
+        <span style={why}>ACCESSING RECORD...</span>
+      </TerminalWindow>
     );
   }
 
   const steps = flowSteps(template);
-  const at = moved ?? savedStep(template, data);
   // Without SHEET IMPORT there is only one way to start, so nothing to ask.
-  const starting = !at && canImport(sheet.system);
-  const step = at ?? steps[0];
-  const index = steps.indexOf(step);
-  const go_to = (id: string) => { setMoved(id); socket?.emit('creationAction', { kind: 'at', step: id }); };
-  const answered = stepAnswered(template, step, data);
-  const last = index === steps.length - 1;
-  const listId = stepListId(step);
+  const hasStart = canImport(sheet.system);
+  const open = moved ?? savedStep(template, data) ?? (hasStart ? START : steps[0]);
+  const starting = open === START;
+  const index = steps.indexOf(open);
+  const answered = (id: string) => stepAnswered(template, id, data);
+  /** A step opens once every step before it is answered. */
+  const reachable = (i: number) => steps.slice(0, i).every(answered);
 
+  const goTo = (id: string) => {
+    setMoved(id);
+    if (id !== START) socket?.emit('creationAction', { kind: 'at', step: id });
+  };
+
+  const folders: TerminalFolder[] = starting ? WAYS : steps.map((id, i) => {
+    const name = flowStepName(template, id);
+    const ticked = id !== open && reachable(i) && answered(id);
+    return { id, label: `${ticked ? '✓ ' : ''}${name}`, name: ticked ? `${name}, answered` : name, disabled: !reachable(i) };
+  });
+
+  const last = index === steps.length - 1;
+  const everyAnswered = steps.every(answered);
+  const canGoOn = index >= 0 && (last ? everyAnswered : answered(open));
+  const actions: TerminalAction[] = [
+    ...(index >= 0 ? [{
+      key: 'back', label: 'BACK', disabled: index === 0 && !hasStart,
+      onClick: () => goTo(index === 0 ? START : steps[index - 1]),
+    }] : []),
+    { key: 'leave', label: 'LEAVE FOR NOW', onClick: onLeave },
+    ...(index >= 0 ? [{
+      key: 'next', label: last ? 'FINISH' : 'NEXT', tone: 'primary' as const, disabled: !canGoOn,
+      title: canGoOn ? undefined : 'Finish this step first',
+      onClick: () => {
+        if (!last) return goTo(steps[index + 1]);
+        socket?.emit('creationAction', { kind: 'finish' });
+        return onDone();
+      },
+    }] : []),
+  ];
+
+  const listId = stepListId(open);
   const body = () => {
-    if (starting) {
+    if (starting && way === 'make') {
       return (
-        <>
-          <p style={{ ...why, fontSize: '0.8rem', opacity: 1 }}>A NEW CHARACTER. HOW DO YOU WANT TO START?</p>
-          <div style={option}>
-            <button type="button" style={go} onClick={() => go_to(steps[0])}>MAKE ONE HERE</button>
-            <span style={small}>Step by step, as your GM set it up.</span>
-          </div>
-          <div style={option}>
-            <button type="button" style={btn} onClick={() => setIsImportOpen(true)}>UPLOAD A SHEET</button>
-            <span style={small}>A filled-in form, or one you already have. Taken as it is.</span>
-          </div>
-          <div style={option}>
-            <a href="/api/sheets/import/template.pdf" download style={{ ...btn, textDecoration: 'none', textAlign: 'center', boxSizing: 'border-box', lineHeight: 'normal', alignSelf: 'center' }} onClick={() => setFormTaken(true)}>THE BLANK FORM</a>
-            <span style={small}>To fill in outside the game, made from this system&apos;s own sheet.</span>
-          </div>
-          {formTaken && <p role="status" style={{ ...why, color: 'var(--cyan)', opacity: 1 }}>Fill it in, then come back and UPLOAD A SHEET.</p>}
-        </>
+        <div style={page}>
+          <p style={why}>Step by step, as your GM set it up. Your answers are saved as you go, so you can leave and come back.</p>
+          <p style={small}>{steps.map((id) => flowStepName(template, id)).join(' · ')}</p>
+          <button type="button" style={confirm} onClick={() => goTo(steps[0])}>BEGIN</button>
+        </div>
       );
     }
-    if (step === 'who') {
+    if (starting && way === 'upload') {
       return (
-        <>
+        <div style={page}>
+          <p style={why}>A filled-in form, or a sheet you already have. It is taken as it is, with no steps after it.</p>
+          <button type="button" style={confirm} onClick={() => setIsImportOpen(true)}>CHOOSE A SHEET</button>
+        </div>
+      );
+    }
+    if (starting) {
+      return (
+        <div style={page}>
+          <p style={why}>To fill in outside the game, made from this system&apos;s own sheet.</p>
+          <a href="/api/sheets/import/template.pdf" download style={{ ...confirm, textDecoration: 'none' }} onClick={() => setFormTaken(true)}>DOWNLOAD THE FORM</a>
+          {formTaken && <p role="status" style={{ ...why, color: 'var(--cyan)', opacity: 1 }}>Fill it in, then come back and UPLOAD A SHEET.</p>}
+        </div>
+      );
+    }
+    if (open === 'who') {
+      return (
+        <div style={page}>
           <p style={why}>Who they are. The rest can wait; a name can&apos;t.</p>
           {whoFields(template).map((f) => (
             <label key={f.id} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
@@ -112,12 +159,12 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, onLeave, onD
                 : <input aria-label={f.label} style={box} value={String(data?.[f.id] ?? '')} onChange={(e) => handleFieldChange(f.id, e.target.value)} />}
             </label>
           ))}
-        </>
+        </div>
       );
     }
-    if (step === 'stats') {
+    if (open === 'stats') {
       return (
-        <>
+        <div style={page}>
           <p style={why}>Type in what you have.</p>
           {statsToSet(template).map((g) => (
             <section key={g.id} aria-label={g.label} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -137,16 +184,16 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, onLeave, onD
               </div>
             </section>
           ))}
-        </>
+        </div>
       );
     }
     if (listId) {
       return (
-        <>
+        <div style={page}>
           <p style={why}>Pick from these. One you don&apos;t meet is off, saying what it needs.</p>
           <ChoicesSection lists={template.choices ?? []} data={data ?? {}} readOnly={false} only={listId} takeBack
             onChoices={(action) => socket?.emit('choicesAction', action)} refused={refused} />
-        </>
+        </div>
       );
     }
     return null;
@@ -154,34 +201,24 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, onLeave, onD
 
   return (
     <>
-      <DraggableWindow title={title} pos={pos} setPos={setPos} onClose={onLeave} windowStyle={windowStyle} contentStyle={contentStyle}>
-        <ol aria-label="The steps" style={{ listStyle: 'none', margin: 0, padding: '7px 12px', display: 'flex', flexWrap: 'wrap', gap: '2px 10px', borderBottom: '1px solid var(--dark-green)' }}>
-          {steps.map((id, i) => {
-            const past = !starting && i < index;
-            const now = !starting && i === index;
-            return (
-              <li key={id} aria-current={now ? 'step' : undefined} style={{ fontSize: '0.6rem', letterSpacing: '1px', opacity: now ? 1 : past ? 0.65 : 0.4 }}>
-                {past ? '✓ ' : ''}{flowStepName(template, id)}
-              </li>
-            );
-          })}
-        </ol>
-        <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '10px', minHeight: '200px' }}>{body()}</div>
-        <div style={{ position: 'sticky', bottom: 0, background: 'var(--black)', display: 'flex', justifyContent: 'space-between', gap: '8px', padding: '8px 12px', borderTop: '1px solid var(--dark-green)', flexWrap: 'wrap' }}>
-          <span style={{ display: 'flex', gap: '6px' }}>
-            {!starting && <button type="button" style={{ ...btn, opacity: index === 0 ? 0.4 : 1 }} disabled={index === 0} onClick={() => go_to(steps[index - 1])}>BACK</button>}
-            <button type="button" style={btn} onClick={onLeave}>LEAVE FOR NOW</button>
-          </span>
-          {!starting && (
-            <button type="button" style={{ ...go, opacity: answered ? 1 : 0.4, cursor: answered ? 'pointer' : 'not-allowed' }} disabled={!answered} title={answered ? undefined : 'Finish this step first'}
-              onClick={() => {
-                if (!last) return go_to(steps[index + 1]);
-                socket?.emit('creationAction', { kind: 'finish' });
-                return onDone();
-              }}>{last ? 'FINISH' : 'NEXT'}</button>
-          )}
-        </div>
-      </DraggableWindow>
+      <TerminalWindow
+        title={title}
+        pos={pos}
+        setPos={setPos}
+        onClose={onLeave}
+        panelMode="controls"
+        preview={sheet.portrait_url
+          ? <img src={sheet.portrait_url} alt="" style={{ width: TERMINAL_PREVIEW.width, height: TERMINAL_PREVIEW.height, objectFit: 'cover', border: '1px solid var(--green)', boxSizing: 'border-box', display: 'block' }} />
+          : undefined}
+        folders={folders}
+        open={starting ? way : open}
+        onOpen={starting ? setWay : goTo}
+        header={starting ? 'A NEW CHARACTER. HOW DO YOU WANT TO START?' : `${flowStepName(template, open)} · STEP ${index + 1} OF ${steps.length}`}
+        actions={actions}
+        label="A new character"
+      >
+        {body()}
+      </TerminalWindow>
       {isImportOpen && ReactDOM.createPortal(
         <ImportSheetDialog
           gameSystem={sheet.system}

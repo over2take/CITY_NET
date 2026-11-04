@@ -19,6 +19,8 @@ export interface TerminalFolder<Id extends string = string> {
   name?: string;
   /** Something changed in there that wants looking at: the folder blinks until opened. */
   attention?: boolean;
+  /** Not open to go to yet: shown faint, and passed over by the arrow keys. */
+  disabled?: boolean;
 }
 
 /** A button along the bottom. The caller decides which apply; the window only lays them out. */
@@ -95,10 +97,11 @@ export function TerminalWindow<Id extends string>({
     // Not while typing or choosing: arrows belong to the field there.
     const tag = (e.target as HTMLElement).tagName;
     if (tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT') return;
-    if (folders.length < 2) return;
+    const usable = folders.filter((f) => !f.disabled);
+    if (usable.length < 2) return;
     e.preventDefault();
-    const i = Math.max(0, folders.findIndex((f) => f.id === open));
-    onOpen(folders[(i + (e.key === 'ArrowDown' ? 1 : folders.length - 1)) % folders.length].id);
+    const i = Math.max(0, usable.findIndex((f) => f.id === open));
+    onOpen(usable[(i + (e.key === 'ArrowDown' ? 1 : usable.length - 1)) % usable.length].id);
   };
 
   const openFolder = folders.find((f) => f.id === open);
@@ -135,11 +138,12 @@ export function TerminalWindow<Id extends string>({
                     role="tab"
                     aria-selected={active}
                     aria-label={f.name}
+                    disabled={f.disabled}
                     className={f.attention && !active ? 'terminal-folder-attention' : undefined}
                     onClick={() => onOpen(f.id)}
                     style={{
                       ...mono, position: 'relative', textAlign: 'left', fontSize: 11,
-                      padding: '6px 8px', minHeight: 30, cursor: 'pointer',
+                      padding: '6px 8px', minHeight: 30, cursor: f.disabled ? 'not-allowed' : 'pointer', opacity: f.disabled ? 0.4 : 1,
                       background: active ? 'color-mix(in srgb, var(--green) 14%, var(--black))' : 'var(--black)',
                       color: 'var(--green)', border: '1px solid var(--green)',
                     }}

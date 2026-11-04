@@ -48,10 +48,12 @@ test('a blank sheet: the blink, the walk, leaving and coming back, and finishing
   await expect(flow(page)).toBeVisible();
   await expect(page.getByText('A NEW CHARACTER. HOW DO YOU WANT TO START?')).toBeVisible();
   await expect(sheetButton(page)).not.toHaveClass(/unread-flash/);
-  await page.getByRole('button', { name: 'MAKE ONE HERE' }).click();
+  await expect(page.getByRole('tab', { name: 'MAKE ONE HERE' })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('button', { name: 'BEGIN' }).click();
 
-  // WHO THEY ARE: NEXT waits for a name.
+  // WHO THEY ARE: NEXT waits for a name, and the folders after it stay shut until then.
   await expect(page.getByRole('button', { name: 'NEXT' })).toBeDisabled();
+  await expect(page.getByRole('tab', { name: 'THE STATS' })).toBeDisabled();
   await page.getByRole('textbox', { name: 'Name' }).fill('Wren');
   await page.getByRole('button', { name: 'NEXT' }).click();
 
@@ -63,7 +65,7 @@ test('a blank sheet: the blink, the walk, leaving and coming back, and finishing
   await grit.fill('14');
   await expect.poll(async () => (await stored()).grit, { timeout: 15_000 }).toBe(14);
   await page.getByRole('button', { name: 'NEXT' }).click();
-  await expect(page.getByRole('listitem').filter({ hasText: 'CLASS' })).toHaveAttribute('aria-current', 'step');
+  await expect(page.getByRole('tab', { name: 'CLASS' })).toHaveAttribute('aria-selected', 'true');
 
   // Leave: the sheet, with its line; no blinking, and CHARACTER_SHEET opens the sheet from now on.
   await page.getByRole('button', { name: 'LEAVE FOR NOW' }).click();
@@ -115,7 +117,8 @@ test('an upload is taken as it is, and no steps follow', async ({ browser, reque
   await expect(rail(page)).toHaveClass(/unread-flash/, { timeout: 15_000 });
   await rail(page).click();
   await sheetButton(page).click();
-  await page.getByRole('button', { name: 'UPLOAD A SHEET' }).click();
+  await page.getByRole('tab', { name: 'UPLOAD A SHEET' }).click();
+  await page.getByRole('button', { name: 'CHOOSE A SHEET' }).click();
   // A stat under its range comes in as it is: no rules checked.
   await page.getByRole('textbox', { name: 'Paste JSON or a stat block' }).fill(JSON.stringify({ name: 'Rook', grit: 1 }));
   await page.getByRole('button', { name: 'PREVIEW', exact: true }).click();
