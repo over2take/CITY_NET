@@ -60,6 +60,10 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
     'The layout players see. Until you CUSTOMIZE it, it arranges itself from your stats, formulas and health model.',
     'Customized, you move tabs, sections and fields, and say who sees each field and who changes it: the player, or only the GM. DOWNLOAD FORM gives the blank PDF players can fill in and upload.',
   ] },
+  { page: 'new_character', title: 'NEW CHARACTER', body: [
+    'Turn on GUIDED NEW CHARACTER and a player opening a blank sheet is walked through steps instead. Off, they get the blank sheet, as always.',
+    'The steps are yours to order and switch off: who they are, the stats, one for each list on CHOICES picked on its own, kits and money. A list made later joins by itself.',
+  ] },
   { page: 'npcs', title: 'NPCS', body: [
     'NPC tiers are difficulties GENERATE_SHEET rolls an NPC from, at a level: HP, defense and any number, each a number, a formula or dice.',
     'An NPC can have a stat block of its own, shorter than the character sheet; only the GM ever sees it.',
@@ -210,6 +214,8 @@ export const HINTS = {
   'choices.picked': 'How characters get this list\'s options. ON ITS OWN: picked from it as a list of its own. THROUGH FEATURES: only under the features that open it, like a specialty at level 3. BOTH: some at the start and more from features, like feats. EVERYONE HAS IT: nothing to pick, every character has them.',
   'choices.picks': 'How many options a character picks from this list: ONE (a class), a number (two backgrounds), or ANY (feats).',
   'choices.again': 'More can be added later, past what was picked first. With levels, this is multiclassing: a second class, each with its own level.',
+  'creation.on': 'Off, a new character is a blank sheet. On, a player opening a blank sheet is walked through the steps below. Anyone with a sheet already is never asked.',
+  'creation.steps': 'What a player is asked, in this order. Move them with the arrows, and switch off any you don\'t want. A list asked before the stats can\'t offer an option that needs a stat.',
   'choices.levelled': 'Each pick has a level, and its features unlock by it, like a class. Formulas read it as @<option>_level.',
   'choices.table': 'Optional: dice to roll on for this list, like a book\'s "roll your background" table. Picking the dice shares the rolls out evenly over the options; change any of them below. Every roll needs exactly one option.',
   'choices.players': 'How players pick from a list with a table. BY HAND: as any list, the table only here. BY HAND OR ROLL: ROLL FOR IT beside picking. BY ROLL ONLY: players roll and take what comes up; the GM can still pick any option for them.',
