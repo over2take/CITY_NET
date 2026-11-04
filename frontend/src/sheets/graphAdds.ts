@@ -80,6 +80,7 @@ export const withRemoved = (def: Definition, node: string): { definition: Defini
   if (n.kind === 'table') return { definition: withoutTable(def, n.id.slice('table:'.length)), message: `Removed the table ${n.label}. Anything that read it shows the problem.` };
   if (n.kind === 'list') return { definition: withoutGroup(def, n.id), message: `Removed ${n.label} and its ${n.rows?.length ?? 0} stats. Undo brings them back.` };
   if (n.kind === 'rule') return { definition: null, message: 'House rules are removed on HOUSE RULES, where removing one says what stays.' };
+  if (n.kind === 'levels') return { definition: null, message: 'Lists are made and removed on CHOICES: this only shows what they give.' };
   if (n.kind === 'roll') return { definition: withoutRoll(def, n.id.slice('roll:'.length)), message: `Removed the roll ${n.label}. Its die buttons go from the sheet; undo brings it back.` };
   return { definition: withoutNote(def, n.id.slice('note:'.length)), message: 'Removed the note. Undo brings it back.' };
 };

@@ -342,3 +342,36 @@ describe('a roll\'s panel (6b4a)', () => {
     expect(screen.queryByTestId('graph-node-roll:check')).toBeNull();
   });
 });
+
+describe('a list of choices (7a5c)', () => {
+  const CHOSEN: Definition = {
+  format: 1, name: 'Hearth',
+  stats: [{ id: 'abilities', label: 'Abilities', stats: [{ id: 'wit', label: 'Wits' }] }],
+  derived: [{ id: 'ward', label: 'Ward', formula: '10 + @mage_level' }, { id: 'defense', label: 'Defense', formula: '10' }],
+  choices: [
+    { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'mage', label: 'Mage', features: [{ id: 'guard', label: 'Guard', modifiers: [{ target: 'defense', amount: '1' }, { target: 'wit', amount: '1' }] }] }] },
+    { id: 'feats', one: 'Feat', many: 'Feats', options: [{ id: 'keen', label: 'Keen', features: [{ id: 'eye', label: 'Eye', modifiers: [{ target: 'defense', amount: '2' }] }] }] },
+  ],
+} as unknown as Definition;
+
+  it('says what it is and goes to its list on CHOICES, where it is made', async () => {
+    const onGoTo = vi.fn();
+    openMap(CHOSEN, { onGoTo });
+    const panel = await pick('choices:classes');
+    expect(panel.getAttribute('aria-label')).toBe('CHOICES CLASSES');
+    expect(panel.textContent).toContain('It is made and changed on CHOICES.');
+    expect(panel.textContent).toContain('· MAGE: @mage_level');
+    expect(panel.textContent).toContain('bonuses: 2.');
+    await userEvent.click(within(panel).getByRole('button', { name: 'GO TO CHOICES' }));
+    expect(onGoTo).toHaveBeenCalledWith('choices', 'classes');
+  });
+
+  it("no GO TO without somewhere to go, and none of FORMS' boxes", async () => {
+    openMap(CHOSEN);
+    const panel = await pick('choices:feats');
+    expect(within(panel).queryByRole('button', { name: 'GO TO CHOICES' })).toBeNull();
+    expect(within(panel).queryAllByRole('textbox')).toEqual([]);
+    expect(panel.textContent).not.toContain('@');
+    expect(panel.textContent).toContain('bonuses: 1.');
+  });
+});

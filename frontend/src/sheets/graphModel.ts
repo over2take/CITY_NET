@@ -19,6 +19,11 @@
 // keeping, adding and target read, wired as a formula's are; @this and the rest of what the table
 // reads for the stat rolled are rows of their own, with no wire.
 //
+// A list of choices (7a5c; approved mockup docs/mockups/nested-choices.html): one with levels is a
+// LEVELS node, a row and a dot for its total and each option's level, so a formula reading
+// @soldier_level is wired as any other. A feature's modifier is a dashed wire from its list into
+// what it changes. Both are read from CHOICES and changed there. A list with neither stays off.
+//
 // The server works the values out (POST /api/systems/preview-values), as for FORMS. This only
 // needs to know what each formula reads, which referencesIn finds the way the server's
 // expression.js does (a test holds the two together).
@@ -28,6 +33,7 @@ import { statGroups, formulaList, tableList, takenIds, FUNCTIONS } from './stats
 import { houseRuleList, waitingOn } from './houseRules';
 import { modifierOn, type Modifier } from './modifiers';
 import { rollList, stepsOf, type Roll } from './rolls';
+import { listsOnMap, featureList } from './choices';
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -82,7 +88,7 @@ const MODIFIER = /^\s*([a-z][a-z0-9_]*)\(\s*@([a-z][a-z0-9_]*)\s*\)\s*$/;
 
 // ─── NODES, WIRES, GROUPS ──────────────────────────────────────────────────
 
-export type NodeKind = 'list' | 'table' | 'formula' | 'condition' | 'rule' | 'note' | 'roll';
+export type NodeKind = 'list' | 'table' | 'formula' | 'condition' | 'rule' | 'note' | 'roll' | 'levels';
 
 /** Where a value comes from on the map: the node, the dot on it, and what players call it. */
 export interface Source { value: string; label: string; node: string; handle: string }
@@ -92,11 +98,12 @@ export interface Source { value: string; label: string; node: string; handle: st
  * BEST (or WORST) of several, a wire from each; `table`: a table called by name; `field`: a sheet
  * field that is neither (the health boxes, cash), not on the map, `known` when the sheet has it
  * (the server reads any other @name as a field nothing fills, worth 0); `engine`: one of the
- * engine's own $rules. `missing` when what it names isn't there.
+ * engine's own $rules; `bonus`: a feature's modifier (7a5c), its wire dashed. `missing` when what it
+ * names isn't there.
  */
 export interface GraphInput {
   key: string;
-  kind: 'value' | 'combined' | 'table' | 'field' | 'engine';
+  kind: 'value' | 'combined' | 'table' | 'field' | 'engine' | 'bonus';
   /** What the row says: the name players see. */
   label: string;
   /** For a stat: the group it is in, shown as where it comes from. */
@@ -110,6 +117,8 @@ export interface GraphInput {
   modifier?: Modifier;
   /** What the row says it is, in place of where it comes from: a roll's ROLLED BY, its @this. */
   about?: string;
+  /** A bonus into a stats group: the stat or modifier it changes, whose row its dot sits on. */
+  on?: string;
 }
 
 /** A row of a list node: a stat, and its modifier when one table works one out for each. */
@@ -137,12 +146,19 @@ export interface GraphNode {
   on?: string;
   /** A roll's last line: what its total is read as (its bands, a target), and the changes a player may pick, ◆ for one that costs. */
   roll?: { outcome: string; changes: string[] };
+  /** A list of choices' node (7a5c): the list it opens on CHOICES, and how many bonuses leave it. */
+  list?: string;
+  bonuses?: number;
   width: number;
   height: number;
 }
 
 /** A wire: from a node's dot (`out`, or a list's `out:<stat or modifier>`) to an input. `value` is what flows. */
-export interface GraphWire { id: string; from: string; fromHandle: string; value: string; to: string; input: string; kind: 'value' | 'table' | 'gate' | 'note'; alt: boolean; modifier?: string }
+export interface GraphWire {
+  id: string; from: string; fromHandle: string; value: string; to: string; input: string; kind: 'value' | 'table' | 'gate' | 'note' | 'bonus'; alt: boolean; modifier?: string;
+  /** What a bonus is, in names: "GUARD STANCE +1 from CLASSES into DEFENSE". */
+  about?: string;
+}
 
 export interface GraphGroup { id: string; label: string; members: string[]; collapsed: boolean }
 
@@ -162,11 +178,12 @@ export const exprHeight = (text: string) => exprLines(text) * SIZE.exprLine + SI
 export const noteHeight = (text: string) => noteLines(text) * SIZE.noteLine + 8;
 
 /** A node's height in the map's pixels, from what it shows. */
-export const heightOf = (node: Pick<GraphNode, 'kind' | 'inputs' | 'alternative' | 'bands' | 'also' | 'text' | 'rows' | 'via'>): number => {
+export const heightOf = (node: Pick<GraphNode, 'kind' | 'inputs' | 'alternative' | 'bands' | 'also' | 'text' | 'rows' | 'via' | 'bonuses'>): number => {
   const S = SIZE;
   const expr = exprHeight;
   switch (node.kind) {
     case 'list': return S.header + (node.via ? S.row : 0) + S.colHead + (node.rows?.length ?? 0) * S.listRow + S.pad + S.border;
+    case 'levels': return S.header + ((node.rows?.length ?? 0) + (node.bonuses ? 1 : 0)) * S.listRow + S.pad + S.border;
     case 'table': return S.header + (node.bands?.length ?? 0) * S.band + S.pad + S.border;
     // Its words, what it does, its TRY ON THE MAP switch (5b6c), and what else is under it.
     case 'rule': return S.header + (node.text ? expr(node.text) : 0) + S.ruleRow + S.row + (node.also?.length ?? 0) * S.row + S.pad + S.border;
@@ -250,16 +267,82 @@ export const graphOf = (def: Definition): Graph => {
   }
   for (const d of derived) if (!absorbed.has(d.id)) at.set(d.id, { value: d.id, label: upper(d.label || d.id), node: d.id, handle: 'out' });
 
+  // Each list of choices on the map (7a5c): its levels are values like any other, unless a stat or
+  // formula has the name (the system's own @level keeps meaning what it always did).
+  const lists = listsOnMap(def);
+  const levelRows = new Map<string, ListRow[]>();
+  const levelRow = (name: string, row: string, read: string, list: string) => {
+    if (at.has(name)) return;
+    at.set(name, { value: name, label: read, node: `choices:${list}`, handle: `out:${name}` });
+    levelRows.get(list)!.push({ stat: name, label: row, short: null, mod: null });
+  };
+  for (const c of lists) {
+    levelRows.set(c.id, []);
+    if (c.levelled !== true) continue;
+    const many = upper(c.many || c.id);
+    levelRow(`${c.id}_level`, 'TOTAL', `${many} LEVEL`, c.id);
+    for (const o of c.options) levelRow(`${o.id}_level`, upper(o.label || o.id), `${upper(o.label || o.id)} LEVEL`, c.id);
+  }
+  const everyLevel = lists.find((c) => c.levelled === true);
+  if (everyLevel) levelRow('level', 'CHARACTER', 'LEVEL', everyLevel.id);
+
+  // Each feature's modifier that lands on the map, by the node it changes. One on a sheet's own
+  // field (the health boxes) has no node to go to, so no wire.
+  const inNames = (text: string) => text.replace(/@([a-z][a-z0-9_]*)/g, (_, id: string) => at.get(id)?.label ?? `@${id}`).replace(/\*/g, '×').replace(/-/g, '−');
+  const amountOf = (amount: unknown) => {
+    const text = String(amount ?? '').trim();
+    if (/^\d+(\.\d+)?$/.test(text)) return `+${text}`;
+    return /^-\d+(\.\d+)?$/.test(text) ? inNames(text) : `+ ${inNames(text)}`;
+  };
+  const bonusesOn = new Map<string, GraphInput[]>();
+  const bonusCount = new Map<string, number>();
+  const abouts = new Map<string, string>();
+  for (const c of lists) {
+    for (const f of c.options.flatMap((o) => featureList(o))) {
+      (f.modifiers ?? []).forEach((m, k) => {
+        const into = at.get(m.target);
+        if (!into) return;
+        const name = upper(f.label || f.id);
+        const key = `bonus:${f.id}:${k}`;
+        const label = `${name} ${amountOf(m.amount)}`;
+        bonusesOn.set(into.node, [...(bonusesOn.get(into.node) ?? []), {
+          key, kind: 'bonus', label, about: `BONUS · ${upper(c.many || c.id)}`, on: m.target, alt: false,
+          from: [{ value: f.id, label: name, node: `choices:${c.id}`, handle: 'bonus' }],
+        }]);
+        bonusCount.set(c.id, (bonusCount.get(c.id) ?? 0) + 1);
+        abouts.set(key, `${label} from ${upper(c.many || c.id)} into ${into.label}`);
+      });
+    }
+  }
+
   const nodes: GraphNode[] = [];
   const wires: GraphWire[] = [];
   const push = (n: Omit<GraphNode, 'width' | 'height'>) => nodes.push({ ...n, width: n.kind === 'note' ? SIZE.noteWidth : SIZE.width, height: heightOf(n) });
   const wire = (to: string, i: GraphInput) => {
-    for (const f of i.from) wires.push({ id: `${f.node}:${f.handle}>${to}:${i.key}`, from: f.node, fromHandle: f.handle, value: f.value, to, input: i.key, kind: i.kind === 'table' ? 'table' : 'value', alt: i.alt, ...(i.modifier ? { modifier: i.modifier.label } : {}) });
+    for (const f of i.from) {
+      wires.push({
+        id: `${f.node}:${f.handle}>${to}:${i.key}`, from: f.node, fromHandle: f.handle, value: f.value, to, input: i.key,
+        kind: i.kind === 'table' ? 'table' : i.kind === 'bonus' ? 'bonus' : 'value', alt: i.alt,
+        ...(i.modifier ? { modifier: i.modifier.label } : {}), ...(abouts.has(i.key) ? { about: abouts.get(i.key) } : {}),
+        // A stat has no row to say what a bonus is, so its wire does; a formula's row says it there.
+        ...(i.kind === 'bonus' && groups.some((g) => g.id === to) ? { modifier: i.label } : {}),
+      });
+    }
   };
+
+  for (const c of lists) {
+    const rows = levelRows.get(c.id)!;
+    const bonuses = bonusCount.get(c.id) ?? 0;
+    // A list whose only modifiers land on what isn't on the map has nothing to show.
+    if (rows.length || bonuses) push({ id: `choices:${c.id}`, kind: 'levels', label: upper(c.many || c.id), group: null, text: '', inputs: [], rows, list: c.id, bonuses });
+  }
 
   for (const g of groups) {
     const t = via.get(g.id);
-    const inputs: GraphInput[] = t ? [{ key: 'via', kind: 'table', label: tableName(t), from: [{ value: t, label: tableName(t), node: `table:${t}`, handle: 'out' }], alt: false }] : [];
+    const inputs: GraphInput[] = [
+      ...(t ? [{ key: 'via', kind: 'table' as const, label: tableName(t), from: [{ value: t, label: tableName(t), node: `table:${t}`, handle: 'out' }], alt: false }] : []),
+      ...(bonusesOn.get(g.id) ?? []),
+    ];
     push({
       id: g.id, kind: 'list', label: upper(g.label || g.id), group: null, text: '', inputs,
       via: t ? { table: t, label: tableName(t) } : undefined,
@@ -323,7 +406,7 @@ export const graphOf = (def: Definition): Graph => {
     const own = condition
       ? read(`IF ${d.when ?? ''} THEN ${d.then ?? ''} ELSE ${d.else ?? ''}`, false)
       : read(String(d.formula ?? ''), false);
-    const inputs = [...own.inputs];
+    const inputs = [...own.inputs, ...(bonusesOn.get(d.id) ?? [])];
     let alternative: GraphNode['alternative'];
     if (!condition && d.alternative && typeof d.alternative.rule === 'string') {
       const alt = read(String(d.alternative.formula ?? ''), true);
@@ -410,6 +493,8 @@ export const columnsOf = (graph: Graph): Record<string, number> => {
     const n = byId.get(id);
     if (!n) return 0;
     if (n.kind === 'table' || n.kind === 'rule') return (col[id] = 0);
+    // What characters pick comes first of all, so its wires read left to right into stats too.
+    if (n.kind === 'levels') return (col[id] = -1);
     if (n.kind === 'list') return (col[id] = n.via ? 1 : 0);
     if (n.kind === 'note') return (col[id] = n.on ? of(n.on) + 1 : 0);
     if (visiting.has(id)) return 1; // a loop: the server reports it; the map just needs a column

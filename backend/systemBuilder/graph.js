@@ -21,8 +21,8 @@
 // Pure: checks only. definition.js runs them.
 
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
-/** A node: a stat or formula by its id, or a table, house rule or note by its kind and id. */
-const NODE = /^(?:(?:table|rule|note|roll):)?[a-z][a-z0-9_]{0,63}$/;
+/** A node: a stat or formula by its id, or a table, house rule, note, roll or list of choices (7a5c) by its kind and id. */
+const NODE = /^(?:(?:table|rule|note|roll|choices):)?[a-z][a-z0-9_]{0,63}$/;
 const LIMITS = {
   /** Positions: every stat, formula, table, house rule and note a system can have, and more. */
   positions: 1000,

@@ -223,6 +223,8 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
   const [rulesView, setRulesView] = useState<BuilderView>('forms');
   /** A note FORMS' EDIT IN GRAPH asked to open the map on (5b5). */
   const [graphStart, setGraphStart] = useState<string | undefined>(undefined);
+  // The list CHOICES opens on, when the map's GO TO names one (7a5c).
+  const [choicesStart, setChoicesStart] = useState<string | undefined>(undefined);
   const rootRef = useRef<HTMLDivElement>(null);
   // The map's windows hide while the builder is open, and come back as they were (windowFocus.ts).
   // Before paint, so switching systems (a new builder, keyed) never shows them for a frame.
@@ -558,10 +560,10 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
             {ready && page === 'rules' && !graphOn && <StatsRulesPage definition={definition!} edit={edit} api={api} onEditInGraph={(node) => pickRulesView('graph', node)} onHelp={(topic) => { setHelpTopic(topic); setPage('help'); setStatus(null); }} />}
             {graphOn && (
               <React.Suspense fallback={<p style={{ opacity: 0.7, padding: 24 }}>LOADING THE MAP…</p>}>
-                <GraphView definition={definition!} edit={edit} api={api} readOnly={looking} startWith={graphStart} problems={problems} onGoTo={(p) => { setPage(p); setStatus(null); }} />
+                <GraphView definition={definition!} edit={edit} api={api} readOnly={looking} startWith={graphStart} problems={problems} onGoTo={(p, list) => { setChoicesStart(list); setPage(p); setStatus(null); }} />
               </React.Suspense>
             )}
-            {ready && page === 'choices' && <ChoicesPage definition={definition!} edit={edit} api={api} />}
+            {ready && page === 'choices' && <ChoicesPage definition={definition!} edit={edit} api={api} startList={choicesStart} />}
             {ready && page === 'sheet' && <SheetPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'npcs' && <NpcsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'conditions' && <ConditionsPage definition={definition!} edit={edit} api={looking ? undefined : api} />}

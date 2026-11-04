@@ -107,6 +107,14 @@ describe('the lists', () => {
     expect(choiceLists(last()).map((c) => c.id)).toEqual(['feats']);
   });
 
+  it("opens on the list the map's GO TO names (7a5c), and the first when it isn't there", () => {
+    render(<ChoicesPage definition={HEARTH} edit={() => {}} startList="feats" />);
+    expect(screen.getByRole('region', { name: 'Feats list' })).toBeTruthy();
+    cleanup();
+    render(<ChoicesPage definition={HEARTH} edit={() => {}} startList="gone" />);
+    expect(screen.getByRole('region', { name: 'Classes list' })).toBeTruthy();
+  });
+
   it('stops at the limit', () => {
     open({ format: 1, name: 'Full', choices: Array.from({ length: LIMITS.lists }, (_, i) => ({ id: `l${i}`, one: 'A', many: `As ${i}`, options: [] })) } as unknown as Definition);
     expect(screen.getByRole('button', { name: '+ LIST' })).toHaveProperty('disabled', true);
