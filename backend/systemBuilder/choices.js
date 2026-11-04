@@ -93,6 +93,12 @@ const PICKS_KEY = '_choices';
 const USES_KEY = '_uses';
 /** Where every save writes what the sheet shows of the picks (workedOf). Never read back as input. */
 const WORKED_KEY = '_worked';
+/**
+ * Where a sheet keeps what ROLL FOR IT last rolled on each list, until it is taken or rolled again
+ * (7a5b2): { [list, or list@feature for a pick under a feature]: { option, roll } }, option null
+ * when the roll is on nothing. Players never write it (no _ field is theirs).
+ */
+const ROLLED_KEY = '_rolled';
 
 const LIMITS = {
   lists: 20,
@@ -167,6 +173,22 @@ const rollRangeOf = (roll) => {
 
 /** How players pick from a list: by hand without a table; with one, as the list says, by hand or rolled when it says nothing. */
 const playersOf = (c) => (!tableOf(c) ? 'hand' : PLAYERS.includes(c.players) ? c.players : 'either');
+
+/** The option a roll of `total` lands on in a list's table, or null for none. */
+const rolledOn = (c, total) => optionsOf(c).find((o) => {
+  const range = rollRangeOf(o.roll);
+  return !!range && total >= range[0] && total <= range[1];
+}) || null;
+
+/** Where a list's roll is kept: the list, or the list under the feature it is picked through. */
+const rolledKey = (listId, from) => (from ? `${listId}@${from}` : listId);
+
+/** What ROLL FOR IT last rolled on a list (under `from`), as kept: { option, roll }, or null. */
+const rolledOf = (data, listId, from) => {
+  const all = isPlainObject(data) && isPlainObject(data[ROLLED_KEY]) ? data[ROLLED_KEY] : {};
+  const r = all[rolledKey(listId, from)];
+  return isPlainObject(r) && Number.isInteger(r.roll) ? { option: typeof r.option === 'string' ? r.option : null, roll: r.roll } : null;
+};
 const levelledOf = (definition) => choicesOf(definition).filter((c) => c.levelled === true);
 
 /** The level names a system's formulas can read: each option's, each list's sum, and @level unless it has its own. */
@@ -705,8 +727,11 @@ const choicesShown = (definition) => {
     id: c.id, one: c.one, many: c.many,
     picks: c.picks === 'any' ? 'any' : Number.isInteger(c.picks) ? c.picks : 1,
     again: c.again === true, levelled: c.levelled === true, picked: pickedOf(c),
+    // A table to roll on, and how players pick from it (7a5b2).
+    ...(tableOf(c) ? { table: c.table.trim().toLowerCase() } : {}), players: playersOf(c),
     options: optionsOf(c).map((o) => ({
       id: o.id, label: o.label || o.id,
+      ...(tableOf(c) && rollRangeOf(o.roll) ? { roll: rollRangeOf(o.roll).join('-').replace(/^(\d+)-\1$/, '$1') } : {}),
       ...(typeof o.description === 'string' && o.description.trim() ? { description: o.description } : {}),
       ...(typeof o.requires === 'string' && o.requires.trim() ? { needs: needsText(definition, o.requires) } : {}),
       features: list(o.features).filter((f) => typeof f.id === 'string').map((f) => ({
@@ -728,7 +753,7 @@ const choicesShown = (definition) => {
 };
 
 module.exports = {
-  LIMITS, PICKED, PLAYERS, PICKS_KEY, USES_KEY, WORKED_KEY, checkChoices, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
+  LIMITS, PICKED, PLAYERS, PICKS_KEY, USES_KEY, WORKED_KEY, ROLLED_KEY, rolledOn, rolledKey, rolledOf, checkChoices, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
   tableOf, rollRangeOf, playersOf,
   capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, choicesShown, tokenMaxFieldOf,
 };

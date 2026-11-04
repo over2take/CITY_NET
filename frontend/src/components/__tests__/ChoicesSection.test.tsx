@@ -175,3 +175,68 @@ describe('what the picks do, on the fields (7a3b2)', () => {
     expect(badge.textContent).toBe('11');
   });
 });
+
+describe('ROLL FOR IT (7a5b2)', () => {
+  const TABLED = (players?: string) => ({
+    ...HEARTH,
+    choices: [{ id: 'bgs', one: 'Background', many: 'Backgrounds', table: 'd6', ...(players ? { players } : {}), options: [
+      { id: 'dock', label: 'Dockhand', roll: '1-3' }, { id: 'scribe', label: 'Scribe', roll: '4-6' },
+    ] }],
+  });
+  const drawRolled = (players: string | undefined, rolled: unknown, more: Partial<React.ComponentProps<typeof SheetRenderer>> = {}) => {
+    const def = TABLED(players);
+    const onChoices = vi.fn();
+    const shown = backend.choicesShown(def) as ChoiceListShown[];
+    render(<SheetRenderer template={{ ...template, choices: shown, sections: [{ id: 'choices', label: 'BACKGROUNDS', layout: 'choices', fields: [] }] } as SheetTemplate}
+      data={{ ...(rolled ? { _rolled: { bgs: rolled } } : {}), [WORKED_KEY]: backend.workedOf(def, {}) } as never} onFieldChange={() => {}} onChoices={onChoices} {...more} />);
+    return { onChoices, pick: within(screen.getByRole('group', { name: 'Pick a Background' })) };
+  };
+
+  it('BY HAND OR ROLL: ROLL FOR IT beside picking, asked of the server; nothing rolled, nothing said', async () => {
+    const { onChoices, pick } = drawRolled(undefined, null);
+    await userEvent.click(pick.getByRole('button', { name: 'ROLL FOR IT' }));
+    expect(onChoices).toHaveBeenCalledWith({ kind: 'roll', list: 'bgs' });
+    expect(pick.queryByText(/^ROLLED/)).toBeNull();
+    expect(pick.getByRole('button', { name: 'SCRIBE' })).toHaveProperty('disabled', false);
+  });
+
+  it('what was rolled is marked TAKE IT and said; any other can still be picked, and rolled again', async () => {
+    const { onChoices, pick } = drawRolled(undefined, { option: 'scribe', roll: 5 });
+    expect(pick.getByText('ROLLED 5 → SCRIBE')).toBeTruthy();
+    await userEvent.click(pick.getByRole('button', { name: 'SCRIBE · TAKE IT' }));
+    expect(onChoices).toHaveBeenLastCalledWith({ kind: 'pick', list: 'bgs', option: 'scribe' });
+    expect(pick.getByRole('button', { name: 'DOCKHAND' })).toHaveProperty('disabled', false);
+    expect(pick.getByRole('button', { name: 'ROLL FOR IT' })).toHaveProperty('disabled', false);
+  });
+
+  it('BY ROLL ONLY: before a roll, nothing to pick by hand; after it, only TAKE IT, and no second roll', () => {
+    drawRolled('roll', null);
+    let pick = within(screen.getByRole('group', { name: 'Pick a Background' }));
+    expect(pick.getByRole('button', { name: 'DOCKHAND' })).toHaveProperty('disabled', true);
+    expect(pick.getByRole('button', { name: 'DOCKHAND' }).getAttribute('title')).toBe('Picked by roll: ROLL FOR IT');
+    expect(pick.getByRole('button', { name: 'ROLL FOR IT' })).toHaveProperty('disabled', false);
+    cleanup();
+    drawRolled('roll', { option: 'dock', roll: 2 });
+    pick = within(screen.getByRole('group', { name: 'Pick a Background' }));
+    expect(pick.getByRole('button', { name: 'DOCKHAND · TAKE IT' })).toHaveProperty('disabled', false);
+    expect(pick.getByRole('button', { name: 'SCRIBE' })).toHaveProperty('disabled', true);
+    expect(pick.getByRole('button', { name: 'ROLL FOR IT' })).toHaveProperty('disabled', true);
+    expect(pick.getByRole('button', { name: 'ROLL FOR IT' }).getAttribute('title')).toBe('Rolled: take what came up, or ask the GM to roll again');
+  });
+
+  it('the GM picks any and ROLLS AGAIN; a roll on nothing says so', async () => {
+    const { onChoices, pick } = drawRolled('roll', { option: null, roll: 9 }, { gm: true });
+    expect(pick.getByText('ROLLED 9 → NOTHING ON THE TABLE')).toBeTruthy();
+    expect(pick.getByRole('button', { name: 'SCRIBE' })).toHaveProperty('disabled', false);
+    await userEvent.click(pick.getByRole('button', { name: 'ROLL AGAIN' }));
+    expect(onChoices).toHaveBeenCalledWith({ kind: 'roll', list: 'bgs' });
+  });
+
+  it('BY HAND: no ROLL FOR IT for a player; the GM may still roll', () => {
+    drawRolled('hand', null);
+    expect(screen.queryByRole('button', { name: 'ROLL FOR IT' })).toBeNull();
+    cleanup();
+    drawRolled('hand', null, { gm: true });
+    expect(screen.getByRole('button', { name: 'ROLL FOR IT' })).toBeTruthy();
+  });
+});

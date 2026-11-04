@@ -151,7 +151,7 @@ describe('what the sheet shows', () => {
   it('the lists as the sheet draws them: words, never a formula', () => {
     const shown = choicesShown(HEARTH);
     expect(shown[0]).toEqual({
-      id: 'classes', one: 'Class', many: 'Classes', picks: 1, again: true, levelled: true, picked: 'own',
+      id: 'classes', one: 'Class', many: 'Classes', picks: 1, again: true, levelled: true, picked: 'own', players: 'hand',
       options: [
         { id: 'soldier', label: 'Soldier', features: [
           { id: 'guard', label: 'Guard Stance', at: 1, modifies: ['Defense'] },

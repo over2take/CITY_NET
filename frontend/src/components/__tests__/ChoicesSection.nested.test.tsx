@@ -106,3 +106,18 @@ describe('a list everyone has', () => {
     expect(commons.queryByText(/No Common picked/)).toBeNull();
   });
 });
+
+describe('ROLL FOR IT under a feature (7a5b2)', () => {
+  it('rolls with the feature named, and marks what that feature\'s roll landed on', async () => {
+    const def = { ...NEST, choices: NEST.choices.map((c) => (c.id === 'specs' ? { ...c, table: 'd6', options: c.options.map((o, i) => ({ ...o, roll: i ? '4-6' : '1-3' })) } : c)) };
+    const shown = backend.choicesShown(def) as ChoiceListShown[];
+    const data = { int: 10, _choices: { classes: [{ option: 'soldier', level: 3 }] }, _rolled: { 'specs@specialty': { option: 'duelist', roll: 2 }, specs: { option: 'vanguard', roll: 5 } } };
+    const onChoices = vi.fn();
+    render(<ChoicesSection lists={shown} data={{ ...data, [WORKED_KEY]: backend.workedOf(def, data) }} readOnly={false} onChoices={onChoices} />);
+    const pick = within(under('Specialty').getByRole('group', { name: 'Pick a Specialty' }));
+    expect(pick.getByText('ROLLED 2 → DUELIST')).toBeTruthy();
+    expect(pick.getByRole('button', { name: 'DUELIST · TAKE IT' })).toBeTruthy();
+    await userEvent.click(pick.getByRole('button', { name: 'ROLL FOR IT' }));
+    expect(onChoices).toHaveBeenCalledWith({ kind: 'roll', list: 'specs', from: 'specialty' });
+  });
+});
