@@ -55,6 +55,11 @@ test('a blank sheet: the blink, the walk, leaving and coming back, and finishing
   await expect(page.getByRole('button', { name: 'NEXT' })).toBeDisabled();
   await expect(page.getByRole('tab', { name: 'THE STATS' })).toBeDisabled();
   await page.getByRole('textbox', { name: 'Name' }).fill('Wren');
+
+  // A portrait, uploaded here, reaches the sheet. A 1x1 PNG.
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+  await page.getByLabel(/UPLOAD · MAX 8MB/).setInputFiles({ name: 'wren.png', mimeType: 'image/png', buffer: png });
+  await expect.poll(async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).portrait_url, { timeout: 15_000 }).toBeTruthy();
   await page.getByRole('button', { name: 'NEXT' }).click();
 
   // THE STATS: a number out of range holds NEXT, and saying 14 opens MAGE on the step after.

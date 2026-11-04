@@ -2223,6 +2223,7 @@ function App() {
                 setPos={setNewCharacterPos}
                 socket={socketRef.current}
                 userName={userName}
+                authToken={token || playerToken}
                 onLeave={() => { setIsNewCharacterOpen(false); setIsSheetOpen(true); }}
                 onDone={() => { setIsNewCharacterOpen(false); setIsSheetOpen(true); }}
               />

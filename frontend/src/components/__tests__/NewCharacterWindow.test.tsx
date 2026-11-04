@@ -44,13 +44,13 @@ const makeSocket = (data: Record<string, unknown>) => {
   return socket;
 };
 
-const open = async (data: Record<string, unknown> = { _creating: {} }, parts?: Record<string, { on: boolean }>) => {
+const open = async (data: Record<string, unknown> = { _creating: {} }, parts?: Record<string, { on: boolean }>, authToken: string | null = 'tok') => {
   registerCustomTemplate(render_(parts));
   vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })));
   const socket = makeSocket(data);
   const onLeave = vi.fn();
   const onDone = vi.fn();
-  render(<NewCharacterWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={socket as never} userName="WREN" onLeave={onLeave} onDone={onDone} />);
+  render(<NewCharacterWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={socket as never} userName="WREN" authToken={authToken} onLeave={onLeave} onDone={onDone} />);
   await screen.findByRole('tablist', { name: 'Folders' });
   return { socket, onLeave, onDone };
 };
@@ -162,15 +162,52 @@ describe('the steps', () => {
     expect(button('FINISH').title).toBe('Finish this step first');
   });
 
-  it('shows their portrait above the folders when they have one', async () => {
-    registerCustomTemplate(render_());
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })));
-    const socket = makeSocket({ _creating: {} });
-    const { container } = render(<NewCharacterWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={socket as never} userName="WREN" onLeave={vi.fn()} onDone={vi.fn()} />);
-    await screen.findByRole('tablist', { name: 'Folders' });
-    expect(container.querySelector('img')).toBeNull();
-    socket.fire('sheetData', { username: 'WREN', system: ID, portrait_url: '/uploads/wren.png', data: { _creating: {} } });
-    expect(container.querySelector('img')?.getAttribute('src')).toBe('/uploads/wren.png');
+  it('says which folder is open inside the panel, so the panel is level with the folders and each lead-in meets it', async () => {
+    await open();
+    expect(within(screen.getByRole('tabpanel')).getByText('A NEW CHARACTER. HOW DO YOU WANT TO START?')).toBeTruthy();
+    await userEvent.click(button('BEGIN'));
+    expect(within(screen.getByRole('tabpanel')).getByText('WHO THEY ARE · STEP 1 OF 3')).toBeTruthy();
+  });
+
+  describe('a portrait', () => {
+    const PICTURE = /UPLOAD · MAX 8MB/;
+    const portraitCalls = () => (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[0] === '/api/sheets/portrait');
+
+    it('WHO THEY ARE uploads one, as the sheet does, under the name of who is signed in', async () => {
+      await open({ _creating: { at: 'who' } });
+      await userEvent.upload(screen.getByLabelText(PICTURE), new File(['x'], 'wren.png', { type: 'image/png' }));
+      expect(portraitCalls()).toHaveLength(1);
+      expect(portraitCalls()[0][1].headers.Authorization).toBe('Bearer tok');
+    });
+
+    it('frames what they have, and their initial until then', async () => {
+      const { socket } = await open({ name: 'wren', _creating: { at: 'who' } });
+      expect(screen.getByText('W')).toBeTruthy();
+      socket.fire('sheetData', { username: 'WREN', system: ID, portrait_url: '/uploads/wren.png', data: { name: 'wren', _creating: { at: 'who' } } });
+      expect(screen.getByRole('tabpanel').innerHTML).toContain('/uploads/wren.png');
+      expect(screen.queryByText('W')).toBeNull();
+    });
+
+    it('? with no name yet', async () => {
+      await open({ _creating: { at: 'who' } });
+      expect(screen.getByText('?')).toBeTruthy();
+    });
+
+    it('offers no upload to someone with no token to send', async () => {
+      await open({ _creating: { at: 'who' } }, undefined, null);
+      expect(screen.queryByLabelText(PICTURE)).toBeNull();
+    });
+
+    it('is only on WHO THEY ARE, and never above the folders', async () => {
+      const { socket } = await open({ _creating: {} });
+      const withPortrait = (at: object) => socket.fire('sheetData', { username: 'WREN', system: ID, portrait_url: '/uploads/wren.png', data: { name: 'W', ...at } });
+      withPortrait({ _creating: {} });
+      expect(document.body.innerHTML).not.toContain('/uploads/wren.png');
+      withPortrait({ _creating: { at: 'stats' } });
+      expect(screen.getByRole('spinbutton', { name: 'Grit' })).toBeTruthy();
+      expect(document.body.innerHTML).not.toContain('/uploads/wren.png');
+      expect(screen.queryByLabelText(PICTURE)).toBeNull();
+    });
   });
 
   it('WHO THEY ARE writes the sheet\'s own fields, with NEXT off until there is a name', async () => {

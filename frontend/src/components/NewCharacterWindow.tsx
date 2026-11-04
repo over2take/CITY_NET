@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { TerminalWindow, TERMINAL_PREVIEW, type TerminalAction, type TerminalFolder } from './TerminalWindow';
+import { TerminalWindow, type TerminalAction, type TerminalFolder } from './TerminalWindow';
+import { BracketPortrait } from './BracketPortrait';
 import { ChoicesSection } from './ChoicesSection';
 import type { Socket } from 'socket.io-client';
 import { ImportSheetDialog } from './ImportSheetDialog';
-import { usePlayerSheet } from '../hooks/usePlayerSheet';
+import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
 import { useChoicesRefused } from '../hooks/useChoicesRefused';
 import { canImport } from '../sheets/importable';
 import {
@@ -19,13 +20,18 @@ import { themeRoot } from '../utils/themeRoot';
 // set, every answer written to the sheet as they go; a step opens once those before it are answered,
 // as one may need an earlier one (a class, a stat). Closing it, or LEAVE FOR NOW, loses nothing: the
 // place is on the sheet (backend creation.js), and the sheet's CREATING · CONTINUE opens it there
-// again. What a step asks and whether it is answered is sheets/newCharacterFlow.ts.
+// again. What a step asks and whether it is answered is sheets/newCharacterFlow.ts. A portrait is
+// uploaded on WHO THEY ARE, the sheet's own frame; the window has none above its folders, being about
+// the making of a character (the user, 2026-11-04). What it says of the open folder is inside the panel,
+// so the panel starts level with the folders and each one's lead-in meets it.
 
 interface Props {
   pos: { x: number; y: number };
   setPos: (pos: { x: number; y: number }) => void;
   socket: Socket | null;
   userName: string;
+  /** Who is uploading a portrait. Without it, WHO THEY ARE offers no upload. */
+  authToken?: string | null;
   /** Closed with the character unfinished: their place is kept. */
   onLeave: () => void;
   /** Finished, or uploaded: the window closes on their sheet. */
@@ -52,8 +58,10 @@ const box: React.CSSProperties = {
 };
 const confirm: React.CSSProperties = { ...btn, borderColor: 'var(--green)', alignSelf: 'flex-start', padding: '5px 14px' };
 const page: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: '10px' };
+/** Says which folder is open, at the head of the panel. */
+const head: React.CSSProperties = { fontSize: 10, letterSpacing: 1, opacity: 0.8 };
 
-export function NewCharacterWindow({ pos, setPos, socket, userName, onLeave, onDone }: Props) {
+export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, onLeave, onDone }: Props) {
   const { sheet, template, handleFieldChange } = usePlayerSheet(socket, userName);
   const refused = useChoicesRefused(socket);
   // The folder shown, ahead of the server's answer so NEXT doesn't wait on it. Null: as the sheet says.
@@ -148,17 +156,24 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, onLeave, onD
       );
     }
     if (open === 'who') {
+      const name = String(data?.[template.header?.nameField ?? 'name'] ?? '');
       return (
         <div style={page}>
           <p style={why}>Who they are. The rest can wait; a name can&apos;t.</p>
-          {whoFields(template).map((f) => (
-            <label key={f.id} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-              <span style={small}>{f.label.toUpperCase()}</span>
-              {f.type === 'textarea'
-                ? <textarea aria-label={f.label} rows={3} style={{ ...box, resize: 'vertical' }} value={String(data?.[f.id] ?? '')} onChange={(e) => handleFieldChange(f.id, e.target.value)} />
-                : <input aria-label={f.label} style={box} value={String(data?.[f.id] ?? '')} onChange={(e) => handleFieldChange(f.id, e.target.value)} />}
-            </label>
-          ))}
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <BracketPortrait initial={(name.trim() || '?').charAt(0).toUpperCase()} portraitUrl={sheet.portrait_url} size={120}
+              onUpload={authToken ? (file) => uploadSheetPortrait(authToken, file) : undefined} />
+            <div style={{ ...page, flex: '1 1 160px', minWidth: 0 }}>
+              {whoFields(template).map((f) => (
+                <label key={f.id} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  <span style={small}>{f.label.toUpperCase()}</span>
+                  {f.type === 'textarea'
+                    ? <textarea aria-label={f.label} rows={3} style={{ ...box, resize: 'vertical' }} value={String(data?.[f.id] ?? '')} onChange={(e) => handleFieldChange(f.id, e.target.value)} />
+                    : <input aria-label={f.label} style={box} value={String(data?.[f.id] ?? '')} onChange={(e) => handleFieldChange(f.id, e.target.value)} />}
+                </label>
+              ))}
+            </div>
+          </div>
         </div>
       );
     }
@@ -207,17 +222,16 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, onLeave, onD
         setPos={setPos}
         onClose={onLeave}
         panelMode="controls"
-        preview={sheet.portrait_url
-          ? <img src={sheet.portrait_url} alt="" style={{ width: TERMINAL_PREVIEW.width, height: TERMINAL_PREVIEW.height, objectFit: 'cover', border: '1px solid var(--green)', boxSizing: 'border-box', display: 'block' }} />
-          : undefined}
         folders={folders}
         open={starting ? way : open}
         onOpen={starting ? setWay : goTo}
-        header={starting ? 'A NEW CHARACTER. HOW DO YOU WANT TO START?' : `${flowStepName(template, open)} · STEP ${index + 1} OF ${steps.length}`}
         actions={actions}
         label="A new character"
       >
-        {body()}
+        <div style={page}>
+          <div style={head}>{starting ? 'A NEW CHARACTER. HOW DO YOU WANT TO START?' : `${flowStepName(template, open)} · STEP ${index + 1} OF ${steps.length}`}</div>
+          {body()}
+        </div>
       </TerminalWindow>
       {isImportOpen && ReactDOM.createPortal(
         <ImportSheetDialog
