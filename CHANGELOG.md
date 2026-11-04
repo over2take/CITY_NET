@@ -694,6 +694,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **What's left to pick on a sheet (System Builder):** the options of a list now sit one to a line under PICK A CLASS, each with what it needs beside it, instead of running together in a row after + CLASS, where a requirement could read as the next option's. An option that can't be picked yet is also easier to read.
 - The character sheet lists CHARACTER first and still opens on STATS. A built sheet can name the tab it opens on; renaming that tab in the builder keeps it, removing it opens on the first.
 - On a sheet's CHOICES, each list (CLASSES, FEATS) folds away on its own, saying how many are picked.
 - The HEALTH box shows its name alone, with CURRENT and MAX each under its number. Temporary HP is added to the current, in the warning color, and a bonus to the maximum (like Tough) colors it and names itself on hover.

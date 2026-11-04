@@ -1,4 +1,4 @@
-import { test, expect, type Page, type Browser, type TestInfo } from '@playwright/test';
+import { test, expect, type Locator, type Page, type Browser, type TestInfo } from '@playwright/test';
 import { signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
 
 // NEW_CHARACTER.EXE at the table (7c2; approved mockup docs/mockups/new-character.html, 2026-11-03):
@@ -12,7 +12,7 @@ const definition = (name: string) => ({
   name,
   stats: [{ id: 'traits', label: 'TRAITS', stats: [{ id: 'grit', label: 'Grit', min: 3, max: 18 }] }],
   choices: [{ id: 'classes', one: 'Class', many: 'Classes', options: [
-    { id: 'soldier', label: 'Soldier' }, { id: 'mage', label: 'Mage', requires: '@grit >= 13' },
+    { id: 'soldier', label: 'Soldier' }, { id: 'mage', label: 'Mage', requires: '@grit >= 13' }, { id: 'warden', label: 'Warden', requires: '@grit >= 20' },
   ] }],
   creation: { on: true },
 });
@@ -91,6 +91,17 @@ test('a blank sheet: the blink, the walk, leaving and coming back, and finishing
   const finish = page.getByRole('button', { name: 'FINISH' });
   await expect(finish).toBeDisabled();
   const pick = page.getByRole('region', { name: 'Classes' }).last();
+  // Each option on its own line under PICK A CLASS, what one needs level with that one.
+  await expect(pick.getByText('PICK A CLASS')).toBeVisible();
+  const lineOf = async (l: Locator) => { const b = (await l.boundingBox())!; return b.y + b.height / 2; };
+  const lines = await Promise.all(['SOLDIER', 'MAGE', 'WARDEN'].map((name) => lineOf(pick.getByRole('button', { name }))));
+  expect(lines[1]).toBeGreaterThan(lines[0]);
+  expect(lines[2]).toBeGreaterThan(lines[1]);
+  expect(Math.abs(await lineOf(pick.getByText('NEEDS GRIT >= 20')) - lines[2])).toBeLessThan(4);
+  // WARDEN is off but still reads, in the color of one that is on.
+  const colorOf = (l: Locator) => l.evaluate((el) => getComputedStyle(el).color);
+  await expect(pick.getByRole('button', { name: 'WARDEN' })).toBeDisabled();
+  expect(await colorOf(pick.getByRole('button', { name: 'WARDEN' }))).toBe(await colorOf(pick.getByRole('button', { name: 'MAGE' })));
   await pick.getByRole('button', { name: 'SOLDIER' }).click();
   await expect(finish).toBeEnabled({ timeout: 15_000 });
   await pick.getByRole('button', { name: 'Drop Soldier' }).click();
