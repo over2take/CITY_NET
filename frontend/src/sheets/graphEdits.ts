@@ -39,7 +39,7 @@ const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 export const givenBy = (graph: Graph, dot: Dot): Given => {
   const n = graph.nodes.find((x) => x.id === dot.node);
   if (!n) return null;
-  if (n.kind === 'list' && dot.handle.startsWith('out:')) return { kind: 'value', id: dot.handle.slice(4) };
+  if ((n.kind === 'list' || n.kind === 'levels') && dot.handle.startsWith('out:')) return { kind: 'value', id: dot.handle.slice(4) };
   if (n.kind === 'list' && dot.handle === 'out') return { kind: 'group', id: n.id };
   if ((n.kind === 'formula' || n.kind === 'condition') && dot.handle === 'out') return { kind: 'value', id: n.id };
   if (n.kind === 'table' && dot.handle === 'out') return { kind: 'table', id: n.id.slice('table:'.length) };
@@ -76,6 +76,7 @@ export const withWire = (def: Definition, graph: Graph, from: Dot, to: string): 
   }
   if (!target) return { definition: null, message: 'Drop the wire on a formula.' };
   if (target.kind === 'list') return { definition: null, message: 'Players fill in stats, so nothing is wired into them. Drop the wire on a formula.' };
+  if (target.kind === 'levels') return { definition: null, message: 'A list\'s levels come from what characters pick, so nothing is wired into them. Drop the wire on a formula.' };
   // Into a roll (6b4b): a stat, a formula or a whole stats group is something it is ROLLED BY.
   if (target.kind === 'roll') {
     const roll = rollList(def).find((r) => `roll:${r.id}` === to)!;
@@ -147,6 +148,8 @@ export const withoutName = (text: string, name: string): string | null => {
 
 /** A wire cut. */
 export const withoutWire = (def: Definition, graph: Graph, wire: GraphWire): WireEdit => {
+  // A feature's bonus (7a5c) is read from CHOICES and changed there: the map's cut offers GO TO instead.
+  if (wire.kind === 'bonus') return { definition: null, message: 'A feature\'s bonus is set on CHOICES, on its feature.' };
   if (wire.kind === 'note') return { definition: withNotePinned(def, wire.value, null), message: 'Note unpinned. Drag its square dot onto a node to pin it again.' };
   // Into a roll (6b4a): ROLLED BY is taken off; a name its dice or adding read is changed in the panel.
   if (wire.to.startsWith('roll:')) {
@@ -188,6 +191,7 @@ export const withoutWire = (def: Definition, graph: Graph, wire: GraphWire): Wir
 
 /** What a wire is, in the names players see: "STR MOD into MELEE", for asking before it is cut. */
 export const wireLabel = (def: Definition, wire: GraphWire): string => {
+  if (wire.about) return wire.about;
   const f = formulaList(def).find((x) => x.id === wire.to);
   const roll = rollList(def).find((r) => `roll:${r.id}` === wire.to);
   const into = upper(f?.label || f?.id || roll?.label || wire.to.replace(/^[a-z]+:/, ''));

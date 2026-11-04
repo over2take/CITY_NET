@@ -73,6 +73,10 @@ const takenIds = (def: Definition): string[] => [
   ...[...allStats(def).map((s) => s.id), ...formulaList(def).map((f) => f.id)].filter((id) => typeof id === 'string' && id.endsWith('_level')).map((id) => id.slice(0, -'_level'.length)),
 ];
 
+/** The lists the GRAPH shows (7a5c): one with levels, or a feature that changes a number. The rest stay off the map. */
+export const listsOnMap = (def: Definition): ChoiceList[] => choiceLists(def).filter((c) => c.levelled === true
+  || c.options.some((o) => featureList(o).some((f) => Array.isArray(f.modifiers) && f.modifiers.length > 0)));
+
 /** How a list is picked: on its own when it says nothing. */
 export const pickedOf = (c: ChoiceList): Picked => (c.picked === 'features' || c.picked === 'both' || c.picked === 'everyone' ? c.picked : 'own');
 

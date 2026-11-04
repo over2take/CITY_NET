@@ -51,7 +51,7 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 | Stats and formulas | a formula from a stat, worked out on the sheet and saved by the server | `stats`, `engine`, `preview_values` | `builder-journey`, `player-journey` (Toughness = 10 + Grit) | **AT THE TABLE** |
 | Formula conditions (IF / THEN / ELSE) | | `engine` | `builder-graph` | **BUILDER ONLY** |
 | Lookup tables | | `engine` | `builder-graph` | **BUILDER ONLY** |
-| The map (GRAPH) | wires, diamonds, + ADD, notes, groups, UNDO, PROBLEMS, hover, TRY ON THE MAP | `graph` | `builder-graph`, `builder-rolls` | **BUILDER ONLY** (it is a builder tool) |
+| The map (GRAPH) | wires, diamonds, + ADD, notes, groups, UNDO, PROBLEMS, hover, TRY ON THE MAP; a list's levels and a feature's bonus, read-only, GO TO CHOICES | `graph` | `builder-graph`, `builder-rolls`, `builder-graph-choices` | **BUILDER ONLY** (it is a builder tool) |
 
 ## Dice and rolls
 

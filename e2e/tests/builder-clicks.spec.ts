@@ -195,6 +195,15 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await page.getByRole('tab', { name: 'STAT BLOCK', exact: true }).click();
     }
   }
+  // A list of choices on the map (7a5c), now CHOICES has made one with levels: its node and panel.
+  await builderPage(page, 'STATS & RULES');
+  const mapView = page.getByRole('group', { name: 'View' });
+  await mapView.getByRole('button', { name: 'GRAPH' }).click();
+  await page.getByTestId('graph-node-choices:new_list_2').click();
+  await expect(page.getByTestId('graph-panel').getByRole('button', { name: 'GO TO CHOICES' })).toBeVisible();
+  missed['STATS & RULES · GRAPH · CHOICES PANEL'] = await faults(page);
+  await page.keyboard.press('Escape');
+  await mapView.getByRole('button', { name: 'FORMS' }).click();
   // HELP's WHO SEES THE TARGET (6c4h), opened as a GM would from the ROLLS tab: its settings,
   // ROLL AGAIN and the two trays.
   await builderPage(page, 'STATS & RULES');

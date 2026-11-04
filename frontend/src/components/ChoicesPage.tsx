@@ -30,6 +30,9 @@ interface Props {
   api?: ReturnType<typeof systemsApi>;
 }
 
+/** The page's own: the list to open on, when the map's GO TO names one (7a5c). */
+interface PageProps extends Props { startList?: string }
+
 const small: React.CSSProperties = { fontSize: 10, letterSpacing: 2, opacity: 0.75 };
 const why: React.CSSProperties = { fontSize: 12, lineHeight: 1.45, opacity: 0.85, margin: 0 };
 const btn: React.CSSProperties = { fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, padding: '4px 9px' };
@@ -292,9 +295,9 @@ function OptionPanel({ list, option, definition, edit, api }: Props & { list: Ch
   );
 }
 
-export function ChoicesPage({ definition, edit, api }: Props) {
+export function ChoicesPage({ definition, edit, api, startList }: PageProps) {
   const lists = choiceLists(definition);
-  const [pickedList, setPickedList] = useState<string>(lists[0]?.id ?? '');
+  const [pickedList, setPickedList] = useState<string>(startList ?? lists[0]?.id ?? '');
   const list = lists.find((c) => c.id === pickedList) ?? lists[0];
   const [pickedOption, setPickedOption] = useState<string | null>(list?.options[0]?.id ?? null);
   // Option ids are one set across the system, so the one picked is only ever in its own list:

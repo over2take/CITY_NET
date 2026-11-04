@@ -30,14 +30,14 @@ interface Props {
   preview: Tried | null;
   tried: Record<string, Tried>;
   onClose: () => void;
-  onGoTo?: (page: BuilderPage) => void;
+  onGoTo?: (page: BuilderPage, list?: string) => void;
   /** The house rules TRY ON THE MAP has on (5b6c), which the values here are worked out with. */
   trying?: Set<string>;
   /** For a roll's TEST ROLL (6b4a). */
   api?: ReturnType<typeof systemsApi>;
 }
 
-const KIND: Record<GraphNode['kind'], string> = { list: 'STATS', table: 'TABLE', formula: 'FORMULA', condition: 'CONDITION', rule: 'HOUSE RULE', note: 'NOTE', roll: 'ROLL' };
+const KIND: Record<GraphNode['kind'], string> = { list: 'STATS', table: 'TABLE', formula: 'FORMULA', condition: 'CONDITION', rule: 'HOUSE RULE', note: 'NOTE', levels: 'CHOICES', roll: 'ROLL' };
 
 /**
  * ON THE WAY IN (5b3): the diamonds on a formula's wires, each number changeable, which rewrites
@@ -246,6 +246,16 @@ export function GraphPanel({ definition, edit, node, preview, tried, onClose, on
       <>
         <RollEditor definition={definition} edit={edit} roll={roll} api={api} onRemoved={onClose} />
         <TestRoll key={roll.id} definition={definition} api={api} roll={roll} />
+      </>
+    );
+  } else if (node.kind === 'levels') {
+    // A list of choices (7a5c): read from CHOICES, changed there.
+    body = (
+      <>
+        <p style={{ ...why, margin: 0 }}>What characters pick from this list, as the rest of the system reads it. It is made and changed on CHOICES.</p>
+        {(node.rows ?? []).map((r) => <span key={r.stat} style={{ fontSize: 12 }}>· {r.label}: @{r.stat}</span>)}
+        {!!node.bonuses && <p style={{ ...why, margin: 0 }}>The dashed wires are its features&apos; bonuses: {node.bonuses}.</p>}
+        {onGoTo && <div><button type="button" className="utility-btn" style={btn} onClick={() => onGoTo('choices', node.list)}>GO TO CHOICES</button></div>}
       </>
     );
   } else if (node.kind === 'rule') {

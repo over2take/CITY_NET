@@ -37,8 +37,8 @@ interface Props {
   api?: ReturnType<typeof systemsApi>;
   /** An example being looked at: the map moves and zooms, nothing on it changes. */
   readOnly?: boolean;
-  /** Where a house rule's GO TO HOUSE RULES goes: the builder's own page. */
-  onGoTo?: (page: BuilderPage) => void;
+  /** Where a house rule's GO TO HOUSE RULES goes: the builder's own page; a list of choices' GO TO names the list. */
+  onGoTo?: (page: BuilderPage, list?: string) => void;
   /** A node to open the panel on when the map opens: a note FORMS' EDIT IN GRAPH asked for (5b5). */
   startWith?: string;
   /** The server's problems with the draft, as PROBLEMS lists them (5b6b). */
@@ -70,6 +70,8 @@ type Values = {
   values: Record<string, number>; problems: Record<string, string>; samples: (id: string) => number; stats: Set<string>; used: Set<string>; editable: boolean;
   /** The house rules TRY ON THE MAP has on (5b6c), and switching one. */
   trying: Set<string>; onTry: (rule: string) => void;
+  /** A list of choices' GO TO (7a5c): opens it on CHOICES. */
+  onChoices?: (list: string) => void;
 };
 type NodeData = { node: GraphNode; values: Values };
 type BoxData = { group: GraphGroup; count: number; wiresOut: number; onFold: () => void; readOnly: boolean };
@@ -175,6 +177,45 @@ function ListNode({ data }: NodeProps<Node<NodeData>>) {
       {/* The whole group, for a roll it is ROLLED BY (6b4a): shown while wired, and faint to draw from (6b4b). */}
       <Handle type="source" id="out" position={Position.Right} isConnectable={v.editable} title={v.editable ? 'Drag onto a roll: rolled by every stat in the group' : undefined}
         style={v.used.has(`${n.id}:out`) ? { ...dot('var(--warning)'), top: 14 } : v.editable ? { ...dot('var(--warning)'), opacity: 0.35, top: 14, cursor: 'crosshair' } : { ...hidden, top: 14 }} />
+      {/* A feature's bonus on a stat (7a5c): its dashed wire ends on that stat's row. */}
+      {n.inputs.filter((i) => i.kind === 'bonus').map((i) => {
+        const row = rows.findIndex((r) => r.stat === i.on || r.mod === i.on);
+        return <Handle key={i.key} type="target" id={i.key} position={Position.Left} isConnectable={false} style={{ ...dot('var(--warning)'), top: top + Math.max(0, row) * SIZE.listRow + SIZE.listRow / 2 }} />;
+      })}
+      <Handle type="target" id="note" position={Position.Right} isConnectable={false} style={{ ...hidden, top: 14 }} />
+    </div>
+  );
+}
+
+/**
+ * A list of choices (7a5c; approved mockup nested-choices): its total and each option's level, a row
+ * and a dot each, drawn from like a stat's; and BONUSES, where its features' dashed wires leave.
+ * Read from CHOICES and changed there: GO TO opens the list.
+ */
+function LevelsNode({ data }: NodeProps<Node<NodeData>>) {
+  const n = data.node;
+  const v = data.values;
+  const rows = n.rows ?? [];
+  return (
+    <div data-testid={`graph-node-${n.id}`} style={shell(n, { borderColor: 'var(--warning)' })}>
+      <Header kindTag={rows.length ? 'LEVELS' : 'CHOICES'} label={n.label} tone="warning" right={v.onChoices && (
+        <button type="button" className="nodrag" title="Open this list on CHOICES" onClick={(e) => { e.stopPropagation(); v.onChoices!(n.list!); }}
+          style={{ background: 'none', border: 0, padding: 0, cursor: 'pointer', fontFamily: 'monospace', fontSize: 10, letterSpacing: 1, color: 'var(--warning)' }}>GO TO</button>
+      )} />
+      {rows.map((r) => (
+        <div key={r.stat} style={{ height: SIZE.listRow, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px 0 10px', boxSizing: 'border-box', borderTop: '1px solid color-mix(in srgb, var(--warning) 15%, transparent)' }}>
+          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12 }}>{r.label}</span>
+          <span style={{ ...dim, color: 'var(--cyan)', opacity: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>@{r.stat}</span>
+        </div>
+      ))}
+      {!!n.bonuses && (
+        <div style={{ height: SIZE.listRow, display: 'flex', alignItems: 'center', padding: '0 12px 0 10px', boxSizing: 'border-box', borderTop: '1px solid color-mix(in srgb, var(--warning) 15%, transparent)', ...dim }}>BONUSES · {n.bonuses}</div>
+      )}
+      {rows.map((r, i) => (
+        <Handle key={r.stat} type="source" id={`out:${r.stat}`} position={Position.Right} isConnectable={v.editable}
+          style={{ ...rowDot(v.used.has(`${n.id}:out:${r.stat}`), v.editable), top: SIZE.header + i * SIZE.listRow + SIZE.listRow / 2 }} />
+      ))}
+      {!!n.bonuses && <Handle type="source" id="bonus" position={Position.Right} isConnectable={false} style={{ ...dot('var(--warning)'), top: SIZE.header + rows.length * SIZE.listRow + SIZE.listRow / 2 }} />}
       <Handle type="target" id="note" position={Position.Right} isConnectable={false} style={{ ...hidden, top: 14 }} />
     </div>
   );
@@ -369,7 +410,7 @@ function FoldedBox({ data, width, height }: NodeProps<Node<BoxData>>) {
 }
 
 const NODE_TYPES: NodeTypes = {
-  list: ListNode, table: TableNode, rule: RuleNode, note: NoteNode, formula: FormulaNode, condition: FormulaNode, roll: RollNode,
+  list: ListNode, table: TableNode, rule: RuleNode, note: NoteNode, formula: FormulaNode, condition: FormulaNode, roll: RollNode, levels: LevelsNode,
   groupBox: GroupBox, folded: FoldedBox,
 };
 
@@ -378,6 +419,7 @@ const EDGE_STYLE: Record<string, React.CSSProperties> = {
   table: { stroke: 'color-mix(in srgb, var(--green) 50%, transparent)', strokeWidth: 1.6 },
   gate: { stroke: 'var(--cyan)', strokeWidth: 2, strokeDasharray: '2 4', strokeLinecap: 'round' },
   note: { stroke: 'var(--text)', strokeWidth: 1, strokeDasharray: '6 4', opacity: 0.6 },
+  bonus: { stroke: 'var(--warning)', strokeWidth: 1.6, strokeDasharray: '6 5' },
 };
 
 /** Hover highlighting (5c1): what isn't part of the node hovered, and a wire that is. */
@@ -554,7 +596,8 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
     used: new Set(graph.wires.map((w) => `${w.from}:${w.fromHandle}`)),
     trying: tryingSet,
     onTry,
-  }), [preview, definition, graph, readOnly, tryingSet, onTry]);
+    onChoices: onGoTo ? (list: string) => onGoTo('choices', list) : undefined,
+  }), [preview, definition, graph, readOnly, tryingSet, onTry, onGoTo]);
 
   // Where nodes sit: the draft's places, and while a drag lasts, the dragged nodes' own over them.
   const saved = useMemo(() => positionsOf(definition, graph), [definition, graph]);
@@ -614,7 +657,8 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
    * THE MAP has its rule on (5b6c), and then the ones into the formula it stands in for.
    */
   const unused = useCallback((w: GraphWire) => {
-    if (w.kind === 'gate' || w.kind === 'note') return false;
+    // A feature's bonus counts whichever formula is in use.
+    if (w.kind === 'gate' || w.kind === 'note' || w.kind === 'bonus') return false;
     const rule = graph.nodes.find((n) => n.id === w.to)?.alternative?.rule;
     const swapped = !!rule && tryingSet.has(rule);
     return w.alt ? !swapped : swapped;
@@ -842,8 +886,11 @@ function GraphMap({ definition, edit, api, readOnly = false, onGoTo, startWith, 
           <div role="dialog" aria-label="Cut this wire?" style={{ position: 'absolute', left: asked.x + 8, top: asked.y + 8, zIndex: 6, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6,
             background: 'var(--black)', border: '1px solid var(--green)', fontFamily: 'monospace', fontSize: 12, boxShadow: '0 4px 16px rgba(0, 0, 0, 0.6)' }}>
             <span>{wireLabel(definition, wire)}</span>
+            {wire.kind === 'bonus' && <span style={{ fontSize: 11, opacity: 0.8 }}>A feature&apos;s bonus is set on CHOICES, on its feature.</span>}
             <span style={{ display: 'flex', gap: 6 }}>
-              <button type="button" className="utility-btn" style={{ fontFamily: 'monospace', fontSize: 11, padding: '3px 10px' }} onClick={cut}>CUT</button>
+              {wire.kind === 'bonus'
+                ? onGoTo && <button type="button" className="utility-btn" style={{ fontFamily: 'monospace', fontSize: 11, padding: '3px 10px' }} onClick={() => onGoTo('choices', wire.from.slice('choices:'.length))}>GO TO CHOICES</button>
+                : <button type="button" className="utility-btn" style={{ fontFamily: 'monospace', fontSize: 11, padding: '3px 10px' }} onClick={cut}>CUT</button>}
               <button type="button" className="utility-btn" style={{ fontFamily: 'monospace', fontSize: 11, padding: '3px 10px' }} onClick={() => setAsked(null)}>KEEP</button>
             </span>
           </div>
