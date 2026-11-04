@@ -55,7 +55,7 @@ const { checkHouseRules } = require('./houseRules');
 const { checkGraph } = require('./graph');
 const { checkRolls, SEEN } = require('./rollStyles');
 const { checkDice } = require('./diceFaces');
-const { checkChoices } = require('./choices');
+const { checkChoices, checkHasNames } = require('./choices');
 const { checkResting } = require('./recovery');
 
 const FORMAT = 1;
@@ -185,6 +185,7 @@ const checkDefinition = (definition) => {
   checkDice(definition, problems);
   checkRolls(definition, problems);
   checkChoices(definition, problems);
+  checkHasNames(definition, problems);
   checkResting(definition, problems);
   if (definition.target_seen !== undefined && !SEEN.includes(definition.target_seen)) {
     problems.push({ where: 'target_seen', message: `One of ${SEEN.join(', ')}` });

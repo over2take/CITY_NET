@@ -15,12 +15,14 @@
 //   sum     := product (('+' | '-') product)*
 //   product := unary (('*' | '/' | '%') unary)*
 //   unary   := '-' unary | '+' unary | primary
-//   primary := NUMBER | '@' NAME | '$' NAME | NAME '(' args? ')' | '(' expr ')'
+//   primary := NUMBER | '@' NAME | '$' NAME | 'has' '(' NAME ')' | NAME '(' args? ')' | '(' expr ')'
 //
 //   @name  a sheet field, or another derived value of the same system
 //   $name  a code-backed rule value (see rules.js) - what a formula cannot say, like
 //          "the soak of whatever armor mods are fitted"
 //   name() a built-in function below, or one of the system's lookup tables
+//   has(name)  1 while the character has that option or feature of the system's choices, else 0
+//          (7b): the one call whose argument is a name, not a number, read as the field has:name
 //
 // Everything is a number. A comparison is 1 or 0; `and`, `or`, `not` and `if` treat any
 // nonzero value as true. Anything that would come out infinite or NaN - dividing by zero,
@@ -44,6 +46,8 @@ const NAME = /^[a-z][a-z0-9_]{0,63}$/;
  * hostile-file tests, __tests__/system_builder_hostile_files.test.js).
  */
 const BUILTINS = Object.assign(Object.create(null), {
+  // Parsed on its own, as its argument is a name: listed so nothing else can take the name.
+  has: { min: 1, max: 1, fn: () => 0 },
   min: { min: 1, max: 32, fn: (...a) => Math.min(...a) },
   max: { min: 1, max: 32, fn: (...a) => Math.max(...a) },
   floor: { min: 1, max: 1, fn: (x) => Math.floor(x) },
@@ -147,6 +151,13 @@ const parse = (source, isFunction = () => false) => {
       if (!isOp('(')) {
         throw new ExpressionError(`"${name}" on its own means nothing: a sheet field is written @${name}`, tok.at);
       }
+      if (name === 'has') {
+        take();
+        const what = take();
+        if (what.t !== 'name' || !isOp(')')) throw new ExpressionError('has() takes the name of an option or feature, like has(second_wind)', what.at);
+        take();
+        return node({ k: 'has', name: what.v });
+      }
       if (!BUILTINS[name] && !isFunction(name)) throw new ExpressionError(`No function or table called "${name}"`, tok.at);
       take();
       const args = [];
@@ -213,12 +224,13 @@ const parse = (source, isFunction = () => false) => {
   return tree;
 };
 
-/** Every @field, $rule and table a tree refers to. */
+/** Every @field, $rule, table and has() name a tree refers to. */
 const references = (tree) => {
-  const out = { fields: new Set(), rules: new Set(), tables: new Set() };
+  const out = { fields: new Set(), rules: new Set(), tables: new Set(), has: new Set() };
   const walk = (n) => {
     switch (n.k) {
       case 'field': out.fields.add(n.name); break;
+      case 'has': out.has.add(n.name); break;
       case 'rule': out.rules.add(n.name); break;
       case 'call': if (!BUILTINS[n.name]) out.tables.add(n.name); n.args.forEach(walk); break;
       case 'bin': walk(n.left); walk(n.right); break;
@@ -242,6 +254,7 @@ const evaluate = (tree, env) => {
     switch (n.k) {
       case 'num': return n.v;
       case 'field': return finite(env.field(n.name));
+      case 'has': return env.field(`has:${n.name}`) ? 1 : 0;
       case 'rule': return finite(env.rule(n.name));
       case 'neg': return finite(-ev(n.arg));
       case 'not': return ev(n.arg) === 0 ? 1 : 0;

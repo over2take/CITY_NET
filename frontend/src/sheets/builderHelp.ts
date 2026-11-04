@@ -92,6 +92,7 @@ export interface FormulaFunction { name: string; args: string; gives: string; ex
 
 /** Every function the formula engine knows (backend systemBuilder/expression.js BUILTINS; a test holds the two together). */
 export const FORMULA_FUNCTIONS: FormulaFunction[] = [
+  { name: 'has', args: 'x', gives: '1 if the character has that option or feature of CHOICES, else 0', example: 'has(second_wind)' },
   { name: 'min', args: 'a, b, ...', gives: 'The smallest', example: 'min(@str, @dex)' },
   { name: 'max', args: 'a, b, ...', gives: 'The largest', example: 'max(1, @level - 2)' },
   { name: 'floor', args: 'x', gives: 'Rounded down', example: 'floor(@str / 2)' },

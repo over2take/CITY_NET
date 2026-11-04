@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { wordsOf, sampleLine, insertGroups, levelTokens, shapesOf, writeShape, formulaTexts, isMistake } from '../formulaBox';
+import { wordsOf, sampleLine, insertGroups, levelTokens, hasTokens, shapesOf, writeShape, formulaTexts, isMistake } from '../formulaBox';
 import type { Definition } from '../systemsApi';
 
 /**
@@ -70,17 +70,36 @@ describe('the sample line', () => {
 describe('INSERT', () => {
   it('offers levels, stats, formulas, tables and workings, with what each is', () => {
     const groups = insertGroups(DEF, 'requires');
-    expect(groups.map((g) => g.title)).toEqual(['LEVELS', 'STATS', 'FORMULAS', 'TABLES', 'WORKINGS']);
+    expect(groups.map((g) => g.title)).toEqual(['LEVELS', 'STATS', 'FORMULAS', 'TABLES', 'CHOICES', 'WORKINGS']);
     expect(groups[0].items).toEqual([
       { token: '@level', label: 'LEVEL' }, { token: '@classes_level', label: 'CLASSES LEVEL' }, { token: '@fighter_level', label: 'FIGHTER LEVEL' },
     ]);
     expect(groups[2].items).toEqual([{ token: '@con_mod', label: 'CON MODIFIER' }]);
     expect(groups[3].items).toEqual([{ token: 'mod()', label: 'A TABLE' }]);
-    expect(groups[4].items).toContainEqual({ token: 'floor()', label: 'ROUNDED DOWN' });
+    expect(groups[4].items).toContainEqual({ token: 'has(fighter)', label: 'HAS FIGHTER' });
+    expect(groups[5].items).toContainEqual({ token: 'floor()', label: 'ROUNDED DOWN' });
+    // has() is offered by name, under CHOICES: never as a bare call with nothing to name.
+    expect(groups[5].items.map((i) => i.token)).not.toContain('has()');
+  });
+
+  it('offers has() for each option and each of its features; a system without lists has none (7b)', () => {
+    const def = { ...DEF, choices: [{ id: 'c', one: 'C', many: 'Cs', options: [{ id: 'mage', label: 'Mage', features: [{ id: 'ward', label: 'Ward' }, { id: 'nameless', label: '' }] }, { id: 'bare', label: '' }] }] } as unknown as Definition;
+    expect(hasTokens(def)).toEqual([
+      { token: 'has(mage)', label: 'HAS MAGE' }, { token: 'has(ward)', label: 'HAS WARD' }, { token: 'has(nameless)', label: 'HAS NAMELESS' }, { token: 'has(bare)', label: 'HAS BARE' },
+    ]);
+    expect(insertGroups({ ...DEF, choices: [] } as Definition, 'requires').map((g) => g.title)).not.toContain('CHOICES');
+  });
+
+  it('says a requirement reading has() in words (7b)', () => {
+    const reads = [{ id: 'has:ward', label: 'WARD', value: 0 }, { id: 'int', label: 'INTELLECT', value: 10 }];
+    expect(wordsOf('requires', 'has(ward)', reads)).toBe('needs WARD');
+    expect(wordsOf('requires', ' has( ward ) ', reads)).toBe('needs WARD');
+    expect(wordsOf('requires', 'has(ward) and @int >= 13', reads)).toBe('needs WARD and INTELLECT >= 13');
+    expect(wordsOf('formula', '2 * has(ward)', reads)).toBe('worked out from WARD, INTELLECT');
   });
 
   it('offers an amount no formulas, which it can\'t read', () => {
-    expect(insertGroups(DEF, 'amount').map((g) => g.title)).toEqual(['LEVELS', 'STATS', 'TABLES', 'WORKINGS']);
+    expect(insertGroups(DEF, 'amount').map((g) => g.title)).toEqual(['LEVELS', 'STATS', 'TABLES', 'CHOICES', 'WORKINGS']);
   });
 
   it('has no levels without a levelled list, and no @level when a stat is called that', () => {
@@ -141,9 +160,9 @@ describe('a roll\'s ADD and AGAINST, and a rest\'s amount (formula box 2)', () =
   });
 
   it('INSERT: the stat rolled first in a roll, no tables in a rest', () => {
-    expect(insertGroups(DEF, 'add').map((g) => g.title)).toEqual(['THIS ROLL', 'LEVELS', 'STATS', 'FORMULAS', 'TABLES', 'WORKINGS']);
+    expect(insertGroups(DEF, 'add').map((g) => g.title)).toEqual(['THIS ROLL', 'LEVELS', 'STATS', 'FORMULAS', 'TABLES', 'CHOICES', 'WORKINGS']);
     expect(insertGroups(DEF, 'against')[0].items.map((i) => i.token)).toEqual(['@this', '@this_mod', '@tie', '@tie_mod']);
-    expect(insertGroups(DEF, 'refill').map((g) => g.title)).toEqual(['LEVELS', 'STATS', 'FORMULAS', 'WORKINGS']);
+    expect(insertGroups(DEF, 'refill').map((g) => g.title)).toEqual(['LEVELS', 'STATS', 'FORMULAS', 'CHOICES', 'WORKINGS']);
   });
 
   it('SHAPES: the stat rolled and its modifier, a target, dice', () => {
