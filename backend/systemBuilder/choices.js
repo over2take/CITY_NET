@@ -61,6 +61,11 @@
 // option. The GM says how players pick from it: by hand only, by hand or rolled (as when unsaid), or
 // rolled only. Rolling for it at the table is 7a5b2's.
 //
+// Formulas, rolls, requirements and amounts read has(name) (7b): 1 while the character holds that
+// option or has that feature unlocked, else 0. It comes with the levels, as the field has:name in the
+// overlay, so whatever reads levels reads it. What is held never reads a formula or an amount, so it
+// can't go round in a loop; a list everyone has reads only what is picked, as it does levels.
+//
 // Levels are read in formulas, rolls and modifier amounts: @<option>_level (0 when not taken),
 // @<list>_level, a levelled list's sum, and @level, every levelled list's sum, unless the system
 // has a stat or formula called level of its own, which keeps meaning what it always did (the user,
@@ -516,7 +521,8 @@ const heldOf = (definition, data) => {
   const totalLevel = () => (ownLevel ? Math.max(1, Math.floor(num(sheet.level)))
     : levelled ? Math.max(1, levelsOf(definition, held.filter((p) => p.active === true && !p.everyone)).level ?? 0) : null);
   if (everyone.length) {
-    const levels = levelsOf(definition, held.filter((p) => p.active === true && !p.everyone));
+    const picked = held.filter((p) => p.active === true && !p.everyone);
+    const levels = { ...levelsOf(definition, picked), ...ownedBy(picked) };
     const tables = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
     const own = (o, name) => Object.prototype.hasOwnProperty.call(o, name);
     const env = {
@@ -584,6 +590,48 @@ const unlockedOf = (picks) => picks.flatMap((p) => list(p.option.features)
   .filter((f) => isPlainObject(f) && typeof f.id === 'string' && (p.level === null || (Number.isInteger(f.at) ? f.at : 1) <= p.level))
   .map((feature) => ({ feature, option: p.option, list: p.list })));
 
+/** What has(name) reads for `picks`: has:<id> for each option held and each feature it has unlocked. */
+function ownedBy(picks) {
+  const owned = {};
+  for (const p of picks) owned[`has:${p.option.id}`] = 1;
+  for (const { feature } of unlockedOf(picks)) owned[`has:${feature.id}`] = 1;
+  return owned;
+}
+
+/** Every option and feature has() can name, by id, with what players call it. */
+const ownableOf = (definition) => new Map(choicesOf(definition).flatMap((c) => optionsOf(c).flatMap((o) => [
+  [o.id, o.label || o.id],
+  ...list(o.features).filter((f) => isPlainObject(f) && typeof f.id === 'string').map((f) => [f.id, f.label || f.id]),
+])));
+
+/** The keys of a definition that hold formula text, wherever they sit. */
+const FORMULA_KEYS = new Set(['formula', 'when', 'then', 'else', 'requires', 'amount', 'count', 'add', 'against', 'plus']);
+/** How a problem names what it is in, as the other checks do: "list classes, option mage, requires". */
+const IN_WORDS = { derived: 'derived', choices: 'list', options: 'option', features: 'feature', rolls: 'roll', changes: 'change' };
+
+/**
+ * Each has(name) in a definition's formulas naming no option or feature: a slip there would read as
+ * "doesn't have it" for ever. Formula text sits in many sections, so it is found by its key.
+ */
+const checkHasNames = (definition, problems) => {
+  const known = ownableOf(definition);
+  const walk = (v, where) => {
+    if (Array.isArray(v)) { v.forEach((x) => walk(x, where)); return; }
+    if (!isPlainObject(v)) return;
+    for (const [key, value] of Object.entries(v)) {
+      if (typeof value === 'string') {
+        if (!FORMULA_KEYS.has(key)) continue;
+        for (const m of value.matchAll(/\bhas\(\s*([a-z][a-z0-9_]*)\s*\)/g)) {
+          if (!known.has(m[1])) problems.push({ where: [...where, key].join(', '), message: `has(${m[1]}): no option or feature is called that` });
+        }
+      } else if (Array.isArray(value) && IN_WORDS[key]) {
+        for (const x of value) walk(x, [...where, `${IN_WORDS[key]} ${isPlainObject(x) && typeof x.id === 'string' ? x.id : '?'}`]);
+      } else walk(value, [...where, key]);
+    }
+  };
+  walk(definition, []);
+};
+
 /**
  * What a character's picks do to their numbers: `{ sheet, add, levels, from }`, the overlay
  * derived.js reads. `sheet` holds the levels and each stat or health field a feature changes, as
@@ -594,11 +642,12 @@ const overlayOf = (definition, data) => {
   const sheet = isPlainObject(data) ? data : {};
   const picks = picksOf(definition, sheet);
   const levels = levelsOf(definition, picks);
+  const owned = ownedBy(picks);
   const own = (o, name) => Object.prototype.hasOwnProperty.call(o, name);
   const tables = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
   const env = {
-    field: (name) => (own(levels, name) ? levels[name] : num(sheet[name])),
+    field: (name) => (own(levels, name) ? levels[name] : own(owned, name) ? owned[name] : num(sheet[name])),
     rule: (name) => ruleValue(name, sheet),
     table: (name, x) => lookupIn(own(tables, name) ? tables[name] : [], x),
   };
@@ -617,7 +666,7 @@ const overlayOf = (definition, data) => {
       (own(from, m.target) ? from[m.target] : (from[m.target] = [])).push({ feature: feature.label || feature.id, amount });
     }
   }
-  const over = { ...levels };
+  const over = { ...levels, ...owned };
   const add = {};
   // The token's maximum already holds its modifiers (7a5a3, tokenMax.js): read as it is, never added twice.
   const onToken = tokenMaxFieldOf(definition);
@@ -676,7 +725,10 @@ const namesOf = (definition) => {
 /** A requirement in the words the sheet shows: @int >= 13 as INTELLECT >= 13. */
 const needsText = (definition, text) => {
   const names = namesOf(definition);
-  return String(text).replace(/@([a-z][a-z0-9_]*)/g, (_, id) => String(names.get(id) || id).toUpperCase()).trim();
+  const ownable = ownableOf(definition);
+  return String(text)
+    .replace(/\bhas\(\s*([a-z][a-z0-9_]*)\s*\)/g, (_, id) => String(ownable.get(id) || id).toUpperCase())
+    .replace(/@([a-z][a-z0-9_]*)/g, (_, id) => String(names.get(id) || id).toUpperCase()).trim();
 };
 
 /** Each unlocked feature with uses: how many it has (its count worked out), how many are spent, and its rest. */
@@ -753,7 +805,7 @@ const choicesShown = (definition) => {
 };
 
 module.exports = {
-  LIMITS, PICKED, PLAYERS, PICKS_KEY, USES_KEY, WORKED_KEY, ROLLED_KEY, rolledOn, rolledKey, rolledOf, checkChoices, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
+  LIMITS, PICKED, PLAYERS, PICKS_KEY, USES_KEY, WORKED_KEY, ROLLED_KEY, rolledOn, rolledKey, rolledOf, checkChoices, checkHasNames, ownableOf, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
   tableOf, rollRangeOf, playersOf,
   capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, choicesShown, tokenMaxFieldOf,
 };

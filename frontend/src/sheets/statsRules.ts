@@ -24,7 +24,7 @@ export interface Band { upTo?: number; value: number }
 export interface Table { id: string; label?: string; bands: Band[] }
 
 /** Functions every formula can call (expression.js BUILTINS): a table may not take these names. */
-export const FUNCTIONS = ['min', 'max', 'floor', 'ceil', 'round', 'abs', 'clamp', 'if'];
+export const FUNCTIONS = ['min', 'max', 'floor', 'ceil', 'round', 'abs', 'clamp', 'if', 'has'];
 /** Fields the starter sheet always has (sheet.js): a stat may not take these ids. */
 const STARTER_IDS = ['name', 'concept', 'description', 'cash', 'notes'];
 

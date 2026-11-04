@@ -163,6 +163,42 @@ describe('a feature\'s bonus', () => {
   });
 });
 
+describe('has() on the map (7b)', () => {
+  const READING = {
+    ...HEARTH,
+    derived: [
+      { id: 'guarded', label: 'Guarded', formula: '10 + 2 * has(guard) + has( guard ) + has(soldier)' },
+      { id: 'slip', label: 'Slip', formula: 'has(nope)' },
+      { id: 'other', label: 'Other', formula: '1', alternative: { rule: 'r', formula: 'has(keen)' } },
+    ],
+    house_rules: [{ id: 'r', name: 'R' }],
+  } as unknown as Definition;
+
+  it('reads in names, a row each once, with no wire: what it reads is on CHOICES', () => {
+    const g = graphOf(READING);
+    const n = g.nodes.find((x) => x.id === 'guarded')!;
+    expect(n.text).toBe('10 + 2 × HAS GUARD STANCE + HAS GUARD STANCE + HAS SOLDIER');
+    expect(n.inputs.filter((i) => i.about === 'ON CHOICES').map((i) => [i.key, i.label, i.known, i.missing, i.from])).toEqual([
+      ['b:has(guard)', 'HAS GUARD STANCE', true, false, []], ['b:has(soldier)', 'HAS SOLDIER', true, false, []],
+    ]);
+    expect(g.wires.some((w) => w.to === 'guarded' && w.kind !== 'bonus')).toBe(false);
+    // Never taken for a table it can't find.
+    expect(n.inputs.some((i) => i.kind === 'table')).toBe(false);
+  });
+
+  it('a name with nothing to read says so', () => {
+    const n = graphOf(READING).nodes.find((x) => x.id === 'slip')!;
+    expect(n.text).toBe('has(nope)');
+    expect(n.inputs).toEqual([{ key: 'b:has(nope)', kind: 'field', label: 'has(nope)', about: 'NOTHING HAS THAT NAME', from: [], alt: false, known: false, missing: true }]);
+  });
+
+  it('counts in a formula\'s other formula too, on that side', () => {
+    const n = graphOf(READING).nodes.find((x) => x.id === 'other')!;
+    expect(n.alternative!.text).toBe('HAS KEEN');
+    expect(n.inputs.find((i) => i.alt)).toMatchObject({ key: 'a:has(keen)', label: 'HAS KEEN' });
+  });
+});
+
 describe('the rest of the map', () => {
   it('a list\'s node can\'t be removed from here, and says where it is', () => {
     expect(withRemoved(HEARTH, 'choices:classes')).toEqual({ definition: null, message: 'Lists are made and removed on CHOICES: this only shows what they give.' });

@@ -349,6 +349,16 @@ describe('a levelled list\'s die (R1a)', () => {
     expect(optionIn(r, 'Sailor')).not.toHaveProperty('die');
   });
 
+  it('takes a requirement reading has() (7b); a slip reads, and is a problem once in the draft', () => {
+    const r = read(FILE('[options]', 'name, requires', 'Ranger, has(second_wind)', 'Bard, has(nope)'));
+    expect(r.skipped).toEqual([]);
+    expect(optionIn(r, 'Ranger').requires).toBe('has(second_wind)');
+    expect(checkDefinition(withList(r)).problems.map((p) => p.message)).toEqual(['has(nope): no option or feature is called that']);
+    const bad = read(FILE('[options]', 'name, requires', 'Ranger, has(1)'));
+    expect(bad.skipped.map((s) => s.line)).toEqual([3]);
+    expect(bad.skipped[0].message).toContain('has() takes the name of an option or feature');
+  });
+
   describe('a table\'s rolls (7a5b)', () => {
     const TABLED = { ...HEARTH, choices: HEARTH.choices.map((c) => (c.id === 'backgrounds' ? { ...c, table: 'd6', options: [{ ...c.options[0], roll: '1-3' }] } : c)) };
     const readT = (...lines) => read(FILE(...lines), 'backgrounds', TABLED);

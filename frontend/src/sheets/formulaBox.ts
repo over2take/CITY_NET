@@ -10,7 +10,7 @@
 
 import type { Definition } from './systemsApi';
 import { allStats, formulaList, tableList, isCondition, partOf, CONDITION_PARTS, FUNCTIONS, type Formula } from './statsRules';
-import { choiceLists } from './choices';
+import { choiceLists, featureList } from './choices';
 
 /**
  * What a box holds: a modifier's amount, an option's requirement, a feature's uses; a roll's ADD and
@@ -60,7 +60,8 @@ export const wordsOf = (kind: FormulaKind, text: string, reads: FormulaReads[] =
   if (kind === 'requires') {
     if ((m = t.match(/^@([a-z][a-z0-9_]*)\s*>=\s*(-?\d+)$/))) return `needs ${word(m[1], reads)} ${m[2]} or more`;
     if ((m = t.match(/^@([a-z][a-z0-9_]*)\s*>\s*(-?\d+)$/))) return `needs ${word(m[1], reads)} over ${m[2]}`;
-    return `needs ${t.replace(/@([a-z][a-z0-9_]*)/g, (_, id: string) => word(id, reads))}`;
+    if ((m = t.match(/^has\(\s*([a-z][a-z0-9_]*)\s*\)$/))) return `needs ${word(`has:${m[1]}`, reads)}`;
+    return `needs ${t.replace(/\bhas\(\s*([a-z][a-z0-9_]*)\s*\)/g, (_, id: string) => word(`has:${id}`, reads)).replace(/@([a-z][a-z0-9_]*)/g, (_, id: string) => word(id, reads))}`;
   }
   // A formula of STATS & RULES is a value, not something added: no sign.
   const plain = kind === 'uses' || kind === 'formula';
@@ -119,6 +120,12 @@ export const levelTokens = (def: Definition): { token: string; label: string }[]
   ];
 };
 
+/** What INSERT offers for has() (7b): each option and feature of the system's lists, by what players call it. */
+export const hasTokens = (def: Definition): { token: string; label: string }[] => choiceLists(def).flatMap((c) => c.options.flatMap((o) => [
+  { token: `has(${o.id})`, label: `HAS ${(o.label || o.id).toUpperCase()}` },
+  ...featureList(o).map((f) => ({ token: `has(${f.id})`, label: `HAS ${(f.label || f.id).toUpperCase()}` })),
+]));
+
 /** WORKINGS: the functions, with what each does. */
 const WORKINGS: Record<string, string> = {
   floor: 'ROUNDED DOWN', ceil: 'ROUNDED UP', round: 'ROUNDED', min: 'THE SMALLER', max: 'THE LARGER', abs: 'WITHOUT ITS SIGN', clamp: 'KEPT BETWEEN', if: 'ONE OR THE OTHER',
@@ -141,7 +148,8 @@ export const insertGroups = (def: Definition, kind: FormulaKind): InsertGroup[] 
   { title: 'STATS', items: allStats(def).map((s) => ({ token: `@${s.id}`, label: (s.label || s.id).toUpperCase() })) },
   { title: 'FORMULAS', items: kind === 'amount' ? [] : formulaList(def).map((f) => ({ token: `@${f.id}`, label: (f.label || f.id).toUpperCase() })) },
   { title: 'TABLES', items: kind === 'refill' ? [] : tableList(def).map((t) => ({ token: `${t.id}()`, label: 'A TABLE' })) },
-  { title: 'WORKINGS', items: FUNCTIONS.map((fn) => ({ token: `${fn}()`, label: WORKINGS[fn] ?? '' })) },
+  { title: 'CHOICES', items: hasTokens(def) },
+  { title: 'WORKINGS', items: FUNCTIONS.filter((fn) => fn !== 'has').map((fn) => ({ token: `${fn}()`, label: WORKINGS[fn] ?? '' })) },
 ].filter((g) => g.items.length);
 
 /** A SHAPE: a common formula written for you from a number, and a name where it needs one. */

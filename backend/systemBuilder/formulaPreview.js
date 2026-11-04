@@ -19,7 +19,7 @@
 const { parse, evaluate, references } = require('./expression');
 const { ruleValue } = require('./rules');
 const { tablesOf, lookupIn, previewDerived } = require('./derived');
-const { namesOf, levelNamesOf } = require('./choices');
+const { namesOf, levelNamesOf, ownableOf } = require('./choices');
 const { fieldsRolledBy, fieldsFor } = require('./tableRolls');
 const { reachOf } = require('./rests');
 const { prepare } = require('./tierRolls');
@@ -125,6 +125,12 @@ const previewFormula = (definition, text, kind, sample = sampleOf(definition), r
   const fields = [...references(tree).fields];
   const unknown = fields.find((n) => !names.has(n));
   if (unknown) return unknownName(unknown, names.keys());
+  // has(name) (7b): a slip would read as "doesn't have it" for ever, so it is said here. The sample
+  // character has picked nothing, so it reads 0.
+  const ownable = ownableOf(definition);
+  const owned = [...references(tree).has];
+  const nobody = owned.find((n) => !ownable.has(n));
+  if (nobody) return { ok: false, problem: `No option or feature is called "${nobody}"` };
   if (kind === 'amount') {
     const formulas = new Set((Array.isArray(definition.derived) ? definition.derived : []).filter(isPlainObject).map((d) => d.id));
     const levels = levelNamesOf(definition);
@@ -141,7 +147,10 @@ const previewFormula = (definition, text, kind, sample = sampleOf(definition), r
     table: (name, x) => lookupIn(isTable(name) ? tables[name] : [], x),
   });
   return {
-    ok: true, value, reads: fields.map((id) => ({ id, label: names.get(id), value: field(id) })),
+    ok: true, value, reads: [
+      ...fields.map((id) => ({ id, label: names.get(id), value: field(id) })),
+      ...owned.map((id) => ({ id: `has:${id}`, label: ownable.get(id), value: 0 })),
+    ],
     ...(stat ? { rolling: names.get(stat) || stat } : {}),
   };
 };

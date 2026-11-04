@@ -33,7 +33,7 @@ import { statGroups, formulaList, tableList, takenIds, FUNCTIONS } from './stats
 import { houseRuleList, waitingOn } from './houseRules';
 import { modifierOn, type Modifier } from './modifiers';
 import { rollList, stepsOf, type Roll } from './rolls';
-import { listsOnMap, featureList } from './choices';
+import { listsOnMap, featureList, choiceLists } from './choices';
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -83,6 +83,8 @@ export const referencesIn = (text: unknown): References => {
 
 /** `max(@a, @b, ...)` or `min(...)` of names only: one input, the best or worst of several. */
 const COMBINED = /\b(max|min)\(\s*(@[a-z][a-z0-9_]*(?:\s*,\s*@[a-z][a-z0-9_]*)+)\s*\)/g;
+/** has(name) (7b): whether the character has an option or feature. Its name is no value to wire. */
+const HAS = /\bhas\(\s*([a-z][a-z0-9_]*)\s*\)/g;
 /** A modifier worked out from one stat by one table: `attribute_mod(@str)`. */
 const MODIFIER = /^\s*([a-z][a-z0-9_]*)\(\s*@([a-z][a-z0-9_]*)\s*\)\s*$/;
 
@@ -364,6 +366,12 @@ export const graphOf = (def: Definition): Graph => {
     });
   }
 
+  // What has(name) can name (7b): read in the formula's words, a row with no wire, as it is on CHOICES.
+  const ownable = new Map(choiceLists(def).flatMap((c) => c.options.flatMap((o) => [
+    [o.id, upper(o.label || o.id)] as const,
+    ...featureList(o).map((f) => [f.id, upper(f.label || f.id)] as const),
+  ])));
+
   /** A formula's inputs, in the order its text first reads each, and its text in names. */
   const read = (text: string, alt: boolean): { inputs: GraphInput[]; text: string } => {
     const side = alt ? 'a' : 'b';
@@ -392,7 +400,12 @@ export const graphOf = (def: Definition): Graph => {
       found.push({ at: text.indexOf(name), input: { key: `${side}:${name}()`, kind: 'table', label: has ? tableName(name) : name, from: has ? [{ value: name, label: tableName(name), node: `table:${name}`, handle: 'out' }] : [], alt, missing: !has } });
     }
     for (const name of refs.rules) found.push({ at: rest.indexOf(`$${name}`), input: { key: `${side}:$${name}`, kind: 'engine', label: upper(name.replace(/_/g, ' ')), from: [], alt } });
+    for (const m of new Map([...text.matchAll(HAS)].map((x) => [x[1], x])).values()) {
+      const has = ownable.get(m[1]);
+      found.push({ at: m.index ?? 0, input: { key: `${side}:has(${m[1]})`, kind: 'field', label: has ? `HAS ${has}` : `has(${m[1]})`, about: has ? 'ON CHOICES' : 'NOTHING HAS THAT NAME', from: [], alt, known: !!has, missing: !has } });
+    }
     shown = shown
+      .replace(HAS, (_, id: string) => (ownable.has(id) ? `HAS ${ownable.get(id)}` : `has(${id})`))
       .replace(/@([a-z][a-z0-9_]*)/g, (_, id: string) => at.get(id)?.label ?? `@${id}`)
       .replace(/\$([a-z][a-z0-9_]*)/g, (_, id: string) => upper(id.replace(/_/g, ' ')))
       .replace(/\b([a-z][a-z0-9_]*)(\s*\()/g, (m: string, id: string, p: string) => (FUNCTIONS.includes(id) || KEYWORDS.includes(id) || !tableIds.has(id) ? m : `${tableName(id)}${p}`))
