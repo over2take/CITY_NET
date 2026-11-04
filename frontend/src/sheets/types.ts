@@ -301,6 +301,8 @@ export interface SheetTemplate {
   choices?: import('./choicesShown').ChoiceListShown[];
   /** A custom system's rests for the sheet's REST section (backend recovery.js restingShown, R3b). */
   resting?: import('./choicesShown').RestingShown;
+  /** The guided new character (7c2), for a custom system with it on. */
+  creation?: import('./newCharacterFlow').CreationShown;
   /** The layout an NPC's sheet is drawn with, when the system gives NPCs one of their own
    *  (a custom system's stat block). Absent = NPCs use this template. */
   npcLayout?: SheetTemplate;

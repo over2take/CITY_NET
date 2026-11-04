@@ -13,7 +13,19 @@
 // one everyone has isn't picked); KITS; MONEY while the BANK part is on. So a list made later joins
 // by itself, before KITS, and a list deleted leaves, and an order naming what has gone is no problem.
 //
-// Pure: checks and reads only. definition.js runs the checks.
+// A character's place in the flow (7c2) is kept on their sheet, under CREATING_KEY, where a player's
+// own edits can't reach it (an underscore key, as their picks are):
+//
+//   _creating: {}                   opened, nothing started: the window's START
+//   _creating: { at: 'stats' }      working, on that step
+//   _creating: { done: true, uploaded?: true }   finished, or came in as an upload
+//
+// Who is asked at all is the browser's to work out (sheets/newCharacterFlow.ts): a blank sheet with
+// nothing here. Being asked only opens a window, so nothing is guarded by it, and nothing is locked
+// after it: the sheet works as it always has. What the flow does change on the server is one thing:
+// while it is under way a player may take a pick back (picking.js).
+//
+// Pure: checks and reads only. definition.js runs the checks, picking.js and the socket the rest.
 
 const { partOn } = require('./parts');
 const { choicesOf, pickedOf } = require('./choices');
@@ -25,6 +37,10 @@ const list = (v) => (Array.isArray(v) ? v : []);
 const LIMITS = { steps: 40 };
 const KEYS = new Set(['on', 'order', 'off']);
 const STEP = /^(?:who|stats|kits|money|list:[a-z][a-z0-9_]{0,63})$/;
+/** Where a sheet keeps its place in the flow. */
+const CREATING_KEY = '_creating';
+/** Steps with nothing to ask yet: KITS and MONEY come with 7c4. */
+const NOT_ASKED_YET = new Set(['kits', 'money']);
 
 /** Every step this system has, in the order they come until the GM moves them. */
 const stepIdsOf = (definition) => [
@@ -53,6 +69,56 @@ const creationOf = (definition) => {
   return { on: c.on === true, steps: ids.map((id) => ({ id, off: id !== 'who' && off.has(id) })) };
 };
 
+/** The steps a player is walked through, in order: those on, with something to ask. */
+const stepsAsked = (definition) => creationOf(definition).steps
+  .filter((s) => !s.off && !NOT_ASKED_YET.has(s.id)).map((s) => s.id);
+
+/** What the browser needs to draw the flow: the steps and the stats to set, or null while it is off. */
+const creationShown = (definition) => (creationOf(definition).on ? {
+  steps: stepsAsked(definition),
+  stats: list(definition.stats).filter((g) => isPlainObject(g) && list(g.stats).length).map((g) => ({
+    id: g.id,
+    label: g.label || g.id,
+    stats: g.stats.filter(isPlainObject).map((s) => ({ id: s.id, label: s.label || s.id, ...(s.min === undefined ? {} : { min: s.min }), ...(s.max === undefined ? {} : { max: s.max }) })),
+  })),
+} : null);
+
+/** A sheet's place in the flow, or null. */
+const placeOf = (data) => (isPlainObject(data) && isPlainObject(data[CREATING_KEY]) ? data[CREATING_KEY] : null);
+
+/** Whether this character is partway through the flow: opened, not finished, with the flow still on. */
+const creatingNow = (definition, data) => {
+  const place = placeOf(data);
+  return !!place && place.done !== true && creationOf(definition).on;
+};
+
+/**
+ * One step of a character's way through the flow: { kind: 'open' }, { kind: 'at', step } or
+ * { kind: 'finish' }. Gives back { ok: true, data } (no `data` when there is nothing to change), or
+ * { ok: false, error } in words.
+ */
+const creationAction = (definition, data, action) => {
+  const sheet = isPlainObject(data) ? data : {};
+  const kind = isPlainObject(action) ? action.kind : null;
+  if (!creationOf(definition).on) return { ok: false, error: 'This game has no guided new character' };
+  if (kind === 'open') return placeOf(sheet) ? { ok: true } : { ok: true, data: { ...sheet, [CREATING_KEY]: {} } };
+  if (kind !== 'at' && kind !== 'finish') return { ok: false, error: 'Nothing to do' };
+  if (!creatingNow(definition, sheet)) return { ok: false, error: 'This character isn\'t being made' };
+  if (kind === 'finish') return { ok: true, data: { ...sheet, [CREATING_KEY]: { done: true } } };
+  if (!stepsAsked(definition).includes(action.step)) return { ok: false, error: 'Not one of this game\'s steps' };
+  return { ok: true, data: { ...sheet, [CREATING_KEY]: { ...placeOf(sheet), at: action.step } } };
+};
+
+/**
+ * The sheet after an upload (the approved mockup's call: taken as it is, no steps after it): marked
+ * done, so it is never asked. Nothing changes where the flow is off or already finished.
+ */
+const withUpload = (definition, data) => {
+  const place = placeOf(data);
+  if (!creationOf(definition).on || (place && place.done === true)) return data;
+  return { ...data, [CREATING_KEY]: { done: true, uploaded: true } };
+};
+
 /** A definition's `creation` checked, its problems added to `problems`. */
 const checkCreation = (definition, problems) => {
   const c = definition.creation;
@@ -70,4 +136,4 @@ const checkCreation = (definition, problems) => {
   if (list(c.off).includes('who')) problems.push({ where: 'creation, off', message: 'WHO THEY ARE is always asked: a character needs a name' });
 };
 
-module.exports = { LIMITS, stepIdsOf, creationOf, checkCreation };
+module.exports = { LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, stepsAsked, creationShown, creatingNow, creationAction, withUpload };

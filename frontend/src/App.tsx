@@ -53,6 +53,8 @@ import { npcsOnMap } from './sheets/restCalls';
 import { ChatWindow } from './components/ChatWindow';
 import { Sidebar, NavControlsMenu, CharacterControlsMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu, hasSheetCombat } from './components/Sidebar';
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
+import { NewCharacterWindow } from './components/NewCharacterWindow';
+import { useNewCharacter } from './hooks/useNewCharacter';
 import { VehiclesWindow } from './components/VehiclesWindow';
 import { EnemyVehiclesWindow } from './components/EnemyVehiclesWindow';
 import { vehicleLook as cwnVehicleLook } from './sheets/vehiclePresets';
@@ -400,6 +402,8 @@ function App() {
   const [isVehiclesOpen, setIsVehiclesOpen] = useState(false);
   const [isEnemyVehiclesOpen, setIsEnemyVehiclesOpen] = useState(false);
   const [sheetPos, setSheetPos] = useState(() => ({ x: window.innerWidth / 2 - 220, y: 60 }));
+  const [isNewCharacterOpen, setIsNewCharacterOpen] = useState(false);
+  const [newCharacterPos, setNewCharacterPos] = useState(() => ({ x: window.innerWidth / 2 - 240, y: 80 }));
   const [vehiclesPos, setVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 200, y: 90 }));
   const [enemyVehiclesPos, setEnemyVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 160, y: 130 }));
   const [bankData, setBankData] = useState<{ balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean, currencies?: BankCurrencyAccount[] }>({ balance: 0, debt: 0 });
@@ -1094,6 +1098,17 @@ function App() {
   const initiativeMode = initiativeSystem === 'cities_without_number'
     ? (globalSettings['cwn_individual_initiative'] === '1' ? 'individual' : 'side')
     : 'individual';
+  // The guided new character (7c2): where this user stands, and what CHARACTER_SHEET opens for it.
+  const newCharacter = useNewCharacter(socketRef, isLoggedIn && !IS_SPECTATOR ? userName : null, gameSystem);
+  const openNewCharacter = () => {
+    socketRef.current?.emit('creationAction', { kind: 'open' });
+    setIsNewCharacterOpen(true);
+  };
+  // The first time on a blank sheet it is the flow that opens; after that the sheet, as ever.
+  const openSheet = (open: boolean) => {
+    if (open && newCharacter === 'new') openNewCharacter();
+    else setIsSheetOpen(open);
+  };
   const initiative = useInitiative(socketRef, initiativeSceneKey, initiativeSystem);
   // Held here, not in the window: the buttons that open it need to know whether this
   // table owns any vehicles at all.
@@ -1759,7 +1774,8 @@ function App() {
               isBankOpen={isBankOpen}
               setIsBankOpen={setIsBankOpen}
               isSheetOpen={isSheetOpen}
-              setIsSheetOpen={setIsSheetOpen}
+              setIsSheetOpen={openSheet}
+              newCharacterWaiting={newCharacter === 'new'}
               isVehiclesOpen={isVehiclesOpen}
               isEnemyVehiclesOpen={isEnemyVehiclesOpen}
               setIsEnemyVehiclesOpen={setIsEnemyVehiclesOpen}
@@ -2198,6 +2214,17 @@ function App() {
                 onRolled={() => setIsDiceTrayOpen(true)}
                 onOpenVehicles={() => setIsVehiclesOpen(true)}
                 currentTheme={currentTheme}
+                onContinueCreating={openNewCharacter}
+              />
+            )}
+            {isNewCharacterOpen && (
+              <NewCharacterWindow
+                pos={newCharacterPos}
+                setPos={setNewCharacterPos}
+                socket={socketRef.current}
+                userName={userName}
+                onLeave={() => { setIsNewCharacterOpen(false); setIsSheetOpen(true); }}
+                onDone={() => { setIsNewCharacterOpen(false); setIsSheetOpen(true); }}
               />
             )}
             {isEnemyVehiclesOpen && isAdmin && (
@@ -2609,7 +2636,7 @@ function App() {
                   isOwner,
                   words: (term, form, builtIn) => wordFor(gameSystem, term, form, builtIn),
                   open: {
-                    ownSheet: () => setIsSheetOpen(true),
+                    ownSheet: () => openSheet(true),
                     playerSheet: (owner) => setOpenPlayerSheetUser(owner),
                     npcSheet: (sheet) => setOpenNpcSheet(sheet),
                     controlledSheet: (npc) => setControlledNpc(npc),

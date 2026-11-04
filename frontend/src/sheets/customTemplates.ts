@@ -67,6 +67,8 @@ export interface CustomRender {
   choices?: import('./choicesShown').ChoiceListShown[];
   /** How a sheet rests (R3a): who finishes a called rest, and each rest by name. */
   resting?: import('./choicesShown').RestingShown;
+  /** The guided new character (7c2): the steps to walk through, null while it is off. */
+  creation?: import('./newCharacterFlow').CreationShown | null;
 }
 
 /** Fired on window when a custom template has been loaded, so the app can redraw. */
@@ -143,6 +145,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.house_rules?.length ? { houseRules: render.house_rules } : {}),
     ...(render.choices?.length ? { choices: render.choices } : {}),
     ...(render.resting ? { resting: render.resting } : {}),
+    ...(render.creation ? { creation: render.creation } : {}),
     ...tiers,
     ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived, rolls), ...tiers } } : {}),
   };

@@ -7,7 +7,8 @@
 //          A list picked through features (7a5a) is picked under one that opens it (`from`), while
 //          that feature is unlocked and has room; a list picked both ways takes either. Nothing
 //          is picked, dropped or levelled in a list every character has (7a5a2)
-//   drop   only the GM takes a pick away
+//   drop   only the GM takes a pick away, or a player their own while making the character (7c2), on
+//          a list not rolled only, as that would be a second roll by another name
 //   level  a pick's level in a levelled list, from 1 to the highest: the player or the GM
 //   use    how many of a feature's uses are spent, from none to all of them: the player or the GM
 //   recovery  how many of a pool of recovery dice are spent, from none to all (R2a): ticked off for
@@ -28,6 +29,7 @@ const {
   PICKS_KEY, USES_KEY, ROLLED_KEY, LIMITS,
 } = require('./choices');
 const { poolsOf, RECOVERY_KEY } = require('./recovery');
+const { creatingNow } = require('./creation');
 const crypto = require('crypto');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -142,7 +144,7 @@ const pickAction = (definition, data, action, { gm = false, rng = cryptoRng } = 
   }
 
   if (action.kind === 'drop') {
-    if (!gm) return fail('Only the GM takes a pick away');
+    if (!gm && !(creatingNow(definition, sheet) && playersOf(c) !== 'roll')) return fail('Only the GM takes a pick away');
     if (!taken) return fail(`${name} isn't picked`);
     return { ok: true, data: withPicks(sheet, c.id, storedPicks(held, c).filter((p) => p.option !== option.id)) };
   }

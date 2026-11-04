@@ -244,6 +244,86 @@ describe('through the socket', () => {
     expect(await stored()).toEqual({ name: 'Kestrel', int: 10 });
   });
 
+  describe('the guided new character, over the socket (7c2)', () => {
+    const turnOn = async () => {
+      const def = JSON.stringify({ ...HEARTH, creation: { on: true } });
+      await run(db, 'UPDATE custom_systems SET draft = ?, published = ? WHERE id = ?', [def, def, ID]);
+      await new Promise((resolve) => runtime.load(db, resolve));
+    };
+
+    it('opens, moves and finishes on their own sheet, telling every screen; never the GM\'s to be asked', async () => {
+      await turnOn();
+      const { kes, shared } = await table();
+      kes.handlers.creationAction({ kind: 'open' });
+      await until(async () => !!(await stored())._creating, { label: 'opened' });
+      expect((await stored())[WORKED_KEY].unmet).toEqual(['mage']);
+      kes.handlers.creationAction({ kind: 'at', step: 'stats' });
+      await until(async () => (await stored())._creating.at === 'stats', { label: 'moved' });
+      kes.handlers.creationAction({ kind: 'finish' });
+      await until(async () => (await stored())._creating.done === true, { label: 'finished' });
+      expect(shared.filter((e) => e.event === 'sheetUpdated')).toHaveLength(3);
+      expect(kes.refused()).toEqual([]);
+      expect((await stored()).name).toBe('Kestrel');
+    });
+
+    it('says why not, writing nothing, and a second open tells no screen', async () => {
+      await turnOn();
+      const { kes, shared } = await table();
+      kes.handlers.creationAction({ kind: 'finish' });
+      await until(() => kes.refused().length === 1, { label: 'the refusal' });
+      expect(kes.refused()).toEqual(['This character isn\'t being made']);
+      kes.handlers.creationAction({ kind: 'open' });
+      await until(async () => !!(await stored())._creating, { label: 'opened' });
+      const heard = shared.filter((e) => e.event === 'sheetUpdated').length;
+      kes.handlers.creationAction({ kind: 'open' });
+      await drain(db);
+      expect(shared.filter((e) => e.event === 'sheetUpdated')).toHaveLength(heard);
+    });
+
+    it('says when a socket is known, so what it asked too soon can be asked again', async () => {
+      const { kes } = await table();
+      expect(kes.heard.filter((e) => e.event === 'identified')).toHaveLength(1);
+    });
+
+    it('refuses with the flow off', async () => {
+      const { kes } = await table();
+      kes.handlers.creationAction({ kind: 'open' });
+      await until(() => kes.refused().length === 1, { label: 'the refusal' });
+      expect(kes.refused()).toEqual(['This game has no guided new character']);
+      expect((await stored())._creating).toBeUndefined();
+    });
+
+    it('an upload finishes it, taken as it is, and a batch edit doesn\'t', async () => {
+      await turnOn();
+      const { kes } = await table();
+      kes.handlers.creationAction({ kind: 'open' });
+      await until(async () => !!(await stored())._creating, { label: 'opened' });
+      kes.handlers.importSheetFields({ fields: { int: 12 } });
+      await until(async () => (await stored()).int === 12, { label: 'the batch edit' });
+      expect((await stored())._creating).toEqual({});
+      kes.handlers.importSheetFields({ fields: { name: 'Wren', int: 14 }, replace: true });
+      await until(async () => (await stored()).name === 'Wren', { label: 'the upload' });
+      expect((await stored())._creating).toEqual({ done: true, uploaded: true });
+    });
+
+    it('an upload with the flow off leaves no mark', async () => {
+      const { kes } = await table();
+      kes.handlers.importSheetFields({ fields: { name: 'Wren' }, replace: true });
+      await until(async () => (await stored()).name === 'Wren', { label: 'the upload' });
+      expect((await stored())._creating).toBeUndefined();
+    });
+
+    it('a player can\'t write their place as a field, and the GM may move theirs', async () => {
+      await turnOn();
+      const { kes, gm } = await table();
+      kes.handlers.updateSheetField({ fieldId: '_creating', value: { done: true } });
+      await drain(db);
+      expect((await stored())._creating).toBeUndefined();
+      gm.handlers.creationAction({ kind: 'open', username: 'kes' });
+      await until(async () => !!(await stored())._creating, { label: 'opened by the GM' });
+    });
+  });
+
   it('a player can\'t name another character, nor write the picks as a field', async () => {
     const { kes } = await table();
     await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('rook', ?, '{}', 0)`, [ID]);

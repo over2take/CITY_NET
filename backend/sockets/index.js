@@ -24,6 +24,7 @@ const { parseTokenConditions } = require('../tokens/conditions');
 const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
+const { withUpload } = require('../systemBuilder/creation');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { healthView } = require('../systemBuilder/healthView');
@@ -336,6 +337,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
       console.log(`User identified: ${info.userName} (Admin: ${info.isAdmin})`);
       userSockets.set(socket.id, info);
+      // Until now anything asked of this socket as a person was dropped: this says ask again.
+      socket.emit('identified');
       broadcastActiveUsers();
 
       // Warm the display-name cache (sheet handle/name) for roll broadcasts
@@ -1488,6 +1491,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     || !sheetTemplates.playerMayEdit(system, k)),
                 )
               : existing;
+            // An upload made during the guided new character finishes it (7c2): taken as it is.
+            if (payload.replace) Object.assign(data, withUpload(customSystems.definitionOf(system), data));
             entries.forEach(([k, v]) => { data[k] = v; });
             entries.forEach(([k]) => sheetTemplates.applyDerived(system, data, k));
             if (cyber) data[cyberware.FIELD] = cyber;

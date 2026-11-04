@@ -37,6 +37,10 @@ interface Props {
   recoveryOpen?: boolean;
   /** The sheet has a RESTS section, where the dice are instead (R3b). */
   recoveryElsewhere?: boolean;
+  /** Only this list, for NEW_CHARACTER.EXE's step (7c2). What it opens, in other lists, still shows under it. */
+  only?: string;
+  /** A player may take their own picks back (7c2), while making the character; never on a list rolled only. */
+  takeBack?: boolean;
 }
 
 const small: React.CSSProperties = { fontSize: '0.55rem', letterSpacing: '1px', opacity: 0.7 };
@@ -62,6 +66,7 @@ interface Ctx {
   setDropping: (key: string | null) => void;
   /** The sheet as stored, for what ROLL FOR IT last rolled (7a5b2). */
   data: Record<string, unknown>;
+  takeBack: boolean;
 }
 
 function Feature({ f, ctx }: { f: FeatureShown; ctx: Ctx }) {
@@ -129,7 +134,8 @@ function Offer({ label, list, from, open, onPick, ctx }: {
 /** DROP, asked first: the GM's alone. */
 function Drop({ list, option, ctx }: { list: string; option: OptionShown; ctx: Ctx }) {
   const key = `${list}:${option.id}`;
-  if (!ctx.can || !ctx.gm) return null;
+  const mayTakeBack = ctx.takeBack && ctx.lists.find((l) => l.id === list)?.players !== 'roll';
+  if (!ctx.can || (!ctx.gm && !mayTakeBack)) return null;
   return ctx.dropping === key ? (
     <div role="group" aria-label={`Take ${option.label} away`} style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
       <span style={{ ...small, color: 'var(--danger)', opacity: 1 }}>TAKE {option.label.toUpperCase()} AWAY, AND WHAT IT GIVES?</span>
@@ -196,7 +202,7 @@ function Pick({ list, p, ctx, fixed = false }: { list: ChoiceListShown; p: PickS
   );
 }
 
-export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm = false, onRecoverySpend, recoveryOpen = false, recoveryElsewhere = false }: Props) {
+export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm = false, onRecoverySpend, recoveryOpen = false, recoveryElsewhere = false, only, takeBack = false }: Props) {
   const worked = workedOn(data);
   // The pick the GM asked to take away, waiting for YES: "list:option".
   const [dropping, setDropping] = useState<string | null>(null);
@@ -210,12 +216,12 @@ export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm =
   const can = !readOnly && !!onChoices;
   // In the builder's previews nothing is published yet: the block says what will be here.
   if (!lists.length) return <div style={small}>A character&apos;s picks from the system&apos;s lists show here: classes, backgrounds, feats.</div>;
-  const ctx: Ctx = { lists, worked, can, gm, ask: (action) => onChoices?.(action), dropping, setDropping, data };
-  const aside = keptAside(lists, worked);
+  const ctx: Ctx = { lists, worked, can, gm, ask: (action) => onChoices?.(action), dropping, setDropping, data, takeBack };
+  const aside = keptAside(lists, worked).filter((a) => !only || a.list.id === only);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      {worked.recovery && !recoveryElsewhere && <RecoveryDice recovery={worked.recovery} can={can} gm={gm} open={recoveryOpen} ask={ctx.ask} onSpend={onRecoverySpend} />}
-      {listsOnTheirOwn(lists).map((list) => {
+      {worked.recovery && !recoveryElsewhere && !only && <RecoveryDice recovery={worked.recovery} can={can} gm={gm} open={recoveryOpen} ask={ctx.ask} onSpend={onRecoverySpend} />}
+      {listsOnTheirOwn(lists).filter((l) => !only || l.id === only).map((list) => {
         const view = listShown(list, worked);
         const everyone = pickedOf(list) === 'everyone';
         const shut = folded.has(list.id);

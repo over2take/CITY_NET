@@ -16,6 +16,7 @@
 const { compileSystem } = require('./derived');
 const { overlayOf, choicesOf, workedOf, choicesShown, WORKED_KEY } = require('./choices');
 const { poolsOf, recoveryShown, restingShown } = require('./recovery');
+const { creationShown } = require('./creation');
 const { fieldsRolledBy } = require('./tableRolls');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf, LIMITS: NPC_LIMITS } = require('./npc');
@@ -162,6 +163,8 @@ const renderOf = (id, definition, on = new Set()) => ({
   // How a sheet rests (R3a): who finishes a called rest, and each rest by name, with whether the
   // recovery dice are spent at it.
   resting: restingShown(definition),
+  // The guided new character (7c2): the steps to walk through, or null while it is off.
+  creation: creationShown(definition),
 });
 
 /**
