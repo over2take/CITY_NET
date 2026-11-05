@@ -217,6 +217,8 @@ export const HINTS = {
   'creation.on': 'Off, a new character is a blank sheet. On, a player opening a blank sheet is walked through the steps below. Anyone with a sheet already is never asked.',
   'creation.steps': 'What a player is asked, in this order. Move them with the arrows, and switch off any you don\'t want. A list asked before the stats can\'t offer an option that needs a stat.',
   'creation.statsBy': 'ONE WAY FOR ALL is one step for every stat. GROUP BY GROUP gives each stats group its own step, which you can move and switch off on its own.',
+  'creation.way': 'How a player sets these stats in the flow. Until they finish, the sheet won\'t let them type over numbers set any other way than typing. After that, the sheet is theirs as usual.',
+  'creation.numbers': 'The numbers everyone gets, with commas between them, each placed on any stat. There must be at least one for each stat, and each must fit every stat\'s lowest and highest.',
   'creation.statsGroups': 'Switch a group off for numbers nobody sets at creation, like stress. Its stats stay on the sheet, and players aren\'t asked for them here.',
   'choices.levelled': 'Each pick has a level, and its features unlock by it, like a class. Formulas read it as @<option>_level.',
   'choices.table': 'Optional: dice to roll on for this list, like a book\'s "roll your background" table. Picking the dice shares the rolls out evenly over the options; change any of them below. Every roll needs exactly one option.',

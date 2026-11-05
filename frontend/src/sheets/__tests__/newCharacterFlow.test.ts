@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
-  CREATING_KEY, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, savedStep, statProblem, statsToSet, stepAnswered, stepListId, whoFields,
+  CREATING_KEY, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, placedFrom, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields, withCreationLocks,
 } from '../newCharacterFlow';
 import { WORKED_KEY, type ChoiceListShown } from '../choicesShown';
 import type { SheetTemplate } from '../types';
@@ -224,7 +224,55 @@ describe('a step answered', () => {
   });
 });
 
+describe('a fixed array (7c3b)', () => {
+  const ARRAY = {
+    ...TEMPLATE,
+    creation: { steps: ['who', 'stats'], ways: { stats: { way: 'array', numbers: [15, 14] } }, stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'grit', label: 'Grit' }, { id: 'luck', label: 'Luck' }, { id: 'name', label: 'Name' }] }] },
+  } as unknown as SheetTemplate;
+  const going = { [CREATING_KEY]: { at: 'stats' } };
+
+  it('a step is typed in unless it says', () => {
+    expect(stepWay(TEMPLATE, 'stats')).toEqual({ way: 'typed' });
+    expect(stepWay(ARRAY, 'stats')).toEqual({ way: 'array', numbers: [15, 14] });
+    expect(stepWay(ARRAY, 'stats:other')).toEqual({ way: 'typed' });
+  });
+
+  it('answered once each stat holds a number from the pool, without those the GM keeps', () => {
+    const two = { ...ARRAY, creation: { ...ARRAY.creation, stats: [{ id: 'a', label: 'A', stats: [{ id: 'grit', label: 'Grit' }, { id: 'luck', label: 'Luck' }] }] } } as unknown as SheetTemplate;
+    expect(stepAnswered(two, 'stats', {})).toBe(false);
+    expect(stepAnswered(two, 'stats', { grit: 15 })).toBe(true);
+    expect(stepAnswered(two, 'stats', { grit: 99 })).toBe(false);
+    const hers = { ...two, creation: { ...two.creation, stats: [{ id: 'a', label: 'A', stats: [{ id: 'grit', label: 'Grit' }, { id: 'concept', label: 'C' }] }] } } as unknown as SheetTemplate;
+    expect(stepAnswered(hers, 'stats', { grit: 15 })).toBe(false);
+    expect(stepAnswered(hers, 'stats', { grit: 15, concept: 15 })).toBe(false);
+    expect(stepAnswered(hers, 'stats', { grit: 15, concept: 14 })).toBe(true);
+  });
+
+  it('locks those stats on the sheet while it is being made, and no others', () => {
+    const fieldsOf = (t: SheetTemplate) => Object.fromEntries(t.sections.flatMap((s) => s.fields).map((f) => [f.id, !!f.gmOnly]));
+    const locked = fieldsOf(withCreationLocks(ARRAY, going));
+    expect([locked.grit, locked.name, locked.concept]).toEqual([true, true, false]);
+    for (const data of [{}, { [CREATING_KEY]: { done: true } }, { name: 'Wren' }]) expect(withCreationLocks(ARRAY, data), JSON.stringify(data)).toBe(ARRAY);
+    expect(withCreationLocks(TEMPLATE, going)).toBe(TEMPLATE);
+    expect(withCreationLocks({ ...ARRAY, creation: undefined } as unknown as SheetTemplate, going).creation).toBeUndefined();
+  });
+});
+
 describe('held to the server', () => {
+  it('counts a number placed as the server does', () => {
+    const stats = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    const cases: [number[], Record<string, unknown>][] = [[[15, 14, 14], { a: 14, b: 14, c: 99 }], [[15], { a: 15, b: 15 }], [[15], { a: '15' }], [[], {}], [[1, 2], { c: 2, b: 1 }]];
+    for (const [pool, data] of cases) expect(placedFrom(pool, stats, data), JSON.stringify(data)).toEqual(backend.placedFrom(pool, stats, data));
+  });
+
+  it('tells a step\'s way as the server sends it', () => {
+    const def = { format: 1, name: 'H', stats: [{ id: 'a', label: 'A', stats: [{ id: 'grit', label: 'Grit' }] }], creation: { on: true, ways: { stats: { way: 'array', numbers: [9] } } } };
+    const template = { ...TEMPLATE, creation: backend.creationShown(def) } as unknown as SheetTemplate;
+    expect(stepWay(template, 'stats')).toEqual({ way: 'array', numbers: [9] });
+    expect(stepAnswered(template, 'stats', { grit: 9 })).toBe(true);
+    expect(stepAnswered(template, 'stats', { grit: 8 })).toBe(false);
+  });
+
   it('reads the same key the server writes, and the steps it sends', () => {
     expect(CREATING_KEY).toBe(backend.CREATING_KEY);
     const def = { format: 1, name: 'H', stats: [{ id: 'a', label: 'A', stats: [{ id: 'grit', label: 'Grit' }] }], choices: [{ id: 'classes', one: 'Class', many: 'Classes', options: [{ id: 'x', label: 'X' }] }], creation: { on: true } };

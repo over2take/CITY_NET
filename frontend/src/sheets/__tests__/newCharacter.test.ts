@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { creationOn, creationSteps, groupLeftOut, orderNotes, statsByGroup, stepGroup, stepList, stepName, withCreationOn, withStatsByGroup, withStepMoved, withStepOff } from '../newCharacter';
+import { creationOn, creationSteps, groupLeftOut, orderNotes, parseNumbers, statsByGroup, stepGroup, stepList, stepName, stepWayProblems, wayOfStep, withCreationOn, withStatsByGroup, withStepMoved, withStepOff, withStepWay } from '../newCharacter';
 import { OTHER_NAMES } from '../versionPreview';
 import type { Definition } from '../systemsApi';
 
@@ -62,6 +62,61 @@ describe('held to the server', () => {
     expect(OTHER.filter((k: string) => !OTHER_NAMES[k])).toEqual([]);
     const groups = withStepOff(withStepMoved(withStatsByGroup(GROUPS, true), 'stats:skills', -1), 'stats:abilities', true);
     expect(checkDefinition(groups).problems.filter((p: { where: string }) => p.where.startsWith('creation'))).toEqual([]);
+  });
+});
+
+describe('a fixed array (7c3b)', () => {
+  const array = (numbers: number[]) => ({ way: 'array' as const, numbers });
+
+  it('a step is typed in to start, and typed in again leaves nothing behind', () => {
+    expect(wayOfStep(GROUPS, 'stats')).toEqual({ way: 'typed' });
+    const set = withStepWay(GROUPS, 'stats', array([15, 14]));
+    expect(set.creation).toEqual({ ways: { stats: array([15, 14]) } });
+    expect(wayOfStep(set, 'stats')).toEqual(array([15, 14]));
+    expect(withStepWay(set, 'stats', { way: 'typed' })).toEqual(GROUPS);
+  });
+
+  it('each step keeps its own, through changing how the stats are asked', () => {
+    const both = withStepWay(withStepWay(GROUPS, 'stats', array([1, 2])), 'stats:skills', array([3]));
+    expect(wayOfStep(both, 'stats:skills')).toEqual(array([3]));
+    expect(wayOfStep(withStatsByGroup(both, true), 'stats')).toEqual(array([1, 2]));
+    expect(withStepWay(both, 'stats', { way: 'typed' }).creation).toEqual({ ways: { 'stats:skills': array([3]) } });
+  });
+
+  it('what isn\'t a way reads as typed in, as the server does', () => {
+    for (const ways of ['array', { stats: 'array' }, { stats: { way: 'dice' } }, { stats: { way: 'array', numbers: 'x' } }]) {
+      expect(wayOfStep({ ...GROUPS, creation: { ways } } as unknown as Definition, 'stats'), JSON.stringify(ways)).toEqual({ way: 'typed' });
+    }
+  });
+
+  it('reads numbers with commas between them, or not at all', () => {
+    expect(parseNumbers('15, 14,13 , -2')).toEqual([15, 14, 13, -2]);
+    expect(parseNumbers('')).toEqual([]);
+    expect(parseNumbers('15, 14,')).toEqual([15, 14]);
+    for (const bad of ['15 14', 'a', '1.5', '1,b', '--2']) expect(parseNumbers(bad), bad).toBeNull();
+  });
+
+  it('says what is wrong in the server\'s words, for what the server reads', () => {
+    const sheet = { sections: [{ id: 's', label: 'S', layout: 'grid', fields: [{ id: 'climb', label: 'Climb', type: 'number', edit: 'gm' }] }] };
+    const ranged = { ...GROUPS, stats: [{ id: 'abilities', label: 'A', stats: [{ id: 'grit', label: 'Grit', min: 3, max: 18 }, { id: 'wits' }] }, { id: 'skills', label: 'S', stats: [{ id: 'climb', label: 'Climb' }] }] } as unknown as Definition;
+    const cases: [Definition, string][] = [
+      [GROUPS, 'stats'],
+      [withStepWay(GROUPS, 'stats', array([])), 'stats'],
+      [withStepWay(GROUPS, 'stats', array([1])), 'stats'],
+      [withStepWay(GROUPS, 'stats', array([1, 2])), 'stats'],
+      [withStepOff(withStepWay(GROUPS, 'stats', array([1])), 'stats:skills', true), 'stats'],
+      [withStepWay(withStatsByGroup(GROUPS, true), 'stats:skills', array([])), 'stats:skills'],
+      [withStepWay(ranged, 'stats', array([19, 2, 18, 19, 3])), 'stats'],
+      [{ ...withStepWay(GROUPS, 'stats', array([1])), sheet } as unknown as Definition, 'stats'],
+    ];
+    for (const [def, id] of cases) expect(stepWayProblems(def, id), JSON.stringify(def.creation)).toEqual(server.stepWayProblems(def, id));
+    expect(stepWayProblems(withStepWay(GROUPS, 'stats', array([1])), 'stats')).toEqual(['1 number for 2 stats: each stat needs one']);
+    expect(stepWayProblems(GROUPS, 'stats')).toEqual([]);
+  });
+
+  it('what it writes, the server takes', () => {
+    const def = withStepWay(GROUPS, 'stats', array([15, 14]));
+    expect(checkDefinition(def).problems.filter((p: { where: string }) => p.where.startsWith('creation'))).toEqual([]);
   });
 });
 

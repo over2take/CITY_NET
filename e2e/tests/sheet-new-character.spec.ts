@@ -184,6 +184,75 @@ test('one way for all: one step, without a group left out', async ({ browser, re
   await page.context().close();
 });
 
+test('a fixed array: numbers placed, swapped and taken back; locked on the sheet until finished', async ({ browser, request }, info) => {
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const player = { username: `e2e_newchar_array${again}`, password: 'e2e-player-password' };
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Newfall Array${again}`,
+    stats: [{ id: 'traits', label: 'TRAITS', stats: [{ id: 'grit', label: 'Grit' }, { id: 'wits', label: 'Wits' }] }],
+    creation: { on: true, ways: { stats: { way: 'array', numbers: [15, 14, 9] } } },
+  });
+  await approvedPlayer(request, gm, player);
+  const stored = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data;
+  const page = await signedIn(browser, info, player);
+  await walkToStats(page);
+
+  const pool = page.getByRole('group', { name: 'Numbers to place' });
+  const chips = () => pool.getByRole('button').allTextContents();
+  const stat = (name: RegExp) => page.getByRole('button', { name });
+  const finish = page.getByRole('button', { name: 'FINISH' });
+  await expect(pool.getByRole('button')).toHaveCount(3);
+  expect(await chips()).toEqual(['15', '14', '9']);
+  await expect(finish).toBeDisabled();
+
+  // 15 on Grit, then 14 over it: the 15 goes back.
+  await pool.getByRole('button', { name: '15' }).click();
+  await stat(/^Grit:/).click();
+  await expect(stat(/^Grit: 15/)).toBeVisible();
+  await expect.poll(async () => (await stored()).grit, { timeout: 15_000 }).toBe(15);
+  await expect(pool.getByRole('button')).toHaveCount(2);
+  await pool.getByRole('button', { name: '14' }).click();
+  await stat(/^Grit:/).click();
+  await expect(stat(/^Grit: 14/)).toBeVisible();
+  expect((await chips()).sort()).toEqual(['15', '9']);
+
+  // Clicked with none held, it comes back.
+  await stat(/^Grit:/).click();
+  await expect(stat(/^Grit: no number yet/)).toBeVisible();
+  await expect.poll(async () => (await stored()).grit, { timeout: 15_000 }).toBeUndefined();
+
+  // Grit placed, then left: the sheet shows it, and won't take typing while they make the character.
+  await pool.getByRole('button', { name: '15' }).click();
+  await stat(/^Grit:/).click();
+  await expect(stat(/^Grit: 15/)).toBeVisible();
+  await page.getByRole('button', { name: 'LEAVE FOR NOW' }).click();
+  await expect(flow(page)).toHaveCount(0);
+  await sheetTab(page, 'STATS');
+  const onSheet = page.getByLabel('Grit', { exact: true });
+  await expect(onSheet).toHaveValue('15');
+  await expect(onSheet).not.toBeEditable();
+
+  // Back, the last one placed, a number left over no matter, and finished.
+  await page.getByRole('button', { name: 'CREATING · CONTINUE' }).click();
+  await expect(flow(page)).toBeVisible();
+  await expect(finish).toBeDisabled();
+  await pool.getByRole('button', { name: '9' }).click();
+  await stat(/^Wits:/).click();
+  await expect(finish).toBeEnabled({ timeout: 15_000 });
+  await finish.click();
+  await expect(flow(page)).toHaveCount(0);
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  expect((await stored()).wits).toBe(9);
+
+  // Finished, the sheet is theirs.
+  await sheetTab(page, 'STATS');
+  await expect(onSheet).toBeEditable();
+  await onSheet.fill('16');
+  await expect.poll(async () => (await stored()).grit, { timeout: 15_000 }).toBe(16);
+  await page.context().close();
+});
+
 test('an upload is taken as it is, and no steps follow', async ({ browser, request }, info) => {
   const again = info.retry ? `_${info.retry + 1}` : '';
   const player = { username: `e2e_uploader${again}`, password: 'e2e-player-password' };

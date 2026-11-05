@@ -64,6 +64,35 @@ test('the stats asked group by group, a group left out, kept after a reload', as
   expect(await names()).toEqual(['WHO THEY ARE', 'ABILITIES', 'CLASS', 'STRESS', 'KITS', 'MONEY']);
 });
 
+test('a fixed array: too few said, set, the server taking it, kept after a reload', async ({ page, request }, info) => {
+  const name = `Arraying Hearth ${info.retry + 1}`;
+  const token = await gmToken(request);
+  const { id } = await asGm(request, token, 'post', '/api/systems', { definition: { ...definition(name), stats: [
+    { id: 'abilities', label: 'ABILITIES', stats: [{ id: 'grit', label: 'Grit', min: 3, max: 15 }, { id: 'wits', label: 'Wits' }] },
+  ] } });
+  await signInAsGm(page);
+  await openPage(page, name);
+  await page.getByRole('button', { name: 'THE STATS', exact: true }).click();
+  await page.getByRole('group', { name: 'How they are set' }).getByRole('button', { name: 'A FIXED ARRAY' }).click();
+  await expect(page.getByText('0 numbers for 2 stats: each stat needs one')).toBeVisible();
+
+  const box = page.getByRole('textbox', { name: 'The numbers' });
+  await box.fill('16, 14');
+  await expect(page.getByText('16 is above Grit\'s highest, 15')).toBeVisible();
+  await box.fill('15, 14');
+  await expect(page.getByText(/highest|each stat needs one/)).toHaveCount(0);
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  const saved = await asGm(request, token, 'get', `/api/systems/${id}`);
+  expect(saved.problems).toEqual([]);
+  expect(saved.draft.creation).toEqual({ ways: { stats: { way: 'array', numbers: [15, 14] } } });
+
+  await page.reload();
+  await signInAsGm(page);
+  await openPage(page, name);
+  await page.getByRole('button', { name: 'THE STATS', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'The numbers' })).toHaveValue('15, 14');
+});
+
 test('the steps of a new character, ordered and switched, kept after a reload', async ({ page, request }, info) => {
   const name = `Stepping Hearth ${info.retry + 1}`;
   const token = await gmToken(request);

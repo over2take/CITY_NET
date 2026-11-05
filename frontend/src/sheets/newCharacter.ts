@@ -10,7 +10,7 @@ import { choiceLists, pickedOf, type ChoiceList } from './choices';
 import { statGroups } from './statsRules';
 import { partIsOn } from './wordsFeatures';
 import { referencesIn } from './graphModel';
-import { isStatsStep } from './newCharacterFlow';
+import { isStatsStep, type StatWay } from './newCharacterFlow';
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -92,9 +92,56 @@ const withSection = (def: Definition, patch: Obj): Definition => {
   if (!strings(c.order).length) delete c.order;
   if (!strings(c.off).length) delete c.off;
   if (c.statsBy !== 'group') delete c.statsBy;
+  if (isObject(c.ways) && !Object.keys(c.ways).length) delete c.ways;
   const next: Definition = { ...def };
   if (Object.keys(c).length) next.creation = c; else delete next.creation;
   return next;
+};
+
+/** How a stats step is set (7c3b): typed in, unless the GM says otherwise. */
+export const wayOfStep = (def: Definition, id: string): StatWay => {
+  const way = isObject(section(def).ways) ? (section(def).ways as Obj)[id] : null;
+  return isObject(way) && way.way === 'array' && Array.isArray(way.numbers) ? way as StatWay : { way: 'typed' };
+};
+
+/** A stats step's way changed; typed in stores nothing. */
+export const withStepWay = (def: Definition, id: string, way: StatWay): Definition => {
+  const ways: Obj = { ...(isObject(section(def).ways) ? section(def).ways as Obj : {}) };
+  if (way.way === 'typed') delete ways[id]; else ways[id] = way;
+  return withSection(def, { ways });
+};
+
+/** What is typed for an array's numbers: whole numbers with commas between them, or null. */
+export const parseNumbers = (text: string): number[] | null => {
+  const parts = text.split(',').map((p) => p.trim()).filter((p) => p !== '');
+  return parts.every((p) => /^-?\d+$/.test(p)) ? parts.map(Number) : null;
+};
+
+/** The stats a step sets, without those the GM keeps to themselves on the sheet. */
+const statsOfStep = (def: Definition, id: string) => {
+  const sheet = isObject(def.sheet) && Array.isArray(def.sheet.sections) ? def.sheet.sections as { fields?: { id: string; edit?: string }[] }[] : [];
+  const gmOnly = new Set(sheet.flatMap((s) => (Array.isArray(s.fields) ? s.fields : [])).filter((f) => f.edit === 'gm').map((f) => f.id));
+  const groups = id === 'stats' ? groupsWithStats(def).filter((g) => !groupLeftOut(def, g.id)) : groupsWithStats(def).filter((g) => `stats:${g.id}` === id);
+  return groups.flatMap((g) => g.stats).filter((s) => !gmOnly.has(s.id));
+};
+
+const counted = (n: number, what: string): string => `${n} ${what}${n === 1 ? '' : 's'}`;
+
+/** What stops a step's way working at the table, in the server's words (backend creation.js stepWayProblems). */
+export const stepWayProblems = (def: Definition, id: string): string[] => {
+  const way = wayOfStep(def, id);
+  if (way.way !== 'array') return [];
+  const stats = statsOfStep(def, id);
+  const numbers = way.numbers.filter(Number.isSafeInteger);
+  const found: string[] = [];
+  if (numbers.length < stats.length) found.push(`${counted(numbers.length, 'number')} for ${counted(stats.length, 'stat')}: each stat needs one`);
+  for (const n of [...new Set(numbers)]) {
+    for (const s of stats) {
+      if (Number.isSafeInteger(s.min) && n < (s.min as number)) found.push(`${n} is below ${s.label || s.id}'s lowest, ${s.min}`);
+      if (Number.isSafeInteger(s.max) && n > (s.max as number)) found.push(`${n} is above ${s.label || s.id}'s highest, ${s.max}`);
+    }
+  }
+  return found;
 };
 
 /** ONE WAY FOR ALL or GROUP BY GROUP; the order and what is left out carry over. */

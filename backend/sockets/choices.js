@@ -12,7 +12,8 @@
 // their sheet: in a system whose rests are finished on each sheet; the GM may on anyone's, always.
 //
 // `creationAction` with { kind: 'open' | 'at' | 'finish', step } (7c2) moves a character through the
-// guided new character (systemBuilder/creation.js).
+// guided new character, and with { kind: 'place', step, stat, value } (7c3b) puts a number on a stat
+// (systemBuilder/creation.js). A stat can move the token's maximum, so it follows, as a pick's does.
 //
 // `recoverySpend` with { pool, count } (R2a) spends recovery dice with a roll (sheets/recover.js).
 // In a system leaving spending to the GM, a player spends or ticks them off only while the GM has
@@ -120,8 +121,11 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
       }, (err2, stored) => {
         if (error) return refuse(error);
         if (err2) return refuse('That character has no sheet yet');
-        if (stored) io.emit('sheetUpdated', { username, system });
-        return undefined;
+        if (!stored) return undefined;
+        return syncTokenMax(db, system, username, (moved) => {
+          if (moved) io.emit('dataUpdated', { isRhombusOnly: true });
+          io.emit('sheetUpdated', { username, system });
+        });
       });
     }, 'This game has no guided new character');
   });
