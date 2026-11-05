@@ -13,8 +13,10 @@ import { listShown, underFeature, workedOn, type ChoiceListShown, type PickShown
 type Obj = Record<string, unknown>;
 
 export interface CreationStat { id: string; label: string; min?: number; max?: number }
-/** How a stats step is set (7c3b, 7c3c). */
-export type StatWay = { way: 'typed' } | { way: 'array'; numbers: number[] } | { way: 'roll'; each: string; placed: 'order' | 'arrange' };
+/** A point buy (7c3d): no costs, 1 for 1 above the lowest. */
+export interface BuyWay { way: 'buy'; points: number; lowest: number; highest: number; costs?: Record<string, number> }
+/** How a stats step is set (7c3b, 7c3c, 7c3d). */
+export type StatWay = { way: 'typed' } | { way: 'array'; numbers: number[] } | { way: 'roll'; each: string; placed: 'order' | 'arrange' } | BuyWay;
 export interface CreationShown {
   /** The steps asked, in the GM's order: who, stats or stats:<group>, list:<id>. */
   steps: string[];
@@ -126,6 +128,32 @@ export const statsToSet = (template: SheetTemplate, step = 'stats'): CreationSho
 /** How a stats step is set: typed in, unless the GM says otherwise. */
 export const stepWay = (template: SheetTemplate, id: string): StatWay => template.creation?.ways?.[id] ?? { way: 'typed' };
 
+/** What a number costs in a point buy (backend creation.js costOf). */
+export const buyCost = (way: BuyWay, n: number): number => {
+  if (!way.costs) return n - way.lowest;
+  return Number.isSafeInteger(way.costs[n]) ? way.costs[n] : 0;
+};
+
+/**
+ * A point buy as it stands on this sheet: what each stat holds, the lowest until bought up (backend
+ * creation.js heldIn), the points spent and left, and whether a stat can go up or down from here.
+ */
+export const buyShown = (way: BuyWay, stats: { id: string }[], data: Obj | null | undefined) => {
+  const held: Record<string, number> = {};
+  for (const s of stats) {
+    const n = data?.[s.id];
+    held[s.id] = Number.isInteger(n) && (n as number) >= way.lowest && (n as number) <= way.highest ? n as number : way.lowest;
+  }
+  const spent = stats.reduce((sum, s) => sum + buyCost(way, held[s.id]), 0);
+  return {
+    held,
+    spent,
+    left: way.points - spent,
+    canLower: (id: string) => held[id] > way.lowest,
+    canRaise: (id: string) => held[id] < way.highest && spent - buyCost(way, held[id]) + buyCost(way, held[id] + 1) <= way.points,
+  };
+};
+
 /** What a step's ROLL came to on this sheet, or null: not rolled yet (backend creation.js rolledOn). */
 export const rolledPool = (data: Obj | null | undefined, id: string): number[] | null => {
   const rolled = placeOf(data)?.rolled;
@@ -200,6 +228,7 @@ export const stepAnswered = (template: SheetTemplate, id: string, data: Obj | nu
   if (isStatsStep(id)) {
     const stats = statsToSet(template, id).flatMap((g) => g.stats);
     const way = stepWay(template, id);
+    if (way.way === 'buy') return buyShown(way, stats, data).left >= 0;
     if (way.way !== 'typed') {
       const pool = way.way === 'array' ? way.numbers : rolledPool(data, id);
       if (!pool) return false;

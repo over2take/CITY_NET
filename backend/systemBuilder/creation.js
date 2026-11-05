@@ -10,6 +10,7 @@
 //     ways: {                                 // how a stats step is set; unsaid, typed in
 //       stats: { way: 'array', numbers: [15, 14, 13, 12] },                 // 7c3b
 //       'stats:skills': { way: 'roll', each: '4d6 drop lowest', placed: 'arrange' },   // 7c3c; or 'order'
+//       'stats:traits': { way: 'buy', points: 20, lowest: 8, highest: 15, costs: { 8: 0, 9: 1 } },   // 7c3d; no costs, 1 for 1
 //     },
 //   }
 //
@@ -49,10 +50,10 @@ const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
 
 /** How many ids `order` and `off` may hold: every list a system can have, and room. */
-const LIMITS = { steps: 40, numbers: 40, rollDice: 20, rollSides: 100, rollAdd: 1000 };
+const LIMITS = { steps: 40, numbers: 40, rollDice: 20, rollSides: 100, rollAdd: 1000, buyRange: 100, buyPoints: 100000 };
 const KEYS = new Set(['on', 'order', 'off', 'statsBy', 'ways']);
 const STATS_STEP = /^stats(?::[a-z][a-z0-9_]{0,63})?$/;
-const WAY_KEYS = { typed: new Set(['way']), array: new Set(['way', 'numbers']), roll: new Set(['way', 'each', 'placed']) };
+const WAY_KEYS = { typed: new Set(['way']), array: new Set(['way', 'numbers']), roll: new Set(['way', 'each', 'placed']), buy: new Set(['way', 'points', 'lowest', 'highest', 'costs']) };
 const PLACED = ['order', 'arrange'];
 const ROLL_READS = `Reads like 3d6, 4d6 drop lowest or 2d6 + 6, up to ${LIMITS.rollDice} dice of up to ${LIMITS.rollSides} sides`;
 const STEP = /^(?:who|stats(?::[a-z][a-z0-9_]{0,63})?|kits|money|list:[a-z][a-z0-9_]{0,63})$/;
@@ -117,8 +118,24 @@ const wayOf = (definition, step) => {
   const way = isPlainObject(ways) ? ways[step] : null;
   if (isPlainObject(way) && way.way === 'array' && Array.isArray(way.numbers)) return way;
   if (isPlainObject(way) && way.way === 'roll' && typeof way.each === 'string') return way;
+  if (isPlainObject(way) && way.way === 'buy' && [way.points, way.lowest, way.highest].every(Number.isSafeInteger)) return way;
   return { way: 'typed' };
 };
+
+/** What a number costs in a point buy: its place in the table, or 1 for 1 above the lowest. */
+const costOf = (way, n) => {
+  if (!isPlainObject(way.costs)) return n - way.lowest;
+  return Number.isSafeInteger(way.costs[n]) ? way.costs[n] : 0;
+};
+
+/** The number a stat holds in a point buy: the lowest until it is bought up, or if it holds no such number. */
+const heldIn = (way, data, stat) => {
+  const n = isPlainObject(data) ? data[stat.id] : undefined;
+  return Number.isInteger(n) && n >= way.lowest && n <= way.highest ? n : way.lowest;
+};
+
+/** The points a character's numbers come to. */
+const spentOn = (way, stats, data) => stats.reduce((sum, s) => sum + costOf(way, heldIn(way, data, s)), 0);
 
 /**
  * What a stat is rolled with, as the GM writes it: "3d6", "4d6 drop lowest", "5d6 drop lowest 2",
@@ -185,7 +202,7 @@ const poolOf = (definition, data, step) => {
 
 /** Whether a stats step with a way of its own is done: every stat holding a number. */
 const wayDone = (definition, data, step) => {
-  if (wayOf(definition, step).way === 'typed') return true;
+  if (['typed', 'buy'].includes(wayOf(definition, step).way)) return true;
   const pool = poolOf(definition, data, step);
   if (!pool) return false;
   const stats = statsOfStep(definition, step);
@@ -240,7 +257,7 @@ const lockedWhileCreating = (definition, data) => {
 const placeNumber = (definition, sheet, action) => {
   if (!stepsAsked(definition).includes(action.step)) return { ok: false, error: 'Not one of this game\'s steps' };
   const way = wayOf(definition, action.step);
-  if (way.way === 'typed' || (way.way === 'roll' && way.placed !== 'arrange')) return { ok: false, error: 'These stats aren\'t placed' };
+  if (way.way !== 'array' && !(way.way === 'roll' && way.placed === 'arrange')) return { ok: false, error: 'These stats aren\'t placed' };
   const pool = poolOf(definition, sheet, action.step);
   if (!pool) return { ok: false, error: 'Roll them first' };
   const stats = statsOfStep(definition, action.step);
@@ -254,6 +271,29 @@ const placeNumber = (definition, sheet, action) => {
   const free = placed[action.stat] === undefined ? left : [...left, placed[action.stat]];
   if (!free.includes(action.value)) return { ok: false, error: 'That number is already placed' };
   return { ok: true, data: { ...sheet, [action.stat]: action.value } };
+};
+
+/** A point buy's stats on the sheet: each holding a number it can, the lowest until bought up. */
+const filledIn = (definition, sheet, step) => {
+  const way = wayOf(definition, step);
+  if (way.way !== 'buy') return sheet;
+  const next = { ...sheet };
+  for (const s of statsOfStep(definition, step)) next[s.id] = heldIn(way, sheet, s);
+  return next;
+};
+
+/** A stat bought up or down (7c3d): to a number in the range, while the points allow; going down always may. */
+const buyNumber = (definition, sheet, action) => {
+  if (!stepsAsked(definition).includes(action.step)) return { ok: false, error: 'Not one of this game\'s steps' };
+  const way = wayOf(definition, action.step);
+  if (way.way !== 'buy') return { ok: false, error: 'These stats aren\'t bought' };
+  const stats = statsOfStep(definition, action.step);
+  const stat = stats.find((s) => s.id === action.stat);
+  if (!stat) return { ok: false, error: 'Not one of this step\'s stats' };
+  if (!Number.isInteger(action.value) || action.value < way.lowest || action.value > way.highest) return { ok: false, error: `From ${way.lowest} to ${way.highest}` };
+  const next = { ...filledIn(definition, sheet, action.step), [stat.id]: action.value };
+  if (spentOn(way, stats, next) > way.points && action.value > heldIn(way, sheet, stat)) return { ok: false, error: 'Not enough points left' };
+  return { ok: true, data: next };
 };
 
 /** What a stats step is called, in the log. */
@@ -301,7 +341,7 @@ const statRollLine = (who, rolled) => `${who} rolled ${rolled.label} (${rolled.e
 
 /**
  * One step of a character's way through the flow: { kind: 'open' }, { kind: 'at', step },
- * { kind: 'place', step, stat, value }, { kind: 'roll', step } or { kind: 'finish' }. Gives back
+ * { kind: 'place', step, stat, value }, { kind: 'roll', step }, { kind: 'buy', step, stat, value } or { kind: 'finish' }. Gives back
  * { ok: true, data } (no `data` when there is nothing to change, `rolled` for the log after a roll), or
  * { ok: false, error } in words. `rng` rolls the dice, 0 to 1 (the secure source unless one is handed in).
  */
@@ -310,16 +350,26 @@ const creationAction = (definition, data, action, { rng = cryptoRng } = {}) => {
   const kind = isPlainObject(action) ? action.kind : null;
   if (!creationOf(definition).on) return { ok: false, error: 'This game has no guided new character' };
   if (kind === 'open') return placeOf(sheet) ? { ok: true } : { ok: true, data: { ...sheet, [CREATING_KEY]: {} } };
-  if (!['at', 'finish', 'place', 'roll'].includes(kind)) return { ok: false, error: 'Nothing to do' };
+  if (!['at', 'finish', 'place', 'roll', 'buy'].includes(kind)) return { ok: false, error: 'Nothing to do' };
   if (!creatingNow(definition, sheet)) return { ok: false, error: 'This character isn\'t being made' };
   if (kind === 'place') return placeNumber(definition, sheet, action);
   if (kind === 'roll') return rollStats(definition, sheet, action, rng);
+  if (kind === 'buy') return buyNumber(definition, sheet, action);
   if (kind === 'finish') {
     if (stepsAsked(definition).some((step) => STATS_STEP.test(step) && !wayDone(definition, sheet, step))) return { ok: false, error: 'Every stat needs its number first' };
-    return { ok: true, data: { ...sheet, [CREATING_KEY]: { done: true } } };
+    const statSteps = stepsAsked(definition).filter((step) => STATS_STEP.test(step));
+    const over = statSteps.some((step) => {
+      const way = wayOf(definition, step);
+      return way.way === 'buy' && spentOn(way, statsOfStep(definition, step), sheet) > way.points;
+    });
+    if (over) return { ok: false, error: 'More points spent than there are' };
+    const filled = statSteps.reduce((data, step) => filledIn(definition, data, step), sheet);
+    return { ok: true, data: { ...filled, [CREATING_KEY]: { done: true } } };
   }
   if (!stepsAsked(definition).includes(action.step)) return { ok: false, error: 'Not one of this game\'s steps' };
-  return { ok: true, data: { ...sheet, [CREATING_KEY]: { ...placeOf(sheet), at: action.step } } };
+  // A point buy's stats start at their lowest as the player arrives, so what they read says so.
+  const arrived = STATS_STEP.test(action.step) ? filledIn(definition, sheet, action.step) : sheet;
+  return { ok: true, data: { ...arrived, [CREATING_KEY]: { ...placeOf(sheet), at: action.step } } };
 };
 
 /**
@@ -342,6 +392,23 @@ const counted = (n, what) => `${n} ${what}${n === 1 ? '' : 's'}`;
 const stepWayProblems = (definition, step) => {
   const way = wayOf(definition, step);
   const stats = statsOfStep(definition, step);
+  if (way.way === 'buy') {
+    if (way.lowest > way.highest) return ['The lowest is above the highest'];
+    if (way.highest - way.lowest >= LIMITS.buyRange) return [`At most ${LIMITS.buyRange} numbers`];
+    const found = [];
+    const missing = [];
+    if (isPlainObject(way.costs)) {
+      for (let n = way.lowest; n <= way.highest; n += 1) if (!Number.isSafeInteger(way.costs[n]) || way.costs[n] < 0) missing.push(n);
+    }
+    if (missing.length) found.push(`${missing.join(', ')} needs a cost, of 0 or more`);
+    const start = stats.length * costOf(way, way.lowest);
+    if (start > way.points) found.push(`Every stat at its lowest costs ${start}, more than the ${way.points} points`);
+    for (const s of stats) {
+      if (Number.isSafeInteger(s.min) && way.lowest < s.min) found.push(`${way.lowest} is below ${s.label || s.id}'s lowest, ${s.min}`);
+      if (Number.isSafeInteger(s.max) && way.highest > s.max) found.push(`${way.highest} is above ${s.label || s.id}'s highest, ${s.max}`);
+    }
+    return found;
+  }
   if (way.way === 'roll') {
     const parsed = parseStatRoll(way.each);
     if (!parsed) return [ROLL_READS];
@@ -371,11 +438,17 @@ const checkWays = (definition, ways, problems) => {
   for (const [step, way] of Object.entries(ways)) {
     const where = `creation, ways, ${step}`;
     if (!STATS_STEP.test(step)) { problems.push({ where, message: 'Only the stats have a way to be set' }); continue; }
-    if (!isPlainObject(way) || !Object.keys(WAY_KEYS).includes(way.way)) { problems.push({ where, message: 'Must be typed, array or roll' }); continue; }
+    if (!isPlainObject(way) || !Object.keys(WAY_KEYS).includes(way.way)) { problems.push({ where, message: 'Must be typed, array, roll or buy' }); continue; }
     for (const key of Object.keys(way)) if (!WAY_KEYS[way.way].has(key)) problems.push({ where: `${where}, ${key}`, message: 'Not part of this way' });
     if (way.way === 'roll') {
       if (typeof way.each !== 'string') problems.push({ where: `${where}, each`, message: 'Must say what each is rolled with' });
       if (!PLACED.includes(way.placed)) problems.push({ where: `${where}, placed`, message: 'Must be order or arrange' });
+      continue;
+    }
+    if (way.way === 'buy') {
+      for (const key of ['points', 'lowest', 'highest']) if (!Number.isSafeInteger(way[key])) problems.push({ where: `${where}, ${key}`, message: 'Must be a whole number' });
+      if (Number.isSafeInteger(way.points) && (way.points < 0 || way.points > LIMITS.buyPoints)) problems.push({ where: `${where}, points`, message: `From 0 to ${LIMITS.buyPoints}` });
+      if (way.costs !== undefined && !isPlainObject(way.costs)) problems.push({ where: `${where}, costs`, message: 'Must say what each number costs' });
       continue;
     }
     if (way.way !== 'array') continue;

@@ -415,6 +415,42 @@ describe('through the socket', () => {
       });
     });
 
+    describe('a point buy (7c3d)', () => {
+      const turnOnBuy = async () => {
+        const def = JSON.stringify({ ...HEARTH, creation: { on: true, ways: { stats: { way: 'buy', points: 5, lowest: 8, highest: 15 } } } });
+        await run(db, 'UPDATE custom_systems SET draft = ?, published = ? WHERE id = ?', [def, def, ID]);
+        await new Promise((resolve) => runtime.load(db, resolve));
+        await run(db, 'UPDATE character_sheets SET data = ? WHERE username = ?', [JSON.stringify({ name: 'Kestrel', _creating: {} }), 'kes']);
+      };
+
+      it('arriving fills them in; a number bought is stored and worked out; too many is refused', async () => {
+        await turnOnBuy();
+        const { kes, shared } = await table();
+        kes.handlers.creationAction({ kind: 'at', step: 'stats' });
+        await until(async () => (await stored()).int === 8, { label: 'filled in' });
+        expect((await stored()).con).toBe(8);
+        kes.handlers.creationAction({ kind: 'buy', step: 'stats', stat: 'int', value: 13 });
+        await until(async () => (await stored()).int === 13, { label: 'bought' });
+        expect((await stored())[WORKED_KEY].unmet).not.toContain('mage');
+        await until(() => shared.filter((e) => e.event === 'sheetUpdated').length === 2, { label: 'the screens told' });
+        kes.handlers.creationAction({ kind: 'buy', step: 'stats', stat: 'con', value: 9 });
+        await until(() => kes.refused().length === 1, { label: 'the refusal' });
+        expect(kes.refused()).toEqual(['Not enough points left']);
+        expect((await stored()).con).toBe(8);
+      });
+
+      it('a player can\'t type over a number while the character is being made; the GM can', async () => {
+        await turnOnBuy();
+        const { kes, gm } = await table();
+        kes.handlers.updateSheetField({ fieldId: 'int', value: 20 });
+        kes.handlers.updateSheetField({ fieldId: 'concept', value: 'Rook' });
+        await until(async () => (await stored()).concept === 'Rook', { label: 'another field' });
+        expect((await stored()).int).toBeUndefined();
+        gm.handlers.creationAction({ kind: 'buy', step: 'stats', stat: 'int', value: 10, username: 'kes' });
+        await until(async () => (await stored()).int === 10, { label: 'bought by the GM' });
+      });
+    });
+
     it('a player can\'t write their place as a field, and the GM may move theirs', async () => {
       await turnOn();
       const { kes, gm } = await table();

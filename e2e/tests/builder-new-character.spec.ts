@@ -127,6 +127,44 @@ test('rolled: what it reads and what it can come to said, set, the server taking
   await expect(page.getByRole('group', { name: 'Placed' }).getByRole('button', { name: 'IN ORDER' })).toHaveAttribute('aria-pressed', 'true');
 });
 
+test('a point buy: points, range and costs set, what would strand a player said, kept after a reload', async ({ page, request }, info) => {
+  const name = `Buying Hearth ${info.retry + 1}`;
+  const token = await gmToken(request);
+  const { id } = await asGm(request, token, 'post', '/api/systems', { definition: { ...definition(name), stats: [
+    { id: 'abilities', label: 'ABILITIES', stats: [{ id: 'grit', label: 'Grit', min: 1, max: 15 }, { id: 'wits', label: 'Wits' }] },
+  ] } });
+  await signInAsGm(page);
+  await openPage(page, name);
+  await page.getByRole('button', { name: 'THE STATS', exact: true }).click();
+  await page.getByRole('group', { name: 'How they are set' }).getByRole('button', { name: 'POINT BUY' }).click();
+  const box = (label: string) => page.getByRole('textbox', { name: label, exact: true });
+  await expect(box('Points')).toHaveValue('20');
+  await expect(box('Cost of 15')).toHaveValue('9');
+
+  // Past a stat's highest: said, then back within it.
+  await box('Highest').fill('16');
+  await expect(page.getByText('16 is above Grit\'s highest, 15')).toBeVisible();
+  await box('Highest').fill('14');
+  await expect(page.getByText(/highest,/)).toHaveCount(0);
+  await expect(box('Cost of 15')).toHaveCount(0);
+
+  // Their own points and a cost of their own.
+  await box('Points').fill('12');
+  await box('Cost of 14').fill('8');
+  await expect(page.getByRole('group', { name: 'Costs' }).getByRole('button', { name: 'CLIMBING' })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  const saved = await asGm(request, token, 'get', `/api/systems/${id}`);
+  expect(saved.problems).toEqual([]);
+  expect(saved.draft.creation).toEqual({ ways: { stats: { way: 'buy', points: 12, lowest: 8, highest: 14, costs: { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 8 } } } });
+
+  await page.reload();
+  await signInAsGm(page);
+  await openPage(page, name);
+  await page.getByRole('button', { name: 'THE STATS', exact: true }).click();
+  await expect(box('Points')).toHaveValue('12');
+  await expect(box('Cost of 14')).toHaveValue('8');
+});
+
 test('the steps of a new character, ordered and switched, kept after a reload', async ({ page, request }, info) => {
   const name = `Stepping Hearth ${info.retry + 1}`;
   const token = await gmToken(request);

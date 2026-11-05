@@ -144,6 +144,10 @@ test('every control in the builder takes a click, on every page', async ({ page 
       missed['NEW CHARACTER array'] = await faults(page);
       await page.getByRole('group', { name: 'How they are set' }).getByRole('button', { name: 'ROLL' }).click();
       await expect(page.getByRole('textbox', { name: 'Each is' })).toBeVisible();
+      missed['NEW CHARACTER roll'] = await faults(page);
+      // And a point buy's points, range and costs (7c3d).
+      await page.getByRole('group', { name: 'How they are set' }).getByRole('button', { name: 'POINT BUY' }).click();
+      await expect(page.getByRole('textbox', { name: 'Cost of 15' })).toBeVisible();
     }
     if (p === 'RESTS') {
       // Recovery dice on, counted by a formula and given back by an amount, so every box is there (R1b).

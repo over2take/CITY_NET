@@ -335,6 +335,63 @@ test('rolled to arrange: what came up placed as they like, then finished', async
   await page.context().close();
 });
 
+test('a point buy: from the lowest, by the table, as far as the points go; locked on the sheet until finished', async ({ browser, request }, info) => {
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const player = { username: `e2e_newchar_buy${again}`, password: 'e2e-player-password' };
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Newfall Buy${again}`,
+    stats: [{ id: 'traits', label: 'TRAITS', stats: [{ id: 'grit', label: 'Grit' }, { id: 'wits', label: 'Wits' }] }],
+    creation: { on: true, ways: { stats: { way: 'buy', points: 5, lowest: 8, highest: 12, costs: { 8: 0, 9: 1, 10: 2, 11: 4, 12: 6 } } } },
+  });
+  await approvedPlayer(request, gm, player);
+  const stored = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data;
+  const page = await signedIn(browser, info, player);
+  await walkToStats(page);
+
+  // Arriving, each is at its lowest with every point left, and the server has them so.
+  const left = page.getByRole('tabpanel').getByRole('status');
+  const up = (name: string) => page.getByRole('button', { name: `${name} up` });
+  const down = (name: string) => page.getByRole('button', { name: `${name} down` });
+  await expect(left).toHaveText('5 OF 5 POINTS LEFT');
+  await expect.poll(async () => (await stored()).grit, { timeout: 15_000 }).toBe(8);
+  await expect(down('Grit')).toBeDisabled();
+
+  // Up by the table: 11 costs 4, so 1 is left, and 12 costs more than that.
+  for (const shows of ['Grit: 9', 'Grit: 10', 'Grit: 11']) {
+    await up('Grit').click();
+    await expect(page.getByRole('group', { name: shows })).toBeVisible();
+  }
+  await expect(left).toHaveText('1 OF 5 POINTS LEFT');
+  await expect(up('Grit')).toBeDisabled();
+  await up('Wits').click();
+  await expect(left).toHaveText('0 OF 5 POINTS LEFT');
+  await expect(up('Wits')).toBeDisabled();
+  await expect.poll(async () => { const d = await stored(); return [d.grit, d.wits]; }, { timeout: 15_000 }).toEqual([11, 9]);
+
+  // Down gives it back.
+  await down('Wits').click();
+  await expect(left).toHaveText('1 OF 5 POINTS LEFT');
+
+  // Left: the sheet shows it, and won't take typing while they make the character.
+  await page.getByRole('button', { name: 'LEAVE FOR NOW' }).click();
+  await expect(flow(page)).toHaveCount(0);
+  await sheetTab(page, 'STATS');
+  const onSheet = page.getByLabel('Grit', { exact: true });
+  await expect(onSheet).toHaveValue('11');
+  await expect(onSheet).not.toBeEditable();
+
+  // Back, a point left over no matter, and finished: the sheet is theirs.
+  await page.getByRole('button', { name: 'CREATING · CONTINUE' }).click();
+  await expect(left).toHaveText('1 OF 5 POINTS LEFT');
+  await page.getByRole('button', { name: 'FINISH' }).click();
+  await expect(flow(page)).toHaveCount(0);
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  await sheetTab(page, 'STATS');
+  await expect(onSheet).toBeEditable();
+  await page.context().close();
+});
+
 test('an upload is taken as it is, and no steps follow', async ({ browser, request }, info) => {
   const again = info.retry ? `_${info.retry + 1}` : '';
   const player = { username: `e2e_uploader${again}`, password: 'e2e-player-password' };
