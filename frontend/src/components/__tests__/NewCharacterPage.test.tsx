@@ -208,6 +208,8 @@ describe('the stats, one way for all or group by group (7c3a)', () => {
     for (const k of ['creation.statsBy', 'creation.statsGroups', 'creation.way'] as const) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
     await userEvent.click(screen.getByRole('button', { name: 'A FIXED ARRAY' }));
     expect(screen.getByRole('note', { name: HINTS['creation.numbers'] })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'ROLL' }));
+    for (const k of ['creation.each', 'creation.placed'] as const) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
   });
 
   describe('how they are set (7c3b)', () => {
@@ -248,6 +250,47 @@ describe('the stats, one way for all or group by group (7c3a)', () => {
       const ranged = { ...GROUPS, stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'grit', label: 'Grit', max: 10 }] }] } as unknown as Definition;
       await onStats({ ...ranged, creation: { ways: { stats: { way: 'array', numbers: [15] } } } } as unknown as Definition);
       expect(screen.getByText('15 is above Grit\'s highest, 10')).toBeTruthy();
+    });
+
+    it('ROLL starts as 4d6 drop lowest, arranged; it says what it does, and takes another way of placing', async () => {
+      const { last } = await onStats();
+      await userEvent.click(screen.getByRole('button', { name: 'ROLL' }));
+      expect(last().creation).toEqual({ ways: { stats: { way: 'roll', each: '4d6 drop lowest', placed: 'arrange' } } });
+      expect((screen.getByRole('textbox', { name: 'Each is' }) as HTMLInputElement).value).toBe('4d6 drop lowest');
+      expect(panel().textContent).toContain('Every stat, rolled with 4d6 drop lowest, then placed as they like.');
+      expect([pressed('IN ORDER'), pressed('ARRANGE')]).toEqual(['false', 'true']);
+      await userEvent.click(screen.getByRole('button', { name: 'IN ORDER' }));
+      expect(last().creation).toEqual({ ways: { stats: { way: 'roll', each: '4d6 drop lowest', placed: 'order' } } });
+      expect(panel().textContent).toContain('Every stat, rolled with 4d6 drop lowest, in order.');
+      expect([pressed('IN ORDER'), pressed('ARRANGE')]).toEqual(['true', 'false']);
+      await userEvent.click(screen.getByRole('button', { name: 'ARRANGE' }));
+      expect((last().creation as { ways: { stats: { placed: string } } }).ways.stats.placed).toBe('arrange');
+    });
+
+    it('takes what the GM writes, saying when it doesn\'t read or could come to what a stat can\'t hold', async () => {
+      const { last } = await onStats();
+      await userEvent.click(screen.getByRole('button', { name: 'ROLL' }));
+      const each = screen.getByRole('textbox', { name: 'Each is' }) as HTMLInputElement;
+      await userEvent.clear(each);
+      expect(each.getAttribute('aria-invalid')).toBe('true');
+      expect(screen.getByText(/^Reads like 3d6, 4d6 drop lowest or 2d6 \+ 6/)).toBeTruthy();
+      await userEvent.type(each, '3d6');
+      expect((last().creation as { ways: { stats: { each: string; placed: string } } }).ways.stats).toEqual({ way: 'roll', each: '3d6', placed: 'arrange' });
+      expect(each.getAttribute('aria-invalid')).toBeNull();
+      expect(screen.queryByText(/^Reads like/)).toBeNull();
+      cleanup();
+      const ranged = { ...GROUPS, stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'grit', label: 'Grit', max: 10 }] }] } as unknown as Definition;
+      await onStats({ ...ranged, creation: { ways: { stats: { way: 'roll', each: '3d6', placed: 'order' } } } } as unknown as Definition);
+      expect(screen.getByText('3d6 can roll 18, above Grit\'s highest, 10')).toBeTruthy();
+    });
+
+    it('pressing the way it already has keeps what it has', async () => {
+      const { edits, last } = await onStats({ ...GROUPS, creation: { ways: { stats: { way: 'roll', each: '3d6', placed: 'order' } } } } as unknown as Definition);
+      await userEvent.click(screen.getByRole('button', { name: 'ROLL' }));
+      expect(edits).toHaveLength(1);
+      expect((last().creation as { ways: { stats: { each: string } } }).ways.stats.each).toBe('3d6');
+      await userEvent.click(screen.getByRole('button', { name: 'A FIXED ARRAY' }));
+      expect((last().creation as { ways: { stats: unknown } }).ways.stats).toEqual({ way: 'array', numbers: [] });
     });
 
     it('back to typed in, the numbers go; each group keeps its own, its box showing its own', async () => {

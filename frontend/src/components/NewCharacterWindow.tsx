@@ -10,7 +10,7 @@ import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
 import { useChoicesRefused } from '../hooks/useChoicesRefused';
 import { canImport } from '../sheets/importable';
 import {
-  flowDone, flowStepName, flowSteps, isStatsStep, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields,
+  flowDone, flowStepName, flowSteps, isStatsStep, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields,
 } from '../sheets/newCharacterFlow';
 import { themeRoot } from '../utils/themeRoot';
 
@@ -179,6 +179,20 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
       );
     }
     const setBy = isStatsStep(open) ? stepWay(template, open) : null;
+    if (setBy?.way === 'roll') {
+      const pool = rolledPool(data, open);
+      return (
+        <div style={page}>
+          <p style={why}>{pool
+            ? 'Rolled, and kept. Rolling again is the GM\'s.'
+            : setBy.placed === 'arrange' ? `${setBy.each}, once for each stat, then placed as you like.` : `${setBy.each} for each stat, in order. What comes up is yours.`}</p>
+          {!pool && <button type="button" style={confirm} onClick={() => socket?.emit('creationAction', { kind: 'roll', step: open })}>ROLL THEM</button>}
+          <PlaceNumbers groups={statsToSet(template, open)} numbers={pool ?? []} data={data} named={open === 'stats'} fixed={!pool || setBy.placed !== 'arrange'}
+            onPlace={(stat, value) => socket?.emit('creationAction', { kind: 'place', step: open, stat, value })} />
+          {refused && <p role="alert" style={{ ...why, color: 'var(--warning)', opacity: 1 }}>{refused}</p>}
+        </div>
+      );
+    }
     if (setBy?.way === 'array') {
       return (
         <div style={page}>

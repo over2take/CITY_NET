@@ -373,6 +373,48 @@ describe('through the socket', () => {
       });
     });
 
+    describe('rolled (7c3c)', () => {
+      const turnOnRoll = async (placed) => {
+        const def = JSON.stringify({ ...HEARTH, creation: { on: true, ways: { stats: { way: 'roll', each: '20d100', placed } } } });
+        await run(db, 'UPDATE custom_systems SET draft = ?, published = ? WHERE id = ?', [def, def, ID]);
+        await new Promise((resolve) => runtime.load(db, resolve));
+        await run(db, 'UPDATE character_sheets SET data = ? WHERE username = ?', [JSON.stringify({ name: 'Kestrel', _creating: { at: 'stats' } }), 'kes']);
+      };
+
+      it('in order: stored on the stats, in the log and thrown for everyone, on the sheet\'s queue', async () => {
+        await turnOnRoll('order');
+        const { kes, shared } = await table();
+        kes.handlers.creationAction({ kind: 'roll', step: 'stats' });
+        await until(() => shared.some((e) => e.event === 'diceRollBroadcast'), { label: 'the throw' });
+        const data = await stored();
+        const [int, con] = data._creating.rolled.stats;
+        expect([data.int, data.con]).toEqual([int, con]);
+        const thrown = shared.find((e) => e.event === 'diceRollBroadcast').data;
+        // On the secure dice: twenty of a hundred sides all landing on 1 isn't going to happen.
+        expect(Math.min(int, con)).toBeGreaterThan(20);
+        expect(thrown.historyString).toBe(`Kestrel rolled THE STATS (20d100): Intellect ${int}, Constitution ${con}`);
+        expect(thrown.results[100]).toHaveLength(40);
+        expect(thrown.total).toBe(int + con);
+        expect(thrown.board).toEqual({ label: 'THE STATS' });
+        expect(thrown.throw.dice[0].landed).toHaveLength(40);
+        await until(() => shared.some((e) => e.event === 'sheetUpdated'), { label: 'the screens told' });
+      });
+
+      it('once only: a second is refused, the numbers as they were, and no second throw', async () => {
+        await turnOnRoll('arrange');
+        const { kes, shared } = await table();
+        kes.handlers.creationAction({ kind: 'roll', step: 'stats' });
+        await until(async () => !!(await stored())._creating.rolled, { label: 'rolled' });
+        const first = (await stored())._creating.rolled.stats;
+        expect([(await stored()).int, (await stored()).con]).toEqual([undefined, undefined]);
+        kes.handlers.creationAction({ kind: 'roll', step: 'stats' });
+        await until(() => kes.refused().length === 1, { label: 'the refusal' });
+        expect(kes.refused()).toEqual(['Rolled, and kept: rolling again is the GM\'s']);
+        expect((await stored())._creating.rolled.stats).toEqual(first);
+        expect(shared.filter((e) => e.event === 'diceRollBroadcast')).toHaveLength(1);
+      });
+    });
+
     it('a player can\'t write their place as a field, and the GM may move theirs', async () => {
       await turnOn();
       const { kes, gm } = await table();

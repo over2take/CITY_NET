@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
 const require_ = createRequire(import.meta.url);
-const { creationOf, stepIdsOf, LIMITS, stepsAsked, creationShown, creatingNow, creationAction, withUpload, CREATING_KEY, lockedWhileCreating, placedFrom, stepWayProblems } = require_('../systemBuilder/creation');
+const { creationOf, stepIdsOf, LIMITS, stepsAsked, creationShown, creatingNow, creationAction, withUpload, CREATING_KEY, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine } = require_('../systemBuilder/creation');
 const { pickAction } = require_('../systemBuilder/picking');
 const { PICKS_KEY } = require_('../systemBuilder/choices');
 const { playerMayEdit } = require_('../sheets/templates');
@@ -244,8 +244,8 @@ describe('a fixed array (7c3b)', () => {
     expect(issues({ ways: { stats: { way: 'typed' } } })).toEqual([]);
     expect(issues({ ways: 'array' })).toEqual(['creation, ways: Must say how each step\'s stats are set']);
     expect(issues({ ways: { who: ARRAY } })).toEqual(['creation, ways, who: Only the stats have a way to be set']);
-    expect(issues({ ways: { stats: 'array' } })).toEqual(['creation, ways, stats: Must be typed or array']);
-    expect(issues({ ways: { stats: { way: 'dice' } } })).toEqual(['creation, ways, stats: Must be typed or array']);
+    expect(issues({ ways: { stats: 'array' } })).toEqual(['creation, ways, stats: Must be typed, array or roll']);
+    expect(issues({ ways: { stats: { way: 'dice' } } })).toEqual(['creation, ways, stats: Must be typed, array or roll']);
     expect(issues({ ways: { stats: { way: 'typed', numbers: [1] } } })).toEqual(['creation, ways, stats, numbers: Not part of this way']);
     expect(issues({ ways: { stats: { way: 'array', numbers: 'three' } } })).toEqual(['creation, ways, stats, numbers: Must be a list of numbers']);
     expect(issues({ ways: { stats: { way: 'array', numbers: [1, 2, 3.5] } } })).toContain('creation, ways, stats, numbers: Must be whole numbers');
@@ -276,6 +276,150 @@ describe('a fixed array (7c3b)', () => {
     const file = citysys.buildFile({ definition: { ...DEF, creation }, version: 1, origin: 'sys_abcdefabcdefabcd' });
     const read = citysys.readFile(JSON.stringify(file));
     expect([read.file.definition.creation, read.problems]).toEqual([creation, []]);
+  });
+});
+
+describe('rolled (7c3c)', () => {
+  const STATS = [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'might', label: 'Might' }, { id: 'wits', label: 'Wits' }] }];
+  const def = (placed = 'arrange', each = '4d6 drop lowest', step = 'stats', more = {}) => ({ format: 1, name: 'R', stats: STATS, creation: { on: true, ways: { [step]: { way: 'roll', each, placed } }, ...more } });
+  const at = { [CREATING_KEY]: { at: 'stats' } };
+  /** Dice that land on these faces, of a d6, in turn. */
+  const dice = (...faces) => { let i = 0; return () => (faces[i++ % faces.length] - 0.5) / 6; };
+  // Might: 6 5 3 1 = 14 dropping the 1. Wits: 2 2 4 1 = 8 dropping the 1.
+  const FACES = [6, 5, 3, 1, 2, 2, 4, 1];
+  const roll = (data, d = def(), rng = dice(...FACES), step = 'stats') => creationAction(d, data, { kind: 'roll', step }, { rng });
+
+  it('reads what a GM writes, and nothing else', () => {
+    expect(parseStatRoll('3d6')).toEqual({ count: 3, sides: 6, drop: 0, which: null, add: 0 });
+    expect(parseStatRoll('4d6 drop lowest')).toEqual({ count: 4, sides: 6, drop: 1, which: 'lowest', add: 0 });
+    expect(parseStatRoll(' 5D6  DROP HIGHEST 2 ')).toEqual({ count: 5, sides: 6, drop: 2, which: 'highest', add: 0 });
+    expect(parseStatRoll('2d6 + 6')).toEqual({ count: 2, sides: 6, drop: 0, which: null, add: 6 });
+    expect(parseStatRoll('2d6-1')).toEqual({ count: 2, sides: 6, drop: 0, which: null, add: -1 });
+    expect(parseStatRoll('d20')).toEqual({ count: 1, sides: 20, drop: 0, which: null, add: 0 });
+    expect(parseStatRoll('4d6 drop lowest + 1')).toEqual({ count: 4, sides: 6, drop: 1, which: 'lowest', add: 1 });
+    for (const bad of ['', 'four', '4d', '0d6', '21d6', '4d1', '4d101', '4d6 drop', '4d6 drop lowest 4', '4d6 drop lowest 0', '1d6 drop lowest', '2d6 + 1001', '2d6 * 10', 7, null]) {
+      expect(parseStatRoll(bad), String(bad)).toBeNull();
+    }
+    expect(parseStatRoll('20d100 + 1000')).not.toBeNull();
+  });
+
+  it('knows the lowest and highest a roll comes to', () => {
+    expect(statRollRange(parseStatRoll('4d6 drop lowest'))).toEqual({ lo: 3, hi: 18 });
+    expect(statRollRange(parseStatRoll('2d6 + 6'))).toEqual({ lo: 8, hi: 18 });
+    expect(statRollRange(parseStatRoll('5d6 drop highest 2 - 1'))).toEqual({ lo: 2, hi: 17 });
+  });
+
+  it('arranged: every stat gets a roll, dropping as it says, kept and waiting to be placed', () => {
+    const done = roll(at);
+    expect(done.data[CREATING_KEY].rolled).toEqual({ stats: [14, 8] });
+    expect([done.data.might, done.data.wits]).toEqual([undefined, undefined]);
+    expect(done.data[CREATING_KEY].at).toBe('stats');
+  });
+
+  it('drops the highest when it says so, and adds what it says', () => {
+    expect(roll(at, def('order', '4d6 drop highest')).data.might).toBe(1 + 3 + 5);
+    expect(roll(at, def('order', '2d6 + 6'), dice(6, 5, 3, 1)).data.might).toBe(17);
+    expect(roll(at, def('order', '3d6'), dice(6, 5, 3)).data.might).toBe(14);
+    expect(roll(at, def('order', '4d6 drop lowest 2')).data.might).toBe(11);
+  });
+
+  it('in order: each goes straight on its stat', () => {
+    const done = roll(at, def('order'));
+    expect([done.data.might, done.data.wits]).toEqual([14, 8]);
+    expect(done.data[CREATING_KEY].rolled).toEqual({ stats: [14, 8] });
+  });
+
+  it('says it for the log: what was thrown, what each came to, and whose in order', () => {
+    const { rolled } = roll(at, def('order'));
+    expect(rolled).toMatchObject({ label: 'THE STATS', each: '4d6 drop lowest', sides: 6, rolls: FACES, totals: [14, 8], total: 22, named: ['Might', 'Wits'] });
+    expect(statRollLine('Wren', rolled)).toBe('Wren rolled THE STATS (4d6 drop lowest): Might 14, Wits 8');
+    expect(statRollLine('Wren', roll(at).rolled)).toBe('Wren rolled THE STATS (4d6 drop lowest): 14, 8');
+    const group = roll(at, def('arrange', '4d6 drop lowest', 'stats:abilities', { statsBy: 'group' }), dice(...FACES), 'stats:abilities');
+    expect(group.rolled.label).toBe('ABILITIES');
+  });
+
+  it('once rolled it stays rolled', () => {
+    const once = roll(at).data;
+    expect(roll(once)).toEqual({ ok: false, error: 'Rolled, and kept: rolling again is the GM\'s' });
+    expect(creationAction(def(), once, { kind: 'at', step: 'stats' }).data[CREATING_KEY].rolled).toEqual({ stats: [14, 8] });
+  });
+
+  it('each step rolls for itself', () => {
+    const two = [...STATS, { id: 'skills', label: 'SKILLS', stats: [{ id: 'climb', label: 'Climb' }] }];
+    const d = { format: 1, name: 'R', stats: two, creation: { on: true, statsBy: 'group', ways: { 'stats:abilities': { way: 'roll', each: '3d6', placed: 'order' }, 'stats:skills': { way: 'roll', each: '1d6', placed: 'order' } } } };
+    const first = creationAction(d, at, { kind: 'roll', step: 'stats:abilities' }, { rng: dice(1, 1, 1) }).data;
+    const second = creationAction(d, first, { kind: 'roll', step: 'stats:skills' }, { rng: dice(4) }).data;
+    expect(second[CREATING_KEY].rolled).toEqual({ 'stats:abilities': [3, 3], 'stats:skills': [4] });
+    expect(second.climb).toBe(4);
+  });
+
+  it('refuses what isn\'t this step\'s to roll', () => {
+    expect(roll(at, { ...def(), creation: { on: true } }).error).toBe('These stats aren\'t rolled');
+    expect(roll(at, def(), dice(1), 'kits').error).toBe('Not one of this game\'s steps');
+    expect(roll({}).error).toBe('This character isn\'t being made');
+    expect(roll(at, def('arrange', 'nonsense')).error).toBe('This game\'s roll doesn\'t read');
+  });
+
+  it('rolls with the secure dice unless handed others', () => {
+    // Twenty dice of a hundred sides all landing on 1 isn't going to happen on real dice.
+    const done = creationAction(def('order', '20d100'), at, { kind: 'roll', step: 'stats' });
+    expect(done.data.might).toBeGreaterThan(20);
+    expect(done.data.might).toBeLessThanOrEqual(2000);
+  });
+
+  it('arranged, placed from what came up; before rolling nothing can be; in order nothing is', () => {
+    const place = (data, stat, value, d = def()) => creationAction(d, data, { kind: 'place', step: 'stats', stat, value });
+    expect(place(at, 'might', 14).error).toBe('Roll them first');
+    const once = roll(at).data;
+    expect(place(once, 'might', 99).error).toBe('That number is already placed');
+    const placed = place(once, 'might', 14).data;
+    expect(placed.might).toBe(14);
+    expect(place(placed, 'wits', 14).error).toBe('That number is already placed');
+    expect('might' in place(placed, 'might', null).data).toBe(false);
+    expect(place(roll(at, def('order')).data, 'might', 8, def('order')).error).toBe('These stats aren\'t placed');
+  });
+
+  it('FINISH needs it rolled, and placed', () => {
+    const finish = (data, d = def()) => creationAction(d, data, { kind: 'finish' });
+    expect(finish(at).error).toBe('Every stat needs its number first');
+    const once = roll(at).data;
+    expect(finish(once).error).toBe('Every stat needs its number first');
+    expect(finish({ ...once, might: 14, wits: 8 }).data).toEqual({ might: 14, wits: 8, [CREATING_KEY]: { done: true } });
+    expect(finish(roll(at, def('order')).data, def('order')).ok).toBe(true);
+  });
+
+  it('is locked on the sheet while being made, as any way but typing', () => {
+    expect([...lockedWhileCreating(def(), at)]).toEqual(['might', 'wits']);
+  });
+
+  it('tells the browser the way', () => {
+    expect(creationShown(def('order')).ways).toEqual({ stats: { way: 'roll', each: '4d6 drop lowest', placed: 'order' } });
+  });
+
+  it('the checks take it, and say what is wrong', () => {
+    const issues = (way, stats = STATS) => checkDefinition({ format: 1, name: 'R', stats, creation: { ways: { stats: way } } }).problems.map((p) => `${p.where}: ${p.message}`);
+    expect(issues({ way: 'roll', each: '4d6 drop lowest', placed: 'order' })).toEqual([]);
+    expect(issues({ way: 'roll', each: '4d6 drop lowest', placed: 'arrange' })).toEqual([]);
+    expect(issues({ way: 'roll', placed: 'order' })).toEqual(['creation, ways, stats, each: Must say what each is rolled with']);
+    expect(issues({ way: 'roll', each: '3d6', placed: 'sideways' })).toEqual(['creation, ways, stats, placed: Must be order or arrange']);
+    expect(issues({ way: 'roll', each: '3d6' })).toEqual(['creation, ways, stats, placed: Must be order or arrange']);
+    expect(issues({ way: 'roll', each: '3d6', placed: 'order', numbers: [1] })).toEqual(['creation, ways, stats, numbers: Not part of this way']);
+    expect(issues({ way: 'roll', each: 'lots', placed: 'order' })).toEqual(['creation, ways, stats: Reads like 3d6, 4d6 drop lowest or 2d6 + 6, up to 20 dice of up to 100 sides']);
+    expect(issues({ way: 'dice' })).toEqual(['creation, ways, stats: Must be typed, array or roll']);
+  });
+
+  it('says when it could come to what a stat can\'t hold', () => {
+    const ranged = [{ id: 'g', label: 'G', stats: [{ id: 'a', label: 'Aim', min: 3, max: 18 }, { id: 'b', label: 'Bow', min: 5, max: 12 }] }];
+    expect(stepWayProblems({ format: 1, name: 'R', stats: ranged, creation: { ways: { stats: { way: 'roll', each: '3d6', placed: 'order' } } } }, 'stats')).toEqual([
+      '3d6 can roll 3, below Bow\'s lowest, 5',
+      '3d6 can roll 18, above Bow\'s highest, 12',
+    ]);
+  });
+
+  it('the system file carries it, unchanged', () => {
+    const d = def();
+    const read = citysys.readFile(JSON.stringify(citysys.buildFile({ definition: d, version: 1, origin: 'sys_abcdefabcdefabcd' })));
+    expect([read.file.definition.creation, read.problems]).toEqual([d.creation, []]);
   });
 });
 

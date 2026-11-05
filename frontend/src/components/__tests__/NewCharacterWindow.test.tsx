@@ -300,6 +300,70 @@ describe('the steps', () => {
     });
   });
 
+  describe('rolled (7c3c)', () => {
+    const ROLL = (placed: string) => ({
+      steps: ['who', 'stats', 'list:classes'],
+      ways: { stats: { way: 'roll', each: '4d6 drop lowest', placed } },
+      stats: [{ id: 'traits', label: 'TRAITS', stats: [{ id: 'grit', label: 'Grit' }, { id: 'wits', label: 'Wits' }] }],
+    });
+    const at = { name: 'Wren', _creating: { at: 'stats' } };
+    const rolled = (over: object = {}) => ({ name: 'Wren', _creating: { at: 'stats', rolled: { stats: [14, 8] } }, ...over });
+    const roll = () => screen.queryByRole('button', { name: 'ROLL THEM' }) as HTMLButtonElement | null;
+    const pool = () => screen.queryByRole('group', { name: 'Numbers to place' });
+
+    it('before rolling: says what it will do, the stats empty, nothing to place, NEXT held', async () => {
+      await open(at, undefined, 'tok', ROLL('order'));
+      expect(screen.getByText('4d6 drop lowest for each stat, in order. What comes up is yours.')).toBeTruthy();
+      expect(screen.getByRole('group', { name: 'Grit: no number yet' })).toBeTruthy();
+      expect(pool()).toBeNull();
+      expect(button('NEXT').disabled).toBe(true);
+      cleanup();
+      await open(at, undefined, 'tok', ROLL('arrange'));
+      expect(screen.getByText('4d6 drop lowest, once for each stat, then placed as you like.')).toBeTruthy();
+      expect(pool()).toBeNull();
+      expect(screen.queryByText('EVERY NUMBER IS PLACED')).toBeNull();
+      expect(screen.getByRole('group', { name: 'Grit: no number yet' })).toBeTruthy();
+    });
+
+    it('ROLL THEM asks the server, for this step', async () => {
+      const { socket } = await open(at, undefined, 'tok', ROLL('arrange'));
+      await userEvent.click(roll()!);
+      expect(socket.said('creationAction')).toContainEqual({ kind: 'roll', step: 'stats' });
+    });
+
+    it('rolled in order: on the stats, kept, with no way to roll or place again', async () => {
+      await open(rolled({ grit: 14, wits: 8 }), undefined, 'tok', ROLL('order'));
+      expect(screen.getByText(/^Rolled, and kept/)).toBeTruthy();
+      expect(roll()).toBeNull();
+      expect(pool()).toBeNull();
+      expect(screen.getByRole('group', { name: 'Grit: 14' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /^Grit/ })).toBeNull();
+      expect(button('NEXT').disabled).toBe(false);
+    });
+
+    it('rolled to arrange: what came up to place, as an array is, asked of the server', async () => {
+      const { socket } = await open(rolled(), undefined, 'tok', ROLL('arrange'));
+      expect(screen.getByText(/^Rolled, and kept/)).toBeTruthy();
+      expect(roll()).toBeNull();
+      expect(within(pool() as HTMLElement).getAllByRole('button').map((b) => b.textContent)).toEqual(['14', '8']);
+      expect(button('NEXT').disabled).toBe(true);
+      await userEvent.click(within(pool() as HTMLElement).getByRole('button', { name: '8' }));
+      await userEvent.click(screen.getByRole('button', { name: /^Grit:/ }));
+      expect(socket.said('creationAction')).toContainEqual({ kind: 'place', step: 'stats', stat: 'grit', value: 8 });
+    });
+
+    it('placed, NEXT opens', async () => {
+      await open(rolled({ grit: 8, wits: 14 }), undefined, 'tok', ROLL('arrange'));
+      expect(button('NEXT').disabled).toBe(false);
+    });
+
+    it('says why the server said no', async () => {
+      const { socket } = await open(at, undefined, 'tok', ROLL('order'));
+      socket.fire('choicesRefused', { error: 'Rolled, and kept: rolling again is the GM\'s' });
+      expect(screen.getByRole('alert').textContent).toBe('Rolled, and kept: rolling again is the GM\'s');
+    });
+  });
+
   it('a group\'s own step shows that group alone, named at its head (7c3a)', async () => {
     await open({ name: 'Wren', grit: 12, _creating: { at: 'stats:skills' } }, undefined, 'tok', {
       steps: ['who', 'stats:traits', 'stats:skills', 'list:classes'],

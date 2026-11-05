@@ -12,8 +12,10 @@
 // their sheet: in a system whose rests are finished on each sheet; the GM may on anyone's, always.
 //
 // `creationAction` with { kind: 'open' | 'at' | 'finish', step } (7c2) moves a character through the
-// guided new character, and with { kind: 'place', step, stat, value } (7c3b) puts a number on a stat
-// (systemBuilder/creation.js). A stat can move the token's maximum, so it follows, as a pick's does.
+// guided new character, with { kind: 'place', step, stat, value } (7c3b) puts a number on a stat, and
+// with { kind: 'roll', step } (7c3c) rolls a step's stats on the secure dice, inside the sheet's write
+// queue, written to the log and thrown in the tray as ROLL FOR IT is (systemBuilder/creation.js). A stat
+// can move the token's maximum, so it follows, as a pick's does.
 //
 // `recoverySpend` with { pool, count } (R2a) spends recovery dice with a roll (sheets/recover.js).
 // In a system leaving spending to the GM, a player spends or ticks them off only while the GM has
@@ -24,7 +26,7 @@ const { pickAction, rollLine } = require('../systemBuilder/picking');
 const { withThrow, boardOf } = require('../utils/diceThrow');
 const { syncTokenMax } = require('../systemBuilder/tokenMax');
 const { maySpend, restingOf, OPEN_SETTING } = require('../systemBuilder/recovery');
-const { creationAction } = require('../systemBuilder/creation');
+const { creationAction, statRollLine } = require('../systemBuilder/creation');
 const { takeRest } = require('../sheets/rests');
 const customSystems = require('../systemBuilder/runtime');
 const sheetTemplates = require('../sheets/templates');
@@ -44,10 +46,10 @@ const spendingOpen = (db, cb) => db.get('SELECT value FROM global_settings WHERE
 
 /** Registered once per connection by sockets/index.js, with what it already knows of the caller. */
 const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, getGameSystem, rng = cryptoRng }) => {
-  /** ROLL FOR IT said to everyone (7a5b2): a dice-log line, and the roll thrown in the tray. */
-  const announceRoll = (username, stored, rolled) => {
+  /** A roll on the sheet said to everyone (7a5b2): a dice-log line, and the roll thrown in the tray. */
+  const announceRoll = (username, stored, rolled, lineOf, board) => {
     const who = (stored && typeof stored.name === 'string' && stored.name.trim()) || username;
-    const line = rollLine(who, rolled);
+    const line = lineOf(who, rolled);
     const results = { [rolled.sides]: rolled.rolls };
     db.get(`SELECT color FROM locations WHERE shape = 'rhombus' AND owner = ? ORDER BY id LIMIT 1`, [username], (e, token) => {
       const color = (token && typeof token.color === 'string' && token.color) || LOG_COLOR;
@@ -56,7 +58,7 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
       });
       io.emit('diceRollBroadcast', withThrow({
         userName: who, account: username, results, modifiers: [], color, total: rolled.total, historyString: line,
-        board: boardOf(String(rolled.list.one || rolled.list.id).toUpperCase()),
+        board: boardOf(board),
       }));
     });
   };
@@ -97,7 +99,7 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
           if (error) return refuse(error);
           if (err2) return refuse('That character has no sheet yet');
           if (!stored) return undefined;
-          if (rolled) announceRoll(username, stored, rolled);
+          if (rolled) announceRoll(username, stored, rolled, rollLine, String(rolled.list.one || rolled.list.id).toUpperCase());
           return syncTokenMax(db, system, username, (moved) => {
             if (moved) io.emit('dataUpdated', { isRhombusOnly: true });
             io.emit('sheetUpdated', { username, system });
@@ -112,9 +114,11 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
     if (!payload || typeof payload !== 'object') return;
     withCaller(payload, 'choicesRefused', ({ username, system, definition, refuse }) => {
       let error = null;
+      let rolled = null;
       mutateSheetForUser(db, { username, system }, (data) => {
-        const done = creationAction(definition, data, payload);
+        const done = creationAction(definition, data, payload, { rng });
         if (!done.ok) { error = done.error; return undefined; }
+        rolled = done.rolled || null;
         // Worked out as any save is, so a list asked first already knows what isn't met.
         if (done.data) sheetTemplates.applyDerived(system, done.data);
         return done.data;
@@ -122,6 +126,7 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
         if (error) return refuse(error);
         if (err2) return refuse('That character has no sheet yet');
         if (!stored) return undefined;
+        if (rolled) announceRoll(username, stored, rolled, statRollLine, rolled.label);
         return syncTokenMax(db, system, username, (moved) => {
           if (moved) io.emit('dataUpdated', { isRhombusOnly: true });
           io.emit('sheetUpdated', { username, system });

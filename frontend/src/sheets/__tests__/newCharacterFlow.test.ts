@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
-  CREATING_KEY, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, placedFrom, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields, withCreationLocks,
+  CREATING_KEY, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, placedFrom, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields, withCreationLocks,
 } from '../newCharacterFlow';
 import { WORKED_KEY, type ChoiceListShown } from '../choicesShown';
 import type { SheetTemplate } from '../types';
@@ -255,6 +255,43 @@ describe('a fixed array (7c3b)', () => {
     for (const data of [{}, { [CREATING_KEY]: { done: true } }, { name: 'Wren' }]) expect(withCreationLocks(ARRAY, data), JSON.stringify(data)).toBe(ARRAY);
     expect(withCreationLocks(TEMPLATE, going)).toBe(TEMPLATE);
     expect(withCreationLocks({ ...ARRAY, creation: undefined } as unknown as SheetTemplate, going).creation).toBeUndefined();
+  });
+});
+
+describe('rolled (7c3c)', () => {
+  const ROLLED = {
+    ...TEMPLATE,
+    creation: { steps: ['who', 'stats'], ways: { stats: { way: 'roll', each: '3d6', placed: 'arrange' } }, stats: [{ id: 'a', label: 'A', stats: [{ id: 'grit', label: 'Grit' }, { id: 'concept', label: 'C' }] }] },
+  } as unknown as SheetTemplate;
+  const with_ = (rolled: unknown, more: object = {}) => ({ [CREATING_KEY]: { at: 'stats', rolled }, ...more });
+
+  it('what a step came to, or nothing yet', () => {
+    expect(rolledPool(with_({ stats: [9, 8] }), 'stats')).toEqual([9, 8]);
+    expect(rolledPool(with_({ stats: [9, 8] }), 'stats:other')).toBeNull();
+    expect(rolledPool(with_('x'), 'stats')).toBeNull();
+    expect(rolledPool(with_({ stats: 'x' }), 'stats')).toBeNull();
+    expect(rolledPool({}, 'stats')).toBeNull();
+  });
+
+  it('answered once rolled and each holds what came up; a number typed earlier doesn\'t count', () => {
+    expect(stepAnswered(ROLLED, 'stats', { grit: 9, concept: 8 })).toBe(false);
+    expect(stepAnswered(ROLLED, 'stats', with_({ stats: [9, 8] }))).toBe(false);
+    expect(stepAnswered(ROLLED, 'stats', with_({ stats: [9, 8] }, { grit: 9 }))).toBe(false);
+    expect(stepAnswered(ROLLED, 'stats', with_({ stats: [9, 8] }, { grit: 9, concept: 7 }))).toBe(false);
+    expect(stepAnswered(ROLLED, 'stats', with_({ stats: [9, 8] }, { grit: 8, concept: 9 }))).toBe(true);
+  });
+
+  it('locks them on the sheet while being made', () => {
+    const fields = withCreationLocks(ROLLED, with_({})).sections.flatMap((s) => s.fields);
+    expect(fields.find((f) => f.id === 'grit')?.gmOnly).toBe(true);
+  });
+
+  it('reads what the server keeps', () => {
+    const def = { format: 1, name: 'H', stats: [{ id: 'a', label: 'A', stats: [{ id: 'grit', label: 'Grit' }] }], creation: { on: true, ways: { stats: { way: 'roll', each: '3d6', placed: 'order' } } } };
+    const template = { ...TEMPLATE, creation: backend.creationShown(def) } as unknown as SheetTemplate;
+    const done = backend.creationAction(def, { [CREATING_KEY]: {} }, { kind: 'roll', step: 'stats' }).data;
+    expect(rolledPool(done, 'stats')).toEqual([done.grit]);
+    expect(stepAnswered(template, 'stats', done)).toBe(true);
   });
 });
 

@@ -1,4 +1,4 @@
-import { test, expect, type Locator, type Page, type Browser, type TestInfo } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Locator, type Page, type Browser, type TestInfo } from '@playwright/test';
 import { signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
 
 // NEW_CHARACTER.EXE at the table (7c2; approved mockup docs/mockups/new-character.html, 2026-11-03):
@@ -250,6 +250,80 @@ test('a fixed array: numbers placed, swapped and taken back; locked on the sheet
   await expect(onSheet).toBeEditable();
   await onSheet.fill('16');
   await expect.poll(async () => (await stored()).grit, { timeout: 15_000 }).toBe(16);
+  await page.context().close();
+});
+
+// A game whose stats are rolled, and a player on that step.
+const rollingTable = async (browser: Browser, request: APIRequestContext, info: TestInfo, placed: string, tag: string) => {
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const player = { username: `e2e_newchar_${tag}${again}`, password: 'e2e-player-password' };
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Newfall ${tag}${again}`,
+    core: { health: { model: 'pool' }, dice: ['d6'] },
+    stats: [{ id: 'traits', label: 'TRAITS', stats: [{ id: 'grit', label: 'Grit' }, { id: 'wits', label: 'Wits' }] }],
+    creation: { on: true, ways: { stats: { way: 'roll', each: '4d6 drop lowest', placed } } },
+  });
+  await approvedPlayer(request, gm, player);
+  const stored = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data;
+  const page = await signedIn(browser, info, player);
+  await walkToStats(page);
+  return { page, stored, player };
+};
+const rollThem = (page: Page) => page.getByRole('button', { name: 'ROLL THEM' });
+
+test('rolled in order: on the secure dice, in the tray and on the stats, kept through a reload', async ({ browser, request }, info) => {
+  const { page, stored, player } = await rollingTable(browser, request, info, 'order', 'order');
+  await expect(page.getByText('4d6 drop lowest for each stat, in order. What comes up is yours.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'FINISH' })).toBeDisabled();
+  await rollThem(page).click();
+
+  // Thrown for everyone, what came up on the stats, within what the dice can do, and no second roll.
+  await expect(page.getByText('DICE_TRAY.EXE', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/^Rolled, and kept/)).toBeVisible({ timeout: 15_000 });
+  await expect(rollThem(page)).toHaveCount(0);
+  const data = await stored();
+  const [grit, wits] = data._creating.rolled.stats;
+  expect([data.grit, data.wits]).toEqual([grit, wits]);
+  for (const n of [grit, wits]) { expect(n).toBeGreaterThanOrEqual(3); expect(n).toBeLessThanOrEqual(18); }
+  await expect(page.getByRole('group', { name: `Grit: ${grit}` })).toBeVisible();
+
+  // A reload doesn't roll again.
+  await page.reload();
+  await signInAsPlayer(page, player);
+  await rail(page).click();
+  await sheetButton(page).click();
+  await page.getByRole('button', { name: 'CREATING · CONTINUE' }).click();
+  await expect(rollThem(page)).toHaveCount(0);
+  await expect(page.getByRole('group', { name: `Wits: ${wits}` })).toBeVisible();
+  await page.getByRole('button', { name: 'FINISH' }).click();
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  await page.context().close();
+});
+
+test('rolled to arrange: what came up placed as they like, then finished', async ({ browser, request }, info) => {
+  const { page, stored } = await rollingTable(browser, request, info, 'arrange', 'arrange');
+  await expect(page.getByText('4d6 drop lowest, once for each stat, then placed as you like.')).toBeVisible();
+  await rollThem(page).click();
+  const pool = page.getByRole('group', { name: 'Numbers to place' });
+  await expect(pool.getByRole('button')).toHaveCount(2, { timeout: 15_000 });
+  const data = await stored();
+  const [first, second] = data._creating.rolled.stats;
+  expect([data.grit, data.wits]).toEqual([undefined, undefined]);
+  const finish = page.getByRole('button', { name: 'FINISH' });
+  await expect(finish).toBeDisabled();
+
+  // The second number on the first stat: theirs to arrange.
+  await pool.getByRole('button').nth(1).click();
+  await page.getByRole('button', { name: /^Grit:/ }).click();
+  await expect.poll(async () => (await stored()).grit, { timeout: 15_000 }).toBe(second);
+  await expect(pool.getByRole('button')).toHaveCount(1);
+  await pool.getByRole('button').first().click();
+  await page.getByRole('button', { name: /^Wits:/ }).click();
+  await expect.poll(async () => (await stored()).wits, { timeout: 15_000 }).toBe(first);
+  await expect(finish).toBeEnabled({ timeout: 15_000 });
+  await finish.click();
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
   await page.context().close();
 });
 

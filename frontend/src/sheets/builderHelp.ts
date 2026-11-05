@@ -218,6 +218,8 @@ export const HINTS = {
   'creation.steps': 'What a player is asked, in this order. Move them with the arrows, and switch off any you don\'t want. A list asked before the stats can\'t offer an option that needs a stat.',
   'creation.statsBy': 'ONE WAY FOR ALL is one step for every stat. GROUP BY GROUP gives each stats group its own step, which you can move and switch off on its own.',
   'creation.way': 'How a player sets these stats in the flow. Until they finish, the sheet won\'t let them type over numbers set any other way than typing. After that, the sheet is theirs as usual.',
+  'creation.each': 'The dice for each stat: 3d6, 4d6 drop lowest, 5d6 drop lowest 2, or 2d6 + 6. Rolled once for every stat in the step. It has to fit every stat\'s lowest and highest.',
+  'creation.placed': 'IN ORDER, each number lands on the next stat as it comes up. ARRANGE, the player rolls them all, then places them as they like.',
   'creation.numbers': 'The numbers everyone gets, with commas between them, each placed on any stat. There must be at least one for each stat, and each must fit every stat\'s lowest and highest.',
   'creation.statsGroups': 'Switch a group off for numbers nobody sets at creation, like stress. Its stats stay on the sheet, and players aren\'t asked for them here.',
   'choices.levelled': 'Each pick has a level, and its features unlock by it, like a class. Formulas read it as @<option>_level.',
