@@ -100,24 +100,28 @@ function Feature({ f, ctx }: { f: FeatureShown; ctx: Ctx }) {
 /**
  * The options left to pick, one to a line so that what one needs reads as its own: each a button asking,
  * one not met saying what it needs (ADD ANYWAY for the GM). On a list with a table (7a5b2), ROLL FOR IT
- * under them, the option rolled marked TAKE IT, and, rolled only, the others off for a player.
+ * under them, the option rolled marked TAKE IT, and, rolled only, the others off for a player. Whoever
+ * can roll sees the table: the dice over the options, and each one's range, so a result can be checked.
  */
 function Offer({ label, list, from, open, onPick, ctx }: {
   label: string; list: ChoiceListShown; from?: string; open: { option: OptionShown; unmet: string | null }[]; onPick: (option: string) => void; ctx: Ctx;
 }) {
   const r = rollOffer(list, rolledOf(ctx.data, list.id, from), ctx.gm);
+  // The column the option's button is in: after its range, when the table is shown.
+  const at = r.roll ? 2 : 1;
   return (
-    <div role="group" aria-label={label} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, max-content) minmax(0, 1fr)', gap: '5px 8px', alignItems: 'center' }}>
-      <span style={{ ...small, gridColumn: '1 / -1' }}>{label.toUpperCase()}</span>
+    <div role="group" aria-label={label} style={{ display: 'grid', gridTemplateColumns: `${r.roll ? 'max-content ' : ''}minmax(0, max-content) minmax(0, 1fr)`, gap: '5px 8px', alignItems: 'center' }}>
+      <span style={{ ...small, gridColumn: '1 / -1', textAlign: 'left' }}>{label.toUpperCase()}{r.roll ? ` (${list.table})` : ''}</span>
       {open.map(({ option, unmet }) => {
         const marked = r.marked === option.id;
         const off = (!!unmet && !ctx.gm) || (r.byRoll && !marked);
         return (
           <React.Fragment key={option.id}>
-            <button type="button" className={off ? 'choice-off' : undefined} style={{ ...btn, gridColumn: 1, textAlign: 'left', ...(marked ? { borderColor: 'var(--cyan)', color: 'var(--cyan)' } : {}), opacity: off ? 0.6 : 1, cursor: off ? 'not-allowed' : 'pointer' }} disabled={off}
+            {r.roll && option.roll && <span title={`A roll of ${option.roll}`} style={{ ...small, gridColumn: 1, opacity: 1, textAlign: 'right', fontVariantNumeric: 'tabular-nums', ...(marked ? { color: 'var(--cyan)' } : {}) }}>{option.roll}</span>}
+            <button type="button" className={off ? 'choice-off' : undefined} style={{ ...btn, gridColumn: at, textAlign: 'left', ...(marked ? { borderColor: 'var(--cyan)', color: 'var(--cyan)' } : {}), opacity: off ? 0.6 : 1, cursor: off ? 'not-allowed' : 'pointer' }} disabled={off}
               title={r.byRoll && !marked ? 'Picked by roll: ROLL FOR IT' : unmet && ctx.gm ? 'Not met: as the GM, you can add it anyway' : option.description}
               onClick={() => onPick(option.id)}>{option.label.toUpperCase()}{marked ? ' · TAKE IT' : ''}</button>
-            {unmet && <span style={{ ...small, gridColumn: 2, color: 'var(--warning)', opacity: 1 }}>NEEDS {unmet}{ctx.gm ? ' · ADD ANYWAY' : ''}</span>}
+            {unmet && <span style={{ ...small, gridColumn: at + 1, color: 'var(--warning)', opacity: 1 }}>NEEDS {unmet}{ctx.gm ? ' · ADD ANYWAY' : ''}</span>}
           </React.Fragment>
         );
       })}
@@ -126,7 +130,7 @@ function Offer({ label, list, from, open, onPick, ctx }: {
           title={r.spent ? 'Rolled: take what came up, or ask the GM to roll again' : `Rolls ${list.table} on the table, written to the log`}
           onClick={() => ctx.ask({ kind: 'roll', list: list.id, ...(from ? { from } : {}) })}>{r.label}</button>
       )}
-      {r.said && <span style={{ ...small, gridColumn: '1 / -1', color: 'var(--cyan)', opacity: 1 }}>{r.said}</span>}
+      {r.said && <span style={{ ...small, gridColumn: '1 / -1', textAlign: 'left', color: 'var(--cyan)', opacity: 1 }}>{r.said}</span>}
     </div>
   );
 }

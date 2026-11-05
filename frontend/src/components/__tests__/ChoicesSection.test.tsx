@@ -218,6 +218,49 @@ describe('ROLL FOR IT (7a5b2)', () => {
     expect(pick.getByRole('button', { name: 'SCRIBE' })).toHaveProperty('disabled', false);
   });
 
+  it('whoever can roll sees the table: the dice, and each option\'s range beside it (7c)', () => {
+    const { pick } = drawRolled(undefined, null);
+    // Left-aligned, as the window it is in centers text unless told otherwise.
+    expect(pick.getByText('PICK A BACKGROUND (d6)').style.textAlign).toBe('left');
+    expect(pick.getByText('1-3').nextElementSibling).toBe(pick.getByRole('button', { name: 'DOCKHAND' }));
+    expect(pick.getByText('4-6').nextElementSibling).toBe(pick.getByRole('button', { name: 'SCRIBE' }));
+    expect(pick.getByRole('button', { name: 'SCRIBE' }).style.gridColumn).toBe('2');
+    expect(pick.getByText('1-3').style.gridColumn).toBe('1');
+  });
+
+  it('rolled only, a player sees the table before rolling; what came up is picked out on it (7c)', () => {
+    const { pick } = drawRolled('roll', { option: 'scribe', roll: 5 });
+    expect(pick.getByText('1-3').nextElementSibling).toBe(pick.getByRole('button', { name: 'DOCKHAND' }));
+    expect(pick.getByText('ROLLED 5 → SCRIBE').style.textAlign).toBe('left');
+    expect(pick.getByText('4-6').style.color).toBe('var(--cyan)');
+    expect(pick.getByText('1-3').style.color).toBe('');
+  });
+
+  it('BY HAND, a player can\'t roll, so there is no table to read; the GM can, so sees it (7c)', () => {
+    const { pick } = drawRolled('hand', null);
+    expect(pick.getByText('PICK A BACKGROUND')).toBeTruthy();
+    expect(pick.queryByText('1-3')).toBeNull();
+    expect(pick.getByRole('button', { name: 'DOCKHAND' }).style.gridColumn).toBe('1');
+    cleanup();
+    const asGm = drawRolled('hand', null, { gm: true });
+    expect(asGm.pick.getByText('1-3')).toBeTruthy();
+  });
+
+  it('an option with no range on the table still lines up, and what it needs stays beside it (7c)', () => {
+    const def = {
+      ...HEARTH,
+      choices: [{ id: 'bgs', one: 'Background', many: 'Backgrounds', table: 'd6', options: [
+        { id: 'dock', label: 'Dockhand', roll: '1-3', requires: '@int >= 13' }, { id: 'odd', label: 'Odd one' },
+      ] }],
+    };
+    render(<SheetRenderer template={{ ...template, choices: backend.choicesShown(def) as ChoiceListShown[], sections: [{ id: 'choices', label: 'BACKGROUNDS', layout: 'choices', fields: [] }] } as SheetTemplate}
+      data={{ [WORKED_KEY]: backend.workedOf(def, {}) } as never} onFieldChange={() => {}} onChoices={vi.fn()} />);
+    const pick = within(screen.getByRole('group', { name: 'Pick a Background' }));
+    expect(pick.getByRole('button', { name: 'ODD ONE' }).style.gridColumn).toBe('2');
+    expect(pick.getByRole('button', { name: 'ODD ONE' }).previousElementSibling?.textContent).toMatch(/^NEEDS /);
+    expect(pick.getByText(/^NEEDS /).style.gridColumn).toBe('3');
+  });
+
   it('what was rolled is marked TAKE IT and said; any other can still be picked, and rolled again', async () => {
     const { onChoices, pick } = drawRolled(undefined, { option: 'scribe', roll: 5 });
     expect(pick.getByText('ROLLED 5 → SCRIBE')).toBeTruthy();
