@@ -121,6 +121,69 @@ test('a blank sheet: the blink, the walk, leaving and coming back, and finishing
   await page.context().close();
 });
 
+// Walks to a stats step: name first, as the flow asks.
+const walkToStats = async (page: Page) => {
+  await rail(page).click();
+  await sheetButton(page).click();
+  await expect(flow(page)).toBeVisible();
+  await page.getByRole('button', { name: 'BEGIN' }).click();
+  await page.getByLabel('Name', { exact: true }).fill('Wren');
+  await page.getByRole('button', { name: 'NEXT' }).click();
+};
+const GROUPS = [
+  { id: 'abilities', label: 'ABILITIES', stats: [{ id: 'grit', label: 'Grit' }] },
+  { id: 'skills', label: 'SKILLS', stats: [{ id: 'climb', label: 'Climb' }] },
+  { id: 'stress', label: 'STRESS', stats: [{ id: 'worry', label: 'Worry' }] },
+];
+
+test('group by group: a step per group, one left out never asked', async ({ browser, request }, info) => {
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const player = { username: `e2e_newchar_group${again}`, password: 'e2e-player-password' };
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, { format: 1, name: `Newfall Groups${again}`, stats: GROUPS, creation: { on: true, statsBy: 'group', off: ['stats:stress'] } });
+  await approvedPlayer(request, gm, player);
+  const stored = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data;
+  const page = await signedIn(browser, info, player);
+  await walkToStats(page);
+
+  // ABILITIES alone, then SKILLS alone, with no folder for STRESS.
+  await expect(page.getByRole('tab', { name: 'ABILITIES' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tab', { name: 'SKILLS' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'STRESS' })).toHaveCount(0);
+  await expect(page.getByRole('spinbutton', { name: 'Climb' })).toHaveCount(0);
+  await page.getByRole('spinbutton', { name: 'Grit' }).fill('4');
+  await expect.poll(async () => (await stored()).grit, { timeout: 15_000 }).toBe(4);
+  await page.getByRole('button', { name: 'NEXT' }).click();
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ at: 'stats:skills' });
+  await expect(page.getByRole('spinbutton', { name: 'Grit' })).toHaveCount(0);
+  await page.getByRole('spinbutton', { name: 'Climb' }).fill('2');
+  await expect.poll(async () => (await stored()).climb, { timeout: 15_000 }).toBe(2);
+
+  // FINISH asks for nothing of STRESS, and the sheet still has it.
+  await page.getByRole('button', { name: 'FINISH' }).click();
+  await expect(flow(page)).toHaveCount(0);
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  await sheetTab(page, 'STATS');
+  await expect(page.getByLabel('Worry', { exact: true })).toBeVisible();
+  await page.context().close();
+});
+
+test('one way for all: one step, without a group left out', async ({ browser, request }, info) => {
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const player = { username: `e2e_newchar_oneway${again}`, password: 'e2e-player-password' };
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, { format: 1, name: `Newfall One Way${again}`, stats: GROUPS, creation: { on: true, off: ['stats:stress'] } });
+  await approvedPlayer(request, gm, player);
+  const page = await signedIn(browser, info, player);
+  await walkToStats(page);
+
+  await expect(page.getByRole('tab', { name: 'THE STATS' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('region', { name: 'ABILITIES' }).getByRole('spinbutton', { name: 'Grit' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'SKILLS' }).getByRole('spinbutton', { name: 'Climb' })).toBeVisible();
+  await expect(page.getByRole('spinbutton', { name: 'Worry' })).toHaveCount(0);
+  await page.context().close();
+});
+
 test('an upload is taken as it is, and no steps follow', async ({ browser, request }, info) => {
   const again = info.retry ? `_${info.retry + 1}` : '';
   const player = { username: `e2e_uploader${again}`, password: 'e2e-player-password' };

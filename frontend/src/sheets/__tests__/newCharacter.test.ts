@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { creationOn, creationSteps, orderNotes, stepList, stepName, withCreationOn, withStepMoved, withStepOff } from '../newCharacter';
+import { creationOn, creationSteps, groupLeftOut, orderNotes, statsByGroup, stepGroup, stepList, stepName, withCreationOn, withStatsByGroup, withStepMoved, withStepOff } from '../newCharacter';
 import { OTHER_NAMES } from '../versionPreview';
 import type { Definition } from '../systemsApi';
 
@@ -22,6 +22,14 @@ const HEARTH = {
     { id: 'specs', one: 'Spec', many: 'Specs', picked: 'features', options: [] },
   ],
 } as unknown as Definition;
+const GROUPS = {
+  ...HEARTH,
+  stats: [
+    { id: 'abilities', label: 'Abilities', stats: [{ id: 'grit', label: 'Grit' }] },
+    { id: 'skills', label: 'SKILLS', stats: [{ id: 'climb', label: 'Climb' }] },
+    { id: 'empty', label: 'EMPTY', stats: [] },
+  ],
+} as unknown as Definition;
 const ids = (def: Definition) => creationSteps(def).map((s) => s.id);
 const off = (def: Definition) => creationSteps(def).filter((s) => s.off).map((s) => s.id);
 
@@ -35,6 +43,13 @@ describe('held to the server', () => {
       { ...HEARTH, creation: { order: ['who', 'stats', 'kits', 'money'] } } as Definition,
       { ...HEARTH, creation: 'on' } as unknown as Definition,
       { ...HEARTH, choices: [{ id: 'feats', one: 'Feat', many: 'Feats', picked: 'both', options: [] }] } as unknown as Definition,
+      GROUPS,
+      { ...GROUPS, creation: { statsBy: 'group' } } as unknown as Definition,
+      { ...GROUPS, creation: { statsBy: 'group', order: ['list:classes', 'stats', 'who'], off: ['stats:skills'] } } as unknown as Definition,
+      { ...GROUPS, creation: { order: ['who', 'stats:skills', 'stats:abilities', 'stats:gone', 'list:classes'], off: ['stats:skills'] } } as unknown as Definition,
+      { ...GROUPS, creation: { statsBy: 'group', order: ['stats:skills', 'who', 'list:classes'] } } as unknown as Definition,
+      { ...GROUPS, creation: { statsBy: 'all' } } as unknown as Definition,
+      { format: 1, name: 'Bare', creation: { statsBy: 'group' } } as unknown as Definition,
     ];
     for (const def of cases) {
       expect({ on: creationOn(def), steps: creationSteps(def) }, JSON.stringify(def.creation)).toEqual(server.creationOf(def));
@@ -45,6 +60,59 @@ describe('held to the server', () => {
     const def = withStepOff(withStepMoved(withCreationOn(HEARTH, true), 'kits', -1), 'money', true);
     expect(checkDefinition(def).problems.filter((p: { where: string }) => p.where.startsWith('creation'))).toEqual([]);
     expect(OTHER.filter((k: string) => !OTHER_NAMES[k])).toEqual([]);
+    const groups = withStepOff(withStepMoved(withStatsByGroup(GROUPS, true), 'stats:skills', -1), 'stats:abilities', true);
+    expect(checkDefinition(groups).problems.filter((p: { where: string }) => p.where.startsWith('creation'))).toEqual([]);
+  });
+});
+
+describe('the stats, one way for all or group by group (7c3a)', () => {
+  it('one way to start; group by group a step each, named by the group; back again leaves nothing', () => {
+    expect(statsByGroup(GROUPS)).toBe(false);
+    const by = withStatsByGroup(GROUPS, true);
+    expect(by.creation).toEqual({ statsBy: 'group' });
+    expect(statsByGroup(by)).toBe(true);
+    expect(ids(by).slice(0, 3)).toEqual(['who', 'stats:abilities', 'stats:skills']);
+    expect(['stats:abilities', 'stats:skills', 'stats:gone'].map((id) => stepName(by, id))).toEqual(['ABILITIES', 'SKILLS', 'STATS:GONE']);
+    expect(stepGroup(by, 'stats:skills')?.label).toBe('SKILLS');
+    expect([stepGroup(by, 'stats'), stepGroup(by, 'who')]).toEqual([undefined, undefined]);
+    expect(withStatsByGroup(by, false)).toEqual(GROUPS);
+  });
+
+  it('a group left out is the same switch either way, and carries over', () => {
+    expect(groupLeftOut(GROUPS, 'skills')).toBe(false);
+    const out = withStepOff(GROUPS, 'stats:skills', true);
+    expect(out.creation).toEqual({ off: ['stats:skills'] });
+    expect(groupLeftOut(out, 'skills')).toBe(true);
+    expect(groupLeftOut(out, 'abilities')).toBe(false);
+    expect(off(out)).toEqual([]);
+    expect(off(withStatsByGroup(out, true))).toEqual(['stats:skills']);
+    expect(withStepOff(out, 'stats:skills', false)).toEqual(GROUPS);
+  });
+
+  it('a moved group keeps its place through changing and back', () => {
+    const by = withStepMoved(withStatsByGroup(withStepMoved(GROUPS, 'stats', 1), true), 'stats:skills', -1);
+    expect(ids(by).slice(0, 4)).toEqual(['who', 'list:classes', 'stats:skills', 'stats:abilities']);
+    expect(ids(withStatsByGroup(by, false)).slice(0, 3)).toEqual(['who', 'list:classes', 'stats']);
+  });
+
+  it('says when a list comes before the group whose stat it needs, and not before the other group', () => {
+    const by = withStatsByGroup(GROUPS, true);
+    expect(orderNotes(by)).toEqual([]);
+    // CLASS between the groups: MAGE needs GRIT, in ABILITIES.
+    const between = withStepMoved(withStepMoved(by, 'list:classes', -1), 'list:classes', -1);
+    expect(ids(between).slice(0, 3)).toEqual(['who', 'list:classes', 'stats:abilities']);
+    expect(orderNotes(between)).toEqual(['CLASS comes before ABILITIES, and MAGE needs a stat: off until the stats are set, so it can\'t be picked here.']);
+    const afterIt = withStepMoved(between, 'stats:abilities', -1);
+    expect(ids(afterIt).slice(0, 3)).toEqual(['who', 'stats:abilities', 'list:classes']);
+    expect(orderNotes(afterIt)).toEqual([]);
+  });
+
+  it('a stat in a group left out is never set here, so no note says it will be', () => {
+    const first = withStepMoved(GROUPS, 'stats', 1);
+    expect(orderNotes(first)).toHaveLength(1);
+    expect(orderNotes(withStepOff(first, 'stats:abilities', true))).toEqual([]);
+    const byFirst = withStepMoved(withStepMoved(withStatsByGroup(GROUPS, true), 'list:classes', -1), 'list:classes', -1);
+    expect(orderNotes(withStepOff(byFirst, 'stats:abilities', true))).toEqual([]);
   });
 });
 

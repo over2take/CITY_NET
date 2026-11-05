@@ -130,3 +130,81 @@ describe('the page', () => {
     for (const k of ['creation.on', 'creation.steps'] as const) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
   });
 });
+
+describe('the stats, one way for all or group by group (7c3a)', () => {
+  const GROUPS = {
+    ...HEARTH,
+    stats: [
+      { id: 'abilities', label: 'ABILITIES', stats: [{ id: 'grit', label: 'Grit' }, { id: 'wits', label: 'Wits' }] },
+      { id: 'stress', label: 'STRESS', stats: [{ id: 'worry', label: 'Worry' }] },
+      { id: 'empty', label: 'EMPTY', stats: [] },
+    ],
+  } as unknown as Definition;
+  const panel = () => screen.getByText(/^THE STEP · /).parentElement!;
+  const pressed = (name: string) => screen.getByRole('button', { name }).getAttribute('aria-pressed');
+  const onStats = async (start: Definition = GROUPS) => {
+    const opened = open(start);
+    await userEvent.click(step('THE STATS').getByRole('button', { name: 'THE STATS' }));
+    return opened;
+  };
+
+  it('offers neither on another step', () => {
+    open(GROUPS);
+    expect(screen.queryByRole('group', { name: 'How the stats are asked' })).toBeNull();
+  });
+
+  it('is one way for all to start, listing the groups with stats in them', async () => {
+    await onStats();
+    expect([pressed('ONE WAY FOR ALL'), pressed('GROUP BY GROUP')]).toEqual(['true', 'false']);
+    const groups = within(screen.getByRole('list', { name: 'Groups asked' }));
+    expect(groups.getAllByRole('listitem').map((li) => li.getAttribute('aria-label'))).toEqual(['ABILITIES', 'STRESS']);
+    expect(groups.getByText('ABILITIES · 2 STATS')).toBeTruthy();
+    expect(groups.getByText('STRESS · 1 STAT')).toBeTruthy();
+    expect(panel().textContent).toContain('Every stat, typed in by the player');
+  });
+
+  it('leaves a group out, says so, and takes it back leaving nothing behind', async () => {
+    const { last } = await onStats();
+    await userEvent.click(screen.getByRole('switch', { name: 'STRESS asked' }));
+    expect(last().creation).toEqual({ off: ['stats:stress'] });
+    expect(panel().textContent).toContain('Every stat but STRESS, typed in by the player');
+    expect(steps()).toContain('THE STATS');
+    await userEvent.click(screen.getByRole('switch', { name: 'STRESS asked' }));
+    expect(last()).toEqual(GROUPS);
+  });
+
+  it('with every group left out, says there is nothing to ask', async () => {
+    await onStats({ ...GROUPS, creation: { off: ['stats:abilities', 'stats:stress'] } } as unknown as Definition);
+    expect(panel().textContent).toContain('Every group is left out, so there is nothing to ask.');
+  });
+
+  it('group by group, a step each, staying on the stats; the switches are in the list then', async () => {
+    const { last } = await onStats();
+    await userEvent.click(screen.getByRole('button', { name: 'GROUP BY GROUP' }));
+    expect(last().creation).toEqual({ statsBy: 'group' });
+    expect(steps()).toEqual(['WHO THEY ARE', 'ABILITIES', 'STRESS', 'CLASS', 'FEAT', 'KITS', 'MONEY']);
+    expect(panel().textContent).toContain('THE STEP · ABILITIES');
+    expect(panel().textContent).toContain('2 stats, typed in by the player');
+    expect(screen.queryByRole('list', { name: 'Groups asked' })).toBeNull();
+    await userEvent.click(step('STRESS').getByRole('button', { name: 'STRESS' }));
+    expect(panel().textContent).toContain('1 stat, typed in by the player');
+    await userEvent.click(step('STRESS').getByRole('switch', { name: 'STRESS on' }));
+    expect(last().creation).toEqual({ statsBy: 'group', off: ['stats:stress'] });
+    expect(screen.getByText(/Off: players aren't asked/)).toBeTruthy();
+  });
+
+  it('back to one way for all, THE STATS is open again, what was left out still left out', async () => {
+    const { last } = open({ ...GROUPS, creation: { statsBy: 'group', off: ['stats:stress'] } } as unknown as Definition);
+    await userEvent.click(step('ABILITIES').getByRole('button', { name: 'ABILITIES' }));
+    await userEvent.click(screen.getByRole('button', { name: 'ONE WAY FOR ALL' }));
+    expect(last().creation).toEqual({ off: ['stats:stress'] });
+    expect(panel().textContent).toContain('THE STEP · THE STATS');
+    expect(panel().textContent).toContain('Every stat but STRESS');
+    expect(screen.getByRole('switch', { name: 'STRESS asked' }).getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('has a "?" on each', async () => {
+    await onStats();
+    for (const k of ['creation.statsBy', 'creation.statsGroups'] as const) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
+  });
+});

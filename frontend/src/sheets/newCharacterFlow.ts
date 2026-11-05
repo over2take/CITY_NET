@@ -14,8 +14,9 @@ type Obj = Record<string, unknown>;
 
 export interface CreationStat { id: string; label: string; min?: number; max?: number }
 export interface CreationShown {
-  /** The steps asked, in the GM's order: who, stats, list:<id>. */
+  /** The steps asked, in the GM's order: who, stats or stats:<group>, list:<id>. */
   steps: string[];
+  /** The groups a player sets: those left out aren't here. */
   stats: { id: string; label: string; stats: CreationStat[] }[];
 }
 
@@ -72,9 +73,13 @@ const listOfStep = (template: SheetTemplate, id: string): ChoiceListShown | unde
 
 export const stepListId = (id: string): string | null => (id.startsWith('list:') ? id.slice('list:'.length) : null);
 
-/** The steps asked: a list with nothing in it has nothing to ask. */
+/** Whether a step sets stats: THE STATS, or one group's with GROUP BY GROUP (7c3a). */
+export const isStatsStep = (id: string): boolean => id === 'stats' || id.startsWith('stats:');
+
+/** The steps asked: a list with nothing in it has nothing to ask, nor stats the GM keeps to themselves. */
 export const flowSteps = (template: SheetTemplate): string[] => (template.creation?.steps ?? [])
-  .filter((id) => !id.startsWith('list:') || !!listOfStep(template, id)?.options.length);
+  .filter((id) => !id.startsWith('list:') || !!listOfStep(template, id)?.options.length)
+  .filter((id) => !isStatsStep(id) || statsToSet(template, id).length > 0);
 
 /** The step a character is on: the one saved, or the first when it has gone since. Null: not started. */
 export const savedStep = (template: SheetTemplate, data: Obj | null | undefined): string | null => {
@@ -84,10 +89,11 @@ export const savedStep = (template: SheetTemplate, data: Obj | null | undefined)
   return steps.includes(at) ? at : steps[0] ?? null;
 };
 
-/** What the window calls a step: a list by its one name. */
+/** What the window calls a step: a stats group by its label, a list by its one name. */
 export const flowStepName = (template: SheetTemplate, id: string): string => {
   if (id === 'who') return 'WHO THEY ARE';
   if (id === 'stats') return 'THE STATS';
+  if (isStatsStep(id)) return ((template.creation?.stats ?? []).find((g) => g.id === id.slice('stats:'.length))?.label || id).toUpperCase();
   const list = listOfStep(template, id);
   return (list?.one || list?.many || id).toUpperCase();
 };
@@ -101,10 +107,14 @@ export const whoFields = (template: SheetTemplate): SheetField[] => {
     .filter((f): f is SheetField => !!f && !f.gmOnly && !f.derived);
 };
 
-/** The stats a player sets: every group, without any the GM keeps to themselves on the sheet. */
-export const statsToSet = (template: SheetTemplate): CreationShown['stats'] => {
+/**
+ * The stats a step sets: THE STATS every group asked, a group's step only that group, without any the
+ * GM keeps to themselves on the sheet.
+ */
+export const statsToSet = (template: SheetTemplate, step = 'stats'): CreationShown['stats'] => {
   const gmOnly = new Set(fieldsOf(template).filter((f) => f.gmOnly).map((f) => f.id));
   return (template.creation?.stats ?? [])
+    .filter((g) => step === 'stats' || step === `stats:${g.id}`)
     .map((g) => ({ ...g, stats: g.stats.filter((s) => !gmOnly.has(s.id)) }))
     .filter((g) => g.stats.length);
 };
@@ -146,8 +156,8 @@ export const stepAnswered = (template: SheetTemplate, id: string, data: Obj | nu
     const name = data?.[template.header?.nameField ?? 'name'];
     return typeof name === 'string' && name.trim() !== '';
   }
-  if (id === 'stats') {
-    return statsToSet(template).every((g) => g.stats.every((s) => typedIn(data?.[s.id]) && !statProblem(s, data?.[s.id])));
+  if (isStatsStep(id)) {
+    return statsToSet(template, id).every((g) => g.stats.every((s) => typedIn(data?.[s.id]) && !statProblem(s, data?.[s.id])));
   }
   const list = listOfStep(template, id);
   return list ? listAnswered(template, list, data) : true;
