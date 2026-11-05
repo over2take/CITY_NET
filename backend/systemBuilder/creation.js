@@ -7,6 +7,7 @@
 //     order: ['who', 'stats', 'list:classes', 'kits', 'money'],   // only what was moved
 //     off: ['money', 'stats:stress'],         // steps switched off; WHO THEY ARE never is
 //     statsBy: 'group',                       // GROUP BY GROUP (7c3a); unsaid, ONE WAY FOR ALL
+//     ways: { stats: { way: 'array', numbers: [15, 14, 13, 12] } },   // how a stats step is set (7c3b); unsaid, typed in
 //   }
 //
 // A step is read from what the system has, never stored: WHO THEY ARE always; THE STATS with stats to
@@ -25,20 +26,28 @@
 //
 // Who is asked at all is the browser's to work out (sheets/newCharacterFlow.ts): a blank sheet with
 // nothing here. Being asked only opens a window, so nothing is guarded by it, and nothing is locked
-// after it: the sheet works as it always has. What the flow does change on the server is one thing:
-// while it is under way a player may take a pick back (picking.js).
+// after it: the sheet works as it always has. What the flow does change on the server, while it is under
+// way: a player may take a pick back (picking.js), and may not write a stat set some way other than
+// typing (lockedWhileCreating), or a number placed could simply be typed over. Finished, it is theirs.
+//
+// A way is kept under the step it sets, so one way for all and each group's keep theirs through changing
+// between them. A fixed array's numbers are placed by `place`, on the stats themselves, so there is
+// nothing else to keep: a number counts as placed while a stat holds it and the pool still has it.
 //
 // Pure: checks and reads only. definition.js runs the checks, picking.js and the socket the rest.
 
 const { partOn } = require('./parts');
 const { choicesOf, pickedOf } = require('./choices');
+const { fieldsOf } = require('./sheet');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
 
 /** How many ids `order` and `off` may hold: every list a system can have, and room. */
-const LIMITS = { steps: 40 };
-const KEYS = new Set(['on', 'order', 'off', 'statsBy']);
+const LIMITS = { steps: 40, numbers: 40 };
+const KEYS = new Set(['on', 'order', 'off', 'statsBy', 'ways']);
+const STATS_STEP = /^stats(?::[a-z][a-z0-9_]{0,63})?$/;
+const WAY_KEYS = { typed: new Set(['way']), array: new Set(['way', 'numbers']) };
 const STEP = /^(?:who|stats(?::[a-z][a-z0-9_]{0,63})?|kits|money|list:[a-z][a-z0-9_]{0,63})$/;
 /** Where a sheet keeps its place in the flow. */
 const CREATING_KEY = '_creating';
@@ -95,14 +104,59 @@ const creationOf = (definition) => {
   return { on: c.on === true, steps: ids.map((id) => ({ id, off: id !== 'who' && off.has(id) })) };
 };
 
+/** How a stats step is set: typed in, unless the GM says otherwise. */
+const wayOf = (definition, step) => {
+  const ways = creationIn(definition).ways;
+  const way = isPlainObject(ways) ? ways[step] : null;
+  return isPlainObject(way) && way.way === 'array' && Array.isArray(way.numbers) ? way : { way: 'typed' };
+};
+
+/** The stats a step sets: all asked, or one group's, without those the GM keeps to themselves on the sheet. */
+const statsOfStep = (definition, step) => {
+  const gmOnly = new Set(fieldsOf(definition && definition.sheet).filter((f) => isPlainObject(f) && f.edit === 'gm').map((f) => f.id));
+  const groups = step === 'stats' ? statGroupsAsked(definition) : statGroupsOf(definition).filter((g) => `stats:${g.id}` === step);
+  return groups.flatMap((g) => g.stats.filter(isPlainObject)).filter((s) => !gmOnly.has(s.id));
+};
+
+/**
+ * Which numbers of a pool the stats hold, and those left: a number counts once, and a value the pool
+ * doesn't have isn't placed (it can only be there from before the GM changed the way).
+ */
+const placedFrom = (pool, stats, data) => {
+  const left = [...pool];
+  const placed = {};
+  for (const s of stats) {
+    const at = left.indexOf(data[s.id]);
+    if (at >= 0) placed[s.id] = left.splice(at, 1)[0];
+  }
+  return { placed, left };
+};
+
+/** Whether a stats step with a way of its own is done: every stat holding a number. */
+const wayDone = (definition, data, step) => {
+  const way = wayOf(definition, step);
+  if (way.way !== 'array') return true;
+  const stats = statsOfStep(definition, step);
+  const { placed } = placedFrom(way.numbers, stats, data);
+  return stats.every((s) => placed[s.id] !== undefined);
+};
+
 /** The steps a player is walked through, in order: those on, with something to ask. */
 const stepsAsked = (definition) => creationOf(definition).steps
   .filter((s) => !s.off && !NOT_ASKED_YET.has(s.id) && (s.id !== 'stats' || statGroupsAsked(definition).length > 0))
   .map((s) => s.id);
 
+/** The ways of the steps asked, those not typed in, by step. */
+const waysShown = (definition) => {
+  const ways = {};
+  for (const step of stepsAsked(definition)) if (STATS_STEP.test(step) && wayOf(definition, step).way !== 'typed') ways[step] = wayOf(definition, step);
+  return ways;
+};
+
 /** What the browser needs to draw the flow: the steps and the stats to set, or null while it is off. */
 const creationShown = (definition) => (creationOf(definition).on ? {
   steps: stepsAsked(definition),
+  ...(Object.keys(waysShown(definition)).length ? { ways: waysShown(definition) } : {}),
   stats: statGroupsAsked(definition).map((g) => ({
     id: g.id,
     label: g.label || g.id,
@@ -120,18 +174,51 @@ const creatingNow = (definition, data) => {
 };
 
 /**
- * One step of a character's way through the flow: { kind: 'open' }, { kind: 'at', step } or
- * { kind: 'finish' }. Gives back { ok: true, data } (no `data` when there is nothing to change), or
- * { ok: false, error } in words.
+ * The stats a player may not write themselves just now: while this character is being made, those of a
+ * step set some way other than typing. Empty with no system (a built-in one), or once it is finished.
+ */
+const lockedWhileCreating = (definition, data) => {
+  if (!definition || !creatingNow(definition, data)) return new Set();
+  return new Set(stepsAsked(definition)
+    .filter((step) => STATS_STEP.test(step) && wayOf(definition, step).way !== 'typed')
+    .flatMap((step) => statsOfStep(definition, step).map((s) => s.id)));
+};
+
+/** A number put on a stat, or with `value` null taken back, in its pool. */
+const placeNumber = (definition, sheet, action) => {
+  if (!stepsAsked(definition).includes(action.step)) return { ok: false, error: 'Not one of this game\'s steps' };
+  const way = wayOf(definition, action.step);
+  if (way.way !== 'array') return { ok: false, error: 'These stats aren\'t placed' };
+  const stats = statsOfStep(definition, action.step);
+  if (!stats.some((s) => s.id === action.stat)) return { ok: false, error: 'Not one of this step\'s stats' };
+  const { placed, left } = placedFrom(way.numbers, stats, sheet);
+  if (action.value === null) {
+    const { [action.stat]: gone, ...rest } = sheet;
+    return { ok: true, data: rest };
+  }
+  // The number already on this stat goes back in the pool as this one comes off it.
+  const free = placed[action.stat] === undefined ? left : [...left, placed[action.stat]];
+  if (!free.includes(action.value)) return { ok: false, error: 'That number is already placed' };
+  return { ok: true, data: { ...sheet, [action.stat]: action.value } };
+};
+
+/**
+ * One step of a character's way through the flow: { kind: 'open' }, { kind: 'at', step },
+ * { kind: 'place', step, stat, value } or { kind: 'finish' }. Gives back { ok: true, data } (no `data`
+ * when there is nothing to change), or { ok: false, error } in words.
  */
 const creationAction = (definition, data, action) => {
   const sheet = isPlainObject(data) ? data : {};
   const kind = isPlainObject(action) ? action.kind : null;
   if (!creationOf(definition).on) return { ok: false, error: 'This game has no guided new character' };
   if (kind === 'open') return placeOf(sheet) ? { ok: true } : { ok: true, data: { ...sheet, [CREATING_KEY]: {} } };
-  if (kind !== 'at' && kind !== 'finish') return { ok: false, error: 'Nothing to do' };
+  if (!['at', 'finish', 'place'].includes(kind)) return { ok: false, error: 'Nothing to do' };
   if (!creatingNow(definition, sheet)) return { ok: false, error: 'This character isn\'t being made' };
-  if (kind === 'finish') return { ok: true, data: { ...sheet, [CREATING_KEY]: { done: true } } };
+  if (kind === 'place') return placeNumber(definition, sheet, action);
+  if (kind === 'finish') {
+    if (stepsAsked(definition).some((step) => STATS_STEP.test(step) && !wayDone(definition, sheet, step))) return { ok: false, error: 'Every stat needs its number first' };
+    return { ok: true, data: { ...sheet, [CREATING_KEY]: { done: true } } };
+  }
   if (!stepsAsked(definition).includes(action.step)) return { ok: false, error: 'Not one of this game\'s steps' };
   return { ok: true, data: { ...sheet, [CREATING_KEY]: { ...placeOf(sheet), at: action.step } } };
 };
@@ -144,6 +231,49 @@ const withUpload = (definition, data) => {
   const place = placeOf(data);
   if (!creationOf(definition).on || (place && place.done === true)) return data;
   return { ...data, [CREATING_KEY]: { done: true, uploaded: true } };
+};
+
+/** "2 numbers", "1 stat". */
+const counted = (n, what) => `${n} ${what}${n === 1 ? '' : 's'}`;
+
+/**
+ * What stops a step's way working at the table, in words: too few numbers for its stats, or one that
+ * doesn't fit a stat, as a player may place each on any.
+ */
+const stepWayProblems = (definition, step) => {
+  const way = wayOf(definition, step);
+  if (way.way !== 'array') return [];
+  const stats = statsOfStep(definition, step);
+  const numbers = way.numbers.filter(Number.isSafeInteger);
+  const found = [];
+  if (numbers.length < stats.length) found.push(`${counted(numbers.length, 'number')} for ${counted(stats.length, 'stat')}: each stat needs one`);
+  for (const n of [...new Set(numbers)]) {
+    for (const s of stats) {
+      if (Number.isSafeInteger(s.min) && n < s.min) found.push(`${n} is below ${s.label || s.id}'s lowest, ${s.min}`);
+      if (Number.isSafeInteger(s.max) && n > s.max) found.push(`${n} is above ${s.label || s.id}'s highest, ${s.max}`);
+    }
+  }
+  return found;
+};
+
+/** A definition's `ways` checked: what each is, then whether the steps asked can be done that way. */
+const checkWays = (definition, ways, problems) => {
+  if (ways === undefined) return;
+  if (!isPlainObject(ways)) { problems.push({ where: 'creation, ways', message: 'Must say how each step\'s stats are set' }); return; }
+  for (const [step, way] of Object.entries(ways)) {
+    const where = `creation, ways, ${step}`;
+    if (!STATS_STEP.test(step)) { problems.push({ where, message: 'Only the stats have a way to be set' }); continue; }
+    if (!isPlainObject(way) || !Object.keys(WAY_KEYS).includes(way.way)) { problems.push({ where, message: 'Must be typed or array' }); continue; }
+    for (const key of Object.keys(way)) if (!WAY_KEYS[way.way].has(key)) problems.push({ where: `${where}, ${key}`, message: 'Not part of this way' });
+    if (way.way !== 'array') continue;
+    if (!Array.isArray(way.numbers)) { problems.push({ where: `${where}, numbers`, message: 'Must be a list of numbers' }); continue; }
+    if (way.numbers.length > LIMITS.numbers) problems.push({ where: `${where}, numbers`, message: `At most ${LIMITS.numbers} numbers` });
+    if (!way.numbers.every(Number.isSafeInteger)) problems.push({ where: `${where}, numbers`, message: 'Must be whole numbers' });
+  }
+  // Only the way of a step this game has: the other way of asking's stays set, unused.
+  for (const { id } of creationOf(definition).steps) {
+    if (STATS_STEP.test(id)) stepWayProblems(definition, id).forEach((message) => problems.push({ where: `creation, ways, ${id}`, message }));
+  }
 };
 
 /** A definition's `creation` checked, its problems added to `problems`. */
@@ -162,6 +292,7 @@ const checkCreation = (definition, problems) => {
   }
   if (list(c.off).includes('who')) problems.push({ where: 'creation, off', message: 'WHO THEY ARE is always asked: a character needs a name' });
   if (c.statsBy !== undefined && c.statsBy !== 'group') problems.push({ where: 'creation, statsBy', message: 'Must say group, or nothing for one way for all' });
+  checkWays(definition, c.ways, problems);
 };
 
-module.exports = { LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, stepsAsked, creationShown, creatingNow, creationAction, withUpload };
+module.exports = { LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, stepsAsked, creationShown, creatingNow, creationAction, withUpload, lockedWhileCreating, placedFrom, stepWayProblems };

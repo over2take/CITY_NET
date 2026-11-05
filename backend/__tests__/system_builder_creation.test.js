@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
 const require_ = createRequire(import.meta.url);
-const { creationOf, stepIdsOf, LIMITS, stepsAsked, creationShown, creatingNow, creationAction, withUpload, CREATING_KEY } = require_('../systemBuilder/creation');
+const { creationOf, stepIdsOf, LIMITS, stepsAsked, creationShown, creatingNow, creationAction, withUpload, CREATING_KEY, lockedWhileCreating, placedFrom, stepWayProblems } = require_('../systemBuilder/creation');
 const { pickAction } = require_('../systemBuilder/picking');
 const { PICKS_KEY } = require_('../systemBuilder/choices');
 const { playerMayEdit } = require_('../sheets/templates');
@@ -140,6 +140,140 @@ describe('the stats, one way for all or group by group (7c3a)', () => {
   it('the system file carries it, unchanged', () => {
     const creation = { on: true, statsBy: 'group', order: ['who', 'stats:skills', 'stats:abilities'], off: ['stats:stress'] };
     const file = citysys.buildFile({ definition: { ...GROUPS, creation }, version: 1, origin: 'sys_abcdefabcdefabcd' });
+    const read = citysys.readFile(JSON.stringify(file));
+    expect([read.file.definition.creation, read.problems]).toEqual([creation, []]);
+  });
+});
+
+describe('a fixed array (7c3b)', () => {
+  const ARRAY = { way: 'array', numbers: [15, 14, 13] };
+  const STATS = [
+    { id: 'abilities', label: 'ABILITIES', stats: [{ id: 'might', label: 'Might' }, { id: 'wits', label: 'Wits' }] },
+    { id: 'skills', label: 'SKILLS', stats: [{ id: 'climb', label: 'Climb' }] },
+  ];
+  const DEF = { format: 1, name: 'A', stats: STATS, creation: { on: true, ways: { stats: ARRAY } } };
+  const BY_GROUP = { ...DEF, creation: { on: true, statsBy: 'group', ways: { 'stats:abilities': { way: 'array', numbers: [15, 14] } } } };
+  const at = { [CREATING_KEY]: { at: 'stats' } };
+  const place = (data, stat, value, def = DEF, step = 'stats') => creationAction(def, data, { kind: 'place', step, stat, value });
+  const issues = (creation, stats = STATS, more = {}) => checkDefinition({ format: 1, name: 'A', stats, creation, ...more }).problems.map((p) => `${p.where}: ${p.message}`);
+
+  it('tells the browser the way of a step asked, and nothing of one typed in', () => {
+    expect(creationShown(DEF).ways).toEqual({ stats: ARRAY });
+    expect(creationShown({ ...DEF, creation: { on: true } }).ways).toBeUndefined();
+    expect(creationShown(BY_GROUP).ways).toEqual({ 'stats:abilities': { way: 'array', numbers: [15, 14] } });
+    // Kept for the other way of asking, not told.
+    expect(creationShown({ ...DEF, creation: { on: true, statsBy: 'group', ways: { stats: ARRAY } } }).ways).toBeUndefined();
+    expect(creationShown({ ...DEF, creation: { on: true, statsBy: 'group', off: ['stats:skills'], ways: { 'stats:skills': { way: 'array', numbers: [1] } } } }).ways).toBeUndefined();
+  });
+
+  it('what a stat holds counts once, and only what the pool has', () => {
+    const stats = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    expect(placedFrom([15, 14, 14], stats, { a: 14, b: 14, c: 99 })).toEqual({ placed: { a: 14, b: 14 }, left: [15] });
+    expect(placedFrom([15], stats, { a: 15, b: 15 })).toEqual({ placed: { a: 15 }, left: [] });
+    expect(placedFrom([15], stats, { a: '15' })).toEqual({ placed: {}, left: [15] });
+  });
+
+  it('places a number on a stat, and the same number can\'t go twice', () => {
+    const one = place(at, 'might', 15);
+    expect(one.ok).toBe(true);
+    expect(one.data.might).toBe(15);
+    expect(place(one.data, 'wits', 15)).toEqual({ ok: false, error: 'That number is already placed' });
+    expect(place(one.data, 'wits', 99)).toEqual({ ok: false, error: 'That number is already placed' });
+    expect(place(one.data, 'wits', '14')).toEqual({ ok: false, error: 'That number is already placed' });
+  });
+
+  it('a number repeated in the array can go twice', () => {
+    const twice = { ...DEF, creation: { on: true, ways: { stats: { way: 'array', numbers: [10, 10, 8] } } } };
+    const one = place(at, 'might', 10, twice);
+    expect(place(one.data, 'wits', 10, twice).data.wits).toBe(10);
+  });
+
+  it('a stat holding a number takes another, its old one going back', () => {
+    const one = place(at, 'might', 15).data;
+    const swapped = place(one, 'might', 14);
+    expect(swapped.data.might).toBe(14);
+    expect(place(swapped.data, 'wits', 15).data.wits).toBe(15);
+    expect(place(one, 'might', 15).data.might).toBe(15);
+  });
+
+  it('takes a number back, leaving the stat empty', () => {
+    const one = place(at, 'might', 15).data;
+    const back = place(one, 'might', null);
+    expect(back.ok).toBe(true);
+    expect('might' in back.data).toBe(false);
+    expect(back.data[CREATING_KEY]).toEqual({ at: 'stats' });
+  });
+
+  it('refuses what isn\'t this step\'s to place', () => {
+    expect(place(at, 'nope', 15).error).toBe('Not one of this step\'s stats');
+    expect(place(at, 'might', 15, DEF, 'stats:abilities').error).toBe('Not one of this game\'s steps');
+    expect(place(at, 'might', 15, { ...DEF, creation: { on: true } }).error).toBe('These stats aren\'t placed');
+    expect(place({}, 'might', 15).error).toBe('This character isn\'t being made');
+    expect(place(at, 'climb', 15, BY_GROUP, 'stats:abilities').error).toBe('Not one of this step\'s stats');
+    expect(place(at, 'might', 15, BY_GROUP, 'stats:abilities').ok).toBe(true);
+    const out = { ...DEF, creation: { on: true, off: ['stats:skills'], ways: { stats: ARRAY } } };
+    expect(place(at, 'climb', 15, out).error).toBe('Not one of this step\'s stats');
+    const secret = { ...DEF, sheet: { sections: [{ id: 's', label: 'S', layout: 'grid', fields: [{ id: 'wits', label: 'Wits', type: 'number', edit: 'gm' }] }] } };
+    expect(place(at, 'wits', 15, secret).error).toBe('Not one of this step\'s stats');
+  });
+
+  it('FINISH needs every stat holding a number; typed in stays as it was', () => {
+    const none = creationAction(DEF, at, { kind: 'finish' });
+    expect(none).toEqual({ ok: false, error: 'Every stat needs its number first' });
+    const stale = { ...at, might: 99, wits: 14, climb: 13 };
+    expect(creationAction(DEF, stale, { kind: 'finish' }).ok).toBe(false);
+    expect(creationAction(DEF, { ...at, might: 15, wits: 14, climb: 13 }, { kind: 'finish' }).ok).toBe(true);
+    expect(creationAction({ ...DEF, creation: { on: true } }, at, { kind: 'finish' }).ok).toBe(true);
+    expect(creationAction(BY_GROUP, at, { kind: 'finish' }).ok).toBe(false);
+    expect(creationAction(BY_GROUP, { ...at, might: 14, wits: 15 }, { kind: 'finish' }).ok).toBe(true);
+  });
+
+  it('a stat set this way is locked while it is being made, and only then', () => {
+    expect([...lockedWhileCreating(DEF, at)]).toEqual(['might', 'wits', 'climb']);
+    expect([...lockedWhileCreating(BY_GROUP, at)]).toEqual(['might', 'wits']);
+    expect(lockedWhileCreating(DEF, {}).size).toBe(0);
+    expect(lockedWhileCreating(DEF, { [CREATING_KEY]: { done: true } }).size).toBe(0);
+    expect(lockedWhileCreating({ ...DEF, creation: { on: true } }, at).size).toBe(0);
+    expect(lockedWhileCreating({ ...DEF, creation: { ...DEF.creation, on: false } }, at).size).toBe(0);
+    expect(lockedWhileCreating(null, at).size).toBe(0);
+    expect([...lockedWhileCreating({ ...DEF, creation: { ...DEF.creation, off: ['stats:skills'] } }, at)]).toEqual(['might', 'wits']);
+  });
+
+  it('the checks take it, and say what is wrong', () => {
+    expect(issues({ ways: { stats: ARRAY } })).toEqual([]);
+    expect(issues({ ways: { stats: { way: 'typed' } } })).toEqual([]);
+    expect(issues({ ways: 'array' })).toEqual(['creation, ways: Must say how each step\'s stats are set']);
+    expect(issues({ ways: { who: ARRAY } })).toEqual(['creation, ways, who: Only the stats have a way to be set']);
+    expect(issues({ ways: { stats: 'array' } })).toEqual(['creation, ways, stats: Must be typed or array']);
+    expect(issues({ ways: { stats: { way: 'dice' } } })).toEqual(['creation, ways, stats: Must be typed or array']);
+    expect(issues({ ways: { stats: { way: 'typed', numbers: [1] } } })).toEqual(['creation, ways, stats, numbers: Not part of this way']);
+    expect(issues({ ways: { stats: { way: 'array', numbers: 'three' } } })).toEqual(['creation, ways, stats, numbers: Must be a list of numbers']);
+    expect(issues({ ways: { stats: { way: 'array', numbers: [1, 2, 3.5] } } })).toContain('creation, ways, stats, numbers: Must be whole numbers');
+    expect(issues({ ways: { stats: { way: 'array', numbers: Array(LIMITS.numbers + 1).fill(1) } } })).toEqual([`creation, ways, stats, numbers: At most ${LIMITS.numbers} numbers`]);
+  });
+
+  it('says when too few numbers, or one that doesn\'t fit a stat, could leave a player stuck', () => {
+    expect(issues({ ways: { stats: { way: 'array', numbers: [15] } } })).toEqual(['creation, ways, stats: 1 number for 3 stats: each stat needs one']);
+    expect(issues({ ways: { stats: { way: 'array', numbers: [] } } })).toEqual(['creation, ways, stats: 0 numbers for 3 stats: each stat needs one']);
+    const one = [{ id: 'g', label: 'G', stats: [{ id: 'a', label: 'Aim', min: 3, max: 18 }] }];
+    expect(issues({ ways: { stats: { way: 'array', numbers: [19, 2, 18, 3] } } }, one)).toEqual([
+      'creation, ways, stats: 19 is above Aim\'s highest, 18',
+      'creation, ways, stats: 2 is below Aim\'s lowest, 3',
+    ]);
+    expect(issues({ ways: { stats: { way: 'array', numbers: [9, 9, 9, 9] } } })).toEqual([]);
+  });
+
+  it('only the way of a step the game has: one left for the other way of asking is no problem', () => {
+    expect(issues({ statsBy: 'group', ways: { stats: { way: 'array', numbers: [] } } })).toEqual([]);
+    expect(issues({ ways: { 'stats:skills': { way: 'array', numbers: [] } } })).toEqual([]);
+    expect(issues({ statsBy: 'group', ways: { 'stats:skills': { way: 'array', numbers: [] } } })).toEqual(['creation, ways, stats:skills: 0 numbers for 1 stat: each stat needs one']);
+    expect(stepWayProblems(DEF, 'stats')).toEqual([]);
+    expect(issues({ off: ['stats:skills'], ways: { stats: { way: 'array', numbers: [15, 14] } } })).toEqual([]);
+  });
+
+  it('the system file carries it, unchanged', () => {
+    const creation = { on: true, ways: { stats: ARRAY } };
+    const file = citysys.buildFile({ definition: { ...DEF, creation }, version: 1, origin: 'sys_abcdefabcdefabcd' });
     const read = citysys.readFile(JSON.stringify(file));
     expect([read.file.definition.creation, read.problems]).toEqual([creation, []]);
   });

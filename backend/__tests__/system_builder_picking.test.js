@@ -313,6 +313,66 @@ describe('through the socket', () => {
       expect((await stored())._creating).toBeUndefined();
     });
 
+    describe('a fixed array (7c3b)', () => {
+      const turnOnArray = async () => {
+        const def = JSON.stringify({ ...HEARTH, creation: { on: true, ways: { stats: { way: 'array', numbers: [15, 14, 13] } } } });
+        await run(db, 'UPDATE custom_systems SET draft = ?, published = ? WHERE id = ?', [def, def, ID]);
+        await new Promise((resolve) => runtime.load(db, resolve));
+        await run(db, 'UPDATE character_sheets SET data = ? WHERE username = ?', [JSON.stringify({ name: 'Kestrel', _creating: { at: 'stats' } }), 'kes']);
+      };
+
+      it('a number placed is stored, worked out and told; one placed twice is refused', async () => {
+        await turnOnArray();
+        const { kes, shared } = await table();
+        kes.handlers.creationAction({ kind: 'place', step: 'stats', stat: 'int', value: 15 });
+        await until(async () => (await stored()).int === 15, { label: 'placed' });
+        expect((await stored())[WORKED_KEY].unmet).not.toContain('mage');
+        expect(shared.filter((e) => e.event === 'sheetUpdated')).toHaveLength(1);
+        kes.handlers.creationAction({ kind: 'place', step: 'stats', stat: 'int', value: 99 });
+        await until(() => kes.refused().length === 1, { label: 'the refusal' });
+        expect(kes.refused()).toEqual(['That number is already placed']);
+        expect((await stored()).int).toBe(15);
+      });
+
+      it('a player can\'t type over it while the character is being made, by a field or a batch edit', async () => {
+        await turnOnArray();
+        const { kes } = await table();
+        kes.handlers.updateSheetField({ fieldId: 'int', value: 20 });
+        kes.handlers.importSheetFields({ fields: { int: 21, concept: 'Scout' } });
+        await until(async () => (await stored()).concept === 'Scout', { label: 'the rest of the batch' });
+        expect((await stored()).int).toBeUndefined();
+        kes.handlers.updateSheetField({ fieldId: 'concept', value: 'Rook' });
+        await until(async () => (await stored()).concept === 'Rook', { label: 'another field' });
+      });
+
+      it('the GM still can, and an upload is taken as it is', async () => {
+        await turnOnArray();
+        const { kes, gm } = await table();
+        gm.handlers.creationAction({ kind: 'place', step: 'stats', stat: 'int', value: 13, username: 'kes' });
+        await until(async () => (await stored()).int === 13, { label: 'placed by the GM' });
+        kes.handlers.importSheetFields({ fields: { name: 'Wren', int: 20 }, replace: true });
+        await until(async () => (await stored()).name === 'Wren', { label: 'the upload' });
+        expect((await stored()).int).toBe(20);
+        expect((await stored())._creating).toEqual({ done: true, uploaded: true });
+      });
+
+      it('finished, the sheet is theirs again', async () => {
+        await turnOnArray();
+        const { kes } = await table();
+        kes.handlers.creationAction({ kind: 'finish' });
+        await until(() => kes.refused().length === 1, { label: 'the refusal' });
+        expect(kes.refused()).toEqual(['Every stat needs its number first']);
+        kes.handlers.creationAction({ kind: 'place', step: 'stats', stat: 'int', value: 13 });
+        await until(async () => (await stored()).int === 13, { label: 'placed' });
+        kes.handlers.creationAction({ kind: 'place', step: 'stats', stat: 'con', value: 14 });
+        await until(async () => (await stored()).con === 14, { label: 'placed again' });
+        kes.handlers.creationAction({ kind: 'finish' });
+        await until(async () => (await stored())._creating.done === true, { label: 'finished' });
+        kes.handlers.updateSheetField({ fieldId: 'int', value: 20 });
+        await until(async () => (await stored()).int === 20, { label: 'typed' });
+      });
+    });
+
     it('a player can\'t write their place as a field, and the GM may move theirs', async () => {
       await turnOn();
       const { kes, gm } = await table();

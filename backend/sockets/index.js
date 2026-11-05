@@ -24,7 +24,7 @@ const { parseTokenConditions } = require('../tokens/conditions');
 const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
-const { withUpload } = require('../systemBuilder/creation');
+const { withUpload, lockedWhileCreating } = require('../systemBuilder/creation');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { healthView } = require('../systemBuilder/healthView');
@@ -1379,6 +1379,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           db,
           { username: info.userName, system },
           (data) => {
+            // A stat set some way other than typing, while the character is being made (7c3b): a
+            // number placed can't be typed over. Nothing to write, and the sheet shows it locked.
+            if (!isAdminSocket(socket) && lockedWhileCreating(customSystems.definitionOf(system), data).has(payload.fieldId)) return undefined;
             data[payload.fieldId] = payload.value;
             // If the changed field is a max, clamp the paired current field.
             const curField = sheetTemplates.getMaxPairs(system)[payload.fieldId];
@@ -1492,9 +1495,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 )
               : existing;
             // An upload made during the guided new character finishes it (7c2): taken as it is.
+            // A batch edit leaves alone what a player may not type just now (7c3b).
+            const locked = gm || payload.replace ? new Set() : lockedWhileCreating(customSystems.definitionOf(system), existing);
+            const allowed = entries.filter(([k]) => !locked.has(k));
             if (payload.replace) Object.assign(data, withUpload(customSystems.definitionOf(system), data));
-            entries.forEach(([k, v]) => { data[k] = v; });
-            entries.forEach(([k]) => sheetTemplates.applyDerived(system, data, k));
+            allowed.forEach(([k, v]) => { data[k] = v; });
+            allowed.forEach(([k]) => sheetTemplates.applyDerived(system, data, k));
             if (cyber) data[cyberware.FIELD] = cyber;
             // A PDF or a pasted block offers one line of cyberware, since a paper form
             // cannot hold rows. Read it into rows here rather than keeping a field the

@@ -9,7 +9,7 @@ import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
 import { VehicleBadgeButton } from './VehicleBadgeButton';
 import type { SheetLinkSource } from '../sheets';
 import { canImport } from '../sheets/importable';
-import { flowState } from '../sheets/newCharacterFlow';
+import { flowState, withCreationLocks } from '../sheets/newCharacterFlow';
 import { themeRoot } from '../utils/themeRoot';
 
 // The player's own character sheet (in-game floating window). Identity is
@@ -121,7 +121,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
       )}
       {sheet && template ? (
         <SheetRenderer
-          template={template}
+          template={withCreationLocks(template, sheet.data)}
           data={sheet.data}
           portraitUrl={sheet.portrait_url}
           onFieldChange={handleFieldChange}

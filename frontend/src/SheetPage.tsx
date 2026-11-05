@@ -5,6 +5,7 @@ import { SheetRenderer } from './components/SheetRenderer';
 import { usePlayerSheet, uploadSheetPortrait } from './hooks/usePlayerSheet';
 import { useCustomTemplates } from './hooks/useCustomTemplates';
 import { THEMES } from './theme/themes';
+import { withCreationLocks } from './sheets/newCharacterFlow';
 
 // Standalone character-sheet tab (?sheet=true). Gives the player a full
 // browser tab for their sheet instead of the in-game floating window.
@@ -127,7 +128,7 @@ export default function SheetPage() {
         {sheet && template ? (
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 90px)' }}>
             <SheetRenderer
-              template={template}
+              template={withCreationLocks(template, sheet.data)}
               data={sheet.data}
               portraitUrl={sheet.portrait_url}
               onFieldChange={handleFieldChange}

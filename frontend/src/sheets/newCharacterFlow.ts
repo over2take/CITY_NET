@@ -13,9 +13,13 @@ import { listShown, underFeature, workedOn, type ChoiceListShown, type PickShown
 type Obj = Record<string, unknown>;
 
 export interface CreationStat { id: string; label: string; min?: number; max?: number }
+/** How a stats step is set (7c3b). */
+export type StatWay = { way: 'typed' } | { way: 'array'; numbers: number[] };
 export interface CreationShown {
   /** The steps asked, in the GM's order: who, stats or stats:<group>, list:<id>. */
   steps: string[];
+  /** How the stats steps not typed in are set, by step. */
+  ways?: Record<string, StatWay>;
   /** The groups a player sets: those left out aren't here. */
   stats: { id: string; label: string; stats: CreationStat[] }[];
 }
@@ -119,6 +123,36 @@ export const statsToSet = (template: SheetTemplate, step = 'stats'): CreationSho
     .filter((g) => g.stats.length);
 };
 
+/** How a stats step is set: typed in, unless the GM says otherwise. */
+export const stepWay = (template: SheetTemplate, id: string): StatWay => template.creation?.ways?.[id] ?? { way: 'typed' };
+
+/**
+ * Which numbers of a pool the stats hold, and those left: a number counts once, and a value the pool
+ * doesn't have isn't placed (backend creation.js placedFrom).
+ */
+export const placedFrom = (pool: number[], stats: { id: string }[], data: Obj | null | undefined): { placed: Record<string, number>; left: number[] } => {
+  const left = [...pool];
+  const placed: Record<string, number> = {};
+  for (const s of stats) {
+    const at = left.indexOf(data?.[s.id] as number);
+    if (at >= 0) placed[s.id] = left.splice(at, 1)[0];
+  }
+  return { placed, left };
+};
+
+/**
+ * The sheet as a player may write it just now: a stat set some way other than typing is locked while
+ * the character is being made, as the server holds it (backend creation.js lockedWhileCreating).
+ */
+export const withCreationLocks = (template: SheetTemplate, data: Obj | null | undefined): SheetTemplate => {
+  if (flowState(template, data) !== 'going') return template;
+  const locked = new Set(flowSteps(template)
+    .filter((id) => isStatsStep(id) && stepWay(template, id).way !== 'typed')
+    .flatMap((id) => statsToSet(template, id).flatMap((g) => g.stats.map((s) => s.id))));
+  if (!locked.size) return template;
+  return { ...template, sections: template.sections.map((s) => ({ ...s, fields: s.fields.map((f) => (locked.has(f.id) ? { ...f, gmOnly: true } : f)) })) };
+};
+
 /** What is wrong with what is typed into a stat, in words, or null. Nothing typed yet says nothing. */
 export const statProblem = (stat: CreationStat, value: unknown): string | null => {
   if (value === undefined || value === null || value === '') return null;
@@ -157,7 +191,13 @@ export const stepAnswered = (template: SheetTemplate, id: string, data: Obj | nu
     return typeof name === 'string' && name.trim() !== '';
   }
   if (isStatsStep(id)) {
-    return statsToSet(template, id).every((g) => g.stats.every((s) => typedIn(data?.[s.id]) && !statProblem(s, data?.[s.id])));
+    const stats = statsToSet(template, id).flatMap((g) => g.stats);
+    const way = stepWay(template, id);
+    if (way.way === 'array') {
+      const { placed } = placedFrom(way.numbers, stats, data);
+      return stats.every((s) => placed[s.id] !== undefined);
+    }
+    return stats.every((s) => typedIn(data?.[s.id]) && !statProblem(s, data?.[s.id]));
   }
   const list = listOfStep(template, id);
   return list ? listAnswered(template, list, data) : true;

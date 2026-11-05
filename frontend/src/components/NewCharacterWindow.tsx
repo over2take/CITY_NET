@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { TerminalWindow, type TerminalAction, type TerminalFolder } from './TerminalWindow';
 import { BracketPortrait } from './BracketPortrait';
+import { PlaceNumbers } from './PlaceNumbers';
 import { ChoicesSection } from './ChoicesSection';
 import type { Socket } from 'socket.io-client';
 import { ImportSheetDialog } from './ImportSheetDialog';
@@ -9,7 +10,7 @@ import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
 import { useChoicesRefused } from '../hooks/useChoicesRefused';
 import { canImport } from '../sheets/importable';
 import {
-  flowDone, flowStepName, flowSteps, isStatsStep, savedStep, statProblem, statsToSet, stepAnswered, stepListId, whoFields,
+  flowDone, flowStepName, flowSteps, isStatsStep, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields,
 } from '../sheets/newCharacterFlow';
 import { themeRoot } from '../utils/themeRoot';
 
@@ -174,6 +175,16 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
               ))}
             </div>
           </div>
+        </div>
+      );
+    }
+    const setBy = isStatsStep(open) ? stepWay(template, open) : null;
+    if (setBy?.way === 'array') {
+      return (
+        <div style={page}>
+          <PlaceNumbers groups={statsToSet(template, open)} numbers={setBy.numbers} data={data} named={open === 'stats'}
+            onPlace={(stat, value) => socket?.emit('creationAction', { kind: 'place', step: open, stat, value })} />
+          {refused && <p role="alert" style={{ ...why, color: 'var(--warning)', opacity: 1 }}>{refused}</p>}
         </div>
       );
     }

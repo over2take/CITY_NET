@@ -205,6 +205,61 @@ describe('the stats, one way for all or group by group (7c3a)', () => {
 
   it('has a "?" on each', async () => {
     await onStats();
-    for (const k of ['creation.statsBy', 'creation.statsGroups'] as const) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
+    for (const k of ['creation.statsBy', 'creation.statsGroups', 'creation.way'] as const) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'A FIXED ARRAY' }));
+    expect(screen.getByRole('note', { name: HINTS['creation.numbers'] })).toBeTruthy();
+  });
+
+  describe('how they are set (7c3b)', () => {
+    const box = () => screen.getByRole('textbox', { name: 'The numbers' }) as HTMLInputElement;
+
+    it('is typed in to start, with no numbers to give', async () => {
+      await onStats();
+      expect([pressed('TYPED IN'), pressed('A FIXED ARRAY')]).toEqual(['true', 'false']);
+      expect(screen.queryByRole('textbox', { name: 'The numbers' })).toBeNull();
+      expect(screen.getByText(/They type what they have/)).toBeTruthy();
+    });
+
+    it('a fixed array: says how many it still needs until it has enough, and what the step does', async () => {
+      const { last } = await onStats();
+      await userEvent.click(screen.getByRole('button', { name: 'A FIXED ARRAY' }));
+      expect(last().creation).toEqual({ ways: { stats: { way: 'array', numbers: [] } } });
+      expect(screen.getByText('0 numbers for 3 stats: each stat needs one')).toBeTruthy();
+      expect(panel().textContent).toContain('Every stat, placed from a fixed array.');
+      await userEvent.type(box(), '15, 14, 13');
+      expect(last().creation).toEqual({ ways: { stats: { way: 'array', numbers: [15, 14, 13] } } });
+      expect(screen.queryByText(/each stat needs one/)).toBeNull();
+      expect(box().value).toBe('15, 14, 13');
+    });
+
+    it('holds what doesn\'t read as numbers, saying so', async () => {
+      const { last, edits } = await onStats({ ...GROUPS, creation: { ways: { stats: { way: 'array', numbers: [9] } } } } as unknown as Definition);
+      expect(box().value).toBe('9');
+      await userEvent.type(box(), 'x');
+      expect(edits).toEqual([]);
+      void last;
+      expect(box().getAttribute('aria-invalid')).toBe('true');
+      expect(screen.getByText('Whole numbers, with commas between them.')).toBeTruthy();
+      await userEvent.type(box(), '{Backspace}');
+      expect(box().getAttribute('aria-invalid')).toBeNull();
+    });
+
+    it('says when a number doesn\'t fit a stat', async () => {
+      const ranged = { ...GROUPS, stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'grit', label: 'Grit', max: 10 }] }] } as unknown as Definition;
+      await onStats({ ...ranged, creation: { ways: { stats: { way: 'array', numbers: [15] } } } } as unknown as Definition);
+      expect(screen.getByText('15 is above Grit\'s highest, 10')).toBeTruthy();
+    });
+
+    it('back to typed in, the numbers go; each group keeps its own, its box showing its own', async () => {
+      const { last } = open({ ...GROUPS, creation: { statsBy: 'group', ways: { 'stats:abilities': { way: 'array', numbers: [15, 14] }, 'stats:stress': { way: 'array', numbers: [3] } } } } as unknown as Definition);
+      await userEvent.click(step('ABILITIES').getByRole('button', { name: 'ABILITIES' }));
+      expect(box().value).toBe('15, 14');
+      expect(panel().textContent).toContain('2 stats, placed from a fixed array.');
+      await userEvent.click(step('STRESS').getByRole('button', { name: 'STRESS' }));
+      expect(box().value).toBe('3');
+      await userEvent.click(screen.getByRole('button', { name: 'TYPED IN' }));
+      expect(last().creation).toEqual({ statsBy: 'group', ways: { 'stats:abilities': { way: 'array', numbers: [15, 14] } } });
+      expect(screen.queryByRole('textbox', { name: 'The numbers' })).toBeNull();
+    });
   });
 });

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { Definition } from '../sheets/systemsApi';
 import type { BuilderPage } from '../sheets/builderSession';
-import { creationOn, creationSteps, groupLeftOut, orderNotes, statsByGroup, stepGroup, stepList, stepName, withCreationOn, withStatsByGroup, withStepMoved, withStepOff } from '../sheets/newCharacter';
+import { creationOn, creationSteps, groupLeftOut, orderNotes, parseNumbers, statsByGroup, stepGroup, stepList, stepName, stepWayProblems, wayOfStep, withCreationOn, withStatsByGroup, withStepMoved, withStepOff, withStepWay } from '../sheets/newCharacter';
 import { isStatsStep } from '../sheets/newCharacterFlow';
 import { statGroups } from '../sheets/statsRules';
 import { pickedOf } from '../sheets/choices';
@@ -30,9 +30,31 @@ const panel: React.CSSProperties = { border: '1px solid var(--dark-green)', padd
 const seg = (on: boolean): React.CSSProperties => ({
   background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)', border: 0, fontFamily: 'monospace', fontSize: 11, padding: '3px 12px', cursor: 'pointer',
 });
-const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '120px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' };
+const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '160px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' };
 /** How many of something, in words. */
 const statCount = (n: number): string => `${n} ${n === 1 ? 'stat' : 'stats'}`;
+/** How a stats step can be set, as the page offers it, with what each means (7c3b). */
+const WAYS = [
+  { id: 'typed', label: 'TYPED IN', why: 'They type what they have, as the sheet does. Rolling and point buy come next.' },
+  { id: 'array', label: 'A FIXED ARRAY', why: 'The same numbers for everyone, placed as they like.' },
+] as const;
+/** What a stats step's way does, for the line saying what the step asks. */
+const howSet = (definition: Definition, id: string): string => (wayOfStep(definition, id).way === 'array'
+  ? 'placed from a fixed array.' : 'typed in by the player. Rolling and point buy come next.');
+
+/** The numbers of an array: kept as typed, written once they read as numbers. */
+function NumbersBox({ numbers, onChange }: { numbers: number[]; onChange: (next: number[]) => void }) {
+  const [text, setText] = useState(numbers.join(', '));
+  const parsed = parseNumbers(text);
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+      <input type="text" aria-label="The numbers" placeholder="15, 14, 13, 12" value={text} aria-invalid={parsed ? undefined : true}
+        style={{ fontFamily: 'monospace', fontSize: 12, padding: '4px 6px', background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--dark-green)', minWidth: 0 }}
+        onChange={(e) => { setText(e.target.value); const next = parseNumbers(e.target.value); if (next) onChange(next); }} />
+      {!parsed && <span role="note" style={{ ...why, fontSize: 11, color: 'var(--warning)', opacity: 1 }}>Whole numbers, with commas between them.</span>}
+    </span>
+  );
+}
 
 /** What a step asks of a player, in the page's words. */
 const asks = (definition: Definition, id: string): string => {
@@ -41,10 +63,10 @@ const asks = (definition: Definition, id: string): string => {
     const out = statGroups(definition).filter((g) => g.stats.length && groupLeftOut(definition, g.id));
     const all = statGroups(definition).filter((g) => g.stats.length);
     if (out.length === all.length) return 'Every group is left out, so there is nothing to ask.';
-    return `Every stat${out.length ? ` but ${out.map((g) => (g.label || g.id).toUpperCase()).join(', ')}` : ''}, typed in by the player. Rolling, point buy and a fixed array come next.`;
+    return `Every stat${out.length ? ` but ${out.map((g) => (g.label || g.id).toUpperCase()).join(', ')}` : ''}, ${howSet(definition, id)}`;
   }
   const group = stepGroup(definition, id);
-  if (group) return `${statCount(group.stats.length)}, typed in by the player. Rolling, point buy and a fixed array come next.`;
+  if (group) return `${statCount(group.stats.length)}, ${howSet(definition, id)}`;
   if (id === 'kits') return 'Named kits of items the character starts with. They are made here next: until then, players aren\'t asked.';
   if (id === 'money') return 'What they start with in the bank. It is set here next, a number, a roll, or typed in: until then, players aren\'t asked.';
   const c = stepList(definition, id);
@@ -60,6 +82,7 @@ export function NewCharacterPage({ definition, edit, onGoTo }: Props) {
   const list = stepList(definition, step.id);
   const notes = orderNotes(definition);
   const byGroup = statsByGroup(definition);
+  const way = wayOfStep(definition, step.id);
   /** ONE WAY FOR ALL or GROUP BY GROUP, staying on the stats. */
   const askStats = (next: boolean) => {
     const after = withStatsByGroup(definition, next);
@@ -130,6 +153,22 @@ export function NewCharacterPage({ definition, edit, onGoTo }: Props) {
                 })}
               </ul>
             </>}
+            <FieldName beside hint={HINTS['creation.way']} style={small}>HOW THEY ARE SET</FieldName>
+            <span role="group" aria-label="How they are set" style={{ display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--green)', justifySelf: 'start' }}>
+              {WAYS.map((w) => (
+                <button key={w.id} type="button" aria-pressed={way.way === w.id} title={w.why} style={seg(way.way === w.id)}
+                  onClick={() => edit(withStepWay(definition, step.id, w.id === 'array' ? { way: 'array', numbers: way.way === 'array' ? way.numbers : [] } : { way: 'typed' }))}>{w.label}</button>
+              ))}
+            </span>
+            <span />
+            <span style={{ ...why, fontSize: 11, opacity: 0.7 }}>{WAYS.find((w) => w.id === way.way)?.why}</span>
+            {way.way === 'array' && <>
+              <FieldName beside hint={HINTS['creation.numbers']} style={small}>THE NUMBERS</FieldName>
+              <NumbersBox key={step.id} numbers={way.numbers} onChange={(numbers) => edit(withStepWay(definition, step.id, { way: 'array', numbers }))} />
+            </>}
+            {stepWayProblems(definition, step.id).map((p) => (
+              <React.Fragment key={p}><span /><span role="note" style={{ ...why, fontSize: 11, color: 'var(--warning)', opacity: 1 }}>{p}</span></React.Fragment>
+            ))}
           </div>
         )}
       </section>

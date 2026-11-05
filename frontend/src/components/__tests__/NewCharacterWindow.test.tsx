@@ -226,6 +226,80 @@ describe('the steps', () => {
     timers.mockRestore();
   });
 
+  describe('a fixed array (7c3b)', () => {
+    const ARRAY = {
+      steps: ['who', 'stats', 'list:classes'],
+      ways: { stats: { way: 'array', numbers: [15, 14, 9] } },
+      stats: [{ id: 'traits', label: 'TRAITS', stats: [{ id: 'grit', label: 'Grit' }, { id: 'wits', label: 'Wits' }] }],
+    };
+    const at = { name: 'Wren', _creating: { at: 'stats' } };
+    const pool = () => within(screen.getByRole('group', { name: 'Numbers to place' }));
+    const stat = (name: RegExp) => screen.getByRole('button', { name }) as HTMLButtonElement;
+
+    it('a number is picked, then the stat it goes on, and the server is asked', async () => {
+      const { socket } = await open(at, undefined, 'tok', ARRAY);
+      expect(pool().getAllByRole('button').map((b) => b.textContent)).toEqual(['15', '14', '9']);
+      await userEvent.click(pool().getByRole('button', { name: '14' }));
+      expect(pool().getByRole('button', { name: '14' }).getAttribute('aria-pressed')).toBe('true');
+      await userEvent.click(stat(/^Grit:/));
+      expect(socket.said('creationAction')).toContainEqual({ kind: 'place', step: 'stats', stat: 'grit', value: 14 });
+      expect(pool().getByRole('button', { name: '14' }).getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('a number picked twice is put down; a stat clicked with none held and none on it asks nothing', async () => {
+      const { socket } = await open(at, undefined, 'tok', ARRAY);
+      await userEvent.click(pool().getByRole('button', { name: '14' }));
+      await userEvent.click(pool().getByRole('button', { name: '14' }));
+      expect(pool().getByRole('button', { name: '14' }).getAttribute('aria-pressed')).toBe('false');
+      await userEvent.click(stat(/^Grit:/));
+      expect(socket.said('creationAction')).toEqual([]);
+    });
+
+    it('what the sheet holds is on its stat and out of the pool; clicked, it comes back', async () => {
+      const { socket } = await open({ ...at, grit: 15 }, undefined, 'tok', ARRAY);
+      expect(stat(/^Grit:/).getAttribute('aria-label')).toBe('Grit: 15');
+      expect(stat(/^Wits:/).getAttribute('aria-label')).toBe('Wits: no number yet');
+      expect(pool().getAllByRole('button').map((b) => b.textContent)).toEqual(['14', '9']);
+      await userEvent.click(stat(/^Grit:/));
+      expect(socket.said('creationAction')).toContainEqual({ kind: 'place', step: 'stats', stat: 'grit', value: null });
+    });
+
+    it('NEXT holds until every stat has one; a number left over is no matter', async () => {
+      await open({ ...at, grit: 15 }, undefined, 'tok', ARRAY);
+      expect(button('NEXT').disabled).toBe(true);
+      cleanup();
+      await open({ ...at, grit: 15, wits: 14 }, undefined, 'tok', ARRAY);
+      expect(button('NEXT').disabled).toBe(false);
+      expect(pool().getAllByRole('button').map((b) => b.textContent)).toEqual(['9']);
+    });
+
+    it('with none left, says so', async () => {
+      await open({ ...at, grit: 15, wits: 14 }, undefined, 'tok', { ...ARRAY, ways: { stats: { way: 'array', numbers: [15, 14] } } });
+      expect(screen.getByText('EVERY NUMBER IS PLACED')).toBeTruthy();
+    });
+
+    it('a number repeated is two to pick, one at a time', async () => {
+      await open(at, undefined, 'tok', { ...ARRAY, ways: { stats: { way: 'array', numbers: [10, 10] } } });
+      const tens = pool().getAllByRole('button', { name: '10' });
+      await userEvent.click(tens[1]);
+      expect(pool().getAllByRole('button', { name: '10' }).map((b) => b.getAttribute('aria-pressed'))).toEqual(['false', 'true']);
+    });
+
+    it('says why the server said no', async () => {
+      const { socket } = await open(at, undefined, 'tok', ARRAY);
+      socket.fire('choicesRefused', { error: 'That number is already placed' });
+      expect(screen.getByRole('alert').textContent).toBe('That number is already placed');
+    });
+
+    it('names each group on THE STATS, and not on a group\'s own step', async () => {
+      await open(at, undefined, 'tok', ARRAY);
+      expect(within(screen.getByRole('tabpanel')).getByText('TRAITS')).toBeTruthy();
+      cleanup();
+      await open({ name: 'Wren', _creating: { at: 'stats:traits' } }, undefined, 'tok', { ...ARRAY, steps: ['who', 'stats:traits'], ways: { 'stats:traits': ARRAY.ways.stats } });
+      expect(within(screen.getByRole('tabpanel')).queryByText('TRAITS')).toBeNull();
+    });
+  });
+
   it('a group\'s own step shows that group alone, named at its head (7c3a)', async () => {
     await open({ name: 'Wren', grit: 12, _creating: { at: 'stats:skills' } }, undefined, 'tok', {
       steps: ['who', 'stats:traits', 'stats:skills', 'list:classes'],

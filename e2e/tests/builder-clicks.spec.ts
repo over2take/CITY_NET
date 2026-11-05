@@ -134,9 +134,11 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await expect(page.getByRole('columnheader', { name: 'LOWEST' })).toBeVisible();
     }
     if (p === 'NEW CHARACTER') {
-      // THE STATS open, so how they are asked and the groups are there (7c3a).
+      // THE STATS open, so how they are asked and the groups are there (7c3a), and a fixed array's numbers (7c3b).
       await page.getByRole('button', { name: 'THE STATS', exact: true }).click();
       await expect(page.getByRole('list', { name: 'Groups asked' })).toBeVisible();
+      await page.getByRole('group', { name: 'How they are set' }).getByRole('button', { name: 'A FIXED ARRAY' }).click();
+      await expect(page.getByRole('textbox', { name: 'The numbers' })).toBeVisible();
     }
     if (p === 'RESTS') {
       // Recovery dice on, counted by a formula and given back by an amount, so every box is there (R1b).
