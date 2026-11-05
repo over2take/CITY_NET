@@ -9,6 +9,7 @@ import type { Definition } from './systemsApi';
 import { choiceLists, pickedOf, type ChoiceList } from './choices';
 import { statGroups } from './statsRules';
 import { partIsOn } from './wordsFeatures';
+import { idFor } from './setup';
 import { referencesIn } from './graphModel';
 import { buyCost, isStatsStep, type BuyWay, type StatWay } from './newCharacterFlow';
 
@@ -93,6 +94,7 @@ const withSection = (def: Definition, patch: Obj): Definition => {
   if (!strings(c.off).length) delete c.off;
   if (c.statsBy !== 'group') delete c.statsBy;
   if (isObject(c.ways) && !Object.keys(c.ways).length) delete c.ways;
+  if (Array.isArray(c.kits) && !c.kits.length) delete c.kits;
   const next: Definition = { ...def };
   if (Object.keys(c).length) next.creation = c; else delete next.creation;
   return next;
@@ -234,6 +236,45 @@ export const stepWayProblems = (def: Definition, id: string): string[] => {
   }
   return found;
 };
+
+/** Who gets a kit (7c4a): everyone, a player's pick, only if a requirement is met, or the GM's to give. */
+export type KitWho = 'all' | 'pick' | 'needs' | 'gm';
+export interface KitItem { name: string; qty: number }
+export interface Kit { id: string; name: string; items: KitItem[]; who: KitWho; requires?: string }
+
+/** The kits as written; what isn't one is left to the server to say. */
+export const kitsOf = (def: Definition): Kit[] => {
+  const kits = section(def).kits;
+  return Array.isArray(kits) ? kits.filter((k): k is Kit => isObject(k) && typeof k.id === 'string') : [];
+};
+
+const withKits = (def: Definition, kits: Kit[]): Definition => withSection(def, { kits });
+
+/** One more kit, one a player may pick to start: { definition, id }. */
+export const withNewKit = (def: Definition): { definition: Definition; id: string } => {
+  const id = idFor('NEW KIT', kitsOf(def).map((k) => k.id));
+  return { definition: withKits(def, [...kitsOf(def), { id, name: 'NEW KIT', items: [], who: 'pick' }]), id };
+};
+
+/** A kit changed. A requirement goes with ONLY IF, kept only while it goes that way. */
+export const withKit = (def: Definition, id: string, patch: Partial<Omit<Kit, 'id'>>): Definition => withKits(def, kitsOf(def).map((k) => {
+  if (k.id !== id) return k;
+  const next: Kit = { ...k, ...patch };
+  if (next.who !== 'needs') delete next.requires;
+  else if (next.requires === undefined) next.requires = '';
+  return next;
+}));
+
+export const withoutKit = (def: Definition, id: string): Definition => withKits(def, kitsOf(def).filter((k) => k.id !== id));
+
+/** What a GM types for a kit's items, as items: "Rope, Lantern, 3x Rations". */
+export const parseKitItems = (text: string): KitItem[] => text.split(',').map((p) => p.trim()).filter((p) => p !== '').map((p) => {
+  const m = /^(\d+)\s*x\s+(.+)$/i.exec(p);
+  return m ? { name: m[2].trim(), qty: Number(m[1]) } : { name: p, qty: 1 };
+});
+
+/** A kit's items as the GM types them. */
+export const kitItemsText = (items: KitItem[]): string => items.map((i) => (i.qty === 1 ? i.name : `${i.qty}x ${i.name}`)).join(', ');
 
 /** ONE WAY FOR ALL or GROUP BY GROUP; the order and what is left out carry over. */
 export const withStatsByGroup = (def: Definition, byGroup: boolean): Definition => withSection(def, { statsBy: byGroup ? 'group' : undefined });

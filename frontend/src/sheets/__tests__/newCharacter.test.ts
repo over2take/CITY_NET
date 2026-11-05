@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { buyNumbers, buyPreset, buyWith, buyWithCost, climbingCosts, creationOn, creationSteps, groupLeftOut, orderNotes, parseNumbers, parseStatRoll, statsByGroup, stepGroup, stepList, stepName, stepWayProblems, wayOfStep, withCreationOn, withStatsByGroup, withStepMoved, withStepOff, withStepWay } from '../newCharacter';
+import { buyNumbers, buyPreset, buyWith, buyWithCost, climbingCosts, creationOn, creationSteps, kitItemsText, kitsOf, parseKitItems, withKit, withNewKit, withoutKit, groupLeftOut, orderNotes, parseNumbers, parseStatRoll, statsByGroup, stepGroup, stepList, stepName, stepWayProblems, wayOfStep, withCreationOn, withStatsByGroup, withStepMoved, withStepOff, withStepWay } from '../newCharacter';
 import { OTHER_NAMES } from '../versionPreview';
 import type { Definition } from '../systemsApi';
 
@@ -213,6 +213,58 @@ describe('a point buy (7c3d)', () => {
     ]) expect(stepWayProblems(def, 'stats'), JSON.stringify(def.creation)).toEqual(server.stepWayProblems(def, 'stats'));
     expect(stepWayProblems(withStepWay(GROUPS, 'stats', { ...FLAT, lowest: 16 }), 'stats')).toEqual(['The lowest is above the highest']);
     expect(stepWayProblems(withStepWay(GROUPS, 'stats', { ...FLAT, highest: 107 }), 'stats')).toEqual([]);
+  });
+});
+
+describe('kits (7c4a)', () => {
+  it('none to start; one more is a kit a player may pick, with an id of its own', () => {
+    expect(kitsOf(HEARTH)).toEqual([]);
+    const one = withNewKit(HEARTH);
+    expect(one.id).toBe('new_kit');
+    expect(kitsOf(one.definition)).toEqual([{ id: 'new_kit', name: 'NEW KIT', items: [], who: 'pick' }]);
+    const two = withNewKit(one.definition);
+    expect(two.id).not.toBe('new_kit');
+    expect(kitsOf(two.definition).map((k) => k.id)).toEqual(['new_kit', two.id]);
+  });
+
+  it('what isn\'t a kit isn\'t read as one', () => {
+    for (const kits of ['x', [3], [{ name: 'no id' }]]) expect(kitsOf({ ...HEARTH, creation: { kits } } as unknown as Definition)).toEqual([]);
+  });
+
+  it('changes one, leaving the others; gone, leaves nothing behind', () => {
+    const { definition, id } = withNewKit(HEARTH);
+    const other = withNewKit(definition);
+    const named = withKit(other.definition, id, { name: 'TRAVELER' });
+    expect(kitsOf(named).map((k) => k.name)).toEqual(['TRAVELER', 'NEW KIT']);
+    expect(kitsOf(withoutKit(named, id)).map((k) => k.id)).toEqual([other.id]);
+    expect(withoutKit(withoutKit(named, id), other.id)).toEqual(HEARTH);
+  });
+
+  it('a requirement comes with ONLY IF and goes with it', () => {
+    const { definition, id } = withNewKit(HEARTH);
+    const needs = withKit(definition, id, { who: 'needs' });
+    expect(kitsOf(needs)[0].requires).toBe('');
+    const written = withKit(needs, id, { requires: '@grit >= 12' });
+    expect(kitsOf(written)[0].requires).toBe('@grit >= 12');
+    expect(kitsOf(withKit(written, id, { name: 'X' }))[0].requires).toBe('@grit >= 12');
+    expect('requires' in kitsOf(withKit(written, id, { who: 'pick' }))[0]).toBe(false);
+  });
+
+  it('reads items as typed, and says them back', () => {
+    expect(parseKitItems('Rope, Lantern, 3x Rations')).toEqual([{ name: 'Rope', qty: 1 }, { name: 'Lantern', qty: 1 }, { name: 'Rations', qty: 3 }]);
+    expect(parseKitItems(' 3X  Rations ,, ')).toEqual([{ name: 'Rations', qty: 3 }]);
+    expect(parseKitItems('')).toEqual([]);
+    expect(parseKitItems('Box of 3x matches')).toEqual([{ name: 'Box of 3x matches', qty: 1 }]);
+    expect(parseKitItems('3xRations')).toEqual([{ name: '3xRations', qty: 1 }]);
+    expect(kitItemsText([{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }])).toBe('Rope, 3x Rations');
+    expect(parseKitItems(kitItemsText([{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }]))).toEqual([{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }]);
+  });
+
+  it('what it writes, the server takes', () => {
+    const { definition, id } = withNewKit(GROUPS);
+    const made = withKit(definition, id, { name: 'TRAVELER', items: parseKitItems('Rope, 3x Rations'), who: 'needs', requires: '@grit >= 12' });
+    expect(checkDefinition(made).problems.filter((p: { where: string }) => p.where.startsWith('creation'))).toEqual([]);
+    expect(checkDefinition(definition).problems.filter((p: { where: string }) => p.where.startsWith('creation')).map((p: { message: string }) => p.message)).toEqual(['Has nothing in it']);
   });
 });
 
