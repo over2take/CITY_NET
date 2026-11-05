@@ -13,8 +13,8 @@ import { listShown, underFeature, workedOn, type ChoiceListShown, type PickShown
 type Obj = Record<string, unknown>;
 
 export interface CreationStat { id: string; label: string; min?: number; max?: number }
-/** How a stats step is set (7c3b). */
-export type StatWay = { way: 'typed' } | { way: 'array'; numbers: number[] };
+/** How a stats step is set (7c3b, 7c3c). */
+export type StatWay = { way: 'typed' } | { way: 'array'; numbers: number[] } | { way: 'roll'; each: string; placed: 'order' | 'arrange' };
 export interface CreationShown {
   /** The steps asked, in the GM's order: who, stats or stats:<group>, list:<id>. */
   steps: string[];
@@ -27,7 +27,7 @@ export interface CreationShown {
 /** Where a sheet keeps its place in the flow (backend creation.js CREATING_KEY). */
 export const CREATING_KEY = '_creating';
 
-interface Place { at?: string; done?: boolean; uploaded?: boolean }
+interface Place { at?: string; done?: boolean; uploaded?: boolean; rolled?: Record<string, unknown> }
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 const placeOf = (data: Obj | null | undefined): Place | null => {
   const place = data?.[CREATING_KEY];
@@ -126,6 +126,13 @@ export const statsToSet = (template: SheetTemplate, step = 'stats'): CreationSho
 /** How a stats step is set: typed in, unless the GM says otherwise. */
 export const stepWay = (template: SheetTemplate, id: string): StatWay => template.creation?.ways?.[id] ?? { way: 'typed' };
 
+/** What a step's ROLL came to on this sheet, or null: not rolled yet (backend creation.js rolledOn). */
+export const rolledPool = (data: Obj | null | undefined, id: string): number[] | null => {
+  const rolled = placeOf(data)?.rolled;
+  const pool = isObject(rolled) ? rolled[id] : null;
+  return Array.isArray(pool) ? pool as number[] : null;
+};
+
 /**
  * Which numbers of a pool the stats hold, and those left: a number counts once, and a value the pool
  * doesn't have isn't placed (backend creation.js placedFrom).
@@ -193,8 +200,10 @@ export const stepAnswered = (template: SheetTemplate, id: string, data: Obj | nu
   if (isStatsStep(id)) {
     const stats = statsToSet(template, id).flatMap((g) => g.stats);
     const way = stepWay(template, id);
-    if (way.way === 'array') {
-      const { placed } = placedFrom(way.numbers, stats, data);
+    if (way.way !== 'typed') {
+      const pool = way.way === 'array' ? way.numbers : rolledPool(data, id);
+      if (!pool) return false;
+      const { placed } = placedFrom(pool, stats, data);
       return stats.every((s) => placed[s.id] !== undefined);
     }
     return stats.every((s) => typedIn(data?.[s.id]) && !statProblem(s, data?.[s.id]));

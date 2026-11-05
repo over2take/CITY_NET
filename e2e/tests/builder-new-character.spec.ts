@@ -93,6 +93,40 @@ test('a fixed array: too few said, set, the server taking it, kept after a reloa
   await expect(page.getByRole('textbox', { name: 'The numbers' })).toHaveValue('15, 14');
 });
 
+test('rolled: what it reads and what it can come to said, set, the server taking it, kept after a reload', async ({ page, request }, info) => {
+  const name = `Dice Stats Hearth ${info.retry + 1}`;
+  const token = await gmToken(request);
+  const { id } = await asGm(request, token, 'post', '/api/systems', { definition: { ...definition(name), stats: [
+    { id: 'abilities', label: 'ABILITIES', stats: [{ id: 'grit', label: 'Grit', min: 1, max: 18 }] },
+  ] } });
+  await signInAsGm(page);
+  await openPage(page, name);
+  await page.getByRole('button', { name: 'THE STATS', exact: true }).click();
+  await page.getByRole('group', { name: 'How they are set' }).getByRole('button', { name: 'ROLL' }).click();
+  const each = page.getByRole('textbox', { name: 'Each is' });
+  await expect(each).toHaveValue('4d6 drop lowest');
+
+  await each.fill('lots');
+  await expect(page.getByText(/^Reads like 3d6, 4d6 drop lowest/)).toBeVisible();
+  await each.fill('4d6');
+  await expect(page.getByText('4d6 can roll 24, above Grit\'s highest, 18')).toBeVisible();
+  await each.fill('3d6');
+  await expect(page.getByText(/can roll|Reads like/)).toHaveCount(0);
+  await page.getByRole('group', { name: 'Placed' }).getByRole('button', { name: 'IN ORDER' }).click();
+  await expect(page.getByText('Every stat, rolled with 3d6, in order.')).toBeVisible();
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  const saved = await asGm(request, token, 'get', `/api/systems/${id}`);
+  expect(saved.problems).toEqual([]);
+  expect(saved.draft.creation).toEqual({ ways: { stats: { way: 'roll', each: '3d6', placed: 'order' } } });
+
+  await page.reload();
+  await signInAsGm(page);
+  await openPage(page, name);
+  await page.getByRole('button', { name: 'THE STATS', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Each is' })).toHaveValue('3d6');
+  await expect(page.getByRole('group', { name: 'Placed' }).getByRole('button', { name: 'IN ORDER' })).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('the steps of a new character, ordered and switched, kept after a reload', async ({ page, request }, info) => {
   const name = `Stepping Hearth ${info.retry + 1}`;
   const token = await gmToken(request);

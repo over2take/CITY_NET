@@ -139,6 +139,11 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await expect(page.getByRole('list', { name: 'Groups asked' })).toBeVisible();
       await page.getByRole('group', { name: 'How they are set' }).getByRole('button', { name: 'A FIXED ARRAY' }).click();
       await expect(page.getByRole('textbox', { name: 'The numbers' })).toBeVisible();
+      // And a roll's, for the sweep to read: what it is, and how it is placed (7c3c). Checked here, as
+      // the way can only show one at a time.
+      missed['NEW CHARACTER array'] = await faults(page);
+      await page.getByRole('group', { name: 'How they are set' }).getByRole('button', { name: 'ROLL' }).click();
+      await expect(page.getByRole('textbox', { name: 'Each is' })).toBeVisible();
     }
     if (p === 'RESTS') {
       // Recovery dice on, counted by a formula and given back by an amount, so every box is there (R1b).

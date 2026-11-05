@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { creationOn, creationSteps, groupLeftOut, orderNotes, parseNumbers, statsByGroup, stepGroup, stepList, stepName, stepWayProblems, wayOfStep, withCreationOn, withStatsByGroup, withStepMoved, withStepOff, withStepWay } from '../newCharacter';
+import { creationOn, creationSteps, groupLeftOut, orderNotes, parseNumbers, parseStatRoll, statsByGroup, stepGroup, stepList, stepName, stepWayProblems, wayOfStep, withCreationOn, withStatsByGroup, withStepMoved, withStepOff, withStepWay } from '../newCharacter';
 import { OTHER_NAMES } from '../versionPreview';
 import type { Definition } from '../systemsApi';
 
@@ -117,6 +117,37 @@ describe('a fixed array (7c3b)', () => {
   it('what it writes, the server takes', () => {
     const def = withStepWay(GROUPS, 'stats', array([15, 14]));
     expect(checkDefinition(def).problems.filter((p: { where: string }) => p.where.startsWith('creation'))).toEqual([]);
+  });
+});
+
+describe('rolled (7c3c)', () => {
+  const roll = (each = '4d6 drop lowest', placed: 'order' | 'arrange' = 'arrange') => ({ way: 'roll' as const, each, placed });
+
+  it('reads a roll as the server does', () => {
+    for (const text of ['3d6', '4d6 drop lowest', ' 5D6  DROP HIGHEST 2 ', '2d6 + 6', '2d6-1', 'd20', '4d6 drop lowest + 1', '20d100 + 1000', '', 'four', '4d', '0d6', '21d6', '4d1', '4d101', '4d6 drop', '4d6 drop lowest 4', '4d6 drop lowest 0', '1d6 drop lowest', '2d6 + 1001', '2d6 * 10']) {
+      expect(parseStatRoll(text), text).toEqual(server.parseStatRoll(text));
+    }
+  });
+
+  it('a step keeps its roll, reading as the server does; what isn\'t one reads as typed in', () => {
+    const set = withStepWay(GROUPS, 'stats', roll());
+    expect(wayOfStep(set, 'stats')).toEqual(roll());
+    expect(wayOfStep({ ...GROUPS, creation: { ways: { stats: { way: 'roll', each: 3 } } } } as unknown as Definition, 'stats')).toEqual({ way: 'typed' });
+    expect(checkDefinition(set).problems.filter((p: { where: string }) => p.where.startsWith('creation'))).toEqual([]);
+    expect(withStepWay(set, 'stats', { way: 'typed' })).toEqual(GROUPS);
+  });
+
+  it('says what is wrong in the server\'s words', () => {
+    const ranged = { ...GROUPS, stats: [{ id: 'g', label: 'G', stats: [{ id: 'a', label: 'Aim', min: 3, max: 18 }, { id: 'b', min: 5, max: 12 }] }] } as unknown as Definition;
+    for (const def of [
+      withStepWay(GROUPS, 'stats', roll('lots')),
+      withStepWay(GROUPS, 'stats', roll('')),
+      withStepWay(ranged, 'stats', roll('3d6')),
+      withStepWay(ranged, 'stats', roll('4d6 drop lowest + 1')),
+      withStepWay(ranged, 'stats', roll('2d6 + 3')),
+    ]) expect(stepWayProblems(def, 'stats'), JSON.stringify(def.creation)).toEqual(server.stepWayProblems(def, 'stats'));
+    expect(stepWayProblems(withStepWay(ranged, 'stats', roll('3d6')), 'stats')).toContain('3d6 can roll 3, below b\'s lowest, 5');
+    expect(stepWayProblems(withStepWay(GROUPS, 'stats', roll()), 'stats')).toEqual([]);
   });
 });
 

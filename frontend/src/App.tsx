@@ -54,6 +54,7 @@ import { ChatWindow } from './components/ChatWindow';
 import { Sidebar, NavControlsMenu, CharacterControlsMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu, hasSheetCombat } from './components/Sidebar';
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
 import { NewCharacterWindow } from './components/NewCharacterWindow';
+import { TERMINAL_WIDTH } from './components/TerminalWindow';
 import { useNewCharacter } from './hooks/useNewCharacter';
 import { VehiclesWindow } from './components/VehiclesWindow';
 import { EnemyVehiclesWindow } from './components/EnemyVehiclesWindow';
@@ -80,6 +81,7 @@ import { DiceTrayWindow, DiceScene } from './components/DiceTray';
 import { useTrayNotify } from './hooks/useTrayNotify';
 import { useRollFlash } from './hooks/useRollFlash';
 import { rollOpensTray } from './utils/rollNotify';
+import { trayBeside } from './utils/trayBeside';
 import { CustomDieBuilder } from './components/CustomDieBuilder';
 import { useCustomDice } from './hooks/useCustomDice';
 import { EnemyRhombus, FriendlyRhombus, PlayerRhombus, OverlapChecker } from './components/Rhombuses';
@@ -404,6 +406,9 @@ function App() {
   const [sheetPos, setSheetPos] = useState(() => ({ x: window.innerWidth / 2 - 220, y: 60 }));
   const [isNewCharacterOpen, setIsNewCharacterOpen] = useState(false);
   const [newCharacterPos, setNewCharacterPos] = useState(() => ({ x: window.innerWidth / 2 - 240, y: 80 }));
+  // Read by the socket handler when a roll opens the tray, as trayOpenRef is: null while it is shut.
+  const newCharacterAt = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => { newCharacterAt.current = isNewCharacterOpen ? newCharacterPos : null; }, [isNewCharacterOpen, newCharacterPos]);
   const [vehiclesPos, setVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 200, y: 90 }));
   const [enemyVehiclesPos, setEnemyVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 160, y: 130 }));
   const [bankData, setBankData] = useState<{ balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean, currencies?: BankCurrencyAccount[] }>({ balance: 0, debt: 0 });
@@ -954,7 +959,12 @@ function App() {
       // display name (handle), which may differ.
       // A quiet line (a rest that rolled nothing) only joins the log.
       if (rollOpensTray(data, userName)) {
-        if (!trayOpenRef.current) setTrayOpener(data);
+        if (!trayOpenRef.current) {
+          setTrayOpener(data);
+          // Not on top of the new character window: the player's next step is in it (7c3c).
+          const flow = newCharacterAt.current;
+          if (flow) setDiceTrayPos((tray) => trayBeside(tray, { ...flow, width: TERMINAL_WIDTH }, window.innerWidth));
+        }
         setIsDiceTrayOpen(true);
         setActiveSidebarMenu('dice_menu');
       } else {

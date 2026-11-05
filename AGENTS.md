@@ -66,6 +66,8 @@ for tests. The journeys start their own servers on ports 5055 and 5174.
 
 - **On CI they run in four parts at once**, split test by test, each part on a fresh database. So
   every test stands alone: never lean on what an earlier test made.
+- Give each test its own system and player names: tests in a part share a database, and a system's
+  name is unique. `backend/__tests__/e2e_names.test.js` checks it.
 - CI is several times slower than a desktop, so wait for what you expect (`expect`, `expect.poll`),
   never for a fixed time. A builder draft saves itself 5 s after the last edit: wait for
   `save-status` to say `· SAVED` before reading it through the API.

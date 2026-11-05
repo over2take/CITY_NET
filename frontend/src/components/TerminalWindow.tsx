@@ -78,6 +78,8 @@ interface Props<Id extends string> {
 
 /** The picture above the folders: callers draw their preview at this size. */
 export const TERMINAL_PREVIEW = { width: 160, height: 124 };
+/** A terminal window's width unless it says otherwise. */
+export const TERMINAL_WIDTH = 660;
 const FOLDER_W = TERMINAL_PREVIEW.width;
 const mono: React.CSSProperties = { fontFamily: 'monospace', letterSpacing: 1 };
 
@@ -89,7 +91,7 @@ const toneStyle = (tone: TerminalAction['tone']): React.CSSProperties => {
 
 export function TerminalWindow<Id extends string>({
   title, pos, setPos, onClose, titleControls, preview, folders, open, onOpen, header, children,
-  panelMode = 'text', actions = [], footer, width = 660, label,
+  panelMode = 'text', actions = [], footer, width = TERMINAL_WIDTH, label,
 }: Props<Id>) {
   /** Up and down walk the folders, the way the terminal in the reference does. */
   const onKeyDown = (e: React.KeyboardEvent) => {

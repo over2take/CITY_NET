@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import type { Definition } from '../sheets/systemsApi';
 import type { BuilderPage } from '../sheets/builderSession';
-import { creationOn, creationSteps, groupLeftOut, orderNotes, parseNumbers, statsByGroup, stepGroup, stepList, stepName, stepWayProblems, wayOfStep, withCreationOn, withStatsByGroup, withStepMoved, withStepOff, withStepWay } from '../sheets/newCharacter';
+import { creationOn, creationSteps, groupLeftOut, orderNotes, parseNumbers, parseStatRoll, statsByGroup, stepGroup, stepList, stepName, stepWayProblems, wayOfStep, withCreationOn, withStatsByGroup, withStepMoved, withStepOff, withStepWay } from '../sheets/newCharacter';
 import { isStatsStep } from '../sheets/newCharacterFlow';
 import { statGroups } from '../sheets/statsRules';
 import { pickedOf } from '../sheets/choices';
 import { HINTS } from '../sheets/builderHelp';
+import type { StatWay } from '../sheets/newCharacterFlow';
 import { FieldName } from './HelpHint';
 import { ToggleSwitch } from './ToggleSwitch';
 
@@ -35,12 +36,23 @@ const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '160px
 const statCount = (n: number): string => `${n} ${n === 1 ? 'stat' : 'stats'}`;
 /** How a stats step can be set, as the page offers it, with what each means (7c3b). */
 const WAYS = [
-  { id: 'typed', label: 'TYPED IN', why: 'They type what they have, as the sheet does. Rolling and point buy come next.' },
+  { id: 'typed', label: 'TYPED IN', why: 'They type what they have, as the sheet does. Point buy comes next.' },
+  { id: 'roll', label: 'ROLL', why: 'The server rolls, the table sees it in the log, and what comes up is kept.' },
   { id: 'array', label: 'A FIXED ARRAY', why: 'The same numbers for everyone, placed as they like.' },
 ] as const;
+/** A way as it starts when the GM picks it, keeping what it already has. */
+const startWay = (id: StatWay['way'], now: StatWay): StatWay => {
+  if (id === now.way) return now;
+  if (id === 'array') return { way: 'array', numbers: [] };
+  return id === 'roll' ? { way: 'roll', each: '4d6 drop lowest', placed: 'arrange' } : { way: 'typed' };
+};
 /** What a stats step's way does, for the line saying what the step asks. */
-const howSet = (definition: Definition, id: string): string => (wayOfStep(definition, id).way === 'array'
-  ? 'placed from a fixed array.' : 'typed in by the player. Rolling and point buy come next.');
+const howSet = (definition: Definition, id: string): string => {
+  const way = wayOfStep(definition, id);
+  if (way.way === 'array') return 'placed from a fixed array.';
+  if (way.way === 'roll') return `rolled with ${way.each}, ${way.placed === 'arrange' ? 'then placed as they like' : 'in order'}.`;
+  return 'typed in by the player. Point buy comes next.';
+};
 
 /** The numbers of an array: kept as typed, written once they read as numbers. */
 function NumbersBox({ numbers, onChange }: { numbers: number[]; onChange: (next: number[]) => void }) {
@@ -157,11 +169,22 @@ export function NewCharacterPage({ definition, edit, onGoTo }: Props) {
             <span role="group" aria-label="How they are set" style={{ display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--green)', justifySelf: 'start' }}>
               {WAYS.map((w) => (
                 <button key={w.id} type="button" aria-pressed={way.way === w.id} title={w.why} style={seg(way.way === w.id)}
-                  onClick={() => edit(withStepWay(definition, step.id, w.id === 'array' ? { way: 'array', numbers: way.way === 'array' ? way.numbers : [] } : { way: 'typed' }))}>{w.label}</button>
+                  onClick={() => edit(withStepWay(definition, step.id, startWay(w.id, way)))}>{w.label}</button>
               ))}
             </span>
             <span />
             <span style={{ ...why, fontSize: 11, opacity: 0.7 }}>{WAYS.find((w) => w.id === way.way)?.why}</span>
+            {way.way === 'roll' && <>
+              <FieldName beside hint={HINTS['creation.each']} style={small}>EACH IS</FieldName>
+              <input type="text" aria-label="Each is" value={way.each} maxLength={60} aria-invalid={parseStatRoll(way.each) ? undefined : true}
+                style={{ fontFamily: 'monospace', fontSize: 12, padding: '4px 6px', background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--dark-green)', minWidth: 0 }}
+                onChange={(e) => edit(withStepWay(definition, step.id, { ...way, each: e.target.value }))} />
+              <FieldName beside hint={HINTS['creation.placed']} style={small}>PLACED</FieldName>
+              <span role="group" aria-label="Placed" style={{ display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--green)', justifySelf: 'start' }}>
+                <button type="button" aria-pressed={way.placed !== 'arrange'} style={seg(way.placed !== 'arrange')} onClick={() => edit(withStepWay(definition, step.id, { ...way, placed: 'order' }))}>IN ORDER</button>
+                <button type="button" aria-pressed={way.placed === 'arrange'} style={seg(way.placed === 'arrange')} onClick={() => edit(withStepWay(definition, step.id, { ...way, placed: 'arrange' }))}>ARRANGE</button>
+              </span>
+            </>}
             {way.way === 'array' && <>
               <FieldName beside hint={HINTS['creation.numbers']} style={small}>THE NUMBERS</FieldName>
               <NumbersBox key={step.id} numbers={way.numbers} onChange={(numbers) => edit(withStepWay(definition, step.id, { way: 'array', numbers }))} />

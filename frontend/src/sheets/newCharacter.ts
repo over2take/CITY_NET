@@ -101,7 +101,26 @@ const withSection = (def: Definition, patch: Obj): Definition => {
 /** How a stats step is set (7c3b): typed in, unless the GM says otherwise. */
 export const wayOfStep = (def: Definition, id: string): StatWay => {
   const way = isObject(section(def).ways) ? (section(def).ways as Obj)[id] : null;
-  return isObject(way) && way.way === 'array' && Array.isArray(way.numbers) ? way as StatWay : { way: 'typed' };
+  if (isObject(way) && way.way === 'array' && Array.isArray(way.numbers)) return way as StatWay;
+  if (isObject(way) && way.way === 'roll' && typeof way.each === 'string') return way as StatWay;
+  return { way: 'typed' };
+};
+
+/**
+ * What a stat is rolled with, as the GM writes it: "3d6", "4d6 drop lowest", "2d6 + 6". The count of what
+ * it keeps, its sides and what it adds, or null when it doesn't read (backend creation.js parseStatRoll).
+ */
+export const parseStatRoll = (text: string): { count: number; sides: number; drop: number; which: string | null; add: number } | null => {
+  const m = /^\s*(\d*)d(\d+)(?:\s+drop\s+(lowest|highest)(?:\s+(\d+))?)?(?:\s*([+-])\s*(\d+))?\s*$/i.exec(text);
+  if (!m) return null;
+  const count = m[1] === '' ? 1 : Number(m[1]);
+  const sides = Number(m[2]);
+  const drop = m[3] ? Number(m[4] ?? 1) : 0;
+  const add = m[6] ? Number(m[6]) * (m[5] === '-' ? -1 : 1) : 0;
+  if (count < 1 || count > 20 || sides < 2 || sides > 100) return null;
+  if (m[3] && (drop < 1 || drop >= count)) return null;
+  if (Math.abs(add) > 1000) return null;
+  return { count, sides, drop, which: m[3] ? m[3].toLowerCase() : null, add };
 };
 
 /** A stats step's way changed; typed in stores nothing. */
@@ -130,8 +149,18 @@ const counted = (n: number, what: string): string => `${n} ${what}${n === 1 ? ''
 /** What stops a step's way working at the table, in the server's words (backend creation.js stepWayProblems). */
 export const stepWayProblems = (def: Definition, id: string): string[] => {
   const way = wayOfStep(def, id);
-  if (way.way !== 'array') return [];
   const stats = statsOfStep(def, id);
+  if (way.way === 'roll') {
+    const r = parseStatRoll(way.each);
+    if (!r) return ['Reads like 3d6, 4d6 drop lowest or 2d6 + 6, up to 20 dice of up to 100 sides'];
+    const lo = (r.count - r.drop) + r.add;
+    const hi = (r.count - r.drop) * r.sides + r.add;
+    return stats.flatMap((s) => [
+      ...(Number.isSafeInteger(s.min) && lo < (s.min as number) ? [`${way.each} can roll ${lo}, below ${s.label || s.id}'s lowest, ${s.min}`] : []),
+      ...(Number.isSafeInteger(s.max) && hi > (s.max as number) ? [`${way.each} can roll ${hi}, above ${s.label || s.id}'s highest, ${s.max}`] : []),
+    ]);
+  }
+  if (way.way !== 'array') return [];
   const numbers = way.numbers.filter(Number.isSafeInteger);
   const found: string[] = [];
   if (numbers.length < stats.length) found.push(`${counted(numbers.length, 'number')} for ${counted(stats.length, 'stat')}: each stat needs one`);

@@ -7,7 +7,10 @@
 //     order: ['who', 'stats', 'list:classes', 'kits', 'money'],   // only what was moved
 //     off: ['money', 'stats:stress'],         // steps switched off; WHO THEY ARE never is
 //     statsBy: 'group',                       // GROUP BY GROUP (7c3a); unsaid, ONE WAY FOR ALL
-//     ways: { stats: { way: 'array', numbers: [15, 14, 13, 12] } },   // how a stats step is set (7c3b); unsaid, typed in
+//     ways: {                                 // how a stats step is set; unsaid, typed in
+//       stats: { way: 'array', numbers: [15, 14, 13, 12] },                 // 7c3b
+//       'stats:skills': { way: 'roll', each: '4d6 drop lowest', placed: 'arrange' },   // 7c3c; or 'order'
+//     },
 //   }
 //
 // A step is read from what the system has, never stored: WHO THEY ARE always; THE STATS with stats to
@@ -22,6 +25,7 @@
 //
 //   _creating: {}                   opened, nothing started: the window's START
 //   _creating: { at: 'stats' }      working, on that step
+//   _creating: { at, rolled: { stats: [14, 9, 12] } }   what a step's ROLL came to (7c3c), kept: once only
 //   _creating: { done: true, uploaded?: true }   finished, or came in as an upload
 //
 // Who is asked at all is the browser's to work out (sheets/newCharacterFlow.ts): a blank sheet with
@@ -39,15 +43,18 @@
 const { partOn } = require('./parts');
 const { choicesOf, pickedOf } = require('./choices');
 const { fieldsOf } = require('./sheet');
+const { cryptoRng } = require('../utils/random');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
 
 /** How many ids `order` and `off` may hold: every list a system can have, and room. */
-const LIMITS = { steps: 40, numbers: 40 };
+const LIMITS = { steps: 40, numbers: 40, rollDice: 20, rollSides: 100, rollAdd: 1000 };
 const KEYS = new Set(['on', 'order', 'off', 'statsBy', 'ways']);
 const STATS_STEP = /^stats(?::[a-z][a-z0-9_]{0,63})?$/;
-const WAY_KEYS = { typed: new Set(['way']), array: new Set(['way', 'numbers']) };
+const WAY_KEYS = { typed: new Set(['way']), array: new Set(['way', 'numbers']), roll: new Set(['way', 'each', 'placed']) };
+const PLACED = ['order', 'arrange'];
+const ROLL_READS = `Reads like 3d6, 4d6 drop lowest or 2d6 + 6, up to ${LIMITS.rollDice} dice of up to ${LIMITS.rollSides} sides`;
 const STEP = /^(?:who|stats(?::[a-z][a-z0-9_]{0,63})?|kits|money|list:[a-z][a-z0-9_]{0,63})$/;
 /** Where a sheet keeps its place in the flow. */
 const CREATING_KEY = '_creating';
@@ -108,7 +115,37 @@ const creationOf = (definition) => {
 const wayOf = (definition, step) => {
   const ways = creationIn(definition).ways;
   const way = isPlainObject(ways) ? ways[step] : null;
-  return isPlainObject(way) && way.way === 'array' && Array.isArray(way.numbers) ? way : { way: 'typed' };
+  if (isPlainObject(way) && way.way === 'array' && Array.isArray(way.numbers)) return way;
+  if (isPlainObject(way) && way.way === 'roll' && typeof way.each === 'string') return way;
+  return { way: 'typed' };
+};
+
+/**
+ * What a stat is rolled with, as the GM writes it: "3d6", "4d6 drop lowest", "5d6 drop lowest 2",
+ * "2d6 + 6". Gives { count, sides, drop, which, add }, or null when it doesn't read.
+ */
+const parseStatRoll = (text) => {
+  const m = /^\s*(\d*)d(\d+)(?:\s+drop\s+(lowest|highest)(?:\s+(\d+))?)?(?:\s*([+-])\s*(\d+))?\s*$/i.exec(typeof text === 'string' ? text : '');
+  if (!m) return null;
+  const count = m[1] === '' ? 1 : Number(m[1]);
+  const sides = Number(m[2]);
+  const drop = m[3] ? Number(m[4] ?? 1) : 0;
+  const add = m[6] ? Number(m[6]) * (m[5] === '-' ? -1 : 1) : 0;
+  if (count < 1 || count > LIMITS.rollDice || sides < 2 || sides > LIMITS.rollSides) return null;
+  if (m[3] && (drop < 1 || drop >= count)) return null;
+  if (Math.abs(add) > LIMITS.rollAdd) return null;
+  return { count, sides, drop, which: m[3] ? m[3].toLowerCase() : null, add };
+};
+
+/** The lowest and highest a roll can come to. */
+const statRollRange = (r) => ({ lo: (r.count - r.drop) + r.add, hi: (r.count - r.drop) * r.sides + r.add });
+
+/** One stat's roll: every die thrown, and what it comes to with those dropped. */
+const rollEach = (r, rng) => {
+  const dice = Array.from({ length: r.count }, () => Math.floor(rng() * r.sides) + 1);
+  const ordered = [...dice].sort((a, b) => a - b);
+  const kept = r.which === 'lowest' ? ordered.slice(r.drop) : r.which === 'highest' ? ordered.slice(0, ordered.length - r.drop) : ordered;
+  return { dice, total: kept.reduce((a, b) => a + b, 0) + r.add };
 };
 
 /** The stats a step sets: all asked, or one group's, without those the GM keeps to themselves on the sheet. */
@@ -132,12 +169,27 @@ const placedFrom = (pool, stats, data) => {
   return { placed, left };
 };
 
+/** What a step's ROLL came to on this sheet, or null: not rolled yet. */
+const rolledOn = (data, step) => {
+  const place = isPlainObject(data) && isPlainObject(data[CREATING_KEY]) ? data[CREATING_KEY] : {};
+  const rolled = isPlainObject(place.rolled) ? place.rolled[step] : null;
+  return Array.isArray(rolled) ? rolled : null;
+};
+
+/** The numbers a step's stats take from: an array's, or what its ROLL came to. Null: nothing yet. */
+const poolOf = (definition, data, step) => {
+  const way = wayOf(definition, step);
+  if (way.way === 'array') return way.numbers;
+  return way.way === 'roll' ? rolledOn(data, step) : null;
+};
+
 /** Whether a stats step with a way of its own is done: every stat holding a number. */
 const wayDone = (definition, data, step) => {
-  const way = wayOf(definition, step);
-  if (way.way !== 'array') return true;
+  if (wayOf(definition, step).way === 'typed') return true;
+  const pool = poolOf(definition, data, step);
+  if (!pool) return false;
   const stats = statsOfStep(definition, step);
-  const { placed } = placedFrom(way.numbers, stats, data);
+  const { placed } = placedFrom(pool, stats, data);
   return stats.every((s) => placed[s.id] !== undefined);
 };
 
@@ -188,10 +240,12 @@ const lockedWhileCreating = (definition, data) => {
 const placeNumber = (definition, sheet, action) => {
   if (!stepsAsked(definition).includes(action.step)) return { ok: false, error: 'Not one of this game\'s steps' };
   const way = wayOf(definition, action.step);
-  if (way.way !== 'array') return { ok: false, error: 'These stats aren\'t placed' };
+  if (way.way === 'typed' || (way.way === 'roll' && way.placed !== 'arrange')) return { ok: false, error: 'These stats aren\'t placed' };
+  const pool = poolOf(definition, sheet, action.step);
+  if (!pool) return { ok: false, error: 'Roll them first' };
   const stats = statsOfStep(definition, action.step);
   if (!stats.some((s) => s.id === action.stat)) return { ok: false, error: 'Not one of this step\'s stats' };
-  const { placed, left } = placedFrom(way.numbers, stats, sheet);
+  const { placed, left } = placedFrom(pool, stats, sheet);
   if (action.value === null) {
     const { [action.stat]: gone, ...rest } = sheet;
     return { ok: true, data: rest };
@@ -202,19 +256,64 @@ const placeNumber = (definition, sheet, action) => {
   return { ok: true, data: { ...sheet, [action.stat]: action.value } };
 };
 
+/** What a stats step is called, in the log. */
+const stepLabel = (definition, step) => {
+  if (step === 'stats') return 'THE STATS';
+  const group = statGroupsOf(definition).find((g) => `stats:${g.id}` === step);
+  return String((group && group.label) || step).toUpperCase();
+};
+
+/**
+ * A step's ROLL (7c3c): once for each of its stats, on the secure dice, kept. In order, each number goes
+ * straight on its stat; arranged, they wait to be placed. Once rolled it stays rolled.
+ */
+const rollStats = (definition, sheet, action, rng) => {
+  if (!stepsAsked(definition).includes(action.step)) return { ok: false, error: 'Not one of this game\'s steps' };
+  const way = wayOf(definition, action.step);
+  if (way.way !== 'roll') return { ok: false, error: 'These stats aren\'t rolled' };
+  if (rolledOn(sheet, action.step)) return { ok: false, error: 'Rolled, and kept: rolling again is the GM\'s' };
+  const parsed = parseStatRoll(way.each);
+  if (!parsed) return { ok: false, error: 'This game\'s roll doesn\'t read' };
+  const stats = statsOfStep(definition, action.step);
+  const rolls = stats.map(() => rollEach(parsed, rng));
+  const totals = rolls.map((r) => r.total);
+  const place = placeOf(sheet);
+  const next = { ...sheet, [CREATING_KEY]: { ...place, rolled: { ...(isPlainObject(place.rolled) ? place.rolled : {}), [action.step]: totals } } };
+  if (way.placed !== 'arrange') stats.forEach((s, i) => { next[s.id] = totals[i]; });
+  return {
+    ok: true,
+    data: next,
+    rolled: {
+      label: stepLabel(definition, action.step),
+      each: way.each,
+      sides: parsed.sides,
+      rolls: rolls.flatMap((r) => r.dice),
+      totals,
+      total: totals.reduce((a, b) => a + b, 0),
+      // In order, each is already a stat's, so the log says whose.
+      named: way.placed === 'arrange' ? null : stats.map((s) => s.label || s.id),
+    },
+  };
+};
+
+/** The dice-log line for a step's ROLL: "Wren rolled THE STATS (4d6 drop lowest): Might 14, Wits 9". */
+const statRollLine = (who, rolled) => `${who} rolled ${rolled.label} (${rolled.each}): ${rolled.totals.map((n, i) => (rolled.named ? `${rolled.named[i]} ${n}` : n)).join(', ')}`;
+
 /**
  * One step of a character's way through the flow: { kind: 'open' }, { kind: 'at', step },
- * { kind: 'place', step, stat, value } or { kind: 'finish' }. Gives back { ok: true, data } (no `data`
- * when there is nothing to change), or { ok: false, error } in words.
+ * { kind: 'place', step, stat, value }, { kind: 'roll', step } or { kind: 'finish' }. Gives back
+ * { ok: true, data } (no `data` when there is nothing to change, `rolled` for the log after a roll), or
+ * { ok: false, error } in words. `rng` rolls the dice, 0 to 1 (the secure source unless one is handed in).
  */
-const creationAction = (definition, data, action) => {
+const creationAction = (definition, data, action, { rng = cryptoRng } = {}) => {
   const sheet = isPlainObject(data) ? data : {};
   const kind = isPlainObject(action) ? action.kind : null;
   if (!creationOf(definition).on) return { ok: false, error: 'This game has no guided new character' };
   if (kind === 'open') return placeOf(sheet) ? { ok: true } : { ok: true, data: { ...sheet, [CREATING_KEY]: {} } };
-  if (!['at', 'finish', 'place'].includes(kind)) return { ok: false, error: 'Nothing to do' };
+  if (!['at', 'finish', 'place', 'roll'].includes(kind)) return { ok: false, error: 'Nothing to do' };
   if (!creatingNow(definition, sheet)) return { ok: false, error: 'This character isn\'t being made' };
   if (kind === 'place') return placeNumber(definition, sheet, action);
+  if (kind === 'roll') return rollStats(definition, sheet, action, rng);
   if (kind === 'finish') {
     if (stepsAsked(definition).some((step) => STATS_STEP.test(step) && !wayDone(definition, sheet, step))) return { ok: false, error: 'Every stat needs its number first' };
     return { ok: true, data: { ...sheet, [CREATING_KEY]: { done: true } } };
@@ -242,8 +341,17 @@ const counted = (n, what) => `${n} ${what}${n === 1 ? '' : 's'}`;
  */
 const stepWayProblems = (definition, step) => {
   const way = wayOf(definition, step);
-  if (way.way !== 'array') return [];
   const stats = statsOfStep(definition, step);
+  if (way.way === 'roll') {
+    const parsed = parseStatRoll(way.each);
+    if (!parsed) return [ROLL_READS];
+    const { lo, hi } = statRollRange(parsed);
+    return stats.flatMap((s) => [
+      ...(Number.isSafeInteger(s.min) && lo < s.min ? [`${way.each} can roll ${lo}, below ${s.label || s.id}'s lowest, ${s.min}`] : []),
+      ...(Number.isSafeInteger(s.max) && hi > s.max ? [`${way.each} can roll ${hi}, above ${s.label || s.id}'s highest, ${s.max}`] : []),
+    ]);
+  }
+  if (way.way !== 'array') return [];
   const numbers = way.numbers.filter(Number.isSafeInteger);
   const found = [];
   if (numbers.length < stats.length) found.push(`${counted(numbers.length, 'number')} for ${counted(stats.length, 'stat')}: each stat needs one`);
@@ -263,8 +371,13 @@ const checkWays = (definition, ways, problems) => {
   for (const [step, way] of Object.entries(ways)) {
     const where = `creation, ways, ${step}`;
     if (!STATS_STEP.test(step)) { problems.push({ where, message: 'Only the stats have a way to be set' }); continue; }
-    if (!isPlainObject(way) || !Object.keys(WAY_KEYS).includes(way.way)) { problems.push({ where, message: 'Must be typed or array' }); continue; }
+    if (!isPlainObject(way) || !Object.keys(WAY_KEYS).includes(way.way)) { problems.push({ where, message: 'Must be typed, array or roll' }); continue; }
     for (const key of Object.keys(way)) if (!WAY_KEYS[way.way].has(key)) problems.push({ where: `${where}, ${key}`, message: 'Not part of this way' });
+    if (way.way === 'roll') {
+      if (typeof way.each !== 'string') problems.push({ where: `${where}, each`, message: 'Must say what each is rolled with' });
+      if (!PLACED.includes(way.placed)) problems.push({ where: `${where}, placed`, message: 'Must be order or arrange' });
+      continue;
+    }
     if (way.way !== 'array') continue;
     if (!Array.isArray(way.numbers)) { problems.push({ where: `${where}, numbers`, message: 'Must be a list of numbers' }); continue; }
     if (way.numbers.length > LIMITS.numbers) problems.push({ where: `${where}, numbers`, message: `At most ${LIMITS.numbers} numbers` });
@@ -295,4 +408,4 @@ const checkCreation = (definition, problems) => {
   checkWays(definition, c.ways, problems);
 };
 
-module.exports = { LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, stepsAsked, creationShown, creatingNow, creationAction, withUpload, lockedWhileCreating, placedFrom, stepWayProblems };
+module.exports = { LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, stepsAsked, creationShown, creatingNow, creationAction, withUpload, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine };
