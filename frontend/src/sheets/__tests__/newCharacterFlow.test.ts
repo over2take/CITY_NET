@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
-  CREATING_KEY, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, placedFrom, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields, withCreationLocks,
+  buyCost, buyShown, CREATING_KEY, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, placedFrom, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields, withCreationLocks,
 } from '../newCharacterFlow';
 import { WORKED_KEY, type ChoiceListShown } from '../choicesShown';
 import type { SheetTemplate } from '../types';
@@ -292,6 +292,61 @@ describe('rolled (7c3c)', () => {
     const done = backend.creationAction(def, { [CREATING_KEY]: {} }, { kind: 'roll', step: 'stats' }).data;
     expect(rolledPool(done, 'stats')).toEqual([done.grit]);
     expect(stepAnswered(template, 'stats', done)).toBe(true);
+  });
+});
+
+describe('a point buy (7c3d)', () => {
+  const FLAT = { way: 'buy' as const, points: 4, lowest: 8, highest: 12 };
+  const COSTED = { ...FLAT, points: 5, costs: { 8: 0, 9: 1, 10: 2, 11: 4, 12: 6 } };
+  const stats = [{ id: 'a' }, { id: 'b' }];
+
+  it('costs by its table, or 1 for 1 above the lowest', () => {
+    expect([8, 11, 12].map((n) => buyCost(FLAT, n))).toEqual([0, 3, 4]);
+    expect([8, 11, 12].map((n) => buyCost(COSTED, n))).toEqual([0, 4, 6]);
+    expect(buyCost({ ...COSTED, costs: { 8: 0 } }, 9)).toBe(0);
+  });
+
+  it('each stat holds the lowest until bought up, or if it holds no such number', () => {
+    expect(buyShown(COSTED, stats, {}).held).toEqual({ a: 8, b: 8 });
+    expect(buyShown(COSTED, stats, { a: 99, b: 10 }).held).toEqual({ a: 8, b: 10 });
+    expect(buyShown(COSTED, stats, { a: 9.5, b: '10' }).held).toEqual({ a: 8, b: 8 });
+    expect(buyShown(COSTED, stats, { a: 12 }).held.a).toBe(12);
+    expect(buyShown(COSTED, stats, null).spent).toBe(0);
+  });
+
+  it('says the points spent and left', () => {
+    const s = buyShown(COSTED, stats, { a: 11, b: 9 });
+    expect([s.spent, s.left]).toEqual([5, 0]);
+    expect(buyShown(COSTED, stats, { a: 12, b: 12 }).left).toBe(-7);
+  });
+
+  it('goes down to the lowest, up to the highest, as far as the points go', () => {
+    const start = buyShown(COSTED, stats, { a: 8, b: 11 });
+    expect(start.canLower('a')).toBe(false);
+    expect(start.canLower('b')).toBe(true);
+    expect(start.canRaise('a')).toBe(true);
+    expect(start.canRaise('b')).toBe(false);
+    expect(buyShown(COSTED, stats, { a: 10, b: 8 }).canRaise('a')).toBe(true);
+    expect(buyShown({ ...FLAT, points: 100 }, stats, { a: 12 }).canRaise('a')).toBe(false);
+  });
+
+  it('answered with points left over, not with too many spent', () => {
+    const template = { ...TEMPLATE, creation: { steps: ['stats'], ways: { stats: COSTED }, stats: [{ id: 'g', label: 'G', stats: [{ id: 'grit', label: 'Grit' }, { id: 'concept', label: 'C' }] }] } } as unknown as SheetTemplate;
+    expect(stepAnswered(template, 'stats', {})).toBe(true);
+    expect(stepAnswered(template, 'stats', { grit: 11, concept: 9 })).toBe(true);
+    expect(stepAnswered(template, 'stats', { grit: 12, concept: 12 })).toBe(false);
+  });
+
+  it('counts as the server does', () => {
+    const def = (way: object) => ({ format: 1, name: 'H', stats: [{ id: 'g', label: 'G', stats: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }] }], creation: { on: true, ways: { stats: way } } });
+    const at = { [CREATING_KEY]: { at: 'stats' } };
+    for (const way of [FLAT, COSTED]) {
+      for (const data of [{ a: 8, b: 8 }, { a: 10, b: 9 }, { a: 11, b: 8 }, { a: 12, b: 8 }, { a: 99, b: 11 }]) {
+        const view = buyShown(way, stats, data);
+        const canAfford = backend.creationAction(def(way), { ...data, ...at }, { kind: 'buy', step: 'stats', stat: 'b', value: view.held.b + 1 });
+        expect(view.canRaise('b'), JSON.stringify([way.points, data])).toBe(canAfford.ok);
+      }
+    }
   });
 });
 

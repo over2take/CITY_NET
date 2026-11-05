@@ -244,8 +244,8 @@ describe('a fixed array (7c3b)', () => {
     expect(issues({ ways: { stats: { way: 'typed' } } })).toEqual([]);
     expect(issues({ ways: 'array' })).toEqual(['creation, ways: Must say how each step\'s stats are set']);
     expect(issues({ ways: { who: ARRAY } })).toEqual(['creation, ways, who: Only the stats have a way to be set']);
-    expect(issues({ ways: { stats: 'array' } })).toEqual(['creation, ways, stats: Must be typed, array or roll']);
-    expect(issues({ ways: { stats: { way: 'dice' } } })).toEqual(['creation, ways, stats: Must be typed, array or roll']);
+    expect(issues({ ways: { stats: 'array' } })).toEqual(['creation, ways, stats: Must be typed, array, roll or buy']);
+    expect(issues({ ways: { stats: { way: 'dice' } } })).toEqual(['creation, ways, stats: Must be typed, array, roll or buy']);
     expect(issues({ ways: { stats: { way: 'typed', numbers: [1] } } })).toEqual(['creation, ways, stats, numbers: Not part of this way']);
     expect(issues({ ways: { stats: { way: 'array', numbers: 'three' } } })).toEqual(['creation, ways, stats, numbers: Must be a list of numbers']);
     expect(issues({ ways: { stats: { way: 'array', numbers: [1, 2, 3.5] } } })).toContain('creation, ways, stats, numbers: Must be whole numbers');
@@ -405,7 +405,7 @@ describe('rolled (7c3c)', () => {
     expect(issues({ way: 'roll', each: '3d6' })).toEqual(['creation, ways, stats, placed: Must be order or arrange']);
     expect(issues({ way: 'roll', each: '3d6', placed: 'order', numbers: [1] })).toEqual(['creation, ways, stats, numbers: Not part of this way']);
     expect(issues({ way: 'roll', each: 'lots', placed: 'order' })).toEqual(['creation, ways, stats: Reads like 3d6, 4d6 drop lowest or 2d6 + 6, up to 20 dice of up to 100 sides']);
-    expect(issues({ way: 'dice' })).toEqual(['creation, ways, stats: Must be typed, array or roll']);
+    expect(issues({ way: 'dice' })).toEqual(['creation, ways, stats: Must be typed, array, roll or buy']);
   });
 
   it('says when it could come to what a stat can\'t hold', () => {
@@ -414,6 +414,120 @@ describe('rolled (7c3c)', () => {
       '3d6 can roll 3, below Bow\'s lowest, 5',
       '3d6 can roll 18, above Bow\'s highest, 12',
     ]);
+  });
+
+  it('the system file carries it, unchanged', () => {
+    const d = def();
+    const read = citysys.readFile(JSON.stringify(citysys.buildFile({ definition: d, version: 1, origin: 'sys_abcdefabcdefabcd' })));
+    expect([read.file.definition.creation, read.problems]).toEqual([d.creation, []]);
+  });
+});
+
+describe('a point buy (7c3d)', () => {
+  const STATS = [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'might', label: 'Might' }, { id: 'wits', label: 'Wits' }] }];
+  const FLAT = { way: 'buy', points: 4, lowest: 8, highest: 12 };
+  const COSTED = { ...FLAT, points: 5, costs: { 8: 0, 9: 1, 10: 2, 11: 4, 12: 6 } };
+  const def = (way = COSTED, more = {}) => ({ format: 1, name: 'B', stats: STATS, creation: { on: true, ways: { stats: way }, ...more } });
+  const at = { [CREATING_KEY]: { at: 'stats' } };
+  const buy = (data, stat, value, d = def()) => creationAction(d, data, { kind: 'buy', step: 'stats', stat, value });
+  const issues = (way, stats = STATS, more = {}) => checkDefinition({ format: 1, name: 'B', stats, creation: { ways: { stats: way } }, ...more }).problems.map((p) => `${p.where}: ${p.message}`);
+
+  it('every stat starts at the lowest on arriving, and a number it can\'t hold goes back to it', () => {
+    const on = creationAction(def(), { [CREATING_KEY]: {} }, { kind: 'at', step: 'stats' }).data;
+    expect([on.might, on.wits]).toEqual([8, 8]);
+    expect(on[CREATING_KEY]).toEqual({ at: 'stats' });
+    const stale = creationAction(def(), { might: 99, wits: 10, [CREATING_KEY]: {} }, { kind: 'at', step: 'stats' }).data;
+    expect([stale.might, stale.wits]).toEqual([8, 10]);
+    const below = creationAction(def(), { might: 3, [CREATING_KEY]: {} }, { kind: 'at', step: 'stats' }).data;
+    expect(below.might).toBe(8);
+    const typed = { ...def(), creation: { on: true } };
+    expect(creationAction(typed, { [CREATING_KEY]: {} }, { kind: 'at', step: 'stats' }).data.might).toBeUndefined();
+  });
+
+  it('arriving elsewhere leaves them alone', () => {
+    const d = { ...def(), choices: [{ id: 'classes', one: 'Class', many: 'Classes', options: [{ id: 'a', label: 'A' }] }] };
+    expect(creationAction(d, { [CREATING_KEY]: {} }, { kind: 'at', step: 'list:classes' }).data.might).toBeUndefined();
+  });
+
+  it('buys up and down by the table, filling in the others', () => {
+    const up = buy(at, 'might', 11);
+    expect(up.ok).toBe(true);
+    expect([up.data.might, up.data.wits]).toEqual([11, 8]);
+    expect(buy(up.data, 'might', 10).data.might).toBe(10);
+  });
+
+  it('holds to the points: the table\'s cost, or 1 for 1 with none', () => {
+    const spent = buy(at, 'might', 11).data;
+    expect(buy(spent, 'wits', 9).ok).toBe(true);
+    expect(buy(spent, 'wits', 10)).toEqual({ ok: false, error: 'Not enough points left' });
+    expect(buy(at, 'might', 12).ok).toBe(false);
+    const flat = def(FLAT);
+    const three = buy(at, 'might', 11, flat).data;
+    expect(buy(three, 'wits', 9, flat).ok).toBe(true);
+    expect(buy(three, 'wits', 10, flat).error).toBe('Not enough points left');
+    expect(buy(at, 'might', 12, flat).ok).toBe(true);
+  });
+
+  it('going down always may, even over the points after the GM changes them', () => {
+    const over = { might: 12, wits: 12, [CREATING_KEY]: { at: 'stats' } };
+    expect(buy(over, 'might', 11).ok).toBe(true);
+    expect(buy(over, 'might', 11).data.might).toBe(11);
+  });
+
+  it('only to a whole number in the range, on this step\'s stats, in this way', () => {
+    expect(buy(at, 'might', 13).error).toBe('From 8 to 12');
+    expect(buy(at, 'might', 7).error).toBe('From 8 to 12');
+    expect(buy(at, 'might', 9.5).error).toBe('From 8 to 12');
+    expect(buy(at, 'might', '9').error).toBe('From 8 to 12');
+    expect(buy(at, 'nope', 9).error).toBe('Not one of this step\'s stats');
+    expect(buy(at, 'might', 9, { ...def(), creation: { on: true } }).error).toBe('These stats aren\'t bought');
+    expect(creationAction(def(), at, { kind: 'buy', step: 'kits', stat: 'might', value: 9 }).error).toBe('Not one of this game\'s steps');
+    expect(buy({}, 'might', 9).error).toBe('This character isn\'t being made');
+  });
+
+  it('isn\'t placed or rolled', () => {
+    expect(creationAction(def(), at, { kind: 'place', step: 'stats', stat: 'might', value: 9 }).error).toBe('These stats aren\'t placed');
+    expect(creationAction(def(), at, { kind: 'roll', step: 'stats' }).error).toBe('These stats aren\'t rolled');
+  });
+
+  it('FINISH takes points left over, fills in any not bought, and refuses too many', () => {
+    const done = creationAction(def(), at, { kind: 'finish' });
+    expect(done.data).toEqual({ might: 8, wits: 8, [CREATING_KEY]: { done: true } });
+    const over = { might: 12, wits: 12, [CREATING_KEY]: { at: 'stats' } };
+    expect(creationAction(def(), over, { kind: 'finish' })).toEqual({ ok: false, error: 'More points spent than there are' });
+    expect(creationAction(def(), { might: 11, wits: 9, ...at }, { kind: 'finish' }).ok).toBe(true);
+  });
+
+  it('is locked on the sheet while being made, as any way but typing', () => {
+    expect([...lockedWhileCreating(def(), at)]).toEqual(['might', 'wits']);
+  });
+
+  it('tells the browser the way', () => {
+    expect(creationShown(def()).ways).toEqual({ stats: COSTED });
+  });
+
+  it('the checks take it, and say what is wrong', () => {
+    expect(issues(FLAT)).toEqual([]);
+    expect(issues(COSTED)).toEqual([]);
+    expect(issues({ ...FLAT, points: 'lots' })).toEqual(['creation, ways, stats, points: Must be a whole number']);
+    expect(issues({ ...FLAT, lowest: 1.5 })).toEqual(['creation, ways, stats, lowest: Must be a whole number']);
+    expect(issues({ ...FLAT, highest: null })).toEqual(['creation, ways, stats, highest: Must be a whole number']);
+    expect(issues({ ...FLAT, points: -1 })).toContain('creation, ways, stats, points: From 0 to 100000');
+    expect(issues({ ...FLAT, points: 100001 })).toEqual(['creation, ways, stats, points: From 0 to 100000']);
+    expect(issues({ ...FLAT, costs: 'high' })).toEqual(['creation, ways, stats, costs: Must say what each number costs']);
+    expect(issues({ ...FLAT, numbers: [1] })).toEqual(['creation, ways, stats, numbers: Not part of this way']);
+  });
+
+  it('says what would leave a player stuck', () => {
+    const problems = (way, stats = STATS) => stepWayProblems({ format: 1, name: 'B', stats, creation: { ways: { stats: way } } }, 'stats');
+    expect(problems(FLAT)).toEqual([]);
+    expect(problems({ ...FLAT, lowest: 13 })).toEqual(['The lowest is above the highest']);
+    expect(problems({ ...FLAT, highest: FLAT.lowest + LIMITS.buyRange })).toEqual([`At most ${LIMITS.buyRange} numbers`]);
+    expect(problems({ ...FLAT, highest: FLAT.lowest + LIMITS.buyRange - 1 })).toEqual([]);
+    expect(problems({ ...COSTED, costs: { 8: 0, 9: 1, 10: -2, 12: 6 } })).toEqual(['10, 11 needs a cost, of 0 or more']);
+    expect(problems({ ...FLAT, points: 3, costs: { 8: 2, 9: 3, 10: 4, 11: 5, 12: 6 } })).toEqual(['Every stat at its lowest costs 4, more than the 3 points']);
+    const ranged = [{ id: 'g', label: 'G', stats: [{ id: 'a', label: 'Aim', min: 9, max: 11 }] }];
+    expect(problems(FLAT, ranged)).toEqual(['8 is below Aim\'s lowest, 9', '12 is above Aim\'s highest, 11']);
   });
 
   it('the system file carries it, unchanged', () => {

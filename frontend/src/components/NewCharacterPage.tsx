@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import type { Definition } from '../sheets/systemsApi';
 import type { BuilderPage } from '../sheets/builderSession';
-import { creationOn, creationSteps, groupLeftOut, orderNotes, parseNumbers, parseStatRoll, statsByGroup, stepGroup, stepList, stepName, stepWayProblems, wayOfStep, withCreationOn, withStatsByGroup, withStepMoved, withStepOff, withStepWay } from '../sheets/newCharacter';
+import { buyNumbers, buyPreset, buyWith, buyWithCost, climbingCosts, creationOn, creationSteps, groupLeftOut, orderNotes, parseNumbers, parseStatRoll, statsByGroup, stepGroup, stepList, stepName, stepWayProblems, wayOfStep, withCreationOn, withStatsByGroup, withStepMoved, withStepOff, withStepWay } from '../sheets/newCharacter';
 import { isStatsStep } from '../sheets/newCharacterFlow';
 import { statGroups } from '../sheets/statsRules';
 import { pickedOf } from '../sheets/choices';
 import { HINTS } from '../sheets/builderHelp';
-import type { StatWay } from '../sheets/newCharacterFlow';
+import { buyCost, type BuyWay, type StatWay } from '../sheets/newCharacterFlow';
 import { FieldName } from './HelpHint';
 import { ToggleSwitch } from './ToggleSwitch';
 
@@ -36,14 +36,16 @@ const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '160px
 const statCount = (n: number): string => `${n} ${n === 1 ? 'stat' : 'stats'}`;
 /** How a stats step can be set, as the page offers it, with what each means (7c3b). */
 const WAYS = [
-  { id: 'typed', label: 'TYPED IN', why: 'They type what they have, as the sheet does. Point buy comes next.' },
+  { id: 'typed', label: 'TYPED IN', why: 'They type what they have, as the sheet does.' },
   { id: 'roll', label: 'ROLL', why: 'The server rolls, the table sees it in the log, and what comes up is kept.' },
+  { id: 'buy', label: 'POINT BUY', why: 'Points to spend, each number with its cost. Each stat starts at the lowest.' },
   { id: 'array', label: 'A FIXED ARRAY', why: 'The same numbers for everyone, placed as they like.' },
 ] as const;
 /** A way as it starts when the GM picks it, keeping what it already has. */
 const startWay = (id: StatWay['way'], now: StatWay): StatWay => {
   if (id === now.way) return now;
   if (id === 'array') return { way: 'array', numbers: [] };
+  if (id === 'buy') return { way: 'buy', points: 20, lowest: 8, highest: 15, costs: climbingCosts(8, 15) };
   return id === 'roll' ? { way: 'roll', each: '4d6 drop lowest', placed: 'arrange' } : { way: 'typed' };
 };
 /** What a stats step's way does, for the line saying what the step asks. */
@@ -51,8 +53,50 @@ const howSet = (definition: Definition, id: string): string => {
   const way = wayOfStep(definition, id);
   if (way.way === 'array') return 'placed from a fixed array.';
   if (way.way === 'roll') return `rolled with ${way.each}, ${way.placed === 'arrange' ? 'then placed as they like' : 'in order'}.`;
-  return 'typed in by the player. Point buy comes next.';
+  if (way.way === 'buy') return `bought with ${way.points} points, from ${way.lowest} to ${way.highest}.`;
+  return 'typed in by the player.';
 };
+
+/** A whole number: kept as typed, written once it reads as one, and showing a change made from elsewhere. */
+function WholeBox({ value, label, width = 64, onChange }: { value: number; label: string; width?: number; onChange: (next: number) => void }) {
+  const [text, setText] = useState(String(value));
+  const read = /^-?\d+$/.test(text.trim()) ? Number(text) : null;
+  return (
+    <input type="text" inputMode="numeric" aria-label={label} value={read === null || read === value ? text : String(value)} aria-invalid={read === null ? true : undefined}
+      style={{ fontFamily: 'monospace', fontSize: 12, padding: '3px 5px', width, background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--dark-green)', textAlign: 'center' }}
+      onChange={(e) => { setText(e.target.value); if (/^-?\d+$/.test(e.target.value.trim())) onChange(Number(e.target.value)); }} />
+  );
+}
+
+/** A point buy's points, range and costs, with the presets for those. */
+function BuySettings({ way, onChange }: { way: BuyWay; onChange: (next: BuyWay) => void }) {
+  const preset = buyPreset(way);
+  return (
+    <>
+      <FieldName beside hint={HINTS['creation.points']} style={small}>POINTS</FieldName>
+      <span style={{ justifySelf: 'start' }}><WholeBox label="Points" value={way.points} onChange={(points) => onChange(buyWith(way, { points }))} /></span>
+      <FieldName beside hint={HINTS['creation.buyRange']} style={small}>FROM / TO</FieldName>
+      <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', justifySelf: 'start' }}>
+        <WholeBox label="Lowest" value={way.lowest} onChange={(lowest) => onChange(buyWith(way, { lowest }))} />
+        <WholeBox label="Highest" value={way.highest} onChange={(highest) => onChange(buyWith(way, { highest }))} />
+      </span>
+      <FieldName beside hint={HINTS['creation.costs']} style={small}>COSTS</FieldName>
+      <span role="group" aria-label="Costs" style={{ display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--green)', justifySelf: 'start' }}>
+        <button type="button" aria-pressed={preset === 'flat'} style={seg(preset === 'flat')} onClick={() => onChange({ way: 'buy', points: way.points, lowest: way.lowest, highest: way.highest })}>1 FOR 1</button>
+        <button type="button" aria-pressed={preset === 'climbing'} style={seg(preset === 'climbing')} onClick={() => onChange({ ...way, costs: climbingCosts(way.lowest, way.highest) })}>CLIMBING</button>
+      </span>
+      <span />
+      <span role="group" aria-label="Cost of each number" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {buyNumbers(way).map((n) => (
+          <label key={n} style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+            <span style={small}>{n}</span>
+            <WholeBox label={`Cost of ${n}`} width={40} value={buyCost(way, n)} onChange={(cost) => onChange(buyWithCost(way, n, cost))} />
+          </label>
+        ))}
+      </span>
+    </>
+  );
+}
 
 /** The numbers of an array: kept as typed, written once they read as numbers. */
 function NumbersBox({ numbers, onChange }: { numbers: number[]; onChange: (next: number[]) => void }) {
@@ -185,6 +229,7 @@ export function NewCharacterPage({ definition, edit, onGoTo }: Props) {
                 <button type="button" aria-pressed={way.placed === 'arrange'} style={seg(way.placed === 'arrange')} onClick={() => edit(withStepWay(definition, step.id, { ...way, placed: 'arrange' }))}>ARRANGE</button>
               </span>
             </>}
+            {way.way === 'buy' && <BuySettings key={step.id} way={way} onChange={(next) => edit(withStepWay(definition, step.id, next))} />}
             {way.way === 'array' && <>
               <FieldName beside hint={HINTS['creation.numbers']} style={small}>THE NUMBERS</FieldName>
               <NumbersBox key={step.id} numbers={way.numbers} onChange={(numbers) => edit(withStepWay(definition, step.id, { way: 'array', numbers }))} />

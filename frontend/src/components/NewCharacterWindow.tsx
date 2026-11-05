@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { TerminalWindow, type TerminalAction, type TerminalFolder } from './TerminalWindow';
 import { BracketPortrait } from './BracketPortrait';
+import { BuyNumbers } from './BuyNumbers';
 import { PlaceNumbers } from './PlaceNumbers';
 import { ChoicesSection } from './ChoicesSection';
 import type { Socket } from 'socket.io-client';
@@ -179,6 +180,15 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
       );
     }
     const setBy = isStatsStep(open) ? stepWay(template, open) : null;
+    if (setBy?.way === 'buy') {
+      return (
+        <div style={page}>
+          <BuyNumbers way={setBy} groups={statsToSet(template, open)} data={data} named={open === 'stats'}
+            onBuy={(stat, value) => socket?.emit('creationAction', { kind: 'buy', step: open, stat, value })} />
+          {refused && <p role="alert" style={{ ...why, color: 'var(--warning)', opacity: 1 }}>{refused}</p>}
+        </div>
+      );
+    }
     if (setBy?.way === 'roll') {
       const pool = rolledPool(data, open);
       return (

@@ -293,6 +293,72 @@ describe('the stats, one way for all or group by group (7c3a)', () => {
       expect((last().creation as { ways: { stats: unknown } }).ways.stats).toEqual({ way: 'array', numbers: [] });
     });
 
+    describe('a point buy (7c3d)', () => {
+      const box = (name: string) => screen.getByRole('textbox', { name }) as HTMLInputElement;
+      const wayNow = (last: () => Definition) => (last().creation as { ways: { stats: Record<string, unknown> } }).ways.stats;
+      const CLIMB = { 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 };
+      const onBuy = async () => {
+        const opened = await onStats();
+        await userEvent.click(screen.getByRole('button', { name: 'POINT BUY' }));
+        return opened;
+      };
+
+      it('starts as 20 points, 8 to 15, the climbing cost, each number\'s cost in its box', async () => {
+        const { last } = await onBuy();
+        expect(wayNow(last)).toEqual({ way: 'buy', points: 20, lowest: 8, highest: 15, costs: CLIMB });
+        expect([box('Points').value, box('Lowest').value, box('Highest').value]).toEqual(['20', '8', '15']);
+        expect([box('Cost of 8').value, box('Cost of 13').value, box('Cost of 15').value]).toEqual(['0', '5', '9']);
+        expect(pressed('CLIMBING')).toBe('true');
+        expect(panel().textContent).toContain('Every stat, bought with 20 points, from 8 to 15.');
+      });
+
+      it('the points and the range, written as they read', async () => {
+        const { last } = await onBuy();
+        await userEvent.clear(box('Points'));
+        expect(box('Points').getAttribute('aria-invalid')).toBe('true');
+        await userEvent.type(box('Points'), '27');
+        expect(wayNow(last).points).toBe(27);
+        expect(box('Points').getAttribute('aria-invalid')).toBeNull();
+        await userEvent.clear(box('Highest'));
+        await userEvent.type(box('Highest'), '9');
+        expect(wayNow(last).highest).toBe(9);
+        expect(wayNow(last).costs).toEqual({ 8: 0, 9: 1 });
+        expect(screen.queryByRole('textbox', { name: 'Cost of 10' })).toBeNull();
+      });
+
+      it('1 FOR 1 drops the table, the boxes showing what each costs; CLIMBING brings it back', async () => {
+        const { last } = await onBuy();
+        await userEvent.click(screen.getByRole('button', { name: '1 FOR 1' }));
+        expect('costs' in wayNow(last)).toBe(false);
+        expect(pressed('1 FOR 1')).toBe('true');
+        expect(box('Cost of 15').value).toBe('7');
+        await userEvent.click(screen.getByRole('button', { name: 'CLIMBING' }));
+        expect(wayNow(last).costs).toEqual(CLIMB);
+        expect(box('Cost of 15').value).toBe('9');
+      });
+
+      it('a cost changed is the GM\'s own: neither preset pressed', async () => {
+        const { last } = await onBuy();
+        await userEvent.clear(box('Cost of 15'));
+        await userEvent.type(box('Cost of 15'), '12');
+        expect(wayNow(last).costs).toEqual({ ...CLIMB, 15: 12 });
+        expect([pressed('1 FOR 1'), pressed('CLIMBING')]).toEqual(['false', 'false']);
+        expect(box('Cost of 15').value).toBe('12');
+      });
+
+      it('says what would leave a player stuck', async () => {
+        await onBuy();
+        await userEvent.clear(box('Lowest'));
+        await userEvent.type(box('Lowest'), '16');
+        expect(screen.getByText('The lowest is above the highest')).toBeTruthy();
+      });
+
+      it('has a "?" on each', async () => {
+        await onBuy();
+        for (const k of ['creation.points', 'creation.buyRange', 'creation.costs'] as const) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
+      });
+    });
+
     it('back to typed in, the numbers go; each group keeps its own, its box showing its own', async () => {
       const { last } = open({ ...GROUPS, creation: { statsBy: 'group', ways: { 'stats:abilities': { way: 'array', numbers: [15, 14] }, 'stats:stress': { way: 'array', numbers: [3] } } } } as unknown as Definition);
       await userEvent.click(step('ABILITIES').getByRole('button', { name: 'ABILITIES' }));

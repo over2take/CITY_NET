@@ -364,6 +364,73 @@ describe('the steps', () => {
     });
   });
 
+  describe('a point buy (7c3d)', () => {
+    const BUY = {
+      steps: ['who', 'stats', 'list:classes'],
+      ways: { stats: { way: 'buy', points: 5, lowest: 8, highest: 12, costs: { 8: 0, 9: 1, 10: 2, 11: 4, 12: 6 } } },
+      stats: [{ id: 'traits', label: 'TRAITS', stats: [{ id: 'grit', label: 'Grit' }, { id: 'wits', label: 'Wits' }] }],
+    };
+    const at = (over: object = {}) => ({ name: 'Wren', _creating: { at: 'stats' }, ...over });
+    const up = (name: string) => button(`${name} up`);
+    const down = (name: string) => button(`${name} down`);
+
+    it('says the points left, each stat at the lowest, what it has cost and what the next costs', async () => {
+      await open(at(), undefined, 'tok', BUY);
+      const panel = within(screen.getByRole('tabpanel'));
+      expect(panel.getByRole('status').textContent).toBe('5 OF 5 POINTS LEFT');
+      const grit = within(screen.getByRole('group', { name: 'Grit: 8' }));
+      expect(grit.getByText('COST 0 · NEXT +1')).toBeTruthy();
+      expect(down('Grit').disabled).toBe(true);
+      expect(up('Grit').disabled).toBe(false);
+    });
+
+    it('asks the server, a number at a time', async () => {
+      const { socket } = await open(at({ grit: 10 }), undefined, 'tok', BUY);
+      await userEvent.click(up('Grit'));
+      expect(socket.said('creationAction')).toContainEqual({ kind: 'buy', step: 'stats', stat: 'grit', value: 11 });
+      await userEvent.click(down('Grit'));
+      expect(socket.said('creationAction')).toContainEqual({ kind: 'buy', step: 'stats', stat: 'grit', value: 9 });
+    });
+
+    it('stops at what the points allow and at the highest, saying the last has no next', async () => {
+      await open(at({ grit: 11, wits: 9 }), undefined, 'tok', BUY);
+      expect(screen.getByRole('status').textContent).toBe('0 OF 5 POINTS LEFT');
+      expect(up('Grit').disabled).toBe(true);
+      expect(up('Wits').disabled).toBe(true);
+      expect(button('NEXT').disabled).toBe(false);
+      cleanup();
+      await open(at({ grit: 12 }), undefined, 'tok', { ...BUY, ways: { stats: { ...BUY.ways.stats, points: 50 } } });
+      expect(up('Grit').disabled).toBe(true);
+      expect(within(screen.getByRole('group', { name: 'Grit: 12' })).getByText('COST 6')).toBeTruthy();
+    });
+
+    it('with too many spent, says by how many, and holds NEXT until they come down', async () => {
+      await open(at({ grit: 12, wits: 12 }), undefined, 'tok', BUY);
+      expect(screen.getByRole('status').textContent).toBe('7 POINTS TOO MANY');
+      expect(button('NEXT').disabled).toBe(true);
+      expect(down('Grit').disabled).toBe(false);
+    });
+
+    it('points left over hold nothing', async () => {
+      await open(at(), undefined, 'tok', BUY);
+      expect(button('NEXT').disabled).toBe(false);
+    });
+
+    it('says why the server said no', async () => {
+      const { socket } = await open(at(), undefined, 'tok', BUY);
+      socket.fire('choicesRefused', { error: 'Not enough points left' });
+      expect(screen.getByRole('alert').textContent).toBe('Not enough points left');
+    });
+
+    it('names each group on THE STATS, and not on a group\'s own step', async () => {
+      await open(at(), undefined, 'tok', BUY);
+      expect(within(screen.getByRole('tabpanel')).getByText('TRAITS')).toBeTruthy();
+      cleanup();
+      await open({ name: 'Wren', _creating: { at: 'stats:traits' } }, undefined, 'tok', { ...BUY, steps: ['who', 'stats:traits'], ways: { 'stats:traits': BUY.ways.stats } });
+      expect(within(screen.getByRole('tabpanel')).queryByText('TRAITS')).toBeNull();
+    });
+  });
+
   it('a group\'s own step shows that group alone, named at its head (7c3a)', async () => {
     await open({ name: 'Wren', grit: 12, _creating: { at: 'stats:skills' } }, undefined, 'tok', {
       steps: ['who', 'stats:traits', 'stats:skills', 'list:classes'],

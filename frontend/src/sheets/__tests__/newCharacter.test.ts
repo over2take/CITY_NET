@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { creationOn, creationSteps, groupLeftOut, orderNotes, parseNumbers, parseStatRoll, statsByGroup, stepGroup, stepList, stepName, stepWayProblems, wayOfStep, withCreationOn, withStatsByGroup, withStepMoved, withStepOff, withStepWay } from '../newCharacter';
+import { buyNumbers, buyPreset, buyWith, buyWithCost, climbingCosts, creationOn, creationSteps, groupLeftOut, orderNotes, parseNumbers, parseStatRoll, statsByGroup, stepGroup, stepList, stepName, stepWayProblems, wayOfStep, withCreationOn, withStatsByGroup, withStepMoved, withStepOff, withStepWay } from '../newCharacter';
 import { OTHER_NAMES } from '../versionPreview';
 import type { Definition } from '../systemsApi';
 
@@ -148,6 +148,71 @@ describe('rolled (7c3c)', () => {
     ]) expect(stepWayProblems(def, 'stats'), JSON.stringify(def.creation)).toEqual(server.stepWayProblems(def, 'stats'));
     expect(stepWayProblems(withStepWay(ranged, 'stats', roll('3d6')), 'stats')).toContain('3d6 can roll 3, below b\'s lowest, 5');
     expect(stepWayProblems(withStepWay(GROUPS, 'stats', roll()), 'stats')).toEqual([]);
+  });
+});
+
+describe('a point buy (7c3d)', () => {
+  const FLAT = { way: 'buy' as const, points: 20, lowest: 8, highest: 15 };
+  const CLIMBING = { ...FLAT, costs: climbingCosts(8, 15) };
+
+  it('the climbing cost adds 1 a number for five, then 2', () => {
+    expect(climbingCosts(8, 15)).toEqual({ 8: 0, 9: 1, 10: 2, 11: 3, 12: 4, 13: 5, 14: 7, 15: 9 });
+    expect(climbingCosts(1, 2)).toEqual({ 1: 0, 2: 1 });
+  });
+
+  it('knows which preset it is, until the GM changes one', () => {
+    expect(buyPreset(FLAT)).toBe('flat');
+    expect(buyPreset(CLIMBING)).toBe('climbing');
+    expect(buyPreset(buyWithCost(CLIMBING, 15, 10))).toBe('own');
+    expect(buyPreset({ ...FLAT, costs: { 8: 0 } })).toBe('own');
+    expect(buyPreset({ ...CLIMBING, costs: { ...CLIMBING.costs, 99: 1 } })).toBe('own');
+  });
+
+  it('one cost changed writes the table out, keeping the rest', () => {
+    const own = buyWithCost({ ...FLAT, highest: 10 }, 10, 5);
+    expect(own.costs).toEqual({ 8: 0, 9: 1, 10: 5 });
+  });
+
+  it('the range changed keeps the costs still in it; a new number costs 1 more than the one below', () => {
+    const own = { ...FLAT, highest: 10, costs: { 8: 0, 9: 3, 10: 7 } };
+    expect(buyWith(own, { highest: 12 }).costs).toEqual({ 8: 0, 9: 3, 10: 7, 11: 8, 12: 9 });
+    expect(buyWith(own, { highest: 9 }).costs).toEqual({ 8: 0, 9: 3 });
+    expect(buyWith(own, { lowest: 7 }).costs).toEqual({ 7: 0, 8: 0, 9: 3, 10: 7 });
+    expect(buyWith(own, { points: 5 })).toEqual({ ...own, points: 5 });
+    expect(buyWith(FLAT, { highest: 9 }).costs).toBeUndefined();
+  });
+
+  it('a range that can\'t be walked lists nothing, and keeps its costs for when it can', () => {
+    expect(buyNumbers(FLAT)).toEqual([8, 9, 10, 11, 12, 13, 14, 15]);
+    expect(buyNumbers({ ...FLAT, lowest: 16 })).toEqual([]);
+    expect(buyNumbers({ ...FLAT, highest: 108 })).toEqual([]);
+    expect(buyNumbers({ ...FLAT, highest: 107 })).toHaveLength(100);
+    expect(buyWith(CLIMBING, { lowest: 16 }).costs).toEqual(CLIMBING.costs);
+  });
+
+  it('reads as the server does, and what isn\'t one reads as typed in', () => {
+    expect(wayOfStep(withStepWay(GROUPS, 'stats', CLIMBING), 'stats')).toEqual(CLIMBING);
+    for (const bad of [{ way: 'buy' }, { way: 'buy', points: 'x', lowest: 1, highest: 2 }, { way: 'buy', points: 1, lowest: 1.5, highest: 2 }, { way: 'buy', points: 1, lowest: 1 }]) {
+      expect(wayOfStep({ ...GROUPS, creation: { ways: { stats: bad } } } as unknown as Definition, 'stats'), JSON.stringify(bad)).toEqual({ way: 'typed' });
+    }
+    expect(checkDefinition(withStepWay(GROUPS, 'stats', CLIMBING)).problems.filter((p: { where: string }) => p.where.startsWith('creation'))).toEqual([]);
+  });
+
+  it('says what is wrong in the server\'s words', () => {
+    const ranged = { ...GROUPS, stats: [{ id: 'g', label: 'G', stats: [{ id: 'a', label: 'Aim', min: 9, max: 11 }, { id: 'b' }] }] } as unknown as Definition;
+    const sheet = { sections: [{ id: 's', label: 'S', layout: 'grid', fields: [{ id: 'climb', label: 'Climb', type: 'number', edit: 'gm' }] }] };
+    for (const def of [
+      withStepWay(GROUPS, 'stats', FLAT),
+      withStepWay(GROUPS, 'stats', { ...FLAT, lowest: 16 }),
+      withStepWay(GROUPS, 'stats', { ...FLAT, highest: 108 }),
+      withStepWay(GROUPS, 'stats', { ...FLAT, highest: 107 }),
+      withStepWay(GROUPS, 'stats', { ...FLAT, highest: 10, costs: { 8: 0, 9: -1 } }),
+      withStepWay(GROUPS, 'stats', { ...FLAT, points: 3, highest: 9, costs: { 8: 2, 9: 3 } }),
+      withStepWay(ranged, 'stats', FLAT),
+      { ...withStepWay(GROUPS, 'stats', { ...FLAT, points: 2, highest: 9, costs: { 8: 2, 9: 3 } }), sheet } as unknown as Definition,
+    ]) expect(stepWayProblems(def, 'stats'), JSON.stringify(def.creation)).toEqual(server.stepWayProblems(def, 'stats'));
+    expect(stepWayProblems(withStepWay(GROUPS, 'stats', { ...FLAT, lowest: 16 }), 'stats')).toEqual(['The lowest is above the highest']);
+    expect(stepWayProblems(withStepWay(GROUPS, 'stats', { ...FLAT, highest: 107 }), 'stats')).toEqual([]);
   });
 });
 

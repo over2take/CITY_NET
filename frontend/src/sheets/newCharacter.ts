@@ -10,7 +10,7 @@ import { choiceLists, pickedOf, type ChoiceList } from './choices';
 import { statGroups } from './statsRules';
 import { partIsOn } from './wordsFeatures';
 import { referencesIn } from './graphModel';
-import { isStatsStep, type StatWay } from './newCharacterFlow';
+import { buyCost, isStatsStep, type BuyWay, type StatWay } from './newCharacterFlow';
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -103,8 +103,56 @@ export const wayOfStep = (def: Definition, id: string): StatWay => {
   const way = isObject(section(def).ways) ? (section(def).ways as Obj)[id] : null;
   if (isObject(way) && way.way === 'array' && Array.isArray(way.numbers)) return way as StatWay;
   if (isObject(way) && way.way === 'roll' && typeof way.each === 'string') return way as StatWay;
+  if (isObject(way) && way.way === 'buy' && [way.points, way.lowest, way.highest].every(Number.isSafeInteger)) return way as unknown as StatWay;
   return { way: 'typed' };
 };
+
+/** The most numbers a point buy's range can hold (backend creation.js LIMITS.buyRange). */
+const BUY_RANGE = 100;
+/** Whether a point buy's range can be walked: in order, and within reason. */
+const rangeOf = (way: BuyWay): number[] | null => (way.lowest > way.highest || way.highest - way.lowest >= BUY_RANGE
+  ? null : Array.from({ length: way.highest - way.lowest + 1 }, (_, i) => way.lowest + i));
+
+/** The common climbing cost: 1 a number for five, then 2 a number. */
+export const climbingCosts = (lowest: number, highest: number): Record<string, number> => {
+  const costs: Record<string, number> = {};
+  for (let n = lowest; n <= highest && n - lowest < BUY_RANGE; n += 1) {
+    const up = n - lowest;
+    costs[n] = up <= 5 ? up : 5 + (up - 5) * 2;
+  }
+  return costs;
+};
+
+/** Which preset a point buy's costs are: 'flat', 'climbing', or 'own' once the GM has changed them. */
+export const buyPreset = (way: BuyWay): 'flat' | 'climbing' | 'own' => {
+  if (!way.costs) return 'flat';
+  const range = rangeOf(way) ?? [];
+  const climbing = climbingCosts(way.lowest, way.highest);
+  return range.length === Object.keys(way.costs).length && range.every((n) => way.costs?.[n] === climbing[n]) ? 'climbing' : 'own';
+};
+
+/**
+ * A point buy with its range or points changed: costs set are kept for the numbers still in the range,
+ * and a new number costs 1 more than the one below it.
+ */
+export const buyWith = (way: BuyWay, patch: Partial<Pick<BuyWay, 'points' | 'lowest' | 'highest'>>): BuyWay => {
+  const next: BuyWay = { ...way, ...patch };
+  const range = rangeOf(next);
+  if (!way.costs || !range) return next;
+  const costs: Record<string, number> = {};
+  range.forEach((n, i) => { costs[n] = way.costs?.[n] ?? (i === 0 ? 0 : costs[n - 1] + 1); });
+  return { ...next, costs };
+};
+
+/** A point buy with one number's cost changed: the table is written out once any is. */
+export const buyWithCost = (way: BuyWay, n: number, cost: number): BuyWay => {
+  const costs: Record<string, number> = {};
+  for (const m of rangeOf(way) ?? []) costs[m] = buyCost(way, m);
+  return { ...way, costs: { ...costs, [n]: cost } };
+};
+
+/** The numbers a point buy's table lists, none while its range can't be walked. */
+export const buyNumbers = (way: BuyWay): number[] => rangeOf(way) ?? [];
 
 /**
  * What a stat is rolled with, as the GM writes it: "3d6", "4d6 drop lowest", "2d6 + 6". The count of what
@@ -150,6 +198,20 @@ const counted = (n: number, what: string): string => `${n} ${what}${n === 1 ? ''
 export const stepWayProblems = (def: Definition, id: string): string[] => {
   const way = wayOfStep(def, id);
   const stats = statsOfStep(def, id);
+  if (way.way === 'buy') {
+    if (way.lowest > way.highest) return ['The lowest is above the highest'];
+    if (way.highest - way.lowest >= BUY_RANGE) return [`At most ${BUY_RANGE} numbers`];
+    const found: string[] = [];
+    const missing = (rangeOf(way) ?? []).filter((n) => way.costs && (!Number.isSafeInteger(way.costs[n]) || way.costs[n] < 0));
+    if (missing.length) found.push(`${missing.join(', ')} needs a cost, of 0 or more`);
+    const start = stats.length * buyCost(way, way.lowest);
+    if (start > way.points) found.push(`Every stat at its lowest costs ${start}, more than the ${way.points} points`);
+    for (const s of stats) {
+      if (Number.isSafeInteger(s.min) && way.lowest < (s.min as number)) found.push(`${way.lowest} is below ${s.label || s.id}'s lowest, ${s.min}`);
+      if (Number.isSafeInteger(s.max) && way.highest > (s.max as number)) found.push(`${way.highest} is above ${s.label || s.id}'s highest, ${s.max}`);
+    }
+    return found;
+  }
   if (way.way === 'roll') {
     const r = parseStatRoll(way.each);
     if (!r) return ['Reads like 3d6, 4d6 drop lowest or 2d6 + 6, up to 20 dice of up to 100 sides'];
