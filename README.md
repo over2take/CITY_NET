@@ -556,6 +556,7 @@ CITY_NET/
 │       ├── npc_controlled_sheet.test.js # A friendly NPC's sheet for the player it was given to, read-only: by their own login, never an enemy's or another player's, the token's HP and armor filled in, nothing written
 │       ├── npc_rolls.test.js           # Rolling from an NPC's sheet: the GM from any NPC, a player from the friendly NPC given to them, the log naming the NPC; anyone else ignored
 │       ├── npc_attacks.test.js         # Attacking as an NPC in CWN, Shadowrun and Cyberpunk RED: its own sheet, wounds and position, the GM for any NPC and a controller for theirs, the log naming both
+│       ├── e2e_names.test.js        # Each browser journey's system and player names its own: on CI, tests sharing a database and a name clash
 │       ├── readme_structure.test.js    # This tree held to the files on disk: every backend and frontend source and test file named in its own folder, and no line naming a file that has gone. Reads the tree by indentation into full paths
 │       ├── system_isolation.test.js    # The CWN work kept out of the other systems where rolls are resolved and sheets written, so widening the shared engine has to be deliberate (the browser half is in components/__tests__/systemIsolation.test.tsx)
 │       ├── bank_own_account.test.js    # The bank's player handlers acting on the sender's own account only, where they used to act on whatever name the message carried; the ordinary cases unchanged

@@ -810,6 +810,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Browser journeys:** a backend test now fails when two journeys use the same system or player name. On CI the tests of a part share a database, so a clash passed as flaky on its retry until a third test used up the retry.
 - A Browser Journeys part that hangs on CI now fails after 25 minutes, with its report kept, and the job stops at 30, instead of holding a machine for GitHub's default six hours.
 - **Recovery dice and resting, as a system says them (R1a).** The first piece of resting on the
   sheet: a levelled list's option (a class) can have a die, and a system can have recovery dice,
