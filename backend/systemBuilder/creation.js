@@ -43,7 +43,7 @@
 const { partOn } = require('./parts');
 const { choicesOf, pickedOf } = require('./choices');
 const { fieldsOf } = require('./sheet');
-const crypto = require('crypto');
+const { cryptoRng } = require('../utils/random');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
@@ -55,8 +55,6 @@ const STATS_STEP = /^stats(?::[a-z][a-z0-9_]{0,63})?$/;
 const WAY_KEYS = { typed: new Set(['way']), array: new Set(['way', 'numbers']), roll: new Set(['way', 'each', 'placed']) };
 const PLACED = ['order', 'arrange'];
 const ROLL_READS = `Reads like 3d6, 4d6 drop lowest or 2d6 + 6, up to ${LIMITS.rollDice} dice of up to ${LIMITS.rollSides} sides`;
-/** The server's secure dice (as every roll's): 0 to 1. */
-const secureRng = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32;
 const STEP = /^(?:who|stats(?::[a-z][a-z0-9_]{0,63})?|kits|money|list:[a-z][a-z0-9_]{0,63})$/;
 /** Where a sheet keeps its place in the flow. */
 const CREATING_KEY = '_creating';
@@ -307,7 +305,7 @@ const statRollLine = (who, rolled) => `${who} rolled ${rolled.label} (${rolled.e
  * { ok: true, data } (no `data` when there is nothing to change, `rolled` for the log after a roll), or
  * { ok: false, error } in words. `rng` rolls the dice, 0 to 1 (the secure source unless one is handed in).
  */
-const creationAction = (definition, data, action, { rng = secureRng } = {}) => {
+const creationAction = (definition, data, action, { rng = cryptoRng } = {}) => {
   const sheet = isPlainObject(data) ? data : {};
   const kind = isPlainObject(action) ? action.kind : null;
   if (!creationOf(definition).on) return { ok: false, error: 'This game has no guided new character' };
