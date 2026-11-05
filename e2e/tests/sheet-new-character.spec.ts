@@ -268,6 +268,8 @@ const rollingTable = async (browser: Browser, request: APIRequestContext, info: 
   const stored = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data;
   const page = await signedIn(browser, info, player);
   await walkToStats(page);
+  // The name saves a moment after it is typed: a reload before that would lose it, and hold FINISH.
+  await expect.poll(async () => (await stored()).name, { timeout: 15_000 }).toBe('Wren');
   return { page, stored, player };
 };
 const rollThem = (page: Page) => page.getByRole('button', { name: 'ROLL THEM' });
