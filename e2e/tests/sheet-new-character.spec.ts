@@ -272,7 +272,7 @@ const rollingTable = async (browser: Browser, request: APIRequestContext, info: 
 };
 const rollThem = (page: Page) => page.getByRole('button', { name: 'ROLL THEM' });
 
-test('rolled in order: on the secure dice, in the tray and on the stats, kept through a reload', async ({ browser, request }, info) => {
+test('rolled in order: on the secure dice, in the tray and on the stats, kept through a reload, saved to the log', async ({ browser, request }, info) => {
   const { page, stored, player } = await rollingTable(browser, request, info, 'order', 'order');
   await expect(page.getByText('4d6 drop lowest for each stat, in order. What comes up is yours.')).toBeVisible();
   await expect(page.getByRole('button', { name: 'FINISH' })).toBeDisabled();
@@ -298,6 +298,12 @@ test('rolled in order: on the secure dice, in the tray and on the stats, kept th
   await expect(page.getByRole('group', { name: `Wits: ${wits}` })).toBeVisible();
   await page.getByRole('button', { name: 'FINISH' }).click();
   await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+
+  // Saved to the dice log: since that reload, the history can only have it from the database.
+  await page.getByRole('button', { name: 'DICE_ROLLER', exact: true }).click();
+  await page.getByRole('button', { name: 'DICE_TRAY.exe' }).click();
+  await page.getByTitle('TOGGLE_HISTORY').click();
+  await expect(page.getByTestId('dice-history')).toContainText(`rolled THE STATS (4d6 drop lowest): Grit ${grit}, Wits ${wits}`, { timeout: 15_000 });
   await page.context().close();
 });
 
