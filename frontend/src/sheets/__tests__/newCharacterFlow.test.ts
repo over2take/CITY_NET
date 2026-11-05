@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
-  CREATING_KEY, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, savedStep, statProblem, statsToSet, stepAnswered, stepListId, whoFields,
+  CREATING_KEY, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, savedStep, statProblem, statsToSet, stepAnswered, stepListId, whoFields,
 } from '../newCharacterFlow';
 import { WORKED_KEY, type ChoiceListShown } from '../choicesShown';
 import type { SheetTemplate } from '../types';
@@ -120,6 +120,37 @@ describe('a step answered', () => {
     const nick = { ...TEMPLATE, header: { nameField: 'nick' } } as unknown as SheetTemplate;
     expect(stepAnswered(nick, 'who', { nick: 'Wren' })).toBe(true);
     expect(stepAnswered(nick, 'who', { name: 'Wren' })).toBe(false);
+  });
+
+  it('a group\'s step sets that group, named by it, answered on its own (7c3a)', () => {
+    const groups = {
+      ...TEMPLATE,
+      creation: {
+        steps: ['who', 'stats:abilities', 'stats:skills'],
+        stats: [
+          { id: 'abilities', label: 'Abilities', stats: [{ id: 'grit', label: 'Grit', min: 3 }] },
+          { id: 'skills', label: 'SKILLS', stats: [{ id: 'climb', label: 'Climb' }] },
+        ],
+      },
+    } as unknown as SheetTemplate;
+    expect(['stats', 'stats:skills', 'who', 'list:classes', 'kits'].map(isStatsStep)).toEqual([true, true, false, false, false]);
+    expect(flowSteps(groups)).toEqual(['who', 'stats:abilities', 'stats:skills']);
+    expect(['stats:abilities', 'stats:skills', 'stats:gone'].map((id) => flowStepName(groups, id))).toEqual(['ABILITIES', 'SKILLS', 'STATS:GONE']);
+    expect(statsToSet(groups, 'stats:skills').map((g) => g.id)).toEqual(['skills']);
+    expect(statsToSet(groups, 'stats:gone')).toEqual([]);
+    expect(statsToSet(groups).map((g) => g.id)).toEqual(['abilities', 'skills']);
+    expect(stepAnswered(groups, 'stats:abilities', { grit: 3 })).toBe(true);
+    expect(stepAnswered(groups, 'stats:skills', { grit: 3 })).toBe(false);
+    expect(stepAnswered(groups, 'stats:abilities', { climb: 1 })).toBe(false);
+  });
+
+  it('a step of stats the GM keeps to themselves has nothing to ask (7c3a)', () => {
+    const secret = {
+      ...TEMPLATE,
+      sections: [{ id: 's', label: 'S', layout: 'grid', fields: [{ id: 'worry', label: 'Worry', type: 'number', gmOnly: true }] }],
+      creation: { steps: ['who', 'stats:stress', 'stats'], stats: [{ id: 'stress', label: 'STRESS', stats: [{ id: 'worry', label: 'Worry' }] }] },
+    } as unknown as SheetTemplate;
+    expect(flowSteps(secret)).toEqual(['who']);
   });
 
   it('THE STATS needs each typed in and in range; a 0 is typed in', () => {

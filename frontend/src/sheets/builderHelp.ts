@@ -216,6 +216,8 @@ export const HINTS = {
   'choices.again': 'More can be added later, past what was picked first. With levels, this is multiclassing: a second class, each with its own level.',
   'creation.on': 'Off, a new character is a blank sheet. On, a player opening a blank sheet is walked through the steps below. Anyone with a sheet already is never asked.',
   'creation.steps': 'What a player is asked, in this order. Move them with the arrows, and switch off any you don\'t want. A list asked before the stats can\'t offer an option that needs a stat.',
+  'creation.statsBy': 'ONE WAY FOR ALL is one step for every stat. GROUP BY GROUP gives each stats group its own step, which you can move and switch off on its own.',
+  'creation.statsGroups': 'Switch a group off for numbers nobody sets at creation, like stress. Its stats stay on the sheet, and players aren\'t asked for them here.',
   'choices.levelled': 'Each pick has a level, and its features unlock by it, like a class. Formulas read it as @<option>_level.',
   'choices.table': 'Optional: dice to roll on for this list, like a book\'s "roll your background" table. Picking the dice shares the rolls out evenly over the options; change any of them below. Every roll needs exactly one option.',
   'choices.players': 'How players pick from a list with a table. BY HAND: as any list, the table only here. BY HAND OR ROLL: ROLL FOR IT beside picking. BY ROLL ONLY: players roll and take what comes up; the GM can still pick any option for them.',

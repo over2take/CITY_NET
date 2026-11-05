@@ -22,6 +22,48 @@ const openPage = async (page: Page, name: string) => {
   await builderPage(page, 'NEW CHARACTER');
 };
 
+test('the stats asked group by group, a group left out, kept after a reload', async ({ page, request }, info) => {
+  const name = `Grouping Hearth ${info.retry + 1}`;
+  const token = await gmToken(request);
+  const { id } = await asGm(request, token, 'post', '/api/systems', { definition: { ...definition(name), stats: [
+    { id: 'abilities', label: 'ABILITIES', stats: [{ id: 'grit', label: 'Grit' }] },
+    { id: 'stress', label: 'STRESS', stats: [{ id: 'worry', label: 'Worry' }] },
+  ] } });
+  await signInAsGm(page);
+  await openPage(page, name);
+  const steps = page.getByRole('list', { name: 'The steps' }).getByRole('listitem');
+  const names = () => steps.evaluateAll((all) => all.map((li) => li.getAttribute('aria-label')));
+
+  // One way for all: STRESS left out of THE STATS.
+  await page.getByRole('button', { name: 'THE STATS', exact: true }).click();
+  await page.getByRole('switch', { name: 'STRESS asked' }).click();
+  await expect(page.getByText(/Every stat but STRESS, typed in by the player/)).toBeVisible();
+
+  // Group by group: a step each, in the same place, with STRESS still out.
+  await page.getByRole('button', { name: 'GROUP BY GROUP' }).click();
+  await expect(steps).toHaveCount(6);
+  expect(await names()).toEqual(['WHO THEY ARE', 'ABILITIES', 'STRESS', 'CLASS', 'KITS', 'MONEY']);
+  await expect(page.getByRole('switch', { name: 'STRESS on' })).toHaveAttribute('aria-checked', 'false');
+
+  // Their own order: CLASS between them, what that means for MAGE said by the group.
+  await page.getByRole('button', { name: 'CLASS up' }).click();
+  await page.getByRole('button', { name: 'CLASS up' }).click();
+  await expect(page.getByText(/CLASS comes before ABILITIES, and MAGE needs a stat/)).toBeVisible();
+  await page.getByRole('button', { name: 'ABILITIES up' }).click();
+  await expect(page.getByText(/comes before ABILITIES/)).toHaveCount(0);
+
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  const saved = await asGm(request, token, 'get', `/api/systems/${id}`);
+  expect(saved.problems).toEqual([]);
+  expect(saved.draft.creation).toMatchObject({ statsBy: 'group', off: ['stats:stress'] });
+
+  await page.reload();
+  await signInAsGm(page);
+  await openPage(page, name);
+  await expect(steps).toHaveCount(6);
+  expect(await names()).toEqual(['WHO THEY ARE', 'ABILITIES', 'CLASS', 'STRESS', 'KITS', 'MONEY']);
+});
+
 test('the steps of a new character, ordered and switched, kept after a reload', async ({ page, request }, info) => {
   const name = `Stepping Hearth ${info.retry + 1}`;
   const token = await gmToken(request);

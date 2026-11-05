@@ -16,7 +16,7 @@ import { registerCustomTemplate, clearCustomTemplates, type CustomRender } from 
 
 const ID = 'sys_0123456789abcdef';
 
-const render_ = (parts: Record<string, { on: boolean }> = {}): CustomRender => ({
+const render_ = (parts: Record<string, { on: boolean }> = {}, creation?: object): CustomRender => ({
   id: ID, name: 'Hearth', words: {}, parts, derived: [],
   sheet: { header: { nameField: 'name' }, sections: [
     { id: 'identity', label: 'IDENTITY', layout: 'list', fields: [
@@ -25,7 +25,7 @@ const render_ = (parts: Record<string, { on: boolean }> = {}): CustomRender => (
     { id: 'traits', label: 'TRAITS', layout: 'grid', fields: [{ id: 'grit', label: 'Grit', type: 'number' }] },
   ] },
   choices: [{ id: 'classes', one: 'Class', many: 'Classes', picks: 1, again: false, levelled: false, options: [{ id: 'soldier', label: 'Soldier', features: [] }, { id: 'mage', label: 'Mage', features: [], needs: 'GRIT >= 13' }] }],
-  creation: { steps: ['who', 'stats', 'list:classes'], stats: [{ id: 'traits', label: 'TRAITS', stats: [{ id: 'grit', label: 'Grit', min: 3, max: 18 }] }] },
+  creation: creation ?? { steps: ['who', 'stats', 'list:classes'], stats: [{ id: 'traits', label: 'TRAITS', stats: [{ id: 'grit', label: 'Grit', min: 3, max: 18 }] }] },
 } as unknown as CustomRender);
 
 /** A socket that hands over one sheet, and hears what the window says. */
@@ -44,8 +44,8 @@ const makeSocket = (data: Record<string, unknown>) => {
   return socket;
 };
 
-const open = async (data: Record<string, unknown> = { _creating: {} }, parts?: Record<string, { on: boolean }>, authToken: string | null = 'tok') => {
-  registerCustomTemplate(render_(parts));
+const open = async (data: Record<string, unknown> = { _creating: {} }, parts?: Record<string, { on: boolean }>, authToken: string | null = 'tok', creation?: object) => {
+  registerCustomTemplate(render_(parts, creation));
   vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })));
   const socket = makeSocket(data);
   const onLeave = vi.fn();
@@ -224,6 +224,28 @@ describe('the steps', () => {
     expect(socket.said('creationAction')).toEqual([{ kind: 'at', step: 'stats' }]);
     expect(screen.getByRole('spinbutton', { name: 'Grit' })).toBeTruthy();
     timers.mockRestore();
+  });
+
+  it('a group\'s own step shows that group alone, named at its head (7c3a)', async () => {
+    await open({ name: 'Wren', grit: 12, _creating: { at: 'stats:skills' } }, undefined, 'tok', {
+      steps: ['who', 'stats:traits', 'stats:skills', 'list:classes'],
+      stats: [
+        { id: 'traits', label: 'TRAITS', stats: [{ id: 'grit', label: 'Grit', min: 3, max: 18 }] },
+        { id: 'skills', label: 'SKILLS', stats: [{ id: 'climb', label: 'Climb' }] },
+      ],
+    });
+    expect(screen.getByRole('tab', { name: 'SKILLS' }).getAttribute('aria-selected')).toBe('true');
+    const panel = within(screen.getByRole('tabpanel'));
+    expect(panel.getByText('SKILLS · STEP 3 OF 4')).toBeTruthy();
+    expect(panel.queryByText('SKILLS')).toBeNull();
+    expect(panel.getByRole('spinbutton', { name: 'Climb' })).toBeTruthy();
+    expect(panel.queryByRole('spinbutton', { name: 'Grit' })).toBeNull();
+    expect(button('NEXT').disabled).toBe(true);
+  });
+
+  it('THE STATS name each group, as there may be several (7c3a)', async () => {
+    await open({ name: 'Wren', _creating: { at: 'stats' } });
+    expect(within(screen.getByRole('tabpanel')).getByText('TRAITS')).toBeTruthy();
   });
 
   it('THE STATS are typed in, a number out of range said and holding NEXT', async () => {

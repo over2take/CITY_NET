@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import type { Definition } from '../sheets/systemsApi';
 import type { BuilderPage } from '../sheets/builderSession';
-import { creationOn, creationSteps, orderNotes, stepList, stepName, withCreationOn, withStepMoved, withStepOff } from '../sheets/newCharacter';
+import { creationOn, creationSteps, groupLeftOut, orderNotes, statsByGroup, stepGroup, stepList, stepName, withCreationOn, withStatsByGroup, withStepMoved, withStepOff } from '../sheets/newCharacter';
+import { isStatsStep } from '../sheets/newCharacterFlow';
+import { statGroups } from '../sheets/statsRules';
 import { pickedOf } from '../sheets/choices';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
@@ -10,8 +12,8 @@ import { ToggleSwitch } from './ToggleSwitch';
 // The builder's NEW CHARACTER page (7c1; approved mockup docs/mockups/new-character.html, 2026-11-03):
 // GUIDED NEW CHARACTER, off to start, and the steps in the GM's order, each on or off, with what it
 // asks. What it reads and writes is sheets/newCharacter.ts; every change goes through the builder's
-// `edit`. What each step can be set to comes with its piece (7c3, 7c4); players get the steps in
-// NEW_CHARACTER.EXE (7c2).
+// `edit`. The stats are ONE WAY FOR ALL or GROUP BY GROUP, and a group can be left out (7c3a). What each
+// step can be set to comes with its piece (7c3, 7c4); players get the steps in NEW_CHARACTER.EXE (7c2).
 
 interface Props {
   definition: Definition;
@@ -25,11 +27,24 @@ const why: React.CSSProperties = { fontSize: 12, lineHeight: 1.45, opacity: 0.85
 const btn: React.CSSProperties = { fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, padding: '4px 9px' };
 const mini: React.CSSProperties = { fontFamily: 'monospace', fontSize: 11, padding: '0 6px', background: 'none', color: 'var(--green)', border: '1px solid var(--dark-green)', cursor: 'pointer' };
 const panel: React.CSSProperties = { border: '1px solid var(--dark-green)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 };
+const seg = (on: boolean): React.CSSProperties => ({
+  background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)', border: 0, fontFamily: 'monospace', fontSize: 11, padding: '3px 12px', cursor: 'pointer',
+});
+const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '120px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' };
+/** How many of something, in words. */
+const statCount = (n: number): string => `${n} ${n === 1 ? 'stat' : 'stats'}`;
 
 /** What a step asks of a player, in the page's words. */
 const asks = (definition: Definition, id: string): string => {
   if (id === 'who') return 'NAME, CONCEPT and DESCRIPTION, the sheet\'s own. A character needs a name, so this one is always asked.';
-  if (id === 'stats') return 'Every stat, typed in by the player. Rolling, point buy and a fixed array come next.';
+  if (id === 'stats') {
+    const out = statGroups(definition).filter((g) => g.stats.length && groupLeftOut(definition, g.id));
+    const all = statGroups(definition).filter((g) => g.stats.length);
+    if (out.length === all.length) return 'Every group is left out, so there is nothing to ask.';
+    return `Every stat${out.length ? ` but ${out.map((g) => (g.label || g.id).toUpperCase()).join(', ')}` : ''}, typed in by the player. Rolling, point buy and a fixed array come next.`;
+  }
+  const group = stepGroup(definition, id);
+  if (group) return `${statCount(group.stats.length)}, typed in by the player. Rolling, point buy and a fixed array come next.`;
   if (id === 'kits') return 'Named kits of items the character starts with. They are made here next: until then, players aren\'t asked.';
   if (id === 'money') return 'What they start with in the bank. It is set here next, a number, a roll, or typed in: until then, players aren\'t asked.';
   const c = stepList(definition, id);
@@ -44,6 +59,13 @@ export function NewCharacterPage({ definition, edit, onGoTo }: Props) {
   const step = steps.find((s) => s.id === picked) ?? steps[0];
   const list = stepList(definition, step.id);
   const notes = orderNotes(definition);
+  const byGroup = statsByGroup(definition);
+  /** ONE WAY FOR ALL or GROUP BY GROUP, staying on the stats. */
+  const askStats = (next: boolean) => {
+    const after = withStatsByGroup(definition, next);
+    setPicked(creationSteps(after).find((s) => isStatsStep(s.id))?.id ?? picked);
+    edit(after);
+  };
   return (
     <div data-testid="new-character-page" style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 420px) minmax(0, 1fr)', gap: 16, alignItems: 'start', maxWidth: 1000 }}>
       <section aria-label="The flow" style={panel}>
@@ -83,6 +105,33 @@ export function NewCharacterPage({ definition, edit, onGoTo }: Props) {
         <p style={why}>{asks(definition, step.id)}</p>
         {step.off && <p style={{ ...why, color: 'var(--warning)', opacity: 1 }}>Off: players aren&apos;t asked.</p>}
         {list && onGoTo && <div><button type="button" className="utility-btn" style={btn} onClick={() => onGoTo('choices', list.id)}>GO TO CHOICES</button></div>}
+        {isStatsStep(step.id) && (
+          <div style={grid}>
+            <FieldName beside hint={HINTS['creation.statsBy']} style={small}>ASKED</FieldName>
+            <span role="group" aria-label="How the stats are asked" style={{ display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--green)', justifySelf: 'start' }}>
+              <button type="button" aria-pressed={!byGroup} style={seg(!byGroup)} onClick={() => askStats(false)}>ONE WAY FOR ALL</button>
+              <button type="button" aria-pressed={byGroup} style={seg(byGroup)} onClick={() => askStats(true)}>GROUP BY GROUP</button>
+            </span>
+            <span />
+            <span style={{ ...why, fontSize: 11, opacity: 0.7 }}>{byGroup
+              ? 'Each stats group is a step of its own in the list. Switch one off there to leave it out.'
+              : 'One step for every stat. Leave a group out for numbers nobody sets at creation.'}</span>
+            {!byGroup && <>
+              <FieldName beside hint={HINTS['creation.statsGroups']} style={small}>GROUPS</FieldName>
+              <ul aria-label="Groups asked" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {statGroups(definition).filter((g) => g.stats.length).map((g) => {
+                  const label = (g.label || g.id).toUpperCase();
+                  return (
+                    <li key={g.id} aria-label={label} style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: 12, letterSpacing: 1, opacity: groupLeftOut(definition, g.id) ? 0.5 : 1 }}>{label} · {statCount(g.stats.length).toUpperCase()}</span>
+                      <ToggleSwitch on={!groupLeftOut(definition, g.id)} name={`${label} asked`} onChange={(next) => edit(withStepOff(definition, `stats:${g.id}`, !next))} />
+                    </li>
+                  );
+                })}
+              </ul>
+            </>}
+          </div>
+        )}
       </section>
     </div>
   );

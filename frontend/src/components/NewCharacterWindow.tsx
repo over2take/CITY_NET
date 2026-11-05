@@ -9,7 +9,7 @@ import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
 import { useChoicesRefused } from '../hooks/useChoicesRefused';
 import { canImport } from '../sheets/importable';
 import {
-  flowDone, flowStepName, flowSteps, savedStep, statProblem, statsToSet, stepAnswered, stepListId, whoFields,
+  flowDone, flowStepName, flowSteps, isStatsStep, savedStep, statProblem, statsToSet, stepAnswered, stepListId, whoFields,
 } from '../sheets/newCharacterFlow';
 import { themeRoot } from '../utils/themeRoot';
 
@@ -177,13 +177,13 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
         </div>
       );
     }
-    if (open === 'stats') {
+    if (isStatsStep(open)) {
       return (
         <div style={page}>
           <p style={why}>Type in what you have.</p>
-          {statsToSet(template).map((g) => (
+          {statsToSet(template, open).map((g) => (
             <section key={g.id} aria-label={g.label} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span style={small}>{g.label.toUpperCase()}</span>
+              {open === 'stats' && <span style={small}>{g.label.toUpperCase()}</span>}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))', gap: '6px' }}>
                 {g.stats.map((s) => {
                   const problem = statProblem(s, data?.[s.id]);

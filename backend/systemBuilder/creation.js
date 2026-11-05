@@ -5,13 +5,16 @@
 //   creation: {
 //     on: true,                               // GUIDED NEW CHARACTER
 //     order: ['who', 'stats', 'list:classes', 'kits', 'money'],   // only what was moved
-//     off: ['money'],                         // steps switched off; WHO THEY ARE never is
+//     off: ['money', 'stats:stress'],         // steps switched off; WHO THEY ARE never is
+//     statsBy: 'group',                       // GROUP BY GROUP (7c3a); unsaid, ONE WAY FOR ALL
 //   }
 //
 // A step is read from what the system has, never stored: WHO THEY ARE always; THE STATS with stats to
-// set; one for each list picked on its own (a list picked only under features is picked there, and
+// set, or one for each stats group with GROUP BY GROUP (stats:<group>); one for each list picked on its own (a list picked only under features is picked there, and
 // one everyone has isn't picked); KITS; MONEY while the BANK part is on. So a list made later joins
 // by itself, before KITS, and a list deleted leaves, and an order naming what has gone is no problem.
+// A group left out says so the same way either way, as stats:<group> in `off`: a step switched off with
+// GROUP BY GROUP, and left out of THE STATS with ONE WAY FOR ALL. So changing between them loses nothing.
 //
 // A character's place in the flow (7c2) is kept on their sheet, under CREATING_KEY, where a player's
 // own edits can't reach it (an underscore key, as their picks are):
@@ -35,17 +38,31 @@ const list = (v) => (Array.isArray(v) ? v : []);
 
 /** How many ids `order` and `off` may hold: every list a system can have, and room. */
 const LIMITS = { steps: 40 };
-const KEYS = new Set(['on', 'order', 'off']);
-const STEP = /^(?:who|stats|kits|money|list:[a-z][a-z0-9_]{0,63})$/;
+const KEYS = new Set(['on', 'order', 'off', 'statsBy']);
+const STEP = /^(?:who|stats(?::[a-z][a-z0-9_]{0,63})?|kits|money|list:[a-z][a-z0-9_]{0,63})$/;
 /** Where a sheet keeps its place in the flow. */
 const CREATING_KEY = '_creating';
 /** Steps with nothing to ask yet: KITS and MONEY come with 7c4. */
 const NOT_ASKED_YET = new Set(['kits', 'money']);
 
+const creationIn = (definition) => (isPlainObject(definition && definition.creation) ? definition.creation : {});
+/** A stats group's own step, with GROUP BY GROUP. */
+const isGroupStep = (id) => id.startsWith('stats:');
+/** The stats groups with stats in them. */
+const statGroupsOf = (definition) => list(definition && definition.stats).filter((g) => isPlainObject(g) && list(g.stats).length);
+const byGroup = (definition) => creationIn(definition).statsBy === 'group';
+/** The groups a player sets: all but those left out. */
+const statGroupsAsked = (definition) => {
+  const off = new Set(list(creationIn(definition).off));
+  return statGroupsOf(definition).filter((g) => !off.has(`stats:${g.id}`));
+};
+
 /** Every step this system has, in the order they come until the GM moves them. */
 const stepIdsOf = (definition) => [
   'who',
-  ...(list(definition && definition.stats).some((g) => isPlainObject(g) && list(g.stats).length) ? ['stats'] : []),
+  ...(byGroup(definition)
+    ? statGroupsOf(definition).map((g) => `stats:${g.id}`)
+    : statGroupsOf(definition).length ? ['stats'] : []),
   ...choicesOf(definition).filter((c) => ['own', 'both'].includes(pickedOf(c))).map((c) => `list:${c.id}`),
   'kits',
   ...(partOn(definition, 'bank') ? ['money'] : []),
@@ -53,16 +70,25 @@ const stepIdsOf = (definition) => [
 
 /**
  * The flow as this system has it: { on, steps: [{ id, off }] }, the steps the GM moved in their order,
- * then any since added, each before KITS and MONEY when it is a list, so a new list lands with the others.
+ * then any since added, each before KITS and MONEY when it is a list, so a new list lands with the others,
+ * and after the other groups when it is a stats group. THE STATS and the groups' steps stand in for each
+ * other in an order, so changing how the stats are asked keeps their place.
  */
 const creationOf = (definition) => {
-  const c = isPlainObject(definition && definition.creation) ? definition.creation : {};
+  const c = creationIn(definition);
   const have = stepIdsOf(definition);
-  const moved = list(c.order).filter((id, i, all) => have.includes(id) && all.indexOf(id) === i);
+  const groups = have.filter(isGroupStep);
+  const read = list(c.order).flatMap((id) => {
+    if (id === 'stats' && byGroup(definition)) return groups;
+    return typeof id === 'string' && isGroupStep(id) && !byGroup(definition) ? ['stats'] : [id];
+  });
+  const moved = read.filter((id, i, all) => have.includes(id) && all.indexOf(id) === i);
   const ids = [...moved];
   for (const id of have) {
     if (ids.includes(id)) continue;
-    const before = id.startsWith('list:') ? ids.findIndex((x) => x === 'kits' || x === 'money') : -1;
+    const lastGroup = ids.map(isGroupStep).lastIndexOf(true);
+    const before = id.startsWith('list:') ? ids.findIndex((x) => x === 'kits' || x === 'money')
+      : isGroupStep(id) && lastGroup >= 0 ? lastGroup + 1 : -1;
     if (before >= 0) ids.splice(before, 0, id); else ids.push(id);
   }
   const off = new Set(list(c.off));
@@ -71,12 +97,13 @@ const creationOf = (definition) => {
 
 /** The steps a player is walked through, in order: those on, with something to ask. */
 const stepsAsked = (definition) => creationOf(definition).steps
-  .filter((s) => !s.off && !NOT_ASKED_YET.has(s.id)).map((s) => s.id);
+  .filter((s) => !s.off && !NOT_ASKED_YET.has(s.id) && (s.id !== 'stats' || statGroupsAsked(definition).length > 0))
+  .map((s) => s.id);
 
 /** What the browser needs to draw the flow: the steps and the stats to set, or null while it is off. */
 const creationShown = (definition) => (creationOf(definition).on ? {
   steps: stepsAsked(definition),
-  stats: list(definition.stats).filter((g) => isPlainObject(g) && list(g.stats).length).map((g) => ({
+  stats: statGroupsAsked(definition).map((g) => ({
     id: g.id,
     label: g.label || g.id,
     stats: g.stats.filter(isPlainObject).map((s) => ({ id: s.id, label: s.label || s.id, ...(s.min === undefined ? {} : { min: s.min }), ...(s.max === undefined ? {} : { max: s.max }) })),
@@ -131,9 +158,10 @@ const checkCreation = (definition, problems) => {
     if (v === undefined) continue;
     if (!Array.isArray(v)) { problems.push({ where: `creation, ${key}`, message: 'Must be a list of steps' }); continue; }
     if (v.length > LIMITS.steps) problems.push({ where: `creation, ${key}`, message: `At most ${LIMITS.steps} steps` });
-    if (v.slice(0, LIMITS.steps).some((id) => typeof id !== 'string' || !STEP.test(id))) problems.push({ where: `creation, ${key}`, message: 'Steps are who, stats, kits, money, or list: and a list\'s id' });
+    if (v.slice(0, LIMITS.steps).some((id) => typeof id !== 'string' || !STEP.test(id))) problems.push({ where: `creation, ${key}`, message: 'Steps are who, stats, kits, money, stats: and a group\'s id, or list: and a list\'s id' });
   }
   if (list(c.off).includes('who')) problems.push({ where: 'creation, off', message: 'WHO THEY ARE is always asked: a character needs a name' });
+  if (c.statsBy !== undefined && c.statsBy !== 'group') problems.push({ where: 'creation, statsBy', message: 'Must say group, or nothing for one way for all' });
 };
 
 module.exports = { LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, stepsAsked, creationShown, creatingNow, creationAction, withUpload };

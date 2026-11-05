@@ -75,6 +75,76 @@ describe('the steps a system has', () => {
   });
 });
 
+describe('the stats, one way for all or group by group (7c3a)', () => {
+  const GROUPS = { ...HEARTH, stats: [
+    { id: 'abilities', label: 'ABILITIES', stats: [{ id: 'might', label: 'Might' }] },
+    { id: 'skills', label: 'SKILLS', stats: [{ id: 'climb', label: 'Climb' }] },
+    { id: 'stress', label: 'STRESS', stats: [{ id: 'worry', label: 'Worry' }] },
+    { id: 'empty', label: 'EMPTY', stats: [] },
+  ] };
+  const LISTS = ['list:classes', 'list:backgrounds', 'list:feats'];
+  const by = (creation) => ({ ...GROUPS, creation: { statsBy: 'group', ...creation } });
+  const shownGroups = (def) => creationShown(def).stats.map((g) => g.id);
+
+  it('one step for all to start; group by group, a step for each group with stats in it', () => {
+    expect(stepIdsOf(GROUPS)).toEqual(['who', 'stats', ...LISTS, 'kits', 'money']);
+    expect(stepIdsOf(by())).toEqual(['who', 'stats:abilities', 'stats:skills', 'stats:stress', ...LISTS, 'kits', 'money']);
+    expect(stepIdsOf({ format: 1, name: 'B', creation: { statsBy: 'group' } })).toEqual(['who', 'kits', 'money']);
+  });
+
+  it('changing between them keeps the stats where the GM put them', () => {
+    const moved = { order: ['who', 'list:classes', 'stats', 'list:backgrounds', 'list:feats', 'kits', 'money'] };
+    expect(ids(by(moved))).toEqual(['who', 'list:classes', 'stats:abilities', 'stats:skills', 'stats:stress', 'list:backgrounds', 'list:feats', 'kits', 'money']);
+    const back = { ...GROUPS, creation: { order: ['who', 'list:classes', 'stats:skills', 'stats:abilities', 'stats:stress', 'list:feats'] } };
+    expect(ids(back)).toEqual(['who', 'list:classes', 'stats', 'list:feats', 'list:backgrounds', 'kits', 'money']);
+  });
+
+  it('groups keep the order the GM gave them; a group made later joins the other groups', () => {
+    const order = ['stats:skills', 'who', 'stats:abilities', 'list:classes'];
+    expect(ids(by({ order })).slice(0, 5)).toEqual(['stats:skills', 'who', 'stats:abilities', 'stats:stress', 'list:classes']);
+  });
+
+  it('group by group, a group off is a step off, and its stats aren\'t asked', () => {
+    const def = by({ on: true, off: ['stats:stress'] });
+    expect(creationOf(def).steps.filter((s) => s.off).map((s) => s.id)).toEqual(['stats:stress']);
+    expect(stepsAsked(def)).toEqual(['who', 'stats:abilities', 'stats:skills', ...LISTS]);
+    expect(shownGroups(def)).toEqual(['abilities', 'skills']);
+  });
+
+  it('one way for all, a group left out is said the same way: the one step stays, without its stats', () => {
+    const def = { ...GROUPS, creation: { on: true, off: ['stats:stress'] } };
+    expect(creationOf(def).steps.filter((s) => s.off)).toEqual([]);
+    expect(stepsAsked(def)).toEqual(['who', 'stats', ...LISTS]);
+    expect(shownGroups(def)).toEqual(['abilities', 'skills']);
+  });
+
+  it('every group left out, THE STATS has nothing to ask: on the page still, not at the table', () => {
+    const def = { ...GROUPS, creation: { on: true, off: ['stats:abilities', 'stats:skills', 'stats:stress'] } };
+    expect(ids(def)).toContain('stats');
+    expect(stepsAsked(def)).toEqual(['who', ...LISTS]);
+  });
+
+  it('a character can stand on a group\'s step, not on one left out or gone, nor on THE STATS with steps per group', () => {
+    const def = by({ on: true, off: ['stats:stress'] });
+    const fresh = { [CREATING_KEY]: {} };
+    expect(creationAction(def, fresh, { kind: 'at', step: 'stats:skills' }).data[CREATING_KEY]).toEqual({ at: 'stats:skills' });
+    for (const step of ['stats:stress', 'stats:gone', 'stats']) expect(creationAction(def, fresh, { kind: 'at', step }).ok, step).toBe(false);
+  });
+
+  it('the checks take it, and say what is wrong', () => {
+    expect(problems({ statsBy: 'group', order: ['who', 'stats:abilities'], off: ['stats:abilities'] }, GROUPS)).toEqual([]);
+    expect(problems({ statsBy: 'all' }, GROUPS)).toEqual(['creation, statsBy: Must say group, or nothing for one way for all']);
+    expect(problems({ order: ['stats:Bad Name'] }, GROUPS)).toEqual(['creation, order: Steps are who, stats, kits, money, stats: and a group\'s id, or list: and a list\'s id']);
+  });
+
+  it('the system file carries it, unchanged', () => {
+    const creation = { on: true, statsBy: 'group', order: ['who', 'stats:skills', 'stats:abilities'], off: ['stats:stress'] };
+    const file = citysys.buildFile({ definition: { ...GROUPS, creation }, version: 1, origin: 'sys_abcdefabcdefabcd' });
+    const read = citysys.readFile(JSON.stringify(file));
+    expect([read.file.definition.creation, read.problems]).toEqual([creation, []]);
+  });
+});
+
 describe('the checks', () => {
   it('take what the page writes', () => {
     expect(problems({ on: true, order: ['who', 'stats', 'list:classes', 'kits', 'money'], off: ['money', 'list:classes'] })).toEqual([]);
@@ -87,7 +157,7 @@ describe('the checks', () => {
     expect(problems({ on: 'yes' })).toEqual(['creation, on: Must say on: true or on: false']);
     expect(problems({ order: 'who' })).toEqual(['creation, order: Must be a list of steps']);
     expect(problems({ off: 'kits' })).toEqual(['creation, off: Must be a list of steps']);
-    const steps = 'creation, order: Steps are who, stats, kits, money, or list: and a list\'s id';
+    const steps = 'creation, order: Steps are who, stats, kits, money, stats: and a group\'s id, or list: and a list\'s id';
     for (const bad of [['nope'], [3], ['list:'], ['list:Bad Name']]) expect(problems({ order: bad }), JSON.stringify(bad)).toEqual([steps]);
     expect(problems({ off: ['who'] })).toEqual(['creation, off: WHO THEY ARE is always asked: a character needs a name']);
     expect(problems({ order: Array(LIMITS.steps + 1).fill('who') })).toEqual([`creation, order: At most ${LIMITS.steps} steps`]);
