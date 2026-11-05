@@ -4,7 +4,7 @@ import { signInAsGm, openBuilder, builderPage, gmToken, asGm } from './helpers';
 // The builder's NEW CHARACTER page (7c1; approved mockup docs/mockups/new-character.html, 2026-11-03):
 // a GM turns the flow on, moves CLASS above THE STATS and is told what that means for MAGE, puts it
 // back, switches MONEY off, goes to a list on CHOICES, and finds it all as they left it after a
-// reload, the server taking it with no problems. The window players get is 7c2's.
+// reload, the server taking it with no problems. The window players get: sheet-new-character.spec.ts.
 
 const definition = (name: string) => ({
   format: 1, name,

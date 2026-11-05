@@ -10,7 +10,8 @@ import { ToggleSwitch } from './ToggleSwitch';
 // The builder's NEW CHARACTER page (7c1; approved mockup docs/mockups/new-character.html, 2026-11-03):
 // GUIDED NEW CHARACTER, off to start, and the steps in the GM's order, each on or off, with what it
 // asks. What it reads and writes is sheets/newCharacter.ts; every change goes through the builder's
-// `edit`. What each step can be set to comes with its piece (7c3, 7c4), and the player's window with 7c2.
+// `edit`. What each step can be set to comes with its piece (7c3, 7c4); players get the steps in
+// NEW_CHARACTER.EXE (7c2).
 
 interface Props {
   definition: Definition;
@@ -29,8 +30,8 @@ const panel: React.CSSProperties = { border: '1px solid var(--dark-green)', padd
 const asks = (definition: Definition, id: string): string => {
   if (id === 'who') return 'NAME, CONCEPT and DESCRIPTION, the sheet\'s own. A character needs a name, so this one is always asked.';
   if (id === 'stats') return 'Every stat, typed in by the player. Rolling, point buy and a fixed array come next.';
-  if (id === 'kits') return 'Named kits of items the character starts with. They are made here next.';
-  if (id === 'money') return 'What they start with in the bank. It is set here next: a number, a roll, or typed in.';
+  if (id === 'kits') return 'Named kits of items the character starts with. They are made here next: until then, players aren\'t asked.';
+  if (id === 'money') return 'What they start with in the bank. It is set here next, a number, a roll, or typed in: until then, players aren\'t asked.';
   const c = stepList(definition, id);
   if (!c) return '';
   return `From CHOICES: ${(c.many || c.id).toUpperCase()}. Its own settings there say how many and how they are picked.${pickedOf(c) === 'both' ? ' Those a feature opens are picked under that feature, at the level it unlocks.' : ''}`;
@@ -53,7 +54,6 @@ export function NewCharacterPage({ definition, edit, onGoTo }: Props) {
         <p style={why}>{on
           ? 'A player opening a blank sheet is walked through these steps. Anyone with a sheet already is never asked.'
           : 'Off: a player gets a blank sheet, as always. These steps stay set for when it is on.'}</p>
-        <p style={{ ...why, fontSize: 11, color: 'var(--warning)', opacity: 1 }}>The window players get comes next: nothing changes at the table yet.</p>
         <FieldName hint={HINTS['creation.steps']} style={small}>THE STEPS, IN YOUR ORDER</FieldName>
         <ul aria-label="The steps" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column' }}>
           {steps.map((s, i) => {

@@ -11,6 +11,9 @@
 // `restTake` with { rest } (R3a) takes one of the game's rests on the caller's own character, from
 // their sheet: in a system whose rests are finished on each sheet; the GM may on anyone's, always.
 //
+// `creationAction` with { kind: 'open' | 'at' | 'finish', step } (7c2) moves a character through the
+// guided new character (systemBuilder/creation.js).
+//
 // `recoverySpend` with { pool, count } (R2a) spends recovery dice with a roll (sheets/recover.js).
 // In a system leaving spending to the GM, a player spends or ticks them off only while the GM has
 // spending open (recovery.js maySpend); the GM always may.
@@ -20,6 +23,7 @@ const { pickAction, rollLine } = require('../systemBuilder/picking');
 const { withThrow, boardOf } = require('../utils/diceThrow');
 const { syncTokenMax } = require('../systemBuilder/tokenMax');
 const { maySpend, restingOf, OPEN_SETTING } = require('../systemBuilder/recovery');
+const { creationAction } = require('../systemBuilder/creation');
 const { takeRest } = require('../sheets/rests');
 const customSystems = require('../systemBuilder/runtime');
 const sheetTemplates = require('../sheets/templates');
@@ -101,6 +105,25 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
       };
       return payload.kind === 'recovery' ? whileSpending(definition, gm, refuse, act) : act();
     });
+  });
+
+  socket.on('creationAction', (payload) => {
+    if (!payload || typeof payload !== 'object') return;
+    withCaller(payload, 'choicesRefused', ({ username, system, definition, refuse }) => {
+      let error = null;
+      mutateSheetForUser(db, { username, system }, (data) => {
+        const done = creationAction(definition, data, payload);
+        if (!done.ok) { error = done.error; return undefined; }
+        // Worked out as any save is, so a list asked first already knows what isn't met.
+        if (done.data) sheetTemplates.applyDerived(system, done.data);
+        return done.data;
+      }, (err2, stored) => {
+        if (error) return refuse(error);
+        if (err2) return refuse('That character has no sheet yet');
+        if (stored) io.emit('sheetUpdated', { username, system });
+        return undefined;
+      });
+    }, 'This game has no guided new character');
   });
 
   socket.on('restTake', (payload) => {

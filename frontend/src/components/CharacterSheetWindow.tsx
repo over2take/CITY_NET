@@ -9,6 +9,7 @@ import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
 import { VehicleBadgeButton } from './VehicleBadgeButton';
 import type { SheetLinkSource } from '../sheets';
 import { canImport } from '../sheets/importable';
+import { flowState } from '../sheets/newCharacterFlow';
 import { themeRoot } from '../utils/themeRoot';
 
 // The player's own character sheet (in-game floating window). Identity is
@@ -33,9 +34,11 @@ interface CharacterSheetWindowProps {
   onOpenVehicles?: () => void;
   /** Active theme name - handed to the standalone tab so it matches. */
   currentTheme?: string;
+  /** Opens NEW_CHARACTER.EXE where they left it (7c2), from the line a sheet being made shows. */
+  onContinueCreating?: () => void;
 }
 
-export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, onOpenVehicles, currentTheme }: CharacterSheetWindowProps) {
+export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, onOpenVehicles, currentTheme, onContinueCreating }: CharacterSheetWindowProps) {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   const { sheet, template, handleFieldChange, handleFieldsChange, allowFumbleShield, xpRate, encumbranceEnforced, hiddenTabs, actions } =
@@ -110,6 +113,12 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
       }}
       contentStyle={{ flex: 1, minHeight: 0, maxHeight: 'none', display: 'flex', flexDirection: 'column', padding: '4px 10px 0' }}
     >
+      {onContinueCreating && flowState(template, sheet?.data) !== 'none' && (
+        <button type="button" onClick={onContinueCreating}
+          style={{ background: 'none', border: '1px solid var(--warning)', color: 'var(--warning)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', padding: '3px 8px', margin: '4px 0', flexShrink: 0 }}>
+          CREATING · CONTINUE
+        </button>
+      )}
       {sheet && template ? (
         <SheetRenderer
           template={template}

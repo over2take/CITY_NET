@@ -83,6 +83,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **NEW_CHARACTER.EXE (System Builder, Phase 7c):** with GUIDED NEW CHARACTER on, a player with a blank sheet sees CHARACTER_CONTROLS blink, then CHARACTER_SHEET, which opens a window walking them through the steps their GM set, in order: who they are, their stats typed in, then each list to pick from. What they choose is written to their sheet as they go, and LEAVE FOR NOW loses nothing: the sheet shows CREATING · CONTINUE, which opens it on the same step. Finished, it closes on their sheet, which works as it always has. It also offers UPLOAD A SHEET, today's IMPORT, taken as it is with no steps after it, and THE BLANK FORM. While making a character a player may take a pick back, except on a list rolled only. Anyone with a sheet already is never asked. Kits, starting money and the other ways to set stats come next.
 - A new builder page, NEW CHARACTER: a GM can turn on GUIDED NEW CHARACTER and set the steps a player is walked through, in their order, each on or off: who they are, the stats, one for each list on CHOICES, kits and money. A list made later joins by itself, and a list placed before a stat it needs says so. Nothing changes at the table yet: the window players get comes next.
 - Formulas can ask what a character has: has(second_wind) is 1 while they hold that option or have that feature unlocked, else 0. It works in formulas, requirements ("MAGE needs SECOND WIND", said by name on the sheet), a feature's amount, a roll's ADD and a rest's amount. The formula box's INSERT lists every option and feature under CHOICES, and catches a misspelt name; so does PROBLEMS. On the map, it reads in names as a row on the formula.
 - On the builder's map (GRAPH), a list with levels is now a LEVELS node, with a row and a dot for its total and each option's level, so a formula reading @soldier_level is wired like any other, and you can draw one in. A feature's bonus is a dashed wire from its list into what it changes. Both are read from CHOICES and changed there: the node's GO TO opens the list, and clicking a bonus wire offers GO TO CHOICES in place of CUT. A list with no levels and no bonuses stays off the map.
@@ -693,6 +694,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **What's left to pick on a sheet (System Builder):** the options of a list now sit one to a line under PICK A CLASS, each with what it needs beside it, instead of running together in a row after + CLASS, where a requirement could read as the next option's. An option that can't be picked yet is also easier to read.
 - The character sheet lists CHARACTER first and still opens on STATS. A built sheet can name the tab it opens on; renaming that tab in the builder keeps it, removing it opens on the first.
 - On a sheet's CHOICES, each list (CLASSES, FEATS) folds away on its own, saying how many are picked.
 - The HEALTH box shows its name alone, with CURRENT and MAX each under its number. Temporary HP is added to the current, in the warning color, and a bonus to the maximum (like Tough) colors it and names itself on hover.

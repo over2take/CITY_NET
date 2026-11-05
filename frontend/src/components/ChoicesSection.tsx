@@ -37,6 +37,10 @@ interface Props {
   recoveryOpen?: boolean;
   /** The sheet has a RESTS section, where the dice are instead (R3b). */
   recoveryElsewhere?: boolean;
+  /** Only this list, for NEW_CHARACTER.EXE's step (7c2). What it opens, in other lists, still shows under it. */
+  only?: string;
+  /** A player may take their own picks back (7c2), while making the character; never on a list rolled only. */
+  takeBack?: boolean;
 }
 
 const small: React.CSSProperties = { fontSize: '0.55rem', letterSpacing: '1px', opacity: 0.7 };
@@ -62,6 +66,7 @@ interface Ctx {
   setDropping: (key: string | null) => void;
   /** The sheet as stored, for what ROLL FOR IT last rolled (7a5b2). */
   data: Record<string, unknown>;
+  takeBack: boolean;
 }
 
 function Feature({ f, ctx }: { f: FeatureShown; ctx: Ctx }) {
@@ -92,36 +97,36 @@ function Feature({ f, ctx }: { f: FeatureShown; ctx: Ctx }) {
   );
 }
 
-/** The options still to pick, each button asking; one not met says what it needs (ADD ANYWAY for the GM). */
 /**
- * The options left to pick, each a button; on a list with a table (7a5b2), ROLL FOR IT beside them,
- * the option rolled marked TAKE IT, and, rolled only, the others off for a player.
+ * The options left to pick, one to a line so that what one needs reads as its own: each a button asking,
+ * one not met saying what it needs (ADD ANYWAY for the GM). On a list with a table (7a5b2), ROLL FOR IT
+ * under them, the option rolled marked TAKE IT, and, rolled only, the others off for a player.
  */
 function Offer({ label, list, from, open, onPick, ctx }: {
   label: string; list: ChoiceListShown; from?: string; open: { option: OptionShown; unmet: string | null }[]; onPick: (option: string) => void; ctx: Ctx;
 }) {
   const r = rollOffer(list, rolledOf(ctx.data, list.id, from), ctx.gm);
   return (
-    <div role="group" aria-label={label} style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center' }}>
-      <span style={small}>{label.toUpperCase().replace(/^PICK A /, '+ ')}</span>
+    <div role="group" aria-label={label} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, max-content) minmax(0, 1fr)', gap: '5px 8px', alignItems: 'center' }}>
+      <span style={{ ...small, gridColumn: '1 / -1' }}>{label.toUpperCase()}</span>
       {open.map(({ option, unmet }) => {
         const marked = r.marked === option.id;
         const off = (!!unmet && !ctx.gm) || (r.byRoll && !marked);
         return (
-          <span key={option.id} style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
-            <button type="button" style={{ ...btn, ...(marked ? { borderColor: 'var(--cyan)', color: 'var(--cyan)' } : {}), opacity: off ? 0.4 : 1, cursor: off ? 'not-allowed' : 'pointer' }} disabled={off}
+          <React.Fragment key={option.id}>
+            <button type="button" className={off ? 'choice-off' : undefined} style={{ ...btn, gridColumn: 1, textAlign: 'left', ...(marked ? { borderColor: 'var(--cyan)', color: 'var(--cyan)' } : {}), opacity: off ? 0.6 : 1, cursor: off ? 'not-allowed' : 'pointer' }} disabled={off}
               title={r.byRoll && !marked ? 'Picked by roll: ROLL FOR IT' : unmet && ctx.gm ? 'Not met: as the GM, you can add it anyway' : option.description}
               onClick={() => onPick(option.id)}>{option.label.toUpperCase()}{marked ? ' · TAKE IT' : ''}</button>
-            {unmet && <span style={{ ...small, color: 'var(--warning)', opacity: 1 }}>NEEDS {unmet}{ctx.gm ? ' · ADD ANYWAY' : ''}</span>}
-          </span>
+            {unmet && <span style={{ ...small, gridColumn: 2, color: 'var(--warning)', opacity: 1 }}>NEEDS {unmet}{ctx.gm ? ' · ADD ANYWAY' : ''}</span>}
+          </React.Fragment>
         );
       })}
       {r.roll && (
-        <button type="button" style={{ ...btn, borderColor: 'var(--warning)', color: 'var(--warning)', opacity: r.spent ? 0.4 : 1 }} disabled={r.spent}
+        <button type="button" style={{ ...btn, gridColumn: '1 / -1', justifySelf: 'start', borderColor: 'var(--warning)', color: 'var(--warning)', opacity: r.spent ? 0.4 : 1 }} disabled={r.spent}
           title={r.spent ? 'Rolled: take what came up, or ask the GM to roll again' : `Rolls ${list.table} on the table, written to the log`}
           onClick={() => ctx.ask({ kind: 'roll', list: list.id, ...(from ? { from } : {}) })}>{r.label}</button>
       )}
-      {r.said && <span style={{ ...small, color: 'var(--cyan)', opacity: 1 }}>{r.said}</span>}
+      {r.said && <span style={{ ...small, gridColumn: '1 / -1', color: 'var(--cyan)', opacity: 1 }}>{r.said}</span>}
     </div>
   );
 }
@@ -129,7 +134,8 @@ function Offer({ label, list, from, open, onPick, ctx }: {
 /** DROP, asked first: the GM's alone. */
 function Drop({ list, option, ctx }: { list: string; option: OptionShown; ctx: Ctx }) {
   const key = `${list}:${option.id}`;
-  if (!ctx.can || !ctx.gm) return null;
+  const mayTakeBack = ctx.takeBack && ctx.lists.find((l) => l.id === list)?.players !== 'roll';
+  if (!ctx.can || (!ctx.gm && !mayTakeBack)) return null;
   return ctx.dropping === key ? (
     <div role="group" aria-label={`Take ${option.label} away`} style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
       <span style={{ ...small, color: 'var(--danger)', opacity: 1 }}>TAKE {option.label.toUpperCase()} AWAY, AND WHAT IT GIVES?</span>
@@ -196,7 +202,7 @@ function Pick({ list, p, ctx, fixed = false }: { list: ChoiceListShown; p: PickS
   );
 }
 
-export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm = false, onRecoverySpend, recoveryOpen = false, recoveryElsewhere = false }: Props) {
+export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm = false, onRecoverySpend, recoveryOpen = false, recoveryElsewhere = false, only, takeBack = false }: Props) {
   const worked = workedOn(data);
   // The pick the GM asked to take away, waiting for YES: "list:option".
   const [dropping, setDropping] = useState<string | null>(null);
@@ -210,12 +216,12 @@ export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm =
   const can = !readOnly && !!onChoices;
   // In the builder's previews nothing is published yet: the block says what will be here.
   if (!lists.length) return <div style={small}>A character&apos;s picks from the system&apos;s lists show here: classes, backgrounds, feats.</div>;
-  const ctx: Ctx = { lists, worked, can, gm, ask: (action) => onChoices?.(action), dropping, setDropping, data };
-  const aside = keptAside(lists, worked);
+  const ctx: Ctx = { lists, worked, can, gm, ask: (action) => onChoices?.(action), dropping, setDropping, data, takeBack };
+  const aside = keptAside(lists, worked).filter((a) => !only || a.list.id === only);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-      {worked.recovery && !recoveryElsewhere && <RecoveryDice recovery={worked.recovery} can={can} gm={gm} open={recoveryOpen} ask={ctx.ask} onSpend={onRecoverySpend} />}
-      {listsOnTheirOwn(lists).map((list) => {
+      {worked.recovery && !recoveryElsewhere && !only && <RecoveryDice recovery={worked.recovery} can={can} gm={gm} open={recoveryOpen} ask={ctx.ask} onSpend={onRecoverySpend} />}
+      {listsOnTheirOwn(lists).filter((l) => !only || l.id === only).map((list) => {
         const view = listShown(list, worked);
         const everyone = pickedOf(list) === 'everyone';
         const shut = folded.has(list.id);

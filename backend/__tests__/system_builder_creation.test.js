@@ -9,7 +9,10 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
 const require_ = createRequire(import.meta.url);
-const { creationOf, stepIdsOf, LIMITS } = require_('../systemBuilder/creation');
+const { creationOf, stepIdsOf, LIMITS, stepsAsked, creationShown, creatingNow, creationAction, withUpload, CREATING_KEY } = require_('../systemBuilder/creation');
+const { pickAction } = require_('../systemBuilder/picking');
+const { PICKS_KEY } = require_('../systemBuilder/choices');
+const { playerMayEdit } = require_('../sheets/templates');
 const { checkDefinition } = require_('../systemBuilder/definition');
 const citysys = require_('../systemBuilder/citysys');
 const { OTHER } = require_('../systemBuilder/versionDiff');
@@ -98,5 +101,107 @@ describe('the system file', () => {
     const read = citysys.readFile(JSON.stringify(file));
     expect([read.file.definition.creation, read.problems]).toEqual([creation, []]);
     expect(OTHER).toContain('creation');
+  });
+});
+
+describe('walking through it (7c2)', () => {
+  const ON = { ...HEARTH, creation: { on: true } };
+  const fresh = { [CREATING_KEY]: {} };
+
+  it('asks the steps that are on, in order; KITS and MONEY wait for 7c4', () => {
+    expect(stepsAsked(ON)).toEqual(['who', 'stats', 'list:classes', 'list:backgrounds', 'list:feats']);
+    expect(stepsAsked({ ...HEARTH, creation: { on: true, off: ['stats'], order: ['list:feats', 'who'] } }))
+      .toEqual(['list:feats', 'who', 'list:classes', 'list:backgrounds']);
+  });
+
+  it('tells the browser the steps and stats while it is on, and nothing while it is off', () => {
+    expect(creationShown(HEARTH)).toBeNull();
+    expect(creationShown({ ...HEARTH, creation: { on: false } })).toBeNull();
+    const withRange = { ...ON, stats: [{ id: 'a', label: 'A', stats: [{ id: 'x', label: 'X', min: 3, max: 18 }, { id: 'y' }] }, { id: 'none', label: 'N', stats: [] }] };
+    expect(creationShown(withRange)).toEqual({
+      steps: ['who', 'stats', 'list:classes', 'list:backgrounds', 'list:feats'],
+      stats: [{ id: 'a', label: 'A', stats: [{ id: 'x', label: 'X', min: 3, max: 18 }, { id: 'y', label: 'y' }] }],
+    });
+  });
+
+  it('opens once: a second open changes nothing, so a place is never lost', () => {
+    expect(creationAction(ON, {}, { kind: 'open' })).toEqual({ ok: true, data: fresh });
+    const going = { name: 'W', [CREATING_KEY]: { at: 'stats' } };
+    expect(creationAction(ON, going, { kind: 'open' })).toEqual({ ok: true });
+    expect(creationAction(ON, { [CREATING_KEY]: { done: true } }, { kind: 'open' })).toEqual({ ok: true });
+  });
+
+  it('keeps the step, keeping what else is on the sheet; only a step this game asks', () => {
+    expect(creationAction(ON, { name: 'W', ...fresh }, { kind: 'at', step: 'stats' })).toEqual({ ok: true, data: { name: 'W', [CREATING_KEY]: { at: 'stats' } } });
+    expect(creationAction(ON, fresh, { kind: 'at', step: 'kits' }).error).toBe('Not one of this game\'s steps');
+    expect(creationAction(ON, fresh, { kind: 'at', step: 'list:nope' }).ok).toBe(false);
+    expect(creationAction(ON, fresh, { kind: 'at' }).ok).toBe(false);
+  });
+
+  it('finishes, and nothing moves it after that', () => {
+    const done = creationAction(ON, { [CREATING_KEY]: { at: 'stats' } }, { kind: 'finish' }).data;
+    expect(done).toEqual({ [CREATING_KEY]: { done: true } });
+    for (const action of [{ kind: 'at', step: 'stats' }, { kind: 'finish' }]) {
+      expect(creationAction(ON, done, action)).toEqual({ ok: false, error: 'This character isn\'t being made' });
+    }
+  });
+
+  it('a step or a finish needs it opened first', () => {
+    expect(creationAction(ON, {}, { kind: 'finish' }).ok).toBe(false);
+    expect(creationAction(ON, {}, { kind: 'at', step: 'stats' }).ok).toBe(false);
+  });
+
+  it('refuses it all with the flow off, and anything else it is asked', () => {
+    expect(creationAction(HEARTH, {}, { kind: 'open' })).toEqual({ ok: false, error: 'This game has no guided new character' });
+    expect(creationAction(ON, fresh, { kind: 'nope' })).toEqual({ ok: false, error: 'Nothing to do' });
+    expect(creationAction(ON, fresh, null).ok).toBe(false);
+  });
+
+  it('under way only while it is opened, not finished, and on', () => {
+    expect(creatingNow(ON, fresh)).toBe(true);
+    expect(creatingNow(ON, {})).toBe(false);
+    expect(creatingNow(ON, { [CREATING_KEY]: { done: true } })).toBe(false);
+    expect(creatingNow(HEARTH, fresh)).toBe(false);
+  });
+
+  it('an upload is the end of it, opened or not; with the flow off nothing is written', () => {
+    expect(withUpload(ON, { name: 'W' })).toEqual({ name: 'W', [CREATING_KEY]: { done: true, uploaded: true } });
+    expect(withUpload(ON, { [CREATING_KEY]: { at: 'stats' } })).toEqual({ [CREATING_KEY]: { done: true, uploaded: true } });
+    expect(withUpload(ON, { [CREATING_KEY]: { done: true } })).toEqual({ [CREATING_KEY]: { done: true } });
+    expect(withUpload(HEARTH, { name: 'W' })).toEqual({ name: 'W' });
+    expect(withUpload(null, { name: 'W' })).toEqual({ name: 'W' });
+  });
+
+  it('the place can\'t be written as a field', () => {
+    expect(playerMayEdit('generic', CREATING_KEY)).toBe(false);
+  });
+});
+
+describe('taking a pick back while making the character (7c2)', () => {
+  const ROLLED = { ...HEARTH, creation: { on: true }, choices: [
+    { id: 'classes', one: 'Class', many: 'Classes', options: [{ id: 'soldier', label: 'Soldier' }] },
+    { id: 'omens', one: 'Omen', many: 'Omens', table: 'd6', players: 'roll', options: [{ id: 'storm', label: 'Storm', roll: '1-6' }] },
+  ] };
+  const held = (place) => ({ [PICKS_KEY]: { classes: [{ option: 'soldier' }], omens: [{ option: 'storm' }] }, ...(place ? { [CREATING_KEY]: place } : {}) });
+  const drop = (data, list, option) => pickAction(ROLLED, data, { kind: 'drop', list, option });
+
+  it('a player may, on their own picks', () => {
+    const done = drop(held({ at: 'list:classes' }), 'classes', 'soldier');
+    expect(done.ok).toBe(true);
+    expect(done.data[PICKS_KEY].classes).toEqual([]);
+  });
+
+  it('not on a list rolled only: that would be a second roll', () => {
+    expect(drop(held({}), 'omens', 'storm')).toEqual({ ok: false, error: 'Only the GM takes a pick away' });
+  });
+
+  it('not before it is opened, nor once it is finished, nor with the flow off', () => {
+    for (const data of [held(null), held({ done: true })]) expect(drop(data, 'classes', 'soldier').ok).toBe(false);
+    const off = { ...ROLLED, creation: { on: false } };
+    expect(pickAction(off, held({}), { kind: 'drop', list: 'classes', option: 'soldier' }).ok).toBe(false);
+  });
+
+  it('the GM still may, on any list, at any time', () => {
+    expect(pickAction(ROLLED, held(null), { kind: 'drop', list: 'omens', option: 'storm' }, { gm: true }).ok).toBe(true);
   });
 });

@@ -1292,6 +1292,13 @@ button:disabled, .utility-btn:disabled, .upload-btn:disabled {
   background: var(--black) !important;
 }
 
+/* A pick not open to this character yet: off, but its name has to read beside what it needs. */
+button.choice-off:disabled {
+  border-color: var(--green) !important;
+  color: var(--green) !important;
+  pointer-events: auto;
+}
+
 .utility-btn.active {
   background: var(--green);
   color: var(--black);

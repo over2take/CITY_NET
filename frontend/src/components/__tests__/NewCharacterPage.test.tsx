@@ -37,11 +37,10 @@ const step = (name: string) => within(screen.getByRole('listitem', { name }));
 const flow = () => screen.getByRole('switch', { name: /GUIDED NEW CHARACTER/ });
 
 describe('the page', () => {
-  it('is off to start, says so, and that nothing changes at the table yet', () => {
+  it('is off to start, and says so', () => {
     open();
     expect(flow().getAttribute('aria-checked')).toBe('false');
     expect(screen.getByText(/Off: a player gets a blank sheet, as always/)).toBeTruthy();
-    expect(screen.getByText(/nothing changes at the table yet/)).toBeTruthy();
   });
 
   it('turns on, says what it means, and turns off again leaving nothing behind', async () => {

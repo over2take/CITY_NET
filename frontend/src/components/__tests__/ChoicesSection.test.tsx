@@ -89,6 +89,24 @@ describe('the CHOICES block', () => {
     expect(onChoices).toHaveBeenCalledWith({ kind: 'pick', list: 'classes', option: 'scout' });
   });
 
+  it('the options one to a line under PICK A CLASS, what one needs beside its own (7c2)', () => {
+    draw({ int: 10, _choices: { classes: [{ option: 'soldier', level: 1 }] } });
+    const pick = within(screen.getByRole('group', { name: 'Pick a Class' }));
+    expect(pick.getByText('PICK A CLASS')).toBeTruthy();
+    const mage = pick.getByRole('button', { name: 'MAGE' });
+    const scout = pick.getByRole('button', { name: 'SCOUT' });
+    expect([mage.style.gridColumn, scout.style.gridColumn]).toEqual(['1', '1']);
+    const needs = pick.getByText('NEEDS INTELLECT >= 13');
+    expect(mage.nextElementSibling).toBe(needs);
+    expect(needs.style.gridColumn).toBe('2');
+  });
+
+  it('the words over the options read the same before a vowel (7c2)', () => {
+    const archetypes = { ...template, choices: [{ ...lists[0], one: 'Archetype' }] } as SheetTemplate;
+    draw({ int: 10 }, { template: archetypes });
+    expect(within(screen.getByRole('group', { name: 'Pick an Archetype' })).getByText('PICK AN ARCHETYPE')).toBeTruthy();
+  });
+
   it('each list folds away on its own, saying how many are picked, and opens again (2026-10-31)', async () => {
     draw({ int: 10, _choices: { classes: [{ option: 'soldier', level: 3 }] } });
     const block = within(screen.getByRole('region', { name: 'Classes' }));
