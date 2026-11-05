@@ -24,7 +24,7 @@ const openChoices = async (page: Page, name: string) => {
 };
 
 test('a d6 table on BACKGROUNDS, its rolls checked, rolled only, kept after a reload', async ({ page, request }, info) => {
-  const name = `Rolling Hearth ${info.retry + 1}`;
+  const name = `Tabled Hearth ${info.retry + 1}`;
   const token = await gmToken(request);
   const { id } = await asGm(request, token, 'post', '/api/systems', { definition: definition(name) });
   await signInAsGm(page);

@@ -94,7 +94,7 @@ test('a fixed array: too few said, set, the server taking it, kept after a reloa
 });
 
 test('rolled: what it reads and what it can come to said, set, the server taking it, kept after a reload', async ({ page, request }, info) => {
-  const name = `Rolling Hearth ${info.retry + 1}`;
+  const name = `Dice Stats Hearth ${info.retry + 1}`;
   const token = await gmToken(request);
   const { id } = await asGm(request, token, 'post', '/api/systems', { definition: { ...definition(name), stats: [
     { id: 'abilities', label: 'ABILITIES', stats: [{ id: 'grit', label: 'Grit', min: 1, max: 18 }] },
