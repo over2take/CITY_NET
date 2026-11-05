@@ -28,7 +28,7 @@ const btn: React.CSSProperties = { fontFamily: 'monospace', fontSize: 11, letter
 const mini: React.CSSProperties = { fontFamily: 'monospace', fontSize: 11, padding: '0 6px', background: 'none', color: 'var(--green)', border: '1px solid var(--dark-green)', cursor: 'pointer' };
 const panel: React.CSSProperties = { border: '1px solid var(--dark-green)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 };
 const seg = (on: boolean): React.CSSProperties => ({
-  background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)', border: 0, fontFamily: 'monospace', fontSize: 11, padding: '3px 12px', cursor: 'pointer',
+  background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)', border: 0, fontFamily: 'monospace', fontSize: 11, padding: '3px 8px', cursor: 'pointer',
 });
 const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '160px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' };
 /** How many of something, in words. */
@@ -90,7 +90,7 @@ export function NewCharacterPage({ definition, edit, onGoTo }: Props) {
     edit(after);
   };
   return (
-    <div data-testid="new-character-page" style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 420px) minmax(0, 1fr)', gap: 16, alignItems: 'start', maxWidth: 1000 }}>
+    <div data-testid="new-character-page" style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 370px) minmax(0, 1fr)', gap: 16, alignItems: 'start', maxWidth: 1000 }}>
       <section aria-label="The flow" style={panel}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <FieldName hint={HINTS['creation.on']} style={small}>A NEW CHARACTER</FieldName>

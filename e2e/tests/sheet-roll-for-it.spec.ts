@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator } from '@playwright/test';
 import { signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
 
 // ROLL FOR IT at the table (7a5b2; approved mockup docs/mockups/nested-choices.html, version 2): a
@@ -35,6 +35,15 @@ test('a background rolled for, thrown in the tray, then taken; picking by hand i
   // Rolled only: nothing to pick by hand until it's rolled.
   const pick = sheet.getByRole('region', { name: 'Backgrounds' }).getByRole('group', { name: 'Pick a Background' });
   await expect(pick.getByRole('button', { name: 'DOCKHAND' })).toBeDisabled();
+  // The table is there to read: the dice, and each option's range on its line.
+  await expect(pick.getByText('PICK A BACKGROUND (d6)')).toBeVisible();
+  const lineOf = async (l: Locator) => { const b = (await l.boundingBox())!; return b.y + b.height / 2; };
+  expect(Math.abs(await lineOf(pick.getByText('4-6', { exact: true })) - await lineOf(pick.getByRole('button', { name: 'SCRIBE' })))).toBeLessThan(4);
+  expect(await lineOf(pick.getByText('1-3', { exact: true }))).toBeLessThan(await lineOf(pick.getByText('4-6', { exact: true })));
+  // The boxes line up, the same width, wherever the ranges sit.
+  const boxes = await Promise.all(['DOCKHAND', 'SCRIBE'].map((name) => pick.getByRole('button', { name }).boundingBox()));
+  expect(boxes[0]!.x).toBe(boxes[1]!.x);
+  expect(boxes[0]!.width).toBe(boxes[1]!.width);
   await pick.getByRole('button', { name: 'ROLL FOR IT' }).click();
 
   // The tray throws it; the sheet says what came up, marked TAKE IT, and no second roll.

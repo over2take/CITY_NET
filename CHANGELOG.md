@@ -696,6 +696,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **ROLL FOR IT shows its table:** a list you can roll on now shows the dice over its options and each option's range beside it, so PICK A BACKGROUND (d6) reads 1-3 DOCKHAND, 4-6 SCRIBE, and a player can see what a roll should give. What came up is picked out on the table. A player who can't roll on that list doesn't get the table; the GM always does.
 - **What's left to pick on a sheet (System Builder):** the options of a list now sit one to a line under PICK A CLASS, each with what it needs beside it, instead of running together in a row after + CLASS, where a requirement could read as the next option's. An option that can't be picked yet is also easier to read.
 - The character sheet lists CHARACTER first and still opens on STATS. A built sheet can name the tab it opens on; renaming that tab in the builder keeps it, removing it opens on the first.
 - On a sheet's CHOICES, each list (CLASSES, FEATS) folds away on its own, saying how many are picked.
