@@ -6,8 +6,8 @@
 import { catalogueLabel, type ShopStock } from '../data/buildingTypes';
 import { catalogueCurrencyFor, formatAmount } from './currencies';
 
-/** One item the game can give, with what it's worth. */
-export interface GivableItem { id: string; name: string; price: number }
+/** One item the game can give, with what it's worth; a kit (7c4c) says what is in it. */
+export interface GivableItem { id: string; name: string; price: number; holds?: string }
 /** A catalogue of them, as the server sends it ('givableItems'). */
 export interface GivableCatalogue { catalogue: string; items: GivableItem[] }
 /** An item as the window lists it: with its catalogue. */
@@ -17,7 +17,8 @@ export interface ListedItem extends GivableItem { catalogue: string }
 export type Lands =
   | { shape: 'rows'; group: string; rows: number[] }
   | { shape: 'cyberware' }
-  | { shape: 'inventory'; stacked: boolean };
+  | { shape: 'inventory'; stacked: boolean }
+  | { shape: 'kit'; items: number };
 
 /** One character a GIVE (or its preview) reached. */
 export interface Recipient {
@@ -39,7 +40,7 @@ export type GiveAnswer =
   | { ok: false; reason: string };
 
 /** What a player is told ('itemReceived'). */
-export interface ReceivedNotice { item: string; catalogue: string; qty: number; note: string }
+export interface ReceivedNotice { item: string; catalogue: string; qty: number; note: string; holds?: string }
 
 /** The most of one item given at once, and the longest note: the server's own (sheets/giving.js LIMITS). */
 export const QTY_MAX = 99;
@@ -61,8 +62,11 @@ export const searchItems = (catalogues: GivableCatalogue[], query: string, chip:
 /** An item's key in the window: a catalogue can share an id with another. */
 export const itemKey = (i: Pick<ListedItem, 'catalogue' | 'id'>) => `${i.catalogue}/${i.id}`;
 
+/** The catalogue a system's kits are listed under (backend sheets/giving.js KITS_CATALOGUE). */
+export const KITS_CATALOGUE = 'kits';
+
 /** A catalogue's name in this game, for its chip (the shop's own names). */
-export const chipLabel = (catalogue: string, system: string | null | undefined) => catalogueLabel(catalogue as ShopStock, system).toUpperCase();
+export const chipLabel = (catalogue: string, system: string | null | undefined) => (catalogue === KITS_CATALOGUE ? 'KITS' : catalogueLabel(catalogue as ShopStock, system).toUpperCase());
 
 /** What an item is worth, as the shop prints it: in its catalogue's currency, or credits. */
 export const worthOf = (system: string | null | undefined, catalogue: string, price: number): string => {
@@ -82,6 +86,7 @@ export const landsText = (lands: Lands, qty: number, stows: boolean): string => 
     const where = lands.rows.length > 1 ? `${lands.group} rows ${first}–${last}` : `${lands.group} row ${first}`;
     return stows && lands.group === 'weapon' ? `${where}, Stowed` : where;
   }
+  if (lands.shape === 'kit') return `${lands.items} ${lands.items === 1 ? 'item' : 'items'}, in the inventory`;
   if (lands.shape === 'cyberware') return qty > 1 ? `${qty} cyberware rows, not yet placed` : 'a cyberware row, not yet placed';
   if (lands.stacked) return `inventory ×${qty}, stacked`;
   return qty > 1 ? `inventory ×${qty}` : 'an inventory line';
@@ -123,8 +128,8 @@ export const givenAt = (at: string, now: Date = new Date()): string => {
 export const givenText = (l: GivenLine, now?: Date): string =>
   `${givenAt(l.at, now)} · ${l.by} gave ${l.to.join(', ')}: ${l.item} ×${l.qty}`;
 
-/** What a player is told: "THE GM GAVE YOU HEAVY PISTOL ×2", in the game's own word for the GM. */
-export const noticeText = (n: ReceivedNotice, gm = 'GM'): string => `THE ${gm.toUpperCase()} GAVE YOU ${n.item.toUpperCase()} ×${n.qty}`;
+/** What a player is told: "THE GM GAVE YOU HEAVY PISTOL ×2", in the game's own word for the GM; a kit, what was in it. */
+export const noticeText = (n: ReceivedNotice, gm = 'GM'): string => `THE ${gm.toUpperCase()} GAVE YOU ${n.item.toUpperCase()} ×${n.qty}${n.holds ? `: ${n.holds}` : ''}`;
 
 /** A recipient's key, for ticking: a player by name, an NPC by token. */
 export const recipientKey = (r: Pick<Recipient, 'kind' | 'username' | 'location_id'>) =>

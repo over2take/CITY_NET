@@ -28,7 +28,7 @@ const WHO: { id: KitWho; label: string; why: string }[] = [
   { id: 'all', label: 'EVERYONE GETS IT', why: 'Every new character starts with this.' },
   { id: 'pick', label: 'A PLAYER MAY PICK IT', why: 'Offered to pick from, one kit per character.' },
   { id: 'needs', label: 'ONLY IF', why: 'Offered to pick from, but off until the requirement is met.' },
-  { id: 'gm', label: 'THE GM GIVES IT', why: 'Not offered to players. It is yours to hand out, as a kit for one character: GIVE will list it next.' },
+  { id: 'gm', label: 'THE GM GIVES IT', why: 'Not offered to players. It is yours to hand out, as a kit for one character, from GIVE_ITEM in the GAME tab.' },
 ];
 
 function KitRow({ kit, definition, edit, api }: Props & { kit: Kit }) {

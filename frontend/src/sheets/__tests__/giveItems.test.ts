@@ -3,9 +3,10 @@ import { createRequire } from 'module';
 import {
   clampQty, searchItems, itemKey, chipLabel, worthOf, landsText, shortReason, recipientText, resultText, giveLabel,
   refusalText, givenAt, givenText, noticeText, recipientKey, previewRequest, giveRequest, askOnce, giveCalls,
-  QTY_MAX, NOTE_MAX, ASK_TIMEOUT_MS, type GivableCatalogue, type Recipient, type AskSocket,
+  KITS_CATALOGUE, QTY_MAX, NOTE_MAX, ASK_TIMEOUT_MS, type GivableCatalogue, type Recipient, type AskSocket,
 } from '../giveItems';
 import { giveAvailable, cataloguesAvailable, shopsAvailable } from '../../data/buildingTypes';
+import { kitItemsText } from '../newCharacterFlow';
 import { registerCustomTemplate, clearCustomTemplates, type CustomRender } from '../customTemplates';
 import type { Currency } from '../currencies';
 
@@ -16,7 +17,8 @@ import type { Currency } from '../currencies';
  */
 
 const req = createRequire(import.meta.url);
-const { LIMITS } = req('../../../../backend/sheets/giving.js');
+const { LIMITS, KITS_CATALOGUE: SERVER_KITS } = req('../../../../backend/sheets/giving.js');
+const { kitWords } = req('../../../../backend/systemBuilder/creation.js');
 
 const HEARTH = 'sys_aaaaaaaaaaaaaaaa';
 const NOGIVE = 'sys_bbbbbbbbbbbbbbbb';
@@ -229,5 +231,31 @@ describe('asking the server', () => {
     expect(await Promise.all([a, b, c])).toEqual([{ ok: true, system: 'x', catalogues: [] }, { ok: false, reason: 'give_off' }, { ok: true, system: 'x', entries: [] }]);
     expect(s.sent.map((x) => x.event)).toEqual(['requestGivable', 'giveItem', 'requestGiven']);
     expect(s.sent[1].payload).toMatchObject({ players: true, preview: true });
+  });
+});
+
+describe('kits (7c4c)', () => {
+  it('are listed under the catalogue the server sends them under, by that name in any game', () => {
+    expect(KITS_CATALOGUE).toBe(SERVER_KITS);
+    expect(chipLabel(KITS_CATALOGUE, 'cities_without_number')).toBe('KITS');
+    expect(chipLabel(KITS_CATALOGUE, HEARTH)).toBe('KITS');
+    expect(chipLabel('gear', 'cities_without_number')).not.toBe('KITS');
+  });
+
+  it('say where they land, one item or more, however many were asked for', () => {
+    expect(landsText({ shape: 'kit', items: 1 }, 1, false)).toBe('1 item, in the inventory');
+    expect(landsText({ shape: 'kit', items: 8 }, 2, true)).toBe('8 items, in the inventory');
+    expect(resultText({ kind: 'player', username: 'vex', name: 'Vex', given: true, lands: { shape: 'kit', items: 4 } }, 1, false)).toBe('VEX: GIVEN, 4 ITEMS, IN THE INVENTORY');
+  });
+
+  it('tell the player what was in one; anything else as it was', () => {
+    expect(noticeText({ item: 'Traveler', catalogue: KITS_CATALOGUE, qty: 1, note: '', holds: 'Rope, 3x Rations' })).toBe('THE GM GAVE YOU TRAVELER ×1: Rope, 3x Rations');
+    expect(noticeText({ item: 'Coin', catalogue: 'gear', qty: 2, note: '' })).toBe('THE GM GAVE YOU COIN ×2');
+  });
+
+  it('read what is in one as the flow does', () => {
+    const items = [{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }];
+    expect(kitWords({ items })).toBe(kitItemsText(items));
+    expect(kitWords({})).toBe('');
   });
 });

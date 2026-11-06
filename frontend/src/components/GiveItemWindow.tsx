@@ -160,7 +160,9 @@ export function GiveItemWindow({ pos, setPos, onClose, socket, system, npcs, onl
         <>
           <span style={{ ...mono(12), fontWeight: 'bold', overflowWrap: 'anywhere' }}>{picked.name.toUpperCase()}</span>
           <span style={{ color: 'var(--grid-section)' }}>{chipLabel(picked.catalogue, system)}</span>
-          <span style={{ color: 'var(--cyan)' }}>WORTH {worthOf(system, picked.catalogue, picked.price)}</span>
+          {picked.holds
+            ? <span style={{ color: 'var(--cyan)', overflowWrap: 'anywhere', letterSpacing: 0 }}>{picked.holds}</span>
+            : <span style={{ color: 'var(--cyan)' }}>WORTH {worthOf(system, picked.catalogue, picked.price)}</span>}
           <span style={{ color: 'var(--grid-section)' }}>×{qty} · FREE</span>
         </>
       ) : <span style={{ color: 'var(--grid-section)', letterSpacing: 0 }}>Pick an item from ITEMS.</span>}
@@ -224,9 +226,12 @@ export function GiveItemWindow({ pos, setPos, onClose, socket, system, npcs, onl
                     const current = picked !== null && itemKey(picked) === itemKey(i);
                     return (
                       <tr key={itemKey(i)} style={current ? { color: 'var(--cyan)' } : undefined}>
-                        <td style={{ ...cell, whiteSpace: 'nowrap' }}>{i.name}</td>
+                        <td style={{ ...cell, whiteSpace: i.holds ? 'normal' : 'nowrap' }}>
+                          {i.name}
+                          {i.holds && <div style={{ color: 'var(--grid-section)' }}>{i.holds}</div>}
+                        </td>
                         <td style={{ ...cell, color: 'var(--grid-section)' }}>{chipLabel(i.catalogue, system)}</td>
-                        <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>{worthOf(system, i.catalogue, i.price)}</td>
+                        <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>{i.holds ? '' : worthOf(system, i.catalogue, i.price)}</td>
                         <td style={{ ...cell, textAlign: 'right' }}>
                           <button type="button" className={`utility-btn ${current ? 'active' : ''}`} aria-label={`Give ${i.name}`}
                             onClick={() => pick(i)} style={{ padding: '1px 6px', fontSize: 9 }}>GIVE</button>

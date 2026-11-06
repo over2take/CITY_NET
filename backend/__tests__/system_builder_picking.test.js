@@ -15,6 +15,7 @@ import { drain, until } from './helpers/until.js';
 process.env.JWT_SECRET = 'test-secret';
 
 const require_ = createRequire(import.meta.url);
+const giving = require_('../sheets/giving');
 const catalogues = require_('../shops/catalogueStore');
 const { readInventory } = require_('../shops/placement');
 const { pickAction } = require_('../systemBuilder/picking');
@@ -539,6 +540,106 @@ describe('through the socket', () => {
         kes.handlers.importSheetFields({ fields: { name: 'Wren' }, replace: true });
         await until(async () => (await stored()).name === 'Wren', { label: 'the upload' });
         expect(await lines()).toEqual([]);
+      });
+    });
+
+    describe('kits in GIVE (7c4c)', () => {
+      const KITS = [
+        { id: 'traveler', name: 'TRAVELER', items: [{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }], who: 'pick' },
+        { id: 'potions', name: 'POTIONS', items: [{ name: 'Mortar', qty: 1 }], who: 'needs', requires: '@int >= 99' },
+        { id: 'rook', name: 'ROOK', items: [{ name: 'Letter', qty: 1 }], who: 'gm' },
+      ];
+      const turnOnKits = async () => {
+        const def = JSON.stringify({ ...HEARTH, creation: { kits: KITS } });
+        await run(db, 'UPDATE custom_systems SET draft = ?, published = ? WHERE id = ?', [def, def, ID]);
+        await new Promise((resolve) => runtime.load(db, resolve));
+      };
+      const lines = async () => readInventory(await stored()).map((i) => [i.name, i.qty]);
+      const answer = (who, event) => until(() => who.heard.some((e) => e.event === event), { label: event }).then(() => who.heard.filter((e) => e.event === event).pop().data);
+
+      it('every kit is listed for the GM, what is in each said; to a player, nothing', async () => {
+        await turnOnKits();
+        const { gm, kes } = await table();
+        gm.handlers.requestGivable();
+        const reply = await answer(gm, 'givableItems');
+        expect(reply.catalogues.find((c) => c.catalogue === 'kits').items).toEqual([
+          { id: 'traveler', name: 'TRAVELER', price: 0, holds: 'Rope, 3x Rations' },
+          { id: 'potions', name: 'POTIONS', price: 0, holds: 'Mortar' },
+          { id: 'rook', name: 'ROOK', price: 0, holds: 'Letter' },
+        ]);
+        kes.handlers.requestGivable();
+        await drain(db);
+        expect(kes.heard.some((e) => e.event === 'givableItems')).toBe(false);
+      });
+
+      it('with no kits, none listed', async () => {
+        const { gm } = await table();
+        gm.handlers.requestGivable();
+        const reply = await answer(gm, 'givableItems');
+        expect(reply.catalogues.some((c) => c.catalogue === 'kits')).toBe(false);
+      });
+
+      it('the preview says where it lands and writes nothing; the GIVE lands it, on the GIVEN list', async () => {
+        await turnOnKits();
+        const { gm } = await table();
+        gm.handlers.giveItem({ catalogue: 'kits', id: 'traveler', qty: 1, players: true, preview: true });
+        const preview = await answer(gm, 'itemGiven');
+        expect(preview.item).toEqual({ catalogue: 'kits', id: 'traveler', name: 'TRAVELER', price: 0 });
+        expect(preview.recipients.find((r) => r.username === 'kes')).toMatchObject({ given: false, lands: { shape: 'kit', items: 4 } });
+        expect(await lines()).toEqual([]);
+        gm.heard.length = 0;
+        gm.handlers.giveItem({ catalogue: 'kits', id: 'traveler', qty: 1, players: ['kes'], note: 'For the road' });
+        const given = await answer(gm, 'itemGiven');
+        expect(given.recipients.find((r) => r.username === 'kes')).toMatchObject({ given: true, lands: { shape: 'kit', items: 4 } });
+        expect(await lines()).toEqual([['Rope', 1], ['Rations', 3]]);
+        expect(given.given[0]).toMatchObject({ catalogue: 'kits', item: 'TRAVELER', qty: 1, to: ['Kestrel'], note: 'For the road' });
+      });
+
+      it('how many is that many of each; whatever way it goes, the GM can give it, even one not met', async () => {
+        await turnOnKits();
+        const { gm } = await table();
+        gm.handlers.giveItem({ catalogue: 'kits', id: 'traveler', qty: 2, players: ['kes'] });
+        const two = await answer(gm, 'itemGiven');
+        expect(two.recipients.find((r) => r.username === 'kes').lands).toEqual({ shape: 'kit', items: 8 });
+        expect(await lines()).toEqual([['Rope', 2], ['Rations', 6]]);
+        gm.heard.length = 0;
+        gm.handlers.giveItem({ catalogue: 'kits', id: 'potions', qty: 1, players: ['kes'] });
+        await answer(gm, 'itemGiven');
+        gm.heard.length = 0;
+        gm.handlers.giveItem({ catalogue: 'kits', id: 'rook', qty: 1, players: ['kes'] });
+        await answer(gm, 'itemGiven');
+        expect((await lines()).map((l) => l[0])).toEqual(['Rope', 'Rations', 'Mortar', 'Letter']);
+      });
+
+      it('a kit it doesn\'t have is refused; a player can\'t give one', async () => {
+        await turnOnKits();
+        const { gm, kes } = await table();
+        gm.handlers.giveItem({ catalogue: 'kits', id: 'nope', qty: 1, players: ['kes'] });
+        const refused = await answer(gm, 'itemGiven');
+        expect(refused).toEqual({ ok: false, reason: 'Not something this game can give.' });
+        kes.handlers.giveItem({ catalogue: 'kits', id: 'traveler', qty: 1, players: ['kes'] });
+        await drain(db);
+        expect(await lines()).toEqual([]);
+      });
+
+      it('the player is told what was in it, privately', async () => {
+        await turnOnKits();
+        await table();
+        const notify = vi.fn();
+        const io = { emit: vi.fn() };
+        await giving.giveItem(db, io, { system: ID, catalogue: 'kits', id: 'traveler', qty: 1, players: ['kes'], note: 'Go' }, notify);
+        expect(notify).toHaveBeenCalledWith('kes', { item: 'TRAVELER', catalogue: 'kits', qty: 1, note: 'Go', holds: 'Rope, 3x Rations' });
+        expect(io.emit.mock.calls.map((c) => c[0])).toEqual(['sheetUpdated']);
+      });
+
+      it('an item from a shelf is told as it was', async () => {
+        await turnOnKits();
+        await table();
+        const notify = vi.fn();
+        catalogues.load(ID, { gear: [{ id: 'coin', name: 'Coin', price: 5, fields: {} }] });
+        await giving.giveItem(db, { emit: vi.fn() }, { system: ID, catalogue: 'gear', id: 'coin', qty: 1, players: ['kes'] }, notify);
+        expect(notify).toHaveBeenCalledWith('kes', { item: 'Coin', catalogue: 'gear', qty: 1, note: '' });
+        expect(await lines()).toEqual([['Coin', 1]]);
       });
     });
 

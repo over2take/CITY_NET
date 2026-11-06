@@ -24,7 +24,7 @@ const { parseTokenConditions } = require('../tokens/conditions');
 const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
-const { withUpload, lockedWhileCreating } = require('../systemBuilder/creation');
+const { withUpload, lockedWhileCreating, kitsGivable } = require('../systemBuilder/creation');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { healthView } = require('../systemBuilder/healthView');
@@ -2446,7 +2446,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (err) return socket.emit('givableItems', { ok: false, reason: 'no_system' });
         // A custom system can turn GIVE ITEM off (4g3, the give_items part): nothing to give then.
         if (!customSystems.partIn(system, 'give_items')) return socket.emit('givableItems', { ok: false, reason: 'give_off' });
-        socket.emit('givableItems', { ok: true, system, catalogues: givable(system) });
+        // Beside the shelves, a custom system's kits (7c4c): every one, as the GM can give anything.
+        const kits = kitsGivable(customSystems.definitionOf(system) ?? {});
+        socket.emit('givableItems', { ok: true, system, catalogues: [...givable(system), ...(kits.length ? [{ catalogue: giving.KITS_CATALOGUE, items: kits }] : [])] });
       });
     });
 
