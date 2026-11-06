@@ -27,7 +27,9 @@ const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Arra
  * An option of a list; a levelled list's may have a die, by its sides (R1a: recovery dice, level-up
  * health); a list with a table's has the roll, or range, that gives it (7a5b: '4', '4-5').
  */
-export interface ChoiceOption { id: string; label: string; description?: string; requires?: string; die?: number; roll?: string; features?: unknown[] }
+/** What holding an option gives a new character as they finish (7c4e). */
+export interface OptionGives { items?: { name: string; qty: number }[]; money?: Record<string, { how: 'number'; amount: number } | { how: 'roll'; each: string }> }
+export interface ChoiceOption { id: string; label: string; description?: string; requires?: string; die?: number; roll?: string; gives?: OptionGives; features?: unknown[] }
 /** How a list is picked (backend choices.js PICKED); on its own when it says nothing. */
 export type Picked = 'own' | 'features' | 'both' | 'everyone';
 /** How players pick from a list with a table (backend choices.js PLAYERS): by hand, by hand or rolled, rolled only. */
@@ -36,7 +38,7 @@ export interface ChoiceList { id: string; one: string; many: string; picks?: num
 /** A change to a list: `table: null` takes its table away, and its options' rolls with it. */
 export type ListPatch = Partial<Pick<ChoiceList, 'one' | 'many' | 'picks' | 'levelled' | 'again' | 'picked' | 'players'>> & { table?: string | null };
 /** A change to an option: `die: null` takes its die away; an empty roll takes its roll away. */
-export type OptionPatch = Partial<Pick<ChoiceOption, 'label' | 'description' | 'requires' | 'roll'>> & { die?: number | null };
+export type OptionPatch = Partial<Pick<ChoiceOption, 'label' | 'description' | 'requires' | 'roll' | 'gives'>> & { die?: number | null };
 export interface Modifier { target: string; amount: string }
 export interface Uses { count: string; refill?: string }
 export interface RollChange { roll: string; change: string }
@@ -239,6 +241,13 @@ export const withOption = (def: Definition, listId: string, optionId: string, pa
     const next: ChoiceOption = { ...o, ...rest };
     if (typeof next.description === 'string' && !next.description.trim()) delete next.description;
     if (typeof next.requires === 'string' && !next.requires.trim()) delete next.requires;
+    // What it gives: nothing stored once it says nothing.
+    if (next.gives) {
+      const gives: OptionGives = { ...next.gives };
+      if (!gives.items?.length) delete gives.items;
+      if (!Object.keys(gives.money ?? {}).length) delete gives.money;
+      if (Object.keys(gives).length) next.gives = gives; else delete next.gives;
+    }
     // A roll only on a list with a table (7a5b), trimmed; empty takes it away.
     if (typeof next.roll === 'string') next.roll = next.roll.trim();
     if (!tableOf(c) || next.roll === '') delete next.roll;

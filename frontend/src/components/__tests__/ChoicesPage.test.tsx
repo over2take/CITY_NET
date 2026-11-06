@@ -302,8 +302,83 @@ describe('help', () => {
     open();
     // The page's own; a feature's are FeaturesEditor.test's, shown once one is open.
     const keys = ['choices.lists', 'choices.names', 'choices.picked', 'choices.picks', 'choices.again', 'choices.levelled', 'choices.table', 'choices.options', 'choices.optionName', 'choices.description', 'choices.requires', 'choices.die', 'choices.features'] as (keyof typeof HINTS)[];
-    expect(Object.keys(HINTS).filter((k) => k.startsWith('choices.'))).toHaveLength(24);
+    // The two for what an option gives are that panel's: their test is below (7c4e).
+    expect(Object.keys(HINTS).filter((k) => k.startsWith('choices.'))).toHaveLength(26);
     for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
+  });
+
+  describe('what an option gives (7c4e)', () => {
+    const MONIED = { ...HEARTH, currencies: [
+      { id: 'gold', name: 'Gold', denominations: [{ id: 'gp', name: 'Gold', short: 'gp', value: 100 }, { id: 'cp', name: 'Copper', short: 'cp', value: 1 }] },
+      { id: 'honor', name: 'Honor' },
+    ] } as unknown as Definition;
+    // The first list's first option is open to start.
+    const onOption = async (start: Definition = MONIED) => open(start);
+    const here = () => within(screen.getByRole('region', { name: 'Soldier option' }));
+    const gives = (d: Definition) => ((d.choices as { id: string; options: { id: string; gives?: object }[] }[])[0].options[0].gives);
+
+    it('items as typed, a comma typed through; emptied, nothing stored', async () => {
+      const { last } = await onOption();
+      const box = here().getByRole('textbox', { name: 'GIVES' }) as HTMLInputElement;
+      await userEvent.type(box, 'Crowbar, 3x Rations, ');
+      expect(box.value).toBe('Crowbar, 3x Rations, ');
+      expect(gives(last())).toEqual({ items: [{ name: 'Crowbar', qty: 1 }, { name: 'Rations', qty: 3 }] });
+      await userEvent.clear(box);
+      expect(gives(last())).toBeUndefined();
+    });
+
+    it('shows what it has, its own for each option', async () => {
+      const set = { ...MONIED, choices: [{ ...(MONIED.choices as object[])[0] as object, options: [
+        { id: 'soldier', label: 'Soldier', gives: { items: [{ name: 'Rope', qty: 2 }], money: { gold: { how: 'roll', each: '2d6' } } } },
+        { id: 'mage', label: 'Mage' },
+      ] }] } as unknown as Definition;
+      await onOption(set);
+      expect((here().getByRole('textbox', { name: 'GIVES' }) as HTMLInputElement).value).toBe('2x Rope');
+      expect((here().getByRole('textbox', { name: 'Gold roll' }) as HTMLInputElement).value).toBe('2d6');
+      await userEvent.click(within(listPanel('Classes').getByRole('group', { name: 'Options' })).getByRole('button', { name: 'MAGE' }));
+      const mage = within(screen.getByRole('region', { name: 'Mage option' }));
+      expect((mage.getByRole('textbox', { name: 'GIVES' }) as HTMLInputElement).value).toBe('');
+      expect(mage.queryByRole('textbox', { name: 'Gold roll' })).toBeNull();
+    });
+
+    it('money per currency, a number or a roll, never typed in; back to nothing stores nothing', async () => {
+      const { last } = await onOption();
+      const gold = within(here().getByRole('group', { name: 'Gold starts with' }));
+      expect(gold.getAllByRole('button').map((b) => b.textContent)).toEqual(['NOTHING', 'A NUMBER', 'A ROLL']);
+      await userEvent.click(gold.getByRole('button', { name: 'A ROLL' }));
+      expect(gives(last())).toEqual({ money: { gold: { how: 'roll', each: '3d6 * 10' } } });
+      await userEvent.click(within(here().getByRole('group', { name: 'Honor starts with' })).getByRole('button', { name: 'A NUMBER' }));
+      expect(gives(last())).toEqual({ money: { gold: { how: 'roll', each: '3d6 * 10' }, honor: { how: 'number', amount: 100 } } });
+      await userEvent.click(gold.getByRole('button', { name: 'NOTHING' }));
+      expect(gives(last())).toEqual({ money: { honor: { how: 'number', amount: 100 } } });
+      await userEvent.click(within(here().getByRole('group', { name: 'Honor starts with' })).getByRole('button', { name: 'NOTHING' }));
+      expect(gives(last())).toBeUndefined();
+    });
+
+    it('items and money sit together', async () => {
+      const { last } = await onOption();
+      await userEvent.type(here().getByRole('textbox', { name: 'GIVES' }), 'Rope');
+      await userEvent.click(within(here().getByRole('group', { name: 'Gold starts with' })).getByRole('button', { name: 'A NUMBER' }));
+      expect(gives(last())).toEqual({ items: [{ name: 'Rope', qty: 1 }], money: { gold: { how: 'number', amount: 10000 } } });
+      // And the other way about: typing items keeps the money.
+      await userEvent.type(here().getByRole('textbox', { name: 'GIVES' }), ', Coin');
+      expect(gives(last())).toEqual({ items: [{ name: 'Rope', qty: 1 }, { name: 'Coin', qty: 1 }], money: { gold: { how: 'number', amount: 10000 } } });
+    });
+
+    it('the app\'s single money with no currencies; none at all with the bank off', async () => {
+      await onOption(HEARTH);
+      expect(here().getByRole('group', { name: 'Money starts with' })).toBeTruthy();
+      cleanup();
+      await onOption({ ...MONIED, parts: { bank: { on: false } } } as unknown as Definition);
+      expect(here().queryByRole('group', { name: 'Gold starts with' })).toBeNull();
+      expect(here().getByRole('textbox', { name: 'GIVES' })).toBeTruthy();
+    });
+
+    it('has a "?" on each', async () => {
+      await onOption();
+      expect(screen.getByRole('note', { name: HINTS['choices.gives'] })).toBeTruthy();
+      expect(screen.getAllByRole('note', { name: HINTS['choices.giveMoney'] })).toHaveLength(2);
+    });
   });
 
   it('a "?" on IMPORT, once it is open', async () => {

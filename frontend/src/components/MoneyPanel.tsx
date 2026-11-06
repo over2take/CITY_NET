@@ -43,44 +43,53 @@ function AmountBox({ label, amount, currency, onChange }: { label: string; amoun
   );
 }
 
+/**
+ * One currency's row: how it is set, and its amount or roll. The MONEY step offers each way; an option
+ * offers no TYPED IN, that being the player's to say on the MONEY step.
+ */
+export function MoneyRow({ id, name, currency, set, typed = true, hint, onSet }: {
+  id: string; name: string; currency: Currency | null; set: MoneySet | null; typed?: boolean; hint: string; onSet: (next: MoneySet | null) => void;
+}) {
+  const now = set?.how ?? 'none';
+  const start = (how: typeof now): MoneySet | null => {
+    if (how === 'none') return null;
+    if (how === 'number') return { how, amount: 100 * wholeUnitOf(currency) };
+    return how === 'roll' ? { how, each: '3d6 * 10' } : { how };
+  };
+  return (
+    <div role="group" aria-label={name} style={grid}>
+      <FieldName beside hint={hint} style={small}>{name.toUpperCase()}</FieldName>
+      <span role="group" aria-label={`${name} starts with`} style={{ display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--green)', justifySelf: 'start' }}>
+        {HOW.filter((h) => typed || h.id !== 'typed').map((h) => (
+          <button key={h.id} type="button" aria-pressed={now === h.id} style={seg(now === h.id)}
+            onClick={() => { if (now !== h.id) onSet(start(h.id)); }}>{h.label}</button>
+        ))}
+      </span>
+      <span />
+      <p style={note}>{HOW.find((h) => h.id === now)?.why}</p>
+      {set?.how === 'number' && <>
+        <span />
+        <AmountBox key={`${id}-number`} label={`${name} amount`} amount={set.amount} currency={currency} onChange={(amount) => onSet({ how: 'number', amount })} />
+      </>}
+      {set?.how === 'roll' && <>
+        <span />
+        <input type="text" aria-label={`${name} roll`} value={set.each} maxLength={60} style={box} aria-invalid={moneyRollProblems(set.each).length ? true : undefined}
+          onChange={(e) => onSet({ how: 'roll', each: e.target.value })} />
+        {moneyRollProblems(set.each).map((p) => (
+          <React.Fragment key={p}><span /><span role="note" style={{ ...note, color: 'var(--warning)', opacity: 1 }}>{p}</span></React.Fragment>
+        ))}
+      </>}
+    </div>
+  );
+}
+
 export function MoneyPanel({ definition, edit }: Props) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {moneyRows(definition).map(({ id, name, currency }) => {
-        const set = moneyOfRow(definition, id);
-        const now = set?.how ?? 'none';
-        const label = name.toUpperCase();
-        const start = (how: typeof now): MoneySet | null => {
-          if (how === 'none') return null;
-          if (how === 'number') return { how, amount: 100 * wholeUnitOf(currency) };
-          return how === 'roll' ? { how, each: '3d6 * 10' } : { how };
-        };
-        return (
-          <div key={id} role="group" aria-label={name} style={grid}>
-            <FieldName beside hint={HINTS['creation.money']} style={small}>{label}</FieldName>
-            <span role="group" aria-label={`${name} starts with`} style={{ display: 'inline-flex', flexWrap: 'wrap', border: '1px solid var(--green)', justifySelf: 'start' }}>
-              {HOW.map((h) => (
-                <button key={h.id} type="button" aria-pressed={now === h.id} style={seg(now === h.id)}
-                  onClick={() => { if (now !== h.id) edit(withMoneyRow(definition, id, start(h.id))); }}>{h.label}</button>
-              ))}
-            </span>
-            <span />
-            <p style={note}>{HOW.find((h) => h.id === now)?.why}</p>
-            {set?.how === 'number' && <>
-              <span />
-              <AmountBox key={`${id}-number`} label={`${name} amount`} amount={set.amount} currency={currency} onChange={(amount) => edit(withMoneyRow(definition, id, { how: 'number', amount }))} />
-            </>}
-            {set?.how === 'roll' && <>
-              <span />
-              <input type="text" aria-label={`${name} roll`} value={set.each} maxLength={60} style={box} aria-invalid={moneyRollProblems(set.each).length ? true : undefined}
-                onChange={(e) => edit(withMoneyRow(definition, id, { how: 'roll', each: e.target.value }))} />
-              {moneyRollProblems(set.each).map((p) => (
-                <React.Fragment key={p}><span /><span role="note" style={{ ...note, color: 'var(--warning)', opacity: 1 }}>{p}</span></React.Fragment>
-              ))}
-            </>}
-          </div>
-        );
-      })}
+      {moneyRows(definition).map(({ id, name, currency }) => (
+        <MoneyRow key={id} id={id} name={name} currency={currency} set={moneyOfRow(definition, id)} hint={HINTS['creation.money']}
+          onSet={(next) => edit(withMoneyRow(definition, id, next))} />
+      ))}
     </div>
   );
 }

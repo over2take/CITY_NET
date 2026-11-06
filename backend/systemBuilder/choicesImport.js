@@ -16,7 +16,8 @@
 // file (ABILITY SCORE IMPROVEMENT at 4 and 8). An empty cell leaves that part as it is; `-` clears it.
 // A levelled list's options take their die too (R1a: d10, or 10), and a list with a table to roll
 // on, each option's roll (7a5b: 4, or a range, 4-5). Only words, levels, requirements, dice, table
-// rolls and uses come from a file: modifiers, rolls, roll changes and the
+// rolls and uses come from a file, with what an option gives (7c4e: gives, as Rope, 3x Rations, and money,
+// as Gold: 3d6 * 10; Honor: 5, or bare in a system with the app's single money): modifiers, rolls, roll changes and the
 // list a feature opens stay as the builder has them. A row with a mistake is skipped and said, by its
 // line, and the rest goes in (the user asked for the GM to be warned of each, 2026-10-28).
 //
@@ -29,13 +30,15 @@ const { LIMITS, choicesOf, levelNamesOf, namesOf, unlocksByLevelOf, tableOf, rol
 const { restIdsOf, restsOf } = require('./rests');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { tablesOf } = require('./derived');
+const { partOn } = require('./parts');
+const { checkItems, parseItems, giftMoneyText, giftMoneyFrom, kitWords } = require('./creation');
 const { splitRow, delimiterOf, stripBom } = require('../shops/catalogueParse');
 
 /** The most a file may be, in bytes: a few hundred options and features with room to spare. */
 const MAX_BYTES = 200_000;
 /** The columns each part reads; the first ones named are required. */
 const COLUMNS = {
-  options: { required: ['name'], read: ['name', 'description', 'requires', 'die', 'roll'] },
+  options: { required: ['name'], read: ['name', 'description', 'requires', 'die', 'roll', 'gives', 'money'] },
   features: { required: ['option', 'feature'], read: ['option', 'feature', 'level', 'words', 'uses', 'refill'] },
 };
 /** What a cell says to clear its part. */
@@ -93,7 +96,7 @@ const formulaProblem = (text, known, isTable) => {
  * The rows of a file by part, each with its line and its cells by column; the problems with whole
  * parts (a missing column, a part this doesn't read) as skipped lines; and notes about columns.
  */
-const rowsOf = (text, levelled, many, ownLevels = levelled, rolled = false) => {
+const rowsOf = (text, levelled, many, ownLevels = levelled, rolled = false, banked = true) => {
   const delimiter = delimiterOf(text);
   const rows = { options: [], features: [] };
   const skipped = [];
@@ -129,6 +132,7 @@ const rowsOf = (text, levelled, many, ownLevels = levelled, rolled = false) => {
       if (part === 'features' && named.includes('level') && !levelled) notes.push({ line, message: `${many} has no levels, so the level column is ignored` });
       if (part === 'options' && named.includes('die') && !ownLevels) notes.push({ line, message: `${many} isn't levelled, so the die column is ignored` });
       if (part === 'options' && named.includes('roll') && !rolled) notes.push({ line, message: `${many} has no table to roll on, so the roll column is ignored` });
+      if (part === 'options' && named.includes('money') && !banked) notes.push({ line, message: 'This system has the BANK part off, so the money column is ignored' });
       return;
     }
     const cols = columns;
@@ -160,7 +164,8 @@ const readChoicesFile = (definition, listId, input) => {
   const ownLevels = next.levelled === true;
   // A roll only where the list has a table to roll on (7a5b).
   const table = tableOf(next);
-  const { rows, skipped, notes } = rowsOf(stripBom(input), levelled, many, ownLevels, !!table);
+  const banked = partOn(definition, 'bank');
+  const { rows, skipped, notes } = rowsOf(stripBom(input), levelled, many, ownLevels, !!table, banked);
   const added = { options: [], features: [] };
   const changed = { options: [], features: [] };
   let unchanged = 0;
@@ -208,6 +213,17 @@ const readChoicesFile = (definition, listId, input) => {
     if (rollText && !clearing(rollText) && (!range || range[0] < table.low || range[1] > table.high)) {
       skip(row.line, `${name}: roll: a roll from ${table.low} to ${table.high}, or a range like ${table.low}-${table.low + 1}`); continue;
     }
+    // What it gives (7c4e): items as a kit's, and money per currency; '-' takes either away.
+    const givesText = row.get('gives');
+    const items = givesText && !clearing(givesText) ? parseItems(givesText) : null;
+    if (items) {
+      const wrong = [];
+      checkItems(items, 'gives', wrong);
+      if (wrong.length) { skip(row.line, `${name}: gives: ${wrong[0].message}`); continue; }
+    }
+    const moneyCell = banked ? row.get('money') : '';
+    const readMoney = moneyCell && !clearing(moneyCell) ? giftMoneyFrom(definition, moneyCell) : null;
+    if (readMoney && readMoney.error) { skip(row.line, `${name}: money: ${readMoney.error}`); continue; }
     if (name.length > LIMITS.label) { skip(row.line, `${name.slice(0, 20)}…: a name is ${LIMITS.label} characters at most`); continue; }
     if (description.length > LIMITS.description) { skip(row.line, `${name}: the description is longer than ${LIMITS.description} characters`); continue; }
     if (requires && !clearing(requires)) {
@@ -224,6 +240,9 @@ const readChoicesFile = (definition, listId, input) => {
       if (requires && !clearing(requires)) made.requires = requires;
       if (die !== null) made.die = die;
       if (roll !== null) made.roll = roll;
+      if ((items && items.length) || (readMoney && Object.keys(readMoney.money).length)) {
+        made.gives = { ...(items && items.length ? { items } : {}), ...(readMoney && Object.keys(readMoney.money).length ? { money: readMoney.money } : {}) };
+      }
       next.options.push(made);
       added.options.push({ line: row.line, option: name, ...(made.requires ? { requires: made.requires } : {}), ...(made.die ? { die: `d${made.die}` } : {}), ...(made.roll ? { roll: made.roll } : {}) });
       continue;
@@ -252,6 +271,26 @@ const readChoicesFile = (definition, listId, input) => {
         parts.push({ part: 'roll', from, to });
         if (to) option.roll = to; else delete option.roll;
       }
+    }
+    const gives = isPlainObject(option.gives) ? { ...option.gives } : {};
+    if (givesText) {
+      const from = kitWords(gives);
+      const to = clearing(givesText) ? '' : kitWords({ items });
+      if (from !== to) {
+        parts.push({ part: 'gives', from, to });
+        if (to) gives.items = items; else delete gives.items;
+      }
+    }
+    if (moneyCell) {
+      const from = giftMoneyText(definition, gives.money);
+      const to = clearing(moneyCell) ? '' : giftMoneyText(definition, readMoney.money);
+      if (from !== to) {
+        parts.push({ part: 'money', from, to });
+        if (to) gives.money = readMoney.money; else delete gives.money;
+      }
+    }
+    if (parts.some((p) => p.part === 'gives' || p.part === 'money')) {
+      if (Object.keys(gives).length) option.gives = gives; else delete option.gives;
     }
     if (parts.length) changed.options.push({ line: row.line, option: option.label, parts });
     else unchanged += 1;

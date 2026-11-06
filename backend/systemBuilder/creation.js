@@ -55,7 +55,7 @@
 // Pure: checks and reads only. definition.js runs the checks, picking.js and the socket the rest.
 
 const { partOn } = require('./parts');
-const { currenciesOf } = require('./currencies');
+const { currenciesOf, formatAmount, parseAmount } = require('./currencies');
 const { choicesOf, pickedOf, meets, needsText } = require('./choices');
 const { fieldsOf } = require('./sheet');
 const { parse } = require('./expression');
@@ -72,6 +72,7 @@ const MONEY_KEYS = { number: new Set(['how', 'amount']), roll: new Set(['how', '
 const MAIN_MONEY = 'main';
 const KIT_KEYS = new Set(['id', 'name', 'items', 'who', 'requires']);
 const ITEM_KEYS = new Set(['name', 'qty']);
+const GIFT_KEYS = new Set(['items', 'money']);
 const KIT_WHO = ['all', 'pick', 'needs', 'gm'];
 const KIT_ID = /^[a-z][a-z0-9_]{0,63}$/;
 const STATS_STEP = /^stats(?::[a-z][a-z0-9_]{0,63})?$/;
@@ -636,6 +637,93 @@ const checkWays = (definition, ways, problems) => {
   }
 };
 
+/** A list of items checked: a kit's, or what an option gives. */
+const checkItems = (items, where, problems) => {
+  if (!Array.isArray(items)) { problems.push({ where, message: 'Must be a list of items' }); return; }
+  if (items.length > LIMITS.kitItems) problems.push({ where, message: `At most ${LIMITS.kitItems} items` });
+  items.slice(0, LIMITS.kitItems).forEach((item) => {
+    if (!isPlainObject(item)) { problems.push({ where, message: 'Each must be an item' }); return; }
+    for (const key of Object.keys(item)) if (!ITEM_KEYS.has(key)) problems.push({ where: `${where}, ${key}`, message: 'Not part of an item' });
+    if (typeof item.name !== 'string' || !item.name.trim()) problems.push({ where, message: 'Each item needs a name' });
+    else if (item.name.length > LIMITS.itemName) problems.push({ where, message: `${item.name.slice(0, 20)}…: longer than ${LIMITS.itemName} characters` });
+    if (!Number.isInteger(item.qty) || item.qty < 1 || item.qty > LIMITS.itemQty) problems.push({ where, message: `${typeof item.name === 'string' ? item.name : 'An item'}: from 1 to ${LIMITS.itemQty} of it` });
+  });
+};
+
+/**
+ * What every option in a definition gives (7c4e): items as a kit's, and money per currency as a number
+ * or a roll. There is nothing typed in here: that is the MONEY step's, as it is the player's to say.
+ */
+const checkGifts = (definition, problems) => {
+  for (const c of choicesOf(definition)) {
+    for (const o of list(c.options).filter((x) => isPlainObject(x) && x.gives !== undefined)) {
+      const where = `list ${c.id}, option ${o.id}, gives`;
+      if (!isPlainObject(o.gives)) { problems.push({ where, message: 'Must say what it gives' }); continue; }
+      for (const key of Object.keys(o.gives)) if (!GIFT_KEYS.has(key)) problems.push({ where: `${where}, ${key}`, message: 'Not part of what it gives' });
+      if (o.gives.items !== undefined) checkItems(o.gives.items, `${where}, items`, problems);
+      if (o.gives.money === undefined) continue;
+      if (!isPlainObject(o.gives.money)) { problems.push({ where: `${where}, money`, message: 'Must say what each currency gets' }); continue; }
+      for (const [id, set] of Object.entries(o.gives.money)) {
+        const at = `${where}, money, ${id}`;
+        if (!isPlainObject(set) || !['number', 'roll'].includes(set.how)) { problems.push({ where: at, message: 'Must be number or roll' }); continue; }
+        checkMoneySet(set, at, problems);
+      }
+    }
+  }
+};
+
+/** What an option's items read as typed: "Rope, 3x Rations". */
+const parseItems = (text) => text.split(',').map((p) => p.trim()).filter((p) => p !== '').map((p) => {
+  const m = /^(\d+)\s*x\s+(.+)$/i.exec(p);
+  return m ? { name: m[2].trim(), qty: Number(m[1]) } : { name: p, qty: 1 };
+});
+
+/** Each currency, as this system has them: the app's single money where it has none of its own. */
+const moneyCurrencies = (definition) => {
+  const own = currenciesOf(definition);
+  return own.length ? own : [{ id: MAIN_MONEY, name: 'Money' }];
+};
+
+/** What an option's money reads as in a file: "Gold: 3d6 * 10; Honor: 5", or bare for the app's money. */
+const giftMoneyText = (definition, money) => {
+  const set = isPlainObject(money) ? money : {};
+  return moneyCurrencies(definition).filter((c) => isPlainObject(set[c.id])).map((c) => {
+    const one = set[c.id];
+    const value = one.how === 'roll' ? one.each : c.id === MAIN_MONEY ? String(one.amount) : formatAmount(c, one.amount);
+    return c.id === MAIN_MONEY ? value : `${c.name}: ${value}`;
+  }).join('; ');
+};
+
+/** A file's money cell read: { money } or { error } in words. A roll has dice in it; anything else is an amount. */
+const giftMoneyFrom = (definition, text) => {
+  const currencies = moneyCurrencies(definition);
+  const money = {};
+  for (const part of text.split(';').map((p) => p.trim()).filter((p) => p !== '')) {
+    const at = part.indexOf(':');
+    const named = at >= 0 ? part.slice(0, at).trim().toLowerCase() : null;
+    const currency = named === null
+      ? (currencies.length === 1 ? currencies[0] : null)
+      : currencies.find((c) => c.id.toLowerCase() === named || String(c.name).toLowerCase() === named);
+    if (!currency) return { error: named === null ? 'say which currency, like Gold: 100' : `"${part.slice(0, at).trim()}" isn't one of this system's currencies` };
+    const value = (at >= 0 ? part.slice(at + 1) : part).trim();
+    if (parseMoneyRoll(value)) {
+      const wrong = moneyRollProblems(value);
+      if (wrong.length) return { error: wrong[0] };
+      money[currency.id] = { how: 'roll', each: value };
+      continue;
+    }
+    let amount = null;
+    if (currency.id === MAIN_MONEY) amount = /^\d+$/.test(value) ? Number(value) : null;
+    else {
+      const parsed = value.startsWith('-') ? { ok: false } : parseAmount(currency, value);
+      amount = parsed.ok ? parsed.amount : null;
+    }
+    if (amount === null || amount > LIMITS.moneyMost) return { error: `"${value}" reads as neither an amount nor a roll` };
+    money[currency.id] = { how: 'number', amount };
+  }
+  return { money };
+};
+
 /** A definition's kits checked (7c4a): each named, with items in it, and saying who gets it. */
 const checkKits = (definition, kits, problems) => {
   if (kits === undefined) return;
@@ -665,17 +753,16 @@ const checkKits = (definition, kits, problems) => {
         try { parse(kit.requires, (name) => tables.has(name)); } catch (e) { problems.push({ where: `${where}, requires`, message: e.message }); }
       }
     } else if (kit.requires !== undefined) problems.push({ where: `${where}, requires`, message: 'Only a kit going ONLY IF has a requirement' });
-    if (!Array.isArray(kit.items)) { problems.push({ where: `${where}, items`, message: 'Must be a list of items' }); return; }
-    if (!kit.items.length) problems.push({ where: `${where}, items`, message: 'Has nothing in it' });
-    if (kit.items.length > LIMITS.kitItems) problems.push({ where: `${where}, items`, message: `At most ${LIMITS.kitItems} items` });
-    kit.items.slice(0, LIMITS.kitItems).forEach((item) => {
-      if (!isPlainObject(item)) { problems.push({ where: `${where}, items`, message: 'Each must be an item' }); return; }
-      for (const key of Object.keys(item)) if (!ITEM_KEYS.has(key)) problems.push({ where: `${where}, items, ${key}`, message: 'Not part of an item' });
-      if (typeof item.name !== 'string' || !item.name.trim()) problems.push({ where: `${where}, items`, message: 'Each item needs a name' });
-      else if (item.name.length > LIMITS.itemName) problems.push({ where: `${where}, items`, message: `${item.name.slice(0, 20)}…: longer than ${LIMITS.itemName} characters` });
-      if (!Number.isInteger(item.qty) || item.qty < 1 || item.qty > LIMITS.itemQty) problems.push({ where: `${where}, items`, message: `${typeof item.name === 'string' ? item.name : 'An item'}: from 1 to ${LIMITS.itemQty} of it` });
-    });
+    if (Array.isArray(kit.items) && !kit.items.length) problems.push({ where: `${where}, items`, message: 'Has nothing in it' });
+    checkItems(kit.items, `${where}, items`, problems);
   });
+};
+
+/** One way money is set, checked: its keys, its amount, or its roll. */
+const checkMoneySet = (set, where, problems) => {
+  for (const key of Object.keys(set)) if (!MONEY_KEYS[set.how].has(key)) problems.push({ where: `${where}, ${key}`, message: 'Not part of this way' });
+  if (set.how === 'number' && (!Number.isInteger(set.amount) || set.amount < 0 || set.amount > LIMITS.moneyMost)) problems.push({ where: `${where}, amount`, message: 'A whole amount, 0 or more' });
+  if (set.how === 'roll') moneyRollProblems(set.each).forEach((message) => problems.push({ where: `${where}, each`, message }));
 };
 
 /** A definition's starting money checked (7c4d): each amount read, each roll one that can't go below 0. */
@@ -685,9 +772,7 @@ const checkMoney = (money, problems) => {
   for (const [id, set] of Object.entries(money)) {
     const where = `creation, money, ${id}`;
     if (!isPlainObject(set) || !Object.keys(MONEY_KEYS).includes(set.how)) { problems.push({ where, message: 'Must be number, roll or typed' }); continue; }
-    for (const key of Object.keys(set)) if (!MONEY_KEYS[set.how].has(key)) problems.push({ where: `${where}, ${key}`, message: 'Not part of this way' });
-    if (set.how === 'number' && (!Number.isInteger(set.amount) || set.amount < 0 || set.amount > LIMITS.moneyMost)) problems.push({ where: `${where}, amount`, message: 'A whole amount, 0 or more' });
-    if (set.how === 'roll') moneyRollProblems(set.each).forEach((message) => problems.push({ where: `${where}, each`, message }));
+    checkMoneySet(set, where, problems);
   }
 };
 
@@ -712,4 +797,4 @@ const checkCreation = (definition, problems) => {
   checkMoney(c.money, problems);
 };
 
-module.exports = { LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, stepsAsked, creationShown, creatingNow, creationAction, withUpload, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine, kitsGivable, kitToGive, kitWords, parseMoneyRoll, moneyRollProblems, moneyOf, wholeOf, MAIN_MONEY };
+module.exports = { LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, checkGifts, checkItems, parseItems, giftMoneyText, giftMoneyFrom, stepsAsked, creationShown, creatingNow, creationAction, withUpload, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine, kitsGivable, kitToGive, kitWords, parseMoneyRoll, moneyRollProblems, moneyOf, wholeOf, MAIN_MONEY };

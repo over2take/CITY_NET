@@ -19,6 +19,10 @@
 //           die: 10,                         // optional, a levelled list's: its die, by its sides
 //                                            // (R1a: recovery dice; level-up health in 7d)
 //           roll: '4-5',                     // a list with a table's: the roll, or range, that gives it
+//           gives: {                         // 7c4e: what a character holding it starts with, given as they finish
+//             items: [{ name: 'Crowbar', qty: 1 }],   // checked in creation.js checkGifts
+//             money: { gold: { how: 'roll', each: '3d6 * 10' }, honor: { how: 'number', amount: 5 } },
+//           },
 //           features: [
 //             { id: 'guard_stance', label: 'Guard Stance', text: 'Words for the table.',
 //               at: 1,                                          // the pick's level it unlocks at (levelled lists)
@@ -129,7 +133,7 @@ const PICKED = ['own', 'features', 'both', 'everyone'];
 /** How players pick from a list with a table (7a5b): by hand only, by hand or rolled, or rolled only. */
 const PLAYERS = ['hand', 'either', 'roll'];
 const LIST_KEYS = new Set(['id', 'one', 'many', 'picks', 'levelled', 'again', 'picked', 'table', 'players', 'options']);
-const OPTION_KEYS = new Set(['id', 'label', 'description', 'requires', 'die', 'roll', 'features']);
+const OPTION_KEYS = new Set(['id', 'label', 'description', 'requires', 'die', 'roll', 'gives', 'features']);
 const FEATURE_KEYS = new Set(['id', 'label', 'text', 'at', 'modifiers', 'uses', 'rolls', 'changes', 'choice', 'choice_count']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);

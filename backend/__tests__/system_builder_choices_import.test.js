@@ -293,7 +293,7 @@ describe('a line with a mistake is skipped, named by its line, and the rest goes
     ));
     expect(r.skipped).toEqual([
       { line: 1, message: '[spells] isn\'t read here: a file has [options] and [features]' },
-      { line: 5, message: '[options] needs a name column: its first line names the columns (name, description, requires, die, roll)' },
+      { line: 5, message: '[options] needs a name column: its first line names the columns (name, description, requires, die, roll, gives, money)' },
     ]);
     expect(r.notes).toEqual([{ line: 8, message: 'The cost column isn\'t read: only option, feature, level, words, uses, refill' }]);
     expect(featureIn(r, 'Mage', 'Spellbook')).toHaveLength(1);
@@ -318,6 +318,115 @@ describe('a line with a mistake is skipped, named by its line, and the rest goes
       { line: 3, message: 'Ranger: CLASSES has 100 options, the most a list holds' },
       { line: 6, message: 'One more: O0 has 40 features, the most an option holds' },
     ]);
+  });
+});
+
+describe('what an option gives (7c4e)', () => {
+  const COINED = {
+    format: 1, name: 'G',
+    currencies: [
+      { id: 'gold', name: 'Gold', denominations: [{ id: 'gp', name: 'Gold', short: 'gp', value: 100 }, { id: 'cp', name: 'Copper', short: 'cp', value: 1 }] },
+      { id: 'honor', name: 'Honor' },
+    ],
+    choices: [{ id: 'bgs', one: 'Background', many: 'Backgrounds', options: [
+      { id: 'noble', label: 'Noble', gives: { items: [{ name: 'Ring', qty: 1 }], money: { honor: { how: 'number', amount: 5 } } } },
+      { id: 'dock', label: 'Dockhand' },
+    ] }],
+  };
+  const BARE = { format: 1, name: 'G', choices: [{ id: 'bgs', one: 'Background', many: 'Backgrounds', options: [{ id: 'dock', label: 'Dockhand' }] }] };
+  const opt = (r, label) => r.list.options.find((o) => o.label === label);
+  const on = (text, def = COINED) => readChoicesFile(def, 'bgs', text);
+
+  it('a new option takes them, and a row says items and money as they are typed', () => {
+    const r = on(FILE('[options]', 'name, gives, money', 'Sailor, "Rope, 3x Rations", Gold: 3d6 * 10; Honor: 7'));
+    expect(opt(r, 'Sailor').gives).toEqual({ items: [{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }], money: { gold: { how: 'roll', each: '3d6 * 10' }, honor: { how: 'number', amount: 7 } } });
+    expect(r.skipped).toEqual([]);
+    expect(checkDefinition({ ...COINED, choices: [r.list] }).problems).toEqual([]);
+  });
+
+  it('money reads in the currency\'s own way, by its name or id, any capitals', () => {
+    const r = on(FILE('[options]', 'name, money', 'Sailor, GOLD: 5gp 2cp; honor: 7 Honor'));
+    expect(opt(r, 'Sailor').gives.money).toEqual({ gold: { how: 'number', amount: 502 }, honor: { how: 'number', amount: 7 } });
+  });
+
+  it('with the app\'s single money, bare, or by its name', () => {
+    expect(opt(on(FILE('[options]', 'name, money', 'Sailor, 100'), BARE), 'Sailor').gives.money).toEqual({ main: { how: 'number', amount: 100 } });
+    expect(opt(on(FILE('[options]', 'name, money', 'Sailor, 3d6 * 10'), BARE), 'Sailor').gives.money).toEqual({ main: { how: 'roll', each: '3d6 * 10' } });
+    expect(opt(on(FILE('[options]', 'name, money', 'Sailor, Money: 9'), BARE), 'Sailor').gives.money).toEqual({ main: { how: 'number', amount: 9 } });
+  });
+
+  it('a change is said, part by part, keeping what the row leaves empty', () => {
+    const r = on(FILE('[options]', 'name, gives, money', 'Noble, 2x Ring, ', 'Dockhand, , Honor: 3'));
+    expect(r.changed.options).toEqual([
+      { line: 3, option: 'Noble', parts: [{ part: 'gives', from: 'Ring', to: '2x Ring' }] },
+      { line: 4, option: 'Dockhand', parts: [{ part: 'money', from: '', to: 'Honor: 3 Honor' }] },
+    ]);
+    expect(opt(r, 'Noble').gives).toEqual({ items: [{ name: 'Ring', qty: 2 }], money: { honor: { how: 'number', amount: 5 } } });
+    expect(opt(r, 'Dockhand').gives).toEqual({ money: { honor: { how: 'number', amount: 3 } } });
+  });
+
+  it('- takes each away; both gone leaves nothing behind', () => {
+    const one = on(FILE('[options]', 'name, gives', 'Noble, -'));
+    expect(opt(one, 'Noble').gives).toEqual({ money: { honor: { how: 'number', amount: 5 } } });
+    expect(one.changed.options[0].parts).toEqual([{ part: 'gives', from: 'Ring', to: '' }]);
+    const both = on(FILE('[options]', 'name, gives, money', 'Noble, -, -'));
+    expect('gives' in opt(both, 'Noble')).toBe(false);
+    expect(both.changed.options[0].parts.map((p) => p.part)).toEqual(['gives', 'money']);
+  });
+
+  it('- on a new option is nothing to give, not an item called -', () => {
+    const r = on(FILE('[options]', 'name, gives, money', 'Sailor, -, -'));
+    expect(r.skipped).toEqual([]);
+    expect('gives' in opt(r, 'Sailor')).toBe(false);
+  });
+
+  it('a currency by its id or its name, where those differ', () => {
+    const named = { ...COINED, currencies: [{ id: 'hp', name: 'Honor Points' }, { id: 'tin', name: 'Tin' }] };
+    const r = on(FILE('[options]', 'name, money', 'Sailor, HP: 3; Tin: 4', 'Scribe, Honor Points: 5'), named);
+    expect(opt(r, 'Sailor').gives.money).toEqual({ hp: { how: 'number', amount: 3 }, tin: { how: 'number', amount: 4 } });
+    expect(opt(r, 'Scribe').gives.money).toEqual({ hp: { how: 'number', amount: 5 } });
+  });
+
+  it('with the app\'s single money, says it bare, and only reads whole numbers up to the most', () => {
+    const r = on(FILE('[options]', 'name, money', 'Dockhand, 100'), BARE);
+    expect(r.changed.options[0].parts).toEqual([{ part: 'money', from: '', to: '100' }]);
+    const bad = on(FILE('[options]', 'name, money', 'One, lots', 'Two, -5', 'Three, 1.5', 'Four, 1000000000001', 'Five, 1000000000000'), BARE);
+    expect(bad.skipped.map((s) => s.line)).toEqual([3, 4, 5, 6]);
+    expect(bad.skipped[0].message).toBe('One: money: "lots" reads as neither an amount nor a roll');
+    expect(opt(bad, 'Five').gives.money).toEqual({ main: { how: 'number', amount: 1000000000000 } });
+  });
+
+  it('as it is already, changes nothing', () => {
+    const r = on(FILE('[options]', 'name, gives, money', 'Noble, Ring, Honor: 5'));
+    expect([r.changes, r.same]).toEqual([0, 1]);
+  });
+
+  it('a line with a mistake is skipped, said by its line; the rest goes in', () => {
+    const r = on(FILE('[options]', 'name, gives, money',
+      'Bad One, , Tin: 5',
+      'Bad Two, , 5',
+      'Bad Three, , Gold: lots',
+      'Bad Four, 100x Rope, ',
+      'Bad Five, , Gold: -5gp',
+      'Bad Six, , Honor: 1d6 - 9',
+      'Fine, Rope, '));
+    expect(r.skipped).toEqual([
+      { line: 3, message: 'Bad One: money: "Tin" isn\'t one of this system\'s currencies' },
+      { line: 4, message: 'Bad Two: money: say which currency, like Gold: 100' },
+      { line: 5, message: 'Bad Three: money: "lots" reads as neither an amount nor a roll' },
+      { line: 6, message: 'Bad Four: gives: Rope: from 1 to 99 of it' },
+      { line: 7, message: 'Bad Five: money: "-5gp" reads as neither an amount nor a roll' },
+      { line: 8, message: 'Bad Six: money: 1d6 - 9 can roll -8, below nothing' },
+    ]);
+    expect(opt(r, 'Fine').gives).toEqual({ items: [{ name: 'Rope', qty: 1 }] });
+    expect(r.list.options.map((o) => o.label)).toEqual(['Noble', 'Dockhand', 'Fine']);
+  });
+
+  it('with the bank off, the money column is ignored, and says so', () => {
+    const off = { ...COINED, parts: { bank: { on: false } } };
+    const r = on(FILE('[options]', 'name, gives, money', 'Dockhand, Rope, Honor: 3'), off);
+    expect(r.notes).toEqual([{ line: 2, message: 'This system has the BANK part off, so the money column is ignored' }]);
+    expect(opt(r, 'Dockhand').gives).toEqual({ items: [{ name: 'Rope', qty: 1 }] });
   });
 });
 

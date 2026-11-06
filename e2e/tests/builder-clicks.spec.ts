@@ -111,6 +111,9 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await page.getByRole('switch', { name: /LEVELLED/ }).click();
       await page.getByRole('button', { name: '+ OPTION' }).click();
       await expect(page.getByRole('region', { name: 'NEW OPTION option' })).toBeVisible();
+      // What it gives, with a roll for the money, so every box of that is there (7c4e).
+      await page.getByRole('region', { name: 'NEW OPTION option' }).getByRole('button', { name: 'A ROLL' }).first().click();
+      await expect(page.getByRole('region', { name: 'NEW OPTION option' }).getByRole('textbox', { name: /roll$/ }).first()).toBeVisible();
       await page.getByRole('group', { name: 'Hit die' }).getByRole('button', { name: 'OTHER' }).click();
       await expect(page.getByRole('spinbutton', { name: 'Sides' })).toBeVisible();
       // A table to roll on, so PLAYERS PICK and each option's roll are there (7a5b).

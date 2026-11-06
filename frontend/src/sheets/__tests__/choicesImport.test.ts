@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
-import { MAX_BYTES, exampleFile, listFile, fileName, withImported, lineRange, partText, addedFeatureText } from '../choicesImport';
+import { MAX_BYTES, exampleFile, giftMoneyText, listFile, fileName, withImported, lineRange, partText, addedFeatureText } from '../choicesImport';
+import { parseKitItems } from '../newCharacter';
 import { choiceLists, type ChoiceList } from '../choices';
 import type { Definition } from '../systemsApi';
 
@@ -52,18 +53,18 @@ describe('a levelled list\'s die in the files (R1a)', () => {
   it('has a die column, the example\'s dice and the list\'s own, and comes back unchanged', () => {
     const def = { ...HEARTH, choices: (HEARTH.choices as { id: string; options: object[] }[]).map((c) => (c.id === 'classes' ? { ...c, options: c.options.map((o, i) => (i ? o : { ...o, die: 10 })) } : c)) } as unknown as Definition;
     const example = exampleFile(def, list(def, 'classes'));
-    expect(example).toContain('\nname, description, requires, die\n');
+    expect(example).toContain('\nname, description, requires, die, gives, money\n');
     expect(example).toContain('# die is an option\'s die, like d10');
-    expect(example).toMatch(/\nVeteran, .*, d10\n/);
+    expect(example).toMatch(/\nVeteran, .*, d10, /);
     const text = listFile(def, list(def, 'classes'));
-    expect(text).toContain('\nname, description, requires, die\n');
+    expect(text).toContain('\nname, description, requires, die, gives, money\n');
     // The list's own die, written as d10; an option without one has an empty cell.
-    expect(text).toMatch(/\nSoldier, .*, d10\n/);
+    expect(text).toMatch(/\nSoldier, .*, d10, , \n/);
     const r = readChoicesFile(def, 'classes', text);
     expect([r.skipped, r.changes]).toEqual([[], 0]);
     expect(r.list).toEqual(list(def, 'classes'));
     // Not where the list isn't levelled.
-    expect(listFile(def, list(def, 'backgrounds'))).toContain('\nname, description, requires\n');
+    expect(listFile(def, list(def, 'backgrounds'))).toContain('\nname, description, requires, gives, money\n');
   });
 });
 
@@ -72,20 +73,20 @@ describe('a table\'s rolls in the files (7a5b)', () => {
     const def = { ...HEARTH, choices: (HEARTH.choices as { id: string; options: object[] }[]).map((c) => (c.id === 'backgrounds'
       ? { ...c, table: 'd6', options: [...c.options.map((o) => ({ ...o, roll: '1-3' })), { id: 'scribe', label: 'Scribe', roll: '4-6' }] } : c)) } as unknown as Definition;
     const example = exampleFile(def, list(def, 'backgrounds'));
-    expect(example).toContain('\nname, description, requires, roll\n');
+    expect(example).toContain('\nname, description, requires, roll, gives, money\n');
     expect(example).toContain('# roll is what a d6 roll gives it on the table: a number, or a range like 3-4.');
-    expect(example).toMatch(/\nVeteran, .*, 1-3\n/);
-    expect(example).toMatch(/\nScholar, .*, 4-6\n/);
+    expect(example).toMatch(/\nVeteran, .*, 1-3, /);
+    expect(example).toMatch(/\nScholar, .*, 4-6, , \n/);
     const text = listFile(def, list(def, 'backgrounds'));
-    expect(text).toContain('\nname, description, requires, roll\n');
-    expect(text).toMatch(/\nScribe, , , 4-6\n/);
+    expect(text).toContain('\nname, description, requires, roll, gives, money\n');
+    expect(text).toMatch(/\nScribe, , , 4-6, , \n/);
     const r = readChoicesFile(def, 'backgrounds', text);
     expect([r.skipped, r.notes, r.changes]).toEqual([[], [], 0]);
     expect(r.list).toEqual(list(def, 'backgrounds'));
     // A levelled list with a table has both, die first; one without a table, neither roll nor its note.
     const both = { ...def, choices: (def.choices as object[]).map((c) => ((c as { id: string }).id === 'classes' ? { ...c, table: 'd20' } : c)) } as unknown as Definition;
-    expect(listFile(both, list(both, 'classes'))).toContain('\nname, description, requires, die, roll\n');
-    expect(listFile(def, list(def, 'classes'))).not.toMatch(/, roll\n|# roll is/);
+    expect(listFile(both, list(both, 'classes'))).toContain('\nname, description, requires, die, roll, gives, money\n');
+    expect(listFile(def, list(def, 'classes'))).not.toMatch(/, roll,|# roll is/);
   });
 });
 
@@ -102,7 +103,7 @@ describe('DOWNLOAD THIS LIST', () => {
 
   it('writes the list as it is, rests by name where the reader finds them by name, a note for what else a feature does', () => {
     const text = listFile(HEARTH, list(HEARTH, 'classes'));
-    expect(text).toContain('\n[options]\nname, description, requires, die\nSoldier, "Holds a line, a wall, ""anything"".", , \n"#1 Fan", "  Spaces at the ends  ", @int >= 13, \n');
+    expect(text).toContain('\n[options]\nname, description, requires, die, gives, money\nSoldier, "Holds a line, a wall, ""anything"".", , , , \n"#1 Fan", "  Spaces at the ends  ", @int >= 13, , , \n');
     expect(text).toContain('\noption, feature, level, words, uses, refill\nSoldier, Second Wind, 1, "Breathe; then keep going.", @soldier_level + 1, Short rest\n');
     expect(text).toContain('\n# Soldier · Guard Stance also has modifiers, set in the builder\nSoldier, Guard Stance, 2, , , \n');
     // A rest turned off is found by its id only.
@@ -134,7 +135,7 @@ describe('DOWNLOAD EXAMPLE', () => {
     expect(levelled).toContain('# CLASSES for Hearth & Home, to import on the builder\'s CHOICES page (IMPORT on the CLASSES list).');
     expect(levelled).toContain('They can read @str, @int, @guard, @level, @classes_level, each option\'s own level, like @soldier_level.');
     expect(levelled).toContain('# refill is one of this system\'s rests, by name: Short rest, Long rest, End of session, Dawn prayer. It needs uses.');
-    expect(levelled).toContain('\nVeteran, "Has seen worse, and says so.", @str >= 13, d10\n');
+    expect(levelled).toContain('\nVeteran, "Has seen worse, and says so.", @str >= 13, d10, "Crowbar, 3x Rations", 3d6 * 10\n');
     expect(levelled).toContain('\noption, feature, level, words, uses, refill\n');
     expect(levelled).toContain('\nScholar, Training, 8, Raise one stat., , \n');
     const flat = exampleFile(HEARTH, list(HEARTH, 'backgrounds'));
@@ -168,7 +169,7 @@ describe('DOWNLOAD EXAMPLE', () => {
     const text = exampleFile(bare, list(bare, 'paths'));
     expect(text).toContain('They can read @level, @paths_level, each option\'s own level, like @soldier_level.');
     expect(text).toContain('by name: none (it has none on).');
-    expect(text).toContain('\nVeteran, "Has seen worse, and says so.", , d10\n');
+    expect(text).toContain('\nVeteran, "Has seen worse, and says so.", , d10, "Crowbar, 3x Rations", 3d6 * 10\n');
     const r = readChoicesFile(bare, 'paths', text);
     expect(r.skipped).toEqual([]);
     expect(problems(withImported(bare, r.list))).toEqual([]);
@@ -201,5 +202,85 @@ describe('the rest', () => {
     expect(partText(HEARTH, { part: 'level', from: 1, to: 5 })).toBe('LEVEL 1 → 5');
     expect(addedFeatureText(HEARTH, { line: 3, option: 'Ranger', feature: 'Favored Foe', level: 2, uses: '1', refill: 'long_rest' })).toBe('RANGER · FAVORED FOE · LEVEL 2 · 1 USE, LONG REST');
     expect(addedFeatureText(HEARTH, { line: 3, option: 'Sailor', feature: 'Knots', uses: '@int' })).toBe('SAILOR · KNOTS · @INT USES');
+  });
+});
+
+describe('what an option gives, in the files (7c4e)', () => {
+  const server = req('../../../../backend/systemBuilder/creation.js');
+  const GOLD = { id: 'gold', name: 'Gold', denominations: [{ id: 'gp', name: 'Gold', short: 'gp', value: 100 }, { id: 'cp', name: 'Copper', short: 'cp', value: 1 }] };
+  const HONOR = { id: 'honor', name: 'Honor' };
+  const DOLLARS = { id: 'dollars', name: 'Dollars', symbol: '$', decimals: 2 };
+  const giving = (extra: object, gives: object) => ({
+    format: 1, name: 'G', ...extra,
+    choices: [{ id: 'bgs', one: 'Background', many: 'Backgrounds', options: [
+      { id: 'noble', label: 'Noble', gives },
+      { id: 'dock', label: 'Dockhand' },
+    ] }],
+  }) as unknown as Definition;
+  const MONIED = { currencies: [GOLD, HONOR, DOLLARS] };
+
+  it('reads items as the server does', () => {
+    for (const text of ['Rope, Lantern, 3x Rations', ' 3X  Rations ,, ', '', 'Box of 3x matches', '3xRations']) {
+      expect(parseKitItems(text), text).toEqual(server.parseItems(text));
+    }
+  });
+
+  it('says money as the server does', () => {
+    const cases: [object, Record<string, unknown>][] = [
+      [MONIED, { gold: { how: 'number', amount: 502 }, honor: { how: 'roll', each: '3d6' }, dollars: { how: 'number', amount: 434 } }],
+      [MONIED, { honor: { how: 'number', amount: 5 }, gone: { how: 'number', amount: 1 } }],
+      [{}, { main: { how: 'number', amount: 100 } }],
+      [{}, { main: { how: 'roll', each: '3d6 * 10' } }],
+      [{}, {}],
+    ];
+    for (const [extra, money] of cases) {
+      const def = giving(extra, {});
+      expect(giftMoneyText(def, money), JSON.stringify(money)).toBe(server.giftMoneyText(def, money));
+    }
+    expect(giftMoneyText(giving(MONIED, {}), { gold: { how: 'number', amount: 502 }, honor: { how: 'roll', each: '3d6' } })).toBe('Gold: 5 gp 2 cp; Honor: 3d6');
+  });
+
+  it('come back unchanged, in every shape of money', () => {
+    for (const [extra, gives] of [
+      [MONIED, { items: [{ name: 'Crowbar', qty: 1 }, { name: 'Rations', qty: 3 }], money: { gold: { how: 'roll', each: '3d6 * 10' }, honor: { how: 'number', amount: 5 } } }],
+      [MONIED, { money: { gold: { how: 'number', amount: 502 }, dollars: { how: 'number', amount: 123456 } } }],
+      [{}, { items: [{ name: 'Rope', qty: 1 }], money: { main: { how: 'number', amount: 100 } } }],
+      [{}, { money: { main: { how: 'roll', each: '4d6 drop lowest * 2' } } }],
+      [{}, { items: [{ name: 'Rope', qty: 2 }] }],
+    ] as [object, object][]) {
+      const def = giving(extra, gives);
+      const r = readChoicesFile(def, 'bgs', listFile(def, list(def, 'bgs')));
+      expect([r.skipped, r.notes, r.changes], JSON.stringify(gives)).toEqual([[], [], 0]);
+      expect(r.list).toEqual(list(def, 'bgs'));
+    }
+  });
+
+  it('writes them in the list\'s own row, and the example shows the shape in this system\'s money', () => {
+    const def = giving(MONIED, { items: [{ name: 'Crowbar', qty: 1 }], money: { honor: { how: 'number', amount: 5 } } });
+    expect(listFile(def, list(def, 'bgs'))).toContain('\nNoble, , , Crowbar, Honor: 5 Honor\n');
+    const example = exampleFile(def, list(def, 'bgs'));
+    expect(example).toContain('Veteran, "Has seen worse, and says so.", , "Crowbar, 3x Rations", Gold: 3d6 * 10\n');
+    expect(example).toContain('# gives is what a new character holding it starts with');
+    expect(example).toContain('# money is what they start with too, a number or a roll: Gold: 3d6 * 10.');
+    const example2 = readChoicesFile(def, 'bgs', example);
+    expect(example2.skipped).toEqual([]);
+  });
+
+  it('with the bank off, no money column or note', () => {
+    const def = giving({ parts: { bank: { on: false } } }, { items: [{ name: 'Rope', qty: 1 }] });
+    const text = listFile(def, list(def, 'bgs'));
+    expect(text).toContain('\nname, description, requires, gives\n');
+    // A row as long as its columns.
+    expect(text).toContain('\nNoble, , , Rope\nDockhand, , , \n');
+    expect(exampleFile(def, list(def, 'bgs'))).not.toContain('# money is');
+    const r = readChoicesFile(def, 'bgs', text);
+    expect([r.skipped, r.notes, r.changes]).toEqual([[], [], 0]);
+  });
+
+  it('a change says itself in the page\'s words, as do a die and a roll', () => {
+    expect(partText(HEARTH, { part: 'gives', from: '', to: 'Rope' })).toBe('GIVES nothing → Rope');
+    expect(partText(HEARTH, { part: 'money', from: '100', to: '3d6' })).toBe('STARTING MONEY 100 → 3d6');
+    expect(partText(HEARTH, { part: 'die', from: 'd8', to: 'd10' })).toBe('HIT DIE d8 → d10');
+    expect(partText(HEARTH, { part: 'roll', from: '1-3', to: '4' })).toBe('ROLL 1-3 → 4');
   });
 });
