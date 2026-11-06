@@ -8,8 +8,8 @@ import { FieldName } from './HelpHint';
 
 // A system's kits, on the NEW CHARACTER page's KITS step (7c4a; approved mockup new-character): each with
 // a name, its items, and who gets it. Written as the rest of the page is, through the builder's `edit`;
-// the logic is sheets/newCharacter.ts and the checks backend creation.js. An item named as one in a
-// catalogue will land as that does when it is given out (7c4b); any other is a line in the inventory.
+// the logic is sheets/newCharacter.ts and the checks backend creation.js. Each item is a line in the
+// inventory when it is given out; one named as a catalogue's takes that one's name and encumbrance (7c4b).
 
 interface Props {
   definition: Definition;
@@ -28,7 +28,7 @@ const WHO: { id: KitWho; label: string; why: string }[] = [
   { id: 'all', label: 'EVERYONE GETS IT', why: 'Every new character starts with this.' },
   { id: 'pick', label: 'A PLAYER MAY PICK IT', why: 'Offered to pick from, one kit per character.' },
   { id: 'needs', label: 'ONLY IF', why: 'Offered to pick from, but off until the requirement is met.' },
-  { id: 'gm', label: 'THE GM GIVES IT', why: 'Not offered to players. It is yours to hand out, as a kit for one character.' },
+  { id: 'gm', label: 'THE GM GIVES IT', why: 'Not offered to players. It is yours to hand out, as a kit for one character: GIVE will list it next.' },
 ];
 
 function KitRow({ kit, definition, edit, api }: Props & { kit: Kit }) {

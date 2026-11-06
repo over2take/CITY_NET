@@ -33,6 +33,7 @@
 //   _creating: {}                   opened, nothing started: the window's START
 //   _creating: { at: 'stats' }      working, on that step
 //   _creating: { at, rolled: { stats: [14, 9, 12] } }   what a step's ROLL came to (7c3c), kept: once only
+//   _creating: { at, kit: 'traveler' }   the kit picked (7c4b), changed as they like: given out at FINISH
 //   _creating: { done: true, uploaded?: true }   finished, or came in as an upload
 //
 // Who is asked at all is the browser's to work out (sheets/newCharacterFlow.ts): a blank sheet with
@@ -48,7 +49,7 @@
 // Pure: checks and reads only. definition.js runs the checks, picking.js and the socket the rest.
 
 const { partOn } = require('./parts');
-const { choicesOf, pickedOf } = require('./choices');
+const { choicesOf, pickedOf, meets, needsText } = require('./choices');
 const { fieldsOf } = require('./sheet');
 const { parse } = require('./expression');
 const { cryptoRng } = require('../utils/random');
@@ -70,8 +71,8 @@ const ROLL_READS = `Reads like 3d6, 4d6 drop lowest or 2d6 + 6, up to ${LIMITS.r
 const STEP = /^(?:who|stats(?::[a-z][a-z0-9_]{0,63})?|kits|money|list:[a-z][a-z0-9_]{0,63})$/;
 /** Where a sheet keeps its place in the flow. */
 const CREATING_KEY = '_creating';
-/** Steps with nothing to ask yet: KITS and MONEY come with 7c4. */
-const NOT_ASKED_YET = new Set(['kits', 'money']);
+/** Steps with nothing to ask yet: MONEY comes with 7c4d. */
+const NOT_ASKED_YET = new Set(['money']);
 
 const creationIn = (definition) => (isPlainObject(definition && definition.creation) ? definition.creation : {});
 /** A stats group's own step, with GROUP BY GROUP. */
@@ -221,9 +222,18 @@ const wayDone = (definition, data, step) => {
   return stats.every((s) => placed[s.id] !== undefined);
 };
 
+/** The kits as written; what isn't one is the checks' to say. */
+const kitsOf = (definition) => list(creationIn(definition).kits).filter((k) => isPlainObject(k) && typeof k.id === 'string');
+/** The kits a player sees: a kit the GM gives stays the GM's, and could name who it is for. */
+const kitsAsked = (definition) => kitsOf(definition).filter((k) => k.who !== 'gm');
+/** The kits offered to pick from. */
+const kitsOffered = (definition) => kitsOf(definition).filter((k) => k.who === 'pick' || k.who === 'needs');
+
 /** The steps a player is walked through, in order: those on, with something to ask. */
 const stepsAsked = (definition) => creationOf(definition).steps
-  .filter((s) => !s.off && !NOT_ASKED_YET.has(s.id) && (s.id !== 'stats' || statGroupsAsked(definition).length > 0))
+  .filter((s) => !s.off && !NOT_ASKED_YET.has(s.id)
+    && (s.id !== 'stats' || statGroupsAsked(definition).length > 0)
+    && (s.id !== 'kits' || kitsAsked(definition).length > 0))
   .map((s) => s.id);
 
 /** The ways of the steps asked, those not typed in, by step. */
@@ -237,6 +247,13 @@ const waysShown = (definition) => {
 const creationShown = (definition) => (creationOf(definition).on ? {
   steps: stepsAsked(definition),
   ...(Object.keys(waysShown(definition)).length ? { ways: waysShown(definition) } : {}),
+  ...(kitsAsked(definition).length ? {
+    kits: kitsAsked(definition).map((k) => ({
+      id: k.id, name: k.name, items: list(k.items), who: k.who,
+      // In the sheet's words, as an option's is: never a formula.
+      ...(k.who === 'needs' ? { needs: needsText(definition, k.requires) } : {}),
+    })),
+  } : {}),
   stats: statGroupsAsked(definition).map((g) => ({
     id: g.id,
     label: g.label || g.id,
@@ -307,6 +324,36 @@ const buyNumber = (definition, sheet, action) => {
   return { ok: true, data: next };
 };
 
+/** A kit picked (7c4b), or with `kit` null, put back. One at a time: a new pick takes its place. */
+const pickKit = (definition, sheet, action) => {
+  if (!stepsAsked(definition).includes('kits')) return { ok: false, error: 'Not one of this game\'s steps' };
+  const { kit: gone, ...place } = placeOf(sheet);
+  if (action.kit === null) return { ok: true, data: { ...sheet, [CREATING_KEY]: place } };
+  const kit = kitsOffered(definition).find((k) => k.id === action.kit);
+  if (!kit) return { ok: false, error: 'Not a kit to pick from' };
+  if (!meets(definition, sheet, kit)) return { ok: false, error: `${kit.name} needs ${needsText(definition, kit.requires)}` };
+  return { ok: true, data: { ...sheet, [CREATING_KEY]: { ...place, kit: kit.id } } };
+};
+
+/**
+ * Why this character can't finish on their kit, or null: a kit to pick left unpicked, or one picked
+ * that they have since stopped meeting. With every kit out of reach, there's nothing to ask.
+ */
+const kitProblem = (definition, sheet) => {
+  if (!stepsAsked(definition).includes('kits')) return null;
+  const offered = kitsOffered(definition);
+  const picked = offered.find((k) => k.id === placeOf(sheet).kit);
+  if (picked) return meets(definition, sheet, picked) ? null : `${picked.name} needs ${needsText(definition, picked.requires)}`;
+  return offered.some((k) => meets(definition, sheet, k)) ? 'Pick a kit first' : null;
+};
+
+/** The items a character finishes with: every kit everyone gets, then the one they picked. */
+const kitItemsOf = (definition, sheet) => {
+  if (!stepsAsked(definition).includes('kits')) return [];
+  const picked = placeOf(sheet).kit;
+  return kitsAsked(definition).filter((k) => k.who === 'all' || k.id === picked).flatMap((k) => list(k.items));
+};
+
 /** What a stats step is called, in the log. */
 const stepLabel = (definition, step) => {
   if (step === 'stats') return 'THE STATS';
@@ -352,8 +399,9 @@ const statRollLine = (who, rolled) => `${who} rolled ${rolled.label} (${rolled.e
 
 /**
  * One step of a character's way through the flow: { kind: 'open' }, { kind: 'at', step },
- * { kind: 'place', step, stat, value }, { kind: 'roll', step }, { kind: 'buy', step, stat, value } or { kind: 'finish' }. Gives back
- * { ok: true, data } (no `data` when there is nothing to change, `rolled` for the log after a roll), or
+ * { kind: 'place', step, stat, value }, { kind: 'roll', step }, { kind: 'buy', step, stat, value }, { kind: 'kit', kit } or
+ * { kind: 'finish' }. Gives back { ok: true, data } (no `data` when there is nothing to change, `rolled` for
+ * the log after a roll, `items` for the caller to give out on finishing, as what can be given is theirs), or
  * { ok: false, error } in words. `rng` rolls the dice, 0 to 1 (the secure source unless one is handed in).
  */
 const creationAction = (definition, data, action, { rng = cryptoRng } = {}) => {
@@ -361,11 +409,12 @@ const creationAction = (definition, data, action, { rng = cryptoRng } = {}) => {
   const kind = isPlainObject(action) ? action.kind : null;
   if (!creationOf(definition).on) return { ok: false, error: 'This game has no guided new character' };
   if (kind === 'open') return placeOf(sheet) ? { ok: true } : { ok: true, data: { ...sheet, [CREATING_KEY]: {} } };
-  if (!['at', 'finish', 'place', 'roll', 'buy'].includes(kind)) return { ok: false, error: 'Nothing to do' };
+  if (!['at', 'finish', 'place', 'roll', 'buy', 'kit'].includes(kind)) return { ok: false, error: 'Nothing to do' };
   if (!creatingNow(definition, sheet)) return { ok: false, error: 'This character isn\'t being made' };
   if (kind === 'place') return placeNumber(definition, sheet, action);
   if (kind === 'roll') return rollStats(definition, sheet, action, rng);
   if (kind === 'buy') return buyNumber(definition, sheet, action);
+  if (kind === 'kit') return pickKit(definition, sheet, action);
   if (kind === 'finish') {
     if (stepsAsked(definition).some((step) => STATS_STEP.test(step) && !wayDone(definition, sheet, step))) return { ok: false, error: 'Every stat needs its number first' };
     const statSteps = stepsAsked(definition).filter((step) => STATS_STEP.test(step));
@@ -374,8 +423,10 @@ const creationAction = (definition, data, action, { rng = cryptoRng } = {}) => {
       return way.way === 'buy' && spentOn(way, statsOfStep(definition, step), sheet) > way.points;
     });
     if (over) return { ok: false, error: 'More points spent than there are' };
+    const kitWrong = kitProblem(definition, sheet);
+    if (kitWrong) return { ok: false, error: kitWrong };
     const filled = statSteps.reduce((data, step) => filledIn(definition, data, step), sheet);
-    return { ok: true, data: { ...filled, [CREATING_KEY]: { done: true } } };
+    return { ok: true, data: { ...filled, [CREATING_KEY]: { done: true } }, items: kitItemsOf(definition, sheet) };
   }
   if (!stepsAsked(definition).includes(action.step)) return { ok: false, error: 'Not one of this game\'s steps' };
   // A point buy's stats start at their lowest as the player arrives, so what they read says so.
@@ -477,6 +528,11 @@ const checkWays = (definition, ways, problems) => {
 const checkKits = (definition, kits, problems) => {
   if (kits === undefined) return;
   if (!Array.isArray(kits)) { problems.push({ where: 'creation, kits', message: 'Must be a list of kits' }); return; }
+  // Kits land in the inventory: a sheet designed without one would hide them.
+  const designed = isPlainObject(definition.sheet) && Array.isArray(definition.sheet.sections) ? definition.sheet.sections : null;
+  if (kits.length && designed && !designed.some((s) => isPlainObject(s) && s.layout === 'inventory')) {
+    problems.push({ where: 'creation, kits', message: 'Kits land in the inventory, and this sheet has none: add one on CHARACTER SHEET' });
+  }
   if (kits.length > LIMITS.kits) problems.push({ where: 'creation, kits', message: `At most ${LIMITS.kits} kits` });
   const tables = new Set(isPlainObject(definition.lookups) ? Object.keys(definition.lookups) : []);
   const seen = new Set();

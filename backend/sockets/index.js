@@ -1338,7 +1338,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     });
 
     // Picking on a custom system's sheet (7a3a): who may do what is systemBuilder/picking.js's.
-    registerChoicesHandlers(socket, { io, db, userSockets, isAdminSocket, getGameSystem });
+    registerChoicesHandlers(socket, { io, db, userSockets, isAdminSocket, getGameSystem, getShopSystem });
 
     socket.on('updateSheetField', (payload) => {
       const info = userSockets.get(socket.id);

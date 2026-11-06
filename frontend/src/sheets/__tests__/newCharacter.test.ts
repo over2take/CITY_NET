@@ -268,6 +268,21 @@ describe('kits (7c4a)', () => {
   });
 });
 
+describe('what the order means for kits (7c4b)', () => {
+  const kit = (who: string, requires?: string) => ({ id: 'potions', name: 'Potions', items: [{ name: 'Mortar', qty: 1 }], who, ...(requires ? { requires } : {}) });
+  const first = (k: object) => withStepMoved(withStepMoved(withStepMoved({ ...HEARTH, creation: { kits: [k] } } as unknown as Definition, 'kits', -1), 'kits', -1), 'kits', -1);
+
+  it('says when KITS comes before the stat one needs, by the kit\'s name', () => {
+    expect(ids(first(kit('needs', '@grit >= 12'))).indexOf('kits')).toBeLessThan(ids(first(kit('needs', '@grit >= 12'))).indexOf('stats'));
+    expect(orderNotes(first(kit('needs', '@grit >= 12')))).toEqual(['KITS comes before THE STATS, and POTIONS needs a stat: off until the stats are set, so it can\'t be picked here.']);
+  });
+
+  it('doesn\'t for one with no requirement, or after the stats', () => {
+    expect(orderNotes(first(kit('pick')))).toEqual([]);
+    expect(orderNotes({ ...HEARTH, creation: { kits: [kit('needs', '@grit >= 12')] } } as unknown as Definition)).toEqual([]);
+  });
+});
+
 describe('the stats, one way for all or group by group (7c3a)', () => {
   it('one way to start; group by group a step each, named by the group; back again leaves nothing', () => {
     expect(statsByGroup(GROUPS)).toBe(false);

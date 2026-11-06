@@ -11,7 +11,7 @@ import { statGroups } from './statsRules';
 import { partIsOn } from './wordsFeatures';
 import { idFor } from './setup';
 import { referencesIn } from './graphModel';
-import { buyCost, isStatsStep, type BuyWay, type StatWay } from './newCharacterFlow';
+import { buyCost, isStatsStep, kitItemsText, type BuyWay, type KitItem, type StatWay } from './newCharacterFlow';
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -239,7 +239,7 @@ export const stepWayProblems = (def: Definition, id: string): string[] => {
 
 /** Who gets a kit (7c4a): everyone, a player's pick, only if a requirement is met, or the GM's to give. */
 export type KitWho = 'all' | 'pick' | 'needs' | 'gm';
-export interface KitItem { name: string; qty: number }
+export { kitItemsText };
 export interface Kit { id: string; name: string; items: KitItem[]; who: KitWho; requires?: string }
 
 /** The kits as written; what isn't one is left to the server to say. */
@@ -272,9 +272,6 @@ export const parseKitItems = (text: string): KitItem[] => text.split(',').map((p
   const m = /^(\d+)\s*x\s+(.+)$/i.exec(p);
   return m ? { name: m[2].trim(), qty: Number(m[1]) } : { name: p, qty: 1 };
 });
-
-/** A kit's items as the GM types them. */
-export const kitItemsText = (items: KitItem[]): string => items.map((i) => (i.qty === 1 ? i.name : `${i.qty}x ${i.name}`)).join(', ');
 
 /** ONE WAY FOR ALL or GROUP BY GROUP; the order and what is left out carry over. */
 export const withStatsByGroup = (def: Definition, byGroup: boolean): Definition => withSection(def, { statsBy: byGroup ? 'group' : undefined });
@@ -313,7 +310,9 @@ export const orderNotes = (def: Definition): string[] => {
     if (!groupLeftOut(def, g.id) && steps.includes(step)) for (const s of g.stats) setBy.set(s.id, step);
   }
   return steps.flatMap((id, at) => {
-    const options = stepList(def, id)?.options ?? [];
+    const options = id === 'kits'
+      ? kitsOf(def).filter((k) => k.who === 'needs').map((k) => ({ id: k.id, label: k.name, requires: k.requires }))
+      : stepList(def, id)?.options ?? [];
     const later = steps.slice(at + 1).filter(isStatsStep);
     return later.flatMap((stats) => {
       const needing = options.filter((o) => referencesIn(o.requires).fields.some((f) => setBy.get(f) === stats));

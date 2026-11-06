@@ -15,7 +15,8 @@
 // guided new character, with { kind: 'place', step, stat, value } (7c3b) puts a number on a stat, and
 // with { kind: 'roll', step } (7c3c) rolls a step's stats on the secure dice, inside the sheet's write
 // queue, written to the log and thrown in the tray as ROLL FOR IT is (systemBuilder/creation.js). A stat
-// can move the token's maximum, so it follows, as a pick's does.
+// can move the token's maximum, so it follows, as a pick's does. FINISH gives out their kits (7c4b) in the
+// same write, so they land once, with the game's catalogues loaded first (sheets/kitGiving.js).
 //
 // `recoverySpend` with { pool, count } (R2a) spends recovery dice with a roll (sheets/recover.js).
 // In a system leaving spending to the GM, a player spends or ticks them off only while the GM has
@@ -27,6 +28,7 @@ const { withThrow, boardOf } = require('../utils/diceThrow');
 const { syncTokenMax } = require('../systemBuilder/tokenMax');
 const { maySpend, restingOf, OPEN_SETTING } = require('../systemBuilder/recovery');
 const { creationAction, statRollLine } = require('../systemBuilder/creation');
+const { kitPatch } = require('../sheets/kitGiving');
 const { takeRest } = require('../sheets/rests');
 const customSystems = require('../systemBuilder/runtime');
 const sheetTemplates = require('../sheets/templates');
@@ -45,7 +47,7 @@ const REST_AT_CALL = 'In this game, rests are taken when the GM calls them';
 const spendingOpen = (db, cb) => db.get('SELECT value FROM global_settings WHERE key = ?', [OPEN_SETTING], (err, row) => cb(!err && !!row && row.value === '1'));
 
 /** Registered once per connection by sockets/index.js, with what it already knows of the caller. */
-const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, getGameSystem, rng = cryptoRng }) => {
+const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, getGameSystem, getShopSystem, rng = cryptoRng }) => {
   /** A roll on the sheet said to everyone (7a5b2): a dice-log line, and the roll thrown in the tray. */
   const announceRoll = (username, stored, rolled, lineOf, board) => {
     const who = (stored && typeof stored.name === 'string' && stored.name.trim()) || username;
@@ -112,13 +114,14 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
 
   socket.on('creationAction', (payload) => {
     if (!payload || typeof payload !== 'object') return;
-    withCaller(payload, 'choicesRefused', ({ username, system, definition, refuse }) => {
+    withCaller(payload, 'choicesRefused', ({ username, system, definition, refuse }) => getShopSystem(() => {
       let error = null;
       let rolled = null;
       mutateSheetForUser(db, { username, system }, (data) => {
         const done = creationAction(definition, data, payload, { rng });
         if (!done.ok) { error = done.error; return undefined; }
         rolled = done.rolled || null;
+        if (done.items && done.items.length) Object.assign(done.data, kitPatch(system, done.items, done.data));
         // Worked out as any save is, so a list asked first already knows what isn't met.
         if (done.data) sheetTemplates.applyDerived(system, done.data);
         return done.data;
@@ -132,7 +135,7 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
           io.emit('sheetUpdated', { username, system });
         });
       });
-    }, 'This game has no guided new character');
+    }), 'This game has no guided new character');
   });
 
   socket.on('restTake', (payload) => {

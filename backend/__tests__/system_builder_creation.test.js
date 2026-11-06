@@ -604,8 +604,98 @@ describe('kits (7c4a)', () => {
     expect([read.file.definition.creation, read.problems]).toEqual([creation, []]);
   });
 
-  it('players aren\'t asked yet', () => {
-    expect(stepsAsked({ format: 1, name: 'K', creation: { on: true, kits: [KIT] } })).not.toContain('kits');
+  it('a sheet designed with no inventory is told: there is nowhere for them to land', () => {
+    const sheet = (layout) => ({ sheet: { sections: [{ id: 's', label: 'S', layout, fields: [] }] } });
+    const hides = 'creation, kits: Kits land in the inventory, and this sheet has none: add one on CHARACTER SHEET';
+    expect(issues([KIT], sheet('notes')).filter((p) => p.startsWith('creation'))).toEqual([hides]);
+    expect(issues([KIT], sheet('inventory')).filter((p) => p.startsWith('creation'))).toEqual([]);
+    expect(issues([], sheet('notes')).filter((p) => p.startsWith('creation'))).toEqual([]);
+    expect(issues([KIT])).toEqual([]);
+  });
+});
+
+describe('kits at the table (7c4b)', () => {
+  const ALL = { id: 'essentials', name: 'ESSENTIALS', items: [{ name: 'Knife', qty: 1 }], who: 'all' };
+  const PICK = { id: 'traveler', name: 'TRAVELER', items: [{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }], who: 'pick' };
+  const NEEDS = { id: 'potions', name: 'POTION MAKER', items: [{ name: 'Mortar', qty: 1 }], who: 'needs', requires: '@wits >= 12' };
+  const GM = { id: 'rook', name: 'ROOK\'S KIT', items: [{ name: 'Letter', qty: 1 }], who: 'gm' };
+  const STATS = [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'wits', label: 'Wits' }] }];
+  const def = (kits = [ALL, PICK, NEEDS, GM], more = {}) => ({ format: 1, name: 'K', stats: STATS, creation: { on: true, kits, ...more } });
+  const at = { [CREATING_KEY]: { at: 'kits' } };
+  const pick = (data, kit, d = def()) => creationAction(d, data, { kind: 'kit', kit });
+  const finish = (data, d = def()) => creationAction(d, data, { kind: 'finish' });
+
+  it('asked with a kit for players to get; not with only the GM\'s, none, or the step off', () => {
+    expect(stepsAsked(def())).toContain('kits');
+    expect(stepsAsked(def([ALL]))).toContain('kits');
+    expect(stepsAsked(def([GM]))).not.toContain('kits');
+    expect(stepsAsked(def([]))).not.toContain('kits');
+    expect(stepsAsked(def([PICK], { off: ['kits'] }))).not.toContain('kits');
+  });
+
+  it('MONEY still waits', () => {
+    expect(stepsAsked(def())).not.toContain('money');
+  });
+
+  it('tells the browser what a player may see: never a kit the GM gives, nor a formula', () => {
+    const { kits } = creationShown(def());
+    expect(kits).toEqual([
+      { id: 'essentials', name: 'ESSENTIALS', items: ALL.items, who: 'all' },
+      { id: 'traveler', name: 'TRAVELER', items: PICK.items, who: 'pick' },
+      { id: 'potions', name: 'POTION MAKER', items: NEEDS.items, who: 'needs', needs: 'WITS >= 12' },
+    ]);
+    expect(JSON.stringify(kits)).not.toContain('ROOK');
+    expect(JSON.stringify(kits)).not.toContain('@wits');
+    expect(creationShown(def([GM])).kits).toBeUndefined();
+  });
+
+  it('the requirement is worked out with the sheet, and only says what isn\'t met', () => {
+    const { workedOf } = require_('../systemBuilder/choices');
+    expect(workedOf(def(), { wits: 3 }).kitsUnmet).toEqual(['potions']);
+    expect(workedOf(def(), { wits: 12 }).kitsUnmet).toEqual([]);
+    expect('kitsUnmet' in workedOf(def([PICK]), {})).toBe(false);
+    expect('kitsUnmet' in workedOf({ format: 1, name: 'K' }, {})).toBe(false);
+  });
+
+  it('one is picked and kept with their place; another takes its place, and null puts it back', () => {
+    const one = pick(at, 'traveler').data;
+    expect(one[CREATING_KEY]).toEqual({ at: 'kits', kit: 'traveler' });
+    expect(pick({ ...one, wits: 12 }, 'potions').data[CREATING_KEY]).toEqual({ at: 'kits', kit: 'potions' });
+    expect(pick(one, null).data[CREATING_KEY]).toEqual({ at: 'kits' });
+    expect(creationAction(def(), one, { kind: 'at', step: 'stats' }).data[CREATING_KEY].kit).toBe('traveler');
+  });
+
+  it('refuses what isn\'t theirs to pick', () => {
+    expect(pick(at, 'rook').error).toBe('Not a kit to pick from');
+    expect(pick(at, 'essentials').error).toBe('Not a kit to pick from');
+    expect(pick(at, 'nope').error).toBe('Not a kit to pick from');
+    expect(pick(at, undefined).error).toBe('Not a kit to pick from');
+    expect(pick({ ...at, wits: 3 }, 'potions').error).toBe('POTION MAKER needs WITS >= 12');
+    expect(pick({}, 'traveler').error).toBe('This character isn\'t being made');
+    expect(pick(at, 'traveler', def([PICK], { off: ['kits'] })).error).toBe('Not one of this game\'s steps');
+  });
+
+  it('FINISH needs a pick while one can be made; not with none in reach, nor nothing to pick', () => {
+    expect(finish(at).error).toBe('Pick a kit first');
+    expect(finish({ ...at, wits: 3 }, def([ALL, NEEDS])).ok).toBe(true);
+    expect(finish(at, def([ALL])).ok).toBe(true);
+    expect(finish({ ...at, wits: 12 }, def([ALL, NEEDS])).error).toBe('Pick a kit first');
+    expect(finish(at, def([PICK], { off: ['kits'] })).ok).toBe(true);
+  });
+
+  it('FINISH refuses a kit they have since stopped meeting', () => {
+    const kept = { wits: 3, [CREATING_KEY]: { at: 'kits', kit: 'potions' } };
+    expect(finish(kept).error).toBe('POTION MAKER needs WITS >= 12');
+    expect(finish({ ...kept, wits: 12 }).ok).toBe(true);
+  });
+
+  it('FINISH says what to give: every kit everyone gets, then the one picked, and none other', () => {
+    const done = finish(pick(at, 'traveler').data);
+    expect(done.items).toEqual([{ name: 'Knife', qty: 1 }, { name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }]);
+    expect(done.data[CREATING_KEY]).toEqual({ done: true });
+    expect(finish(at, def([ALL])).items).toEqual([{ name: 'Knife', qty: 1 }]);
+    expect(finish(at, def([GM])).items).toEqual([]);
+    expect(finish(at, def([ALL], { off: ['kits'] })).items).toEqual([]);
   });
 });
 

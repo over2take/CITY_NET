@@ -223,7 +223,7 @@ export const HINTS = {
   'creation.points': 'How many points each character has to spend on these stats. Any left over are simply unspent.',
   'creation.buyRange': 'The lowest number a stat can have and the highest it can be bought to. Every stat starts at the lowest, and both have to fit every stat\'s own lowest and highest.',
   'creation.costs': 'What having each number costs in all, so the lowest usually costs 0. 1 FOR 1 adds a point a number. CLIMBING adds a point a number for five, then two. Change any box to make your own.',
-  'creation.kits': 'What a character can start with. Give each a name and its items, with commas between them, like Rope, Lantern, 3x Rations. An item named as one in your catalogues lands as buying it would; any other is a line in the inventory.',
+  'creation.kits': 'What a character can start with. Give each a name and its items, with commas between them, like Rope, Lantern, 3x Rations. Each is a line in the character\'s inventory when they finish. An item named as one in your catalogues takes that one\'s name and encumbrance.',
   'creation.numbers': 'The numbers everyone gets, with commas between them, each placed on any stat. There must be at least one for each stat, and each must fit every stat\'s lowest and highest.',
   'creation.statsGroups': 'Switch a group off for numbers nobody sets at creation, like stress. Its stats stay on the sheet, and players aren\'t asked for them here.',
   'choices.levelled': 'Each pick has a level, and its features unlock by it, like a class. Formulas read it as @<option>_level.',

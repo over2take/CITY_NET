@@ -14,7 +14,7 @@
 // section or condition waiting on a rule that is off is hidden from every answer at once.
 
 const { compileSystem } = require('./derived');
-const { overlayOf, choicesOf, workedOf, choicesShown, WORKED_KEY } = require('./choices');
+const { overlayOf, choicesOf, workedOf, worksOutPicks, choicesShown, WORKED_KEY } = require('./choices');
 const { poolsOf, recoveryShown, restingShown } = require('./recovery');
 const { creationShown } = require('./creation');
 const { fieldsRolledBy } = require('./tableRolls');
@@ -71,7 +71,7 @@ const metaOf = (definition) => {
     recompute: compiled.ok ? (data) => {
       try {
         const changed = compiled.system.apply(data, overlayOf(definition, data));
-        if (choicesOf(definition).length) {
+        if (worksOutPicks(definition)) {
           data[WORKED_KEY] = workedOf(definition, data);
           // The recovery dice (R2a, R2b): in the sheet's words, with each pool's die, how many and how many spent.
           const pools = poolsOf(definition, data);

@@ -392,6 +392,65 @@ test('a point buy: from the lowest, by the table, as far as the points go; locke
   await page.context().close();
 });
 
+test('kits: everyone\'s and the one picked land in the inventory on finishing; one not met is off; the GM\'s never shown', async ({ browser, request }, info) => {
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const player = { username: `e2e_newchar_kits${again}`, password: 'e2e-player-password' };
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Newfall Kits${again}`,
+    stats: [{ id: 'traits', label: 'TRAITS', stats: [{ id: 'grit', label: 'Grit' }] }],
+    creation: { on: true, kits: [
+      { id: 'essentials', name: 'ESSENTIALS', items: [{ name: 'Knife', qty: 1 }], who: 'all' },
+      { id: 'traveler', name: 'TRAVELER', items: [{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }], who: 'pick' },
+      { id: 'potions', name: 'POTION MAKER', items: [{ name: 'Mortar', qty: 1 }], who: 'needs', requires: '@grit >= 13' },
+      { id: 'rook', name: 'ROOK', items: [{ name: 'Sealed letter', qty: 1 }], who: 'gm' },
+    ] },
+  });
+  await approvedPlayer(request, gm, player);
+  const stored = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data;
+  const page = await signedIn(browser, info, player);
+  await walkToStats(page);
+
+  // Below the requirement.
+  await page.getByRole('spinbutton', { name: 'Grit' }).fill('4');
+  await expect.poll(async () => (await stored()).grit, { timeout: 15_000 }).toBe(4);
+  await page.getByRole('button', { name: 'NEXT' }).click();
+  await expect(page.getByRole('tab', { name: 'KITS' })).toHaveAttribute('aria-selected', 'true');
+
+  // What everyone gets said; one off, what it needs beside it; the GM's nowhere.
+  await expect(page.getByText('Everyone gets ESSENTIALS: Knife.')).toBeVisible();
+  const picks = page.getByRole('group', { name: 'Kits to pick from' });
+  await expect(picks.getByRole('button', { name: 'POTION MAKER' })).toBeDisabled();
+  await expect(picks.getByText('NEEDS GRIT >= 13')).toBeVisible();
+  await expect(page.getByText('ROOK')).toHaveCount(0);
+  const finish = page.getByRole('button', { name: 'FINISH' });
+  await expect(finish).toBeDisabled();
+
+  // Picked, nothing lands yet; back up to meet it, and it takes the other's place.
+  await picks.getByRole('button', { name: 'TRAVELER' }).click();
+  await expect(finish).toBeEnabled({ timeout: 15_000 });
+  expect((await stored()).inventory).toBeUndefined();
+  await page.getByRole('tab', { name: 'THE STATS' }).click();
+  await page.getByRole('spinbutton', { name: 'Grit' }).fill('14');
+  await expect.poll(async () => (await stored()).grit, { timeout: 15_000 }).toBe(14);
+  await page.getByRole('tab', { name: 'KITS' }).click();
+  await expect(picks.getByRole('button', { name: 'POTION MAKER' })).toBeEnabled({ timeout: 15_000 });
+  await picks.getByRole('button', { name: 'POTION MAKER' }).click();
+  await expect(picks.getByRole('button', { name: 'POTION MAKER' })).toHaveAttribute('aria-pressed', 'true');
+  await picks.getByRole('button', { name: 'TRAVELER' }).click();
+  await expect(picks.getByRole('button', { name: 'TRAVELER' })).toHaveAttribute('aria-pressed', 'true');
+
+  // Finished: each its own line, on the sheet's GEAR, none of the other kit.
+  await finish.click();
+  await expect(flow(page)).toHaveCount(0);
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  const held = JSON.parse((await stored()).inventory).map((i: { name: string; qty: number }) => [i.name, i.qty]);
+  expect(held).toEqual([['Knife', 1], ['Rope', 1], ['Rations', 3]]);
+  await sheetTab(page, 'GEAR');
+  await expect(page.locator('input').and(page.locator('[value="Rations"]'))).toHaveCount(1);
+  await page.context().close();
+});
+
 test('an upload is taken as it is, and no steps follow', async ({ browser, request }, info) => {
   const again = info.retry ? `_${info.retry + 1}` : '';
   const player = { username: `e2e_uploader${again}`, password: 'e2e-player-password' };

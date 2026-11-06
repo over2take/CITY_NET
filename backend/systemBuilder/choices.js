@@ -742,17 +742,26 @@ const usesOf = (definition, data) => {
   });
 };
 
+/** The kits going ONLY IF (7c4b), whose requirement is the sheet's to work out as an option's is. */
+const kitsNeedingOf = (definition) => list(isPlainObject(definition.creation) ? definition.creation.kits : undefined).filter((k) => isPlainObject(k) && k.who === 'needs');
+
+/** Whether a system has anything for workedOf to say: a list to pick from, or a kit with a requirement. */
+const worksOutPicks = (definition) => choicesOf(definition).length > 0 || kitsNeedingOf(definition).length > 0;
+
 /**
  * What the sheet shows of a character's picks, worked out on every save: every pick kept with its
  * level, the feature it was picked under and whether it waits (7a5a), each feature's picks open, the
  * levels formulas read, what each changed value's modifiers come from, each feature's uses
- * ({ max, spent }), and the options not taken whose requirement isn't met.
+ * ({ max, spent }), the options not taken whose requirement isn't met, and any kits going ONLY IF that
+ * aren't met (7c4b), which a player can't see the formula of any more than an option's.
  */
 const workedOf = (definition, data) => {
   const held = heldOf(definition, data);
   const picks = held.filter((p) => p.active);
   const taken = new Set(held.map((p) => p.option.id));
+  const kits = kitsNeedingOf(definition);
   return {
+    ...(kits.length ? { kitsUnmet: kits.filter((k) => !meets(definition, data, k)).map((k) => k.id) } : {}),
     picks: held.map((p) => ({ list: p.list.id, option: p.option.id, ...(p.level === null ? {} : { level: p.level }),
       ...(p.from ? { from: p.from } : {}), ...(p.active ? {} : { waiting: true }) })),
     // 7a5a: each unlocked feature opening a list picked through features, and how many it gives and has.
@@ -807,5 +816,5 @@ const choicesShown = (definition) => {
 module.exports = {
   LIMITS, PICKED, PLAYERS, PICKS_KEY, USES_KEY, WORKED_KEY, ROLLED_KEY, rolledOn, rolledKey, rolledOf, checkChoices, checkHasNames, ownableOf, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
   tableOf, rollRangeOf, playersOf,
-  capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, choicesShown, tokenMaxFieldOf,
+  capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, worksOutPicks, choicesShown, tokenMaxFieldOf,
 };

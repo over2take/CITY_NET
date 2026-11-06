@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
-  buyCost, buyShown, CREATING_KEY, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, placedFrom, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields, withCreationLocks,
+  buyCost, buyShown, CREATING_KEY, kitItemsText, kitsShownOn, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, placedFrom, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields, withCreationLocks,
 } from '../newCharacterFlow';
 import { WORKED_KEY, type ChoiceListShown } from '../choicesShown';
 import type { SheetTemplate } from '../types';
@@ -347,6 +347,61 @@ describe('a point buy (7c3d)', () => {
         expect(view.canRaise('b'), JSON.stringify([way.points, data])).toBe(canAfford.ok);
       }
     }
+  });
+});
+
+describe('kits (7c4b)', () => {
+  const KITS = [
+    { id: 'essentials', name: 'ESSENTIALS', items: [{ name: 'Knife', qty: 1 }], who: 'all' },
+    { id: 'traveler', name: 'TRAVELER', items: [{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }], who: 'pick' },
+    { id: 'potions', name: 'POTION MAKER', items: [{ name: 'Mortar', qty: 1 }], who: 'needs', needs: 'WITS >= 12' },
+  ];
+  const kitted = (kits: unknown[] = KITS) => ({ ...TEMPLATE, creation: { steps: ['who', 'kits'], stats: [], kits } }) as unknown as SheetTemplate;
+  const on = (kit?: string, unmet: string[] = []) => ({ [CREATING_KEY]: { at: 'kits', ...(kit ? { kit } : {}) }, ...worked({ kitsUnmet: unmet }) });
+
+  it('names the step, and says the items', () => {
+    expect(flowStepName(kitted(), 'kits')).toBe('KITS');
+    expect(flowSteps(kitted())).toEqual(['who', 'kits']);
+    expect(kitItemsText(KITS[1].items as { name: string; qty: number }[])).toBe('Rope, 3x Rations');
+  });
+
+  it('splits what everyone gets from what is offered, saying what one still needs', () => {
+    const shown = kitsShownOn(kitted(), on(undefined, ['potions']));
+    expect(shown.everyone.map((k) => k.id)).toEqual(['essentials']);
+    expect(shown.offered.map((o) => [o.kit.id, o.unmet])).toEqual([['traveler', null], ['potions', 'WITS >= 12']]);
+    expect(shown.picked).toBeNull();
+    expect(kitsShownOn(kitted(), on('traveler')).picked?.kit.id).toBe('traveler');
+    expect(kitsShownOn(kitted(), on('essentials')).picked).toBeNull();
+    expect(kitsShownOn(kitted(), on('gone')).picked).toBeNull();
+  });
+
+  it('says a requirement even if its words are missing', () => {
+    const bare = kitted([{ id: 'x', name: 'X', items: [], who: 'needs' }]);
+    expect(kitsShownOn(bare, on(undefined, ['x'])).offered[0].unmet).toBe('a requirement');
+  });
+
+  it('with no kits worked out, nothing is unmet, and no template has none', () => {
+    expect(kitsShownOn(kitted(), {}).offered.every((o) => !o.unmet)).toBe(true);
+    expect(kitsShownOn(TEMPLATE, {}).offered).toEqual([]);
+  });
+
+  it('answered with a pick that is met, or with none in reach; not while one can be made', () => {
+    expect(stepAnswered(kitted(), 'kits', on())).toBe(false);
+    expect(stepAnswered(kitted(), 'kits', on('traveler'))).toBe(true);
+    expect(stepAnswered(kitted(), 'kits', on('potions', ['potions']))).toBe(false);
+    expect(stepAnswered(kitted([KITS[0]]), 'kits', on())).toBe(true);
+    expect(stepAnswered(kitted([KITS[0], KITS[2]]), 'kits', on(undefined, ['potions']))).toBe(true);
+    expect(stepAnswered(kitted([KITS[0], KITS[2]]), 'kits', on())).toBe(false);
+  });
+
+  it('reads what the server sends and works out', () => {
+    const def = { format: 1, name: 'H', stats: [{ id: 'a', label: 'A', stats: [{ id: 'wits', label: 'Wits' }] }], creation: { on: true, kits: [
+      { id: 'potions', name: 'POTION MAKER', items: [{ name: 'Mortar', qty: 1 }], who: 'needs', requires: '@wits >= 12' },
+    ] } };
+    const template = { ...TEMPLATE, creation: backend.creationShown(def) } as unknown as SheetTemplate;
+    const worked_ = req('../../../../backend/systemBuilder/choices.js').workedOf(def, { wits: 3 });
+    expect(kitsShownOn(template, { [WORKED_KEY]: worked_ }).offered[0].unmet).toBe('WITS >= 12');
+    expect(stepAnswered(template, 'kits', { [WORKED_KEY]: worked_ })).toBe(true);
   });
 });
 
