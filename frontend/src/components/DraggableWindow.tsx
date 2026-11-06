@@ -37,12 +37,14 @@ interface DraggableWindowProps {
   notificationsEnabled?: boolean;
   onToggleNotifications?: () => void;
   titleControls?: React.ReactNode;
+  /** Changes when this window should come to the front of its own accord, over one opening with it. */
+  raiseOn?: number;
 }
 
 export function DraggableWindow({
   title, centerTitle, children, pos, setPos, onClose,
   windowStyle = {}, contentStyle = {},
-  notificationsEnabled, onToggleNotifications, titleControls,
+  notificationsEnabled, onToggleNotifications, titleControls, raiseOn,
 }: DraggableWindowProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -58,6 +60,10 @@ export function DraggableWindow({
   // Hidden, never closed, while the system builder takes over the screen (windowFocus.ts).
   const hidden = useBuilderOpen();
   const bringToFront = () => { if (focusedZ() !== zIndex) setZIndex(++zCounter); };
+  // After this render, and whatever is in front now: a window opening with it has only just taken a number.
+  useEffect(() => {
+    if (raiseOn) queueMicrotask(() => setZIndex(++zCounter));
+  }, [raiseOn]);
 
   const onCloseRef = React.useRef(onClose);
   onCloseRef.current = onClose;

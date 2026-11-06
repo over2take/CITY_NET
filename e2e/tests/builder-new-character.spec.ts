@@ -204,6 +204,44 @@ test('kits made, each saying who gets it, the server taking them, kept after a r
   await expect(page.getByRole('textbox', { name: 'ONLY IF' })).toHaveValue('@grit >= 12');
 });
 
+test('starting money set a way per currency, the server taking it, kept after a reload', async ({ page, request }, info) => {
+  const name = `Moneyed Hearth ${info.retry + 1}`;
+  const token = await gmToken(request);
+  const { id } = await asGm(request, token, 'post', '/api/systems', { definition: { ...definition(name), currencies: [
+    { id: 'gold', name: 'Gold', denominations: [{ id: 'gp', name: 'Gold', short: 'gp', value: 100 }, { id: 'cp', name: 'Copper', short: 'cp', value: 1 }] },
+    { id: 'honor', name: 'Honor' },
+    { id: 'tin', name: 'Tin' },
+  ] } });
+  await signInAsGm(page);
+  await openPage(page, name);
+  await page.getByRole('button', { name: 'MONEY', exact: true }).click();
+
+  await page.getByRole('group', { name: 'Gold starts with' }).getByRole('button', { name: 'A ROLL' }).click();
+  const roll = page.getByRole('textbox', { name: 'Gold roll' });
+  await expect(roll).toHaveValue('3d6 * 10');
+  await roll.fill('lots');
+  await expect(page.getByText(/^Reads like 3d6/)).toBeVisible();
+  await roll.fill('2d6 * 5');
+  await expect(page.getByText(/^Reads like 3d6/)).toHaveCount(0);
+
+  await page.getByRole('group', { name: 'Honor starts with' }).getByRole('button', { name: 'A NUMBER' }).click();
+  await page.getByRole('textbox', { name: 'Honor amount' }).fill('7 Honor');
+  await page.getByRole('group', { name: 'Tin starts with' }).getByRole('button', { name: 'TYPED IN' }).click();
+
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  const saved = await asGm(request, token, 'get', `/api/systems/${id}`);
+  expect(saved.problems).toEqual([]);
+  expect(saved.draft.creation.money).toEqual({ gold: { how: 'roll', each: '2d6 * 5' }, honor: { how: 'number', amount: 7 }, tin: { how: 'typed' } });
+
+  await page.reload();
+  await signInAsGm(page);
+  await openPage(page, name);
+  await page.getByRole('button', { name: 'MONEY', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Gold roll' })).toHaveValue('2d6 * 5');
+  await expect(page.getByRole('textbox', { name: 'Honor amount' })).toHaveValue('7 Honor');
+  await expect(page.getByRole('group', { name: 'Tin starts with' }).getByRole('button', { name: 'TYPED IN' })).toHaveAttribute('aria-pressed', 'true');
+});
+
 test('the steps of a new character, ordered and switched, kept after a reload', async ({ page, request }, info) => {
   const name = `Stepping Hearth ${info.retry + 1}`;
   const token = await gmToken(request);

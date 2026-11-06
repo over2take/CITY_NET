@@ -16,6 +16,7 @@ process.env.JWT_SECRET = 'test-secret';
 
 const require_ = createRequire(import.meta.url);
 const giving = require_('../sheets/giving');
+const bankAccounts = require_('../bank/accounts');
 const catalogues = require_('../shops/catalogueStore');
 const { readInventory } = require_('../shops/placement');
 const { pickAction } = require_('../systemBuilder/picking');
@@ -640,6 +641,66 @@ describe('through the socket', () => {
         await giving.giveItem(db, { emit: vi.fn() }, { system: ID, catalogue: 'gear', id: 'coin', qty: 1, players: ['kes'] }, notify);
         expect(notify).toHaveBeenCalledWith('kes', { item: 'Coin', catalogue: 'gear', qty: 1, note: '' });
         expect(await lines()).toEqual([['Coin', 1]]);
+      });
+    });
+
+    describe('starting money (7c4d)', () => {
+      const turnOnMoney = async (money, currencies) => {
+        const def = JSON.stringify({ ...HEARTH, ...(currencies ? { currencies } : {}), creation: { on: true, money } });
+        await run(db, 'UPDATE custom_systems SET draft = ?, published = ? WHERE id = ?', [def, def, ID]);
+        await new Promise((resolve) => runtime.load(db, resolve));
+        await run(db, 'UPDATE character_sheets SET data = ? WHERE username = ?', [JSON.stringify({ name: 'Kestrel', _creating: { at: 'money' } }), 'kes']);
+      };
+      const account = () => new Promise((ok, no) => bankAccounts.get(db, 'kes', ID, (e, r) => (e ? no(e) : ok(r ? r.balance : 0))));
+      const extra = (currency) => get(db, 'SELECT balance FROM bank_balances WHERE username = ? AND system = ? AND currency = ?', ['kes', ID, currency]);
+
+      it('a roll is kept, in the log and thrown; nothing is paid until FINISH, then once', async () => {
+        await turnOnMoney({ main: { how: 'roll', each: '3d6 * 10' } });
+        const { kes, shared } = await table();
+        kes.handlers.creationAction({ kind: 'moneyRoll', id: 'main' });
+        await until(() => shared.some((e) => e.event === 'diceRollBroadcast'), { label: 'the throw' });
+        const amount = (await stored())._creating.money.main;
+        expect(amount).toBeGreaterThanOrEqual(30);
+        expect(amount % 10).toBe(0);
+        const thrown = shared.find((e) => e.event === 'diceRollBroadcast').data;
+        expect(thrown.historyString).toBe(`Kestrel rolled MONEY (3d6 * 10): ${amount}`);
+        expect(thrown.results[6]).toHaveLength(3);
+        expect(await account()).toBe(0);
+        kes.handlers.creationAction({ kind: 'finish' });
+        await until(async () => (await account()) === amount, { label: 'paid' });
+        await until(() => shared.some((e) => e.event === 'bankUpdate' && e.data.balance === amount), { label: 'told' });
+        kes.handlers.creationAction({ kind: 'finish' });
+        await until(() => kes.refused().length === 1, { label: 'the refusal' });
+        await drain(db);
+        expect(await account()).toBe(amount);
+      });
+
+      it('each currency into its own account, the first the main one; typed as they said, a number as it is', async () => {
+        await turnOnMoney({ gold: { how: 'typed' }, honor: { how: 'number', amount: 5 } }, [{ id: 'gold', name: 'Gold' }, { id: 'honor', name: 'Honor' }]);
+        const { kes } = await table();
+        kes.handlers.creationAction({ kind: 'moneyTyped', id: 'gold', amount: 70 });
+        await until(async () => (await stored())._creating.money?.gold === 70, { label: 'typed' });
+        kes.handlers.creationAction({ kind: 'finish' });
+        await until(async () => (await account()) === 70, { label: 'gold paid' });
+        await until(async () => (await extra('honor'))?.balance === 5, { label: 'honor paid' });
+      });
+
+      it('FINISH without it is refused, paying nothing', async () => {
+        await turnOnMoney({ main: { how: 'typed' } });
+        const { kes } = await table();
+        kes.handlers.creationAction({ kind: 'finish' });
+        await until(() => kes.refused().length === 1, { label: 'the refusal' });
+        expect(kes.refused()).toEqual(['Say how much Money first']);
+        expect(await account()).toBe(0);
+      });
+
+      it('an upload is paid nothing: taken as it is', async () => {
+        await turnOnMoney({ main: { how: 'number', amount: 100 } });
+        const { kes } = await table();
+        kes.handlers.importSheetFields({ fields: { name: 'Wren' }, replace: true });
+        await until(async () => (await stored()).name === 'Wren', { label: 'the upload' });
+        await drain(db);
+        expect(await account()).toBe(0);
       });
     });
 

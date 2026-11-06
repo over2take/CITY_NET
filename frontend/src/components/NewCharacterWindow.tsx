@@ -4,6 +4,7 @@ import { TerminalWindow, type TerminalAction, type TerminalFolder } from './Term
 import { BracketPortrait } from './BracketPortrait';
 import { BuyNumbers } from './BuyNumbers';
 import { KitsStep } from './KitsStep';
+import { MoneyStep } from './MoneyStep';
 import { PlaceNumbers } from './PlaceNumbers';
 import { ChoicesSection } from './ChoicesSection';
 import type { Socket } from 'socket.io-client';
@@ -39,6 +40,8 @@ interface Props {
   onLeave: () => void;
   /** Finished, or uploaded: the window closes on their sheet. */
   onDone: () => void;
+  /** Changes when a roll has opened the tray: this stays in front, as the next step is here. */
+  raiseOn?: number;
 }
 
 /** Before the steps, while there is a choice of how to start. */
@@ -64,7 +67,7 @@ const page: React.CSSProperties = { display: 'flex', flexDirection: 'column', ga
 /** Says which folder is open, at the head of the panel. */
 const head: React.CSSProperties = { fontSize: 10, letterSpacing: 1, opacity: 0.8 };
 
-export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, onLeave, onDone }: Props) {
+export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, onLeave, onDone, raiseOn }: Props) {
   const { sheet, template, handleFieldChange } = usePlayerSheet(socket, userName);
   const refused = useChoicesRefused(socket);
   // The folder shown, ahead of the server's answer so NEXT doesn't wait on it. Null: as the sheet says.
@@ -180,6 +183,16 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
         </div>
       );
     }
+    if (open === 'money') {
+      return (
+        <div style={page}>
+          <MoneyStep money={template.creation?.money ?? []} data={data} system={sheet.system}
+            onRoll={(id) => socket?.emit('creationAction', { kind: 'moneyRoll', id })}
+            onType={(id, amount) => socket?.emit('creationAction', { kind: 'moneyTyped', id, amount })} />
+          {refused && <p role="alert" style={{ ...why, color: 'var(--warning)', opacity: 1 }}>{refused}</p>}
+        </div>
+      );
+    }
     if (open === 'kits') {
       return (
         <div style={page}>
@@ -260,7 +273,7 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
 
   return (
     <>
-      <TerminalWindow
+      <TerminalWindow raiseOn={raiseOn}
         title={title}
         pos={pos}
         setPos={setPos}

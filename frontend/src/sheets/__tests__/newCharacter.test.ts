@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { buyNumbers, buyPreset, buyWith, buyWithCost, climbingCosts, creationOn, creationSteps, kitItemsText, kitsOf, parseKitItems, withKit, withNewKit, withoutKit, groupLeftOut, orderNotes, parseNumbers, parseStatRoll, statsByGroup, stepGroup, stepList, stepName, stepWayProblems, wayOfStep, withCreationOn, withStatsByGroup, withStepMoved, withStepOff, withStepWay } from '../newCharacter';
+import { buyNumbers, buyPreset, buyWith, buyWithCost, climbingCosts, creationOn, creationSteps, moneyOfRow, moneyRollProblems, moneyRows, wholeUnitOf, withMoneyRow, kitItemsText, kitsOf, parseKitItems, withKit, withNewKit, withoutKit, groupLeftOut, orderNotes, parseNumbers, parseStatRoll, statsByGroup, stepGroup, stepList, stepName, stepWayProblems, wayOfStep, withCreationOn, withStatsByGroup, withStepMoved, withStepOff, withStepWay } from '../newCharacter';
 import { OTHER_NAMES } from '../versionPreview';
 import type { Definition } from '../systemsApi';
 
@@ -280,6 +280,51 @@ describe('what the order means for kits (7c4b)', () => {
   it('doesn\'t for one with no requirement, or after the stats', () => {
     expect(orderNotes(first(kit('pick')))).toEqual([]);
     expect(orderNotes({ ...HEARTH, creation: { kits: [kit('needs', '@grit >= 12')] } } as unknown as Definition)).toEqual([]);
+  });
+});
+
+describe('starting money (7c4d)', () => {
+  const GOLD = { id: 'gold', name: 'Gold', denominations: [{ id: 'gp', name: 'Gold', value: 100 }, { id: 'cp', name: 'Copper', value: 1 }] };
+  const DOLLARS = { id: 'dollars', name: 'Dollars', symbol: '$', decimals: 2 };
+  const HONOR = { id: 'honor', name: 'Honor' };
+  const coined = { ...HEARTH, currencies: [GOLD, DOLLARS, HONOR] } as unknown as Definition;
+
+  it('a row per currency, or the app\'s money with none of its own', () => {
+    expect(moneyRows(coined).map((r) => r.id)).toEqual(['gold', 'dollars', 'honor']);
+    expect(moneyRows(HEARTH)).toEqual([{ id: 'main', name: 'Money', currency: null }]);
+    expect(moneyRows({ ...HEARTH, currencies: [] } as unknown as Definition).map((r) => r.id)).toEqual(['main']);
+    expect(moneyRows({ ...HEARTH, currencies: [3] } as unknown as Definition).map((r) => r.id)).toEqual(['main']);
+  });
+
+  it('starts at nothing; set, it reads back; nothing again leaves nothing behind', () => {
+    expect(moneyOfRow(coined, 'gold')).toBeNull();
+    const set = withMoneyRow(coined, 'gold', { how: 'typed' });
+    expect(set.creation).toEqual({ money: { gold: { how: 'typed' } } });
+    expect(moneyOfRow(set, 'gold')).toEqual({ how: 'typed' });
+    expect(moneyOfRow(set, 'honor')).toBeNull();
+    expect(moneyOfRow(withMoneyRow(set, 'honor', { how: 'number', amount: 5 }), 'gold')).toEqual({ how: 'typed' });
+    expect(withMoneyRow(set, 'gold', null)).toEqual(coined);
+    expect(moneyOfRow({ ...coined, creation: { money: { gold: { how: 'nope' } } } } as unknown as Definition, 'gold')).toBeNull();
+    expect(moneyOfRow({ ...coined, creation: { money: 'x' } } as unknown as Definition, 'gold')).toBeNull();
+  });
+
+  it('what it writes, the server takes and reads', () => {
+    const made = withMoneyRow(withMoneyRow(withCreationOn(coined, true), 'gold', { how: 'roll', each: '3d6 * 10' }), 'honor', { how: 'number', amount: 5 });
+    expect(checkDefinition(made).problems.filter((p: { where: string }) => p.where.startsWith('creation'))).toEqual([]);
+    expect(server.moneyOf(made).map((e: { id: string }) => e.id)).toEqual(['gold', 'honor']);
+    expect(server.moneyOf(withMoneyRow(withCreationOn(HEARTH, true), 'main', { how: 'typed' })).map((e: { id: string }) => e.id)).toEqual(['main']);
+  });
+
+  it('a whole piece as the server counts it', () => {
+    for (const c of [GOLD, DOLLARS, HONOR]) expect(wholeUnitOf(c as never), c.id).toBe(server.wholeOf(c));
+    expect(wholeUnitOf(null)).toBe(1);
+  });
+
+  it('says what is wrong with a roll in the server\'s words', () => {
+    for (const each of ['3d6 * 10', '3d6', '4d6 drop lowest*2', '', 'lots', '3d6 * x', '3d6 * 0', '3d6 * 1001', '1d6 - 9', '1d6 - 9 * 2', '1d6 - 1']) {
+      expect(moneyRollProblems(each), each).toEqual(server.moneyRollProblems(each));
+    }
+    expect(moneyRollProblems('1d6 - 9 * 2')).toEqual(['1d6 - 9 * 2 can roll -16, below nothing']);
   });
 });
 

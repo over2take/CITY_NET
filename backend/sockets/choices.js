@@ -16,7 +16,8 @@
 // with { kind: 'roll', step } (7c3c) rolls a step's stats on the secure dice, inside the sheet's write
 // queue, written to the log and thrown in the tray as ROLL FOR IT is (systemBuilder/creation.js). A stat
 // can move the token's maximum, so it follows, as a pick's does. FINISH gives out their kits (7c4b) in the
-// same write, so they land once, with the game's catalogues loaded first (sheets/kitGiving.js).
+// same write, so they land once, with the game's catalogues loaded first (sheets/kitGiving.js), and pays in
+// their starting money (7c4d) once that write has stood, as it comes only from there.
 //
 // `recoverySpend` with { pool, count } (R2a) spends recovery dice with a roll (sheets/recover.js).
 // In a system leaving spending to the GM, a player spends or ticks them off only while the GM has
@@ -47,7 +48,7 @@ const REST_AT_CALL = 'In this game, rests are taken when the GM calls them';
 const spendingOpen = (db, cb) => db.get('SELECT value FROM global_settings WHERE key = ?', [OPEN_SETTING], (err, row) => cb(!err && !!row && row.value === '1'));
 
 /** Registered once per connection by sockets/index.js, with what it already knows of the caller. */
-const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, getGameSystem, getShopSystem, rng = cryptoRng }) => {
+const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, getGameSystem, getShopSystem, withMoney, sendBankUpdate, rng = cryptoRng }) => {
   /** A roll on the sheet said to everyone (7a5b2): a dice-log line, and the roll thrown in the tray. */
   const announceRoll = (username, stored, rolled, lineOf, board) => {
     const who = (stored && typeof stored.name === 'string' && stored.name.trim()) || username;
@@ -117,10 +118,12 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
     withCaller(payload, 'choicesRefused', ({ username, system, definition, refuse }) => getShopSystem(() => {
       let error = null;
       let rolled = null;
+      let pay = [];
       mutateSheetForUser(db, { username, system }, (data) => {
         const done = creationAction(definition, data, payload, { rng });
         if (!done.ok) { error = done.error; return undefined; }
         rolled = done.rolled || null;
+        pay = done.pay || [];
         if (done.items && done.items.length) Object.assign(done.data, kitPatch(system, done.items, done.data));
         // Worked out as any save is, so a list asked first already knows what isn't met.
         if (done.data) sheetTemplates.applyDerived(system, done.data);
@@ -130,6 +133,12 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
         if (err2) return refuse('That character has no sheet yet');
         if (!stored) return undefined;
         if (rolled) announceRoll(username, stored, rolled, statRollLine, rolled.label);
+        for (const { id, amount } of pay) {
+          withMoney(id ? { currency: id } : {}, (money) => money.add(username, amount, (e) => {
+            if (e) console.error('[creation] starting money not paid:', e.message);
+            sendBankUpdate(username);
+          }));
+        }
         return syncTokenMax(db, system, username, (moved) => {
           if (moved) io.emit('dataUpdated', { isRhombusOnly: true });
           io.emit('sheetUpdated', { username, system });

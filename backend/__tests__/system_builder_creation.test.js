@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
 const require_ = createRequire(import.meta.url);
-const { creationOf, stepIdsOf, LIMITS, stepsAsked, creationShown, creatingNow, creationAction, withUpload, CREATING_KEY, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine } = require_('../systemBuilder/creation');
+const { creationOf, stepIdsOf, LIMITS, stepsAsked, creationShown, creatingNow, creationAction, withUpload, CREATING_KEY, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine, parseMoneyRoll, moneyRollProblems, moneyOf, wholeOf } = require_('../systemBuilder/creation');
 const { pickAction } = require_('../systemBuilder/picking');
 const { PICKS_KEY } = require_('../systemBuilder/choices');
 const { playerMayEdit } = require_('../sheets/templates');
@@ -633,10 +633,6 @@ describe('kits at the table (7c4b)', () => {
     expect(stepsAsked(def([PICK], { off: ['kits'] }))).not.toContain('kits');
   });
 
-  it('MONEY still waits', () => {
-    expect(stepsAsked(def())).not.toContain('money');
-  });
-
   it('tells the browser what a player may see: never a kit the GM gives, nor a formula', () => {
     const { kits } = creationShown(def());
     expect(kits).toEqual([
@@ -696,6 +692,148 @@ describe('kits at the table (7c4b)', () => {
     expect(finish(at, def([ALL])).items).toEqual([{ name: 'Knife', qty: 1 }]);
     expect(finish(at, def([GM])).items).toEqual([]);
     expect(finish(at, def([ALL], { off: ['kits'] })).items).toEqual([]);
+  });
+});
+
+describe('starting money (7c4d)', () => {
+  const GOLD = { id: 'gold', name: 'Gold', short: 'gp', denominations: [{ id: 'gp', name: 'Gold', short: 'gp', value: 100 }, { id: 'cp', name: 'Copper', short: 'cp', value: 1 }] };
+  const DOLLARS = { id: 'dollars', name: 'Dollars', symbol: '$', decimals: 2 };
+  const HONOR = { id: 'honor', name: 'Honor' };
+  const three = { format: 1, name: 'M', currencies: [GOLD, DOLLARS, HONOR] };
+  const def = (money, more = {}) => ({ ...three, creation: { on: true, money }, ...more });
+  const single = (money) => ({ format: 1, name: 'M', creation: { on: true, money } });
+  const at = { [CREATING_KEY]: { at: 'money' } };
+  const dice = (...faces) => { let i = 0; return () => (faces[i++ % faces.length] - 0.5) / 6; };
+  const roll = (data, d, id, rng = dice(3, 4, 5)) => creationAction(d, data, { kind: 'moneyRoll', id }, { rng });
+  const type = (data, d, id, amount) => creationAction(d, data, { kind: 'moneyTyped', id, amount });
+  const finish = (data, d) => creationAction(d, data, { kind: 'finish' });
+  const issues = (money, more = {}) => checkDefinition({ ...three, creation: { money }, ...more }).problems.map((p) => `${p.where}: ${p.message}`);
+
+  it('reads a roll, with a multiple after it if it likes', () => {
+    expect(parseMoneyRoll('3d6 * 10')).toEqual({ roll: parseStatRoll('3d6'), times: 10 });
+    expect(parseMoneyRoll('4d6 drop lowest*2')).toEqual({ roll: parseStatRoll('4d6 drop lowest'), times: 2 });
+    expect(parseMoneyRoll('2d6 + 3')).toEqual({ roll: parseStatRoll('2d6 + 3'), times: 1 });
+    for (const bad of ['', 'lots', '3d6 * x', '3d6 * 0', '3d6 * 1001', '* 10', 5]) expect(parseMoneyRoll(bad), String(bad)).toBeNull();
+    expect(parseMoneyRoll('3d6 * 1000')).not.toBeNull();
+  });
+
+  it('a whole piece: the biggest coin, a dollar, or as it comes', () => {
+    expect([wholeOf(GOLD), wholeOf(DOLLARS), wholeOf(HONOR)]).toEqual([100, 100, 1]);
+  });
+
+  it('asked with something set and the bank on, in order, passing over a currency gone', () => {
+    expect(stepsAsked(def({ gold: { how: 'typed' } }))).toContain('money');
+    expect(stepsAsked(def({}))).not.toContain('money');
+    expect(stepsAsked(three)).not.toContain('money');
+    expect(stepsAsked(def({ gold: { how: 'typed' } }, { parts: { bank: { on: false } } }))).not.toContain('money');
+    expect(stepsAsked(def({ gone: { how: 'typed' } }))).not.toContain('money');
+    expect(moneyOf(def({ honor: { how: 'typed' }, gold: { how: 'typed' }, gone: { how: 'typed' } })).map((e) => e.id)).toEqual(['gold', 'honor']);
+    expect(moneyOf(def({ gold: { how: 'nope' } }))).toEqual([]);
+    // With the bank off, nowhere to pay it, so nothing said of it either.
+    const noBank = def({ gold: { how: 'typed' } }, { parts: { bank: { on: false } } });
+    expect(moneyOf(noBank)).toEqual([]);
+    expect(creationShown(noBank).money).toBeUndefined();
+    expect(moneyOf(def({ gold: 'typed' }))).toEqual([]);
+  });
+
+  it('with no currencies of its own, the app\'s money is called main', () => {
+    expect(moneyOf(single({ main: { how: 'typed' } })).map((e) => e.id)).toEqual(['main']);
+    expect(moneyOf(def({ main: { how: 'typed' } }))).toEqual([]);
+  });
+
+  it('tells the browser each amount in words, and nothing of one unsaid', () => {
+    expect(creationShown(def({ gold: { how: 'roll', each: '3d6 * 10' }, dollars: { how: 'number', amount: 500 }, honor: { how: 'typed' } })).money).toEqual([
+      { id: 'gold', name: 'Gold', how: 'roll', each: '3d6 * 10' },
+      { id: 'dollars', name: 'Dollars', how: 'number', amount: 500 },
+      { id: 'honor', name: 'Honor', how: 'typed' },
+    ]);
+    expect(creationShown(def({})).money).toBeUndefined();
+  });
+
+  it('a roll is whole pieces, kept, and said for the log', () => {
+    const d = def({ gold: { how: 'roll', each: '3d6 * 10' }, dollars: { how: 'roll', each: '3d6' }, honor: { how: 'roll', each: '3d6' } });
+    const done = roll(at, d, 'gold');
+    expect(done.data[CREATING_KEY].money).toEqual({ gold: 120 * 100 });
+    expect(done.data[CREATING_KEY].at).toBe('money');
+    expect(done.rolled).toMatchObject({ label: 'GOLD', each: '3d6 * 10', sides: 6, rolls: [3, 4, 5], totals: [120], total: 120, named: null });
+    expect(statRollLine('Wren', done.rolled)).toBe('Wren rolled GOLD (3d6 * 10): 120');
+    expect(roll(done.data, d, 'gold')).toEqual({ ok: false, error: 'Rolled, and kept: rolling again is the GM\'s' });
+    const both = roll(done.data, d, 'dollars').data;
+    expect(both[CREATING_KEY].money).toEqual({ gold: 12000, dollars: 1200 });
+    expect(roll(both, d, 'honor').data[CREATING_KEY].money.honor).toBe(12);
+  });
+
+  it('a roll that came to below nothing is nothing', () => {
+    const d = def({ honor: { how: 'roll', each: '1d6 - 9' } });
+    expect(roll(at, d, 'honor', dice(1)).data[CREATING_KEY].money.honor).toBe(0);
+  });
+
+  it('typed: changes as they like, 0 allowed, cleared with null', () => {
+    const d = def({ gold: { how: 'typed' } });
+    const one = type(at, d, 'gold', 500).data;
+    expect(one[CREATING_KEY].money).toEqual({ gold: 500 });
+    expect(type(one, d, 'gold', 750).data[CREATING_KEY].money).toEqual({ gold: 750 });
+    expect(type(one, d, 'gold', 0).data[CREATING_KEY].money).toEqual({ gold: 0 });
+    expect(type(one, d, 'gold', null).data[CREATING_KEY].money).toEqual({});
+    for (const bad of [-1, 1.5, '5', undefined, LIMITS.moneyMost + 1]) expect(type(at, d, 'gold', bad).error, String(bad)).toBe('A whole amount, 0 or more');
+    expect(type(at, d, 'gold', LIMITS.moneyMost).ok).toBe(true);
+  });
+
+  it('only each currency\'s own way, and only one this game asks', () => {
+    const d = def({ gold: { how: 'typed' }, honor: { how: 'roll', each: '3d6' }, dollars: { how: 'number', amount: 5 } });
+    expect(roll(at, d, 'gold').error).toBe('Gold isn\'t rolled');
+    expect(type(at, d, 'honor', 5).error).toBe('Honor isn\'t typed in');
+    expect(type(at, d, 'dollars', 5).error).toBe('Dollars isn\'t typed in');
+    expect(roll(at, d, 'nope').error).toBe('Not one of this game\'s amounts');
+    expect(type(at, def({ gold: { how: 'typed' } }, { parts: { bank: { on: false } } }), 'gold', 5).error).toBe('Not one of this game\'s amounts');
+    expect(type({}, d, 'gold', 5).error).toBe('This character isn\'t being made');
+    const stepOff = { ...three, creation: { on: true, off: ['money'], money: { gold: { how: 'typed' } } } };
+    expect(type(at, stepOff, 'gold', 5).error).toBe('Not one of this game\'s amounts');
+    expect(roll(at, def({ honor: { how: 'roll', each: 'nonsense' } }), 'honor').error).toBe('This game\'s roll doesn\'t read');
+  });
+
+  it('FINISH needs a roll rolled and an amount said', () => {
+    const d = def({ gold: { how: 'roll', each: '3d6' }, honor: { how: 'typed' } });
+    expect(finish(at, d).error).toBe('Roll for Gold first');
+    const rolled = roll(at, d, 'gold').data;
+    expect(finish(rolled, d).error).toBe('Say how much Honor first');
+    expect(finish(type(rolled, d, 'honor', 7).data, d).ok).toBe(true);
+    expect(finish(at, def({ gold: { how: 'number', amount: 5 } })).ok).toBe(true);
+  });
+
+  it('FINISH says what to pay: nothing of 0, the number as it is, the app\'s money with no currency', () => {
+    const d = def({ gold: { how: 'roll', each: '3d6' }, dollars: { how: 'number', amount: 500 }, honor: { how: 'typed' } });
+    const ready = type(roll(at, d, 'gold').data, d, 'honor', 0).data;
+    expect(finish(ready, d).pay).toEqual([{ id: 'gold', amount: 1200 }, { id: 'dollars', amount: 500 }]);
+    expect(finish(ready, d).data[CREATING_KEY]).toEqual({ done: true });
+    expect(finish(at, single({ main: { how: 'number', amount: 100 } })).pay).toEqual([{ id: null, amount: 100 }]);
+  });
+
+  it('with the step off, none asked and none paid', () => {
+    expect(finish(at, def({ dollars: { how: 'number', amount: 500 } }, { creation: { on: true, money: { dollars: { how: 'number', amount: 500 } }, off: ['money'] } })).pay).toEqual([]);
+  });
+
+  it('the checks take it, and say what is wrong', () => {
+    expect(issues({ gold: { how: 'roll', each: '3d6 * 10' }, dollars: { how: 'number', amount: 500 }, honor: { how: 'typed' } })).toEqual([]);
+    expect(issues('lots')).toEqual(['creation, money: Must say what each currency starts at']);
+    expect(issues({ gold: 'lots' })).toEqual(['creation, money, gold: Must be number, roll or typed']);
+    expect(issues({ gold: { how: 'nope' } })).toEqual(['creation, money, gold: Must be number, roll or typed']);
+    expect(issues({ gold: { how: 'typed', amount: 5 } })).toEqual(['creation, money, gold, amount: Not part of this way']);
+    for (const amount of [-1, 1.5, '5', undefined, LIMITS.moneyMost + 1]) expect(issues({ gold: { how: 'number', amount } }), String(amount)).toEqual(['creation, money, gold, amount: A whole amount, 0 or more']);
+    expect(issues({ gold: { how: 'roll', each: 'lots' } })).toEqual(['creation, money, gold, each: Reads like 3d6, 4d6 drop lowest or 2d6 + 6, up to 20 dice of up to 100 sides, with * 10 after it if you like']);
+    expect(issues({ gold: { how: 'roll', each: '1d6 - 9 * 2' } })).toEqual(['creation, money, gold, each: 1d6 - 9 * 2 can roll -16, below nothing']);
+    expect(issues({ gone: { how: 'typed' } })).toEqual([]);
+  });
+
+  it('says of a roll as the page does', () => {
+    expect(moneyRollProblems('3d6 * 10')).toEqual([]);
+    expect(moneyRollProblems('1d6 - 1')).toEqual([]);
+  });
+
+  it('the system file carries it, unchanged', () => {
+    const d = def({ gold: { how: 'roll', each: '3d6 * 10' }, honor: { how: 'typed' } });
+    const read = citysys.readFile(JSON.stringify(citysys.buildFile({ definition: d, version: 1, origin: 'sys_abcdefabcdefabcd' })));
+    expect([read.file.definition.creation, read.problems]).toEqual([d.creation, []]);
   });
 });
 

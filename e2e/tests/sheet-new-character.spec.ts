@@ -491,6 +491,51 @@ test('a kit the GM gives: listed in GIVE, ticked, landing on the sheet with the 
   await theirs.context().close();
 });
 
+test('starting money: rolled once and in the log, nothing paid until finishing, then in the bank', async ({ browser, request }, info) => {
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const player = { username: `e2e_newchar_money${again}`, password: 'e2e-player-password' };
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Newfall Money${again}`,
+    core: { health: { model: 'pool' }, dice: ['d6'] },
+    creation: { on: true, money: { main: { how: 'roll', each: '3d6 * 10' } } },
+  });
+  await approvedPlayer(request, gm, player);
+  const stored = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data;
+  const page = await signedIn(browser, info, player);
+  await rail(page).click();
+  await sheetButton(page).click();
+  await expect(flow(page)).toBeVisible();
+  await page.getByRole('button', { name: 'BEGIN' }).click();
+  await page.getByLabel('Name', { exact: true }).fill('Wren');
+  await expect.poll(async () => (await stored()).name, { timeout: 15_000 }).toBe('Wren');
+  await page.getByRole('button', { name: 'NEXT' }).click();
+
+  // Asked, FINISH held until rolled.
+  const here = page.getByRole('region', { name: 'Money' });
+  await expect(here.getByText('3d6 * 10, rolled once.')).toBeVisible();
+  const finish = page.getByRole('button', { name: 'FINISH' });
+  await expect(finish).toBeDisabled();
+  await here.getByRole('button', { name: 'ROLL FOR IT' }).click();
+
+  // Thrown, kept, said, no second roll; not in the bank yet.
+  await expect(page.getByText('DICE_TRAY.EXE', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(here.getByText(/^ROLLED, AND KEPT/)).toBeVisible({ timeout: 15_000 });
+  await expect(here.getByRole('button', { name: 'ROLL FOR IT' })).toHaveCount(0);
+  const amount = (await stored())._creating.money.main;
+  expect(amount).toBeGreaterThanOrEqual(30);
+  expect(amount).toBeLessThanOrEqual(180);
+  await expect(here.getByText(String(amount), { exact: true })).toBeVisible();
+  expect((await stored()).cash ?? 0).toBe(0);
+
+  // Finished: paid in, the sheet saying so without a reload.
+  await finish.click();
+  await expect(flow(page)).toHaveCount(0);
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  await expect.poll(async () => (await stored()).cash, { timeout: 15_000 }).toBe(amount);
+  await page.context().close();
+});
+
 test('an upload is taken as it is, and no steps follow', async ({ browser, request }, info) => {
   const again = info.retry ? `_${info.retry + 1}` : '';
   const player = { username: `e2e_uploader${again}`, password: 'e2e-player-password' };

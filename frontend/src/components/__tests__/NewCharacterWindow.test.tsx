@@ -496,6 +496,98 @@ describe('the steps', () => {
     });
   });
 
+  describe('starting money (7c4d)', () => {
+    const MONEY = (money: object[]) => ({ steps: ['who', 'money'], stats: [], money });
+    const at = (held?: object) => ({ name: 'Wren', _creating: { at: 'money', ...(held ? { money: held } : {}) } });
+
+    it('a number is said, and holds nothing', async () => {
+      await open(at(), undefined, 'tok', MONEY([{ id: 'main', name: 'Money', how: 'number', amount: 100 }]));
+      expect(screen.getByRole('tab', { name: 'MONEY' }).getAttribute('aria-selected')).toBe('true');
+      expect(within(screen.getByRole('region', { name: 'Money' })).getByText('100')).toBeTruthy();
+      expect(screen.getByText('PAID INTO YOUR BANK WHEN YOU FINISH.')).toBeTruthy();
+      expect(button('FINISH').disabled).toBe(false);
+    });
+
+    it('a roll is asked of the server, holding FINISH; rolled, it says what came up with no way to roll again', async () => {
+      const roll = MONEY([{ id: 'main', name: 'Money', how: 'roll', each: '3d6 * 10' }]);
+      const { socket } = await open(at(), undefined, 'tok', roll);
+      expect(screen.getByText('3d6 * 10, rolled once.')).toBeTruthy();
+      expect(button('FINISH').disabled).toBe(true);
+      await userEvent.click(button('ROLL FOR IT'));
+      expect(socket.said('creationAction')).toContainEqual({ kind: 'moneyRoll', id: 'main' });
+      cleanup();
+      await open(at({ main: 120 }), undefined, 'tok', roll);
+      expect(within(screen.getByRole('region', { name: 'Money' })).getByText('120')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'ROLL FOR IT' })).toBeNull();
+      expect(screen.getByText(/^ROLLED, AND KEPT/)).toBeTruthy();
+      expect(button('FINISH').disabled).toBe(false);
+    });
+
+    it('typed: each amount asked as it reads, one that doesn\'t said and not sent, cleared when emptied', async () => {
+      const { socket } = await open(at(), undefined, 'tok', MONEY([{ id: 'main', name: 'Money', how: 'typed' }]));
+      const box = screen.getByRole('textbox', { name: 'Money' }) as HTMLInputElement;
+      expect(button('FINISH').disabled).toBe(true);
+      await userEvent.type(box, '75');
+      expect(socket.said('creationAction')).toContainEqual({ kind: 'moneyTyped', id: 'main', amount: 75 });
+      await userEvent.type(box, 'x');
+      expect(box.getAttribute('aria-invalid')).toBe('true');
+      expect(screen.getByText("THAT DOESN'T READ AS AN AMOUNT")).toBeTruthy();
+      expect(socket.said('creationAction').filter((c) => (c as { amount?: number }).amount === undefined)).toEqual([]);
+      await userEvent.clear(box);
+      expect(socket.said('creationAction')).toContainEqual({ kind: 'moneyTyped', id: 'main', amount: null });
+      expect(box.getAttribute('aria-invalid')).toBeNull();
+    });
+
+    it('a minus isn\'t an amount, on its way to one or not; in a currency of its own as well', async () => {
+      registerCustomTemplate(render_());
+      const { socket } = await open(at(), undefined, 'tok', MONEY([{ id: 'main', name: 'Money', how: 'typed' }]));
+      const box = screen.getByRole('textbox', { name: 'Money' }) as HTMLInputElement;
+      await userEvent.type(box, '-');
+      expect(box.getAttribute('aria-invalid')).toBe('true');
+      await userEvent.type(box, '5');
+      expect(socket.said('creationAction').filter((c) => (c as { kind: string }).kind === 'moneyTyped')).toEqual([]);
+    });
+
+    it('in a currency, read as it writes itself and said as it writes itself', async () => {
+      const coined = { ...render_({}, MONEY([{ id: 'gold', name: 'Gold', how: 'typed' }, { id: 'tin', name: 'Tin', how: 'number', amount: 250 }])),
+        currencies: [
+          { id: 'gold', name: 'Gold', denominations: [{ id: 'gp', name: 'Gold', short: 'gp', value: 100 }, { id: 'cp', name: 'Copper', short: 'cp', value: 1 }] },
+          { id: 'tin', name: 'Tin', symbol: '$', decimals: 2 },
+        ] } as unknown as CustomRender;
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })));
+      registerCustomTemplate(coined);
+      const socket = makeSocket(at({ gold: 502 }));
+      render(<NewCharacterWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={socket as never} userName="WREN" authToken="tok" onLeave={vi.fn()} onDone={vi.fn()} />);
+      const box = await screen.findByRole('textbox', { name: 'Gold' }) as HTMLInputElement;
+      expect(box.value).toBe('5 gp 2 cp');
+      expect(within(screen.getByRole('region', { name: 'Tin' })).getByText('$2.50')).toBeTruthy();
+      await userEvent.clear(box);
+      await userEvent.type(box, '3gp');
+      expect(socket.said('creationAction')).toContainEqual({ kind: 'moneyTyped', id: 'gold', amount: 300 });
+      await userEvent.clear(box);
+      await userEvent.type(box, '7');
+      expect(box.getAttribute('aria-invalid')).toBe('true');
+      // A lone minus reads as 0 in a currency's own reading, so it is turned away first.
+      await userEvent.clear(box);
+      const before = socket.said('creationAction').length;
+      await userEvent.type(box, '-');
+      expect(box.getAttribute('aria-invalid')).toBe('true');
+      expect(socket.said('creationAction')).toHaveLength(before);
+    });
+
+    it('shows what was typed before', async () => {
+      await open(at({ main: 75 }), undefined, 'tok', MONEY([{ id: 'main', name: 'Money', how: 'typed' }]));
+      expect((screen.getByRole('textbox', { name: 'Money' }) as HTMLInputElement).value).toBe('75');
+      expect(button('FINISH').disabled).toBe(false);
+    });
+
+    it('says why the server said no', async () => {
+      const { socket } = await open(at(), undefined, 'tok', MONEY([{ id: 'main', name: 'Money', how: 'typed' }]));
+      socket.fire('choicesRefused', { error: 'Say how much Money first' });
+      expect(screen.getByRole('alert').textContent).toBe('Say how much Money first');
+    });
+  });
+
   it('a group\'s own step shows that group alone, named at its head (7c3a)', async () => {
     await open({ name: 'Wren', grit: 12, _creating: { at: 'stats:skills' } }, undefined, 'tok', {
       steps: ['who', 'stats:traits', 'stats:skills', 'list:classes'],

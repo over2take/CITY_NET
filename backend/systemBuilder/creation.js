@@ -18,6 +18,11 @@
 //       who: 'pick',                          // all: everyone; pick: a player may; needs: only if; gm: the GM gives it
 //       // requires: '@wits >= 12',           // with who: 'needs', the same box as a list's
 //     }],
+//     money: {                                // 7c4d: what each currency starts at; one unsaid, nothing
+//       gold: { how: 'roll', each: '3d6 * 10' },   // whole gold pieces, rolled once, kept
+//       honor: { how: 'number', amount: 5 },       // the same for everyone, in its smallest unit
+//       silver: { how: 'typed' },                  // what the player says they have
+//     },                                      // a system with the app's single money says main
 //   }
 //
 // A step is read from what the system has, never stored: WHO THEY ARE always; THE STATS with stats to
@@ -34,6 +39,7 @@
 //   _creating: { at: 'stats' }      working, on that step
 //   _creating: { at, rolled: { stats: [14, 9, 12] } }   what a step's ROLL came to (7c3c), kept: once only
 //   _creating: { at, kit: 'traveler' }   the kit picked (7c4b), changed as they like: given out at FINISH
+//   _creating: { at, money: { gold: 1200 } }   what was rolled or typed for each currency (7c4d): paid at FINISH
 //   _creating: { done: true, uploaded?: true }   finished, or came in as an upload
 //
 // Who is asked at all is the browser's to work out (sheets/newCharacterFlow.ts): a blank sheet with
@@ -49,6 +55,7 @@
 // Pure: checks and reads only. definition.js runs the checks, picking.js and the socket the rest.
 
 const { partOn } = require('./parts');
+const { currenciesOf } = require('./currencies');
 const { choicesOf, pickedOf, meets, needsText } = require('./choices');
 const { fieldsOf } = require('./sheet');
 const { parse } = require('./expression');
@@ -58,8 +65,11 @@ const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
 
 /** How many ids `order` and `off` may hold: every list a system can have, and room. */
-const LIMITS = { steps: 40, numbers: 40, rollDice: 20, rollSides: 100, rollAdd: 1000, buyRange: 100, buyPoints: 100000, kits: 40, kitName: 60, kitItems: 40, itemName: 80, itemQty: 99 };
-const KEYS = new Set(['on', 'order', 'off', 'statsBy', 'ways', 'kits']);
+const LIMITS = { steps: 40, numbers: 40, rollDice: 20, rollSides: 100, rollAdd: 1000, buyRange: 100, buyPoints: 100000, moneyMost: 1000000000000, kits: 40, kitName: 60, kitItems: 40, itemName: 80, itemQty: 99 };
+const KEYS = new Set(['on', 'order', 'off', 'statsBy', 'ways', 'kits', 'money']);
+const MONEY_KEYS = { number: new Set(['how', 'amount']), roll: new Set(['how', 'each']), typed: new Set(['how']) };
+/** What a system with no currencies of its own calls the app's single money, in `money`. */
+const MAIN_MONEY = 'main';
 const KIT_KEYS = new Set(['id', 'name', 'items', 'who', 'requires']);
 const ITEM_KEYS = new Set(['name', 'qty']);
 const KIT_WHO = ['all', 'pick', 'needs', 'gm'];
@@ -71,8 +81,6 @@ const ROLL_READS = `Reads like 3d6, 4d6 drop lowest or 2d6 + 6, up to ${LIMITS.r
 const STEP = /^(?:who|stats(?::[a-z][a-z0-9_]{0,63})?|kits|money|list:[a-z][a-z0-9_]{0,63})$/;
 /** Where a sheet keeps its place in the flow. */
 const CREATING_KEY = '_creating';
-/** Steps with nothing to ask yet: MONEY comes with 7c4d. */
-const NOT_ASKED_YET = new Set(['money']);
 
 const creationIn = (definition) => (isPlainObject(definition && definition.creation) ? definition.creation : {});
 /** A stats group's own step, with GROUP BY GROUP. */
@@ -239,11 +247,40 @@ const kitsAsked = (definition) => kitsOf(definition).filter((k) => k.who !== 'gm
 /** The kits offered to pick from. */
 const kitsOffered = (definition) => kitsOf(definition).filter((k) => k.who === 'pick' || k.who === 'needs');
 
+/**
+ * What each currency starts at (7c4d), in the system's order: { id, name, how, ... } for those the GM
+ * set. None with the bank off, as there is nowhere to pay it. A currency since deleted is passed over.
+ */
+const moneyOf = (definition) => {
+  const set = creationIn(definition).money;
+  if (!isPlainObject(set) || !partOn(definition, 'bank')) return [];
+  const currencies = currenciesOf(definition);
+  return (currencies.length ? currencies : [{ id: MAIN_MONEY, name: 'Money' }])
+    .filter((c) => isPlainObject(set[c.id]) && Object.keys(MONEY_KEYS).includes(set[c.id].how))
+    .map((c) => ({ ...set[c.id], id: c.id, name: c.name, currency: c }));
+};
+
+/** A roll's whole amount in smallest units: a gold piece, a dollar, the app's money as it comes. */
+const wholeOf = (currency) => {
+  if (Array.isArray(currency.denominations) && currency.denominations.length) return Math.max(...currency.denominations.map((d) => d.value));
+  return 10 ** (Number.isInteger(currency.decimals) ? currency.decimals : 0);
+};
+
+/** What money is rolled with, as the GM writes it: a stat's roll, with "* 10" after it if it likes. */
+const parseMoneyRoll = (text) => {
+  const m = /^(.*?)(?:\s*\*\s*(\d+))?\s*$/.exec(typeof text === 'string' ? text : '');
+  const roll = m ? parseStatRoll(m[1]) : null;
+  if (!roll) return null;
+  const times = m[2] === undefined ? 1 : Number(m[2]);
+  return times >= 1 && times <= LIMITS.rollAdd ? { roll, times } : null;
+};
+
 /** The steps a player is walked through, in order: those on, with something to ask. */
 const stepsAsked = (definition) => creationOf(definition).steps
-  .filter((s) => !s.off && !NOT_ASKED_YET.has(s.id)
+  .filter((s) => !s.off
     && (s.id !== 'stats' || statGroupsAsked(definition).length > 0)
-    && (s.id !== 'kits' || kitsAsked(definition).length > 0))
+    && (s.id !== 'kits' || kitsAsked(definition).length > 0)
+    && (s.id !== 'money' || moneyOf(definition).length > 0))
   .map((s) => s.id);
 
 /** The ways of the steps asked, those not typed in, by step. */
@@ -257,6 +294,9 @@ const waysShown = (definition) => {
 const creationShown = (definition) => (creationOf(definition).on ? {
   steps: stepsAsked(definition),
   ...(Object.keys(waysShown(definition)).length ? { ways: waysShown(definition) } : {}),
+  ...(moneyOf(definition).length ? {
+    money: moneyOf(definition).map(({ id, name, how, amount, each }) => ({ id, name, how, ...(how === 'number' ? { amount } : {}), ...(how === 'roll' ? { each } : {}) })),
+  } : {}),
   ...(kitsAsked(definition).length ? {
     kits: kitsAsked(definition).map((k) => ({
       id: k.id, name: k.name, items: list(k.items), who: k.who,
@@ -364,6 +404,56 @@ const kitItemsOf = (definition, sheet) => {
   return kitsAsked(definition).filter((k) => k.who === 'all' || k.id === picked).flatMap((k) => list(k.items));
 };
 
+/** What was rolled or typed for each currency so far. */
+const moneyHeld = (sheet) => {
+  const place = placeOf(sheet);
+  return place && isPlainObject(place.money) ? place.money : {};
+};
+
+/** One currency's starting amount set as this asks: rolled once, or typed and changed as they like. */
+const setMoney = (definition, sheet, action, rng) => {
+  const entry = moneyOf(definition).find((e) => e.id === action.id);
+  if (!stepsAsked(definition).includes('money') || !entry) return { ok: false, error: 'Not one of this game\'s amounts' };
+  const place = placeOf(sheet);
+  const keep = (next) => ({ ...sheet, [CREATING_KEY]: { ...place, money: next } });
+  if (action.kind === 'moneyRoll') {
+    if (entry.how !== 'roll') return { ok: false, error: `${entry.name} isn't rolled` };
+    if (moneyHeld(sheet)[entry.id] !== undefined) return { ok: false, error: 'Rolled, and kept: rolling again is the GM\'s' };
+    const parsed = parseMoneyRoll(entry.each);
+    if (!parsed) return { ok: false, error: 'This game\'s roll doesn\'t read' };
+    const rolled = rollEach(parsed.roll, rng);
+    const total = Math.max(0, rolled.total * parsed.times);
+    return {
+      ok: true,
+      data: keep({ ...moneyHeld(sheet), [entry.id]: total * wholeOf(entry.currency) }),
+      rolled: { label: String(entry.name).toUpperCase(), each: entry.each, sides: parsed.roll.sides, rolls: rolled.dice, totals: [total], total, named: null },
+    };
+  }
+  if (entry.how !== 'typed') return { ok: false, error: `${entry.name} isn't typed in` };
+  if (action.amount === null) {
+    const { [entry.id]: gone, ...rest } = moneyHeld(sheet);
+    return { ok: true, data: keep(rest) };
+  }
+  if (!Number.isInteger(action.amount) || action.amount < 0 || action.amount > LIMITS.moneyMost) return { ok: false, error: 'A whole amount, 0 or more' };
+  return { ok: true, data: keep({ ...moneyHeld(sheet), [entry.id]: action.amount }) };
+};
+
+/** Why this character can't finish on their money, or null. */
+const moneyProblem = (definition, sheet) => {
+  if (!stepsAsked(definition).includes('money')) return null;
+  const missing = moneyOf(definition).find((e) => e.how !== 'number' && !Number.isInteger(moneyHeld(sheet)[e.id]));
+  if (!missing) return null;
+  return missing.how === 'roll' ? `Roll for ${missing.name} first` : `Say how much ${missing.name} first`;
+};
+
+/** What a character is paid on finishing: { id, amount }, the id null for the app's single money. */
+const moneyToPay = (definition, sheet) => {
+  if (!stepsAsked(definition).includes('money')) return [];
+  return moneyOf(definition)
+    .map((e) => ({ id: e.id === MAIN_MONEY ? null : e.id, amount: e.how === 'number' ? e.amount : moneyHeld(sheet)[e.id] }))
+    .filter((p) => p.amount > 0);
+};
+
 /** What a stats step is called, in the log. */
 const stepLabel = (definition, step) => {
   if (step === 'stats') return 'THE STATS';
@@ -409,9 +499,10 @@ const statRollLine = (who, rolled) => `${who} rolled ${rolled.label} (${rolled.e
 
 /**
  * One step of a character's way through the flow: { kind: 'open' }, { kind: 'at', step },
- * { kind: 'place', step, stat, value }, { kind: 'roll', step }, { kind: 'buy', step, stat, value }, { kind: 'kit', kit } or
- * { kind: 'finish' }. Gives back { ok: true, data } (no `data` when there is nothing to change, `rolled` for
- * the log after a roll, `items` for the caller to give out on finishing, as what can be given is theirs), or
+ * { kind: 'place', step, stat, value }, { kind: 'roll', step }, { kind: 'buy', step, stat, value }, { kind: 'kit', kit },
+ * { kind: 'moneyRoll', id }, { kind: 'moneyTyped', id, amount } or { kind: 'finish' }. Gives back { ok: true,
+ * data } (no `data` when there is nothing to change, `rolled` for the log after a roll, and on finishing
+ * `items` to give out and `pay` to pay in, those being the caller's to do), or
  * { ok: false, error } in words. `rng` rolls the dice, 0 to 1 (the secure source unless one is handed in).
  */
 const creationAction = (definition, data, action, { rng = cryptoRng } = {}) => {
@@ -419,12 +510,13 @@ const creationAction = (definition, data, action, { rng = cryptoRng } = {}) => {
   const kind = isPlainObject(action) ? action.kind : null;
   if (!creationOf(definition).on) return { ok: false, error: 'This game has no guided new character' };
   if (kind === 'open') return placeOf(sheet) ? { ok: true } : { ok: true, data: { ...sheet, [CREATING_KEY]: {} } };
-  if (!['at', 'finish', 'place', 'roll', 'buy', 'kit'].includes(kind)) return { ok: false, error: 'Nothing to do' };
+  if (!['at', 'finish', 'place', 'roll', 'buy', 'kit', 'moneyRoll', 'moneyTyped'].includes(kind)) return { ok: false, error: 'Nothing to do' };
   if (!creatingNow(definition, sheet)) return { ok: false, error: 'This character isn\'t being made' };
   if (kind === 'place') return placeNumber(definition, sheet, action);
   if (kind === 'roll') return rollStats(definition, sheet, action, rng);
   if (kind === 'buy') return buyNumber(definition, sheet, action);
   if (kind === 'kit') return pickKit(definition, sheet, action);
+  if (kind === 'moneyRoll' || kind === 'moneyTyped') return setMoney(definition, sheet, action, rng);
   if (kind === 'finish') {
     if (stepsAsked(definition).some((step) => STATS_STEP.test(step) && !wayDone(definition, sheet, step))) return { ok: false, error: 'Every stat needs its number first' };
     const statSteps = stepsAsked(definition).filter((step) => STATS_STEP.test(step));
@@ -435,8 +527,10 @@ const creationAction = (definition, data, action, { rng = cryptoRng } = {}) => {
     if (over) return { ok: false, error: 'More points spent than there are' };
     const kitWrong = kitProblem(definition, sheet);
     if (kitWrong) return { ok: false, error: kitWrong };
+    const moneyWrong = moneyProblem(definition, sheet);
+    if (moneyWrong) return { ok: false, error: moneyWrong };
     const filled = statSteps.reduce((data, step) => filledIn(definition, data, step), sheet);
-    return { ok: true, data: { ...filled, [CREATING_KEY]: { done: true } }, items: kitItemsOf(definition, sheet) };
+    return { ok: true, data: { ...filled, [CREATING_KEY]: { done: true } }, items: kitItemsOf(definition, sheet), pay: moneyToPay(definition, sheet) };
   }
   if (!stepsAsked(definition).includes(action.step)) return { ok: false, error: 'Not one of this game\'s steps' };
   // A point buy's stats start at their lowest as the player arrives, so what they read says so.
@@ -461,6 +555,14 @@ const counted = (n, what) => `${n} ${what}${n === 1 ? '' : 's'}`;
  * What stops a step's way working at the table, in words: too few numbers for its stats, or one that
  * doesn't fit a stat, as a player may place each on any.
  */
+/** What is wrong with what money is rolled with, in words. */
+const moneyRollProblems = (each) => {
+  const parsed = parseMoneyRoll(each);
+  if (!parsed) return [`${ROLL_READS}, with * 10 after it if you like`];
+  const { lo } = statRollRange(parsed.roll);
+  return lo < 0 ? [`${each} can roll ${lo * parsed.times}, below nothing`] : [];
+};
+
 const stepWayProblems = (definition, step) => {
   const way = wayOf(definition, step);
   const stats = statsOfStep(definition, step);
@@ -576,6 +678,19 @@ const checkKits = (definition, kits, problems) => {
   });
 };
 
+/** A definition's starting money checked (7c4d): each amount read, each roll one that can't go below 0. */
+const checkMoney = (money, problems) => {
+  if (money === undefined) return;
+  if (!isPlainObject(money)) { problems.push({ where: 'creation, money', message: 'Must say what each currency starts at' }); return; }
+  for (const [id, set] of Object.entries(money)) {
+    const where = `creation, money, ${id}`;
+    if (!isPlainObject(set) || !Object.keys(MONEY_KEYS).includes(set.how)) { problems.push({ where, message: 'Must be number, roll or typed' }); continue; }
+    for (const key of Object.keys(set)) if (!MONEY_KEYS[set.how].has(key)) problems.push({ where: `${where}, ${key}`, message: 'Not part of this way' });
+    if (set.how === 'number' && (!Number.isInteger(set.amount) || set.amount < 0 || set.amount > LIMITS.moneyMost)) problems.push({ where: `${where}, amount`, message: 'A whole amount, 0 or more' });
+    if (set.how === 'roll') moneyRollProblems(set.each).forEach((message) => problems.push({ where: `${where}, each`, message }));
+  }
+};
+
 /** A definition's `creation` checked, its problems added to `problems`. */
 const checkCreation = (definition, problems) => {
   const c = definition.creation;
@@ -594,6 +709,7 @@ const checkCreation = (definition, problems) => {
   if (c.statsBy !== undefined && c.statsBy !== 'group') problems.push({ where: 'creation, statsBy', message: 'Must say group, or nothing for one way for all' });
   checkWays(definition, c.ways, problems);
   checkKits(definition, c.kits, problems);
+  checkMoney(c.money, problems);
 };
 
-module.exports = { LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, stepsAsked, creationShown, creatingNow, creationAction, withUpload, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine, kitsGivable, kitToGive, kitWords };
+module.exports = { LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, stepsAsked, creationShown, creatingNow, creationAction, withUpload, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine, kitsGivable, kitToGive, kitWords, parseMoneyRoll, moneyRollProblems, moneyOf, wholeOf, MAIN_MONEY };
