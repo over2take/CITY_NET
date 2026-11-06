@@ -1,5 +1,5 @@
 import { test, expect, type APIRequestContext, type Locator, type Page, type Browser, type TestInfo } from '@playwright/test';
-import { signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
+import { signInAsGm, signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer, sheetTab, openGameSystem } from './helpers';
 
 // NEW_CHARACTER.EXE at the table (7c2; approved mockup docs/mockups/new-character.html, 2026-11-03):
 // a player with a blank sheet sees CHARACTER_CONTROLS blink, then CHARACTER_SHEET, which opens the
@@ -449,6 +449,46 @@ test('kits: everyone\'s and the one picked land in the inventory on finishing; o
   await sheetTab(page, 'GEAR');
   await expect(page.locator('input').and(page.locator('[value="Rations"]'))).toHaveCount(1);
   await page.context().close();
+});
+
+test('a kit the GM gives: listed in GIVE, ticked, landing on the sheet with the player told what was in it', async ({ browser, page, request }, info) => {
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const player = { username: `e2e_newchar_given${again}`, password: 'e2e-player-password' };
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Newfall Given${again}`,
+    creation: { kits: [{ id: 'rook', name: 'ROOK', items: [{ name: 'Old sword', qty: 1 }, { name: 'Candles', qty: 3 }], who: 'gm' }] },
+  });
+  await approvedPlayer(request, gm, player);
+  const stored = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data;
+
+  // The player, on their sheet, with the window open.
+  const theirs = await signedIn(browser, info, player);
+  await rail(theirs).click();
+  await sheetButton(theirs).click();
+  await expect(theirs.getByText(/^SHEET\.EXE/)).toBeVisible();
+  await sheetTab(theirs, 'CHARACTER');
+  await theirs.getByLabel('Name', { exact: true }).fill('Wren');
+  await expect.poll(async () => (await stored()).name, { timeout: 15_000 }).toBe('Wren');
+
+  // The GM: GIVE lists it, says what is in it, and where it would land.
+  await signInAsGm(page);
+  await openGameSystem(page);
+  await page.getByRole('button', { name: 'GIVE_ITEM', exact: true }).click();
+  await expect(page.getByRole('table', { name: 'Items' }).getByText('Old sword, 3x Candles')).toBeVisible({ timeout: 15_000 });
+  await page.getByRole('button', { name: 'Give ROOK' }).click();
+  await expect(page.getByTestId('give-card').getByText('Old sword, 3x Candles')).toBeVisible();
+  const who = page.getByRole('table', { name: 'Who gets it' });
+  await expect(who.getByText('4 items, in the inventory')).toBeVisible({ timeout: 15_000 });
+  await who.getByRole('checkbox', { name: 'Wren' }).check();
+  await page.getByRole('button', { name: 'GIVE 1 × ROOK TO 1' }).click();
+  await expect.poll(async () => JSON.parse((await stored()).inventory ?? '[]').map((i: { name: string; qty: number }) => [i.name, i.qty]), { timeout: 15_000 }).toEqual([['Old sword', 1], ['Candles', 3]]);
+
+  // The player is told, and it is on their sheet without a reload.
+  await expect(theirs.getByText('THE GM GAVE YOU ROOK ×1: Old sword, 3x Candles')).toBeVisible({ timeout: 15_000 });
+  await sheetTab(theirs, 'GEAR');
+  await expect(theirs.locator('[value="Candles"]')).toHaveCount(1, { timeout: 15_000 });
+  await theirs.context().close();
 });
 
 test('an upload is taken as it is, and no steps follow', async ({ browser, request }, info) => {

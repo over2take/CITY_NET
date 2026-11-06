@@ -224,6 +224,16 @@ const wayDone = (definition, data, step) => {
 
 /** The kits as written; what isn't one is the checks' to say. */
 const kitsOf = (definition) => list(creationIn(definition).kits).filter((k) => isPlainObject(k) && typeof k.id === 'string');
+/** A kit's items in words: "Rope, 3x Rations". */
+const kitWords = (kit) => list(kit.items).filter(isPlainObject).map((i) => (i.qty === 1 ? i.name : `${i.qty}x ${i.name}`)).join(', ');
+/**
+ * Every kit as GIVE.EXE lists it (7c4c), any of them being the GM's to hand over: one going to a player
+ * that way too, and one going ONLY IF whether or not it is met, as the GM can give anything.
+ */
+const kitsGivable = (definition) => kitsOf(definition).map((k) => ({ id: k.id, name: k.name, price: 0, holds: kitWords(k) }));
+/** One kit by id, to give. */
+const kitToGive = (definition, id) => kitsOf(definition).find((k) => k.id === id) || null;
+
 /** The kits a player sees: a kit the GM gives stays the GM's, and could name who it is for. */
 const kitsAsked = (definition) => kitsOf(definition).filter((k) => k.who !== 'gm');
 /** The kits offered to pick from. */
@@ -586,4 +596,4 @@ const checkCreation = (definition, problems) => {
   checkKits(definition, c.kits, problems);
 };
 
-module.exports = { LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, stepsAsked, creationShown, creatingNow, creationAction, withUpload, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine };
+module.exports = { LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, stepsAsked, creationShown, creatingNow, creationAction, withUpload, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine, kitsGivable, kitToGive, kitWords };
