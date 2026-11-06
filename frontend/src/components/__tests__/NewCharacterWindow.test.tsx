@@ -431,6 +431,71 @@ describe('the steps', () => {
     });
   });
 
+  describe('kits (7c4b)', () => {
+    const KITTED = {
+      steps: ['who', 'stats', 'kits'],
+      stats: [{ id: 'traits', label: 'TRAITS', stats: [{ id: 'grit', label: 'Grit' }] }],
+      kits: [
+        { id: 'essentials', name: 'Essentials', items: [{ name: 'Knife', qty: 1 }, { name: 'Torch', qty: 2 }], who: 'all' },
+        { id: 'traveler', name: 'Traveler', items: [{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }], who: 'pick' },
+        { id: 'potions', name: 'Potion Maker', items: [{ name: 'Mortar', qty: 1 }], who: 'needs', needs: 'GRIT >= 13' },
+      ],
+    };
+    const at = (place: object = {}, over: object = {}) => ({ name: 'Wren', grit: 12, _creating: { at: 'kits', ...place }, _worked: answers({ kitsUnmet: ['potions'] }), ...over });
+    const picks = () => within(screen.getByRole('group', { name: 'Kits to pick from' }));
+    const kit = (name: string) => picks().getByRole('button', { name }) as HTMLButtonElement;
+
+    it('is a step of its own, saying what everyone gets, and what each to pick has in it', async () => {
+      await open(at(), undefined, 'tok', KITTED);
+      expect(screen.getByRole('tab', { name: 'KITS' }).getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByText('Everyone gets ESSENTIALS: Knife, 2x Torch.')).toBeTruthy();
+      expect(kit('TRAVELER').nextElementSibling?.textContent).toBe('Rope, 3x Rations');
+      expect(screen.getByText('IT ALL GOES IN YOUR INVENTORY WHEN YOU FINISH.')).toBeTruthy();
+    });
+
+    it('one not met is off, saying what it needs', async () => {
+      await open(at(), undefined, 'tok', KITTED);
+      expect(kit('POTION MAKER').disabled).toBe(true);
+      expect(kit('POTION MAKER').className).toBe('choice-off');
+      expect(kit('POTION MAKER').nextElementSibling?.textContent).toBe('MortarNEEDS GRIT >= 13');
+      expect(kit('TRAVELER').disabled).toBe(false);
+      expect(kit('TRAVELER').className).toBe('');
+    });
+
+    it('a pick is asked of the server; pressed again it is put back', async () => {
+      const { socket } = await open(at(), undefined, 'tok', KITTED);
+      expect(button('FINISH').disabled).toBe(true);
+      await userEvent.click(kit('TRAVELER'));
+      expect(socket.said('creationAction')).toContainEqual({ kind: 'kit', kit: 'traveler' });
+      cleanup();
+      const again = await open(at({ kit: 'traveler' }), undefined, 'tok', KITTED);
+      expect(kit('TRAVELER').getAttribute('aria-pressed')).toBe('true');
+      expect(button('FINISH').disabled).toBe(false);
+      await userEvent.click(kit('TRAVELER'));
+      expect(again.socket.said('creationAction')).toContainEqual({ kind: 'kit', kit: null });
+    });
+
+    it('one picked and since out of reach stays pressable, to put back, holding FINISH', async () => {
+      await open(at({ kit: 'potions' }), undefined, 'tok', KITTED);
+      expect(kit('POTION MAKER').disabled).toBe(false);
+      expect(kit('POTION MAKER').className).toBe('');
+      expect(button('FINISH').disabled).toBe(true);
+    });
+
+    it('with only what everyone gets, nothing to pick, FINISH open', async () => {
+      await open(at(), undefined, 'tok', { ...KITTED, kits: [KITTED.kits[0]] });
+      expect(screen.getByText('Nothing to pick here.')).toBeTruthy();
+      expect(screen.queryByRole('group', { name: 'Kits to pick from' })).toBeNull();
+      expect(button('FINISH').disabled).toBe(false);
+    });
+
+    it('says why the server said no', async () => {
+      const { socket } = await open(at(), undefined, 'tok', KITTED);
+      socket.fire('choicesRefused', { error: 'Pick a kit first' });
+      expect(screen.getByRole('alert').textContent).toBe('Pick a kit first');
+    });
+  });
+
   it('a group\'s own step shows that group alone, named at its head (7c3a)', async () => {
     await open({ name: 'Wren', grit: 12, _creating: { at: 'stats:skills' } }, undefined, 'tok', {
       steps: ['who', 'stats:traits', 'stats:skills', 'list:classes'],

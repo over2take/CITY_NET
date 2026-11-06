@@ -8,13 +8,16 @@
 // MONEY come with 7c4, and the other ways to set stats with 7c3: here they are typed in.
 
 import type { SheetField, SheetTemplate } from './types';
-import { listShown, underFeature, workedOn, type ChoiceListShown, type PickShown, type Worked } from './choicesShown';
+import { listShown, underFeature, WORKED_KEY, workedOn, type ChoiceListShown, type PickShown, type Worked } from './choicesShown';
 
 type Obj = Record<string, unknown>;
 
 export interface CreationStat { id: string; label: string; min?: number; max?: number }
 /** A point buy (7c3d): no costs, 1 for 1 above the lowest. */
 export interface BuyWay { way: 'buy'; points: number; lowest: number; highest: number; costs?: Record<string, number> }
+/** A kit as a player sees it (7c4b): never the GM's own, nor a formula. */
+export interface KitItem { name: string; qty: number }
+export interface KitShown { id: string; name: string; items: KitItem[]; who: 'all' | 'pick' | 'needs'; needs?: string }
 /** How a stats step is set (7c3b, 7c3c, 7c3d). */
 export type StatWay = { way: 'typed' } | { way: 'array'; numbers: number[] } | { way: 'roll'; each: string; placed: 'order' | 'arrange' } | BuyWay;
 export interface CreationShown {
@@ -22,6 +25,8 @@ export interface CreationShown {
   steps: string[];
   /** How the stats steps not typed in are set, by step. */
   ways?: Record<string, StatWay>;
+  /** The kits a player sees. */
+  kits?: KitShown[];
   /** The groups a player sets: those left out aren't here. */
   stats: { id: string; label: string; stats: CreationStat[] }[];
 }
@@ -29,7 +34,7 @@ export interface CreationShown {
 /** Where a sheet keeps its place in the flow (backend creation.js CREATING_KEY). */
 export const CREATING_KEY = '_creating';
 
-interface Place { at?: string; done?: boolean; uploaded?: boolean; rolled?: Record<string, unknown> }
+interface Place { at?: string; done?: boolean; uploaded?: boolean; rolled?: Record<string, unknown>; kit?: string }
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 const placeOf = (data: Obj | null | undefined): Place | null => {
   const place = data?.[CREATING_KEY];
@@ -127,6 +132,22 @@ export const statsToSet = (template: SheetTemplate, step = 'stats'): CreationSho
 
 /** How a stats step is set: typed in, unless the GM says otherwise. */
 export const stepWay = (template: SheetTemplate, id: string): StatWay => template.creation?.ways?.[id] ?? { way: 'typed' };
+
+/** A kit's items as they read: "Rope, 3x Rations". */
+export const kitItemsText = (items: KitItem[]): string => items.map((i) => (i.qty === 1 ? i.name : `${i.qty}x ${i.name}`)).join(', ');
+
+/**
+ * The KITS step as it stands on this sheet: what everyone gets, what is offered with what each still
+ * needs, and the one picked. What isn't met is worked out by the server, as an option's is.
+ */
+export const kitsShownOn = (template: SheetTemplate, data: Obj | null | undefined) => {
+  const worked = data?.[WORKED_KEY];
+  const unmet = new Set(isObject(worked) && Array.isArray(worked.kitsUnmet) ? worked.kitsUnmet as string[] : []);
+  const kits = template.creation?.kits ?? [];
+  const offered = kits.filter((k) => k.who !== 'all').map((kit) => ({ kit, unmet: unmet.has(kit.id) ? kit.needs ?? 'a requirement' : null }));
+  const chosen = placeOf(data)?.kit;
+  return { everyone: kits.filter((k) => k.who === 'all'), offered, picked: offered.find((o) => o.kit.id === chosen) ?? null };
+};
 
 /** What a number costs in a point buy (backend creation.js costOf). */
 export const buyCost = (way: BuyWay, n: number): number => {
@@ -236,6 +257,10 @@ export const stepAnswered = (template: SheetTemplate, id: string, data: Obj | nu
       return stats.every((s) => placed[s.id] !== undefined);
     }
     return stats.every((s) => typedIn(data?.[s.id]) && !statProblem(s, data?.[s.id]));
+  }
+  if (id === 'kits') {
+    const { offered, picked } = kitsShownOn(template, data);
+    return picked ? !picked.unmet : !offered.some((o) => !o.unmet);
   }
   const list = listOfStep(template, id);
   return list ? listAnswered(template, list, data) : true;

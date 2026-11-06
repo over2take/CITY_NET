@@ -15,6 +15,8 @@ import { drain, until } from './helpers/until.js';
 process.env.JWT_SECRET = 'test-secret';
 
 const require_ = createRequire(import.meta.url);
+const catalogues = require_('../shops/catalogueStore');
+const { readInventory } = require_('../shops/placement');
 const { pickAction } = require_('../systemBuilder/picking');
 const { PICKS_KEY, USES_KEY, WORKED_KEY, workedOf, choicesShown, needsText, usesOf, meets } = require_('../systemBuilder/choices');
 const { checkDefinition } = require_('../systemBuilder/definition');
@@ -448,6 +450,95 @@ describe('through the socket', () => {
         expect((await stored()).int).toBeUndefined();
         gm.handlers.creationAction({ kind: 'buy', step: 'stats', stat: 'int', value: 10, username: 'kes' });
         await until(async () => (await stored()).int === 10, { label: 'bought by the GM' });
+      });
+    });
+
+    describe('kits (7c4b)', () => {
+      const KITS = [
+        { id: 'essentials', name: 'ESSENTIALS', items: [{ name: 'Knife', qty: 1 }, { name: ' COIL of rope ', qty: 2 }], who: 'all' },
+        { id: 'traveler', name: 'TRAVELER', items: [{ name: 'Knife', qty: 1 }, { name: 'Rations', qty: 3 }], who: 'pick' },
+        { id: 'rook', name: 'ROOK', items: [{ name: 'Letter', qty: 1 }], who: 'gm' },
+      ];
+      const turnOnKits = async (start = {}) => {
+        const def = JSON.stringify({ ...HEARTH, creation: { on: true, kits: KITS } });
+        await run(db, 'UPDATE custom_systems SET draft = ?, published = ? WHERE id = ?', [def, def, ID]);
+        await new Promise((resolve) => runtime.load(db, resolve));
+        await run(db, 'UPDATE character_sheets SET data = ? WHERE username = ?', [JSON.stringify({ name: 'Kestrel', _creating: { at: 'kits' }, ...start }), 'kes']);
+      };
+      const lines = async () => readInventory(await stored()).map((i) => [i.name, i.qty, i.carry, i.enc]);
+
+      it('picking gives nothing yet; FINISH puts it all in the inventory, stacking, a catalogue\'s item by its own name', async () => {
+        await turnOnKits();
+        const { kes, shared } = await table();
+        // After the boot, as GIVE ITEM's tests do: what this game's catalogues hold.
+        catalogues.load(ID, { gear: [{ id: 'rope', name: 'Coil of Rope', price: 5, fields: { enc: '1' } }] });
+        kes.handlers.creationAction({ kind: 'kit', kit: 'traveler' });
+        await until(async () => (await stored())._creating.kit === 'traveler', { label: 'picked' });
+        expect(await lines()).toEqual([]);
+        kes.handlers.creationAction({ kind: 'finish' });
+        await until(async () => (await stored())._creating.done === true, { label: 'finished' });
+        expect(await lines()).toEqual([
+          ['Knife', 2, 'stowed', ''],
+          ['Coil of Rope', 2, 'stowed', '1'],
+          ['Rations', 3, 'stowed', ''],
+        ]);
+        expect(shared.filter((e) => e.event === 'sheetUpdated')).toHaveLength(2);
+      });
+
+      it('adds to what they carry, and comes once: a second FINISH is refused, the items as they were', async () => {
+        await turnOnKits({ inventory: JSON.stringify([{ name: 'Knife', qty: 1, carry: 'readied' }, { name: 'Rations', qty: 9, carry: 'stash' }]), _creating: { at: 'kits', kit: 'traveler' } });
+        const { kes } = await table();
+        kes.handlers.creationAction({ kind: 'finish' });
+        await until(async () => (await stored())._creating.done === true, { label: 'finished' });
+        const first = await lines();
+        expect(first.find((l) => l[0] === 'Knife')[1]).toBe(3);
+        expect(first.filter((l) => l[0] === 'Rations').map((l) => [l[1], l[2]])).toEqual([[9, 'stash'], [3, 'stowed']]);
+        kes.handlers.creationAction({ kind: 'finish' });
+        await until(() => kes.refused().length === 1, { label: 'the refusal' });
+        expect(kes.refused()).toEqual(['This character isn\'t being made']);
+        expect(await lines()).toEqual(first);
+      });
+
+      it('FINISH without a pick is refused, giving nothing', async () => {
+        await turnOnKits();
+        const { kes } = await table();
+        kes.handlers.creationAction({ kind: 'finish' });
+        await until(() => kes.refused().length === 1, { label: 'the refusal' });
+        expect(kes.refused()).toEqual(['Pick a kit first']);
+        expect(await lines()).toEqual([]);
+        expect((await stored())._creating.done).toBeUndefined();
+      });
+
+      it('a game with no lists still works out a kit\'s requirement as a stat changes', async () => {
+        const def = JSON.stringify({ format: 1, name: 'Hearth', stats: HEARTH.stats, creation: { on: true, kits: [{ id: 'potions', name: 'POTIONS', items: [{ name: 'Mortar', qty: 1 }], who: 'needs', requires: '@int >= 13' }] } });
+        await run(db, 'UPDATE custom_systems SET draft = ?, published = ? WHERE id = ?', [def, def, ID]);
+        await new Promise((resolve) => runtime.load(db, resolve));
+        await run(db, 'UPDATE character_sheets SET data = ? WHERE username = ?', [JSON.stringify({ name: 'Kestrel', _creating: {} }), 'kes']);
+        const { kes } = await table();
+        kes.handlers.updateSheetField({ fieldId: 'int', value: 4 });
+        await until(async () => (await stored()).int === 4, { label: 'low' });
+        expect((await stored())[WORKED_KEY].kitsUnmet).toEqual(['potions']);
+        kes.handlers.updateSheetField({ fieldId: 'int', value: 14 });
+        await until(async () => (await stored()).int === 14, { label: 'high' });
+        expect((await stored())[WORKED_KEY].kitsUnmet).toEqual([]);
+      });
+
+      it('a game with neither writes nothing of it', async () => {
+        const def = JSON.stringify({ format: 1, name: 'Hearth', stats: HEARTH.stats, creation: { on: true, kits: [{ id: 'all', name: 'ALL', items: [{ name: 'Mortar', qty: 1 }], who: 'all' }] } });
+        await run(db, 'UPDATE custom_systems SET draft = ?, published = ? WHERE id = ?', [def, def, ID]);
+        await new Promise((resolve) => runtime.load(db, resolve));
+        const { kes } = await table();
+        kes.handlers.updateSheetField({ fieldId: 'int', value: 4 });
+        await until(async () => (await stored()).int === 4, { label: 'saved' });
+        expect((await stored())[WORKED_KEY]).toBeUndefined();
+      });
+
+      it('an upload gives no kits: taken as it is', async () => {
+        await turnOnKits();
+        const { kes } = await table();
+        kes.handlers.importSheetFields({ fields: { name: 'Wren' }, replace: true });
+        await until(async () => (await stored()).name === 'Wren', { label: 'the upload' });
+        expect(await lines()).toEqual([]);
       });
     });
 

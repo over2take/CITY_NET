@@ -126,7 +126,7 @@ const asks = (definition: Definition, id: string): string => {
   }
   const group = stepGroup(definition, id);
   if (group) return `${statCount(group.stats.length)}, ${howSet(definition, id)}`;
-  if (id === 'kits') return 'Named kits of items the character starts with. Players are asked for them next: until then, they aren\'t.';
+  if (id === 'kits') return 'Named kits of items the character starts with, in their inventory once they finish. With none for players to get, this step isn\'t asked.';
   if (id === 'money') return 'What they start with in the bank. It is set here next, a number, a roll, or typed in: until then, players aren\'t asked.';
   const c = stepList(definition, id);
   if (!c) return '';

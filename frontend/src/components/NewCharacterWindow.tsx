@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { TerminalWindow, type TerminalAction, type TerminalFolder } from './TerminalWindow';
 import { BracketPortrait } from './BracketPortrait';
 import { BuyNumbers } from './BuyNumbers';
+import { KitsStep } from './KitsStep';
 import { PlaceNumbers } from './PlaceNumbers';
 import { ChoicesSection } from './ChoicesSection';
 import type { Socket } from 'socket.io-client';
@@ -176,6 +177,14 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
               ))}
             </div>
           </div>
+        </div>
+      );
+    }
+    if (open === 'kits') {
+      return (
+        <div style={page}>
+          <KitsStep template={template} data={data} onPick={(kit) => socket?.emit('creationAction', { kind: 'kit', kit })} />
+          {refused && <p role="alert" style={{ ...why, color: 'var(--warning)', opacity: 1 }}>{refused}</p>}
         </div>
       );
     }
