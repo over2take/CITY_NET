@@ -131,6 +131,96 @@ describe('the page', () => {
   });
 });
 
+describe('kits (7c4a)', () => {
+  const onKits = async (start: Definition = HEARTH) => {
+    const opened = open(start);
+    await userEvent.click(step('KITS').getByRole('button', { name: 'KITS' }));
+    return opened;
+  };
+  const kits = (d: Definition) => (d.creation as { kits?: Record<string, unknown>[] } | undefined)?.kits;
+  const KITTED = { ...HEARTH, creation: { kits: [{ id: 'traveler', name: 'TRAVELER', items: [{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }], who: 'pick' }] } } as unknown as Definition;
+
+  it('only on the KITS step; none to start, saying so', async () => {
+    open();
+    expect(screen.queryByRole('button', { name: '+ KIT' })).toBeNull();
+    cleanup();
+    await onKits();
+    expect(screen.getByText('No kits yet.')).toBeTruthy();
+  });
+
+  it('+ KIT makes one a player may pick; what it has is shown', async () => {
+    const { last } = await onKits();
+    await userEvent.click(screen.getByRole('button', { name: '+ KIT' }));
+    expect(kits(last())).toEqual([{ id: 'new_kit', name: 'NEW KIT', items: [], who: 'pick' }]);
+    expect(screen.queryByText('No kits yet.')).toBeNull();
+    expect((screen.getByRole('combobox', { name: 'NEW KIT goes to' }) as HTMLSelectElement).value).toBe('pick');
+    await userEvent.click(screen.getByRole('button', { name: '+ KIT' }));
+    expect(kits(last())).toHaveLength(2);
+  });
+
+  it('shows a kit as it was left, items as they are typed', async () => {
+    await onKits(KITTED);
+    expect((screen.getByRole('textbox', { name: 'TRAVELER items' }) as HTMLInputElement).value).toBe('Rope, 3x Rations');
+    expect((screen.getByRole('textbox', { name: 'Kit name' }) as HTMLInputElement).value).toBe('TRAVELER');
+  });
+
+  it('takes a name and items as they are typed, a comma typed through', async () => {
+    const { last } = await onKits(KITTED);
+    const items = screen.getByRole('textbox', { name: 'TRAVELER items' }) as HTMLInputElement;
+    await userEvent.clear(items);
+    await userEvent.type(items, 'Knife, 2x Torch, ');
+    expect(items.value).toBe('Knife, 2x Torch, ');
+    expect(kits(last())?.[0].items).toEqual([{ name: 'Knife', qty: 1 }, { name: 'Torch', qty: 2 }]);
+    const name = screen.getByRole('textbox', { name: 'Kit name' });
+    await userEvent.clear(name);
+    expect(name.getAttribute('aria-invalid')).toBe('true');
+    await userEvent.type(name, 'POTION MAKER');
+    expect(kits(last())?.[0].name).toBe('POTION MAKER');
+    expect(screen.getByRole('group', { name: 'Kit POTION MAKER' })).toBeTruthy();
+  });
+
+  it('says who each goes to, and what that means', async () => {
+    const { last } = await onKits(KITTED);
+    const goes = screen.getByRole('combobox', { name: 'TRAVELER goes to' });
+    expect(screen.getByText(/one kit per character/)).toBeTruthy();
+    await userEvent.selectOptions(goes, 'all');
+    expect(kits(last())?.[0].who).toBe('all');
+    expect(screen.getByText('Every new character starts with this.')).toBeTruthy();
+    await userEvent.selectOptions(goes, 'gm');
+    expect(screen.getByText(/It is yours to hand out/)).toBeTruthy();
+  });
+
+  it('ONLY IF has the same box as a list\'s requirement, gone again with it', async () => {
+    const { last } = await onKits(KITTED);
+    expect(screen.queryByRole('textbox', { name: 'ONLY IF' })).toBeNull();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'TRAVELER goes to' }), 'needs');
+    const box = screen.getByRole('textbox', { name: 'ONLY IF' });
+    expect(kits(last())?.[0].requires).toBe('');
+    await userEvent.type(box, '@grit > 1');
+    expect(kits(last())?.[0].requires).toBe('@grit > 1');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'TRAVELER goes to' }), 'pick');
+    expect(screen.queryByRole('textbox', { name: 'ONLY IF' })).toBeNull();
+    expect('requires' in (kits(last())?.[0] ?? {})).toBe(false);
+  });
+
+  it('asks before deleting one; KEEP keeps it; gone leaves nothing behind', async () => {
+    const { last, edits } = await onKits(KITTED);
+    await userEvent.click(screen.getByRole('button', { name: 'Delete TRAVELER' }));
+    expect(edits).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: 'KEEP' }));
+    expect(screen.queryByRole('button', { name: 'DELETE' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Delete TRAVELER' }));
+    await userEvent.click(screen.getByRole('button', { name: 'DELETE' }));
+    expect(last()).toEqual(HEARTH);
+    expect(screen.getByText('No kits yet.')).toBeTruthy();
+  });
+
+  it('has a "?"', async () => {
+    await onKits();
+    expect(screen.getByRole('note', { name: HINTS['creation.kits'] })).toBeTruthy();
+  });
+});
+
 describe('the stats, one way for all or group by group (7c3a)', () => {
   const GROUPS = {
     ...HEARTH,

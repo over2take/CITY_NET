@@ -537,6 +537,78 @@ describe('a point buy (7c3d)', () => {
   });
 });
 
+describe('kits (7c4a)', () => {
+  const KIT = { id: 'traveler', name: 'TRAVELER', items: [{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }], who: 'pick' };
+  const STATS = [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'wits', label: 'Wits' }] }];
+  const issues = (kits, more = {}) => checkDefinition({ format: 1, name: 'K', stats: STATS, creation: { kits }, ...more }).problems.map((p) => `${p.where}: ${p.message}`);
+  const one = (patch) => issues([{ ...KIT, ...patch }]);
+
+  it('take what the page writes, each way of going', () => {
+    expect(issues([KIT])).toEqual([]);
+    expect(issues([])).toEqual([]);
+    expect(one({ who: 'all' })).toEqual([]);
+    expect(one({ who: 'gm' })).toEqual([]);
+    expect(one({ who: 'needs', requires: '@wits >= 12' })).toEqual([]);
+  });
+
+  it('say what is wrong with the list', () => {
+    expect(issues('kits')).toEqual(['creation, kits: Must be a list of kits']);
+    expect(issues([3])).toEqual(['creation, kit 1: Must be a kit']);
+    expect(issues(Array.from({ length: LIMITS.kits + 1 }, (_, i) => ({ ...KIT, id: `k${i}` })))).toEqual([`creation, kits: At most ${LIMITS.kits} kits`]);
+    expect(issues([KIT, KIT])).toEqual(['creation, kit TRAVELER: Another kit has this id already']);
+    // A list far too long is said once, not kit by kit.
+    expect(issues(Array(LIMITS.kits + 10).fill(KIT))).toHaveLength(LIMITS.kits);
+  });
+
+  it('say what is wrong with a kit', () => {
+    expect(one({ extra: 1 })).toEqual(['creation, kit TRAVELER, extra: Not part of a kit']);
+    expect(one({ id: 'Bad Id' })).toEqual(['creation, kit TRAVELER: Ids use lowercase letters, digits and _, starting with a letter']);
+    expect(one({ id: 3 })).toEqual(['creation, kit TRAVELER: Ids use lowercase letters, digits and _, starting with a letter']);
+    expect(one({ name: '  ' })).toEqual(['creation, kit 1: Needs a name']);
+    expect(one({ name: 7 })).toEqual(['creation, kit 1: Needs a name']);
+    expect(one({ name: 'x'.repeat(LIMITS.kitName + 1) })[0]).toContain(`Longer than ${LIMITS.kitName} characters`);
+    expect(one({ name: 'x'.repeat(LIMITS.kitName) })).toEqual([]);
+    expect(one({ who: 'nobody' })).toEqual(['creation, kit TRAVELER, who: Must be all, pick, needs or gm']);
+  });
+
+  it('a requirement goes with ONLY IF, and reads', () => {
+    expect(one({ who: 'needs' })).toEqual(['creation, kit TRAVELER, requires: ONLY IF needs a requirement']);
+    expect(one({ who: 'needs', requires: '  ' })).toEqual(['creation, kit TRAVELER, requires: ONLY IF needs a requirement']);
+    expect(one({ who: 'pick', requires: '@wits' })).toEqual(['creation, kit TRAVELER, requires: Only a kit going ONLY IF has a requirement']);
+    expect(one({ who: 'needs', requires: '@wits >=' })[0]).toMatch(/^creation, kit TRAVELER, requires: /);
+    expect(issues([{ ...KIT, who: 'needs', requires: 'bonus(@wits) > 1' }], { lookups: { bonus: [[0, 1]] } }).filter((p) => p.startsWith('creation'))).toEqual([]);
+    expect(one({ who: 'needs', requires: 'bonus(@wits) > 1' }).length).toBeGreaterThan(0);
+  });
+
+  it('has() in a requirement names something real, as a list\'s does', () => {
+    expect(one({ who: 'needs', requires: 'has(nope)' }).some((p) => p.includes('has(nope): no option or feature is called that'))).toBe(true);
+  });
+
+  it('say what is wrong with its items', () => {
+    expect(one({ items: 'Rope' })).toEqual(['creation, kit TRAVELER, items: Must be a list of items']);
+    expect(one({ items: [] })).toEqual(['creation, kit TRAVELER, items: Has nothing in it']);
+    expect(one({ items: Array(LIMITS.kitItems + 1).fill({ name: 'Rope', qty: 1 }) })).toEqual([`creation, kit TRAVELER, items: At most ${LIMITS.kitItems} items`]);
+    expect(one({ items: ['Rope'] })).toEqual(['creation, kit TRAVELER, items: Each must be an item']);
+    expect(one({ items: Array(LIMITS.kitItems + 10).fill('Rope') })).toHaveLength(LIMITS.kitItems + 1);
+    expect(one({ items: [{ name: 'Rope', qty: 1, price: 3 }] })).toEqual(['creation, kit TRAVELER, items, price: Not part of an item']);
+    expect(one({ items: [{ name: ' ', qty: 1 }] })).toEqual(['creation, kit TRAVELER, items: Each item needs a name']);
+    expect(one({ items: [{ name: 'x'.repeat(LIMITS.itemName + 1), qty: 1 }] })[0]).toContain(`longer than ${LIMITS.itemName} characters`);
+    expect(one({ items: [{ name: 'x'.repeat(LIMITS.itemName), qty: 1 }] })).toEqual([]);
+    for (const qty of [0, 100, 1.5, '3']) expect(one({ items: [{ name: 'Rope', qty }] }), String(qty)).toEqual([`creation, kit TRAVELER, items: Rope: from 1 to ${LIMITS.itemQty} of it`]);
+    expect(one({ items: [{ name: 'Rope', qty: 99 }] })).toEqual([]);
+  });
+
+  it('the system file carries them, unchanged', () => {
+    const creation = { on: true, kits: [KIT, { ...KIT, id: 'mage_kit', who: 'needs', requires: '@wits >= 12' }] };
+    const read = citysys.readFile(JSON.stringify(citysys.buildFile({ definition: { format: 1, name: 'K', stats: STATS, creation }, version: 1, origin: 'sys_abcdefabcdefabcd' })));
+    expect([read.file.definition.creation, read.problems]).toEqual([creation, []]);
+  });
+
+  it('players aren\'t asked yet', () => {
+    expect(stepsAsked({ format: 1, name: 'K', creation: { on: true, kits: [KIT] } })).not.toContain('kits');
+  });
+});
+
 describe('the checks', () => {
   it('take what the page writes', () => {
     expect(problems({ on: true, order: ['who', 'stats', 'list:classes', 'kits', 'money'], off: ['money', 'list:classes'] })).toEqual([]);

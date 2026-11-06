@@ -12,6 +12,12 @@
 //       'stats:skills': { way: 'roll', each: '4d6 drop lowest', placed: 'arrange' },   // 7c3c; or 'order'
 //       'stats:traits': { way: 'buy', points: 20, lowest: 8, highest: 15, costs: { 8: 0, 9: 1 } },   // 7c3d; no costs, 1 for 1
 //     },
+//     kits: [{                                // 7c4a: what a character can start with
+//       id: 'traveler', name: 'TRAVELER',
+//       items: [{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }],
+//       who: 'pick',                          // all: everyone; pick: a player may; needs: only if; gm: the GM gives it
+//       // requires: '@wits >= 12',           // with who: 'needs', the same box as a list's
+//     }],
 //   }
 //
 // A step is read from what the system has, never stored: WHO THEY ARE always; THE STATS with stats to
@@ -44,14 +50,19 @@
 const { partOn } = require('./parts');
 const { choicesOf, pickedOf } = require('./choices');
 const { fieldsOf } = require('./sheet');
+const { parse } = require('./expression');
 const { cryptoRng } = require('../utils/random');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
 
 /** How many ids `order` and `off` may hold: every list a system can have, and room. */
-const LIMITS = { steps: 40, numbers: 40, rollDice: 20, rollSides: 100, rollAdd: 1000, buyRange: 100, buyPoints: 100000 };
-const KEYS = new Set(['on', 'order', 'off', 'statsBy', 'ways']);
+const LIMITS = { steps: 40, numbers: 40, rollDice: 20, rollSides: 100, rollAdd: 1000, buyRange: 100, buyPoints: 100000, kits: 40, kitName: 60, kitItems: 40, itemName: 80, itemQty: 99 };
+const KEYS = new Set(['on', 'order', 'off', 'statsBy', 'ways', 'kits']);
+const KIT_KEYS = new Set(['id', 'name', 'items', 'who', 'requires']);
+const ITEM_KEYS = new Set(['name', 'qty']);
+const KIT_WHO = ['all', 'pick', 'needs', 'gm'];
+const KIT_ID = /^[a-z][a-z0-9_]{0,63}$/;
 const STATS_STEP = /^stats(?::[a-z][a-z0-9_]{0,63})?$/;
 const WAY_KEYS = { typed: new Set(['way']), array: new Set(['way', 'numbers']), roll: new Set(['way', 'each', 'placed']), buy: new Set(['way', 'points', 'lowest', 'highest', 'costs']) };
 const PLACED = ['order', 'arrange'];
@@ -462,6 +473,43 @@ const checkWays = (definition, ways, problems) => {
   }
 };
 
+/** A definition's kits checked (7c4a): each named, with items in it, and saying who gets it. */
+const checkKits = (definition, kits, problems) => {
+  if (kits === undefined) return;
+  if (!Array.isArray(kits)) { problems.push({ where: 'creation, kits', message: 'Must be a list of kits' }); return; }
+  if (kits.length > LIMITS.kits) problems.push({ where: 'creation, kits', message: `At most ${LIMITS.kits} kits` });
+  const tables = new Set(isPlainObject(definition.lookups) ? Object.keys(definition.lookups) : []);
+  const seen = new Set();
+  kits.slice(0, LIMITS.kits).forEach((kit, i) => {
+    const named = isPlainObject(kit) && typeof kit.name === 'string' && kit.name.trim() ? kit.name.trim() : `${i + 1}`;
+    const where = `creation, kit ${named}`;
+    if (!isPlainObject(kit)) { problems.push({ where, message: 'Must be a kit' }); return; }
+    for (const key of Object.keys(kit)) if (!KIT_KEYS.has(key)) problems.push({ where: `${where}, ${key}`, message: 'Not part of a kit' });
+    if (typeof kit.id !== 'string' || !KIT_ID.test(kit.id)) problems.push({ where, message: 'Ids use lowercase letters, digits and _, starting with a letter' });
+    else if (seen.has(kit.id)) problems.push({ where, message: 'Another kit has this id already' });
+    else seen.add(kit.id);
+    if (typeof kit.name !== 'string' || !kit.name.trim()) problems.push({ where, message: 'Needs a name' });
+    else if (kit.name.length > LIMITS.kitName) problems.push({ where, message: `Longer than ${LIMITS.kitName} characters` });
+    if (!KIT_WHO.includes(kit.who)) problems.push({ where: `${where}, who`, message: 'Must be all, pick, needs or gm' });
+    if (kit.who === 'needs') {
+      if (typeof kit.requires !== 'string' || !kit.requires.trim()) problems.push({ where: `${where}, requires`, message: 'ONLY IF needs a requirement' });
+      else {
+        try { parse(kit.requires, (name) => tables.has(name)); } catch (e) { problems.push({ where: `${where}, requires`, message: e.message }); }
+      }
+    } else if (kit.requires !== undefined) problems.push({ where: `${where}, requires`, message: 'Only a kit going ONLY IF has a requirement' });
+    if (!Array.isArray(kit.items)) { problems.push({ where: `${where}, items`, message: 'Must be a list of items' }); return; }
+    if (!kit.items.length) problems.push({ where: `${where}, items`, message: 'Has nothing in it' });
+    if (kit.items.length > LIMITS.kitItems) problems.push({ where: `${where}, items`, message: `At most ${LIMITS.kitItems} items` });
+    kit.items.slice(0, LIMITS.kitItems).forEach((item) => {
+      if (!isPlainObject(item)) { problems.push({ where: `${where}, items`, message: 'Each must be an item' }); return; }
+      for (const key of Object.keys(item)) if (!ITEM_KEYS.has(key)) problems.push({ where: `${where}, items, ${key}`, message: 'Not part of an item' });
+      if (typeof item.name !== 'string' || !item.name.trim()) problems.push({ where: `${where}, items`, message: 'Each item needs a name' });
+      else if (item.name.length > LIMITS.itemName) problems.push({ where: `${where}, items`, message: `${item.name.slice(0, 20)}…: longer than ${LIMITS.itemName} characters` });
+      if (!Number.isInteger(item.qty) || item.qty < 1 || item.qty > LIMITS.itemQty) problems.push({ where: `${where}, items`, message: `${typeof item.name === 'string' ? item.name : 'An item'}: from 1 to ${LIMITS.itemQty} of it` });
+    });
+  });
+};
+
 /** A definition's `creation` checked, its problems added to `problems`. */
 const checkCreation = (definition, problems) => {
   const c = definition.creation;
@@ -479,6 +527,7 @@ const checkCreation = (definition, problems) => {
   if (list(c.off).includes('who')) problems.push({ where: 'creation, off', message: 'WHO THEY ARE is always asked: a character needs a name' });
   if (c.statsBy !== undefined && c.statsBy !== 'group') problems.push({ where: 'creation, statsBy', message: 'Must say group, or nothing for one way for all' });
   checkWays(definition, c.ways, problems);
+  checkKits(definition, c.kits, problems);
 };
 
 module.exports = { LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, stepsAsked, creationShown, creatingNow, creationAction, withUpload, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine };

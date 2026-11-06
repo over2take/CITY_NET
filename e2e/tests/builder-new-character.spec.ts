@@ -165,6 +165,45 @@ test('a point buy: points, range and costs set, what would strand a player said,
   await expect(box('Cost of 14')).toHaveValue('8');
 });
 
+test('kits made, each saying who gets it, the server taking them, kept after a reload', async ({ page, request }, info) => {
+  const name = `Packing Hearth ${info.retry + 1}`;
+  const token = await gmToken(request);
+  const { id } = await asGm(request, token, 'post', '/api/systems', { definition: definition(name) });
+  await signInAsGm(page);
+  await openPage(page, name);
+  await page.getByRole('button', { name: 'KITS', exact: true }).click();
+  await expect(page.getByText('No kits yet.')).toBeVisible();
+
+  // One a player may pick.
+  await page.getByRole('button', { name: '+ KIT' }).click();
+  await page.getByRole('textbox', { name: 'Kit name' }).fill('TRAVELER');
+  await page.getByRole('textbox', { name: 'TRAVELER items' }).fill('Rope, Lantern, 3x Rations');
+
+  // One only some may, the same box as a list's requirement.
+  await page.getByRole('button', { name: '+ KIT' }).click();
+  const second = page.getByRole('group', { name: 'Kit NEW KIT' });
+  await second.getByRole('combobox', { name: 'NEW KIT goes to' }).selectOption('needs');
+  await second.getByRole('textbox', { name: 'ONLY IF' }).fill('@grit >= 12');
+  await second.getByRole('textbox', { name: 'NEW KIT items' }).fill('Mortar');
+  await second.getByRole('textbox', { name: 'Kit name' }).fill('POTION MAKER');
+
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  const saved = await asGm(request, token, 'get', `/api/systems/${id}`);
+  expect(saved.problems).toEqual([]);
+  expect(saved.draft.creation.kits).toEqual([
+    { id: 'new_kit', name: 'TRAVELER', items: [{ name: 'Rope', qty: 1 }, { name: 'Lantern', qty: 1 }, { name: 'Rations', qty: 3 }], who: 'pick' },
+    { id: expect.any(String), name: 'POTION MAKER', items: [{ name: 'Mortar', qty: 1 }], who: 'needs', requires: '@grit >= 12' },
+  ]);
+
+  await page.reload();
+  await signInAsGm(page);
+  await openPage(page, name);
+  await page.getByRole('button', { name: 'KITS', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'TRAVELER items' })).toHaveValue('Rope, Lantern, 3x Rations');
+  await expect(page.getByRole('combobox', { name: 'POTION MAKER goes to' })).toHaveValue('needs');
+  await expect(page.getByRole('textbox', { name: 'ONLY IF' })).toHaveValue('@grit >= 12');
+});
+
 test('the steps of a new character, ordered and switched, kept after a reload', async ({ page, request }, info) => {
   const name = `Stepping Hearth ${info.retry + 1}`;
   const token = await gmToken(request);
