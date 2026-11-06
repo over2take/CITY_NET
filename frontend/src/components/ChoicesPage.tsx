@@ -8,10 +8,14 @@ import {
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
 import { FeaturesEditor } from './FeaturesEditor';
+import { MoneyRow } from './MoneyPanel';
 import { ChoicesImport } from './ChoicesImport';
 import { ToggleSwitch } from './ToggleSwitch';
 import { useFormulaBox } from '../hooks/useFormulaBox';
 import { restingOf, DIE_CHOICES } from '../sheets/recovery';
+import { moneyRows, parseKitItems } from '../sheets/newCharacter';
+import { kitItemsText } from '../sheets/newCharacterFlow';
+import { partIsOn } from '../sheets/wordsFeatures';
 
 // The builder's CHOICES page (7a2b1; approved mockup docs/mockups/builder-choices.html, 2026-10-27):
 // the lists a character picks from (classes, backgrounds, feats), named in the game's own words. The
@@ -256,6 +260,34 @@ function DiePicker({ die, onChange }: { die?: number; onChange: (die: number | n
   );
 }
 
+/** What an option gives (7c4e): items as a kit's, and, with the bank on, money per currency. */
+function OptionGivesPanel({ list, option, definition, edit }: Pick<Props, 'definition' | 'edit'> & { list: ChoiceList; option: ChoiceOption }) {
+  // The items as typed: read into items as they are typed, so "Rope, " can be typed through.
+  const [text, setText] = useState(kitItemsText(option.gives?.items ?? []));
+  const set = (gives: ChoiceOption['gives']) => edit(withOption(definition, list.id, option.id, { gives }));
+  const id = `choice-${list.id}-${option.id}-gives`;
+  return (
+    <>
+      <div style={grid}>
+        <FieldName beside htmlFor={id} hint={HINTS['choices.gives']} style={small}>GIVES</FieldName>
+        <input id={id} type="text" value={text} placeholder="NOTHING · Crowbar, 3x Rations" style={input}
+          onChange={(e) => { setText(e.target.value); set({ ...option.gives, items: parseKitItems(e.target.value) }); }} />
+      </div>
+      <p style={{ ...why, fontSize: 11, opacity: 0.7 }}>What a new character holding this starts with, given as they finish. Players don&apos;t get these yet: that comes next.</p>
+      {partIsOn(definition, 'bank') && moneyRows(definition).map((r) => {
+        const one = option.gives?.money?.[r.id] ?? null;
+        return (
+          <MoneyRow key={r.id} id={r.id} name={r.name} currency={r.currency} set={one} typed={false} hint={HINTS['choices.giveMoney']}
+            onSet={(next) => {
+              const rest = Object.fromEntries(Object.entries(option.gives?.money ?? {}).filter(([k]) => k !== r.id));
+              set({ ...option.gives, money: next && next.how !== 'typed' ? { ...rest, [r.id]: next } : rest });
+            }} />
+        );
+      })}
+    </>
+  );
+}
+
 function OptionPanel({ list, option, definition, edit, api }: Props & { list: ChoiceList; option: ChoiceOption }) {
   const set = (patch: Parameters<typeof withOption>[3]) => edit(withOption(definition, list.id, option.id, patch));
   const features = (option.features ?? []).filter((f): f is { id: string; label?: string } => !!f && typeof f === 'object' && typeof (f as { id?: unknown }).id === 'string');
@@ -290,6 +322,7 @@ function OptionPanel({ list, option, definition, edit, api }: Props & { list: Ch
         Its level reads as {levelNames(list).options[option.id]} in formulas: 0 for a character without it.
         {option.die !== undefined && (recovery ? ` Its d${option.die} is what its ${(recovery.name.trim() || 'recovery dice').toLowerCase()} roll at a rest.` : ` Turn on RECOVERY DICE on RESTS to spend its d${option.die} at a rest.`)}
       </p>}
+      <OptionGivesPanel list={list} option={option} definition={definition} edit={edit} />
       <FeaturesEditor definition={definition} edit={edit} list={list} option={option} api={api} />
     </section>
   );

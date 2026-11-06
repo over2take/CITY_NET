@@ -234,6 +234,8 @@ export const HINTS = {
   'choices.options': 'What a character can pick from this list. A big list, like forty feats, is fine: up to a hundred.',
   'choices.optionName': 'What players see for this option: SOLDIER, DOCKHAND, TOUGH.',
   'choices.description': 'Words for the table about this option, shown when a player picks.',
+  'choices.gives': 'What a new character holding this starts with, typed like Crowbar, 3x Rations. Each is a line in their inventory when they finish. Works with the KITS step off. A choice of things is a feature opening a list, each of its options giving one.',
+  'choices.giveMoney': 'What a new character holding this starts with in this money, on top of the MONEY step: a number, or a roll like 3d6 * 10 they make when they pick it. Paid into the bank when they finish. Works with the MONEY step off.',
   'choices.requires': 'Optional. A formula that must not be 0 for this to be picked, like @int >= 13. One not met shows greyed with the reason; the GM can pick it anyway. The line under it says it in words and whether the sample character meets it; the formula button beside it writes common ones for you and lists the names it can read.',
   'choices.features': 'What this pick gives a character, each unlocking at a level in a levelled list. One feature can do several things at once, or be words for the table.',
   'choices.featureName': 'What players see for this feature on their sheet: GUARD STANCE, RALLY.',

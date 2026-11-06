@@ -7,6 +7,51 @@ import { signInAsGm, openBuilder, builderPage, gmToken, asGm } from './helpers';
 // modifier on Intellect and uses a long rest refills, and finds it all as they left it after a
 // reload; the server takes it with no problems.
 
+test('what an option gives: items and money set, then changed by a file, kept after a reload', async ({ page, request }, info) => {
+  const name = `Giving Hearth ${info.retry + 1}`;
+  const token = await gmToken(request);
+  const { id } = await asGm(request, token, 'post', '/api/systems', { definition: { format: 1, name, currencies: [{ id: 'gold', name: 'Gold' }, { id: 'honor', name: 'Honor' }],
+    choices: [{ id: 'bgs', one: 'Background', many: 'Backgrounds', options: [{ id: 'noble', label: 'Noble' }, { id: 'dock', label: 'Dockhand' }] }] } });
+  const openIt = async () => {
+    await signInAsGm(page);
+    await openBuilder(page);
+    const card = page.getByTestId(/^system-/).filter({ hasText: name.toUpperCase() });
+    if (!(await card.getByRole('button', { name: 'OPEN', exact: true }).isVisible())) await card.getByRole('button').first().click();
+    await card.getByRole('button', { name: 'OPEN', exact: true }).click();
+    await builderPage(page, 'CHOICES');
+  };
+  await openIt();
+
+  const noble = page.getByRole('region', { name: 'Noble option' });
+  await noble.getByRole('textbox', { name: 'GIVES' }).fill('Signet ring, 2x Fine clothes');
+  await noble.getByRole('group', { name: 'Gold starts with' }).getByRole('button', { name: 'A ROLL' }).click();
+  await noble.getByRole('textbox', { name: 'Gold roll' }).fill('lots');
+  await expect(noble.getByText(/^Reads like 3d6/)).toBeVisible();
+  await noble.getByRole('textbox', { name: 'Gold roll' }).fill('3d6 * 10');
+  await expect(noble.getByText(/^Reads like 3d6/)).toHaveCount(0);
+
+  // A file: Dockhand's gifts added, Noble's left as they are.
+  await page.getByRole('region', { name: 'Backgrounds list' }).getByRole('button', { name: 'IMPORT' }).click();
+  await page.getByRole('textbox', { name: 'Text to import' }).fill('[options]\nname, gives, money\nDockhand, Crowbar, Honor: 3');
+  await page.getByRole('button', { name: 'PREVIEW', exact: true }).click();
+  await expect(page.getByText(/GIVES nothing → Crowbar/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText(/STARTING MONEY nothing → Honor: 3 Honor/)).toBeVisible();
+  await page.getByRole('button', { name: /^APPLY/ }).click();
+
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  const saved = await asGm(request, token, 'get', `/api/systems/${id}`);
+  expect(saved.problems).toEqual([]);
+  expect(saved.draft.choices[0].options.map((o: { gives?: object }) => o.gives)).toEqual([
+    { items: [{ name: 'Signet ring', qty: 1 }, { name: 'Fine clothes', qty: 2 }], money: { gold: { how: 'roll', each: '3d6 * 10' } } },
+    { items: [{ name: 'Crowbar', qty: 1 }], money: { honor: { how: 'number', amount: 3 } } },
+  ]);
+
+  await page.reload();
+  await openIt();
+  await expect(noble.getByRole('textbox', { name: 'GIVES' })).toHaveValue('Signet ring, 2x Fine clothes');
+  await expect(noble.getByRole('textbox', { name: 'Gold roll' })).toHaveValue('3d6 * 10');
+});
+
 test('a class list made on CHOICES, with two options, kept after a reload', async ({ page, request }, info) => {
   const name = `Choosing Hearth ${info.retry + 1}`;
   const token = await gmToken(request);

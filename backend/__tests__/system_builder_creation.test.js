@@ -837,6 +837,44 @@ describe('starting money (7c4d)', () => {
   });
 });
 
+describe('what an option gives (7c4e)', () => {
+  const opt = (gives, more = {}) => ({ format: 1, name: 'G', currencies: [{ id: 'gold', name: 'Gold' }], choices: [{ id: 'bgs', one: 'Background', many: 'Backgrounds', options: [{ id: 'noble', label: 'Noble', gives }] }], ...more });
+  const issues = (gives, more) => checkDefinition(opt(gives, more)).problems.map((p) => `${p.where}: ${p.message}`);
+  const at = 'list bgs, option noble, gives';
+
+  it('the checks take it', () => {
+    expect(issues({ items: [{ name: 'Rope', qty: 3 }], money: { gold: { how: 'roll', each: '3d6 * 10' } } })).toEqual([]);
+    expect(issues({ money: { gold: { how: 'number', amount: 100 } } })).toEqual([]);
+    expect(issues({})).toEqual([]);
+    expect(issues({ items: [] })).toEqual([]);
+    // A currency since deleted is passed over, with no way to fix it left on the page.
+    expect(issues({ money: { gone: { how: 'number', amount: 1 } } })).toEqual([]);
+  });
+
+  it('and say what is wrong', () => {
+    expect(issues('lots')).toEqual([`${at}: Must say what it gives`]);
+    expect(issues({ kits: [] })).toEqual([`${at}, kits: Not part of what it gives`]);
+    expect(issues({ items: 'Rope' })).toEqual([`${at}, items: Must be a list of items`]);
+    expect(issues({ items: [{ name: 'Rope', qty: 0 }] })).toEqual([`${at}, items: Rope: from 1 to ${LIMITS.itemQty} of it`]);
+    expect(issues({ money: 'lots' })).toEqual([`${at}, money: Must say what each currency gets`]);
+    expect(issues({ money: { gold: { how: 'typed' } } })).toEqual([`${at}, money, gold: Must be number or roll`]);
+    expect(issues({ money: { gold: 'lots' } })).toEqual([`${at}, money, gold: Must be number or roll`]);
+    expect(issues({ money: { gold: { how: 'number', amount: -1 } } })).toEqual([`${at}, money, gold, amount: A whole amount, 0 or more`]);
+    expect(issues({ money: { gold: { how: 'roll', each: 'lots' } } })[0]).toMatch(/^list bgs, option noble, gives, money, gold, each: Reads like 3d6/);
+    expect(issues({ money: { gold: { how: 'number', amount: 1, each: '3d6' } } })).toEqual([`${at}, money, gold, each: Not part of this way`]);
+  });
+
+  it('an option giving nothing is no matter, nor one that isn\'t an option', () => {
+    expect(checkDefinition({ format: 1, name: 'G', choices: [{ id: 'bgs', one: 'B', many: 'Bs', options: [{ id: 'a', label: 'A' }] }] }).problems).toEqual([]);
+  });
+
+  it('the system file carries it, unchanged', () => {
+    const d = opt({ items: [{ name: 'Rope', qty: 3 }], money: { gold: { how: 'roll', each: '3d6 * 10' } } });
+    const read = citysys.readFile(JSON.stringify(citysys.buildFile({ definition: d, version: 1, origin: 'sys_abcdefabcdefabcd' })));
+    expect([read.file.definition.choices, read.problems]).toEqual([d.choices, []]);
+  });
+});
+
 describe('the checks', () => {
   it('take what the page writes', () => {
     expect(problems({ on: true, order: ['who', 'stats', 'list:classes', 'kits', 'money'], off: ['money', 'list:classes'] })).toEqual([]);
