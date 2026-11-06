@@ -8,7 +8,8 @@
 // MONEY come with 7c4, and the other ways to set stats with 7c3: here they are typed in.
 
 import type { SheetField, SheetTemplate } from './types';
-import { listShown, underFeature, WORKED_KEY, workedOn, type ChoiceListShown, type PickShown, type Worked } from './choicesShown';
+import { listShown, underFeature, WORKED_KEY, workedOn, type ChoiceListShown, type GiftsShown, type PickShown, type Worked } from './choicesShown';
+import { currenciesFor, formatAmount } from './currencies';
 
 type Obj = Record<string, unknown>;
 
@@ -38,7 +39,7 @@ export interface CreationShown {
 /** Where a sheet keeps its place in the flow (backend creation.js CREATING_KEY). */
 export const CREATING_KEY = '_creating';
 
-interface Place { at?: string; done?: boolean; uploaded?: boolean; rolled?: Record<string, unknown>; kit?: string; money?: Record<string, unknown> }
+interface Place { at?: string; done?: boolean; uploaded?: boolean; rolled?: Record<string, unknown>; kit?: string; money?: Record<string, unknown>; gifts?: Record<string, unknown> }
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 const placeOf = (data: Obj | null | undefined): Place | null => {
   const place = data?.[CREATING_KEY];
@@ -144,6 +145,26 @@ export const moneyHeldOn = (data: Obj | null | undefined, id: string): number | 
   return Number.isInteger(amount) ? amount as number : null;
 };
 
+/** An amount as a player reads it: in the currency's own way, or the app's money as a plain number. */
+export const moneyWords = (system: string | null | undefined, id: string, amount: number): string => {
+  const currency = currenciesFor(system).find((c) => c.id === id);
+  return currency ? formatAmount(currency, amount) : String(amount);
+};
+
+/** What an option's money rolled so far on this sheet (backend creation.js giftRolled), or null. */
+export const giftRolledOn = (data: Obj | null | undefined, option: string, id: string): number | null => {
+  const gifts = placeOf(data)?.gifts;
+  const rolled = isObject(gifts) ? gifts[option] : null;
+  const amount = isObject(rolled) ? rolled[id] : null;
+  return Number.isInteger(amount) ? amount as number : null;
+};
+
+/** What an option gives, in a line: "Crowbar, 3x Rations · Gold: 3d6 * 10 · Honor: 5 Honor". */
+export const giftWords = (gives: GiftsShown, system: string | null | undefined): string => [
+  ...(gives.items?.length ? [kitItemsText(gives.items)] : []),
+  ...(gives.money ?? []).map((m) => `${m.name}: ${m.how === 'roll' ? m.each : moneyWords(system, m.id, m.amount ?? 0)}`),
+].join(' · ');
+
 /** A kit's items as they read: "Rope, 3x Rations". */
 export const kitItemsText = (items: KitItem[]): string => items.map((i) => (i.qty === 1 ? i.name : `${i.qty}x ${i.name}`)).join(', ');
 
@@ -240,15 +261,21 @@ const owesPick = (p: PickShown, lists: ChoiceListShown[], worked: Worked): boole
   return under.picks.some((q) => owesPick(q, lists, worked));
 });
 
+/** A pick whose money is still to be rolled (7c4e), or one under it, however deep. */
+const owesGiftRoll = (p: PickShown, lists: ChoiceListShown[], worked: Worked, data: Obj | null | undefined): boolean => (
+  (p.option.gives?.money ?? []).some((m) => m.how === 'roll' && giftRolledOn(data, p.option.id, m.id) === null)
+  || p.unlocked.some((f) => !!underFeature(f, lists, worked)?.picks.some((q) => owesGiftRoll(q, lists, worked, data)))
+);
+
 /**
  * Whether a list's step is answered: as many picks as it asks for, or all the requirements let them
- * make, and every feature those unlock answered too. A list of ANY needs none.
+ * make, every feature those unlock answered too, and the money they give rolled. A list of ANY needs none.
  */
 const listAnswered = (template: SheetTemplate, list: ChoiceListShown, data: Obj | null | undefined): boolean => {
   const worked = workedOn(data);
   const view = listShown(list, worked);
   if (list.picks !== 'any' && view.picks.length < list.picks && view.open.some((o) => !o.unmet)) return false;
-  return !view.picks.some((p) => owesPick(p, template.choices ?? [], worked));
+  return !view.picks.some((p) => owesPick(p, template.choices ?? [], worked) || owesGiftRoll(p, template.choices ?? [], worked, data));
 };
 
 /** Whether NEXT can be pressed. A step this code doesn't know has nothing to answer. */

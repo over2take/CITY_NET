@@ -24,7 +24,10 @@ export interface FeatureShown {
   opensCount?: number;
 }
 /** An option as the sheet draws it; on a list with a table, the roll that gives it (7a5b2). */
-export interface OptionShown { id: string; label: string; description?: string; needs?: string; roll?: string; features: FeatureShown[] }
+export interface OptionShown { id: string; label: string; description?: string; needs?: string; roll?: string; gives?: GiftsShown; features: FeatureShown[] }
+/** What holding an option gives a new character (7c4e), as the server says it: money only with the bank on. */
+export interface GiftsShown { items?: { name: string; qty: number }[]; money?: GiftMoneyShown[] }
+export interface GiftMoneyShown { id: string; name: string; how: 'number' | 'roll'; amount?: number; each?: string }
 /** How a list is picked (backend choices.js PICKED). */
 export type Picked = 'own' | 'features' | 'both' | 'everyone';
 /** How players pick from a list with a table (backend choices.js PLAYERS). */

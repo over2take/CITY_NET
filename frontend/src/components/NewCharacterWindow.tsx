@@ -264,7 +264,8 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
         <div style={page}>
           <p style={why}>Pick from these. One you don&apos;t meet is off, saying what it needs.</p>
           <ChoicesSection lists={template.choices ?? []} data={data ?? {}} readOnly={false} only={listId} takeBack
-            onChoices={(action) => socket?.emit('choicesAction', action)} refused={refused} />
+            onChoices={(action) => socket?.emit('choicesAction', action)} refused={refused}
+            gifts={{ system: sheet.system, onRoll: (option, id) => socket?.emit('creationAction', { kind: 'giftRoll', option, id }) }} />
         </div>
       );
     }

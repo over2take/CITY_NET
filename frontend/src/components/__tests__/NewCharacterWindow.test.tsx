@@ -496,6 +496,80 @@ describe('the steps', () => {
     });
   });
 
+  describe('what an option gives (7c4e)', () => {
+    const CHOICES = [
+      { id: 'bgs', one: 'Background', many: 'Backgrounds', picks: 1, again: false, levelled: false, table: 'd6', options: [
+        { id: 'noble', label: 'Noble', roll: '1-3', gives: { items: [{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }], money: [{ id: 'main', name: 'Money', how: 'roll', each: '3d6 * 10' }] }, features: [{ id: 'armed', label: 'Armed', opens: 'weapons' }] },
+        { id: 'scribe', label: 'Scribe', roll: '4', needs: 'GRIT >= 13', gives: { money: [{ id: 'main', name: 'Money', how: 'number', amount: 25 }] }, features: [] },
+        { id: 'plain', label: 'Plain', roll: '5-6', features: [] },
+      ] },
+      { id: 'weapons', one: 'Weapon', many: 'Weapons', picks: 1, again: false, levelled: false, picked: 'features', options: [{ id: 'sword', label: 'Sword', gives: { money: [{ id: 'main', name: 'Money', how: 'roll', each: '1d6' }] }, features: [] }] },
+    ];
+    const opened = async (data: object) => {
+      registerCustomTemplate({ ...render_(undefined, { steps: ['who', 'list:bgs'], stats: [] }), choices: CHOICES } as unknown as CustomRender);
+      vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })));
+      const socket = makeSocket({ name: 'Wren', _creating: { at: 'list:bgs' }, ...data });
+      render(<NewCharacterWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={socket as never} userName="WREN" authToken="tok" onLeave={vi.fn()} onDone={vi.fn()} />);
+      await screen.findByRole('tablist', { name: 'Folders' });
+      return socket;
+    };
+    const NOBLE = { list: 'bgs', option: 'noble' };
+
+    it('beside each option before picking: what it gives, what it needs as well, and nothing for one giving nothing', async () => {
+      await opened({ _worked: answers({ unmet: ['scribe'] }) });
+      const offer = within(screen.getByRole('group', { name: 'Pick a Background' }));
+      expect(offer.getByText('GIVES Rope, 3x Rations · Money: 3d6 * 10')).toBeTruthy();
+      expect(offer.getByText('GIVES Money: 25')).toBeTruthy();
+      expect(offer.getByText('NEEDS GRIT >= 13')).toBeTruthy();
+      expect(offer.getAllByText(/^GIVES/)).toHaveLength(2);
+      expect(screen.queryByText('GIVEN AS YOU FINISH')).toBeNull();
+    });
+
+    it('picked: its roll is asked of the server, holding NEXT; rolled, it says what came up with no way to roll again', async () => {
+      const opens = [{ feature: 'armed', list: 'weapons', count: 1, used: 1 }];
+      const picks = [NOBLE, { list: 'weapons', option: 'sword', from: 'armed' }];
+      const socket = await opened({ _worked: answers({ picks, opens }) });
+      const held = within(screen.getByRole('group', { name: 'What Noble gives' }));
+      expect(held.getByText('GIVEN AS YOU FINISH')).toBeTruthy();
+      expect(held.getByText('Rope, 3x Rations')).toBeTruthy();
+      expect(held.getByText('Money: 3d6 * 10')).toBeTruthy();
+      expect(button('FINISH').disabled).toBe(true);
+      await userEvent.click(held.getByRole('button', { name: 'Roll Money for Noble' }));
+      expect(socket.said('creationAction')).toContainEqual({ kind: 'giftRoll', option: 'noble', id: 'main' });
+      // One under a feature has its own.
+      await userEvent.click(within(screen.getByRole('group', { name: 'What Sword gives' })).getByRole('button', { name: 'Roll Money for Sword' }));
+      expect(socket.said('creationAction')).toContainEqual({ kind: 'giftRoll', option: 'sword', id: 'main' });
+      cleanup();
+      await opened({ _worked: answers({ picks, opens }), _creating: { at: 'list:bgs', gifts: { noble: { main: 120 }, sword: { main: 3 } } } });
+      const after = within(screen.getByRole('group', { name: 'What Noble gives' }));
+      expect(after.getByText('Money: 120')).toBeTruthy();
+      expect(after.getByText('ROLLED, AND KEPT')).toBeTruthy();
+      expect(after.queryByRole('button', { name: /^Roll/ })).toBeNull();
+      expect(button('FINISH').disabled).toBe(false);
+    });
+
+    it('a number just says what it is, with nothing to roll or hold', async () => {
+      await opened({ _worked: answers({ picks: [{ list: 'bgs', option: 'scribe' }] }) });
+      const held = within(screen.getByRole('group', { name: 'What Scribe gives' }));
+      expect(held.getByText('Money: 25')).toBeTruthy();
+      expect(held.queryByRole('button', { name: /^Roll/ })).toBeNull();
+      expect(held.queryByText('ROLLED, AND KEPT')).toBeNull();
+      expect(button('FINISH').disabled).toBe(false);
+    });
+
+    it('a roll left from before the GM made it a number says the number, not the roll', async () => {
+      await opened({ _worked: answers({ picks: [{ list: 'bgs', option: 'scribe' }] }), _creating: { at: 'list:bgs', gifts: { scribe: { main: 999 } } } });
+      const held = within(screen.getByRole('group', { name: 'What Scribe gives' }));
+      expect(held.getByText('Money: 25')).toBeTruthy();
+      expect(held.queryByText('ROLLED, AND KEPT')).toBeNull();
+    });
+
+    it('one giving nothing has nothing under it', async () => {
+      await opened({ _worked: answers({ picks: [{ list: 'bgs', option: 'plain' }] }) });
+      expect(screen.queryByRole('group', { name: 'What Plain gives' })).toBeNull();
+    });
+  });
+
   describe('starting money (7c4d)', () => {
     const MONEY = (money: object[]) => ({ steps: ['who', 'money'], stats: [], money });
     const at = (held?: object) => ({ name: 'Wren', _creating: { at: 'money', ...(held ? { money: held } : {}) } });

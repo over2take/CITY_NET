@@ -95,6 +95,8 @@ const { tablesOf, lookupIn } = require('./derived');
 const { statIdsOf } = require('./stats');
 const { restIdsOf } = require('./rests');
 const { healthLayout } = require('./core');
+const { partOn } = require('./parts');
+const { currenciesOf } = require('./currencies');
 
 /** Where a sheet keeps its picks: starting with _, so no stat, formula or field can be called it. */
 const PICKS_KEY = '_choices';
@@ -777,9 +779,42 @@ const workedOf = (definition, data) => {
   };
 };
 
+/** What a system with no currencies of its own calls the app's single money. */
+const MAIN_MONEY = 'main';
+
+/** Each currency, as this system has them: the app's single money where it has none of its own. */
+const moneyCurrencies = (definition) => {
+  const own = currenciesOf(definition);
+  return own.length ? own : [{ id: MAIN_MONEY, name: 'Money' }];
+};
+
+/** The items an option gives (7c4e): those written as items. */
+const giftItemsOf = (option) => list(isPlainObject(option.gives) ? option.gives.items : undefined).filter(isPlainObject);
+
+/**
+ * The money an option gives (7c4e), in the system's order: { currency, how, ... }. None with the bank
+ * off, as there is nowhere to pay it. A currency since deleted is passed over.
+ */
+const giftMoneyOf = (definition, option) => {
+  const money = isPlainObject(option.gives) && isPlainObject(option.gives.money) ? option.gives.money : {};
+  if (!partOn(definition, 'bank')) return [];
+  return moneyCurrencies(definition)
+    .filter((c) => isPlainObject(money[c.id]) && ['number', 'roll'].includes(money[c.id].how))
+    .map((c) => ({ ...money[c.id], currency: c }));
+};
+
+/** What an option gives as a player reads it, before and after picking it; null when it gives nothing. */
+const giftsShown = (definition, option) => {
+  const items = giftItemsOf(option).map(({ name, qty }) => ({ name, qty }));
+  const money = giftMoneyOf(definition, option).map(({ currency, how, amount, each }) => ({ id: currency.id, name: currency.name, how, amount, each }));
+  if (!items.length && !money.length) return null;
+  return { ...(items.length ? { items } : {}), ...(money.length ? { money } : {}) };
+};
+
 /**
  * The lists as the sheet draws them (7a3a): names, how many and how, each option's words and what
- * it needs in words, and each feature's words, level and what it does, named. Never a formula.
+ * it needs in words, what it gives (7c4e), and each feature's words, level and what it does, named.
+ * Never a formula.
  */
 const choicesShown = (definition) => {
   const names = namesOf(definition);
@@ -799,6 +834,7 @@ const choicesShown = (definition) => {
       ...(tableOf(c) && rollRangeOf(o.roll) ? { roll: rollRangeOf(o.roll).join('-').replace(/^(\d+)-\1$/, '$1') } : {}),
       ...(typeof o.description === 'string' && o.description.trim() ? { description: o.description } : {}),
       ...(typeof o.requires === 'string' && o.requires.trim() ? { needs: needsText(definition, o.requires) } : {}),
+      ...(giftsShown(definition, o) ? { gives: giftsShown(definition, o) } : {}),
       features: list(o.features).filter((f) => typeof f.id === 'string').map((f) => ({
         id: f.id, label: f.label || f.id,
         ...(typeof f.text === 'string' && f.text.trim() ? { text: f.text } : {}),
@@ -821,4 +857,5 @@ module.exports = {
   LIMITS, PICKED, PLAYERS, PICKS_KEY, USES_KEY, WORKED_KEY, ROLLED_KEY, rolledOn, rolledKey, rolledOf, checkChoices, checkHasNames, ownableOf, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
   tableOf, rollRangeOf, playersOf,
   capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, worksOutPicks, choicesShown, tokenMaxFieldOf,
+  MAIN_MONEY, moneyCurrencies, giftItemsOf, giftMoneyOf,
 };

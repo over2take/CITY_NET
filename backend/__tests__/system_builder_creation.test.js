@@ -11,7 +11,7 @@ import { createRequire } from 'module';
 const require_ = createRequire(import.meta.url);
 const { creationOf, stepIdsOf, LIMITS, stepsAsked, creationShown, creatingNow, creationAction, withUpload, CREATING_KEY, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine, parseMoneyRoll, moneyRollProblems, moneyOf, wholeOf } = require_('../systemBuilder/creation');
 const { pickAction } = require_('../systemBuilder/picking');
-const { PICKS_KEY } = require_('../systemBuilder/choices');
+const { PICKS_KEY, choicesShown } = require_('../systemBuilder/choices');
 const { playerMayEdit } = require_('../sheets/templates');
 const { checkDefinition } = require_('../systemBuilder/definition');
 const citysys = require_('../systemBuilder/citysys');
@@ -868,10 +868,182 @@ describe('what an option gives (7c4e)', () => {
     expect(checkDefinition({ format: 1, name: 'G', choices: [{ id: 'bgs', one: 'B', many: 'Bs', options: [{ id: 'a', label: 'A' }] }] }).problems).toEqual([]);
   });
 
+  it('with a sheet designed without an inventory, says once that items need one; money doesn\'t', () => {
+    const sheet = { sections: [{ id: 'who', label: 'WHO', layout: 'list', fields: [{ id: 'name', label: 'Name', type: 'text' }] }] };
+    const twoOptions = { format: 1, name: 'G', sheet, choices: [{ id: 'bgs', one: 'B', many: 'Bs', options: [{ id: 'a', label: 'A', gives: { items: [{ name: 'Rope', qty: 1 }] } }, { id: 'b', label: 'B', gives: { items: [{ name: 'Oar', qty: 1 }] } }] }] };
+    const said = checkDefinition(twoOptions).problems.map((p) => `${p.where}: ${p.message}`);
+    expect(said).toEqual(['list bgs: An option gives items, which land in the inventory, and this sheet has none: add one on CHARACTER SHEET']);
+    expect(issues({ money: { gold: { how: 'number', amount: 1 } } }, { sheet })).toEqual([]);
+    expect(issues({ items: [] }, { sheet })).toEqual([]);
+    expect(issues({ items: [{ name: 'Rope', qty: 1 }] }, { sheet: { sections: [{ id: 'gear', label: 'GEAR', layout: 'inventory', fields: [] }] } })).toEqual([]);
+  });
+
   it('the system file carries it, unchanged', () => {
     const d = opt({ items: [{ name: 'Rope', qty: 3 }], money: { gold: { how: 'roll', each: '3d6 * 10' } } });
     const read = citysys.readFile(JSON.stringify(citysys.buildFile({ definition: d, version: 1, origin: 'sys_abcdefabcdefabcd' })));
     expect([read.file.definition.choices, read.problems]).toEqual([d.choices, []]);
+  });
+});
+
+describe('what an option gives, at the table (7c4e)', () => {
+  const GOLD = { id: 'gold', name: 'Gold', short: 'gp', denominations: [{ id: 'gp', name: 'Gold', short: 'gp', value: 100 }, { id: 'cp', name: 'Copper', short: 'cp', value: 1 }] };
+  const HONOR = { id: 'honor', name: 'Honor' };
+  const LISTS = [
+    { id: 'bgs', one: 'Background', many: 'Backgrounds', options: [
+      { id: 'noble', label: 'Noble', gives: { items: [{ name: 'Ring', qty: 1 }, { name: 'Rations', qty: 3 }], money: { gold: { how: 'roll', each: '3d6 * 10' }, honor: { how: 'number', amount: 5 } } }, features: [{ id: 'armed', label: 'Armed', choice: 'weapons' }] },
+      { id: 'dockhand', label: 'Dockhand', gives: { items: [{ name: 'Crowbar', qty: 1 }], money: { gold: { how: 'number', amount: 250 } } } },
+      { id: 'plain', label: 'Plain' },
+    ] },
+    { id: 'weapons', one: 'Weapon', many: 'Weapons', picked: 'features', options: [
+      { id: 'sword', label: 'Sword', gives: { items: [{ name: 'Sword', qty: 1 }], money: { honor: { how: 'number', amount: 2 } } } },
+      { id: 'axe', label: 'Axe', gives: { items: [{ name: 'Axe', qty: 1 }] } },
+    ] },
+    { id: 'commons', one: 'Common', many: 'Commons', picked: 'everyone', options: [{ id: 'breath', label: 'Breath', gives: { items: [{ name: 'Whistle', qty: 1 }], money: { honor: { how: 'roll', each: '1d6' } } } }] },
+  ];
+  const def = (creation = {}, more = {}) => ({ format: 1, name: 'G', currencies: [GOLD, HONOR], choices: LISTS.slice(0, 2), creation: { on: true, ...creation }, ...more });
+  const dice = (...faces) => { let i = 0; return () => (faces[i++ % faces.length] - 0.5) / 6; };
+  const holding = (...picks) => ({ [PICKS_KEY]: Object.fromEntries(Object.entries(picks.reduce((all, p) => {
+    (all[p.list] ??= []).push(p.from ? { option: p.option, from: p.from } : { option: p.option });
+    return all;
+  }, {}))), [CREATING_KEY]: { at: 'list:bgs' } });
+  const NOBLE = { list: 'bgs', option: 'noble' };
+  const DOCK = { list: 'bgs', option: 'dockhand' };
+  const SWORD = { list: 'weapons', option: 'sword', from: 'armed' };
+  const roll = (data, d = def(), option = 'noble', id = 'gold', rng = dice(3, 4, 5)) => creationAction(d, data, { kind: 'giftRoll', option, id }, { rng });
+  const finish = (data, d = def(), rng = dice(1)) => creationAction(d, data, { kind: 'finish' }, { rng });
+
+  it('a roll is whole pieces, once, kept under the option, and said for the log', () => {
+    const done = roll(holding(NOBLE));
+    expect(done.data[CREATING_KEY].gifts).toEqual({ noble: { gold: 12000 } });
+    expect(done.data[CREATING_KEY].at).toBe('list:bgs');
+    expect(done.rolled).toMatchObject({ label: 'NOBLE · GOLD', each: '3d6 * 10', sides: 6, rolls: [3, 4, 5], totals: [120], total: 120, named: null });
+    expect(statRollLine('Wren', done.rolled)).toBe('Wren rolled NOBLE · GOLD (3d6 * 10): 120');
+    expect(roll(done.data)).toEqual({ ok: false, error: 'Rolled, and kept: rolling again is the GM\'s' });
+  });
+
+  it('a second roll sits beside the first, of the same option or another', () => {
+    const d = def({}, { choices: [{ id: 'bgs', one: 'B', many: 'Bs', picks: 2, options: [
+      { id: 'a', label: 'A', gives: { money: { gold: { how: 'roll', each: '1d6' }, honor: { how: 'roll', each: '1d6' } } } },
+      { id: 'b', label: 'B', gives: { money: { honor: { how: 'roll', each: '1d6' } } } },
+    ] }] });
+    const start = { [PICKS_KEY]: { bgs: [{ option: 'a' }, { option: 'b' }] }, [CREATING_KEY]: {} };
+    const one = roll(start, d, 'a', 'gold', dice(2)).data;
+    const two = roll(one, d, 'a', 'honor', dice(3)).data;
+    const three = roll(two, d, 'b', 'honor', dice(4)).data;
+    expect(three[CREATING_KEY].gifts).toEqual({ a: { gold: 200, honor: 3 }, b: { honor: 4 } });
+  });
+
+  it('only for what they hold now, and only money that is rolled', () => {
+    expect(roll(holding(DOCK)).error).toBe('This character doesn\'t hold that');
+    expect(roll(holding(NOBLE), def(), 'noble', 'honor').error).toBe('That isn\'t rolled');
+    expect(roll(holding(NOBLE), def(), 'noble', 'tin').error).toBe('That isn\'t rolled');
+    expect(roll({ [PICKS_KEY]: { bgs: [{ option: 'noble' }] } }).error).toBe('This character isn\'t being made');
+    const noBank = def({}, { parts: { bank: { on: false } } });
+    expect(roll(holding(NOBLE), noBank).error).toBe('That isn\'t rolled');
+    const broken = def({}, { choices: [{ id: 'bgs', one: 'B', many: 'Bs', options: [{ id: 'noble', label: 'N', gives: { money: { gold: { how: 'roll', each: 'lots' } } } }] }] });
+    expect(roll(holding(NOBLE), broken).error).toBe('This game\'s roll doesn\'t read');
+  });
+
+  it('a pick that no longer counts can\'t roll: one waiting under a pick taken away', () => {
+    expect(roll({ [PICKS_KEY]: { weapons: [{ option: 'sword', from: 'armed' }] }, [CREATING_KEY]: {} }, def({}, { choices: [LISTS[0], { ...LISTS[1], options: [{ id: 'sword', label: 'Sword', gives: { money: { gold: { how: 'roll', each: '1d6' } } } }] }] }), 'sword').error).toBe('This character doesn\'t hold that');
+  });
+
+  it('kept through a swap: taken back and picked again, what it rolled still holds and can\'t be rolled again', () => {
+    const rolled = roll(holding(NOBLE)).data;
+    const back = pickAction(def(), rolled, { kind: 'drop', list: 'bgs', option: 'noble' }, { gm: false });
+    const swapped = { ...rolled, [PICKS_KEY]: { bgs: [{ option: 'dockhand' }] } };
+    expect(back.ok).toBe(true);
+    expect(back.data[CREATING_KEY].gifts).toEqual({ noble: { gold: 12000 } });
+    const returned = { ...swapped, [PICKS_KEY]: { bgs: [{ option: 'noble' }] } };
+    expect(roll(returned).error).toBe('Rolled, and kept: rolling again is the GM\'s');
+    expect(finish(returned).pay).toContainEqual({ id: 'gold', amount: 12000 });
+    // One let go of pays nothing, though its roll was kept.
+    expect(finish(swapped).pay).toEqual([{ id: 'gold', amount: 250 }]);
+  });
+
+  it('FINISH gives what they hold then, nested picks included, each paid together by currency', () => {
+    const rolled = roll(holding(NOBLE, SWORD)).data;
+    const done = finish(rolled);
+    expect(done.items).toEqual([{ name: 'Ring', qty: 1 }, { name: 'Rations', qty: 3 }, { name: 'Sword', qty: 1 }]);
+    expect(done.pay).toEqual([{ id: 'gold', amount: 12000 }, { id: 'honor', amount: 7 }]);
+    expect(done.rolls).toEqual([]);
+    expect(done.data[CREATING_KEY]).toEqual({ done: true });
+  });
+
+  it('nothing from a pick waiting, nor from one giving nothing', () => {
+    const waiting = { [PICKS_KEY]: { bgs: [{ option: 'plain' }], weapons: [{ option: 'sword', from: 'armed' }] }, [CREATING_KEY]: {} };
+    expect(finish(waiting)).toMatchObject({ ok: true, items: [], pay: [], rolls: [] });
+  });
+
+  it('with KITS and MONEY off gifts still come, on top of nothing from them; with them on, on top of theirs', () => {
+    const steps = { kits: [{ id: 'all', name: 'ALL', items: [{ name: 'Knife', qty: 1 }], who: 'all' }], money: { gold: { how: 'number', amount: 1000 } } };
+    const on = finish(holding(DOCK), def(steps));
+    expect(on.items).toEqual([{ name: 'Knife', qty: 1 }, { name: 'Crowbar', qty: 1 }]);
+    expect(on.pay).toEqual([{ id: 'gold', amount: 1250 }]);
+    const off = finish(holding(DOCK), def({ ...steps, off: ['kits', 'money'] }));
+    expect(off.items).toEqual([{ name: 'Crowbar', qty: 1 }]);
+    expect(off.pay).toEqual([{ id: 'gold', amount: 250 }]);
+  });
+
+  it('a roll never made is made at FINISH and logged: a list everyone has, or a step skipped', () => {
+    const d = def({}, { choices: LISTS });
+    const done = finish({ [CREATING_KEY]: {} }, d, dice(4));
+    expect(done.items).toEqual([{ name: 'Whistle', qty: 1 }]);
+    expect(done.pay).toEqual([{ id: 'honor', amount: 4 }]);
+    expect(done.rolls.map((r) => statRollLine('Wren', r))).toEqual(['Wren rolled BREATH · HONOR (1d6): 4']);
+  });
+
+  it('a roll that doesn\'t read gives nothing and stops nothing; a roll of 0 pays nothing', () => {
+    const broken = def({}, { choices: [{ id: 'bgs', one: 'B', many: 'Bs', options: [{ id: 'noble', label: 'N', gives: { money: { gold: { how: 'roll', each: 'lots' } } } }] }] });
+    expect(finish(holding(NOBLE), broken)).toMatchObject({ ok: true, pay: [], rolls: [] });
+    const zero = def({}, { choices: [{ id: 'bgs', one: 'B', many: 'Bs', options: [{ id: 'noble', label: 'N', gives: { money: { gold: { how: 'roll', each: '1d6 - 9' } } } }] }] });
+    expect(finish(holding(NOBLE), zero).pay).toEqual([]);
+  });
+
+  it('only a number or a roll counts as money, said or paid', () => {
+    const d = def({}, { choices: [{ id: 'bgs', one: 'B', many: 'Bs', options: [{ id: 'noble', label: 'N', gives: { money: { gold: { how: 'typed' } } } }] }] });
+    expect('gives' in choicesShown(d)[0].options[0]).toBe(false);
+    expect(finish(holding(NOBLE), d).pay).toEqual([]);
+  });
+
+  it('what is kept only counts as a whole amount: anything else is rolled, not paid', () => {
+    const odd = { ...holding(NOBLE), [CREATING_KEY]: { gifts: { noble: { gold: 'lots' } } } };
+    expect(roll(odd).data[CREATING_KEY].gifts.noble.gold).toBe(12000);
+    expect(finish(odd, def(), dice(2)).pay[0]).toEqual({ id: 'gold', amount: 6000 });
+  });
+
+  it('the app\'s single money is paid with no currency; a currency since deleted is passed over', () => {
+    const single = { format: 1, name: 'G', choices: [{ id: 'bgs', one: 'B', many: 'Bs', options: [{ id: 'noble', label: 'Noble', gives: { money: { main: { how: 'number', amount: 30 }, gold: { how: 'number', amount: 9 } } } }] }], creation: { on: true } };
+    expect(finish(holding(NOBLE), single).pay).toEqual([{ id: null, amount: 30 }]);
+    expect(choicesShown(single)[0].options[0].gives.money).toEqual([{ id: 'main', name: 'Money', how: 'number', amount: 30 }]);
+  });
+
+  it('with the bank off, the items still come and no money is paid or said', () => {
+    const noBank = def({}, { parts: { bank: { on: false } } });
+    const done = finish(holding(NOBLE), noBank);
+    expect(done.items).toEqual([{ name: 'Ring', qty: 1 }, { name: 'Rations', qty: 3 }]);
+    expect(done.pay).toEqual([]);
+    expect(done.rolls).toEqual([]);
+    expect(choicesShown(noBank)[0].options[0].gives).toEqual({ items: [{ name: 'Ring', qty: 1 }, { name: 'Rations', qty: 3 }] });
+  });
+
+  it('with the flow off, or an upload, nothing is given', () => {
+    expect(finish(holding(NOBLE), def({ on: false })).ok).toBe(false);
+    const uploaded = withUpload(def(), holding(NOBLE));
+    expect(uploaded[CREATING_KEY]).toEqual({ done: true, uploaded: true });
+    expect(finish(uploaded).ok).toBe(false);
+  });
+
+  it('the browser is told what each gives, in its order, and nothing of one giving nothing', () => {
+    const [bgs] = choicesShown(def());
+    expect(bgs.options[0].gives).toEqual({
+      items: [{ name: 'Ring', qty: 1 }, { name: 'Rations', qty: 3 }],
+      money: [{ id: 'gold', name: 'Gold', how: 'roll', each: '3d6 * 10' }, { id: 'honor', name: 'Honor', how: 'number', amount: 5 }],
+    });
+    expect('gives' in bgs.options[2]).toBe(false);
+    const onlyMoney = { format: 1, name: 'G', currencies: [HONOR], choices: [{ id: 'bgs', one: 'B', many: 'Bs', options: [{ id: 'a', label: 'A', gives: { money: { honor: { how: 'number', amount: 1 } } } }, { id: 'b', label: 'B', gives: { items: [], money: {} } }] }] };
+    expect(choicesShown(onlyMoney)[0].options[0].gives).toEqual({ money: [{ id: 'honor', name: 'Honor', how: 'number', amount: 1 }] });
+    expect('gives' in choicesShown(onlyMoney)[0].options[1]).toBe(false);
   });
 });
 

@@ -47,6 +47,20 @@ const draw = (stored: Record<string, unknown>, { gm = false, readOnly = false } 
 };
 const under = (name: string) => within(screen.getByRole('group', { name: `Under ${name}` }));
 
+describe('what an option gives (7c4e), on a plain sheet', () => {
+  it('says nothing, as only finishing NEW_CHARACTER.EXE gives it', () => {
+    const lists = [{ id: 'bgs', one: 'Background', many: 'Backgrounds', picks: 2, again: false, levelled: false, options: [
+      { id: 'noble', label: 'Noble', gives: { items: [{ name: 'Rope', qty: 1 }] }, features: [] },
+      { id: 'scribe', label: 'Scribe', gives: { items: [{ name: 'Ink', qty: 1 }] }, features: [] },
+    ] }];
+    const data = { [WORKED_KEY]: { picks: [{ list: 'bgs', option: 'noble' }], opens: [], levels: {}, from: {}, uses: {}, unmet: [], recovery: null } };
+    render(<ChoicesSection lists={lists as never} data={data} readOnly={false} onChoices={() => {}} />);
+    expect(screen.getByRole('button', { name: 'SCRIBE' })).toBeTruthy();
+    expect(screen.queryByText(/GIVE/)).toBeNull();
+    expect(screen.queryByText(/Rope|Ink/)).toBeNull();
+  });
+});
+
 describe('a list picked through features', () => {
   it('isn\'t a block of its own: it waits under the feature, picked there with the feature named', async () => {
     const ask = draw({ classes: [{ option: 'soldier', level: 3 }] });

@@ -273,7 +273,7 @@ function OptionGivesPanel({ list, option, definition, edit }: Pick<Props, 'defin
         <input id={id} type="text" value={text} placeholder="NOTHING · Crowbar, 3x Rations" style={input}
           onChange={(e) => { setText(e.target.value); set({ ...option.gives, items: parseKitItems(e.target.value) }); }} />
       </div>
-      <p style={{ ...why, fontSize: 11, opacity: 0.7 }}>What a new character holding this starts with, given as they finish. Players don&apos;t get these yet: that comes next.</p>
+      <p style={{ ...why, fontSize: 11, opacity: 0.7 }}>What a new character holding this starts with, given as they finish.</p>
       {partIsOn(definition, 'bank') && moneyRows(definition).map((r) => {
         const one = option.gives?.money?.[r.id] ?? null;
         return (

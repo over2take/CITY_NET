@@ -17,7 +17,8 @@
 // queue, written to the log and thrown in the tray as ROLL FOR IT is (systemBuilder/creation.js). A stat
 // can move the token's maximum, so it follows, as a pick's does. FINISH gives out their kits (7c4b) in the
 // same write, so they land once, with the game's catalogues loaded first (sheets/kitGiving.js), and pays in
-// their starting money (7c4d) once that write has stood, as it comes only from there.
+// their starting money (7c4d) once that write has stood, as it comes only from there. What the options they
+// hold give (7c4e) comes the same way, and { kind: 'giftRoll', option, id } rolls an option's money.
 //
 // `recoverySpend` with { pool, count } (R2a) spends recovery dice with a roll (sheets/recover.js).
 // In a system leaving spending to the GM, a player spends or ticks them off only while the GM has
@@ -117,12 +118,12 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
     if (!payload || typeof payload !== 'object') return;
     withCaller(payload, 'choicesRefused', ({ username, system, definition, refuse }) => getShopSystem(() => {
       let error = null;
-      let rolled = null;
+      let rolls = [];
       let pay = [];
       mutateSheetForUser(db, { username, system }, (data) => {
         const done = creationAction(definition, data, payload, { rng });
         if (!done.ok) { error = done.error; return undefined; }
-        rolled = done.rolled || null;
+        rolls = done.rolls || (done.rolled ? [done.rolled] : []);
         pay = done.pay || [];
         if (done.items && done.items.length) Object.assign(done.data, kitPatch(system, done.items, done.data));
         // Worked out as any save is, so a list asked first already knows what isn't met.
@@ -132,7 +133,7 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
         if (error) return refuse(error);
         if (err2) return refuse('That character has no sheet yet');
         if (!stored) return undefined;
-        if (rolled) announceRoll(username, stored, rolled, statRollLine, rolled.label);
+        for (const rolled of rolls) announceRoll(username, stored, rolled, statRollLine, rolled.label);
         for (const { id, amount } of pay) {
           withMoney(id ? { currency: id } : {}, (money) => money.add(username, amount, (e) => {
             if (e) console.error('[creation] starting money not paid:', e.message);
