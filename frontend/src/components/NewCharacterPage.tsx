@@ -8,6 +8,7 @@ import { pickedOf } from '../sheets/choices';
 import { HINTS } from '../sheets/builderHelp';
 import { buyCost, type BuyWay, type StatWay } from '../sheets/newCharacterFlow';
 import { KitsPanel } from './KitsPanel';
+import { MoneyPanel } from './MoneyPanel';
 import { FieldName } from './HelpHint';
 import { ToggleSwitch } from './ToggleSwitch';
 
@@ -127,7 +128,7 @@ const asks = (definition: Definition, id: string): string => {
   const group = stepGroup(definition, id);
   if (group) return `${statCount(group.stats.length)}, ${howSet(definition, id)}`;
   if (id === 'kits') return 'Named kits of items the character starts with, in their inventory once they finish. With none for players to get, this step isn\'t asked.';
-  if (id === 'money') return 'What they start with in the bank. It is set here next, a number, a roll, or typed in: until then, players aren\'t asked.';
+  if (id === 'money') return 'What they start with in the bank: a number, a roll, or typed in, paid in once as they finish. With nothing set, this step isn\'t asked.';
   const c = stepList(definition, id);
   if (!c) return '';
   return `From CHOICES: ${(c.many || c.id).toUpperCase()}. Its own settings there say how many and how they are picked.${pickedOf(c) === 'both' ? ' Those a feature opens are picked under that feature, at the level it unlocks.' : ''}`;
@@ -188,6 +189,7 @@ export function NewCharacterPage({ definition, edit, onGoTo, api }: Props) {
         {step.off && <p style={{ ...why, color: 'var(--warning)', opacity: 1 }}>Off: players aren&apos;t asked.</p>}
         {list && onGoTo && <div><button type="button" className="utility-btn" style={btn} onClick={() => onGoTo('choices', list.id)}>GO TO CHOICES</button></div>}
         {step.id === 'kits' && <KitsPanel definition={definition} edit={edit} api={api} />}
+        {step.id === 'money' && <MoneyPanel definition={definition} edit={edit} />}
         {isStatsStep(step.id) && (
           <div style={grid}>
             <FieldName beside hint={HINTS['creation.statsBy']} style={small}>ASKED</FieldName>

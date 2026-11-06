@@ -408,6 +408,7 @@ function App() {
   const [newCharacterPos, setNewCharacterPos] = useState(() => ({ x: window.innerWidth / 2 - 240, y: 80 }));
   // Read by the socket handler when a roll opens the tray, as trayOpenRef is: null while it is shut.
   const newCharacterAt = useRef<{ x: number; y: number } | null>(null);
+  const [raiseNewCharacter, setRaiseNewCharacter] = useState(0);
   useEffect(() => { newCharacterAt.current = isNewCharacterOpen ? newCharacterPos : null; }, [isNewCharacterOpen, newCharacterPos]);
   const [vehiclesPos, setVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 200, y: 90 }));
   const [enemyVehiclesPos, setEnemyVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 160, y: 130 }));
@@ -959,10 +960,11 @@ function App() {
       // display name (handle), which may differ.
       // A quiet line (a rest that rolled nothing) only joins the log.
       if (rollOpensTray(data, userName)) {
+        // Not on top of the new character window: the player's next step is in it (7c3c, 7c4d).
+        const flow = newCharacterAt.current;
+        if (flow) setRaiseNewCharacter((n) => n + 1);
         if (!trayOpenRef.current) {
           setTrayOpener(data);
-          // Not on top of the new character window: the player's next step is in it (7c3c).
-          const flow = newCharacterAt.current;
           if (flow) setDiceTrayPos((tray) => trayBeside(tray, { ...flow, width: TERMINAL_WIDTH }, window.innerWidth));
         }
         setIsDiceTrayOpen(true);
@@ -2229,6 +2231,7 @@ function App() {
             )}
             {isNewCharacterOpen && (
               <NewCharacterWindow
+                raiseOn={raiseNewCharacter}
                 pos={newCharacterPos}
                 setPos={setNewCharacterPos}
                 socket={socketRef.current}

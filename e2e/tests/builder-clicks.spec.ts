@@ -152,6 +152,10 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await page.getByRole('combobox', { name: 'NEW KIT goes to' }).selectOption('needs');
       await expect(page.getByRole('textbox', { name: 'ONLY IF' })).toBeVisible();
       missed['NEW CHARACTER kits'] = await faults(page);
+      // MONEY set to a roll, so every box of it is there (7c4d).
+      await page.getByRole('button', { name: 'MONEY', exact: true }).click();
+      await page.getByRole('button', { name: 'A ROLL' }).first().click();
+      missed['NEW CHARACTER money'] = await faults(page);
       await page.getByRole('button', { name: 'THE STATS', exact: true }).click();
       // And a point buy's points, range and costs (7c3d).
       await page.getByRole('group', { name: 'How they are set' }).getByRole('button', { name: 'POINT BUY' }).click();

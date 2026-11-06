@@ -6,6 +6,7 @@
 // stats:<group> in `off` either way, so changing between them loses nothing.
 
 import type { Definition } from './systemsApi';
+import type { Currency } from './currencies';
 import { choiceLists, pickedOf, type ChoiceList } from './choices';
 import { statGroups } from './statsRules';
 import { partIsOn } from './wordsFeatures';
@@ -95,6 +96,7 @@ const withSection = (def: Definition, patch: Obj): Definition => {
   if (c.statsBy !== 'group') delete c.statsBy;
   if (isObject(c.ways) && !Object.keys(c.ways).length) delete c.ways;
   if (Array.isArray(c.kits) && !c.kits.length) delete c.kits;
+  if (isObject(c.money) && !Object.keys(c.money).length) delete c.money;
   const next: Definition = { ...def };
   if (Object.keys(c).length) next.creation = c; else delete next.creation;
   return next;
@@ -272,6 +274,47 @@ export const parseKitItems = (text: string): KitItem[] => text.split(',').map((p
   const m = /^(\d+)\s*x\s+(.+)$/i.exec(p);
   return m ? { name: m[2].trim(), qty: Number(m[1]) } : { name: p, qty: 1 };
 });
+
+/** What a system with no currencies of its own calls the app's single money (backend creation.js MAIN_MONEY). */
+const MAIN_MONEY = 'main';
+export type MoneySet = { how: 'number'; amount: number } | { how: 'roll'; each: string } | { how: 'typed' };
+
+/** Each currency the MONEY step can set: the app's single money where the system has none of its own. */
+export const moneyRows = (def: Definition): { id: string; name: string; currency: Currency | null }[] => {
+  const own = Array.isArray(def.currencies) ? (def.currencies as Currency[]).filter((c) => isObject(c) && typeof c.id === 'string') : [];
+  return own.length ? own.map((c) => ({ id: c.id, name: c.name, currency: c })) : [{ id: MAIN_MONEY, name: 'Money', currency: null }];
+};
+
+/** What a currency starts at, or null: it starts at nothing. */
+export const moneyOfRow = (def: Definition, id: string): MoneySet | null => {
+  const money = section(def).money;
+  const set = isObject(money) ? money[id] : null;
+  return isObject(set) && ['number', 'roll', 'typed'].includes(set.how as string) ? set as unknown as MoneySet : null;
+};
+
+/** A currency's start changed; nothing stores nothing. */
+export const withMoneyRow = (def: Definition, id: string, set: MoneySet | null): Definition => {
+  const money: Obj = { ...(isObject(section(def).money) ? section(def).money as Obj : {}) };
+  if (set) money[id] = set; else delete money[id];
+  return withSection(def, { money });
+};
+
+/** A roll's whole amount in smallest units (backend creation.js wholeOf). */
+export const wholeUnitOf = (currency: Currency | null): number => {
+  if (!currency) return 1;
+  if (currency.denominations?.length) return Math.max(...currency.denominations.map((d) => d.value));
+  return 10 ** (currency.decimals ?? 0);
+};
+
+/** What is wrong with what money is rolled with, in the server's words (backend creation.js moneyRollProblems). */
+export const moneyRollProblems = (each: string): string[] => {
+  const m = /^(.*?)(?:\s*\*\s*(\d+))?\s*$/.exec(each);
+  const roll = m ? parseStatRoll(m[1]) : null;
+  const times = m?.[2] === undefined ? 1 : Number(m[2]);
+  if (!roll || times < 1 || times > 1000) return ['Reads like 3d6, 4d6 drop lowest or 2d6 + 6, up to 20 dice of up to 100 sides, with * 10 after it if you like'];
+  const lo = (roll.count - roll.drop) + roll.add;
+  return lo < 0 ? [`${each} can roll ${lo * times}, below nothing`] : [];
+};
 
 /** ONE WAY FOR ALL or GROUP BY GROUP; the order and what is left out carry over. */
 export const withStatsByGroup = (def: Definition, byGroup: boolean): Definition => withSection(def, { statsBy: byGroup ? 'group' : undefined });

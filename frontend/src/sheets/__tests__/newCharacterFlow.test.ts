@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
-  buyCost, buyShown, CREATING_KEY, kitItemsText, kitsShownOn, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, placedFrom, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields, withCreationLocks,
+  buyCost, buyShown, CREATING_KEY, moneyHeldOn, kitItemsText, kitsShownOn, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, placedFrom, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields, withCreationLocks,
 } from '../newCharacterFlow';
 import { WORKED_KEY, type ChoiceListShown } from '../choicesShown';
 import type { SheetTemplate } from '../types';
@@ -402,6 +402,38 @@ describe('kits (7c4b)', () => {
     const worked_ = req('../../../../backend/systemBuilder/choices.js').workedOf(def, { wits: 3 });
     expect(kitsShownOn(template, { [WORKED_KEY]: worked_ }).offered[0].unmet).toBe('WITS >= 12');
     expect(stepAnswered(template, 'kits', { [WORKED_KEY]: worked_ })).toBe(true);
+  });
+});
+
+describe('starting money (7c4d)', () => {
+  const moneyed = (money: unknown[]) => ({ ...TEMPLATE, creation: { steps: ['who', 'money'], stats: [], money } }) as unknown as SheetTemplate;
+  const held = (money: unknown) => ({ [CREATING_KEY]: { at: 'money', money } });
+
+  it('reads what is held, or nothing', () => {
+    expect(moneyHeldOn(held({ gold: 12 }), 'gold')).toBe(12);
+    expect(moneyHeldOn(held({ gold: 0 }), 'gold')).toBe(0);
+    expect(moneyHeldOn(held({ gold: 12 }), 'honor')).toBeNull();
+    expect(moneyHeldOn(held({ gold: 'x' }), 'gold')).toBeNull();
+    expect(moneyHeldOn(held('x'), 'gold')).toBeNull();
+    expect(moneyHeldOn({}, 'gold')).toBeNull();
+  });
+
+  it('answered once each roll is rolled and each amount said; a number needs nothing', () => {
+    const t = moneyed([{ id: 'gold', name: 'Gold', how: 'roll', each: '3d6' }, { id: 'honor', name: 'Honor', how: 'typed' }, { id: 'tin', name: 'Tin', how: 'number', amount: 5 }]);
+    expect(stepAnswered(t, 'money', held({}))).toBe(false);
+    expect(stepAnswered(t, 'money', held({ gold: 120 }))).toBe(false);
+    expect(stepAnswered(t, 'money', held({ gold: 120, honor: 0 }))).toBe(true);
+    expect(stepAnswered(moneyed([{ id: 'tin', name: 'Tin', how: 'number', amount: 5 }]), 'money', {})).toBe(true);
+    expect(flowStepName(t, 'money')).toBe('MONEY');
+    expect(flowSteps(t)).toEqual(['who', 'money']);
+  });
+
+  it('reads what the server keeps', () => {
+    const def = { format: 1, name: 'H', creation: { on: true, money: { main: { how: 'typed' } } } };
+    const template = { ...TEMPLATE, creation: backend.creationShown(def) } as unknown as SheetTemplate;
+    const done = backend.creationAction(def, { [CREATING_KEY]: {} }, { kind: 'moneyTyped', id: 'main', amount: 7 }).data;
+    expect(moneyHeldOn(done, 'main')).toBe(7);
+    expect(stepAnswered(template, 'money', done)).toBe(true);
   });
 });
 

@@ -131,6 +131,92 @@ describe('the page', () => {
   });
 });
 
+describe('starting money (7c4d)', () => {
+  const COINED = { ...HEARTH, currencies: [
+    { id: 'gold', name: 'Gold', denominations: [{ id: 'gp', name: 'Gold', short: 'gp', value: 100 }, { id: 'cp', name: 'Copper', short: 'cp', value: 1 }] },
+    { id: 'honor', name: 'Honor' },
+  ] } as unknown as Definition;
+  const onMoney = async (start: Definition = COINED) => {
+    const opened = open(start);
+    await userEvent.click(step('MONEY').getByRole('button', { name: 'MONEY' }));
+    return opened;
+  };
+  const row = (name: string) => within(screen.getByRole('group', { name }));
+  const money = (d: Definition) => (d.creation as { money?: Record<string, unknown> } | undefined)?.money;
+
+  it('only on the MONEY step: a row per currency, each starting at nothing', async () => {
+    open(COINED);
+    expect(screen.queryByRole('group', { name: 'Gold starts with' })).toBeNull();
+    cleanup();
+    await onMoney();
+    for (const name of ['Gold', 'Honor']) expect(row(`${name} starts with`).getByRole('button', { name: 'NOTHING' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getAllByText('They start with none of this.')).toHaveLength(2);
+  });
+
+  it('the app\'s money with no currencies of its own', async () => {
+    const { last } = await onMoney(HEARTH);
+    await userEvent.click(row('Money starts with').getByRole('button', { name: 'TYPED IN' }));
+    expect(money(last())).toEqual({ main: { how: 'typed' } });
+  });
+
+  it('a number starts at 100 whole, written as the currency writes it, and takes what is typed', async () => {
+    const { last } = await onMoney();
+    await userEvent.click(row('Gold starts with').getByRole('button', { name: 'A NUMBER' }));
+    expect(money(last())).toEqual({ gold: { how: 'number', amount: 10000 } });
+    const box = screen.getByRole('textbox', { name: 'Gold amount' }) as HTMLInputElement;
+    expect(box.value).toBe('100 gp');
+    await userEvent.clear(box);
+    expect(box.getAttribute('aria-invalid')).toBe('true');
+    await userEvent.type(box, '5gp 2cp');
+    expect(money(last())).toEqual({ gold: { how: 'number', amount: 502 } });
+    expect(box.getAttribute('aria-invalid')).toBeNull();
+    await userEvent.clear(box);
+    await userEvent.type(box, '-5gp');
+    expect(box.getAttribute('aria-invalid')).toBe('true');
+    expect(money(last())).toEqual({ gold: { how: 'number', amount: 502 } });
+  });
+
+  it('a number in money with no coins is a plain whole number', async () => {
+    const { last } = await onMoney(HEARTH);
+    await userEvent.click(row('Money starts with').getByRole('button', { name: 'A NUMBER' }));
+    const box = screen.getByRole('textbox', { name: 'Money amount' }) as HTMLInputElement;
+    expect(box.value).toBe('100');
+    await userEvent.clear(box);
+    await userEvent.type(box, '250');
+    expect(money(last())).toEqual({ main: { how: 'number', amount: 250 } });
+    await userEvent.type(box, 'x');
+    expect(box.getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('a roll starts as 3d6 * 10, saying when one doesn\'t read', async () => {
+    const { last } = await onMoney();
+    await userEvent.click(row('Honor starts with').getByRole('button', { name: 'A ROLL' }));
+    expect(money(last())).toEqual({ honor: { how: 'roll', each: '3d6 * 10' } });
+    const box = screen.getByRole('textbox', { name: 'Honor roll' });
+    expect(screen.queryByRole('note', { name: /^Reads like/ })).toBeNull();
+    await userEvent.clear(box);
+    await userEvent.type(box, 'lots');
+    expect(box.getAttribute('aria-invalid')).toBe('true');
+    expect(screen.getByText(/^Reads like 3d6/)).toBeTruthy();
+    expect(money(last())).toEqual({ honor: { how: 'roll', each: 'lots' } });
+  });
+
+  it('back to nothing leaves nothing behind; pressing the way it has keeps what it has', async () => {
+    const { last, edits } = await onMoney({ ...COINED, creation: { money: { gold: { how: 'roll', each: '2d6' } } } } as unknown as Definition);
+    await userEvent.click(row('Gold starts with').getByRole('button', { name: 'A ROLL' }));
+    expect(edits).toEqual([]);
+    await userEvent.click(row('Gold starts with').getByRole('button', { name: 'NOTHING' }));
+    expect(last()).toEqual(COINED);
+  });
+
+  it('says what each way means, and has a "?"', async () => {
+    await onMoney();
+    expect(screen.getAllByRole('note', { name: HINTS['creation.money'] })).toHaveLength(2);
+    await userEvent.click(row('Gold starts with').getByRole('button', { name: 'TYPED IN' }));
+    expect(screen.getByText('They say what they have, and it is paid into the bank.')).toBeTruthy();
+  });
+});
+
 describe('kits (7c4a)', () => {
   const onKits = async (start: Definition = HEARTH) => {
     const opened = open(start);

@@ -18,6 +18,8 @@ export interface BuyWay { way: 'buy'; points: number; lowest: number; highest: n
 /** A kit as a player sees it (7c4b): never the GM's own, nor a formula. */
 export interface KitItem { name: string; qty: number }
 export interface KitShown { id: string; name: string; items: KitItem[]; who: 'all' | 'pick' | 'needs'; needs?: string }
+/** One currency's starting amount, as a player sees it (7c4d): a roll in words, never its dice worked out. */
+export interface MoneyShown { id: string; name: string; how: 'number' | 'roll' | 'typed'; amount?: number; each?: string }
 /** How a stats step is set (7c3b, 7c3c, 7c3d). */
 export type StatWay = { way: 'typed' } | { way: 'array'; numbers: number[] } | { way: 'roll'; each: string; placed: 'order' | 'arrange' } | BuyWay;
 export interface CreationShown {
@@ -27,6 +29,8 @@ export interface CreationShown {
   ways?: Record<string, StatWay>;
   /** The kits a player sees. */
   kits?: KitShown[];
+  /** What each currency starts at. */
+  money?: MoneyShown[];
   /** The groups a player sets: those left out aren't here. */
   stats: { id: string; label: string; stats: CreationStat[] }[];
 }
@@ -34,7 +38,7 @@ export interface CreationShown {
 /** Where a sheet keeps its place in the flow (backend creation.js CREATING_KEY). */
 export const CREATING_KEY = '_creating';
 
-interface Place { at?: string; done?: boolean; uploaded?: boolean; rolled?: Record<string, unknown>; kit?: string }
+interface Place { at?: string; done?: boolean; uploaded?: boolean; rolled?: Record<string, unknown>; kit?: string; money?: Record<string, unknown> }
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 const placeOf = (data: Obj | null | undefined): Place | null => {
   const place = data?.[CREATING_KEY];
@@ -132,6 +136,13 @@ export const statsToSet = (template: SheetTemplate, step = 'stats'): CreationSho
 
 /** How a stats step is set: typed in, unless the GM says otherwise. */
 export const stepWay = (template: SheetTemplate, id: string): StatWay => template.creation?.ways?.[id] ?? { way: 'typed' };
+
+/** What was rolled or typed for a currency so far (backend creation.js moneyHeld), or null. */
+export const moneyHeldOn = (data: Obj | null | undefined, id: string): number | null => {
+  const held = placeOf(data)?.money;
+  const amount = isObject(held) ? held[id] : null;
+  return Number.isInteger(amount) ? amount as number : null;
+};
 
 /** A kit's items as they read: "Rope, 3x Rations". */
 export const kitItemsText = (items: KitItem[]): string => items.map((i) => (i.qty === 1 ? i.name : `${i.qty}x ${i.name}`)).join(', ');
@@ -258,6 +269,7 @@ export const stepAnswered = (template: SheetTemplate, id: string, data: Obj | nu
     }
     return stats.every((s) => typedIn(data?.[s.id]) && !statProblem(s, data?.[s.id]));
   }
+  if (id === 'money') return (template.creation?.money ?? []).every((m) => m.how === 'number' || moneyHeldOn(data, m.id) !== null);
   if (id === 'kits') {
     const { offered, picked } = kitsShownOn(template, data);
     return picked ? !picked.unmet : !offered.some((o) => !o.unmet);

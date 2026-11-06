@@ -74,6 +74,8 @@ interface Props<Id extends string> {
   width?: number;
   /** For screen readers and the arrow keys' focus target. */
   label?: string;
+  /** Changes when this window should come to the front of its own accord (DraggableWindow). */
+  raiseOn?: number;
 }
 
 /** The picture above the folders: callers draw their preview at this size. */
@@ -91,7 +93,7 @@ const toneStyle = (tone: TerminalAction['tone']): React.CSSProperties => {
 
 export function TerminalWindow<Id extends string>({
   title, pos, setPos, onClose, titleControls, preview, folders, open, onOpen, header, children,
-  panelMode = 'text', actions = [], footer, width = TERMINAL_WIDTH, label,
+  panelMode = 'text', actions = [], footer, width = TERMINAL_WIDTH, label, raiseOn,
 }: Props<Id>) {
   /** Up and down walk the folders, the way the terminal in the reference does. */
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -117,6 +119,7 @@ export function TerminalWindow<Id extends string>({
       titleControls={titleControls}
       windowStyle={{ width, maxWidth: '96vw' }}
       contentStyle={{ maxHeight: 'none', padding: 12 }}
+      raiseOn={raiseOn}
     >
       <div
         tabIndex={0}
