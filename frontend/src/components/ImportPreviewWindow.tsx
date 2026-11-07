@@ -16,6 +16,7 @@ import { DraggableWindow } from './DraggableWindow';
 
 import type { CyberRow } from '../sheets/cyberwareRows';
 import { pickLinesSaid } from '../sheets/importPicks';
+import { getTemplate } from '../sheets';
 
 export interface ImportPreview {
   system: string;
@@ -42,6 +43,9 @@ export interface ImportPreview {
   picksSaid?: { list: string; one: string; option: string; level?: number; unmet?: string }[];
   picksNotFound?: Record<string, string[]>;
   picksTooMany?: Record<string, string[]>;
+  picksUnopened?: Record<string, string[]>;
+  /** A custom system's upload adds to the inventory, where it replaces everything else. */
+  inventoryAdds?: boolean;
 }
 
 interface Props {
@@ -52,8 +56,6 @@ interface Props {
   currentData?: Record<string, unknown>;
   /** Fields a replace leaves as they are (worked out again, or the GM's), so never listed as lost. */
   keeps?: string[];
-  /** The GM's upload replaces a locked pick; a player's leaves it. */
-  gm?: boolean;
   busy?: boolean;
   applied?: boolean;
   onApply: () => void;
@@ -96,7 +98,7 @@ export const leftLines = (preview: ImportPreview): { key: string; text: string }
   return found.length ? [{ key: String(key), text: `${label}: ${found.map(([k, v]) => (withValue ? `${k} (${String(v)})` : k)).join(', ')}` }] : [];
 });
 
-export function ImportPreviewWindow({ pos, setPos, preview, currentData, keeps, gm, busy, applied, onApply, onCancel }: Props) {
+export function ImportPreviewWindow({ pos, setPos, preview, currentData, keeps, busy, applied, onApply, onCancel }: Props) {
   const mapped = Object.entries(preview.mapped);
   const unmappedKeys = Object.keys(preview.unmapped);
   const skippedKeys = Object.keys(preview.skipped);
@@ -131,7 +133,7 @@ export function ImportPreviewWindow({ pos, setPos, preview, currentData, keeps, 
           <div key={l.key} style={{ ...label9, color: l.key === 'notAChoice' ? 'var(--warning)' : 'var(--cyan)' }}>{l.text}</div>
         ))}
 
-        {pickLinesSaid(preview, currentData, gm).map((l) => (
+        {pickLinesSaid(preview, currentData, preview.system ? getTemplate(preview.system).choices : []).map((l) => (
           <div key={l.text} style={{ ...label9, color: l.tone === 'warn' ? 'var(--warning)' : 'var(--cyan)' }}>{l.text}</div>
         ))}
 

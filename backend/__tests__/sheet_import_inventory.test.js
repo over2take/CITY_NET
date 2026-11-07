@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getImporter, IMPORTERS } from '../sheets/importers.js';
 import { LAYOUTS } from '../sheets/pdfTemplate.js';
+import { inventoryAdded } from '../sheets/inventoryImport.js';
 
 /**
  * The inventory on the way in.
@@ -251,5 +252,32 @@ describe('the CWN cyberware table', () => {
     // has a CYBERWARE NOTES section, so a line about your chrome stays a line.
     expect(map('cities_without_number', { Cyberware: 'twitchy since the surgery' })
       .mapped.cyberware_notes).toBe('twitchy since the surgery');
+  });
+});
+
+describe('an upload adding to what is already there (7c6)', () => {
+  const rows = (v) => JSON.parse(v).map((l) => [l.name, l.qty, l.carry]);
+  const line = (name, qty, carry = 'stowed') => ({ name, qty, enc: '1', bundled: false, carry, location: '' });
+
+  it('what is new goes on the end, as it came, and what they hold stays', () => {
+    expect(rows(inventoryAdded(JSON.stringify([line('Rope', 1)]), JSON.stringify([line('Lantern', 2)])))).toEqual([['Rope', 1, 'stowed'], ['Lantern', 2, 'stowed']]);
+  });
+
+  it('the same name stacks onto a carried line, in any case and spacing', () => {
+    expect(rows(inventoryAdded(JSON.stringify([line('Rope', 2)]), JSON.stringify([{ name: ' rope ', qty: 3 }])))).toEqual([['Rope', 5, 'stowed']]);
+  });
+
+  it('a stashed line is left alone', () => {
+    expect(rows(inventoryAdded(JSON.stringify([line('Rope', 2, 'stash')]), JSON.stringify([line('Rope', 1)])))).toEqual([['Rope', 2, 'stash'], ['Rope', 1, 'stowed']]);
+  });
+
+  it('a quantity that doesn\'t read counts as one', () => {
+    expect(rows(inventoryAdded(JSON.stringify([{ name: 'Rope', carry: 'stowed' }]), JSON.stringify([{ name: 'Rope' }])))).toEqual([['Rope', 2, 'stowed']]);
+  });
+
+  it('nothing coming in leaves it as it was; nothing held is what came in', () => {
+    expect(rows(inventoryAdded(JSON.stringify([line('Rope', 1)]), undefined))).toEqual([['Rope', 1, 'stowed']]);
+    expect(rows(inventoryAdded(undefined, JSON.stringify([line('Rope', 1)])))).toEqual([['Rope', 1, 'stowed']]);
+    expect(rows(inventoryAdded('not json', [line('Rope', 1), 'x']))).toEqual([['Rope', 1, 'stowed']]);
   });
 });

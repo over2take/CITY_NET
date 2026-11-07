@@ -271,7 +271,7 @@ describe('the GM uploading picks to a player\'s sheet (7c6)', () => {
   });
 
   it('writes them, replacing a locked pick, and works out what they do', async () => {
-    const res = await put({ fields: { might: 5 }, picks: { classes: [{ option: 'soldier', level: 2 }] } });
+    const res = await put({ fields: { might: 5 }, upload: true, picks: { classes: [{ option: 'soldier', level: 2 }] } });
     expect(res.status).toBe(200);
     const data = await stored();
     expect(data.might).toBe(5);
@@ -284,8 +284,27 @@ describe('the GM uploading picks to a player\'s sheet (7c6)', () => {
     expect((await stored())._choices.classes).toEqual([{ option: 'mage', level: 1, locked: true, roll: 4 }]);
   });
 
+  it('an upload naming no picks clears them; an edit naming picks doesn\'t touch them', async () => {
+    await put({ fields: {}, picks: { classes: [{ option: 'soldier' }] } });
+    expect((await stored())._choices.classes).toEqual([{ option: 'mage', level: 1, locked: true, roll: 4 }]);
+    await put({ fields: {}, upload: true });
+    expect((await stored())._choices.classes).toEqual([]);
+  });
+
+  it('an upload adds to the inventory, where an edit replaces it', async () => {
+    const bag = (v) => run(db, 'UPDATE character_sheets SET data = ? WHERE username = ?', [JSON.stringify({ name: 'Vex', inventory: v }), 'vex']);
+    const had = JSON.stringify([{ name: 'Rope', qty: 1, carry: 'stowed' }]);
+    const came = JSON.stringify([{ name: 'Rope', qty: 2 }]);
+    await bag(had);
+    await put({ fields: { inventory: came }, upload: true });
+    expect(JSON.parse((await stored()).inventory)).toEqual([{ name: 'Rope', qty: 3, carry: 'stowed' }]);
+    await bag(had);
+    await put({ fields: { inventory: came } });
+    expect(JSON.parse((await stored()).inventory)).toEqual([{ name: 'Rope', qty: 2 }]);
+  });
+
   it('checks what was sent', async () => {
-    await put({ fields: {}, picks: { classes: [{ option: 'wizard' }] } });
+    await put({ fields: {}, upload: true, picks: { classes: [{ option: 'wizard' }] } });
     expect((await stored())._choices.classes).toEqual([]);
   });
 });

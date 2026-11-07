@@ -10,17 +10,21 @@
 // A field is matched by its id or its label, in any case and spacing. A choice must be one of its
 // options (by value or label). The inventory comes as lines ("2x Rope") or a list.
 //
-// A line per list picked on its own (7c6; approved mockup new-character): a dropdown where one is picked,
-// with a level box if it has levels, or names with commas between where more can be ("Soldier 3, Mage 1").
-// They are read by name. One it can't find is said by its line, and one not met comes in as it is, said in
-// the preview, as an upload is taken as it stands. A list picked under a feature isn't asked: those wait on
-// the sheet, under the feature. Applying checks the names again (withImportedPicks), as the browser only
-// hands back what it was told, and a player's upload doesn't replace a pick locked by a roll or by the GM.
+// A line per list a character picks from (7c6; approved mockup new-character, and the user's calls of
+// 2026-11-07): a dropdown where one is picked, with a level box if it has levels, or names with commas between
+// where more can be ("Soldier 3, Mage 1"). They are read by name. An upload is the character, complete, so it
+// is king: one not met comes in as it is, said in the preview, and it replaces whatever a list held, locked by
+// a roll or the GM or not. A list picked under a feature is on the form too, its picks placed under whatever
+// opens them, so nothing is left to set up. A list it doesn't name is cleared, as a field left blank is. Only
+// what it can't place is left out: a name it can't find, no room, or nothing opening it, each said by its line.
+// Applying reads the names again (withImportedPicks), as the browser only hands back what it was told. The
+// inventory is the one thing it adds to (inventoryAdded), to be tidied on the sheet. What an option gives comes
+// only through FINISH.
 //
 // Pure, needing no pdf-lib, so the browser's tests can hold the PDF form and this to each other.
 
 const { effectiveSheet } = require('./sheet');
-const { PICKS_KEY, LIMITS: CHOICE_LIMITS, choicesOf, pickedOf, capOf, meets, needsText } = require('./choices');
+const { PICKS_KEY, ROLLED_KEY, LIMITS: CHOICE_LIMITS, choicesOf, pickedOf, capOf, meets, needsText, heldOf, openingsOf, openCountOf } = require('./choices');
 const { normaliseInventory } = require('../sheets/inventoryImport');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -79,8 +83,14 @@ const sheetFields = (definition) => {
 
 /** The options of a list that can be named. */
 const namedOptions = (c) => list(c.options).filter((o) => isPlainObject(o) && typeof o.id === 'string');
-/** The lists a form asks about: those picked on their own, with something in them. */
-const listsAsked = (definition) => choicesOf(definition).filter((c) => ['own', 'both'].includes(pickedOf(c)) && namedOptions(c).length);
+/** How many a list can hold: its own room, or for one picked under features, what those features give in all. */
+const roomOf = (definition, c) => {
+  if (pickedOf(c) !== 'features') return capOf(c);
+  return choicesOf(definition).flatMap((l) => namedOptions(l)).flatMap((o) => list(o.features)).filter((f) => isPlainObject(f) && f.choice === c.id)
+    .reduce((n, f) => n + openCountOf(f), 0);
+};
+/** The lists a form asks about: those a character picks from, with something in them and a way to pick it. */
+const listsAsked = (definition) => choicesOf(definition).filter((c) => pickedOf(c) !== 'everyone' && namedOptions(c).length && roomOf(definition, c) > 0);
 const optionLabel = (o) => String(o.label || o.id);
 
 /**
@@ -91,7 +101,7 @@ const pickLines = (definition) => listsAsked(definition).flatMap((c) => {
   const one = String(c.one || c.id);
   const names = namedOptions(c).map(optionLabel);
   const where = { tab: null, section: 'CHOICES' };
-  if (capOf(c) !== 1) {
+  if (roomOf(definition, c) !== 1) {
     return [{ id: `pick_${c.id}`, label: String(c.many || one), type: 'text', list: c, ...where, hint: c.levelled === true ? `Names and levels, commas between: ${names[0]} 2${names[1] ? `, ${names[1]} 1` : ''}` : `Names, commas between: ${names.join(', ')}` }];
   }
   return [
@@ -110,7 +120,7 @@ const levelFrom = (v) => {
  * What one line names, as picks: { picks: [{ option, level? }], notFound, tooMany }. A name first as it
  * stands, then with a level off its end on a list with levels, so an option called "Rank 2" stays itself.
  */
-const readLine = (c, value, level) => {
+const readLine = (definition, c, value, level) => {
   const options = namedOptions(c);
   const find = (name) => options.find((o) => norm(o.id) === norm(name) || norm(optionLabel(o)) === norm(name));
   const picks = [];
@@ -126,7 +136,7 @@ const readLine = (c, value, level) => {
     }
     if (!option) { notFound.push(part); continue; }
     if (picks.some((p) => p.option === option.id)) continue;
-    if (picks.length >= capOf(c)) { tooMany.push(optionLabel(option)); continue; }
+    if (picks.length >= roomOf(definition, c)) { tooMany.push(optionLabel(option)); continue; }
     const at = own ?? level;
     picks.push({ option: option.id, ...(c.levelled === true ? { level: at ?? 1 } : {}) });
   }
@@ -134,26 +144,56 @@ const readLine = (c, value, level) => {
 };
 
 /**
- * The sheet with an upload's picks on it (7c6), each list named taking them in place of its own, those under
- * features staying. What was sent is checked again here. A player's upload leaves a list holding a locked
- * pick as it is, or it would be a second roll by another name; the GM's doesn't.
+ * These picks written over what each list held: a list's own as they are, and one picked under features
+ * under whatever opens it, down the lists, as a pick here can open the next. { stored, unopened }.
  */
-const withImportedPicks = (definition, data, sent, { gm = false } = {}) => {
-  if (!definition || !isPlainObject(sent)) return data;
+const placePicks = (definition, data, wanted) => {
   const stored = isPlainObject(data[PICKS_KEY]) ? { ...data[PICKS_KEY] } : {};
+  let waiting = [];
   for (const c of listsAsked(definition)) {
-    if (!Array.isArray(sent[c.id])) continue;
-    const held = list(stored[c.id]).filter(isPlainObject);
-    if (!gm && held.some((p) => p.locked === true)) continue;
+    if (!wanted[c.id]) continue;
+    const under = pickedOf(c) === 'features';
+    stored[c.id] = under ? [] : wanted[c.id];
+    if (under) waiting = [...waiting, ...wanted[c.id].map((pick) => ({ c, pick }))];
+  }
+  for (let moved = true; moved && waiting.length;) {
+    moved = false;
+    waiting = waiting.filter(({ c, pick }) => {
+      const held = heldOf(definition, { ...data, [PICKS_KEY]: stored }).filter((p) => p.active);
+      const opening = openingsOf(definition, held).find((o) => o.list === c && o.used < o.count);
+      if (!opening) return true;
+      stored[c.id] = [...stored[c.id], { ...pick, from: opening.feature.id }];
+      moved = true;
+      return false;
+    });
+  }
+  return { stored, unopened: waiting };
+};
+
+/**
+ * The sheet with an upload's picks on it (7c6), each list named taking them in place of whatever it held.
+ * What was sent is read again here, and placed again against the sheet as it is now. With `whole`, the upload
+ * is the whole character: a list it doesn't name is cleared too, and any roll waiting goes with it.
+ */
+const withImportedPicks = (definition, data, sent, { whole = false } = {}) => {
+  if (!definition || (!isPlainObject(sent) && !whole)) return data;
+  const given = isPlainObject(sent) ? sent : {};
+  const wanted = {};
+  for (const c of listsAsked(definition)) {
+    if (!Array.isArray(given[c.id])) {
+      if (whole) wanted[c.id] = [];
+      continue;
+    }
     const named = namedOptions(c);
     const picks = [];
-    for (const p of sent[c.id].filter(isPlainObject)) {
-      if (!named.some((o) => o.id === p.option) || picks.some((x) => x.option === p.option) || picks.length >= capOf(c)) continue;
+    for (const p of given[c.id].filter(isPlainObject)) {
+      if (!named.some((o) => o.id === p.option) || picks.some((x) => x.option === p.option) || picks.length >= roomOf(definition, c)) continue;
       picks.push({ option: p.option, ...(c.levelled === true ? { level: levelFrom(p.level) ?? 1 } : {}) });
     }
-    stored[c.id] = [...held.filter((p) => typeof p.from === 'string'), ...picks];
+    wanted[c.id] = picks;
   }
-  return { ...data, [PICKS_KEY]: stored };
+  const { [ROLLED_KEY]: rolled, ...rest } = data;
+  return { ...(whole ? rest : data), [PICKS_KEY]: placePicks(definition, data, wanted).stored };
 };
 
 /**
@@ -244,13 +284,22 @@ const customImporter = (definition) => {
       const given = levels.get(c);
       const level = given ? levelFrom(given.value) : null;
       if (given && level === null) out.unmapped[given.key] = given.value;
-      const read = readLine(c, value, level);
+      const read = readLine(definition, c, value, level);
       if (read.picks.length) picks[c.id] = read.picks;
       if (read.notFound.length) picksNotFound[key] = read.notFound;
       if (read.tooMany.length) picksTooMany[key] = read.tooMany;
     }
     for (const [c, { key, value }] of levels) if (!lines.has(c)) out.unmapped[key] = value;
-    const seen = { ...mapped, [PICKS_KEY]: picks };
+    // Placed as they will be, so a list under a feature with nothing opening it is said now.
+    const placed = placePicks(definition, mapped, picks);
+    const picksUnopened = {};
+    for (const { c, pick } of placed.unopened) {
+      const { key } = lines.get(c);
+      picksUnopened[key] = [...(picksUnopened[key] ?? []), optionLabel(namedOptions(c).find((o) => o.id === pick.option))];
+      picks[c.id] = picks[c.id].filter((p) => p !== pick);
+      if (!picks[c.id].length) delete picks[c.id];
+    }
+    const seen = { ...mapped, [PICKS_KEY]: placed.stored };
     for (const c of listsAsked(definition)) {
       for (const p of picks[c.id] ?? []) {
         const option = namedOptions(c).find((o) => o.id === p.option);
@@ -264,6 +313,8 @@ const customImporter = (definition) => {
       ...(picksSaid.length ? { picks, picksSaid } : {}),
       ...(Object.keys(picksNotFound).length ? { picksNotFound } : {}),
       ...(Object.keys(picksTooMany).length ? { picksTooMany } : {}),
+      ...(Object.keys(picksUnopened).length ? { picksUnopened } : {}),
+      ...(mapped[INVENTORY] === undefined ? {} : { inventoryAdds: true }),
     };
   };
 

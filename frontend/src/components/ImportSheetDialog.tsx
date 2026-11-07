@@ -3,6 +3,7 @@ import { DraggableWindow } from './DraggableWindow';
 import { ImportPreviewWindow, type ImportPreview } from './ImportPreviewWindow';
 import { hasJsonTemplate } from '../sheets/importable';
 import { getTemplate } from '../sheets';
+import { isCustomSystem } from '../sheets/customTemplates';
 
 // Sheet import dialog. Three inputs, one preview, one APPLY:
 //   - a fillable character-sheet PDF (form fields extracted server-side)
@@ -26,8 +27,6 @@ interface ImportSheetDialogProps {
   /** The sheet as it stands. Only read to work out what a replace would erase — the
    *  dialog cannot warn about losing something it cannot see. */
   currentData?: Record<string, unknown>;
-  /** The GM's: an upload replaces a locked pick. */
-  gm?: boolean;
   /** Apply the mapped fields to the target sheet (socket or admin REST). */
   onApply: (
     fields: Record<string, string | number>,
@@ -42,13 +41,14 @@ const boxColors: React.CSSProperties = { background: 'color-mix(in srgb, var(--g
 
 /**
  * The fields a replace leaves as they are, so the preview doesn't list them as lost: worked-out values
- * (the game works them out again) and GM-only fields (kept by the server, 4h2c; no upload sets them).
+ * (the game works them out again) and GM-only fields (kept by the server, 4h2c; no upload sets them). A custom
+ * system's inventory stays too: an upload adds to it (7c6).
  */
 export const keptFields = (system: string | null | undefined): string[] => (system
-  ? getTemplate(system).sections.flatMap((s) => s.fields).filter((f) => f.derived || f.gmOnly).map((f) => f.id)
+  ? [...getTemplate(system).sections.flatMap((s) => s.fields).filter((f) => f.derived || f.gmOnly).map((f) => f.id), ...(isCustomSystem(system) ? ['inventory'] : [])]
   : []);
 
-export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, currentData, gm }: ImportSheetDialogProps) {
+export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, currentData }: ImportSheetDialogProps) {
   const [pasted, setPasted] = useState('');
   const [code, setCode] = useState('');
   const [preview, setPreview] = useState<ImportPreview | null>(null);
@@ -295,7 +295,6 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
         preview={preview}
         currentData={currentData}
         keeps={keptFields(gameSystem)}
-        gm={gm}
         busy={busy}
         applied={applied}
         onApply={handleApply}

@@ -98,7 +98,7 @@ describe('what a replace would lose', () => {
   });
 
   it('knows which fields those are from the system\'s sheet', () => {
-    expect(keptFields(HEARTH)).toEqual(['defense', 'wound_notes']);
+    expect(keptFields(HEARTH)).toEqual(['defense', 'wound_notes', 'inventory']);
     expect(keptFields(undefined)).toEqual([]);
     const preview: ImportPreview = { system: HEARTH, source: 'json', mapped: {}, unmapped: {}, skipped: {} };
     expect(lossesFrom(preview, { defense: 1, notes: 'x' }, ['defense'])).toEqual(['notes']);
@@ -152,13 +152,30 @@ describe('picks in the preview (7c6)', () => {
     ]);
   });
 
-  it('a list holding a locked pick stays for a player, and is replaced by the GM', () => {
-    const sheet = { _choices: { classes: [{ option: 'mage', locked: true, roll: 4 }], feats: [{ option: 'tough' }] } };
-    const preview = { ...base, picksSaid: [SOLDIER, { list: 'feats', one: 'Feat', option: 'Keen' }] };
-    expect(pickLinesSaid(preview, sheet)).toEqual([
-      { tone: 'warn', text: 'CLASS: SOLDIER 3, NOT TAKEN: THIS CHARACTER\'S CLASS IS LOCKED. YOUR GM CAN CLEAR IT.' }, { tone: 'good', text: 'FEAT: KEEN' },
+  it('says what a list it doesn\'t name will lose, by name', () => {
+    const lists = [
+      { id: 'classes', one: 'Class', options: [{ id: 'soldier', label: 'Soldier' }, { id: 'mage', label: 'Mage' }] },
+      { id: 'feats', one: 'Feat', options: [{ id: 'tough', label: 'Tough' }] },
+      { id: 'skills', one: 'Skill', options: [{ id: 'cook', label: 'Cook' }] },
+    ] as never[];
+    const sheet = { _choices: { classes: [{ option: 'soldier' }, { option: 'mage' }], feats: [{ option: 'tough' }], skills: [] } };
+    expect(pickLinesSaid({ ...base, picks: { feats: [{ option: 'tough' }] } }, sheet, lists)).toEqual([
+      { tone: 'warn', text: 'CLASS: SOLDIER, MAGE, CLEARED: THIS SHEET DOESN\'T NAME ONE' },
     ]);
-    expect(pickLinesSaid(preview, sheet, true)[0]).toEqual({ tone: 'good', text: 'CLASS: SOLDIER 3' });
+    expect(pickLinesSaid(base, undefined, lists)).toEqual([]);
+  });
+
+  it('says an inventory adds', () => {
+    expect(pickLinesSaid({ ...base, inventoryAdds: true })).toEqual([{ tone: 'good', text: 'INVENTORY: ADDED TO WHAT IS ALREADY THERE. FIX IT ON THE SHEET.' }]);
+  });
+
+  it('a custom system\'s inventory isn\'t listed as lost; a built-in\'s still is', () => {
+    expect(keptFields(HEARTH)).toContain('inventory');
+    expect(keptFields('cyberpunk_red')).not.toContain('inventory');
+  });
+
+  it('one under a feature with nothing opening it, by the line that named it', () => {
+    expect(pickLinesSaid({ ...base, picksUnopened: { Weapon: ['Cudgel'] } })).toEqual([{ tone: 'warn', text: 'Weapon: NOTHING ON THIS SHEET OPENS Cudgel, LEFT OUT' }]);
   });
 
   it('a sheet\'s own bookkeeping isn\'t listed as lost: the server keeps it', () => {

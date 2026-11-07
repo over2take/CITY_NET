@@ -26,6 +26,7 @@ const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
 const { withUpload, lockedWhileCreating, kitsGivable } = require('../systemBuilder/creation');
 const { withImportedPicks } = require('../systemBuilder/sheetImport');
+const { inventoryAdded } = require('../sheets/inventoryImport');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { healthView } = require('../systemBuilder/healthView');
@@ -1506,8 +1507,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             allowed.forEach(([k, v]) => { data[k] = v; });
             allowed.forEach(([k]) => sheetTemplates.applyDerived(system, data, k));
             if (cyber) data[cyberware.FIELD] = cyber;
-            if (picks) {
-              Object.assign(data, withImportedPicks(definition, data, picks, { gm }));
+            // A custom system's upload is the whole character (7c6), but for the inventory, which it adds to.
+            if (definition && payload.replace) {
+              if (existing.inventory !== undefined) data.inventory = inventoryAdded(existing.inventory, data.inventory);
+              const whole = withImportedPicks(definition, data, picks, { whole: true });
+              delete data._rolled;
+              Object.assign(data, whole);
               sheetTemplates.applyDerived(system, data);
             }
             // A PDF or a pasted block offers one line of cyberware, since a paper form

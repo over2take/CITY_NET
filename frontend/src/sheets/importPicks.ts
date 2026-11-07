@@ -1,28 +1,36 @@
 // What the upload preview says of the picks a sheet names (7c6; approved mockup new-character): what each
-// comes to, one not met coming in as it is, one it can't find or has no room for, and one a player's upload
-// can't replace because a roll or the GM locked that list. What is read and written is the server's
+// comes to, one not met coming in as it is, and what it couldn't place: a name it can't find, no room, or
+// nothing opening it. An upload is the character, so it replaces what a list held, locked or not, and clears a
+// list it doesn't name. The inventory it adds to, so that is said too. What is read and written is the server's
 // (backend systemBuilder/sheetImport.js); ImportPreviewWindow only draws this.
 
 import type { ImportPreview } from '../components/ImportPreviewWindow';
+import type { ChoiceListShown } from './choicesShown';
 
-/** Whether this sheet holds a locked pick in a list. */
-const lockedIn = (data: Record<string, unknown> | undefined, list: string): boolean => {
-  const picks = (data?._choices as Record<string, unknown> | undefined)?.[list];
-  return Array.isArray(picks) && picks.some((p) => !!p && typeof p === 'object' && (p as { locked?: unknown }).locked === true);
+/** What this sheet holds in a list, by name. */
+const heldIn = (data: Record<string, unknown> | undefined, list: ChoiceListShown): string[] => {
+  const picks = (data?._choices as Record<string, unknown> | undefined)?.[list.id];
+  return (Array.isArray(picks) ? picks : []).flatMap((p) => {
+    const id = (p as { option?: unknown } | null)?.option;
+    const option = list.options.find((o) => o.id === id);
+    return option ? [option.label] : [];
+  });
 };
 
-/** What the window says of an upload's picks, in order (7c6). */
-export const pickLinesSaid = (preview: ImportPreview, currentData?: Record<string, unknown>, gm = false): { tone: 'good' | 'warn'; text: string }[] => {
-  const kept = (list: string) => !gm && lockedIn(currentData, list);
-  return [
-    ...(preview.picksSaid ?? []).flatMap((p): { tone: 'good' | 'warn'; text: string }[] => {
-      const named = `${p.one.toUpperCase()}: ${p.option.toUpperCase()}${p.level === undefined ? '' : ` ${p.level}`}`;
-      if (kept(p.list)) return [{ tone: 'warn', text: `${named}, NOT TAKEN: THIS CHARACTER'S ${p.one.toUpperCase()} IS LOCKED. YOUR GM CAN CLEAR IT.` }];
-      return p.unmet
-        ? [{ tone: 'warn', text: `${named}, COMING IN AS IT IS: IT NEEDS ${p.unmet}` }]
-        : [{ tone: 'good', text: named }];
-    }),
-    ...Object.entries(preview.picksNotFound ?? {}).map(([line, names]) => ({ tone: 'warn' as const, text: `${line}: CAN'T FIND ${names.join(', ')}, LEFT OUT` })),
-    ...Object.entries(preview.picksTooMany ?? {}).map(([line, names]) => ({ tone: 'warn' as const, text: `${line}: NO ROOM FOR ${names.join(', ')}, LEFT OUT` })),
-  ];
-};
+/** What the window says of an upload's picks, in order. */
+export const pickLinesSaid = (preview: ImportPreview, currentData?: Record<string, unknown>, lists: ChoiceListShown[] = []): { tone: 'good' | 'warn'; text: string }[] => [
+  ...(preview.picksSaid ?? []).map((p) => {
+    const named = `${p.one.toUpperCase()}: ${p.option.toUpperCase()}${p.level === undefined ? '' : ` ${p.level}`}`;
+    return p.unmet
+      ? { tone: 'warn' as const, text: `${named}, COMING IN AS IT IS: IT NEEDS ${p.unmet}` }
+      : { tone: 'good' as const, text: named };
+  }),
+  ...Object.entries(preview.picksNotFound ?? {}).map(([line, names]) => ({ tone: 'warn' as const, text: `${line}: CAN'T FIND ${names.join(', ')}, LEFT OUT` })),
+  ...Object.entries(preview.picksTooMany ?? {}).map(([line, names]) => ({ tone: 'warn' as const, text: `${line}: NO ROOM FOR ${names.join(', ')}, LEFT OUT` })),
+  ...Object.entries(preview.picksUnopened ?? {}).map(([line, names]) => ({ tone: 'warn' as const, text: `${line}: NOTHING ON THIS SHEET OPENS ${names.join(', ')}, LEFT OUT` })),
+  ...lists.filter((l) => !preview.picks?.[l.id]).flatMap((l) => {
+    const held = heldIn(currentData, l);
+    return held.length ? [{ tone: 'warn' as const, text: `${l.one.toUpperCase()}: ${held.join(', ').toUpperCase()}, CLEARED: THIS SHEET DOESN'T NAME ONE` }] : [];
+  }),
+  ...(preview.inventoryAdds ? [{ tone: 'good' as const, text: 'INVENTORY: ADDED TO WHAT IS ALREADY THERE. FIX IT ON THE SHEET.' }] : []),
+];
