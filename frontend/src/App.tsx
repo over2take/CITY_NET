@@ -56,6 +56,7 @@ import { CharacterSheetWindow } from './components/CharacterSheetWindow';
 import { NewCharacterWindow } from './components/NewCharacterWindow';
 import { TERMINAL_WIDTH } from './components/TerminalWindow';
 import { useNewCharacter } from './hooks/useNewCharacter';
+import { useLevelReady } from './hooks/useLevelReady';
 import { VehiclesWindow } from './components/VehiclesWindow';
 import { EnemyVehiclesWindow } from './components/EnemyVehiclesWindow';
 import { vehicleLook as cwnVehicleLook } from './sheets/vehiclePresets';
@@ -1112,6 +1113,7 @@ function App() {
     : 'individual';
   // The guided new character (7c2): where this user stands, and what CHARACTER_SHEET opens for it.
   const newCharacter = useNewCharacter(socketRef, isLoggedIn && !IS_SPECTATOR ? userName : null, gameSystem);
+  const levelReady = useLevelReady(socketRef, isLoggedIn && !IS_SPECTATOR ? userName : null, gameSystem);
   const openNewCharacter = () => {
     socketRef.current?.emit('creationAction', { kind: 'open' });
     setIsNewCharacterOpen(true);
@@ -1787,7 +1789,7 @@ function App() {
               setIsBankOpen={setIsBankOpen}
               isSheetOpen={isSheetOpen}
               setIsSheetOpen={openSheet}
-              newCharacterWaiting={newCharacter === 'new'}
+              newCharacterWaiting={newCharacter === 'new' || (levelReady && !isSheetOpen)}
               isVehiclesOpen={isVehiclesOpen}
               isEnemyVehiclesOpen={isEnemyVehiclesOpen}
               setIsEnemyVehiclesOpen={setIsEnemyVehiclesOpen}

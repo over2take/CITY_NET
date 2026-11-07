@@ -10,7 +10,7 @@ import { signInAsGm, signInAsPlayer, gmToken, asGm, runningSystem, approvedPlaye
 const definition = (name: string) => ({
   format: 1,
   name,
-  core: { health: { model: 'pool' }, advancement: ['levels'], dice: ['d20'] },
+  core: { health: { model: 'pool' }, dice: ['d20'] },
   choices: [
     { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter' }] },
     { id: 'feats', one: 'Feat', many: 'Feats', picks: 'any', options: [

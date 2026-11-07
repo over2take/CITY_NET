@@ -10,7 +10,8 @@
 // testing without a socket, a database or an admin token in the way.
 
 const { mutateSheetForUser } = require('./mutate');
-const { XP_KEY, LIMITS: XP_LIMITS, earnsXp } = require('../systemBuilder/levels');
+const { XP_KEY, LIMITS: XP_LIMITS, earnsXp, advances } = require('../systemBuilder/levels');
+const { levelAction } = require('../systemBuilder/levelUp');
 
 /**
  * What each system calls experience, or absent where it has no such field.
@@ -200,6 +201,28 @@ const applyLevel = (current, delta) => {
   return { from, to, delta: to - from };
 };
 
+/** A custom system's LEVEL_UP and LEVEL_DOWN (7d2b): a level given for the player to take, or one taken back. */
+const adjustCustom = (db, { system, definition, applyDerived, usernames, kind }, cb) => {
+  const results = [];
+  let remaining = usernames.length;
+  usernames.forEach((username) => {
+    let reason = null;
+    let done = null;
+    mutateSheetForUser(db, { username, system }, (data) => {
+      done = levelAction(definition, data, { kind }, { gm: true });
+      if (!done.ok) { reason = done.error; return undefined; }
+      if (applyDerived) applyDerived(system, done.data);
+      return done.data;
+    }, (err, data) => {
+      if (reason) results.push({ username, ok: false, reason });
+      else if (err || !data) results.push({ username, ok: false, reason: 'No sheet.' });
+      else results.push({ username, ok: true, level: done.level, owed: done.owed });
+      remaining -= 1;
+      if (remaining === 0) cb(null, results);
+    });
+  });
+};
+
 /**
  * Move a character up or down a level.
  *
@@ -208,11 +231,13 @@ const applyLevel = (current, delta) => {
  * invent an XP figure to do it, and taking XP back does not un-level anybody, because
  * the skill points and Focus picks that came with the level do not undo themselves.
  */
-const adjustLevel = (db, { system, usernames, delta }, cb = () => {}) => {
-  if (!supportsXp(system)) return cb('This system does not track levels.', null);
+const adjustLevel = (db, { system, definition, applyDerived, usernames, delta }, cb = () => {}) => {
+  const custom = !!definition && advances(definition);
+  if (!custom && !supportsXp(system)) return cb('This system does not track levels.', null);
   if (!Array.isArray(usernames) || usernames.length === 0) return cb('Nobody selected.', null);
   const step = Number(delta);
   if (!Number.isInteger(step) || step === 0) return cb('Level change must be a whole number.', null);
+  if (custom) return adjustCustom(db, { system, definition, applyDerived, usernames, kind: step > 0 ? 'give' : 'down' }, cb);
 
   const results = [];
   let remaining = usernames.length;

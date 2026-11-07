@@ -10,7 +10,8 @@
 //          is picked, dropped or levelled in a list every character has (7a5a2)
 //   drop   only the GM takes a pick away, or a player their own while making the character (7c2), on
 //          a list not rolled only and a pick not locked, as that would be a second roll by another name
-//   level  a pick's level in a levelled list, from 1 to the highest: the player or the GM
+//   level  a pick's level in a levelled list, from 1 to the highest: the player or the GM, or only the GM
+//          once the system has its own way up (7d2b, levelUp.js)
 //   use    how many of a feature's uses are spent, from none to all of them: the player or the GM
 //   recovery  how many of a pool of recovery dice are spent, from none to all (R2a): ticked off for
 //          real dice, or put right; the player or the GM. Spending them with a roll is sheets/recover.js's
@@ -34,6 +35,7 @@ const {
 } = require('./choices');
 const { poolsOf, RECOVERY_KEY } = require('./recovery');
 const { creatingNow, ROLLED_KEPT } = require('./creation');
+const { advances } = require('./levels');
 const crypto = require('crypto');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -176,6 +178,7 @@ const pickAction = (definition, data, action, { gm = false, rng = cryptoRng } = 
 
   if (action.kind === 'level') {
     if (c.levelled !== true) return fail(`The ${c.many || c.id} have no levels`);
+    if (!gm && advances(definition)) return fail('Levels go up with LEVEL UP');
     if (!taken) return fail(`${name} isn't picked`);
     const level = Number(action.level);
     if (!Number.isInteger(level) || level < 1 || level > LIMITS.level) return fail(`A level from 1 to ${LIMITS.level}`);

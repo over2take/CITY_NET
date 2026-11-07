@@ -275,10 +275,12 @@ export const placedFrom = (pool: number[], stats: { id: string }[], data: Obj | 
  * the character is being made, as the server holds it (backend creation.js lockedWhileCreating).
  */
 export const withCreationLocks = (template: SheetTemplate, data: Obj | null | undefined): SheetTemplate => {
-  if (flowState(template, data) !== 'going') return template;
-  const locked = new Set(flowSteps(template)
+  const going = flowState(template, data) === 'going';
+  const locked = new Set(going ? flowSteps(template)
     .filter((id) => isStatsStep(id) && stepWay(template, id).way !== 'typed')
-    .flatMap((id) => statsToSet(template, id).flatMap((g) => g.stats.map((s) => s.id))));
+    .flatMap((id) => statsToSet(template, id).flatMap((g) => g.stats.map((s) => s.id))) : []);
+  // Once a character is made, a stat called level goes up with LEVEL UP (7d2b; backend levelUp.js lockedByLevels).
+  if (template.levels && !going) locked.add('level');
   if (!locked.size) return template;
   return { ...template, sections: template.sections.map((s) => ({ ...s, fields: s.fields.map((f) => (locked.has(f.id) ? { ...f, gmOnly: true } : f)) })) };
 };

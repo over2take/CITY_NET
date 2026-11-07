@@ -25,6 +25,7 @@ const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
 const { withUpload, lockedWhileCreating, kitsGivable } = require('../systemBuilder/creation');
+const { lockedByLevels } = require('../systemBuilder/levelUp');
 const { withImportedPicks } = require('../systemBuilder/sheetImport');
 const { inventoryAdded } = require('../sheets/inventoryImport');
 const tableRolls = require('../systemBuilder/tableRolls');
@@ -1383,7 +1384,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           (data) => {
             // A stat set some way other than typing, while the character is being made (7c3b): a
             // number placed can't be typed over. Nothing to write, and the sheet shows it locked.
-            if (!isAdminSocket(socket) && lockedWhileCreating(customSystems.definitionOf(system), data).has(payload.fieldId)) return undefined;
+            if (!isAdminSocket(socket) && (lockedWhileCreating(customSystems.definitionOf(system), data).has(payload.fieldId) || lockedByLevels(customSystems.definitionOf(system), data).has(payload.fieldId))) return undefined;
             data[payload.fieldId] = payload.value;
             // If the changed field is a max, clamp the paired current field.
             const curField = sheetTemplates.getMaxPairs(system)[payload.fieldId];
@@ -1501,7 +1502,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               : existing;
             // An upload made during the guided new character finishes it (7c2): taken as it is.
             // A batch edit leaves alone what a player may not type just now (7c3b).
-            const locked = gm || payload.replace ? new Set() : lockedWhileCreating(customSystems.definitionOf(system), existing);
+            const locked = gm || payload.replace ? new Set() : new Set([...lockedWhileCreating(customSystems.definitionOf(system), existing), ...lockedByLevels(customSystems.definitionOf(system), existing)]);
             const allowed = entries.filter(([k]) => !locked.has(k));
             if (payload.replace) Object.assign(data, withUpload(customSystems.definitionOf(system), data));
             allowed.forEach(([k, v]) => { data[k] = v; });
@@ -2590,11 +2591,15 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (!isMainAdmin(decoded)) return;
         getGameSystem((sysErr, system) => {
           if (sysErr) return;
-          awardXpModule.adjustLevel(db, { system, usernames: data.usernames, delta: data.delta }, (reason, results) => {
+          awardXpModule.adjustLevel(db, { system, definition: customSystems.definitionOf(system), applyDerived: sheetTemplates.applyDerived, usernames: data.usernames, delta: data.delta }, (reason, results) => {
             if (reason) return socket.emit('xpAwardResult', { ok: false, reason });
             socket.emit('xpAwardResult', { ok: true, levelChange: Number(data.delta), results });
             results.filter((r) => r.ok).forEach((r) => {
-              io.emit('sheetUpdated', { username: r.username, system });
+              // A level can move the token's maximum, by a class's feature.
+              syncTokenMax(db, system, r.username, (moved) => {
+                if (moved) io.emit('dataUpdated', { isRhombusOnly: true });
+                io.emit('sheetUpdated', { username: r.username, system });
+              });
             });
           });
         });

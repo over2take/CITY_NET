@@ -3,7 +3,7 @@ import type { Definition } from '../sheets/systemsApi';
 import type { BuilderPage } from '../sheets/builderSession';
 import { HINTS } from '../sheets/builderHelp';
 import {
-  MOST_LEVEL, MULTIPLIERS, advancesBy, anyTyped, canAddRange, firstAsTyped, isTyped, topAsTyped, levelNotes, levelTable, levelsSet, withAdvancement, withFilledAgain,
+  MOST_LEVEL, MULTIPLIERS, advancesBy, levelHomeNote, anyTyped, canAddRange, firstAsTyped, isTyped, topAsTyped, levelNotes, levelTable, levelsSet, withAdvancement, withFilledAgain,
   withFirst, withRangeAdded, withRangeOff, withRangeTo, withRangeX, withTop, withTyped, xpWord,
 } from '../sheets/levels';
 import { FieldName } from './HelpHint';
@@ -79,6 +79,7 @@ export function LevelsPage({ definition, edit, onGoTo }: Props) {
         {!xp && milestone && <p style={why}>No {word} is kept. The GM levels up whoever they tick.</p>}
         {!xp && !milestone && <p style={why}>Off: characters don&apos;t go up here. Levels stay what the GM or the player types.</p>}
         {later.length > 0 && <p role="note" style={{ ...why, fontSize: 11 }}>SETUP also picks {later.map((id) => (id === 'spend' ? 'SPEND XP' : 'IMPROVE BY USE')).join(' and ')}. {later.length === 1 ? 'That comes' : 'Those come'} later, as their own pieces.</p>}
+        {levelHomeNote(definition) && <p role="note" style={note}>{levelHomeNote(definition)}</p>}
       </section>
       {xp && (
         <section aria-label="The XP table" style={panel}>

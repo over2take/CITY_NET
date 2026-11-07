@@ -308,7 +308,7 @@ export function FlowWindow({ pos, setPos, sheet, template, onField, act, choose,
       return (
         <div style={page}>
           <p style={why}>{gm ? 'Pick from these. One not met can be added anyway.' : <>Pick from these. One you don&apos;t meet is off, saying what it needs.</>}</p>
-          <ChoicesSection lists={template.choices ?? []} data={data ?? {}} readOnly={false} only={listId} takeBack gm={gm}
+          <ChoicesSection lists={template.choices ?? []} data={data ?? {}} readOnly={false} only={listId} takeBack gm={gm} levelsFixed={!!template.levels}
             onChoices={choose} refused={refused}
             gifts={{
               system: sheet.system,

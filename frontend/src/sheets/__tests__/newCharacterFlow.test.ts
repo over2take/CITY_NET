@@ -250,6 +250,15 @@ describe('a fixed array (7c3b)', () => {
     expect(stepAnswered(hers, 'stats', { grit: 15, concept: 14 })).toBe(true);
   });
 
+  it('locks a stat called level once a character is made, where levels go up on their own (7d2b)', () => {
+    const fieldsOf = (t: SheetTemplate) => Object.fromEntries(t.sections.flatMap((s) => s.fields).map((f) => [f.id, !!f.gmOnly]));
+    const withLevel = { ...TEMPLATE, levels: { top: 5 }, sections: [{ fields: [{ id: 'level' }, { id: 'grit' }] }] } as unknown as SheetTemplate;
+    expect(fieldsOf(withCreationLocks(withLevel, {}))).toEqual({ level: true, grit: false });
+    expect(fieldsOf(withCreationLocks(withLevel, { [CREATING_KEY]: { done: true } }))).toEqual({ level: true, grit: false });
+    const noLevels = { ...withLevel, levels: null } as unknown as SheetTemplate;
+    expect(withCreationLocks(noLevels, {})).toBe(noLevels);
+  });
+
   it('locks those stats on the sheet while it is being made, and no others', () => {
     const fieldsOf = (t: SheetTemplate) => Object.fromEntries(t.sections.flatMap((s) => s.fields).map((f) => [f.id, !!f.gmOnly]));
     const locked = fieldsOf(withCreationLocks(ARRAY, going));

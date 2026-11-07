@@ -11,7 +11,7 @@ const definition = (name: string) => ({
   format: 1,
   name,
   stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'int', label: 'Intellect', min: 1, max: 18 }] }],
-  core: { health: { model: 'pool' }, advancement: ['levels'], dice: ['d20'] },
+  core: { health: { model: 'pool' }, dice: ['d20'] },
   choices: [
     { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [
       { id: 'soldier', label: 'Soldier', features: [{ id: 'specialty', label: 'Specialty', at: 3, choice: 'specs' }] },

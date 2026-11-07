@@ -6,10 +6,12 @@ import { workedOn } from './choicesShown';
 import type { SheetTemplate } from './types';
 
 /** What the server sends (backend levels.js levelsShown): the total to reach each level from 2. */
-export interface LevelsShown { table: Record<string, number> }
+export interface LevelsShown { top: number; table?: Record<string, number> }
 
 /** Where a sheet keeps its XP (backend levels.js XP_KEY). */
 export const XP_KEY = '_xp';
+/** A level the GM gave, not taken yet (backend levelUp.js OWED_KEY). */
+export const OWED_KEY = '_levels_owed';
 /** A cell per point up to this many to the next level, as the HP bar has one per hit point. */
 const ONE_PER_POINT = 40;
 /** Past that, this many. */
@@ -47,6 +49,27 @@ export const xpMeter = (template: SheetTemplate | null | undefined, data: Record
   const span = Math.max(1, next - from);
   const cells = span <= ONE_PER_POINT ? span : CELLS;
   return { xp, level, need: next, cells, lit: Math.max(0, Math.min(cells, Math.floor(((xp - from) / span) * cells))), ready: xp >= next };
+};
+
+/** One thing that can go up: a pick in a levelled list, or with none, the level stat (backend levelUp.js levelTargets). */
+export interface LevelTarget { list?: string; option?: string; name: string; level: number }
+export interface LevelUpOffer { ready: boolean; targets: LevelTarget[]; firstPick: string | null }
+
+/** Whether this character can go up now, and what would. Null where levels are typed in. */
+export const levelUpOffer = (template: SheetTemplate | null | undefined, data: Record<string, unknown> | null | undefined): LevelUpOffer | null => {
+  const levels = template?.levels;
+  if (!levels) return null;
+  const level = characterLevel(data);
+  const need = levels.table?.[level + 1];
+  const ready = level < levels.top && (whole(data?.[OWED_KEY]) > 0 || (need !== undefined && whole(data?.[XP_KEY]) >= need));
+  const lists = (template?.choices ?? []).filter((l) => l.levelled);
+  if (!lists.length) return { ready, targets: [{ name: 'LEVEL', level }], firstPick: null };
+  const targets = workedOn(data).picks.filter((p) => !p.from && !p.waiting).flatMap((p) => {
+    const list = lists.find((l) => l.id === p.list);
+    const option = list?.options.find((o) => o.id === p.option);
+    return list && option ? [{ list: list.id, option: option.id, name: option.label, level: p.level ?? 1 }] : [];
+  });
+  return { ready, targets, firstPick: targets.length ? null : lists[0].one };
 };
 
 /** The line under the meter. */

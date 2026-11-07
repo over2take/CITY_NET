@@ -250,9 +250,29 @@ describe('a custom system (7d2a)', () => {
     expect(screen.getByText("1 LEFT OVER: IT WOULDN'T DIVIDE")).toBeInTheDocument();
   });
 
-  it('has no level buttons yet: those come with level up', () => {
-    custom();
-    expect(screen.queryByRole('button', { name: 'LEVEL_UP' })).toBeNull();
+  it('its level buttons give a level to take, or take one back, for those ticked (7d2b)', async () => {
+    const { emit, handlers } = custom();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'ghost' }));
+    await userEvent.click(screen.getByRole('button', { name: 'LEVEL_UP' }));
+    expect(emit).toHaveBeenCalledWith('adminAdjustLevel', { token: 't', usernames: ['ghost'], delta: 1 });
+    await userEvent.click(screen.getByRole('button', { name: 'LEVEL_DOWN' }));
+    expect(emit).toHaveBeenCalledWith('adminAdjustLevel', { token: 't', usernames: ['ghost'], delta: -1 });
+    expect(screen.getByText(/LEVEL UP READY shows on their sheet/)).toBeInTheDocument();
+    act(() => handlers.xpAwardResult({ ok: true, levelChange: 1, results: [{ username: 'ghost', ok: true, level: 3, owed: 2 }] }));
+    expect(screen.getByText(/level 3 · 2 to take/)).toBeInTheDocument();
+    act(() => handlers.xpAwardResult({ ok: true, levelChange: -1, results: [{ username: 'ghost', ok: true, level: 3, owed: 0 }] }));
+    expect(screen.getByText(/level 3/).textContent).not.toContain('to take');
+  });
+
+  it('with milestone only there is no XP to give: only the level buttons', () => {
+    registerCustomTemplate({ id: ID, name: 'H', words: {}, parts: {}, derived: [], sheet: { sections: [] }, levels: { top: 5 } } as unknown as CustomRender);
+    show({ system: ID });
+    expect(screen.getByText('LEVELS.EXE')).toBeInTheDocument();
+    expect(xpAvailable(ID)).toBe(true);
+    expect(screen.getByRole('button', { name: 'LEVEL_UP' })).toBeInTheDocument();
+    for (const gone of ['AWARD_SELECTED', 'SPLIT', 'EACH']) expect(screen.queryByRole('button', { name: new RegExp(gone) }), gone).toBeNull();
+    expect(screen.queryByLabelText('POINTS_EACH')).toBeNull();
+    expect(screen.queryByLabelText(/^Replace what the selected/)).toBeNull();
   });
 
   it('Cities Without Number stays as it was: EACH only, no setting it', () => {

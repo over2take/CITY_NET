@@ -17,7 +17,7 @@ const definition = (name: string) => ({
     { id: 'traits', label: 'TRAITS', stats: [{ id: 'grit', label: 'Grit', min: 1, max: 20 }] },
     { id: 'resources', label: 'RESOURCES', stats: [{ id: 'resolve', label: 'Resolve', min: 0, max: 30 }] },
   ],
-  core: { health: { model: 'pool' }, advancement: ['levels'], dice: ['d6'] },
+  core: { health: { model: 'pool' }, dice: ['d6'] },
   choices: [{
     id: 'classes', one: 'Class', many: 'Classes', levelled: true,
     options: [{ id: 'fighter', label: 'Fighter', features: [{ id: 'tough', label: 'Tough', at: 2, modifiers: [{ target: 'grit', amount: '2' }] }] }],

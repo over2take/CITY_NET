@@ -11,7 +11,7 @@ const definition = (name: string) => ({
   format: 1,
   name,
   stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'str', label: 'Strength', min: 1, max: 20 }] }],
-  core: { health: { model: 'pool' }, advancement: ['levels'], dice: ['d20'] },
+  core: { health: { model: 'pool' }, dice: ['d20'] },
   choices: [
     { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [
       { id: 'fighter', label: 'Fighter', features: [{ id: 'martial_archetype', label: 'Martial Archetype', at: 3, choice: 'archetypes' }] },

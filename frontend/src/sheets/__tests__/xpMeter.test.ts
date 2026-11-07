@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { characterLevel, xpMeter, xpMeterWords, XP_KEY } from '../xpMeter';
+import { characterLevel, levelUpOffer, xpMeter, xpMeterWords, OWED_KEY, XP_KEY } from '../xpMeter';
 import { WORKED_KEY } from '../choicesShown';
 import type { SheetTemplate } from '../types';
 
@@ -101,5 +101,47 @@ describe('what it says', () => {
 
   it('the top', () => {
     expect(words(5000, 4)).toBe('5000 · THE HIGHEST LEVEL');
+  });
+});
+
+describe('whether a character can go up (7d2b)', () => {
+  const LISTS = [{ id: 'classes', one: 'Class', levelled: true, options: [{ id: 'soldier', label: 'Soldier' }, { id: 'mage', label: 'Mage' }, { id: 'spare', label: 'Spare' }] }, { id: 'feats', one: 'Feat', options: [{ id: 'quick', label: 'Quick' }] }];
+  const made = (extra: object = {}) => ({ levels: { top: 3, table: { 2: 300, 3: 900 } }, ...extra }) as unknown as SheetTemplate;
+  const pick = (option: string, level: number | undefined, over: object = {}) => ({ list: 'classes', option, ...(level === undefined ? {} : { level }), ...over });
+  const holding = (picks: object[], level: number, more: object = {}) => ({ [WORKED_KEY]: { picks, levels: { level } }, ...more });
+
+  it('not where levels are typed in', () => {
+    expect(levelUpOffer({} as SheetTemplate, {})).toBeNull();
+    expect(levelUpOffer(null, {})).toBeNull();
+  });
+
+  it('once XP reaches the next level, and not one short', () => {
+    expect(levelUpOffer(made(), { [XP_KEY]: 299 })?.ready).toBe(false);
+    expect(levelUpOffer(made(), { [XP_KEY]: 300 })?.ready).toBe(true);
+    expect(levelUpOffer(made(), { [XP_KEY]: 300, level: 2 })?.ready).toBe(false);
+  });
+
+  it('once the GM has given a level, with or without a table', () => {
+    expect(levelUpOffer(made(), { [OWED_KEY]: 1 })?.ready).toBe(true);
+    const milestone = { levels: { top: 3 } } as unknown as SheetTemplate;
+    expect(levelUpOffer(milestone, {})?.ready).toBe(false);
+    expect(levelUpOffer(milestone, { [OWED_KEY]: 1 })?.ready).toBe(true);
+  });
+
+  it('never at the highest level', () => {
+    expect(levelUpOffer(made(), { [XP_KEY]: 9000, level: 3 })?.ready).toBe(false);
+    expect(levelUpOffer(made(), { [OWED_KEY]: 2, level: 3 })?.ready).toBe(false);
+  });
+
+  it('with no levelled list, the level itself goes up', () => {
+    expect(levelUpOffer(made({ choices: [LISTS[1]] }), { level: 2 })).toEqual({ ready: false, targets: [{ name: 'LEVEL', level: 2 }], firstPick: null });
+  });
+
+  it('with one, each of their own that counts; none picked says which to pick', () => {
+    const template = made({ choices: LISTS });
+    const offer = levelUpOffer(template, holding([pick('soldier', 2), pick('mage', 1), pick('spare', 1, { waiting: true }), pick('spare', 1, { from: 'x' }), pick('gone', 1), { list: 'feats', option: 'quick' }], 3));
+    expect(offer?.targets).toEqual([{ list: 'classes', option: 'soldier', name: 'Soldier', level: 2 }, { list: 'classes', option: 'mage', name: 'Mage', level: 1 }]);
+    expect(offer?.firstPick).toBeNull();
+    expect(levelUpOffer(template, holding([], 0))).toEqual({ ready: false, targets: [], firstPick: 'Class' });
   });
 });

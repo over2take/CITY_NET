@@ -142,6 +142,7 @@ export default function SheetPage() {
               encumbranceEnforced={encumbranceEnforced}
               onCastSpell={actions.onCastSpell}
               onRollAbility={actions.onRollAbility}
+              onLevelUp={actions.onLevelUp}
               onResistDrain={actions.onResistDrain}
               allowFumbleShield={allowFumbleShield}
               hiddenTabs={hiddenTabs}

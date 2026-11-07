@@ -63,6 +63,19 @@ describe('the CHOICES block', () => {
     expect(screen.getByLabelText('Level 3: SOLDIER 3').getAttribute('title')).toBe('SOLDIER 3');
   });
 
+  it('where levels go up with LEVEL UP (7d2b), a player has no + or -, and the GM still does', () => {
+    const data = { _choices: { classes: [{ option: 'soldier', level: 2 }] } };
+    const shown = backend.choicesShown(HEARTH, data);
+    const worked = { ...data, [WORKED_KEY]: backend.workedOf(HEARTH, data) };
+    const { unmount } = render(<ChoicesSection lists={shown as ChoiceListShown[]} data={worked} onChoices={vi.fn()} levelsFixed />);
+    expect(screen.queryByRole('button', { name: 'Soldier level up' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Soldier level down' })).toBeNull();
+    unmount();
+    render(<ChoicesSection lists={shown as ChoiceListShown[]} data={worked} onChoices={vi.fn()} levelsFixed gm />);
+    expect(screen.getByRole('button', { name: 'Soldier level up' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Soldier level down' })).toBeTruthy();
+  });
+
   it('a level raised and lowered, asked of the server, never below 1', async () => {
     const onChoices = draw({ _choices: { classes: [{ option: 'soldier', level: 1 }] } });
     expect(soldier().getByRole('button', { name: 'Soldier level down' })).toHaveProperty('disabled', true);
