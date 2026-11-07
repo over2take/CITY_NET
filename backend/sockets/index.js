@@ -25,6 +25,8 @@ const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
 const { withUpload, lockedWhileCreating, kitsGivable } = require('../systemBuilder/creation');
+const { withImportedPicks } = require('../systemBuilder/sheetImport');
+const { inventoryAdded } = require('../sheets/inventoryImport');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { healthView } = require('../systemBuilder/healthView');
@@ -1471,7 +1473,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         const entries = Object.entries(payload.fields)
           .filter(([k, v]) => !linked[k] && (gm || sheetTemplates.playerMayEdit(system, k))
             && (typeof v === 'string' || typeof v === 'number'));
-        if (entries.length === 0 && !cyber) return;
+        // A custom system's upload can name its picks too (7c6), checked again as they are written.
+        const definition = customSystems.definitionOf(system);
+        const picks = definition && payload.picks && typeof payload.picks === 'object' ? payload.picks : null;
+        if (entries.length === 0 && !cyber && !picks) return;
         // Through the queue: an import replaces the whole sheet, so a concurrent edit
         // does not merely lose a field, it disappears entirely. The occupancy carried
         // across a replace has to be read at write time too, or a player seated during
@@ -1502,6 +1507,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             allowed.forEach(([k, v]) => { data[k] = v; });
             allowed.forEach(([k]) => sheetTemplates.applyDerived(system, data, k));
             if (cyber) data[cyberware.FIELD] = cyber;
+            // A custom system's upload is the whole character (7c6), but for the inventory, which it adds to.
+            if (definition && payload.replace) {
+              if (existing.inventory !== undefined) data.inventory = inventoryAdded(existing.inventory, data.inventory);
+              const whole = withImportedPicks(definition, data, picks, { whole: true });
+              delete data._rolled;
+              Object.assign(data, whole);
+              sheetTemplates.applyDerived(system, data);
+            }
             // A PDF or a pasted block offers one line of cyberware, since a paper form
             // cannot hold rows. Read it into rows here rather than keeping a field the
             // template no longer has — and never over rows that already arrived, which

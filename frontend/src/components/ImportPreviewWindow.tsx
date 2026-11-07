@@ -15,6 +15,8 @@ import { DraggableWindow } from './DraggableWindow';
  */
 
 import type { CyberRow } from '../sheets/cyberwareRows';
+import { pickLinesSaid } from '../sheets/importPicks';
+import { getTemplate } from '../sheets';
 
 export interface ImportPreview {
   system: string;
@@ -36,6 +38,14 @@ export interface ImportPreview {
   workedOut?: Record<string, unknown>;
   gmOnly?: Record<string, unknown>;
   notAChoice?: Record<string, unknown>;
+  /** The picks an upload names (7c6), to send back as they are, what they come to, and what wasn't taken. */
+  picks?: Record<string, { option: string; level?: number }[]>;
+  picksSaid?: { list: string; one: string; option: string; level?: number; unmet?: string }[];
+  picksNotFound?: Record<string, string[]>;
+  picksTooMany?: Record<string, string[]>;
+  picksUnopened?: Record<string, string[]>;
+  /** A custom system's upload adds to the inventory, where it replaces everything else. */
+  inventoryAdds?: boolean;
 }
 
 interface Props {
@@ -71,6 +81,8 @@ export const lossesFrom = (
 ): string[] => (currentData
   ? Object.entries(currentData)
       .filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '')
+      // The sheet's own bookkeeping is the server's, and stays.
+      .filter(([k]) => !k.startsWith('_'))
       .filter(([k]) => !(k in preview.mapped))
       .filter(([k]) => !KEPT.includes(k) && !keeps.includes(k))
       .map(([k]) => k)
@@ -121,6 +133,10 @@ export function ImportPreviewWindow({ pos, setPos, preview, currentData, keeps, 
           <div key={l.key} style={{ ...label9, color: l.key === 'notAChoice' ? 'var(--warning)' : 'var(--cyan)' }}>{l.text}</div>
         ))}
 
+        {pickLinesSaid(preview, currentData, preview.system ? getTemplate(preview.system).choices : []).map((l) => (
+          <div key={l.text} style={{ ...label9, color: l.tone === 'warn' ? 'var(--warning)' : 'var(--cyan)' }}>{l.text}</div>
+        ))}
+
         {unmappedKeys.length > 0 && (
           <div style={{ ...row, opacity: 0.55 }}>
             NOT RECOGNIZED: {unmappedKeys.slice(0, 30).join(', ')}{unmappedKeys.length > 30 ? '…' : ''}
@@ -153,7 +169,7 @@ export function ImportPreviewWindow({ pos, setPos, preview, currentData, keeps, 
           <button
             className="upload-btn danger-btn"
             style={{ flex: 1, marginTop: 0, padding: '6px', fontWeight: 'bold' }}
-            disabled={busy || applied || mapped.length === 0}
+            disabled={busy || applied || (mapped.length === 0 && !preview.picksSaid?.length)}
             onClick={onApply}
           >
             {applied ? '✓ APPLIED' : `REPLACE SHEET WITH ${mapped.length} FIELDS`}

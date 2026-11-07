@@ -3,6 +3,7 @@ import { DraggableWindow } from './DraggableWindow';
 import { ImportPreviewWindow, type ImportPreview } from './ImportPreviewWindow';
 import { hasJsonTemplate } from '../sheets/importable';
 import { getTemplate } from '../sheets';
+import { isCustomSystem } from '../sheets/customTemplates';
 
 // Sheet import dialog. Three inputs, one preview, one APPLY:
 //   - a fillable character-sheet PDF (form fields extracted server-side)
@@ -29,7 +30,7 @@ interface ImportSheetDialogProps {
   /** Apply the mapped fields to the target sheet (socket or admin REST). */
   onApply: (
     fields: Record<string, string | number>,
-    opts?: { replace?: boolean; cyberware?: unknown[] },
+    opts?: { replace?: boolean; cyberware?: unknown[]; picks?: unknown },
   ) => Promise<void> | void;
 }
 
@@ -40,10 +41,11 @@ const boxColors: React.CSSProperties = { background: 'color-mix(in srgb, var(--g
 
 /**
  * The fields a replace leaves as they are, so the preview doesn't list them as lost: worked-out values
- * (the game works them out again) and GM-only fields (kept by the server, 4h2c; no upload sets them).
+ * (the game works them out again) and GM-only fields (kept by the server, 4h2c; no upload sets them). A custom
+ * system's inventory stays too: an upload adds to it (7c6).
  */
 export const keptFields = (system: string | null | undefined): string[] => (system
-  ? getTemplate(system).sections.flatMap((s) => s.fields).filter((f) => f.derived || f.gmOnly).map((f) => f.id)
+  ? [...getTemplate(system).sections.flatMap((s) => s.fields).filter((f) => f.derived || f.gmOnly).map((f) => f.id), ...(isCustomSystem(system) ? ['inventory'] : [])]
   : []);
 
 export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, currentData }: ImportSheetDialogProps) {
@@ -153,7 +155,7 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
   const handleApply = async () => {
     if (!preview) return;
     setBusy(true);
-    await onApply(preview.mapped, { replace: true, cyberware: preview.cyberware });
+    await onApply(preview.mapped, { replace: true, cyberware: preview.cyberware, picks: preview.picks });
     setBusy(false);
     setApplied(true);
   };

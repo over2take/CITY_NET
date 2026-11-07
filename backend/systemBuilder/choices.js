@@ -860,5 +860,5 @@ module.exports = {
   LIMITS, PICKED, PLAYERS, PICKS_KEY, USES_KEY, WORKED_KEY, ROLLED_KEY, rolledOn, rolledKey, rolledOf, checkChoices, checkHasNames, ownableOf, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
   tableOf, rollRangeOf, playersOf,
   capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, worksOutPicks, choicesShown, tokenMaxFieldOf,
-  MAIN_MONEY, moneyCurrencies, giftItemsOf, giftMoneyOf,
+  MAIN_MONEY, moneyCurrencies, giftItemsOf, giftMoneyOf, openCountOf,
 };

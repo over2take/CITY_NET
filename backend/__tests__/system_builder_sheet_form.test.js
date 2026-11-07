@@ -181,3 +181,130 @@ describe('through the routes', () => {
     expect((await request(app).post('/api/systems/form.pdf').set('Authorization', `Bearer ${GM}`).send({ definition: 'nope' })).status).toBe(400);
   });
 });
+
+describe('picks on the form (7c6)', () => {
+  const PICKS = { ...HEARTH, ...{
+    format: 1, name: 'Picks',
+    stats: [{ id: 'traits', label: 'TRAITS', stats: [{ id: 'wits', label: 'Wits', min: 1, max: 20 }] }],
+    choices: [
+      { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [
+        { id: 'soldier', label: 'Soldier' }, { id: 'mage', label: 'Mage', requires: '@wits >= 13' },
+      ] },
+      { id: 'feats', one: 'Feat', many: 'Feats', picks: 2, options: [
+        { id: 'tough', label: 'Tough' }, { id: 'quick', label: 'Quick' }, { id: 'keen', label: 'Keen' },
+      ] },
+      { id: 'skills', one: 'Skill', many: 'Skills', again: true, levelled: true, options: [
+        { id: 'cook', label: 'Cook' }, { id: 'rank2', label: 'Rank 2' }, { id: 'sail', label: 'Sail' },
+      ] },
+      { id: 'specs', one: 'Specialty', many: 'Specialties', picked: 'features', options: [{ id: 'duelist', label: 'Duelist' }] },
+      { id: 'commons', one: 'Common', many: 'Commons', picked: 'everyone', options: [{ id: 'breath', label: 'Breath' }] },
+      { id: 'empty', one: 'Nothing', many: 'Nothings', options: [] },
+    ],
+  }, stats: HEARTH.stats, name: 'Hearth Fire' };
+
+  it('has a dropdown for a list picked once, a level box, and a box for names', async () => {
+    const form = await formOf(await buildCustomTemplate(PICKS));
+    expect(form.getField('pick_classes')).toBeInstanceOf(PDFDropdown);
+    expect(form.getDropdown('pick_classes').getOptions()).toEqual(['Soldier', 'Mage']);
+    expect(form.getField('pick_classes_level')).toBeInstanceOf(PDFTextField);
+    expect(form.getField('pick_feats')).toBeInstanceOf(PDFTextField);
+    const names = form.getFields().map((f) => f.getName());
+    expect(names).toContain('pick_skills');
+    for (const not of ['pick_specs', 'pick_commons', 'pick_empty']) expect(names).not.toContain(not);
+    // After the sheet's own.
+    expect(names.indexOf('pick_classes')).toBeGreaterThan(names.indexOf('inventory_12_qty'));
+  });
+
+  it('comes back through the importer, picks and all, filled in', async () => {
+    const doc = await PDFDocument.load(await buildCustomTemplate(PICKS));
+    const form = doc.getForm();
+    form.getTextField('name').setText('Vex Marrow');
+    form.getDropdown('pick_classes').select('Mage');
+    form.getTextField('pick_classes_level').setText('3');
+    form.getTextField('pick_feats').setText('Tough, Keen');
+    form.getTextField('pick_skills').setText('Cook 2, Sail');
+    const raw = await extractPdfFields(Buffer.from(await doc.save()));
+    const { mapped, picks, picksSaid, picksNotFound } = customImporter(PICKS).mapFields(raw);
+    expect(mapped.name).toBe('Vex Marrow');
+    expect(picks).toEqual({
+      classes: [{ option: 'mage', level: 3 }],
+      feats: [{ option: 'tough' }, { option: 'keen' }],
+      skills: [{ option: 'cook', level: 2 }, { option: 'sail', level: 1 }],
+    });
+    expect(picksSaid.map((p) => p.option)).toEqual(['Mage', 'Tough', 'Keen', 'Cook', 'Sail']);
+    expect(picksNotFound).toBeUndefined();
+  });
+
+  it('left blank, a form names no picks', async () => {
+    const raw = await extractPdfFields(await buildCustomTemplate(PICKS));
+    const read = customImporter(PICKS).mapFields(raw);
+    expect(read.picks).toBeUndefined();
+    expect(read.picksNotFound).toBeUndefined();
+    expect(Object.keys(read.unmapped)).toEqual([]);
+  });
+
+  it('prints how to write the names under their box', () => {
+    expect(hintOf({ type: 'text', hint: 'Names, commas between: A, B' })).toBe('Names, commas between: A, B');
+  });
+});
+
+describe('the GM uploading picks to a player\'s sheet (7c6)', () => {
+  const ID = 'sys_aaaaaaaaaaaaaaaa';
+  const LISTED = { format: 1, name: 'Listed', stats: [{ id: 'attrs', label: 'ATTRIBUTES', stats: [{ id: 'might', label: 'Might' }] }], choices: [
+    { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'soldier', label: 'Soldier', features: [{ id: 'guard', label: 'Guard', modifiers: [{ target: 'might', amount: '1' }] }] }, { id: 'mage', label: 'Mage' }] },
+  ] };
+  let db;
+  let app;
+  const put = (body) => request(app).put('/api/sheets/user/vex').set('Authorization', `Bearer ${GM}`).send(body);
+  const stored = async () => JSON.parse((await new Promise((resolve, reject) => db.get('SELECT data FROM character_sheets WHERE username = ?', ['vex'], (e, row) => (e ? reject(e) : resolve(row))))).data);
+
+  beforeEach(async () => {
+    db = await makeTestDb();
+    const text = JSON.stringify(LISTED);
+    await run(db, 'INSERT INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 3)', [ID, LISTED.name, text, text]);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    await run(db, `INSERT OR REPLACE INTO global_settings (key, value) VALUES ('game_system', ?)`, [ID]);
+    await run(db, 'INSERT INTO character_sheets (username, system, data, is_npc) VALUES (?, ?, ?, 0)', ['vex', ID, JSON.stringify({ name: 'Vex', _choices: { classes: [{ option: 'mage', level: 1, locked: true, roll: 4 }] } })]);
+    app = express();
+    app.use(express.json());
+    app.use('/api/sheets', sheetsRouteFactory(db, { emit: () => {} }));
+  });
+
+  it('writes them, replacing a locked pick, and works out what they do', async () => {
+    const res = await put({ fields: { might: 5 }, upload: true, picks: { classes: [{ option: 'soldier', level: 2 }] } });
+    expect(res.status).toBe(200);
+    const data = await stored();
+    expect(data.might).toBe(5);
+    expect(data._choices.classes).toEqual([{ option: 'soldier', level: 2 }]);
+    expect(data._worked.picks).toEqual([{ list: 'classes', option: 'soldier', level: 2 }]);
+  });
+
+  it('an edit with no picks leaves them as they were', async () => {
+    await put({ fields: { might: 5 } });
+    expect((await stored())._choices.classes).toEqual([{ option: 'mage', level: 1, locked: true, roll: 4 }]);
+  });
+
+  it('an upload naming no picks clears them; an edit naming picks doesn\'t touch them', async () => {
+    await put({ fields: {}, picks: { classes: [{ option: 'soldier' }] } });
+    expect((await stored())._choices.classes).toEqual([{ option: 'mage', level: 1, locked: true, roll: 4 }]);
+    await put({ fields: {}, upload: true });
+    expect((await stored())._choices.classes).toEqual([]);
+  });
+
+  it('an upload adds to the inventory, where an edit replaces it', async () => {
+    const bag = (v) => run(db, 'UPDATE character_sheets SET data = ? WHERE username = ?', [JSON.stringify({ name: 'Vex', inventory: v }), 'vex']);
+    const had = JSON.stringify([{ name: 'Rope', qty: 1, carry: 'stowed' }]);
+    const came = JSON.stringify([{ name: 'Rope', qty: 2 }]);
+    await bag(had);
+    await put({ fields: { inventory: came }, upload: true });
+    expect(JSON.parse((await stored()).inventory)).toEqual([{ name: 'Rope', qty: 3, carry: 'stowed' }]);
+    await bag(had);
+    await put({ fields: { inventory: came } });
+    expect(JSON.parse((await stored()).inventory)).toEqual([{ name: 'Rope', qty: 2 }]);
+  });
+
+  it('checks what was sent', async () => {
+    await put({ fields: {}, upload: true, picks: { classes: [{ option: 'wizard' }] } });
+    expect((await stored())._choices.classes).toEqual([]);
+  });
+});
