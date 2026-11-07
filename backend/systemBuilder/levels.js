@@ -13,9 +13,17 @@
 // by itself. The first range starts at level 1, each after the one before ends, and the last reaches the
 // highest level, so every level has a multiplier. Level 2 costs `first`, so a multiplier first counts at level 3.
 //
+// A character's XP is kept on their sheet under XP_KEY, a name no field can have and a player's own edits
+// can't reach: only the GM gives it (7d2a). It runs while the system answers XP LEVELS and has the XP part on.
+//
 // Pure: checks and reads only. The browser's copy of levelTable is sheets/levels.ts, held to this by its test.
 
+const { partOn } = require('./parts');
+
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** Where a sheet keeps its XP. */
+const XP_KEY = '_xp';
 
 const LIMITS = { top: 30, xp: 1000000000000, ranges: 30, times: 100 };
 const KEYS = new Set(['top', 'first', 'ranges', 'typed']);
@@ -50,6 +58,13 @@ const levelTable = (definition) => {
   }
   return table;
 };
+
+/** Whether this system's characters earn XP toward levels. */
+const earnsXp = (definition) => !!definition && isPlainObject(definition.core) && Array.isArray(definition.core.advancement)
+  && definition.core.advancement.includes('levels') && partOn(definition, 'xp');
+
+/** What the browser needs to draw the meter, or null where there is none. */
+const levelsShown = (definition) => (earnsXp(definition) ? { table: levelTable(definition) } : null);
 
 /** A definition's levels checked, its problems added to `problems`. */
 const checkLevels = (definition, problems) => {
@@ -92,4 +107,4 @@ const checkLevels = (definition, problems) => {
   }
 };
 
-module.exports = { LIMITS, DEFAULTS, levelsOf, levelTable, checkLevels };
+module.exports = { LIMITS, DEFAULTS, XP_KEY, levelsOf, levelTable, earnsXp, levelsShown, checkLevels };

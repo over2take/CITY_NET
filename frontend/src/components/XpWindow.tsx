@@ -1,5 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
+import { getTemplate } from '../sheets';
+import { isCustomSystem } from '../sheets/customTemplates';
+import { wordFor } from '../sheets/words';
 
 // Awarding and taking back experience.
 //
@@ -11,11 +14,16 @@ import { DraggableWindow } from './DraggableWindow';
 // would earn less each than a pair, which is the opposite of the rule.
 //
 // So there is no DIVIDE button here, and the label says EACH.
+//
+// A custom system (7d2a; approved mockup docs/mockups/level-up.html) earns XP however its game does, so it
+// has EACH by default and SPLIT beside it, and SET XP TO to put a mistake right.
 
 export interface XpAwardResult {
   ok: boolean;
   reason?: string;
   amount?: number;
+  /** What a split couldn't divide. */
+  left?: number;
   levelChange?: number;
   results?: { username: string; ok: boolean; xp?: number; level?: number; reason?: string }[];
 }
@@ -44,14 +52,19 @@ const SYSTEMS_WITH_XP = ['cities_without_number'];
  * the gate.
  */
 export const xpAvailable = (system: string | undefined | null): boolean =>
-  SYSTEMS_WITH_XP.includes(String(system ?? ''));
+  SYSTEMS_WITH_XP.includes(String(system ?? '')) || (isCustomSystem(String(system ?? '')) && !!getTemplate(String(system)).levels);
 
 export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers, system }: Props) {
   const [amount, setAmount] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [outcome, setOutcome] = useState<XpAwardResult | null>(null);
 
+  const [split, setSplit] = useState(false);
+  const [setTo, setSetTo] = useState('');
+
   const supported = xpAvailable(system);
+  const custom = isCustomSystem(String(system ?? ''));
+  const word = custom ? wordFor(system, 'xp', 'short', 'XP').toUpperCase() : 'XP';
 
   const players = (activeUsers || [])
     .filter((u) => !u.isNPC && !(u.isAdmin && !u.isTemporaryAdmin))
@@ -88,7 +101,14 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
     const n = Number(amount);
     if (!Number.isInteger(n) || n === 0 || who.length === 0) return;
     setOutcome(null);
-    socket?.emit('adminAwardXp', { token, usernames: who, amount: n });
+    socket?.emit('adminAwardXp', { token, usernames: who, amount: n, ...(custom && split ? { split: true } : {}) });
+  };
+
+  const setToNumber = Number(setTo);
+  const setToValid = setTo.trim() !== '' && Number.isInteger(setToNumber) && setToNumber >= 0;
+  const sendSet = () => {
+    setOutcome(null);
+    socket?.emit('adminSetXp', { token, usernames: selected, value: setToNumber });
   };
 
   const n = Number(amount);
@@ -96,7 +116,7 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
   const verb = n < 0 ? 'TAKE' : 'AWARD';
 
   return (
-    <DraggableWindow title="XP.EXE" pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
+    <DraggableWindow title={`${word}.EXE`} pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
       <div style={{ padding: '10px' }}>
         {!supported ? (
           // Cyberpunk RED spends Improvement Points and Shadowrun spends Karma. Both are
@@ -107,7 +127,7 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
         ) : (
           <>
             <label htmlFor="xp-amount" style={{ display: 'block', marginBottom: '5px', color: 'var(--green)' }}>
-              POINTS_EACH
+              {custom && split ? 'POINTS_TO_SPLIT' : 'POINTS_EACH'}
             </label>
             <input
               id="xp-amount" type="number" step="1" value={amount}
@@ -118,9 +138,18 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
             {/* Said plainly, because the button beside it in PAY_PLAYERS does the
                 opposite and muscle memory is a real thing. */}
             <div style={{ fontSize: '11px', opacity: 0.6, marginBottom: '12px' }}>
-              Each selected character gets this many, and levels up if the total earns it.
-              Negative takes points back, but never a level.
+              {custom
+                ? (split ? 'Shared between those selected, in whole points. Negative takes points back, but never a level.' : 'Each selected character gets this many. Negative takes points back, but never a level.')
+                : 'Each selected character gets this many, and levels up if the total earns it. Negative takes points back, but never a level.'}
             </div>
+            {custom && (
+              <div role="group" aria-label="How it is given" style={{ display: 'inline-flex', border: '1px solid var(--green)', marginBottom: '12px' }}>
+                {([[false, 'EACH'], [true, 'SPLIT']] as const).map(([on, label]) => (
+                  <button key={label} type="button" aria-pressed={split === on} onClick={() => setSplit(on)}
+                    style={{ background: split === on ? 'var(--green)' : 'none', color: split === on ? 'var(--black)' : 'var(--green)', border: 0, fontFamily: 'monospace', fontSize: '11px', padding: '3px 10px', cursor: 'pointer' }}>{label}</button>
+                ))}
+              </div>
+            )}
 
             <div className="crt-scroll" style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid var(--dark-green)', padding: '5px', marginBottom: '10px', background: 'color-mix(in srgb, var(--black) 50%, transparent)' }}>
               {players.length === 0 ? (
@@ -146,7 +175,20 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
               >{verb}_ALL</button>
             </div>
 
-            <div style={{ marginTop: '10px', borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>
+            {custom && (
+              <div style={{ marginTop: '10px', borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>
+                <label htmlFor="xp-set" style={{ display: 'block', fontSize: '11px', opacity: 0.6, marginBottom: '5px' }}>
+                  Replace what the selected characters have with another number. Their level stays.
+                </label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input id="xp-set" type="number" min="0" step="1" value={setTo} onChange={(e) => setSetTo(e.target.value)}
+                    style={{ flex: 1, minWidth: 0, padding: '5px', background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'monospace', boxSizing: 'border-box' }} />
+                  <button className="utility-btn" style={{ flex: 1 }} disabled={!setToValid || selected.length === 0} onClick={sendSet}>SET_{word}_TO</button>
+                </div>
+              </div>
+            )}
+
+            {!custom && <div style={{ marginTop: '10px', borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>
               <div style={{ fontSize: '11px', opacity: 0.6, marginBottom: '5px' }}>
                 Levels for the selected characters, if one needs correcting.
               </div>
@@ -162,7 +204,7 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
                   onClick={() => changeLevel(1)}
                 >LEVEL_UP</button>
               </div>
-            </div>
+            </div>}
 
             {outcome && (
               <div style={{ marginTop: '10px', fontSize: '11px', borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>
@@ -170,13 +212,14 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
                   <div style={{ color: 'var(--danger)' }}>{outcome.reason}</div>
                 ) : (
                   <>
+                    {!!outcome.left && <div style={{ color: 'var(--warning)' }}>{outcome.left} LEFT OVER: IT WOULDN&apos;T DIVIDE</div>}
                     {(outcome.results ?? []).map((r) => (
                       <div key={r.username} style={{ color: r.ok ? undefined : 'var(--danger)' }}>
                         {r.username}: {!r.ok
                           ? (r.reason ?? 'no sheet')
                           : r.xp === undefined ? `level ${r.level}`
-                          : r.level === undefined ? `${r.xp} XP`
-                          : `${r.xp} XP · level ${r.level}`}
+                          : r.level === undefined ? `${r.xp} ${word}`
+                          : `${r.xp} ${word} · level ${r.level}`}
                       </div>
                     ))}
                   </>
