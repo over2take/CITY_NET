@@ -5,6 +5,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **A step-by-step install guide, [INSTALL.md](INSTALL.md).** For a GM who has never used Docker or a tunnel: installing Docker Desktop, the guided setup, a link for your players by Cloudflare tunnel or DuckDNS, day-to-day running, and what common errors mean. The README links to it.
+
+---
+
 ## [1.14.10] - 2026-10-22
 
 Node.js's October 2026 security fixes.

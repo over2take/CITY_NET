@@ -35,6 +35,8 @@ Built with React + Three.js · Node.js + SQLite · Socket.IO · Docker
 
 ## For Game Masters — Getting Started
 
+> **New to Docker or tunnels? Follow the [step-by-step install guide](INSTALL.md).** It starts from nothing, and covers getting a link to your players and what to do when something goes wrong.
+
 ### Prerequisites
 
 - **Install Git:** [Git install](https://git-scm.com/install/)
@@ -184,6 +186,8 @@ node server.js
 ---
 
 ## Connectivity & Deployment
+
+> **Not sure how to do this?** The [install guide](INSTALL.md#5-give-your-players-a-link) walks through a Cloudflare tunnel and DuckDNS one step at a time.
 
 The app runs locally on `localhost:5000` (manual) or `localhost:$APP_PORT` (Docker). To let players connect over the internet, you need to expose it publicly:
 
