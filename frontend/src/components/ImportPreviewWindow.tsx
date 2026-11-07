@@ -15,6 +15,7 @@ import { DraggableWindow } from './DraggableWindow';
  */
 
 import type { CyberRow } from '../sheets/cyberwareRows';
+import { pickLinesSaid } from '../sheets/importPicks';
 
 export interface ImportPreview {
   system: string;
@@ -36,6 +37,11 @@ export interface ImportPreview {
   workedOut?: Record<string, unknown>;
   gmOnly?: Record<string, unknown>;
   notAChoice?: Record<string, unknown>;
+  /** The picks an upload names (7c6), to send back as they are, what they come to, and what wasn't taken. */
+  picks?: Record<string, { option: string; level?: number }[]>;
+  picksSaid?: { list: string; one: string; option: string; level?: number; unmet?: string }[];
+  picksNotFound?: Record<string, string[]>;
+  picksTooMany?: Record<string, string[]>;
 }
 
 interface Props {
@@ -46,6 +52,8 @@ interface Props {
   currentData?: Record<string, unknown>;
   /** Fields a replace leaves as they are (worked out again, or the GM's), so never listed as lost. */
   keeps?: string[];
+  /** The GM's upload replaces a locked pick; a player's leaves it. */
+  gm?: boolean;
   busy?: boolean;
   applied?: boolean;
   onApply: () => void;
@@ -71,6 +79,8 @@ export const lossesFrom = (
 ): string[] => (currentData
   ? Object.entries(currentData)
       .filter(([, v]) => v !== null && v !== undefined && String(v).trim() !== '')
+      // The sheet's own bookkeeping is the server's, and stays.
+      .filter(([k]) => !k.startsWith('_'))
       .filter(([k]) => !(k in preview.mapped))
       .filter(([k]) => !KEPT.includes(k) && !keeps.includes(k))
       .map(([k]) => k)
@@ -86,7 +96,7 @@ export const leftLines = (preview: ImportPreview): { key: string; text: string }
   return found.length ? [{ key: String(key), text: `${label}: ${found.map(([k, v]) => (withValue ? `${k} (${String(v)})` : k)).join(', ')}` }] : [];
 });
 
-export function ImportPreviewWindow({ pos, setPos, preview, currentData, keeps, busy, applied, onApply, onCancel }: Props) {
+export function ImportPreviewWindow({ pos, setPos, preview, currentData, keeps, gm, busy, applied, onApply, onCancel }: Props) {
   const mapped = Object.entries(preview.mapped);
   const unmappedKeys = Object.keys(preview.unmapped);
   const skippedKeys = Object.keys(preview.skipped);
@@ -121,6 +131,10 @@ export function ImportPreviewWindow({ pos, setPos, preview, currentData, keeps, 
           <div key={l.key} style={{ ...label9, color: l.key === 'notAChoice' ? 'var(--warning)' : 'var(--cyan)' }}>{l.text}</div>
         ))}
 
+        {pickLinesSaid(preview, currentData, gm).map((l) => (
+          <div key={l.text} style={{ ...label9, color: l.tone === 'warn' ? 'var(--warning)' : 'var(--cyan)' }}>{l.text}</div>
+        ))}
+
         {unmappedKeys.length > 0 && (
           <div style={{ ...row, opacity: 0.55 }}>
             NOT RECOGNIZED: {unmappedKeys.slice(0, 30).join(', ')}{unmappedKeys.length > 30 ? '…' : ''}
@@ -153,7 +167,7 @@ export function ImportPreviewWindow({ pos, setPos, preview, currentData, keeps, 
           <button
             className="upload-btn danger-btn"
             style={{ flex: 1, marginTop: 0, padding: '6px', fontWeight: 'bold' }}
-            disabled={busy || applied || mapped.length === 0}
+            disabled={busy || applied || (mapped.length === 0 && !preview.picksSaid?.length)}
             onClick={onApply}
           >
             {applied ? '✓ APPLIED' : `REPLACE SHEET WITH ${mapped.length} FIELDS`}

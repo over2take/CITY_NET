@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/re
 import userEvent from '@testing-library/user-event';
 import { ImportSheetDialog, keptFields } from '../ImportSheetDialog';
 import { leftLines, lossesFrom, type ImportPreview } from '../ImportPreviewWindow';
+import { pickLinesSaid } from '../../sheets/importPicks';
 import { registerCustomTemplate, clearCustomTemplates, type CustomRender } from '../../sheets/customTemplates';
 
 vi.mock('../DraggableWindow', () => ({
@@ -124,5 +125,43 @@ describe('the theme', () => {
       expect(box.getAttribute('style') ?? '', box.getAttribute('aria-label') ?? '').not.toMatch(/#[0-9a-f]{3,6}/i);
       expect(box.getAttribute('style')).toContain('var(--dark-green)');
     }
+  });
+});
+
+describe('picks in the preview (7c6)', () => {
+  const base: ImportPreview = { system: HEARTH, source: 'json', mapped: {}, unmapped: {}, skipped: {} };
+  const SOLDIER = { list: 'classes', one: 'Class', option: 'Soldier', level: 3 };
+
+  it('says nothing of a file naming none', () => {
+    expect(pickLinesSaid(base)).toEqual([]);
+  });
+
+  it('says what each comes to, with its level if it has one', () => {
+    expect(pickLinesSaid({ ...base, picksSaid: [SOLDIER, { list: 'feats', one: 'Feat', option: 'Tough' }] })).toEqual([
+      { tone: 'good', text: 'CLASS: SOLDIER 3' }, { tone: 'good', text: 'FEAT: TOUGH' },
+    ]);
+  });
+
+  it('one not met comes in as it is, saying what it needs', () => {
+    expect(pickLinesSaid({ ...base, picksSaid: [{ ...SOLDIER, unmet: 'WITS >= 13' }] })).toEqual([{ tone: 'warn', text: 'CLASS: SOLDIER 3, COMING IN AS IT IS: IT NEEDS WITS >= 13' }]);
+  });
+
+  it('one it can\'t find, and one with no room, by the line that named them', () => {
+    expect(pickLinesSaid({ ...base, picksNotFound: { Class: ['Wizard', 'Bard'] }, picksTooMany: { Feats: ['Keen'] } })).toEqual([
+      { tone: 'warn', text: 'Class: CAN\'T FIND Wizard, Bard, LEFT OUT' }, { tone: 'warn', text: 'Feats: NO ROOM FOR Keen, LEFT OUT' },
+    ]);
+  });
+
+  it('a list holding a locked pick stays for a player, and is replaced by the GM', () => {
+    const sheet = { _choices: { classes: [{ option: 'mage', locked: true, roll: 4 }], feats: [{ option: 'tough' }] } };
+    const preview = { ...base, picksSaid: [SOLDIER, { list: 'feats', one: 'Feat', option: 'Keen' }] };
+    expect(pickLinesSaid(preview, sheet)).toEqual([
+      { tone: 'warn', text: 'CLASS: SOLDIER 3, NOT TAKEN: THIS CHARACTER\'S CLASS IS LOCKED. YOUR GM CAN CLEAR IT.' }, { tone: 'good', text: 'FEAT: KEEN' },
+    ]);
+    expect(pickLinesSaid(preview, sheet, true)[0]).toEqual({ tone: 'good', text: 'CLASS: SOLDIER 3' });
+  });
+
+  it('a sheet\'s own bookkeeping isn\'t listed as lost: the server keeps it', () => {
+    expect(lossesFrom(base, { _choices: { classes: [] }, _worked: {}, notes: 'x' })).toEqual(['notes']);
   });
 });

@@ -128,11 +128,11 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
     pendingSaves.current.clear();
   }, []);
 
-  const saveFields = useCallback(async (fields: Record<string, SheetFieldValue>) => {
+  const saveFields = useCallback(async (fields: Record<string, SheetFieldValue>, picks?: unknown) => {
     await fetch(apiPath, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields }),
+      body: JSON.stringify({ fields, ...(picks ? { picks } : {}) }),
     });
   }, [apiPath, token]);
 
@@ -333,8 +333,9 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
         pos={importPos}
         setPos={setImportPos}
         onClose={() => setIsImportOpen(false)}
-        onApply={async (fields) => {
-          await saveFields(fields);
+        gm
+        onApply={async (fields, opts) => {
+          await saveFields(fields, playerUsername ? opts?.picks : undefined);
           setReloadKey(k => k + 1);
         }}
       />,

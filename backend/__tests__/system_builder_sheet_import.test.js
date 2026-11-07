@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
 const require_ = createRequire(import.meta.url);
-const { INVENTORY, sheetFields, customImporter, jsonTemplate } = require_('../systemBuilder/sheetImport');
+const { INVENTORY, sheetFields, pickLines, withImportedPicks, customImporter, jsonTemplate } = require_('../systemBuilder/sheetImport');
 
 const HEARTH = {
   format: 1, name: 'Hearth',
@@ -176,5 +176,208 @@ describe('the JSON template', () => {
 
   it('is named for the system when it isn\'t told, with no version', () => {
     expect(jsonTemplate(HEARTH)).toMatchObject({ system: 'Hearth', version: null });
+  });
+});
+
+describe('picks on the form (7c6)', () => {
+  const PICKS = {
+    format: 1, name: 'Picks',
+    stats: [{ id: 'traits', label: 'TRAITS', stats: [{ id: 'wits', label: 'Wits', min: 1, max: 20 }] }],
+    choices: [
+      { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [
+        { id: 'soldier', label: 'Soldier' }, { id: 'mage', label: 'Mage', requires: '@wits >= 13' },
+      ] },
+      { id: 'feats', one: 'Feat', many: 'Feats', picks: 2, options: [
+        { id: 'tough', label: 'Tough' }, { id: 'quick', label: 'Quick' }, { id: 'keen', label: 'Keen' },
+      ] },
+      { id: 'skills', one: 'Skill', many: 'Skills', again: true, levelled: true, options: [
+        { id: 'cook', label: 'Cook' }, { id: 'rank2', label: 'Rank 2' }, { id: 'sail', label: 'Sail' },
+      ] },
+      { id: 'specs', one: 'Specialty', many: 'Specialties', picked: 'features', options: [{ id: 'duelist', label: 'Duelist' }] },
+      { id: 'commons', one: 'Common', many: 'Commons', picked: 'everyone', options: [{ id: 'breath', label: 'Breath' }] },
+      { id: 'empty', one: 'Nothing', many: 'Nothings', options: [] },
+    ],
+  };
+  const { mapFields, parseText } = customImporter(PICKS);
+
+  describe('the lines it asks', () => {
+    const lines = pickLines(PICKS);
+    const shape = (id) => lines.find((l) => l.id === id);
+
+    it('one per list picked on its own: not those under features, everyone\'s, or an empty one', () => {
+      expect(lines.map((l) => l.id)).toEqual(['pick_classes', 'pick_classes_level', 'pick_feats', 'pick_skills']);
+    });
+
+    it('where one is picked: a choice of its options, and a level box if it has levels', () => {
+      expect(shape('pick_classes')).toMatchObject({ label: 'Class', type: 'select', options: [{ value: 'soldier', label: 'Soldier' }, { value: 'mage', label: 'Mage' }] });
+      expect(shape('pick_classes_level')).toMatchObject({ label: 'Class level', type: 'number', min: 1, max: 30 });
+    });
+
+    it('where more can be: names with commas, by the list\'s plural, and how to write levels if it has them', () => {
+      expect(shape('pick_feats')).toMatchObject({ label: 'Feats', type: 'text', hint: 'Names, commas between: Tough, Quick, Keen' });
+      expect(shape('pick_skills').hint).toBe('Names and levels, commas between: Cook 2, Rank 2 1');
+      expect(lines.find((l) => l.id === 'pick_feats_level')).toBeUndefined();
+    });
+
+    it('one picked with no levels has no level box', () => {
+      const plain = { format: 1, name: 'P', choices: [{ id: 'jobs', one: 'Job', options: [{ id: 'dock', label: 'Dock' }] }] };
+      expect(pickLines(plain).map((l) => l.id)).toEqual(['pick_jobs']);
+    });
+
+    it('a system with no lists asks nothing', () => {
+      expect(pickLines({ format: 1, name: 'None' })).toEqual([]);
+    });
+
+    it('a list picked both ways is asked; one with a name only reads by its id', () => {
+      const both = { format: 1, name: 'B', choices: [{ id: 'jobs', picked: 'both', options: [{ id: 'dock' }] }] };
+      expect(pickLines(both)[0]).toMatchObject({ id: 'pick_jobs', label: 'jobs', options: [{ value: 'dock', label: 'dock' }] });
+    });
+  });
+
+  describe('reading them', () => {
+    it('by the form\'s own name, the list\'s one and many, and an option by its label or id', () => {
+      const soldier = { classes: [{ option: 'soldier', level: 1 }] };
+      for (const key of ['pick_classes', 'Class', 'classes', 'CLASS']) expect(mapFields({ [key]: 'Soldier' }).picks, key).toEqual(soldier);
+      expect(mapFields({ Class: 'soldier' }).picks).toEqual(soldier);
+      expect(mapFields({ Class: ' SOLDIER ' }).picks).toEqual(soldier);
+    });
+
+    it('an option whose id and label differ reads by either', () => {
+      const named = { format: 1, name: 'N', choices: [{ id: 'jobs', one: 'Job', options: [{ id: 'dk', label: 'Dockhand' }] }] };
+      for (const name of ['dk', 'Dockhand']) expect(customImporter(named).mapFields({ Job: name }).picks, name).toEqual({ jobs: [{ option: 'dk' }] });
+    });
+
+    it('leaves the sheet\'s fields as they were, and adds no words when there are no picks', () => {
+      const plain = mapFields({ wits: 12 });
+      expect(Object.keys(plain).sort()).toEqual(['gmOnly', 'mapped', 'notAChoice', 'skipped', 'unmapped', 'workedOut']);
+      expect(mapFields({ wits: 12, Class: 'Soldier' }).mapped).toEqual({ wits: 12 });
+    });
+
+    it('a sheet\'s own field of that name is the field', () => {
+      const own = { ...PICKS, sheet: { sections: [{ id: 'who', label: 'WHO', layout: 'list', fields: [{ id: 'class', label: 'Class', type: 'text' }] }] } };
+      const read = customImporter(own).mapFields({ Class: 'Soldier', pick_classes: 'Mage' });
+      expect(read.mapped).toEqual({ class: 'Soldier' });
+      expect(read.picks.classes[0].option).toBe('mage');
+    });
+
+    it('its level from the level line, or 1, and from the name where more can be picked', () => {
+      expect(mapFields({ Class: 'Soldier', 'Class level': 3 }).picks.classes).toEqual([{ option: 'soldier', level: 3 }]);
+      expect(mapFields({ Class: 'Soldier 3' }).picks.classes).toEqual([{ option: 'soldier', level: 3 }]);
+      expect(mapFields({ Class: 'Soldier 3', 'Class level': 5 }).picks.classes).toEqual([{ option: 'soldier', level: 3 }]);
+      expect(mapFields({ Skills: 'Cook 2, Sail' }).picks.skills).toEqual([{ option: 'cook', level: 2 }, { option: 'sail', level: 1 }]);
+    });
+
+    it('a name with a number in it is that name first', () => {
+      expect(mapFields({ Skills: 'Rank 2' }).picks.skills).toEqual([{ option: 'rank2', level: 1 }]);
+      expect(mapFields({ Skills: 'Rank 2 4' }).picks.skills).toEqual([{ option: 'rank2', level: 4 }]);
+    });
+
+    it('a number on a list with no levels is part of the name, so isn\'t found', () => {
+      expect(mapFields({ Feats: 'Tough 2' }).picksNotFound).toEqual({ Feats: ['Tough 2'] });
+    });
+
+    it('a level that doesn\'t read is said, and the pick stays at 1', () => {
+      for (const bad of ['high', 0, -1, 31, 1.5]) {
+        const read = mapFields({ Class: 'Soldier', 'Class level': bad });
+        expect(read.picks.classes, String(bad)).toEqual([{ option: 'soldier', level: 1 }]);
+        expect(read.unmapped, String(bad)).toEqual({ 'Class level': bad });
+      }
+    });
+
+    it('a level with nothing to go with it is said', () => {
+      expect(mapFields({ 'Class level': 3 }).unmapped).toEqual({ 'Class level': 3 });
+      expect(mapFields({ 'Class level': 3 }).picks).toBeUndefined();
+    });
+
+    it('one it can\'t find is said by its line, with what it did find kept', () => {
+      const read = mapFields({ Feats: 'Tough, Wizardry' });
+      expect(read.picksNotFound).toEqual({ Feats: ['Wizardry'] });
+      expect(read.picks.feats).toEqual([{ option: 'tough' }]);
+      expect(mapFields({ Class: 'Wizard' })).toMatchObject({ picksNotFound: { Class: ['Wizard'] } });
+      expect(mapFields({ Class: 'Wizard' }).picks).toBeUndefined();
+    });
+
+    it('past what the list allows is said; the same one twice is once', () => {
+      const read = mapFields({ Feats: 'Tough, Quick, Keen' });
+      expect(read.picks.feats.map((p) => p.option)).toEqual(['tough', 'quick']);
+      expect(read.picksTooMany).toEqual({ Feats: ['Keen'] });
+      const twice = mapFields({ Feats: 'Tough, tough' });
+      expect(twice.picks.feats).toEqual([{ option: 'tough' }]);
+      expect(twice.picksTooMany).toBeUndefined();
+      expect(mapFields({ Skills: 'Cook, Sail, Rank 2' }).picks.skills).toHaveLength(3);
+    });
+
+    it('a JSON list of names reads as the commas do', () => {
+      expect(mapFields({ Feats: ['Tough', 'Quick'] }).picks.feats).toEqual([{ option: 'tough' }, { option: 'quick' }]);
+    });
+
+    it('blank says nothing', () => {
+      const read = mapFields({ Class: '', Feats: ' , ' });
+      expect(read.picks).toBeUndefined();
+      expect(read.picksNotFound).toBeUndefined();
+    });
+
+    it('a list under features or everyone\'s isn\'t read', () => {
+      expect(mapFields({ Specialty: 'Duelist', Common: 'Breath' }).unmapped).toEqual({ Specialty: 'Duelist', Common: 'Breath' });
+    });
+
+    it('says what each comes to, and what one not met needs, against the numbers in the same file', () => {
+      expect(mapFields({ Class: 'Soldier', 'Class level': 2 }).picksSaid).toEqual([{ list: 'classes', one: 'Class', option: 'Soldier', level: 2 }]);
+      expect(mapFields({ Class: 'Mage', wits: 5 }).picksSaid).toEqual([{ list: 'classes', one: 'Class', option: 'Mage', level: 1, unmet: 'WITS >= 13' }]);
+      expect(mapFields({ Class: 'Mage', wits: 13 }).picksSaid[0].unmet).toBeUndefined();
+      expect(mapFields({ Class: 'Mage', wits: 5 }).picks.classes).toEqual([{ option: 'mage', level: 1 }]);
+      expect(mapFields({ Feats: 'Tough' }).picksSaid[0]).toEqual({ list: 'feats', one: 'Feat', option: 'Tough' });
+    });
+
+    it('from a pasted stat block', () => {
+      expect(mapFields(parseText('Class: Soldier\nClass level: 4')).picks.classes).toEqual([{ option: 'soldier', level: 4 }]);
+    });
+
+    it('from its own JSON template, filled in', () => {
+      const template = jsonTemplate(PICKS);
+      expect(template.fields).toMatchObject({ pick_classes: '', pick_classes_level: null, pick_feats: '', pick_skills: '' });
+      expect(template.help.pick_classes).toBe('Class, one of Soldier, Mage');
+      expect(template.help.pick_classes_level).toBe('Class level, a number 1 to 30');
+      expect(template.help.pick_feats).toBe('Feats. Names, commas between: Tough, Quick, Keen');
+      template.fields.pick_classes = 'Soldier';
+      template.fields.pick_classes_level = 2;
+      expect(mapFields(template).picks).toEqual({ classes: [{ option: 'soldier', level: 2 }] });
+    });
+  });
+
+  describe('writing them', () => {
+    const write = (data, sent, opts) => withImportedPicks(PICKS, data, sent, opts)._choices;
+
+    it('a list named takes them; one not named stays', () => {
+      const data = { _choices: { classes: [{ option: 'mage', level: 2 }], feats: [{ option: 'quick' }] } };
+      expect(write(data, { classes: [{ option: 'soldier', level: 3 }] })).toEqual({ classes: [{ option: 'soldier', level: 3 }], feats: [{ option: 'quick' }] });
+    });
+
+    it('checks what was sent again: lists, options, room and levels', () => {
+      expect(write({}, { nope: [{ option: 'x' }], specs: [{ option: 'duelist' }], commons: [{ option: 'breath' }] })).toEqual({});
+      expect(write({}, { classes: 'soldier' })).toEqual({});
+      expect(write({}, { classes: [{ option: 'wizard' }, 'soldier'] })).toEqual({ classes: [] });
+      expect(write({}, { feats: [{ option: 'tough' }, { option: 'tough' }, { option: 'quick' }, { option: 'keen' }] })).toEqual({ feats: [{ option: 'tough' }, { option: 'quick' }] });
+      expect(write({}, { classes: [{ option: 'soldier', level: 99 }] })).toEqual({ classes: [{ option: 'soldier', level: 1 }] });
+      expect(write({}, { feats: [{ option: 'tough', level: 3, locked: true, roll: 6 }] })).toEqual({ feats: [{ option: 'tough' }] });
+    });
+
+    it('those picked under a feature stay', () => {
+      const data = { _choices: { feats: [{ option: 'keen', from: 'f1' }, { option: 'quick' }] } };
+      expect(write(data, { feats: [{ option: 'tough' }] })).toEqual({ feats: [{ option: 'keen', from: 'f1' }, { option: 'tough' }] });
+    });
+
+    it('a player\'s upload leaves a locked pick; the GM\'s replaces it', () => {
+      const data = { _choices: { classes: [{ option: 'mage', level: 1, locked: true, roll: 4 }] } };
+      const sent = { classes: [{ option: 'soldier', level: 2 }] };
+      expect(write(data, sent)).toEqual(data._choices);
+      expect(write(data, sent, { gm: true })).toEqual({ classes: [{ option: 'soldier', level: 2 }] });
+    });
+
+    it('nothing sent, or no system, is the sheet as it was', () => {
+      const data = { name: 'W' };
+      expect(withImportedPicks(PICKS, data, null)).toBe(data);
+      expect(withImportedPicks(null, data, { classes: [] })).toBe(data);
+    });
   });
 });

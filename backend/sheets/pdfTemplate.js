@@ -275,6 +275,7 @@ const printable = (s) => String(s ?? '').replace(/[^\x20-\x7E\xA0-\xFF]/g, '?');
 
 /** What a box is for, printed small under it. */
 const hintOf = (f) => {
+  if (f.hint) return f.hint;
   if (f.type === 'select') return `One of: ${f.options.map((o) => o.label).join(', ')}`;
   if (f.min !== undefined && f.max !== undefined) return `${f.min} to ${f.max}`;
   if (f.min !== undefined) return `At least ${f.min}`;
@@ -300,7 +301,7 @@ const leftLine = (left) => {
  */
 async function buildCustomTemplate(definition, { name, version } = {}) {
   // Required here rather than at the top: it is a builder module, and this file loads first.
-  const { sheetFields, INVENTORY_ROWS } = require('../systemBuilder/sheetImport');
+  const { sheetFields, pickLines, INVENTORY_ROWS } = require('../systemBuilder/sheetImport');
   const { ask, left } = sheetFields(definition);
   const title = printable(name || (definition && definition.name) || 'System').toUpperCase();
 
@@ -364,7 +365,8 @@ async function buildCustomTemplate(definition, { name, version } = {}) {
     y -= size + 12;
   };
 
-  for (const f of ask) {
+  // The picks after the sheet's own fields (7c6): a line per list.
+  for (const f of [...ask, ...pickLines(definition)]) {
     if (f.tab !== tab) { tab = f.tab; section = undefined; if (tab) heading(tab, 12, 120); }
     if (f.section !== section) { section = f.section; heading(section, 9, 72); }
     if (f.type === 'inventory') {

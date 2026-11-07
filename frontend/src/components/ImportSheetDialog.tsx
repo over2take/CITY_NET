@@ -26,10 +26,12 @@ interface ImportSheetDialogProps {
   /** The sheet as it stands. Only read to work out what a replace would erase — the
    *  dialog cannot warn about losing something it cannot see. */
   currentData?: Record<string, unknown>;
+  /** The GM's: an upload replaces a locked pick. */
+  gm?: boolean;
   /** Apply the mapped fields to the target sheet (socket or admin REST). */
   onApply: (
     fields: Record<string, string | number>,
-    opts?: { replace?: boolean; cyberware?: unknown[] },
+    opts?: { replace?: boolean; cyberware?: unknown[]; picks?: unknown },
   ) => Promise<void> | void;
 }
 
@@ -46,7 +48,7 @@ export const keptFields = (system: string | null | undefined): string[] => (syst
   ? getTemplate(system).sections.flatMap((s) => s.fields).filter((f) => f.derived || f.gmOnly).map((f) => f.id)
   : []);
 
-export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, currentData }: ImportSheetDialogProps) {
+export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, currentData, gm }: ImportSheetDialogProps) {
   const [pasted, setPasted] = useState('');
   const [code, setCode] = useState('');
   const [preview, setPreview] = useState<ImportPreview | null>(null);
@@ -153,7 +155,7 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
   const handleApply = async () => {
     if (!preview) return;
     setBusy(true);
-    await onApply(preview.mapped, { replace: true, cyberware: preview.cyberware });
+    await onApply(preview.mapped, { replace: true, cyberware: preview.cyberware, picks: preview.picks });
     setBusy(false);
     setApplied(true);
   };
@@ -293,6 +295,7 @@ export function ImportSheetDialog({ pos, setPos, onClose, onApply, gameSystem, c
         preview={preview}
         currentData={currentData}
         keeps={keptFields(gameSystem)}
+        gm={gm}
         busy={busy}
         applied={applied}
         onApply={handleApply}

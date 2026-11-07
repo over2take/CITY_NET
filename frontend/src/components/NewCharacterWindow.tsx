@@ -68,7 +68,7 @@ export interface FlowWindowProps {
   /** The player being filled in for. Unsaid: a player at their own. */
   forPlayer?: string;
   /** What UPLOAD A SHEET's import does. */
-  onImport?: (fields: Record<string, SheetFieldValue>, opts?: { replace?: boolean; cyberware?: unknown }) => void;
+  onImport?: (fields: Record<string, SheetFieldValue>, opts?: { replace?: boolean; cyberware?: unknown; picks?: unknown }) => void;
 }
 
 /** Before the steps, while there is a choice of how to start. */
@@ -102,7 +102,7 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
       act={(action) => socket?.emit('creationAction', action)}
       choose={(action) => socket?.emit('choicesAction', action)}
       upload={authToken ? (file) => uploadSheetPortrait(authToken, file) : undefined}
-      onImport={(fields, opts) => { socket?.emit('importSheetFields', { fields, replace: opts?.replace, cyberware: opts?.cyberware }); }}
+      onImport={(fields, opts) => { socket?.emit('importSheetFields', { fields, replace: opts?.replace, cyberware: opts?.cyberware, picks: opts?.picks }); }}
       onLeave={onLeave} onDone={onDone} />
   );
 }

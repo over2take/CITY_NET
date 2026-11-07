@@ -27,7 +27,7 @@ const tokenAccess = require('../tokens/tokenAccess');
 const rests = require('../sheets/rests');
 const { restsOf } = require('../systemBuilder/rests');
 const { recoveryShown, restingOf } = require('../systemBuilder/recovery');
-const { jsonTemplate } = require('../systemBuilder/sheetImport');
+const { jsonTemplate, withImportedPicks } = require('../systemBuilder/sheetImport');
 
 // Admin-facing character sheet routes. Player self-service (open/edit own
 // sheet, quick-sheet lookups) goes through socket events, matching how the
@@ -175,7 +175,7 @@ module.exports = (db, io) => {
 
   // Admin per-field patch of any player's active-system sheet
   router.put('/user/:username', authenticate, requireAdmin, (req, res) => {
-    const { fields } = req.body; // { fieldId: value, ... }
+    const { fields, picks } = req.body; // { fieldId: value, ... }, and an upload's picks (7c6)
     if (!fields || typeof fields !== 'object') return res.status(400).json({ error: 'fields object required' });
     getGameSystem((err, system) => {
       if (err) return res.status(500).json({ error: err.message });
@@ -207,7 +207,9 @@ module.exports = (db, io) => {
             (current) => {
               const next = { ...current, ...patch };
               Object.keys(patch).forEach((f) => applyDerived(system, next, f));
-              return next;
+              const picked = withImportedPicks(customSystems.definitionOf(system), next, picks, { gm: true });
+              if (picked !== next) applyDerived(system, picked);
+              return picked;
             },
             (err3, data) => {
               if (err3) return res.status(500).json({ error: err3.message });
