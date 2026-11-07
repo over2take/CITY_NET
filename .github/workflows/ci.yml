@@ -190,14 +190,15 @@ jobs:
 
   # The browser journeys (e2e/, 4l): the real backend and frontend started on a throwaway database,
   # driven in Playwright's own headless Chromium. On a developer's machine they run only when asked
-  # (e2e/README.md); here, on every pull request, split across four machines at once (Playwright's
+  # (e2e/README.md); here, on every pull request, split across five machines at once (Playwright's
   # --shard), each with its own servers and database. Split test by test (--fully-parallel; each
-  # machine still runs one at a time) so the long graph file is shared out too: about 12 minutes in
-  # place of 27.
+  # machine still runs one at a time) so the long graph file is shared out too. The aim is 10 minutes
+  # or less on each part's journeys step: past that in two runs in a row, add a part (the owner's
+  # call, 2026-11-06, when four parts had reached 13.8 and 10.1).
   test-e2e-part:
-    name: Browser Journeys (${{ matrix.part }}/4)
+    name: Browser Journeys (${{ matrix.part }}/5)
     runs-on: ubuntu-latest
-    # A part takes about 9 to 12 minutes. One hung once (2026-10-31) and would have held its machine
+    # A part aims for 10 minutes or less. One hung once (2026-10-31) and would have held its machine
     # for GitHub's default six hours. Playwright's own limit (playwright.config.ts globalTimeout, 25
     # minutes) ends a hung run first, as a failure, so its report is still kept; this one catches a
     # hang outside the tests.
@@ -206,7 +207,7 @@ jobs:
       # Every part runs to the end, so one failure never hides another's.
       fail-fast: false
       matrix:
-        part: [1, 2, 3, 4]
+        part: [1, 2, 3, 4, 5]
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -239,7 +240,7 @@ jobs:
 
       - name: Run the journeys
         working-directory: ./e2e
-        run: npx playwright test --shard=${{ matrix.part }}/4 --fully-parallel
+        run: npx playwright test --shard=${{ matrix.part }}/5 --fully-parallel
 
       # What failed and why: screenshots, a trace of every step, and the HTML report, one per part.
       - name: Keep the report of a failed run
