@@ -64,6 +64,10 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
     'Turn on GUIDED NEW CHARACTER and a player opening a blank sheet is walked through steps instead. Off, they get the blank sheet, as always.',
     'The steps are yours to order and switch off: who they are, the stats, one for each list on CHOICES picked on its own, kits and money. A list made later joins by itself.',
   ] },
+  { page: 'levels', title: 'LEVELS', body: [
+    'How characters go up. XP LEVELS: the GM awards XP and the sheet counts toward the next level. MILESTONE: the GM says when. Neither, and levels stay what is typed.',
+    'The table fills itself from what level 2 costs and a multiplier for each range of levels. Type over any level for a table that isn\'t an even curve. XP past a level carries into the next.',
+  ] },
   { page: 'npcs', title: 'NPCS', body: [
     'NPC tiers are difficulties GENERATE_SHEET rolls an NPC from, at a level: HP, defense and any number, each a number, a formula or dice.',
     'An NPC can have a stat block of its own, shorter than the character sheet; only the GM ever sees it.',
@@ -275,6 +279,12 @@ export const HINTS = {
   'sheet.columns': 'How many fields sit side by side in the grid, 1 to 8.',
   'sheet.kind': 'What the field holds. NUMBER and TEXT take one line, LONG TEXT a box for paragraphs, and PICK ONE a list of choices you write.',
   'sheet.whoSees': 'OWNER AND GM: only the character\'s player and the GM. EVERYONE: other players too, on the card they open from the token.',
+  'levels.how': 'The same answer as SETUP\'s. XP LEVELS: the GM awards XP, and the sheet counts toward the next level. MILESTONE: no XP is kept, and the GM levels up whoever they tick. Pick both, or neither.',
+  'levels.top': 'The most a character can reach, from 2 to 30.',
+  'levels.word': 'What this game calls experience, like KARMA or MARKS. It is one of the words on the WORDS page.',
+  'levels.first': 'The XP to go from level 1 to level 2. The rest of the table grows from this.',
+  'levels.ranges': 'Each level costs its range\'s multiple of the level before it, so a curve can double early and slow down later. Add a range to change it partway. Level 2 costs what you said, so a multiplier first counts at level 3.',
+  'levels.table': 'The running total to reach each level, so XP is never spent and what a level doesn\'t need carries into the next. Type over any of them, in blue once you have.',
   'sheet.whoChanges': 'THE PLAYER fills it in. ONLY THE GM: the player sees it, but only the GM changes it, like XP or awards.',
   'sheet.hint': 'A short line under the field on the sheet, like where a number comes from.',
   // NPCS

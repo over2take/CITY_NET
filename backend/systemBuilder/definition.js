@@ -21,6 +21,7 @@
 //     sheet:   { tabs, header, sections },           // the character sheet (sheet.js)
 //     npc:     { sheet, tiers },                     // NPC layout and power tiers (npc.js)
 //     core:    { health, advancement, dice, distance }, // the setup questions (core.js)
+//     levels:  { top, first, ranges, typed },            // how far characters go, and the XP table (levels.js)
 //     conditions: { blinded: { on: false }, glitching: { name: 'Glitching', ... } }, // (conditions.js)
 //     rests: { long_rest: { counts_as: ['short_rest'], refills: [...] } },          // (rests.js)
 //     house_rules: [ { id: 'magic', name: 'MAGIC', starts: false } ],  // what waits on one: houseRules.js
@@ -57,6 +58,7 @@ const { checkRolls, SEEN } = require('./rollStyles');
 const { checkDice } = require('./diceFaces');
 const { checkChoices, checkHasNames } = require('./choices');
 const { checkCreation, checkGifts } = require('./creation');
+const { checkLevels } = require('./levels');
 const { checkResting } = require('./recovery');
 
 const FORMAT = 1;
@@ -73,7 +75,7 @@ const LIMITS = {
   word: 40,
 };
 
-const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules', 'graph', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'resting', 'creation']);
+const SECTIONS = new Set(['levels', 'format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules', 'graph', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'resting', 'creation']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -190,6 +192,7 @@ const checkDefinition = (definition) => {
   checkResting(definition, problems);
   checkCreation(definition, problems);
   checkGifts(definition, problems);
+  checkLevels(definition, problems);
   if (definition.target_seen !== undefined && !SEEN.includes(definition.target_seen)) {
     problems.push({ where: 'target_seen', message: `One of ${SEEN.join(', ')}` });
   }
