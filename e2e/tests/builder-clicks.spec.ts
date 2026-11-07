@@ -99,7 +99,7 @@ test('every control in the builder takes a click, on every page', async ({ page 
   // ROLLS is swept: + MODIFIER gives the open condition ALL ROLLS -1.
   await builderPage(page, 'CONDITIONS');
   await page.getByRole('button', { name: '+ MODIFIER' }).click();
-  for (const p of ['SETUP', 'WORDS', 'PARTS', 'STATS & RULES', 'CHOICES', 'CHARACTER SHEET', 'NEW CHARACTER', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
+  for (const p of ['SETUP', 'WORDS', 'PARTS', 'STATS & RULES', 'CHOICES', 'CHARACTER SHEET', 'NEW CHARACTER', 'LEVELS', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
     await builderPage(page, p);
     if (p === 'CHOICES') {
       // A list picking several, with an option, so every box on the page is there (7a2b1); a second
@@ -135,6 +135,14 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await page.getByRole('button', { name: '+ GROUP' }).click();
       await page.getByRole('button', { name: '+ STAT' }).click();
       await expect(page.getByRole('columnheader', { name: 'LOWEST' })).toBeVisible();
+    }
+    if (p === 'LEVELS') {
+      // XP LEVELS on, with a second range and a level typed over, so all of it is there.
+      await page.getByRole('button', { name: 'XP LEVELS' }).click();
+      await page.getByRole('button', { name: '+ ANOTHER RANGE' }).click();
+      await page.getByRole('textbox', { name: 'Level 3 total' }).fill('5000');
+      await expect(page.getByRole('button', { name: 'FILL IT AGAIN' })).toBeVisible();
+      missed['LEVELS, the table'] = await faults(page);
     }
     if (p === 'NEW CHARACTER') {
       // THE STATS open, so how they are asked and the groups are there (7c3a), and a fixed array's numbers (7c3b).

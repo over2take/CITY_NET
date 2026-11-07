@@ -18,6 +18,7 @@ import { NpcsPage } from './NpcsPage';
 import { ConditionsPage } from './ConditionsPage';
 import { RestsPage } from './RestsPage';
 import { NewCharacterPage } from './NewCharacterPage';
+import { LevelsPage } from './LevelsPage';
 import { HouseRulesPage } from './HouseRulesPage';
 import { ChoicesPage } from './ChoicesPage';
 import { CONDITION_ICONS } from '../sheets/conditionIcons';
@@ -145,6 +146,7 @@ const Icons: Record<BuilderPage | 'builder' | 'systems' | 'help' | 'save' | 'pub
   choices: icon('M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6l1 1 2-2', 'M3 12l1 1 2-2', 'M3 18l1 1 2-2'),
   sheet: icon('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M16 13H8', 'M16 17H8', 'M10 9H8'),
   new_character: icon('M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8z', 'M19 8v6', 'M22 11h-6'),
+  levels: icon('M3 17l6-6 4 4 8-8', 'M15 7h6v6'),
   npcs: icon('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8z', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'),
   conditions: icon(...CONDITION_ICONS.skull),
   rests: icon('M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z'),
@@ -567,6 +569,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
             )}
             {ready && page === 'choices' && <ChoicesPage definition={definition!} edit={edit} api={api} startList={choicesStart} />}
             {ready && page === 'new_character' && <NewCharacterPage definition={definition!} edit={edit} api={api} onGoTo={(p, list) => { setChoicesStart(list); setPage(p); setStatus(null); }} />}
+            {ready && page === 'levels' && <LevelsPage definition={definition!} edit={edit} onGoTo={(p) => { setPage(p); setStatus(null); }} />}
             {ready && page === 'sheet' && <SheetPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'npcs' && <NpcsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'conditions' && <ConditionsPage definition={definition!} edit={edit} api={looking ? undefined : api} />}

@@ -11,6 +11,7 @@ import { KitsPanel } from './KitsPanel';
 import { MoneyPanel } from './MoneyPanel';
 import { FieldName } from './HelpHint';
 import { ToggleSwitch } from './ToggleSwitch';
+import { WholeBox } from './WholeBox';
 
 // The builder's NEW CHARACTER page (7c1; approved mockup docs/mockups/new-character.html, 2026-11-03):
 // GUIDED NEW CHARACTER, off to start, and the steps in the GM's order, each on or off, with what it
@@ -60,17 +61,6 @@ const howSet = (definition: Definition, id: string): string => {
   if (way.way === 'buy') return `bought with ${way.points} points, from ${way.lowest} to ${way.highest}.`;
   return 'typed in by the player.';
 };
-
-/** A whole number: kept as typed, written once it reads as one, and showing a change made from elsewhere. */
-function WholeBox({ value, label, width = 64, onChange }: { value: number; label: string; width?: number; onChange: (next: number) => void }) {
-  const [text, setText] = useState(String(value));
-  const read = /^-?\d+$/.test(text.trim()) ? Number(text) : null;
-  return (
-    <input type="text" inputMode="numeric" aria-label={label} value={read === null || read === value ? text : String(value)} aria-invalid={read === null ? true : undefined}
-      style={{ fontFamily: 'monospace', fontSize: 12, padding: '3px 5px', width, background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--dark-green)', textAlign: 'center' }}
-      onChange={(e) => { setText(e.target.value); if (/^-?\d+$/.test(e.target.value.trim())) onChange(Number(e.target.value)); }} />
-  );
-}
 
 /** A point buy's points, range and costs, with the presets for those. */
 function BuySettings({ way, onChange }: { way: BuyWay; onChange: (next: BuyWay) => void }) {

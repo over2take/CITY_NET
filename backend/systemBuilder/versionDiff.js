@@ -42,7 +42,7 @@ const list = (v) => (Array.isArray(v) ? v : []);
  * symbols and dice, who sees a roll's target) joined in 6c4h: a change to them said nothing before.
  * Choices (7a1a) are here too: what a change to them does to each character shows in their values (7a1b).
  */
-const OTHER = ['name', 'description', 'author', 'license', 'words', 'buildings', 'bank', 'lookups', 'npc', 'rests', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'creation'];
+const OTHER = ['name', 'description', 'author', 'license', 'words', 'buildings', 'bank', 'lookups', 'npc', 'rests', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'creation', 'levels'];
 
 const fieldMap = (definition) => new Map(fieldsOf(effectiveSheet(definition))
   .filter((f) => isPlainObject(f) && typeof f.id === 'string')

@@ -1,0 +1,195 @@
+import { describe, it, expect } from 'vitest';
+import { createRequire } from 'module';
+import {
+  advancesBy, anyTyped, canAddRange, firstAsTyped, isTyped, levelNotes, levelTable, levelsSet, tidyRanges, topAsTyped, withAdvancement, withFilledAgain,
+  withFirst, withRangeAdded, withRangeOff, withRangeTo, withRangeX, withTop, withTyped, xpWord,
+} from '../levels';
+import type { Definition } from '../systemsApi';
+
+/**
+ * The builder's LEVELS page as logic (7d1). Held to the server (backend systemBuilder/levels.js), so what the
+ * page shows is what the table comes to, and what it writes the server takes.
+ */
+
+const req = createRequire(import.meta.url);
+const backend = req('../../../../backend/systemBuilder/levels.js');
+const { checkDefinition } = req('../../../../backend/systemBuilder/definition.js');
+
+const def = (over: Record<string, unknown> = {}): Definition => ({ format: 1, name: 'L', ...over });
+const levelsProblems = (d: Definition) => checkDefinition(d).problems.filter((p: { where: string }) => p.where.startsWith('levels'));
+const ranges = (d: Definition) => levelsSet(d).ranges;
+
+describe('held to the server', () => {
+  const samples: Record<string, unknown>[] = [
+    {},
+    { top: 5, first: 100, ranges: [{ to: 5, x: 2 }] },
+    { top: 10, first: 300, ranges: [{ to: 5, x: 2 }, { to: 10, x: 1.5 }] },
+    { top: 12, first: 7, ranges: [{ to: 4, x: 3 }, { to: 8, x: 1.5 }, { to: 12, x: 2 }], typed: { 6: 5000 } },
+    { top: 30, first: 1000000000, ranges: [{ to: 30, x: 3 }] },
+  ];
+  for (const levels of samples) {
+    it(`the same table for ${JSON.stringify(levels)}`, () => {
+      expect(levelTable(def({ levels }))).toEqual(backend.levelTable(def({ levels })));
+    });
+  }
+
+  it('the same defaults', () => {
+    expect(levelsSet(def())).toEqual({ ...backend.DEFAULTS, typed: {} });
+  });
+
+  it('the same words for a level that doesn\'t climb', () => {
+    const d = def({ levels: { top: 5, first: 100, ranges: [{ to: 5, x: 2 }], typed: { 3: 50 } } });
+    expect(levelNotes(d).map((n) => n)).toEqual(levelsProblems(d).map((p: { message: string }) => p.message));
+  });
+
+  it('everything the page writes, the server takes', () => {
+    let d = def();
+    d = withTop(d, 12);
+    d = withFirst(d, 500);
+    d = withRangeAdded(d);
+    d = withRangeX(d, 1, 3);
+    d = withRangeAdded(d);
+    d = withRangeTo(d, 0, 4);
+    d = withTyped(d, 12, 99999999);
+    d = withAdvancement(d, 'levels');
+    expect(levelsProblems(d)).toEqual([]);
+    d = withRangeOff(d, 1);
+    expect(levelsProblems(d)).toEqual([]);
+    d = withTop(d, 3);
+    expect(levelsProblems(d)).toEqual([]);
+  });
+});
+
+describe('the ranges stay joined', () => {
+  it('the last reaches the highest level, whatever it said', () => {
+    expect(tidyRanges([{ to: 5, x: 2 }], 10)).toEqual([{ to: 10, x: 2 }]);
+    expect(tidyRanges([{ to: 50, x: 2 }], 10)).toEqual([{ to: 10, x: 2 }]);
+  });
+
+  it('each ends at or after where it starts, and the first at 2 at the least', () => {
+    expect(tidyRanges([{ to: 1, x: 2 }, { to: 10, x: 3 }], 10)).toEqual([{ to: 2, x: 2 }, { to: 10, x: 3 }]);
+    expect(tidyRanges([{ to: 5, x: 2 }, { to: 3, x: 3 }, { to: 10, x: 1.5 }], 10)).toEqual([{ to: 5, x: 2 }, { to: 6, x: 3 }, { to: 10, x: 1.5 }]);
+  });
+
+  it('one pushed past the highest level drops those after it', () => {
+    expect(tidyRanges([{ to: 12, x: 2 }, { to: 20, x: 3 }], 10)).toEqual([{ to: 10, x: 2 }]);
+  });
+
+  it('none is one range of 2', () => {
+    expect(tidyRanges([], 8)).toEqual([{ to: 8, x: 2 }]);
+  });
+
+  it('a highest level lowered takes the ranges with it', () => {
+    const d = withTop(def({ levels: { top: 10, ranges: [{ to: 5, x: 2 }, { to: 10, x: 3 }] } }), 4);
+    expect(ranges(d)).toEqual([{ to: 4, x: 2 }]);
+  });
+});
+
+describe('adding and taking off a range', () => {
+  it('a new one takes the top half of the last, at its multiplier', () => {
+    expect(ranges(withRangeAdded(def()))).toEqual([{ to: 5, x: 2 }, { to: 10, x: 2 }]);
+    const two = withRangeX(withRangeAdded(def()), 1, 3);
+    expect(ranges(withRangeAdded(two))).toEqual([{ to: 5, x: 2 }, { to: 7, x: 3 }, { to: 10, x: 3 }]);
+  });
+
+  it('only with room to split', () => {
+    const tight = def({ levels: { top: 2, ranges: [{ to: 2, x: 2 }] } });
+    expect(canAddRange(tight)).toBe(false);
+    expect(withRangeAdded(tight)).toBe(tight);
+    expect(canAddRange(def({ levels: { top: 3, ranges: [{ to: 3, x: 2 }] } }))).toBe(true);
+    const full = def({ levels: { top: 7, ranges: [{ to: 5, x: 2 }, { to: 7, x: 2 }] } });
+    expect(canAddRange(full)).toBe(true);
+    expect(canAddRange(def({ levels: { top: 6, ranges: [{ to: 5, x: 2 }, { to: 6, x: 2 }] } }))).toBe(false);
+  });
+
+  it('taken off, its neighbor covers its levels', () => {
+    const d = def({ levels: { top: 10, ranges: [{ to: 3, x: 2 }, { to: 6, x: 3 }, { to: 10, x: 1.5 }] } });
+    expect(ranges(withRangeOff(d, 1))).toEqual([{ to: 3, x: 2 }, { to: 10, x: 1.5 }]);
+    expect(ranges(withRangeOff(d, 2))).toEqual([{ to: 3, x: 2 }, { to: 10, x: 3 }]);
+    expect(ranges(withRangeOff(d, 0))).toEqual([{ to: 6, x: 3 }, { to: 10, x: 1.5 }]);
+  });
+
+  it('moving an end and a multiplier touch that range only', () => {
+    const d = def({ levels: { top: 10, ranges: [{ to: 5, x: 2 }, { to: 10, x: 3 }] } });
+    expect(ranges(withRangeTo(d, 0, 7))).toEqual([{ to: 7, x: 2 }, { to: 10, x: 3 }]);
+    expect(ranges(withRangeX(d, 0, 1.5))).toEqual([{ to: 5, x: 1.5 }, { to: 10, x: 3 }]);
+  });
+});
+
+describe('typing over', () => {
+  it('a level takes the number, the others keep theirs, and it says which were typed', () => {
+    const d = withTyped(def({ levels: { top: 4, first: 100, ranges: [{ to: 4, x: 2 }] } }), 3, 999);
+    expect(levelTable(d)).toEqual({ 2: 100, 3: 999, 4: 700 });
+    expect(isTyped(d, 3)).toBe(true);
+    expect(isTyped(d, 2)).toBe(false);
+    expect(anyTyped(d)).toBe(true);
+  });
+
+  it('a second level typed keeps the first', () => {
+    const d = withTyped(withTyped(def(), 3, 999), 4, 5000);
+    expect(levelTable(d)).toMatchObject({ 3: 999, 4: 5000 });
+  });
+
+  it('survives the cost and ranges changing', () => {
+    let d = withTyped(def(), 3, 999);
+    d = withFirst(d, 50);
+    d = withRangeAdded(d);
+    expect(levelTable(d)[3]).toBe(999);
+  });
+
+  it('FILL IT AGAIN keeps nothing typed, and writes nothing empty', () => {
+    const d = withFilledAgain(withTyped(def(), 3, 999));
+    expect(anyTyped(d)).toBe(false);
+    expect(levelTable(d)[3]).toBe(900);
+    expect(d.levels).not.toHaveProperty('typed');
+  });
+
+  it('says a level that doesn\'t climb, only where it was touched', () => {
+    const d = withTyped(def({ levels: { top: 4, first: 100, ranges: [{ to: 4, x: 2 }] } }), 3, 50);
+    expect(levelNotes(d)).toEqual(['Level 3 needs more than level 2, 100']);
+    expect(levelNotes(withTyped(d, 3, 101))).toEqual([]);
+    expect(levelNotes(def({ levels: { top: 30, first: 1000000000, ranges: [{ to: 30, x: 100 }] } }))).toEqual([]);
+  });
+});
+
+describe('what the boxes show', () => {
+  it('what was typed, even while it doesn\'t read yet, with the table staying on what does', () => {
+    const d = withTop(def(), 1);
+    expect(topAsTyped(d)).toBe(1);
+    expect(levelsSet(d).top).toBe(10);
+    expect(Object.keys(levelTable(d))).toHaveLength(9);
+    const f = withFirst(def(), 0);
+    expect(firstAsTyped(f)).toBe(0);
+    expect(levelsSet(f).first).toBe(300);
+  });
+
+  it('with nothing typed, the defaults', () => {
+    expect(topAsTyped(def())).toBe(10);
+    expect(firstAsTyped(def())).toBe(300);
+  });
+});
+
+describe('how they advance', () => {
+  it('is the setup question\'s answer, either or both or neither, leaving the rest of it', () => {
+    const d = def({ core: { dice: ['d20'], advancement: ['spend'] } });
+    expect(advancesBy(d, 'levels')).toBe(false);
+    const on = withAdvancement(d, 'levels');
+    expect(advancesBy(on, 'levels')).toBe(true);
+    expect(advancesBy(on, 'spend')).toBe(true);
+    expect(on.core).toMatchObject({ dice: ['d20'] });
+    expect(advancesBy(withAdvancement(on, 'levels'), 'levels')).toBe(false);
+  });
+
+  it('with no answer yet, none', () => {
+    expect(advancesBy(def(), 'levels')).toBe(false);
+    expect((withAdvancement(def(), 'milestone').core as { advancement: string[] }).advancement).toEqual(['milestone']);
+  });
+});
+
+describe('the word', () => {
+  it('XP, until WORDS renames it', () => {
+    expect(xpWord(def())).toBe('XP');
+    expect(xpWord(def({ words: { xp: { short: 'KARMA' } } }))).toBe('KARMA');
+    expect(xpWord(def({ words: { xp: { short: ' ' } } }))).toBe('XP');
+  });
+});
