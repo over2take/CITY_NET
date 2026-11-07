@@ -25,7 +25,7 @@ export interface XpAwardResult {
   /** What a split couldn't divide. */
   left?: number;
   levelChange?: number;
-  results?: { username: string; ok: boolean; xp?: number; level?: number; reason?: string }[];
+  results?: { username: string; ok: boolean; xp?: number; level?: number; owed?: number; reason?: string }[];
 }
 
 interface Props {
@@ -64,6 +64,8 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
 
   const supported = xpAvailable(system);
   const custom = isCustomSystem(String(system ?? ''));
+  // A milestone game (7d2b) keeps no XP: here it only gives levels.
+  const earns = !custom || !!getTemplate(String(system)).levels?.table;
   const word = custom ? wordFor(system, 'xp', 'short', 'XP').toUpperCase() : 'XP';
 
   const players = (activeUsers || [])
@@ -116,7 +118,7 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
   const verb = n < 0 ? 'TAKE' : 'AWARD';
 
   return (
-    <DraggableWindow title={`${word}.EXE`} pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
+    <DraggableWindow title={earns ? `${word}.EXE` : 'LEVELS.EXE'} pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
       <div style={{ padding: '10px' }}>
         {!supported ? (
           // Cyberpunk RED spends Improvement Points and Shadowrun spends Karma. Both are
@@ -126,7 +128,7 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
           </div>
         ) : (
           <>
-            <label htmlFor="xp-amount" style={{ display: 'block', marginBottom: '5px', color: 'var(--green)' }}>
+            {earns && <><label htmlFor="xp-amount" style={{ display: 'block', marginBottom: '5px', color: 'var(--green)' }}>
               {custom && split ? 'POINTS_TO_SPLIT' : 'POINTS_EACH'}
             </label>
             <input
@@ -149,7 +151,7 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
                     style={{ background: split === on ? 'var(--green)' : 'none', color: split === on ? 'var(--black)' : 'var(--green)', border: 0, fontFamily: 'monospace', fontSize: '11px', padding: '3px 10px', cursor: 'pointer' }}>{label}</button>
                 ))}
               </div>
-            )}
+            )}</>}
 
             <div className="crt-scroll" style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid var(--dark-green)', padding: '5px', marginBottom: '10px', background: 'color-mix(in srgb, var(--black) 50%, transparent)' }}>
               {players.length === 0 ? (
@@ -162,7 +164,7 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
               ))}
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
+            {earns && <div style={{ display: 'flex', gap: '10px' }}>
               <button
                 className="utility-btn" style={{ flex: 1 }}
                 disabled={!valid || selected.length === 0}
@@ -173,9 +175,9 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
                 disabled={!valid || players.length === 0}
                 onClick={() => send(players)}
               >{verb}_ALL</button>
-            </div>
+            </div>}
 
-            {custom && (
+            {custom && earns && (
               <div style={{ marginTop: '10px', borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>
                 <label htmlFor="xp-set" style={{ display: 'block', fontSize: '11px', opacity: 0.6, marginBottom: '5px' }}>
                   Replace what the selected characters have with another number. Their level stays.
@@ -188,9 +190,11 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
               </div>
             )}
 
-            {!custom && <div style={{ marginTop: '10px', borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>
+            <div style={{ marginTop: '10px', borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>
               <div style={{ fontSize: '11px', opacity: 0.6, marginBottom: '5px' }}>
-                Levels for the selected characters, if one needs correcting.
+                {custom
+                  ? 'LEVEL_UP gives the selected characters a level to take: LEVEL UP READY shows on their sheet. LEVEL_DOWN takes one back.'
+                  : 'Levels for the selected characters, if one needs correcting.'}
               </div>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button
@@ -204,7 +208,7 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
                   onClick={() => changeLevel(1)}
                 >LEVEL_UP</button>
               </div>
-            </div>}
+            </div>
 
             {outcome && (
               <div style={{ marginTop: '10px', fontSize: '11px', borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>
@@ -217,7 +221,7 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
                       <div key={r.username} style={{ color: r.ok ? undefined : 'var(--danger)' }}>
                         {r.username}: {!r.ok
                           ? (r.reason ?? 'no sheet')
-                          : r.xp === undefined ? `level ${r.level}`
+                          : r.xp === undefined ? `level ${r.level}${r.owed ? ` · ${r.owed} to take` : ''}`
                           : r.level === undefined ? `${r.xp} ${word}`
                           : `${r.xp} ${word} · level ${r.level}`}
                       </div>

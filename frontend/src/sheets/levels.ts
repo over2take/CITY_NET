@@ -74,6 +74,16 @@ export const levelNotes = (d: Definition): string[] => {
   return notes;
 };
 
+/** Said when going up has nothing to show it on: no levelled list, and no stat or formula called level (7d2b). */
+export const levelHomeNote = (d: Definition): string | null => {
+  const lists = Array.isArray(d.choices) ? d.choices as Array<{ levelled?: unknown }> : [];
+  const groups = Array.isArray(d.stats) ? d.stats as Array<{ stats?: Array<{ id?: unknown }> }> : [];
+  const derived = Array.isArray(d.derived) ? d.derived as Array<{ id?: unknown }> : [];
+  const has = lists.some((l) => l?.levelled === true) || groups.some((g) => (g?.stats ?? []).some((s) => s?.id === 'level')) || derived.some((f) => f?.id === 'level');
+  return has || !(advancesBy(d, 'levels') || advancesBy(d, 'milestone')) ? null
+    : 'Nothing on the sheet shows a level yet. It is still counted: make a list in CHOICES levelled, or add a stat called level, to see it.';
+};
+
 const write = (d: Definition, next: Partial<LevelsSet>): Definition => {
   const now = levelsSet(d);
   const raw = stored(d);

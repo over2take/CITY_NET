@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import {
+import { levelHomeNote,
   advancesBy, anyTyped, canAddRange, firstAsTyped, isTyped, levelNotes, levelTable, levelsSet, tidyRanges, topAsTyped, withAdvancement, withFilledAgain,
   withFirst, withRangeAdded, withRangeOff, withRangeTo, withRangeX, withTop, withTyped, xpWord,
 } from '../levels';
@@ -18,6 +18,21 @@ const { checkDefinition } = req('../../../../backend/systemBuilder/definition.js
 const def = (over: Record<string, unknown> = {}): Definition => ({ format: 1, name: 'L', ...over });
 const levelsProblems = (d: Definition) => checkDefinition(d).problems.filter((p: { where: string }) => p.where.startsWith('levels'));
 const ranges = (d: Definition) => levelsSet(d).ranges;
+
+describe('where a level shows (7d2b)', () => {
+  const on = (advancement: string[], rest: object = {}) => ({ format: 1, name: 'L', core: { advancement }, ...rest }) as never;
+  it('says so when nothing on the sheet would show one, where they go up', () => {
+    expect(levelHomeNote(on(['levels']))).toMatch(/Nothing on the sheet shows a level yet/);
+    expect(levelHomeNote(on(['milestone']))).toMatch(/Nothing on the sheet/);
+    expect(levelHomeNote(on(['levels'], { choices: [{ id: 'feats' }] }))).toMatch(/Nothing on the sheet/);
+  });
+  it('and not with a levelled list, a level stat or formula, or where they do not go up', () => {
+    expect(levelHomeNote(on(['levels'], { choices: [{ id: 'c', levelled: true }] }))).toBeNull();
+    expect(levelHomeNote(on(['levels'], { stats: [{ id: 'a', stats: [{ id: 'level' }] }] }))).toBeNull();
+    expect(levelHomeNote(on(['levels'], { derived: [{ id: 'level' }] }))).toBeNull();
+    expect(levelHomeNote(on(['spend']))).toBeNull();
+  });
+});
 
 describe('held to the server', () => {
   const samples: Record<string, unknown>[] = [

@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 
 const require_ = createRequire(import.meta.url);
-const { levelTable, levelsOf, levelsShown, earnsXp, XP_KEY, LIMITS, DEFAULTS } = require_('../systemBuilder/levels');
+const { levelTable, levelsOf, levelsShown, earnsXp, advances, XP_KEY, LIMITS, DEFAULTS } = require_('../systemBuilder/levels');
 const { checkDefinition } = require_('../systemBuilder/definition');
 const { OTHER } = require_('../systemBuilder/versionDiff');
 const citysys = require_('../systemBuilder/citysys');
@@ -121,12 +121,15 @@ describe('what the browser is told (7d2a)', () => {
   const on = { format: 1, name: 'L', core: { advancement: ['levels'] }, levels: { top: 3, first: 100, ranges: [{ to: 3, x: 2 }] } };
 
   it('the table while characters earn XP', () => {
-    expect(levelsShown(on)).toEqual({ table: { 2: 100, 3: 300 } });
+    expect(levelsShown(on)).toEqual({ top: 3, table: { 2: 100, 3: 300 } });
     expect(XP_KEY).toBe('_xp');
   });
 
-  it('nothing with milestone only, no answer, or the XP part off', () => {
-    expect(levelsShown({ ...on, core: { advancement: ['milestone'] } })).toBeNull();
+  it('the highest level alone with milestone only, and nothing with no answer or the XP part off', () => {
+    expect(levelsShown({ ...on, core: { advancement: ['milestone'] } })).toEqual({ top: 3 });
+    expect(levelsShown({ ...on, core: { advancement: ['milestone'] }, parts: { xp: { on: false } } })).toEqual({ top: 3 });
+    expect(advances({ ...on, core: { advancement: ['spend'] } })).toBe(false);
+    expect(advances(null)).toBe(false);
     expect(levelsShown({ ...on, core: undefined })).toBeNull();
     expect(levelsShown({ ...on, core: { advancement: 'levels' } })).toBeNull();
     expect(levelsShown({ ...on, parts: { xp: { on: false } } })).toBeNull();

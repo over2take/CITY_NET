@@ -63,8 +63,13 @@ const levelTable = (definition) => {
 const earnsXp = (definition) => !!definition && isPlainObject(definition.core) && Array.isArray(definition.core.advancement)
   && definition.core.advancement.includes('levels') && partOn(definition, 'xp');
 
-/** What the browser needs to draw the meter, or null where there is none. */
-const levelsShown = (definition) => (earnsXp(definition) ? { table: levelTable(definition) } : null);
+/** Whether this system's characters go up at all here: by XP, or the GM saying so (milestone). */
+const advances = (definition) => earnsXp(definition)
+  || (!!definition && isPlainObject(definition.core) && Array.isArray(definition.core.advancement) && definition.core.advancement.includes('milestone'));
+
+/** What the browser needs (7d2): the highest level, and the XP table if there's a meter. Null where they don't go up. */
+const levelsShown = (definition) => (advances(definition)
+  ? { top: levelsOf(definition).top, ...(earnsXp(definition) ? { table: levelTable(definition) } : {}) } : null);
 
 /** A definition's levels checked, its problems added to `problems`. */
 const checkLevels = (definition, problems) => {
@@ -107,4 +112,4 @@ const checkLevels = (definition, problems) => {
   }
 };
 
-module.exports = { LIMITS, DEFAULTS, XP_KEY, levelsOf, levelTable, earnsXp, levelsShown, checkLevels };
+module.exports = { LIMITS, DEFAULTS, XP_KEY, levelsOf, levelTable, earnsXp, advances, levelsShown, checkLevels };

@@ -44,6 +44,8 @@ interface Props {
   only?: string;
   /** A player may take their own picks back (7c2), while making the character; never on a list rolled only. */
   takeBack?: boolean;
+  /** Levels go up with LEVEL UP here (7d2b), so a player can't just press + or -. */
+  levelsFixed?: boolean;
   /** Making a character: what each option gives shows, with its money to roll (7c4e). */
   gifts?: GiftsAt;
 }
@@ -76,6 +78,7 @@ interface Ctx {
   data: Record<string, unknown>;
   takeBack: boolean;
   gifts?: GiftsAt;
+  levelsFixed: boolean;
 }
 
 function Feature({ f, ctx }: { f: FeatureShown; ctx: Ctx }) {
@@ -214,10 +217,10 @@ function Pick({ list, p, ctx, fixed = false }: { list: ChoiceListShown; p: PickS
         <span title={p.option.description} style={{ fontSize: '0.72rem', letterSpacing: '1px' }}>{p.option.label.toUpperCase()}</span>
         {p.level !== null && (
           <span style={{ display: 'inline-flex', gap: '4px', alignItems: 'center', fontSize: '0.62rem' }}>
-            {ctx.can && <button type="button" style={btn} aria-label={`${p.option.label} level down`} disabled={p.level <= 1}
+            {ctx.can && (ctx.gm || !ctx.levelsFixed) && <button type="button" style={btn} aria-label={`${p.option.label} level down`} disabled={p.level <= 1}
               onClick={() => ctx.ask({ kind: 'level', list: list.id, option: p.option.id, level: p.level! - 1 })}>−</button>}
             <span>LV {p.level}</span>
-            {ctx.can && <button type="button" style={btn} aria-label={`${p.option.label} level up`} disabled={p.level >= MAX_LEVEL}
+            {ctx.can && (ctx.gm || !ctx.levelsFixed) && <button type="button" style={btn} aria-label={`${p.option.label} level up`} disabled={p.level >= MAX_LEVEL}
               onClick={() => ctx.ask({ kind: 'level', list: list.id, option: p.option.id, level: p.level! + 1 })}>+</button>}
           </span>
         )}
@@ -239,7 +242,7 @@ function Pick({ list, p, ctx, fixed = false }: { list: ChoiceListShown; p: PickS
   );
 }
 
-export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm = false, onRecoverySpend, recoveryOpen = false, recoveryElsewhere = false, only, takeBack = false, gifts }: Props) {
+export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm = false, onRecoverySpend, recoveryOpen = false, recoveryElsewhere = false, only, takeBack = false, gifts, levelsFixed = false }: Props) {
   const worked = workedOn(data);
   // The pick the GM asked to take away, waiting for YES: "list:option".
   const [dropping, setDropping] = useState<string | null>(null);
@@ -253,7 +256,7 @@ export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm =
   const can = !readOnly && !!onChoices;
   // In the builder's previews nothing is published yet: the block says what will be here.
   if (!lists.length) return <div style={small}>A character&apos;s picks from the system&apos;s lists show here: classes, backgrounds, feats.</div>;
-  const ctx: Ctx = { lists, worked, can, gm, ask: (action) => onChoices?.(action), dropping, setDropping, data, takeBack, gifts };
+  const ctx: Ctx = { lists, worked, can, gm, ask: (action) => onChoices?.(action), dropping, setDropping, data, takeBack, gifts, levelsFixed };
   const aside = keptAside(lists, worked).filter((a) => !only || a.list.id === only);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

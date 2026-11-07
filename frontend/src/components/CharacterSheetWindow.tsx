@@ -135,6 +135,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           onStabilize={actions.onStabilize}
           onCastSpell={actions.onCastSpell}
           onRollAbility={actions.onRollAbility}
+          onLevelUp={actions.onLevelUp}
           onResistDrain={actions.onResistDrain}
           allowFumbleShield={allowFumbleShield}
           xpRate={xpRate}

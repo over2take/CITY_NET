@@ -11,7 +11,7 @@ const definition = (name: string) => ({
   format: 1,
   name,
   stats: [{ id: 'traits', label: 'TRAITS', stats: [{ id: 'grit', label: 'Grit', min: 1, max: 20 }] }],
-  core: { health: { model: 'pool' }, advancement: ['levels'], dice: ['d10'] },
+  core: { health: { model: 'pool' }, dice: ['d10'] },
   choices: [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter', die: 10 }] }],
   resting: { recovery: { name: 'Hit Dice', plus: '@grit', spent_at: ['short_rest'], spend: 'gm', back: [{ rest: 'long_rest', how: 'all' }] } },
 });

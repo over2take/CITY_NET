@@ -32,6 +32,7 @@ const { withThrow, boardOf } = require('../utils/diceThrow');
 const { syncTokenMax } = require('../systemBuilder/tokenMax');
 const { maySpend, restingOf, OPEN_SETTING } = require('../systemBuilder/recovery');
 const { creationAction, statRollLine } = require('../systemBuilder/creation');
+const { levelAction } = require('../systemBuilder/levelUp');
 const { kitPatch, kitTakenBack } = require('../sheets/kitGiving');
 const identity = require('../sheets/identity');
 const { takeRest } = require('../sheets/rests');
@@ -169,6 +170,28 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
         });
       });
     }), 'This game has no guided new character');
+  });
+
+  // Going up a level (7d2b): the player's own, or the GM's for the player they name.
+  socket.on('levelAction', (payload) => {
+    if (!payload || typeof payload !== 'object') return;
+    withCaller(payload, 'choicesRefused', ({ gm, username, system, definition, refuse }) => {
+      let error = null;
+      mutateSheetForUser(db, { username, system }, (data) => {
+        const done = levelAction(definition, data, payload, { gm });
+        if (!done.ok) { error = done.error; return undefined; }
+        sheetTemplates.applyDerived(system, done.data);
+        return done.data;
+      }, (err2, stored) => {
+        if (error) return refuse(error);
+        if (err2) return refuse('That character has no sheet yet');
+        if (!stored) return undefined;
+        return syncTokenMax(db, system, username, (moved) => {
+          if (moved) io.emit('dataUpdated', { isRhombusOnly: true });
+          io.emit('sheetUpdated', { username, system });
+        });
+      });
+    }, 'Levels here are typed in');
   });
 
   socket.on('restTake', (payload) => {

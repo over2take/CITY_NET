@@ -13,7 +13,7 @@ const definition = (name: string) => ({
   name,
   stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'int', label: 'Intellect', min: 1, max: 18 }] }],
   derived: [{ id: 'defense', label: 'Defense', formula: '10' }],
-  core: { health: { model: 'pool' }, advancement: ['levels'], dice: ['d20'] },
+  core: { health: { model: 'pool' }, dice: ['d20'] },
   choices: [{
     id: 'classes', one: 'Class', many: 'Classes', levelled: true, again: true,
     options: [{ id: 'soldier', label: 'Soldier', description: 'Holds the line.', features: [
