@@ -351,6 +351,24 @@ describe('through the socket', () => {
     await until(() => gm.heard.some((e) => e.event === 'xpAwardResult' && e.data.levelChange === -1), { label: 'told the GM' });
   });
 
+  it('READY only peeks at a sheet: the GM, with none, isn\'t given one, as a plain ask still does', async () => {
+    const { gm } = await table();
+    const gmSheets = async () => (await get(db, 'SELECT COUNT(*) AS n FROM character_sheets WHERE username = ?', ['gm'])).n;
+    gm.handlers.requestMySheet({ peek: true });
+    await drain(db);
+    await new Promise((r) => setTimeout(r, 100));
+    expect(await gmSheets()).toBe(0);
+    expect(gm.heard.some((e) => e.event === 'sheetData')).toBe(false);
+    gm.handlers.requestMySheet({ peek: false });
+    await until(async () => (await gmSheets()) === 1, { label: 'made' });
+  });
+
+  it('and a peek still reads a sheet that is there', async () => {
+    const { kes } = await table();
+    kes.handlers.requestMySheet({ peek: true });
+    await until(() => kes.heard.some((e) => e.event === 'sheetData' && e.data.username === 'kes'), { label: 'read' });
+  });
+
   it('the GM goes up for a player they name', async () => {
     const { gm } = await table();
     gm.handlers.levelAction({ kind: 'up', username: 'kes' });

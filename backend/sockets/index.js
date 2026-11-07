@@ -1263,7 +1263,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       });
     });
 
-    socket.on('requestMySheet', () => {
+    // { peek: true } only reads (7d2b): what blinks on the rail mustn't make a sheet for someone with none, the GM
+    // among them, or a long rest would count them as a character.
+    socket.on('requestMySheet', (opts) => {
+      const peek = opts?.peek === true;
       const info = userSockets.get(socket.id);
       if (!info || !info.userName) return;
       getGameSystem((err, system) => {
@@ -1310,7 +1313,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 });
                 });
               });
-            } else {
+            } else if (!peek) {
               // Auto-create a blank sheet on first open, carrying the portrait
               // over from the player's most recent sheet on another system
               db.get(

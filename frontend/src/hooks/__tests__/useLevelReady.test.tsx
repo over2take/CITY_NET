@@ -30,11 +30,11 @@ const sheet = (data: object, over: object = {}) => ({ username: 'WREN', system: 
 afterEach(() => { cleanup(); clearCustomTemplates(); vi.unstubAllGlobals(); });
 
 describe('useLevelReady', () => {
-  it('asks for the sheet, and is ready once the XP is there', () => {
+  it('peeks at the sheet, never making one, and is ready once the XP is there', () => {
     system();
     const socket = makeSocket();
     const { result } = renderHook(() => useLevelReady({ current: socket } as never, 'WREN', ID));
-    expect(socket.emit).toHaveBeenCalledWith('requestMySheet');
+    expect(socket.emit).toHaveBeenCalledWith('requestMySheet', { peek: true });
     expect(result.current).toBe(false);
     socket.fire('sheetData', sheet({ [XP_KEY]: 99 }));
     expect(result.current).toBe(false);

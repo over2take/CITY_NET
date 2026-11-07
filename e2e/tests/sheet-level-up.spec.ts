@@ -81,6 +81,11 @@ test('milestone: the GM gives a level, the rail blinks, the player takes it; no 
   const mine = await signedIn(browser, info, rook);
   const rail = mine.getByRole('button', { name: 'CHARACTER_SHEET', exact: true });
   await expect(rail).toBeVisible();
+  // Their sheet is made the first time they open it: a level can only be given to a sheet that's there.
+  await openSheet(mine);
+  await expect(mine.getByText(/^SHEET.EXE/)).toBeVisible({ timeout: 15_000 });
+  await mine.keyboard.press('Escape');
+  await expect(mine.getByText(/^SHEET.EXE/)).toHaveCount(0);
 
   await signInAsGm(page);
   await page.getByRole('button', { name: 'GAME', exact: true }).click();
