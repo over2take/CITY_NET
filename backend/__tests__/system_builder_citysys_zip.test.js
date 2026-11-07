@@ -321,6 +321,21 @@ describe('through the routes', () => {
     expect(copy.published.symbols[0].icon).toBe(p.hit.address);
   });
 
+  it('starts fresh from a zip too, its pictures with it', async () => {
+    const p = pictures();
+    Object.values(p).forEach(keep);
+    const old = await published(systemWith(p));
+    const bytes = (await request(app).get(`/api/systems/${old}/export?images=1`).set(gm).buffer(true).parse(binary)).body;
+    await request(app).delete(`/api/systems/${old}`).set(gm);
+    for (const x of Object.values(p)) fs.rmSync(path.join(UPLOADS, x.folder, x.name));
+
+    const done = await request(app).post('/api/systems/install/zip?mode=fresh').set(gm).set('Content-Type', 'application/zip').send(bytes);
+    expect(done.status).toBe(200);
+    expect(done.body.id).not.toBe(old);
+    expect(done.body.images).toBe(4);
+    for (const x of Object.values(p)) expect(fs.readFileSync(path.join(UPLOADS, x.folder, x.name))).toEqual(x.bytes);
+  });
+
   it('stores nothing when the install is refused', async () => {
     const p = pictures();
     Object.values(p).forEach(keep);

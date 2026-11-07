@@ -133,7 +133,7 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 |---|---|---|---|---|
 | Publish, and publish again through the version preview | | `store`, `publish_preview`, `version_diff` | `builder-journey` | **AT THE TABLE** |
 | Switch the game to a system | | `runtime` | `builder-journey` | **AT THE TABLE** |
-| Export and install | .citysys, .zip with images, INSTALL A FILE | `citysys`, `citysys_zip`, `hostile_files` | `builder-share`, `builder-clicks` | **AT THE TABLE** |
+| Export and install | .citysys, .zip with images, INSTALL A FILE, BRING IT BACK, START FRESH | `citysys`, `citysys_zip`, `hostile_files` | `builder-share`, `builder-clicks` | **AT THE TABLE** |
 | Close and delete a system | | `store` | `builder-systems` | **AT THE TABLE** |
 | The tour and HELP | | `tour` | `builder-smoke`, `builder-clicks` (WHO SEES THE TARGET) | **AT THE TABLE** |
 
