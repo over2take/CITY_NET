@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
 import { GmCreatingLine } from './GmCreatingLine';
+import { FillInForThemWindow } from './FillInForThemWindow';
 import { ImportSheetDialog } from './ImportSheetDialog';
 import { getTemplate, getMaxPairs, hiddenTabsFor, npcTemplateOf, type CharacterSheet, type SheetTemplate } from '../sheets';
 import type { SheetFieldValue, RollPick } from '../sheets/types';
@@ -61,6 +62,8 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
   const choicesRefused = useChoicesRefused(playerUsername ? socket : null);
   const recoveryOpen = useRecoveryOpen(playerUsername ? socket : null);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [fillingIn, setFillingIn] = useState(false);
+  const [fillInPos, setFillInPos] = useState({ x: pos.x + 40, y: pos.y + 40 });
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   const [reloadKey, setReloadKey] = useState(0);
   const [ruleSettings, setRuleSettings] = useState<{ key: string; value: string }[]>([]);
@@ -287,7 +290,8 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
       )}
       {playerUsername && socket && sheet && (
         <GmCreatingLine template={template} data={sheet.data} system={sheet.system} refused={choicesRefused}
-          onAct={(kind) => socket.emit('creationAction', { kind, username: playerUsername })} />
+          onAct={(kind) => socket.emit('creationAction', { kind, username: playerUsername })}
+          onFillIn={() => { socket.emit('creationAction', { kind: 'open', username: playerUsername }); setFillingIn(true); }} />
       )}
       {sheet && template ? (
         <SheetRenderer
@@ -319,6 +323,9 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
         </div>
       )}
     </DraggableWindow>
+    {fillingIn && playerUsername && socket && (
+      <FillInForThemWindow key={playerUsername} token={token} socket={socket} username={playerUsername} pos={fillInPos} setPos={setFillInPos} onClose={() => setFillingIn(false)} />
+    )}
     {isImportOpen && ReactDOM.createPortal(
       <ImportSheetDialog
         gameSystem={sheet?.system}

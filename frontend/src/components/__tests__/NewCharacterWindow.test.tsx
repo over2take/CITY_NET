@@ -359,8 +359,8 @@ describe('the steps', () => {
 
     it('says why the server said no', async () => {
       const { socket } = await open(at, undefined, 'tok', ROLL('order'));
-      socket.fire('choicesRefused', { error: 'Rolled, and kept: rolling again is the GM\'s' });
-      expect(screen.getByRole('alert').textContent).toBe('Rolled, and kept: rolling again is the GM\'s');
+      socket.fire('choicesRefused', { error: 'Rolled, and kept: your GM can clear it for another go' });
+      expect(screen.getByRole('alert').textContent).toBe('Rolled, and kept: your GM can clear it for another go');
     });
   });
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
-  buyCost, buyShown, CREATING_KEY, gmFlowLine, startOverWords, giftRolledOn, giftWords, moneyHeldOn, moneyWords, kitItemsText, kitsShownOn, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, placedFrom, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields, withCreationLocks,
+  buyCost, buyShown, CREATING_KEY, gmFlowLine, gmStatsWords, startOverWords, giftRolledOn, giftWords, moneyHeldOn, moneyWords, kitItemsText, kitsShownOn, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, placedFrom, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields, withCreationLocks,
 } from '../newCharacterFlow';
 import { WORKED_KEY, type ChoiceListShown } from '../choicesShown';
 import { clearCustomTemplates, registerCustomTemplate } from '../customTemplates';
@@ -592,5 +592,15 @@ describe('what START OVER warns of (7c5)', () => {
 
   it('finished before it was recorded: says it stays', () => {
     expect(words({ done: true })).toBe(`${CLEARS} They finished before what FINISH gives was recorded, so what they were given stays.`);
+  });
+});
+
+describe('what filling in says on a stats step (7c5)', () => {
+  it('says what the game would give, with the boxes open whatever it is', () => {
+    expect(gmStatsWords({ way: 'typed' }, null)).toBe('Type in what they have.');
+    expect(gmStatsWords({ way: 'array', numbers: [15, 14] }, null)).toBe('This game places 15, 14. Type what you like.');
+    expect(gmStatsWords({ way: 'buy', points: 20, lowest: 8, highest: 15 }, null)).toBe('This game buys them: 20 points, 8 to 15. Type what you like.');
+    expect(gmStatsWords({ way: 'roll', each: '3d6', placed: 'order' }, null)).toBe('3d6 for each stat, or type what you like.');
+    expect(gmStatsWords({ way: 'roll', each: '3d6', placed: 'order' }, [9, 11])).toBe('Rolled 9, 11. Type what you like, or clear it to roll again.');
   });
 });

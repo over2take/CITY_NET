@@ -16,7 +16,7 @@ import { drain, until } from './helpers/until.js';
 process.env.JWT_SECRET = 'test-secret';
 const require_ = createRequire(import.meta.url);
 const { pickAction, rollLine } = require_('../systemBuilder/picking');
-const { PICKS_KEY, ROLLED_KEY, rolledOn, rolledOf, choicesShown } = require_('../systemBuilder/choices');
+const { PICKS_KEY, ROLLED_KEY, rolledOn, rolledOf, choicesShown, workedOf } = require_('../systemBuilder/choices');
 const { checkDefinition } = require_('../systemBuilder/definition');
 const runtime = require_('../systemBuilder/runtime');
 const socketsFactory = (await import('../sockets/index.js')).default;
@@ -57,32 +57,143 @@ describe('the rules', () => {
     expect([0, 7].map((n) => rolledOn(bgs(), n))).toEqual([null, null]);
   });
 
-  it('BY HAND OR ROLL: the roll is kept, nothing picked; rolled again, and any option picked, which clears it', () => {
+  it('BY HAND OR ROLL: a roll picks what it lands on and locks it; not rolling, any option picked by hand', () => {
     const done = roll(bgs(), {}, { values: [4] });
     expect(done.ok).toBe(true);
-    expect(done.data).toEqual({ [ROLLED_KEY]: { bgs: { option: 'scribe', roll: 4 } } });
+    expect(done.data).toEqual({ [PICKS_KEY]: { bgs: [{ option: 'scribe', locked: true, roll: 4 }] } });
     expect(done.rolled).toMatchObject({ dice: 'd6', sides: 6, rolls: [4], total: 4, option: { id: 'scribe' } });
-    const again = roll(bgs(), done.data, { values: [1] });
-    expect(rolledOf(again.data, 'bgs')).toEqual({ option: 'dock', roll: 1 });
-    const picked = act(bgs(), again.data, { kind: 'pick', list: 'bgs', option: 'scribe' });
-    expect(picked.data).toEqual({ [PICKS_KEY]: { bgs: [{ option: 'scribe' }] } });
+    expect(act(bgs(), {}, { kind: 'pick', list: 'bgs', option: 'scribe' }).data).toEqual({ [PICKS_KEY]: { bgs: [{ option: 'scribe' }] } });
   });
 
-  it('BY ROLL ONLY: a player rolls once and takes what came up; the GM rolls again and picks anything', () => {
-    const done = roll(bgs('roll'), {}, { values: [2] });
-    expect(rolledOf(done.data, 'bgs')).toEqual({ option: 'dock', roll: 2 });
-    expect(roll(bgs('roll'), done.data)).toEqual({ ok: false, error: 'Rolled already: take what came up, or ask the GM to roll again' });
-    expect(act(bgs('roll'), done.data, { kind: 'pick', list: 'bgs', option: 'scribe' })).toEqual({ ok: false, error: 'The Backgrounds are picked by roll: ROLL FOR IT' });
+  it('BY ROLL ONLY: nothing to pick by hand; a roll picks and locks it as well', () => {
     expect(act(bgs('roll'), {}, { kind: 'pick', list: 'bgs', option: 'dock' })).toEqual({ ok: false, error: 'The Backgrounds are picked by roll: ROLL FOR IT' });
-    expect(act(bgs('roll'), done.data, { kind: 'pick', list: 'bgs', option: 'dock' }).data).toEqual({ [PICKS_KEY]: { bgs: [{ option: 'dock' }] } });
-    const gmAgain = roll(bgs('roll'), done.data, { gm: true, values: [6] });
-    expect(rolledOf(gmAgain.data, 'bgs')).toEqual({ option: 'thief', roll: 6 });
-    expect(act(bgs('roll'), done.data, { kind: 'pick', list: 'bgs', option: 'scribe' }, { gm: true }).data).toEqual({ [PICKS_KEY]: { bgs: [{ option: 'scribe' }] } });
+    expect(roll(bgs('roll'), {}, { values: [2] }).data).toEqual({ [PICKS_KEY]: { bgs: [{ option: 'dock', locked: true, roll: 2 }] } });
   });
 
-  it('a rolled option the character doesn\'t meet says what it needs, as picking does', () => {
-    const done = roll(bgs('roll'), { luck: 1 }, { values: [5] });
-    expect(act(bgs('roll'), done.data, { kind: 'pick', list: 'bgs', option: 'thief' })).toEqual({ ok: false, error: 'Thief needs LUCK >= 3' });
+  describe('a roll locked in (the user\'s flow, 2026-11-06)', () => {
+    const CREATING = { _creating: { at: 'list:bgs' } };
+    const ON = (list) => ({ ...system(list), creation: { on: true } });
+    const rolledIn = (players) => roll(bgs(players), {}, { values: [1] }).data;
+
+    for (const players of [undefined, 'roll']) {
+      it(`${players ?? 'either'}: a player can't roll again, drop it, or pick another, with room or without`, () => {
+        const many = { ...bgs(players), picks: 2 };
+        const data = rolledIn(players);
+        expect(roll(bgs(players), data)).toEqual({ ok: false, error: 'No more Backgrounds can be picked' });
+        expect(pickAction(ON(bgs(players)), { ...data, ...CREATING }, { kind: 'drop', list: 'bgs', option: 'dock' }).ok).toBe(false);
+        expect(act(many, data, { kind: 'level', list: 'bgs', option: 'dock', level: 2 }).ok).toBe(false);
+      });
+    }
+
+    it('a player making a character can\'t take a locked pick back, though they can one picked by hand', () => {
+      const data = { ...rolledIn(), ...CREATING };
+      expect(pickAction(ON(bgs()), data, { kind: 'drop', list: 'bgs', option: 'dock' })).toEqual({ ok: false, error: 'Rolled, and kept: your GM can clear it for another go' });
+      const byHand = { [PICKS_KEY]: { bgs: [{ option: 'dock' }] }, ...CREATING };
+      expect(pickAction(ON(bgs()), byHand, { kind: 'drop', list: 'bgs', option: 'dock' }).ok).toBe(true);
+    });
+
+    it('stays locked through a level or a use changing', () => {
+      const list = { ...bgs(), levelled: true };
+      const done = act(list, roll(list, {}, { values: [1] }).data, { kind: 'level', list: 'bgs', option: 'dock', level: 3 });
+      expect(done.data[PICKS_KEY].bgs).toEqual([{ option: 'dock', level: 3, locked: true, roll: 1 }]);
+    });
+
+    it('a list picking more than one rolls on: each locked in its turn', () => {
+      const many = { ...bgs(), picks: 2 };
+      const first = roll(many, {}, { values: [1] }).data;
+      const second = roll(many, first, { values: [4] }).data;
+      expect(second[PICKS_KEY].bgs).toEqual([{ option: 'dock', locked: true, roll: 1 }, { option: 'scribe', locked: true, roll: 4 }]);
+    });
+
+    it('landing on one already held picks nothing, and they may roll again', () => {
+      const many = { ...bgs(), picks: 2 };
+      const first = roll(many, {}, { values: [1] }).data;
+      const same = roll(many, first, { values: [2] });
+      expect(same.data).toEqual(first);
+      expect(same.rolled.option.id).toBe('dock');
+    });
+
+    it('one they don\'t meet is kept, marked, with no pick: nothing else until they meet it or the GM acts', () => {
+      const done = roll(bgs(), { luck: 1 }, { values: [5] });
+      expect(done.data).toEqual({ luck: 1, [ROLLED_KEY]: { bgs: { option: 'thief', roll: 5 } } });
+      expect(roll(bgs(), done.data)).toEqual({ ok: false, error: 'Rolled, and kept: your GM can clear it for another go' });
+      expect(act(bgs(), done.data, { kind: 'pick', list: 'bgs', option: 'dock' })).toEqual({ ok: false, error: 'Rolled, and kept: your GM can clear it for another go' });
+      expect(act(bgs(), done.data, { kind: 'pick', list: 'bgs', option: 'thief' })).toEqual({ ok: false, error: 'Thief needs LUCK >= 3' });
+      // Come to meet it, it is theirs, locked.
+      const taken = act(bgs(), { ...done.data, luck: 3 }, { kind: 'pick', list: 'bgs', option: 'thief' });
+      expect(taken.data).toEqual({ luck: 3, [PICKS_KEY]: { bgs: [{ option: 'thief', locked: true, roll: 5 }] } });
+    });
+
+    describe('the GM', () => {
+      const gm = { gm: true };
+
+      it('clears it: the pick gone, and the player can roll or pick again', () => {
+        const done = act(bgs(), rolledIn(), { kind: 'clear', list: 'bgs', option: 'dock' }, gm);
+        expect(done.data).toEqual({ [PICKS_KEY]: { bgs: [] } });
+        expect(roll(bgs(), done.data, { values: [4] }).ok).toBe(true);
+        expect(act(bgs(), done.data, { kind: 'pick', list: 'bgs', option: 'scribe' }).ok).toBe(true);
+      });
+
+      it('clearing leaves the list\'s other picks', () => {
+        const many = { ...bgs(), picks: 2 };
+        const both = roll(many, roll(many, {}, { values: [1] }).data, { values: [4] }).data;
+        expect(act(many, both, { kind: 'clear', list: 'bgs', option: 'dock' }, gm).data[PICKS_KEY].bgs).toEqual([{ option: 'scribe', locked: true, roll: 4 }]);
+      });
+
+      it('clearing is theirs alone, and only what is locked', () => {
+        expect(act(bgs(), rolledIn(), { kind: 'clear', list: 'bgs', option: 'dock' })).toEqual({ ok: false, error: 'That is the GM\'s to do' });
+        expect(act(bgs(), {}, { kind: 'clear', list: 'bgs' })).toEqual({ ok: false, error: 'That is the GM\'s to do' });
+        expect(act(bgs(), {}, { kind: 'clear', list: 'bgs', option: 'dock' }, gm)).toEqual({ ok: false, error: 'Dockhand isn\'t picked' });
+        const byHand = { [PICKS_KEY]: { bgs: [{ option: 'dock' }] } };
+        expect(act(bgs(), byHand, { kind: 'clear', list: 'bgs', option: 'dock' }, gm)).toEqual({ ok: false, error: 'Nothing rolled there to clear' });
+      });
+
+      it('clears a roll waiting, marked, with no pick to take', () => {
+        const waiting = roll(bgs(), { luck: 1 }, { values: [5] }).data;
+        expect(act(bgs(), waiting, { kind: 'clear', list: 'bgs' }, gm).data).toEqual({ luck: 1 });
+        expect(act(bgs(), { luck: 1 }, { kind: 'clear', list: 'bgs' }, gm)).toEqual({ ok: false, error: 'Nothing rolled there to clear' });
+      });
+
+      it('rolls again for them: the old pick replaced by what comes up, locked', () => {
+        const done = act(bgs(), rolledIn(), { kind: 'roll', list: 'bgs', again: 'dock' }, { gm: true, rng: faces(6, 4) });
+        expect(done.data[PICKS_KEY].bgs).toEqual([{ option: 'scribe', locked: true, roll: 4 }]);
+        expect(done.rolled.option.id).toBe('scribe');
+      });
+
+      it('rolling again may land on the same one', () => {
+        const done = act(bgs(), rolledIn(), { kind: 'roll', list: 'bgs', again: 'dock' }, { gm: true, rng: faces(6, 2) });
+        expect(done.data[PICKS_KEY].bgs).toEqual([{ option: 'dock', locked: true, roll: 2 }]);
+      });
+
+      it('a player can\'t use rolling again to get round the lock', () => {
+        expect(act(bgs(), rolledIn(), { kind: 'roll', list: 'bgs', again: 'dock' }, { rng: faces(6, 4) })).toEqual({ ok: false, error: 'No more Backgrounds can be picked' });
+      });
+
+      it('a roll of theirs needs nothing met: it is the GM\'s say', () => {
+        expect(roll(bgs(), { luck: 1 }, { gm: true, values: [5] }).data[PICKS_KEY].bgs).toEqual([{ option: 'thief', locked: true, roll: 5 }]);
+      });
+
+      it('picking by hand on a list a player could roll on locks it, with no roll to say', () => {
+        for (const players of [undefined, 'roll']) {
+          expect(act(bgs(players), {}, { kind: 'pick', list: 'bgs', option: 'scribe' }, gm).data[PICKS_KEY].bgs).toEqual([{ option: 'scribe', locked: true }]);
+        }
+        expect(act(bgs('hand'), {}, { kind: 'pick', list: 'bgs', option: 'scribe' }, gm).data[PICKS_KEY].bgs).toEqual([{ option: 'scribe' }]);
+      });
+
+      it('a pick on a list with no table is as it always was', () => {
+        const { table: _t, ...plain } = bgs();
+        const list = { ...plain, options: plain.options.map(({ roll: _r, ...o }) => o) };
+        expect(act(list, {}, { kind: 'pick', list: 'bgs', option: 'scribe' }, gm).data[PICKS_KEY].bgs).toEqual([{ option: 'scribe' }]);
+      });
+
+      it('the sheet is told what is locked and what it rolled', () => {
+        const shown = workedOf(system(bgs()), rolledIn()).picks;
+        expect(shown[0]).toMatchObject({ list: 'bgs', option: 'dock', locked: true, roll: 1 });
+        const hand = workedOf(system(bgs()), { [PICKS_KEY]: { bgs: [{ option: 'dock', roll: 3 }] } }).picks;
+        expect(hand[0]).not.toHaveProperty('locked');
+        expect(hand[0]).not.toHaveProperty('roll');
+      });
+    });
   });
 
   it('BY HAND: a player can\'t roll, the GM can; no table, nothing to roll; no room, no roll', () => {
@@ -91,6 +202,7 @@ describe('the rules', () => {
     const { table: _t, ...plain } = bgs();
     expect(roll({ ...plain, options: plain.options.map(({ roll: _r, ...o }) => o) }, {}, { gm: true })).toEqual({ ok: false, error: 'The Backgrounds have no table to roll on' });
     expect(roll(bgs(), { [PICKS_KEY]: { bgs: [{ option: 'dock' }] } }, { gm: true })).toEqual({ ok: false, error: 'No more Backgrounds can be picked' });
+    expect(roll(bgs(), { [PICKS_KEY]: { bgs: [{ option: 'dock' }] } })).toEqual({ ok: false, error: 'No more Backgrounds can be picked' });
   });
 
   it('rolls on the secure dice when none are handed in', () => {
@@ -108,16 +220,31 @@ describe('the rules', () => {
     expect(rolledOf(done.data, 'bgs')).toEqual({ option: null, roll: 12 });
   });
 
-  it('under a feature that opens the list, kept by that feature, taken there', () => {
+  it('under a feature that opens the list, picked and locked there', () => {
     const data = { [PICKS_KEY]: { classes: [{ option: 'soldier', level: 1 }] } };
     const done = roll(bgs(), data, { from: 'specialty', values: [4, 5] });
     expect(done.ok).toBe(true);
-    expect(done.data[ROLLED_KEY]).toEqual({ 'specs@specialty': { option: 'vanguard', roll: 9 } });
-    expect(rolledOf(done.data, 'specs')).toBeNull();
-    const taken = act(bgs(), done.data, { kind: 'pick', list: 'specs', option: 'vanguard', from: 'specialty' });
-    expect(taken.data[PICKS_KEY].specs).toEqual([{ option: 'vanguard', from: 'specialty' }]);
-    expect(taken.data).not.toHaveProperty(ROLLED_KEY);
+    expect(done.data[PICKS_KEY].specs).toEqual([{ option: 'vanguard', from: 'specialty', locked: true, roll: 9 }]);
+    expect(done.data).not.toHaveProperty(ROLLED_KEY);
+    expect(act(bgs(), done.data, { kind: 'roll', list: 'specs', from: 'specialty' }, { rng: faces(6, 1, 1) }).ok).toBe(false);
+    const again = act(bgs(), done.data, { kind: 'roll', list: 'specs', from: 'specialty', again: 'vanguard' }, { gm: true, rng: faces(6, 1, 1) });
+    expect(again.data[PICKS_KEY].specs).toEqual([{ option: 'duelist', from: 'specialty', locked: true, roll: 2 }]);
+    const cleared = act(bgs(), done.data, { kind: 'clear', list: 'specs', option: 'vanguard' }, { gm: true });
+    expect(cleared.data[PICKS_KEY].specs).toEqual([]);
     expect(act(bgs(), data, { kind: 'roll', list: 'specs' }, { rng: faces(6, 1, 1) })).toEqual({ ok: false, error: 'The Specialties are picked under the features that open them' });
+  });
+
+  it('under a feature, one not met waits by that feature, taken there, and cleared there', () => {
+    const list = { ...SPECIALTIES, options: [{ id: 'duelist', label: 'Duelist', roll: '2-7', requires: '@luck >= 3' }, { id: 'vanguard', label: 'Vanguard', roll: '8-12' }] };
+    const def = { ...system(bgs()), choices: system(bgs()).choices.map((c) => (c.id === 'specs' ? list : c)) };
+    const data = { luck: 1, [PICKS_KEY]: { classes: [{ option: 'soldier', level: 1 }] } };
+    const done = pickAction(def, data, { kind: 'roll', list: 'specs', from: 'specialty' }, { rng: faces(6, 1, 1) });
+    expect(done.data[ROLLED_KEY]).toEqual({ 'specs@specialty': { option: 'duelist', roll: 2 } });
+    expect(rolledOf(done.data, 'specs')).toBeNull();
+    const taken = pickAction(def, { ...done.data, luck: 3 }, { kind: 'pick', list: 'specs', option: 'duelist', from: 'specialty' });
+    expect(taken.data[PICKS_KEY].specs).toEqual([{ option: 'duelist', from: 'specialty', locked: true, roll: 2 }]);
+    expect(taken.data).not.toHaveProperty(ROLLED_KEY);
+    expect(pickAction(def, done.data, { kind: 'clear', list: 'specs', from: 'specialty' }, { gm: true }).data).not.toHaveProperty(ROLLED_KEY);
   });
 
   it('the sheet is told each list\'s table, how players pick, and each option\'s roll, tidied', () => {
@@ -169,38 +296,51 @@ describe('through the socket', () => {
     await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('wren', ?, ?, 0)`, [ID, JSON.stringify({ name: 'Wren', luck: 5 })]);
   });
 
-  it('a player rolls: kept on the sheet, a dice-log line, the tray throwing it; once, then refused; TAKE IT picks it', async () => {
+  it('a player rolls: locked in on the sheet, a dice-log line, the tray throwing it; once, then refused', async () => {
     const { wren, shared } = await table();
     wren.handlers.choicesAction({ kind: 'roll', list: 'bgs' });
-    await until(async () => !!(await stored())[ROLLED_KEY], { label: 'the roll kept' });
-    const kept = (await stored())[ROLLED_KEY].bgs;
-    expect(kept.roll).toBeGreaterThanOrEqual(1);
-    expect(kept.roll).toBeLessThanOrEqual(6);
+    await until(async () => !!((await stored())[PICKS_KEY] || (await stored())[ROLLED_KEY]), { label: 'the roll kept' });
+    const after = await stored();
+    // Thief needs Luck, so a 5 or 6 waits, marked, and anything else is picked.
+    const kept = after[PICKS_KEY]?.bgs?.[0] ?? after[ROLLED_KEY].bgs;
+    const total = kept.roll;
+    expect(total).toBeGreaterThanOrEqual(1);
+    expect(total).toBeLessThanOrEqual(6);
+    if (after[PICKS_KEY]) expect(kept.locked).toBe(true);
     await until(async () => (await lines()).length === 1, { label: 'the log line' });
     const [line] = await lines();
-    const landed = { 1: 'DOCKHAND', 2: 'DOCKHAND', 3: 'SCRIBE', 4: 'SCRIBE', 5: 'THIEF', 6: 'THIEF' }[kept.roll];
-    expect(line).toMatchObject({ username: 'wren', total: kept.roll, results: JSON.stringify({ 6: [kept.roll] }), historyString: `Wren rolled Background (d6) [${kept.roll} = ${kept.roll}] — ${landed}` });
+    const landed = { 1: 'DOCKHAND', 2: 'DOCKHAND', 3: 'SCRIBE', 4: 'SCRIBE', 5: 'THIEF', 6: 'THIEF' }[total];
+    expect(line).toMatchObject({ username: 'wren', total, results: JSON.stringify({ 6: [total] }), historyString: `Wren rolled Background (d6) [${total} = ${total}] — ${landed}` });
     const thrown = shared.find((e) => e.event === 'diceRollBroadcast');
-    expect(thrown.data).toMatchObject({ userName: 'Wren', account: 'wren', total: kept.roll, historyString: line.historyString });
+    expect(thrown.data).toMatchObject({ userName: 'Wren', account: 'wren', total, historyString: line.historyString });
     expect(thrown.data.board).toBeTruthy();
     expect(shared.some((e) => e.event === 'sheetUpdated' && e.data.username === 'wren')).toBe(true);
 
     wren.handlers.choicesAction({ kind: 'roll', list: 'bgs' });
     await until(() => wren.refused().length === 1, { label: 'the second roll refused' });
-    expect(wren.refused()).toEqual(['Rolled already: take what came up, or ask the GM to roll again']);
     expect(await lines()).toHaveLength(1);
+  });
 
-    wren.handlers.choicesAction({ kind: 'pick', list: 'bgs', option: kept.option });
-    await until(async () => !!(await stored())[PICKS_KEY], { label: 'taken' });
-    expect((await stored())[PICKS_KEY].bgs).toEqual([{ option: kept.option }]);
-    expect(await stored()).not.toHaveProperty(ROLLED_KEY);
+  it('a player can\'t clear through the socket; the GM can, naming them', async () => {
+    const { wren, gm } = await table();
+    wren.handlers.choicesAction({ kind: 'roll', list: 'bgs' });
+    await until(async () => (await lines()).length === 1, { label: 'the roll' });
+    wren.handlers.choicesAction({ kind: 'clear', list: 'bgs', option: 'dock' });
+    await until(() => wren.refused().length === 1, { label: 'the player refused' });
+    expect(wren.refused()).toEqual(['That is the GM\'s to do']);
+    const kept = await stored();
+    const held = kept[PICKS_KEY]?.bgs?.[0]?.option;
+    gm.handlers.choicesAction({ kind: 'clear', list: 'bgs', ...(held ? { option: held } : {}), username: 'wren' });
+    await until(async () => { const d = await stored(); return !d[PICKS_KEY]?.bgs?.length && !d[ROLLED_KEY]; }, { label: 'cleared' });
+    expect(gm.refused()).toEqual([]);
   });
 
   it('the GM rolls again on the player they name', async () => {
     const { wren, gm } = await table();
     wren.handlers.choicesAction({ kind: 'roll', list: 'bgs' });
     await until(async () => (await lines()).length === 1, { label: 'the player\'s roll' });
-    gm.handlers.choicesAction({ kind: 'roll', list: 'bgs', username: 'wren' });
+    const held = (await stored())[PICKS_KEY]?.bgs?.[0]?.option;
+    gm.handlers.choicesAction({ kind: 'roll', list: 'bgs', ...(held ? { again: held } : {}), username: 'wren' });
     await until(async () => (await lines()).length === 2, { label: 'the GM\'s roll' });
     expect((await lines())[1].username).toBe('wren');
     expect(gm.refused()).toEqual([]);

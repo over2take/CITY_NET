@@ -514,7 +514,10 @@ const heldOf = (definition, data) => {
         : isPlainObject(p) && Number.isInteger(p.level) && p.level >= 1 ? Math.min(p.level, LIMITS.level) : 1;
       const counts = from ? (mode === 'own' ? false : null) : mode !== 'features';
       if (counts) own += 1;
-      held.push({ list: c, option: options.get(id), level, from, active: counts });
+      // Locked by a roll, or by the GM (picking.js): a player can't change it.
+      const locked = isPlainObject(p) && p.locked === true;
+      const roll = locked && Number.isInteger(p.roll) ? p.roll : null;
+      held.push({ list: c, option: options.get(id), level, from, active: counts, ...(locked ? { locked } : {}), ...(roll === null ? {} : { roll }) });
     }
   }
   // What everyone has: the options whose requirement is met on the sheet as typed and the levels so
@@ -769,7 +772,7 @@ const workedOf = (definition, data) => {
   return {
     ...(kits.length ? { kitsUnmet: kits.filter((k) => !meets(definition, data, k)).map((k) => k.id) } : {}),
     picks: held.map((p) => ({ list: p.list.id, option: p.option.id, ...(p.level === null ? {} : { level: p.level }),
-      ...(p.from ? { from: p.from } : {}), ...(p.active ? {} : { waiting: true }) })),
+      ...(p.from ? { from: p.from } : {}), ...(p.active ? {} : { waiting: true }), ...(p.locked ? { locked: true } : {}), ...(p.roll === undefined ? {} : { roll: p.roll }) })),
     // 7a5a: each unlocked feature opening a list picked through features, and how many it gives and has.
     opens: openingsOf(definition, picks).map((o) => ({ feature: o.feature.id, list: o.list.id, count: o.count, used: o.used })),
     levels: levelsOf(definition, picks),

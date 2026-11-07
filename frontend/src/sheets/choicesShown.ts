@@ -38,7 +38,7 @@ export interface ChoiceListShown { id: string; one: string; many: string; picks:
 /** What the server worked out of a character's picks on their last save (backend choices.js workedOf). */
 export interface Worked {
   /** Every pick kept: `from` the feature it was picked under, `waiting` when that no longer counts. */
-  picks: { list: string; option: string; level?: number; from?: string; waiting?: true }[];
+  picks: { list: string; option: string; level?: number; from?: string; waiting?: true; locked?: true; roll?: number }[];
   /** Each unlocked feature opening a list picked through features, and how many it gives and has. */
   opens: { feature: string; list: string; count: number; used: number }[];
   levels: Record<string, number>;
@@ -61,10 +61,11 @@ export const WORKED_KEY = '_worked';
 export type ChoicesAction =
   | { kind: 'pick'; list: string; option: string; from?: string }
   | { kind: 'drop'; list: string; option: string }
+  | { kind: 'clear'; list: string; option?: string; from?: string }
   | { kind: 'level'; list: string; option: string; level: number }
   | { kind: 'use'; feature: string; spent: number }
   | { kind: 'recovery'; pool: string; spent: number }
-  | { kind: 'roll'; list: string; from?: string };
+  | { kind: 'roll'; list: string; from?: string; again?: string };
 
 /** Where a sheet keeps what ROLL FOR IT last rolled on each list (backend choices.js ROLLED_KEY). */
 export const ROLLED_KEY = '_rolled';
@@ -77,10 +78,10 @@ export const rolledOf = (data: unknown, list: string, from?: string): { option: 
 };
 
 /**
- * ROLL FOR IT on a list's offer (7a5b2; approved mockup nested-choices, version 2), for this viewer:
- * whether there is a button and what it says (ROLL AGAIN for the GM once rolled), whether a player
- * has already had their one roll of a list rolled only, the option rolled (marked TAKE IT), whether
- * picking by hand is off for a player, and what the last roll said.
+ * What a list's table offers just now (7a5b2; the user's flow of 2026-11-06): whether there is a button and
+ * what it says (ROLL AGAIN for the GM over a roll waiting), whether a player has used theirs, the option a
+ * roll waiting landed on (marked TAKE IT, as only one they don't meet yet waits), whether a player is held to
+ * rolling, and what to say of it. A roll that could be picked is a locked pick by now, not a roll waiting.
  */
 export const rollOffer = (list: ChoiceListShown, rolled: { option: string | null; roll: number } | null, gm: boolean) => {
   const players = list.table ? list.players ?? 'either' : 'hand';
@@ -89,7 +90,7 @@ export const rollOffer = (list: ChoiceListShown, rolled: { option: string | null
   return {
     roll: !!list.table && (gm || players !== 'hand'),
     label: gm && rolled ? 'ROLL AGAIN' : 'ROLL FOR IT',
-    spent: byRoll && !!rolled,
+    spent: !gm && !!rolled,
     marked: hit ? hit.id : null,
     byRoll,
     said: rolled ? `ROLLED ${rolled.roll} → ${hit ? hit.label.toUpperCase() : 'NOTHING ON THE TABLE'}` : null,
@@ -184,7 +185,7 @@ export const spendCount = (wanted: number, left: number) => Math.max(left > 0 ? 
 const atOf = (f: FeatureShown) => (Number.isInteger(f.at) && (f.at as number) >= 1 ? f.at as number : 1);
 
 /** One pick as the block draws it: its option, its level, the features it has and the next to come. */
-export interface PickShown { option: OptionShown; level: number | null; unlocked: FeatureShown[]; next: FeatureShown | null }
+export interface PickShown { option: OptionShown; level: number | null; unlocked: FeatureShown[]; next: FeatureShown | null; from?: string; locked?: boolean; roll?: number }
 
 /** One list as the block draws it. */
 export interface ListShown {
@@ -217,6 +218,7 @@ const pickShown = (list: ChoiceListShown, p: Worked['picks'][number]): PickShown
     level: list.levelled ? gate : null,
     unlocked: sorted.filter((f) => gate === null || atOf(f) <= gate),
     next: gate === null ? null : sorted.find((f) => atOf(f) > gate) ?? null,
+    ...(p.from ? { from: p.from } : {}), ...(p.locked ? { locked: true } : {}), ...(p.roll === undefined ? {} : { roll: p.roll }),
   };
 };
 

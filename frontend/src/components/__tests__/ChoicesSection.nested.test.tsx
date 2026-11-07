@@ -131,7 +131,22 @@ describe('ROLL FOR IT under a feature (7a5b2)', () => {
     const pick = within(under('Specialty').getByRole('group', { name: 'Pick a Specialty' }));
     expect(pick.getByText('ROLLED 2 → DUELIST')).toBeTruthy();
     expect(pick.getByRole('button', { name: 'DUELIST · TAKE IT' })).toBeTruthy();
-    await userEvent.click(pick.getByRole('button', { name: 'ROLL FOR IT' }));
+    expect(pick.getByRole('button', { name: 'ROLL FOR IT' })).toHaveProperty('disabled', true);
+    cleanup();
+    const fresh = { int: 10, _choices: { classes: [{ option: 'soldier', level: 3 }] } };
+    render(<ChoicesSection lists={shown} data={{ ...fresh, [WORKED_KEY]: backend.workedOf(def, fresh) }} readOnly={false} onChoices={onChoices} />);
+    await userEvent.click(within(under('Specialty').getByRole('group', { name: 'Pick a Specialty' })).getByRole('button', { name: 'ROLL FOR IT' }));
     expect(onChoices).toHaveBeenCalledWith({ kind: 'roll', list: 'specs', from: 'specialty' });
+  });
+
+  it('locked under a feature, the GM\'s buttons name that feature', async () => {
+    const def = { ...NEST, choices: NEST.choices.map((c) => (c.id === 'specs' ? { ...c, table: 'd6', options: c.options.map((o, i) => ({ ...o, roll: i ? '4-6' : '1-3' })) } : c)) };
+    const data = { int: 10, _choices: { classes: [{ option: 'soldier', level: 3 }], specs: [{ option: 'duelist', from: 'specialty', locked: true, roll: 2 }] } };
+    const onChoices = vi.fn();
+    render(<ChoicesSection lists={backend.choicesShown(def) as ChoiceListShown[]} data={{ ...data, [WORKED_KEY]: backend.workedOf(def, data) }} readOnly={false} gm onChoices={onChoices} />);
+    await userEvent.click(screen.getByRole('button', { name: 'Clear the roll for Duelist' }));
+    expect(onChoices).toHaveBeenLastCalledWith({ kind: 'clear', list: 'specs', from: 'specialty', option: 'duelist' });
+    await userEvent.click(screen.getByRole('button', { name: 'Roll again for Duelist' }));
+    expect(onChoices).toHaveBeenLastCalledWith({ kind: 'roll', list: 'specs', from: 'specialty', again: 'duelist' });
   });
 });

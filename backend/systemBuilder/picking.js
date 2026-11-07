@@ -3,22 +3,26 @@
 // the server, the sheet as stored the only thing trusted.
 //
 //   pick   a player picks for their own character while the list has room and the option's
-//          requirement is met; the GM may pick past a requirement, never past the list's room.
+//          requirement is met; the GM may pick past a requirement, never past the list's room, and
+//          on a list a player can roll on, what the GM picks is locked as a roll is.
 //          A list picked through features (7a5a) is picked under one that opens it (`from`), while
 //          that feature is unlocked and has room; a list picked both ways takes either. Nothing
 //          is picked, dropped or levelled in a list every character has (7a5a2)
 //   drop   only the GM takes a pick away, or a player their own while making the character (7c2), on
-//          a list not rolled only, as that would be a second roll by another name
+//          a list not rolled only and a pick not locked, as that would be a second roll by another name
 //   level  a pick's level in a levelled list, from 1 to the highest: the player or the GM
 //   use    how many of a feature's uses are spent, from none to all of them: the player or the GM
 //   recovery  how many of a pool of recovery dice are spent, from none to all (R2a): ticked off for
 //          real dice, or put right; the player or the GM. Spending them with a roll is sheets/recover.js's
-//   roll   ROLL FOR IT on a list with a table (7a5b2; approved mockup nested-choices, version 2): the
-//          dice rolled, the option it lands on kept until taken, nothing picked; wherever a pick
-//          would have room. Players roll where the list lets them (by hand or rolled, or rolled
-//          only), and under ROLLED ONLY once, until it is taken: rolling again is the GM's, who may
-//          roll on any list with a table. Under ROLLED ONLY a player picks only what was rolled;
-//          the GM picks anything. A pick clears that list's roll
+//   roll   ROLL FOR IT on a list with a table (7a5b2; approved mockup nested-choices, version 2, and the
+//          user's flow of 2026-11-06, which replaced rolling then TAKE IT): the dice rolled, wherever a
+//          pick would have room, and the option it lands on picked and locked. Players roll where the
+//          list lets them (by hand or rolled, or rolled only); rolling is their one way in, as a player
+//          who wants to choose picks by hand instead. One they don't meet, or nothing on the table, is
+//          kept, marked, and waits on the GM unless they come to meet it. Landing on one already held
+//          picks nothing, and they can roll again. { again: option } is the GM's reroll of a held pick
+//   clear  the GM takes a lock off, the pick and any roll with it, so it can be rolled or picked again:
+//          { list, option, from }, or with no option a roll waiting, marked
 //
 // Pure: takes the running definition and the sheet's data, and gives back the data to store or why
 // not. The socket (sockets/choices.js) stores it through the sheet queue and works the numbers out
@@ -29,7 +33,7 @@ const {
   PICKS_KEY, USES_KEY, ROLLED_KEY, LIMITS,
 } = require('./choices');
 const { poolsOf, RECOVERY_KEY } = require('./recovery');
-const { creatingNow } = require('./creation');
+const { creatingNow, ROLLED_KEPT } = require('./creation');
 const crypto = require('crypto');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -39,7 +43,7 @@ const fail = (error) => ({ ok: false, error });
 
 /** The list's picks, stored back as they are read: every one kept (those waiting too), in order. */
 const storedPicks = (held, c) => held.filter((p) => p.list === c)
-  .map((p) => ({ option: p.option.id, ...(p.level === null ? {} : { level: p.level }), ...(p.from ? { from: p.from } : {}) }));
+  .map((p) => ({ option: p.option.id, ...(p.level === null ? {} : { level: p.level }), ...(p.from ? { from: p.from } : {}), ...(p.locked ? { locked: true } : {}), ...(p.roll === undefined ? {} : { roll: p.roll }) }));
 
 const withPicks = (data, listId, stored) => ({ ...data, [PICKS_KEY]: { ...(isPlainObject(data[PICKS_KEY]) ? data[PICKS_KEY] : {}), [listId]: stored } });
 
@@ -72,8 +76,8 @@ const noRoom = (definition, held, c, from) => {
 };
 
 /**
- * One action on a sheet's picks. `action` is { kind: 'pick' | 'drop' | 'level', list, option, level, from },
- * { kind: 'roll', list, from }, or { kind: 'use', feature, spent }; `gm` says whether the GM asks;
+ * One action on a sheet's picks. `action` is { kind: 'pick' | 'drop' | 'level' | 'clear', list, option, level, from },
+ * { kind: 'roll', list, from, again }, or { kind: 'use', feature, spent }; `gm` says whether the GM asks;
  * `rng` rolls a roll's dice, 0 to 1 (the secure source unless one is handed in). Returns { ok: true, data } or { ok: false,
  * error } in words for the person who asked; a roll also { rolled: { list, dice, rolls, total, option } }.
  */
@@ -108,18 +112,28 @@ const pickAction = (definition, data, action, { gm = false, rng = cryptoRng } = 
     if (pickedOf(c) === 'everyone') return fail(`Every character has the ${many}: nothing to pick`);
     const players = playersOf(c);
     if (!gm && players === 'hand') return fail(`The ${many} are picked by hand`);
-    const room = noRoom(definition, heldOf(definition, sheet), c, from);
+    // The GM's reroll of a pick already held: as if it were cleared first.
+    const base = gm && typeof action.again === 'string'
+      ? withPicks(sheet, c.id, storedPicks(heldOf(definition, sheet), c).filter((p) => p.option !== action.again)) : sheet;
+    const before = heldOf(definition, base);
+    const room = noRoom(definition, before, c, from);
     if (room) return fail(room);
-    const before = rolledOf(sheet, c.id, from);
-    if (!gm && players === 'roll' && before) return fail('Rolled already: take what came up, or ask the GM to roll again');
+    if (!gm && rolledOf(base, c.id, from)) return fail(ROLLED_KEPT);
     const rolls = Array.from({ length: table.count }, () => Math.floor(rng() * table.sides) + 1);
     const total = rolls.reduce((a, b) => a + b, 0);
     const hit = rolledOn(c, total);
-    return {
-      ok: true,
-      data: withRolled(sheet, rolledKey(c.id, from), { option: hit ? hit.id : null, roll: total }),
-      rolled: { list: c, dice: c.table.trim().toLowerCase(), sides: table.sides, rolls, total, option: hit },
-    };
+    const key = rolledKey(c.id, from);
+    const landed = { list: c, dice: c.table.trim().toLowerCase(), sides: table.sides, rolls, total, option: hit };
+    if (hit && before.some((p) => p.list === c && p.option === hit)) return { ok: true, data: withRolled(base, key, null), rolled: landed };
+    if (!hit || (!gm && !meets(definition, base, hit))) return { ok: true, data: withRolled(base, key, { option: hit ? hit.id : null, roll: total }), rolled: landed };
+    const added = { option: hit.id, ...(c.levelled === true ? { level: 1 } : {}), ...(from ? { from } : {}), locked: true, roll: total };
+    return { ok: true, data: withRolled(withPicks(base, c.id, [...storedPicks(before, c), added]), key, null), rolled: landed };
+  }
+
+  if (action.kind === 'clear' && typeof action.option !== 'string') {
+    if (!gm) return fail('That is the GM\'s to do');
+    if (!rolledOf(sheet, c.id, from)) return fail('Nothing rolled there to clear');
+    return { ok: true, data: withRolled(sheet, rolledKey(c.id, from), null) };
   }
 
   const option = (Array.isArray(c.options) ? c.options : []).find((o) => isPlainObject(o) && o.id === action.option);
@@ -137,15 +151,26 @@ const pickAction = (definition, data, action, { gm = false, rng = cryptoRng } = 
     if (room) return fail(room);
     // Rolled only (7a5b2): a player takes what was rolled; the GM picks anything.
     const rolled = rolledOf(sheet, c.id, from);
-    if (!gm && playersOf(c) === 'roll' && (!rolled || rolled.option !== option.id)) return fail(`The ${many} are picked by roll: ROLL FOR IT`);
+    if (!gm && rolled && rolled.option !== option.id) return fail(ROLLED_KEPT);
+    if (!gm && playersOf(c) === 'roll' && !rolled) return fail(`The ${many} are picked by roll: ROLL FOR IT`);
     if (!gm && !meets(definition, sheet, option)) return fail(`${name} needs ${needsText(definition, option.requires)}`);
-    const added = { option: option.id, ...(c.levelled === true ? { level: 1 } : {}), ...(from ? { from } : {}) };
+    // What was rolled and has come to be met, or the GM's say on a list a player could roll on: locked.
+    const locks = rolled || (gm && playersOf(c) !== 'hand');
+    const added = { option: option.id, ...(c.levelled === true ? { level: 1 } : {}), ...(from ? { from } : {}), ...(locks ? { locked: true } : {}), ...(rolled ? { roll: rolled.roll } : {}) };
     return { ok: true, data: withRolled(withPicks(sheet, c.id, [...storedPicks(held, c), added]), rolledKey(c.id, from), null) };
   }
 
   if (action.kind === 'drop') {
     if (!gm && !(creatingNow(definition, sheet) && playersOf(c) !== 'roll')) return fail('Only the GM takes a pick away');
     if (!taken) return fail(`${name} isn't picked`);
+    if (!gm && taken.locked) return fail(ROLLED_KEPT);
+    return { ok: true, data: withPicks(sheet, c.id, storedPicks(held, c).filter((p) => p.option !== option.id)) };
+  }
+
+  if (action.kind === 'clear') {
+    if (!gm) return fail('That is the GM\'s to do');
+    if (!taken) return fail(`${name} isn't picked`);
+    if (!taken.locked) return fail('Nothing rolled there to clear');
     return { ok: true, data: withPicks(sheet, c.id, storedPicks(held, c).filter((p) => p.option !== option.id)) };
   }
 

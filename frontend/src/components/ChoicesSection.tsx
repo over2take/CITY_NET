@@ -49,7 +49,7 @@ interface Props {
 }
 
 /** What drawing an option's gifts needs: the system, for its money's words, and asking for a roll. */
-interface GiftsAt { system: string | null | undefined; onRoll: (option: string, id: string) => void }
+interface GiftsAt { system: string | null | undefined; onRoll: (option: string, id: string) => void; onClear?: (option: string, id: string) => void }
 
 const small: React.CSSProperties = { fontSize: '0.55rem', letterSpacing: '1px', opacity: 0.7 };
 const btn: React.CSSProperties = {
@@ -109,8 +109,9 @@ function Feature({ f, ctx }: { f: FeatureShown; ctx: Ctx }) {
 /**
  * The options left to pick, one to a line so that what one needs reads as its own: each a button asking,
  * one not met saying what it needs (ADD ANYWAY for the GM). On a list with a table (7a5b2), ROLL FOR IT
- * under them, the option rolled marked TAKE IT, and, rolled only, the others off for a player. Whoever
- * can roll sees the table: the dice over the options, and each one's range, so a result can be checked.
+ * under them. A roll picks what it lands on and locks it (LockedPick); one they don't meet waits here, marked
+ * TAKE IT with the others off, until they meet it or the GM steps in. Whoever can roll sees the table: the
+ * dice over the options, and each one's range, so a result can be checked.
  */
 function Offer({ label, list, from, open, onPick, ctx }: {
   label: string; list: ChoiceListShown; from?: string; open: { option: OptionShown; unmet: string | null }[]; onPick: (option: string) => void; ctx: Ctx;
@@ -123,7 +124,7 @@ function Offer({ label, list, from, open, onPick, ctx }: {
       <span style={{ ...small, gridColumn: '1 / -1', textAlign: 'left' }}>{label.toUpperCase()}{r.roll ? ` (${list.table})` : ''}</span>
       {open.map(({ option, unmet }) => {
         const marked = r.marked === option.id;
-        const off = (!!unmet && !ctx.gm) || (r.byRoll && !marked);
+        const off = (!!unmet && !ctx.gm) || ((r.byRoll || r.spent) && !marked);
         return (
           <React.Fragment key={option.id}>
             {r.roll && option.roll && <span title={`A roll of ${option.roll}`} style={{ ...small, gridColumn: 1, opacity: 1, textAlign: 'right', fontVariantNumeric: 'tabular-nums', ...(marked ? { color: 'var(--cyan)' } : {}) }}>{option.roll}</span>}
@@ -137,10 +138,13 @@ function Offer({ label, list, from, open, onPick, ctx }: {
       })}
       {r.roll && (
         <button type="button" style={{ ...btn, gridColumn: '1 / -1', justifySelf: 'start', borderColor: 'var(--warning)', color: 'var(--warning)', opacity: r.spent ? 0.4 : 1 }} disabled={r.spent}
-          title={r.spent ? 'Rolled: take what came up, or ask the GM to roll again' : `Rolls ${list.table} on the table, written to the log`}
+          title={r.spent ? 'Rolled: your GM can clear it for another go' : `Rolls ${list.table} on the table, written to the log`}
           onClick={() => ctx.ask({ kind: 'roll', list: list.id, ...(from ? { from } : {}) })}>{r.label}</button>
       )}
       {r.said && <span style={{ ...small, gridColumn: '1 / -1', textAlign: 'left', color: 'var(--cyan)', opacity: 1 }}>{r.said}</span>}
+      {r.said && ctx.gm && ctx.can && (
+        <button type="button" style={{ ...btn, gridColumn: '1 / -1', justifySelf: 'start' }} onClick={() => ctx.ask({ kind: 'clear', list: list.id, ...(from ? { from } : {}) })}>CLEAR THE ROLL</button>
+      )}
     </div>
   );
 }
@@ -184,6 +188,23 @@ function Under({ f, unlocked, ctx }: { f: FeatureShown; unlocked: boolean; ctx: 
   );
 }
 
+/**
+ * A pick locked by a roll or by the GM (backend picking.js): a player is told how to get another go, and the
+ * GM can clear it, for the player to roll or the GM to pick by hand, or roll again for them.
+ */
+function LockedPick({ list, p, ctx }: { list: ChoiceListShown; p: PickShown; ctx: Ctx }) {
+  const said = p.roll === undefined ? 'SET BY THE GM' : `ROLLED ${p.roll}, AND KEPT`;
+  const where = { list: list.id, ...(p.from ? { from: p.from } : {}) };
+  if (!ctx.gm) return <span style={{ ...small, color: 'var(--cyan)', opacity: 1 }}>{said}. YOUR GM CAN CLEAR IT FOR ANOTHER GO.</span>;
+  return (
+    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ ...small, color: 'var(--cyan)', opacity: 1 }}>{said}</span>
+      {ctx.can && <button type="button" style={btn} aria-label={`Clear the roll for ${p.option.label}`} onClick={() => ctx.ask({ kind: 'clear', ...where, option: p.option.id })}>CLEAR THE ROLL</button>}
+      {ctx.can && list.table && <button type="button" style={btn} aria-label={`Roll again for ${p.option.label}`} onClick={() => ctx.ask({ kind: 'roll', ...where, again: p.option.id })}>ROLL AGAIN</button>}
+    </div>
+  );
+}
+
 /** One pick: its name, level and DROP, its features (each with what it opens under it), and the next to come. */
 function Pick({ list, p, ctx, fixed = false }: { list: ChoiceListShown; p: PickShown; ctx: Ctx; fixed?: boolean }) {
   const locked = p.option.features.filter((f) => !p.unlocked.includes(f));
@@ -200,10 +221,11 @@ function Pick({ list, p, ctx, fixed = false }: { list: ChoiceListShown; p: PickS
               onClick={() => ctx.ask({ kind: 'level', list: list.id, option: p.option.id, level: p.level! + 1 })}>+</button>}
           </span>
         )}
-        {!fixed && ctx.dropping !== `${list.id}:${p.option.id}` && <Drop list={list.id} option={p.option} ctx={ctx} />}
+        {!fixed && !p.locked && ctx.dropping !== `${list.id}:${p.option.id}` && <Drop list={list.id} option={p.option} ctx={ctx} />}
       </div>
-      {!fixed && ctx.dropping === `${list.id}:${p.option.id}` && <Drop list={list.id} option={p.option} ctx={ctx} />}
-      {ctx.gifts && p.option.gives && <GiftsHeld option={p.option} gives={p.option.gives} data={ctx.data} system={ctx.gifts.system} onRoll={ctx.gifts.onRoll} />}
+      {!fixed && !p.locked && ctx.dropping === `${list.id}:${p.option.id}` && <Drop list={list.id} option={p.option} ctx={ctx} />}
+      {!fixed && p.locked && <LockedPick list={list} p={p} ctx={ctx} />}
+      {ctx.gifts && p.option.gives && <GiftsHeld option={p.option} gives={p.option.gives} data={ctx.data} system={ctx.gifts.system} onRoll={ctx.gifts.onRoll} onClear={ctx.gifts.onClear} />}
       {p.unlocked.map((f) => (
         <React.Fragment key={f.id}>
           <Feature f={f} ctx={ctx} />

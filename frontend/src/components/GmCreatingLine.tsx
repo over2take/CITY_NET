@@ -3,7 +3,7 @@ import { gmFlowLine, startOverWords } from '../sheets/newCharacterFlow';
 import type { SheetTemplate } from '../sheets';
 
 // The GM's line on a player's sheet (7c5; approved mockup docs/mockups/new-character.html): where the
-// character is in the new character flow, SKIP IT, and START OVER, which asks first. What it says is
+// character is in the new character flow, FILL IT IN FOR THEM, SKIP IT, and START OVER, which asks first. What it says is
 // sheets/newCharacterFlow.ts, and what the actions do is the server's (backend creation.js).
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
   data: Record<string, unknown> | null | undefined;
   system: string | null | undefined;
   onAct: (kind: 'skip' | 'startOver') => void;
+  onFillIn?: () => void;
   /** Why the server last said no. */
   refused?: string | null;
 }
@@ -21,7 +22,7 @@ const btn: React.CSSProperties = {
 };
 const danger: React.CSSProperties = { ...btn, borderColor: 'var(--danger)', color: 'var(--danger)' };
 
-export function GmCreatingLine({ template, data, system, onAct, refused }: Props) {
+export function GmCreatingLine({ template, data, system, onAct, onFillIn, refused }: Props) {
   const [asking, setAsking] = useState(false);
   const [acted, setActed] = useState(false);
   const line = gmFlowLine(template, data);
@@ -31,6 +32,7 @@ export function GmCreatingLine({ template, data, system, onAct, refused }: Props
     <div role="group" aria-label="New character" style={{ display: 'flex', flexDirection: 'column', gap: '4px', margin: '4px 0', flexShrink: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', border: '1px solid var(--dark-green)', padding: '3px 8px' }}>
         <span style={{ fontSize: '0.65rem', letterSpacing: '1px', flex: '1 1 auto', minWidth: 0, textAlign: 'left' }}>{line.words}</span>
+        {line.canSkip && onFillIn && <button type="button" style={btn} onClick={onFillIn}>FILL IT IN FOR THEM</button>}
         {line.canSkip && <button type="button" style={btn} onClick={() => act('skip')}>SKIP IT</button>}
         {line.canStartOver && !asking && <button type="button" style={danger} onClick={() => setAsking(true)}>START OVER</button>}
       </div>

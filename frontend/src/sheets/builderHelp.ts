@@ -229,7 +229,7 @@ export const HINTS = {
   'creation.statsGroups': 'Switch a group off for numbers nobody sets at creation, like stress. Its stats stay on the sheet, and players aren\'t asked for them here.',
   'choices.levelled': 'Each pick has a level, and its features unlock by it, like a class. Formulas read it as @<option>_level.',
   'choices.table': 'Optional: dice to roll on for this list, like a book\'s "roll your background" table. Picking the dice shares the rolls out evenly over the options; change any of them below. Every roll needs exactly one option.',
-  'choices.players': 'How players pick from a list with a table. BY HAND: as any list, the table only here. BY HAND OR ROLL: ROLL FOR IT beside picking. BY ROLL ONLY: players roll and take what comes up; the GM can still pick any option for them.',
+  'choices.players': 'How players pick from a list with a table. BY HAND: as any list, the table only here. BY HAND OR ROLL: ROLL FOR IT beside picking, and a roll locks in what it lands on. BY ROLL ONLY: players roll and keep what comes up. Either way, the GM can clear a roll, roll again or pick for them.',
   'choices.die': 'Optional, on a levelled list\'s options, like a class\'s hit die: the die its recovery dice roll at a rest (set up on RESTS). D4 to D20, or OTHER for any size from 2 to 100 sides.',
   'choices.options': 'What a character can pick from this list. A big list, like forty feats, is fine: up to a hundred.',
   'choices.optionName': 'What players see for this option: SOLDIER, DOCKHAND, TOUGH.',

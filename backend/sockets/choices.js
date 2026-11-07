@@ -40,7 +40,7 @@ const sheetTemplates = require('../sheets/templates');
 const { mutateSheetForUser } = require('../sheets/mutate');
 const { spendRecovery } = require('../sheets/recover');
 
-const KINDS = new Set(['pick', 'drop', 'level', 'use', 'recovery', 'roll']);
+const KINDS = new Set(['pick', 'drop', 'clear', 'level', 'use', 'recovery', 'roll']);
 const LOG_COLOR = '#00ff00';
 const cryptoRng = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32;
 /** The most recovery dice one spend rolls from a pool. */

@@ -12,6 +12,8 @@ interface Props {
   system: string | null | undefined;
   onRoll: (id: string) => void;
   onType: (id: string, amount: number | null) => void;
+  /** The GM's, filling it in for a player (7c5): a kept roll cleared, to roll again. */
+  onClear?: (id: string) => void;
 }
 
 const why: React.CSSProperties = { margin: 0, fontSize: 12, lineHeight: 1.45, opacity: 0.85 };
@@ -49,7 +51,7 @@ function Typed({ entry, currency, held, onType }: { entry: MoneyShown; currency:
   );
 }
 
-export function MoneyStep({ money, data, system, onRoll, onType }: Props) {
+export function MoneyStep({ money, data, system, onRoll, onType, onClear }: Props) {
   const currencies = currenciesFor(system);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -68,12 +70,13 @@ export function MoneyStep({ money, data, system, onRoll, onType }: Props) {
               </>
             )}
             {m.how === 'roll' && held !== null && <span style={amountStyle}>{say(held)}</span>}
-            {m.how === 'roll' && held !== null && <span style={small}>ROLLED, AND KEPT. ROLLING AGAIN IS THE GM&apos;S.</span>}
+            {m.how === 'roll' && held !== null && !onClear && <span style={small}>ROLLED, AND KEPT. YOUR GM CAN CLEAR IT FOR ANOTHER GO.</span>}
+            {m.how === 'roll' && held !== null && onClear && <button type="button" style={btn} aria-label={`Clear the roll for ${m.name}`} onClick={() => onClear(m.id)}>CLEAR THE ROLL</button>}
             {m.how === 'typed' && <Typed entry={m} currency={currency} held={held} onType={onType} />}
           </section>
         );
       })}
-      <p style={small}>PAID INTO YOUR BANK WHEN YOU FINISH.</p>
+      <p style={small}>{onClear ? 'PAID INTO THEIR BANK AT FINISH. A ROLL NOT MADE IS MADE THEN.' : 'PAID INTO YOUR BANK WHEN YOU FINISH.'}</p>
     </div>
   );
 }
