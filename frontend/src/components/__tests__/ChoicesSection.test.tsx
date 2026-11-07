@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { createRequire } from 'module';
 
 import { SheetRenderer } from '../SheetRenderer';
+import { ChoicesSection } from '../ChoicesSection';
 import { WORKED_KEY, type ChoiceListShown } from '../../sheets/choicesShown';
 import type { SheetTemplate } from '../../sheets';
 
@@ -261,28 +262,71 @@ describe('ROLL FOR IT (7a5b2)', () => {
     expect(pick.getByText(/^NEEDS /).style.gridColumn).toBe('3');
   });
 
-  it('what was rolled is marked TAKE IT and said; any other can still be picked, and rolled again', async () => {
+  it('a roll waiting, one they can\'t take yet: marked and said, with every other off and no second roll', async () => {
     const { onChoices, pick } = drawRolled(undefined, { option: 'scribe', roll: 5 });
     expect(pick.getByText('ROLLED 5 → SCRIBE')).toBeTruthy();
     await userEvent.click(pick.getByRole('button', { name: 'SCRIBE · TAKE IT' }));
     expect(onChoices).toHaveBeenLastCalledWith({ kind: 'pick', list: 'bgs', option: 'scribe' });
+    expect(pick.getByRole('button', { name: 'DOCKHAND' })).toHaveProperty('disabled', true);
+    expect(pick.getByRole('button', { name: 'ROLL FOR IT' })).toHaveProperty('disabled', true);
+    expect(pick.getByRole('button', { name: 'ROLL FOR IT' }).getAttribute('title')).toBe('Rolled: your GM can clear it for another go');
+    expect(pick.queryByRole('button', { name: 'CLEAR THE ROLL' })).toBeNull();
+  });
+
+  it('BY HAND OR ROLL, nothing rolled: both ways open', () => {
+    const { pick } = drawRolled(undefined, null);
     expect(pick.getByRole('button', { name: 'DOCKHAND' })).toHaveProperty('disabled', false);
     expect(pick.getByRole('button', { name: 'ROLL FOR IT' })).toHaveProperty('disabled', false);
   });
 
-  it('BY ROLL ONLY: before a roll, nothing to pick by hand; after it, only TAKE IT, and no second roll', () => {
-    drawRolled('roll', null);
-    let pick = within(screen.getByRole('group', { name: 'Pick a Background' }));
+  it('BY ROLL ONLY: before a roll, nothing to pick by hand', () => {
+    const { pick } = drawRolled('roll', null);
     expect(pick.getByRole('button', { name: 'DOCKHAND' })).toHaveProperty('disabled', true);
     expect(pick.getByRole('button', { name: 'DOCKHAND' }).getAttribute('title')).toBe('Picked by roll: ROLL FOR IT');
     expect(pick.getByRole('button', { name: 'ROLL FOR IT' })).toHaveProperty('disabled', false);
-    cleanup();
-    drawRolled('roll', { option: 'dock', roll: 2 });
-    pick = within(screen.getByRole('group', { name: 'Pick a Background' }));
-    expect(pick.getByRole('button', { name: 'DOCKHAND · TAKE IT' })).toHaveProperty('disabled', false);
-    expect(pick.getByRole('button', { name: 'SCRIBE' })).toHaveProperty('disabled', true);
-    expect(pick.getByRole('button', { name: 'ROLL FOR IT' })).toHaveProperty('disabled', true);
-    expect(pick.getByRole('button', { name: 'ROLL FOR IT' }).getAttribute('title')).toBe('Rolled: take what came up, or ask the GM to roll again');
+  });
+
+  describe('a pick locked in (2026-11-06)', () => {
+    const def = {
+      ...HEARTH,
+      choices: [{ id: 'bgs', one: 'Background', many: 'Backgrounds', table: 'd6', options: [
+        { id: 'dock', label: 'Dockhand', roll: '1-3' }, { id: 'scribe', label: 'Scribe', roll: '4-6' },
+      ] }],
+    };
+    const draw = (entry: Record<string, unknown>, gm = false) => {
+      const data = { _choices: { bgs: [{ option: 'dock', ...entry }] } };
+      const onChoices = vi.fn();
+      render(<ChoicesSection lists={backend.choicesShown(def) as ChoiceListShown[]} data={{ ...data, [WORKED_KEY]: backend.workedOf(def, data) }} readOnly={false} gm={gm} takeBack onChoices={onChoices} />);
+      return { onChoices, card: within(screen.getByRole('group', { name: 'Dockhand' })) };
+    };
+
+    it('a player is told, and has no way to change it', () => {
+      const { card } = draw({ locked: true, roll: 2 });
+      expect(card.getByText('ROLLED 2, AND KEPT. YOUR GM CAN CLEAR IT FOR ANOTHER GO.')).toBeTruthy();
+      expect(card.queryByRole('button', { name: 'Drop Dockhand' })).toBeNull();
+      expect(card.queryByRole('button', { name: /Clear the roll/ })).toBeNull();
+      expect(card.queryByRole('button', { name: /Roll again/ })).toBeNull();
+    });
+
+    it('one the GM set says so', () => {
+      expect(draw({ locked: true }).card.getByText('SET BY THE GM. YOUR GM CAN CLEAR IT FOR ANOTHER GO.')).toBeTruthy();
+    });
+
+    it('one picked by hand can still be taken back', () => {
+      const { card } = draw({});
+      expect(card.getByRole('button', { name: 'Drop Dockhand' })).toBeTruthy();
+      expect(card.queryByText(/YOUR GM CAN CLEAR IT/)).toBeNull();
+    });
+
+    it('the GM clears it, or rolls again, in place of DROP', async () => {
+      const { onChoices, card } = draw({ locked: true, roll: 2 }, true);
+      expect(card.getByText('ROLLED 2, AND KEPT')).toBeTruthy();
+      expect(card.queryByRole('button', { name: 'Drop Dockhand' })).toBeNull();
+      await userEvent.click(card.getByRole('button', { name: 'Clear the roll for Dockhand' }));
+      expect(onChoices).toHaveBeenLastCalledWith({ kind: 'clear', list: 'bgs', option: 'dock' });
+      await userEvent.click(card.getByRole('button', { name: 'Roll again for Dockhand' }));
+      expect(onChoices).toHaveBeenLastCalledWith({ kind: 'roll', list: 'bgs', again: 'dock' });
+    });
   });
 
   it('the GM picks any and ROLLS AGAIN; a roll on nothing says so', async () => {
@@ -291,6 +335,8 @@ describe('ROLL FOR IT (7a5b2)', () => {
     expect(pick.getByRole('button', { name: 'SCRIBE' })).toHaveProperty('disabled', false);
     await userEvent.click(pick.getByRole('button', { name: 'ROLL AGAIN' }));
     expect(onChoices).toHaveBeenCalledWith({ kind: 'roll', list: 'bgs' });
+    await userEvent.click(pick.getByRole('button', { name: 'CLEAR THE ROLL' }));
+    expect(onChoices).toHaveBeenLastCalledWith({ kind: 'clear', list: 'bgs' });
   });
 
   it('BY HAND: no ROLL FOR IT for a player; the GM may still roll', () => {

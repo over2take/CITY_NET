@@ -966,4 +966,4 @@ const checkCreation = (definition, problems) => {
   checkMoney(c.money, problems);
 };
 
-module.exports = { LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, checkGifts, checkItems, parseItems, giftMoneyText, giftMoneyFrom, stepsAsked, creationShown, creatingNow, creationAction, withUpload, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine, kitsGivable, kitToGive, kitWords, parseMoneyRoll, moneyRollProblems, moneyOf, wholeOf, MAIN_MONEY };
+module.exports = { ROLLED_KEPT, LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, checkGifts, checkItems, parseItems, giftMoneyText, giftMoneyFrom, stepsAsked, creationShown, creatingNow, creationAction, withUpload, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine, kitsGivable, kitToGive, kitWords, parseMoneyRoll, moneyRollProblems, moneyOf, wholeOf, MAIN_MONEY };

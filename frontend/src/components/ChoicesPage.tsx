@@ -60,8 +60,8 @@ const PICKED_WAYS: { id: Picked; label: string; why: string }[] = [
 /** How players pick from a list with a table (7a5b; the mockup's words), with what each means. */
 const PLAYER_WAYS: { id: Players; label: string; why: string }[] = [
   { id: 'hand', label: 'BY HAND', why: 'No ROLL FOR IT on the sheet; the table only shows in the builder.' },
-  { id: 'either', label: 'BY HAND OR ROLL', why: 'ROLL FOR IT beside picking: the roll marks a result to TAKE, and any other can still be picked by hand.' },
-  { id: 'roll', label: 'BY ROLL ONLY', why: 'Players roll, and take what comes up: picking by hand is off for them. The GM can still pick any option for a player, or let them roll again.' },
+  { id: 'either', label: 'BY HAND OR ROLL', why: 'ROLL FOR IT beside picking by hand. A roll picks what it lands on and locks it: the GM can clear it, roll again or pick for them.' },
+  { id: 'roll', label: 'BY ROLL ONLY', why: 'Players roll, and keep what comes up: picking by hand is off for them. The GM can clear it, roll again or pick for them.' },
 ];
 
 /**
