@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
-  buyCost, buyShown, CREATING_KEY, giftRolledOn, giftWords, moneyHeldOn, moneyWords, kitItemsText, kitsShownOn, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, placedFrom, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields, withCreationLocks,
+  buyCost, buyShown, CREATING_KEY, gmFlowLine, startOverWords, giftRolledOn, giftWords, moneyHeldOn, moneyWords, kitItemsText, kitsShownOn, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, placedFrom, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields, withCreationLocks,
 } from '../newCharacterFlow';
 import { WORKED_KEY, type ChoiceListShown } from '../choicesShown';
 import { clearCustomTemplates, registerCustomTemplate } from '../customTemplates';
@@ -529,5 +529,68 @@ describe('held to the server', () => {
     const template = { ...TEMPLATE, choices: [list({ id: 'classes' })], creation: shown } as unknown as SheetTemplate;
     expect(flowSteps(template)).toEqual(['who', 'stats', 'list:classes']);
     expect(statsToSet(template)[0].stats[0].id).toBe('grit');
+  });
+});
+
+describe('the GM\'s line on a player\'s sheet (7c5)', () => {
+  const at = (place: object, more: object = {}) => ({ ...more, [CREATING_KEY]: place });
+  const on = (data: Record<string, unknown>) => gmFlowLine(TEMPLATE as unknown as SheetTemplate, data);
+
+  it('says nothing with the flow off, or for a character never asked', () => {
+    expect(gmFlowLine({ ...TEMPLATE, creation: undefined } as unknown as SheetTemplate, at({ at: 'who' }))).toBeNull();
+    expect(gmFlowLine(null, {})).toBeNull();
+    expect(on({ name: 'Old Hand' })).toBeNull();
+  });
+
+  it('a blank sheet: not opened yet, with nothing to start over', () => {
+    expect(on({})).toEqual({ words: 'CREATING · NOT OPENED YET', canSkip: true, canStartOver: false });
+  });
+
+  it('started over: asked again, whatever stayed on the sheet', () => {
+    expect(on(at({ restarted: true }, { notes: 'Mine' }))).toEqual({ words: 'CREATING · STARTED OVER, NOT OPENED YET', canSkip: true, canStartOver: false });
+  });
+
+  it('opened, not begun', () => {
+    expect(on(at({}))).toEqual({ words: 'CREATING · OPENED, NOT BEGUN', canSkip: true, canStartOver: true });
+  });
+
+  it('says which step of how many, by the steps they are really asked', () => {
+    expect(on(at({ at: 'stats' }))).toEqual({ words: 'CREATING · STEP 2 OF 3 · THE STATS', canSkip: true, canStartOver: true });
+    expect(on(at({ at: 'gone' }))?.words).toBe('CREATING · STEP 1 OF 3 · WHO THEY ARE');
+  });
+
+  it('done, it says how, and only START OVER is left', () => {
+    expect(on(at({ done: true }))).toEqual({ words: 'NEW CHARACTER · FINISHED', canSkip: false, canStartOver: true });
+    expect(on(at({ done: true, uploaded: true }))?.words).toBe('NEW CHARACTER · UPLOADED');
+    expect(on(at({ done: true, skipped: true }))?.words).toBe('NEW CHARACTER · SKIPPED BY THE GM');
+  });
+});
+
+describe('started over by the GM (7c5)', () => {
+  it('asks again as a blank sheet does, whatever stayed on the sheet', () => {
+    expect(flowState(TEMPLATE as unknown as SheetTemplate, { notes: 'Mine', [CREATING_KEY]: { restarted: true } })).toBe('new');
+    expect(flowDone({ [CREATING_KEY]: { restarted: true } })).toBe(false);
+  });
+});
+
+describe('what START OVER warns of (7c5)', () => {
+  const CLEARS = 'Clears their name, stats, picks and rolls, and asks them again. The rest of the sheet and their portrait stay.';
+  const words = (place: object) => startOverWords({ [CREATING_KEY]: place }, null);
+
+  it('nothing handed out yet: only what it clears', () => {
+    expect(words({ at: 'stats' })).toBe(CLEARS);
+    expect(words({ done: true, uploaded: true })).toBe(CLEARS);
+    expect(words({ done: true, skipped: true })).toBe(CLEARS);
+    expect(words({ done: true, given: { items: [], pay: [] } })).toBe(CLEARS);
+  });
+
+  it('finished: says exactly what comes back, and how far', () => {
+    expect(words({ done: true, given: { items: [{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }], pay: [{ id: null, amount: 50 }] } }))
+      .toBe(`${CLEARS} It also takes back what FINISH gave: Rope, 3x Rations, 50. An item they no longer have is passed over, and money stops at 0.`);
+    expect(words({ done: true, given: { items: [], pay: [{ id: null, amount: 7 }] } })).toContain('gave: 7. An item');
+  });
+
+  it('finished before it was recorded: says it stays', () => {
+    expect(words({ done: true })).toBe(`${CLEARS} They finished before what FINISH gives was recorded, so what they were given stays.`);
   });
 });

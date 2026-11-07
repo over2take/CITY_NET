@@ -7,7 +7,7 @@
 // GIVE ITEM's does. A patch out; the caller writes it through the sheet's queue, so it lands once.
 
 const { itemOf, givable } = require('../shops/give');
-const { addToInventory, placeTimes } = require('../shops/placement');
+const { addToInventory, placeTimes, readInventory, writeInventory, INVENTORY_FIELD } = require('../shops/placement');
 
 /** The catalogue item called this, in any catalogue the game can give from: { name, fields }, or null. */
 const catalogueItem = (system, name) => {
@@ -34,4 +34,26 @@ const kitPatch = (system, items, data) => {
   return patch;
 };
 
-module.exports = { kitPatch, catalogueItem };
+/**
+ * These items taken back out of the inventory (7c5's START OVER): a carried line first, then one stashed,
+ * going as far as it can. One since sold or dropped is simply gone. A patch, empty with nothing to take.
+ */
+const kitTakenBack = (items, data) => {
+  if (!items.length) return {};
+  let lines = readInventory(data);
+  for (const item of items) {
+    const wanted = String(item.name).trim().toLowerCase();
+    const same = lines.filter((line) => line.name.trim().toLowerCase() === wanted);
+    let left = item.qty;
+    const taken = new Map();
+    for (const line of [...same.filter((l) => l.carry !== 'stash'), ...same.filter((l) => l.carry === 'stash')]) {
+      const n = Math.min(left, line.qty);
+      taken.set(line, n);
+      left -= n;
+    }
+    lines = lines.map((line) => ({ ...line, qty: line.qty - (taken.get(line) || 0) })).filter((line) => line.qty > 0);
+  }
+  return { [INVENTORY_FIELD]: writeInventory(lines) };
+};
+
+module.exports = { kitPatch, kitTakenBack, catalogueItem };

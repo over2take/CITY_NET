@@ -384,7 +384,7 @@ describe('rolled (7c3c)', () => {
     expect(finish(at).error).toBe('Every stat needs its number first');
     const once = roll(at).data;
     expect(finish(once).error).toBe('Every stat needs its number first');
-    expect(finish({ ...once, might: 14, wits: 8 }).data).toEqual({ might: 14, wits: 8, [CREATING_KEY]: { done: true } });
+    expect(finish({ ...once, might: 14, wits: 8 }).data).toEqual({ might: 14, wits: 8, [CREATING_KEY]: { done: true, given: { items: [], pay: [] } } });
     expect(finish(roll(at, def('order')).data, def('order')).ok).toBe(true);
   });
 
@@ -492,7 +492,7 @@ describe('a point buy (7c3d)', () => {
 
   it('FINISH takes points left over, fills in any not bought, and refuses too many', () => {
     const done = creationAction(def(), at, { kind: 'finish' });
-    expect(done.data).toEqual({ might: 8, wits: 8, [CREATING_KEY]: { done: true } });
+    expect(done.data).toEqual({ might: 8, wits: 8, [CREATING_KEY]: { done: true, given: { items: [], pay: [] } } });
     const over = { might: 12, wits: 12, [CREATING_KEY]: { at: 'stats' } };
     expect(creationAction(def(), over, { kind: 'finish' })).toEqual({ ok: false, error: 'More points spent than there are' });
     expect(creationAction(def(), { might: 11, wits: 9, ...at }, { kind: 'finish' }).ok).toBe(true);
@@ -688,7 +688,7 @@ describe('kits at the table (7c4b)', () => {
   it('FINISH says what to give: every kit everyone gets, then the one picked, and none other', () => {
     const done = finish(pick(at, 'traveler').data);
     expect(done.items).toEqual([{ name: 'Knife', qty: 1 }, { name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }]);
-    expect(done.data[CREATING_KEY]).toEqual({ done: true });
+    expect(done.data[CREATING_KEY]).toEqual({ done: true, given: { items: done.items, pay: [] } });
     expect(finish(at, def([ALL])).items).toEqual([{ name: 'Knife', qty: 1 }]);
     expect(finish(at, def([GM])).items).toEqual([]);
     expect(finish(at, def([ALL], { off: ['kits'] })).items).toEqual([]);
@@ -805,7 +805,7 @@ describe('starting money (7c4d)', () => {
     const d = def({ gold: { how: 'roll', each: '3d6' }, dollars: { how: 'number', amount: 500 }, honor: { how: 'typed' } });
     const ready = type(roll(at, d, 'gold').data, d, 'honor', 0).data;
     expect(finish(ready, d).pay).toEqual([{ id: 'gold', amount: 1200 }, { id: 'dollars', amount: 500 }]);
-    expect(finish(ready, d).data[CREATING_KEY]).toEqual({ done: true });
+    expect(finish(ready, d).data[CREATING_KEY]).toEqual({ done: true, given: { items: [], pay: [{ id: 'gold', amount: 1200 }, { id: 'dollars', amount: 500 }] } });
     expect(finish(at, single({ main: { how: 'number', amount: 100 } })).pay).toEqual([{ id: null, amount: 100 }]);
   });
 
@@ -967,7 +967,7 @@ describe('what an option gives, at the table (7c4e)', () => {
     expect(done.items).toEqual([{ name: 'Ring', qty: 1 }, { name: 'Rations', qty: 3 }, { name: 'Sword', qty: 1 }]);
     expect(done.pay).toEqual([{ id: 'gold', amount: 12000 }, { id: 'honor', amount: 7 }]);
     expect(done.rolls).toEqual([]);
-    expect(done.data[CREATING_KEY]).toEqual({ done: true });
+    expect(done.data[CREATING_KEY]).toEqual({ done: true, given: { items: done.items, pay: done.pay } });
   });
 
   it('nothing from a pick waiting, nor from one giving nothing', () => {
@@ -1112,7 +1112,7 @@ describe('walking through it (7c2)', () => {
 
   it('finishes, and nothing moves it after that', () => {
     const done = creationAction(ON, { [CREATING_KEY]: { at: 'stats' } }, { kind: 'finish' }).data;
-    expect(done).toEqual({ [CREATING_KEY]: { done: true } });
+    expect(done).toEqual({ [CREATING_KEY]: { done: true, given: { items: [], pay: [] } } });
     for (const action of [{ kind: 'at', step: 'stats' }, { kind: 'finish' }]) {
       expect(creationAction(ON, done, action)).toEqual({ ok: false, error: 'This character isn\'t being made' });
     }
@@ -1146,6 +1146,96 @@ describe('walking through it (7c2)', () => {
 
   it('the place can\'t be written as a field', () => {
     expect(playerMayEdit('generic', CREATING_KEY)).toBe(false);
+  });
+});
+
+describe('the GM\'s side (7c5)', () => {
+  const ON = {
+    ...HEARTH,
+    sheet: { tabs: ['STATS'], header: { nameField: 'handle' }, sections: [{ id: 'who', label: 'WHO', layout: 'list', tab: 'STATS', fields: [
+      { id: 'handle', label: 'Handle', type: 'text' }, { id: 'concept', label: 'Concept', type: 'text' }, { id: 'description', label: 'About', type: 'text', edit: 'gm' },
+    ] }] },
+    stats: [{ id: 'a', label: 'A', stats: [{ id: 'grit', label: 'Grit' }] }],
+    creation: { on: true },
+  };
+  const as = (data, kind, gm = true, def = ON) => creationAction(def, data, { kind }, { gm });
+  const played = {
+    handle: 'Wren', concept: 'Thief', description: 'Kept by the GM', grit: 12, notes: 'Mine', inventory: '[]',
+    [PICKS_KEY]: { classes: [{ option: 'x' }] }, _uses: { f: 1 }, _rolled: { classes: { option: 'x' } },
+    [CREATING_KEY]: { at: 'stats', kit: 'k', rolled: { stats: [1] } },
+  };
+
+  it('only the GM may, whatever the sheet says', () => {
+    for (const kind of ['skip', 'startOver']) {
+      expect(as(played, kind, false)).toEqual({ ok: false, error: 'That is the GM\'s to do' });
+      expect(creationAction(ON, played, { kind }).ok).toBe(false);
+    }
+  });
+
+  it('neither with the flow off', () => {
+    const off = { ...ON, creation: { on: false } };
+    for (const kind of ['skip', 'startOver']) expect(as(played, kind, true, off).error).toBe('This game has no guided new character');
+  });
+
+  it('SKIP IT marks them done as they stand, handing nothing out', () => {
+    const done = as(played, 'skip');
+    expect(done.data[CREATING_KEY]).toEqual({ done: true, skipped: true });
+    expect(done.data.handle).toBe('Wren');
+    expect(done.items).toBeUndefined();
+    expect(done.pay).toBeUndefined();
+    expect(as({ name: 'Blank' }, 'skip').data[CREATING_KEY]).toEqual({ done: true, skipped: true });
+    expect(creatingNow(ON, done.data)).toBe(false);
+  });
+
+  it('SKIP IT is refused once they are done', () => {
+    for (const place of [{ done: true }, { done: true, uploaded: true }]) expect(as({ [CREATING_KEY]: place }, 'skip')).toEqual({ ok: false, error: 'This character is done already' });
+  });
+
+  it('START OVER clears what the flow wrote and nothing else, and asks again', () => {
+    const { data } = as(played, 'startOver');
+    expect(data).toEqual({ description: 'Kept by the GM', notes: 'Mine', inventory: '[]', [CREATING_KEY]: { restarted: true } });
+  });
+
+  it('START OVER leaves a stat the GM keeps, and one no step asks', () => {
+    const def = { ...ON, stats: [{ id: 'a', label: 'A', stats: [{ id: 'grit', label: 'Grit' }] }, { id: 'b', label: 'B', stats: [{ id: 'wits', label: 'Wits' }] }], creation: { on: true, statsBy: 'group', off: ['stats:b'] } };
+    expect(as({ grit: 1, wits: 2, [CREATING_KEY]: {} }, 'startOver', true, def).data).toEqual({ wits: 2, [CREATING_KEY]: { restarted: true } });
+    const kept = { ...ON, sheet: { ...ON.sheet, sections: [{ ...ON.sheet.sections[0], fields: [...ON.sheet.sections[0].fields, { id: 'grit', label: 'Grit', type: 'number', edit: 'gm' }] }] } };
+    expect(as({ grit: 1, [CREATING_KEY]: {} }, 'startOver', true, kept).data).toEqual({ grit: 1, [CREATING_KEY]: { restarted: true } });
+  });
+
+  it('START OVER says what FINISH gave, to take back', () => {
+    const given = { items: [{ name: 'Rope', qty: 2 }], pay: [{ id: null, amount: 50 }] };
+    const done = as({ [CREATING_KEY]: { done: true, given } }, 'startOver');
+    expect(done.takeItems).toEqual(given.items);
+    expect(done.takeMoney).toEqual(given.pay);
+    expect(done.restarted).toBe(true);
+  });
+
+  it('START OVER takes nothing back when nothing was recorded, or twice', () => {
+    for (const place of [{ done: true }, { done: true, uploaded: true }, { at: 'stats' }, { done: true, given: 'odd' }]) {
+      const done = as({ [CREATING_KEY]: place }, 'startOver');
+      expect([done.takeItems, done.takeMoney]).toEqual([[], []]);
+    }
+    const once = as({ [CREATING_KEY]: { done: true, given: { items: [{ name: 'Rope', qty: 1 }], pay: [] } } }, 'startOver');
+    expect(as(once.data, 'startOver').takeItems).toEqual([]);
+  });
+
+  it('START OVER is refused for a character never in the flow', () => {
+    expect(as({ handle: 'Old Hand' }, 'startOver')).toEqual({ ok: false, error: 'This character wasn\'t made with the flow' });
+  });
+
+  it('started over, they are still being made, and opening it starts from the top', () => {
+    const { data } = as(played, 'startOver');
+    expect(creatingNow(ON, data)).toBe(true);
+    expect(creationAction(ON, data, { kind: 'open' }).data[CREATING_KEY]).toEqual({});
+    // Already opened, it stays where it is.
+    expect(creationAction(ON, { [CREATING_KEY]: { at: 'stats' } }, { kind: 'open' })).toEqual({ ok: true });
+  });
+
+  it('finishing again gives it all again, recorded afresh', () => {
+    const { data } = as({ [CREATING_KEY]: { done: true, given: { items: [{ name: 'Rope', qty: 2 }], pay: [] } } }, 'startOver');
+    const at = creationAction(ON, creationAction(ON, data, { kind: 'open' }).data, { kind: 'at', step: 'who' }).data;
+    expect(creationAction(ON, at, { kind: 'finish' }).data[CREATING_KEY]).toEqual({ done: true, given: { items: [], pay: [] } });
   });
 });
 

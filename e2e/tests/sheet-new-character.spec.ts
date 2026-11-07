@@ -113,7 +113,7 @@ test('a blank sheet: the blink, the walk, leaving and coming back, and finishing
 
   // Closed on their sheet, filled in, and it works as it always has.
   await expect(flow(page)).toHaveCount(0);
-  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toMatchObject({ done: true });
   await expect(page.getByRole('button', { name: 'CREATING · CONTINUE' })).toHaveCount(0);
   await sheetTab(page, 'CHARACTER');
   await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Wren');
@@ -162,7 +162,7 @@ test('group by group: a step per group, one left out never asked', async ({ brow
   // FINISH asks for nothing of STRESS, and the sheet still has it.
   await page.getByRole('button', { name: 'FINISH' }).click();
   await expect(flow(page)).toHaveCount(0);
-  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toMatchObject({ done: true });
   await sheetTab(page, 'STATS');
   await expect(page.getByLabel('Worry', { exact: true })).toBeVisible();
   await page.context().close();
@@ -242,7 +242,7 @@ test('a fixed array: numbers placed, swapped and taken back; locked on the sheet
   await expect(finish).toBeEnabled({ timeout: 15_000 });
   await finish.click();
   await expect(flow(page)).toHaveCount(0);
-  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toMatchObject({ done: true });
   expect((await stored()).wits).toBe(9);
 
   // Finished, the sheet is theirs.
@@ -299,7 +299,7 @@ test('rolled in order: on the secure dice, in the tray and on the stats, kept th
   await expect(rollThem(page)).toHaveCount(0);
   await expect(page.getByRole('group', { name: `Wits: ${wits}` })).toBeVisible();
   await page.getByRole('button', { name: 'FINISH' }).click();
-  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toMatchObject({ done: true });
 
   // Saved to the dice log: since that reload, the history can only have it from the database.
   await page.getByRole('button', { name: 'DICE_ROLLER', exact: true }).click();
@@ -331,7 +331,7 @@ test('rolled to arrange: what came up placed as they like, then finished', async
   await expect.poll(async () => (await stored()).wits, { timeout: 15_000 }).toBe(first);
   await expect(finish).toBeEnabled({ timeout: 15_000 });
   await finish.click();
-  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toMatchObject({ done: true });
   await page.context().close();
 });
 
@@ -386,7 +386,7 @@ test('a point buy: from the lowest, by the table, as far as the points go; locke
   await expect(left).toHaveText('1 OF 5 POINTS LEFT');
   await page.getByRole('button', { name: 'FINISH' }).click();
   await expect(flow(page)).toHaveCount(0);
-  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toMatchObject({ done: true });
   await sheetTab(page, 'STATS');
   await expect(onSheet).toBeEditable();
   await page.context().close();
@@ -443,7 +443,7 @@ test('kits: everyone\'s and the one picked land in the inventory on finishing; o
   // Finished: each its own line, on the sheet's GEAR, none of the other kit.
   await finish.click();
   await expect(flow(page)).toHaveCount(0);
-  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toMatchObject({ done: true });
   const held = JSON.parse((await stored()).inventory).map((i: { name: string; qty: number }) => [i.name, i.qty]);
   expect(held).toEqual([['Knife', 1], ['Rope', 1], ['Rations', 3]]);
   await sheetTab(page, 'GEAR');
@@ -531,7 +531,7 @@ test('starting money: rolled once and in the log, nothing paid until finishing, 
   // Finished: paid in, the sheet saying so without a reload.
   await finish.click();
   await expect(flow(page)).toHaveCount(0);
-  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toMatchObject({ done: true });
   await expect.poll(async () => (await stored()).cash, { timeout: 15_000 }).toBe(amount);
   await page.context().close();
 });
@@ -615,7 +615,7 @@ test('what an option gives: with KITS and MONEY off, said before picking, its mo
   // Finished: only what they hold, as inventory lines, the money added up, and neither step's own.
   await finish.click();
   await expect(flow(page)).toHaveCount(0);
-  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toMatchObject({ done: true });
   await expect.poll(async () => (await stored()).cash, { timeout: 15_000 }).toBeGreaterThan(amount + 5);
   const share = (await stored()).cash - amount - 5;
   expect(share).toBeLessThanOrEqual(6);

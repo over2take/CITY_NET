@@ -19,6 +19,8 @@
 // same write, so they land once, with the game's catalogues loaded first (sheets/kitGiving.js), and pays in
 // their starting money (7c4d) once that write has stood, as it comes only from there. What the options they
 // hold give (7c4e) comes the same way, and { kind: 'giftRoll', option, id } rolls an option's money.
+// The GM's START OVER (7c5) takes back what FINISH gave the same way round: items in the write, money
+// after it, stopping at 0 as it may be spent. Clearing the name, it renames their token too.
 //
 // `recoverySpend` with { pool, count } (R2a) spends recovery dice with a roll (sheets/recover.js).
 // In a system leaving spending to the GM, a player spends or ticks them off only while the GM has
@@ -30,7 +32,8 @@ const { withThrow, boardOf } = require('../utils/diceThrow');
 const { syncTokenMax } = require('../systemBuilder/tokenMax');
 const { maySpend, restingOf, OPEN_SETTING } = require('../systemBuilder/recovery');
 const { creationAction, statRollLine } = require('../systemBuilder/creation');
-const { kitPatch } = require('../sheets/kitGiving');
+const { kitPatch, kitTakenBack } = require('../sheets/kitGiving');
+const identity = require('../sheets/identity');
 const { takeRest } = require('../sheets/rests');
 const customSystems = require('../systemBuilder/runtime');
 const sheetTemplates = require('../sheets/templates');
@@ -116,16 +119,21 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
 
   socket.on('creationAction', (payload) => {
     if (!payload || typeof payload !== 'object') return;
-    withCaller(payload, 'choicesRefused', ({ username, system, definition, refuse }) => getShopSystem(() => {
+    withCaller(payload, 'choicesRefused', ({ gm, username, system, definition, refuse }) => getShopSystem(() => {
       let error = null;
       let rolls = [];
       let pay = [];
+      let takeMoney = [];
+      let restarted = false;
       mutateSheetForUser(db, { username, system }, (data) => {
-        const done = creationAction(definition, data, payload, { rng });
+        const done = creationAction(definition, data, payload, { rng, gm });
         if (!done.ok) { error = done.error; return undefined; }
         rolls = done.rolls || (done.rolled ? [done.rolled] : []);
         pay = done.pay || [];
+        takeMoney = done.takeMoney || [];
+        restarted = done.restarted === true;
         if (done.items && done.items.length) Object.assign(done.data, kitPatch(system, done.items, done.data));
+        if (done.takeItems) Object.assign(done.data, kitTakenBack(done.takeItems, done.data));
         // Worked out as any save is, so a list asked first already knows what isn't met.
         if (done.data) sheetTemplates.applyDerived(system, done.data);
         return done.data;
@@ -140,9 +148,24 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
             sendBankUpdate(username);
           }));
         }
-        return syncTokenMax(db, system, username, (moved) => {
+        for (const { id, amount } of takeMoney) {
+          withMoney(id ? { currency: id } : {}, (money) => money.get(username, (e, account) => {
+            const take = Math.min(amount, account ? account.balance : 0);
+            if (e || take <= 0) return;
+            money.add(username, -take, (e2) => {
+              if (e2) console.error('[creation] starting money not taken back:', e2.message);
+              sendBankUpdate(username);
+            });
+          }));
+        }
+        const settled = () => syncTokenMax(db, system, username, (moved) => {
           if (moved) io.emit('dataUpdated', { isRhombusOnly: true });
           io.emit('sheetUpdated', { username, system });
+        });
+        if (!restarted) return settled();
+        return identity.syncToken(db, system, username, (renamed) => {
+          if (renamed) io.emit('dataUpdated', { isRhombusOnly: true });
+          settled();
         });
       });
     }), 'This game has no guided new character');
