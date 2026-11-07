@@ -24,6 +24,7 @@ import {
   carriedToStashed, compactCarried, type StashedWeapon,
 } from '../sheets/cwnWeaponStash';
 import { ChoicesSection } from './ChoicesSection';
+import { XpMeterBar } from './XpMeterBar';
 import { RestSection } from './RestSection';
 import { withTempHp } from '../sheets/tempHp';
 import { choiceEffects, type ChoicesAction } from '../sheets/choicesShown';
@@ -636,6 +637,7 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
             ))}
           </div>
         )}
+        <XpMeterBar template={template} data={data as Record<string, unknown>} />
         {h.xpBar && (() => {
           // Under the HP bar and its chips, because it answers the same kind of question:
           // how far through something am I. Display only - the number is typed on the

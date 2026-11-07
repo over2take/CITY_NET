@@ -2545,16 +2545,32 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           // Which column the table advances on, so the award can carry the level with it.
           db.get(`SELECT value FROM global_settings WHERE key = 'cwn_slow_advancement'`, (rErr, rRow) => {
           const rate = (!rErr && rRow && rRow.value === '1') ? 'slow' : 'fast';
-          awardXpModule.awardXp(db, { system, usernames: data.usernames, amount: data.amount, rate }, (reason, results) => {
+          awardXpModule.awardXp(db, { system, definition: customSystems.definitionOf(system), usernames: data.usernames, amount: data.amount, rate, split: data.split === true }, (reason, results, given) => {
             if (reason) return socket.emit('xpAwardResult', { ok: false, reason });
             // Told to the GM who asked, so a name that did nothing is visible rather than
             // looking like the button missed.
-            socket.emit('xpAwardResult', { ok: true, amount: Number(data.amount), results });
+            socket.emit('xpAwardResult', { ok: true, amount: given.each, left: given.left, results });
             // And to each player, whose sheet is showing an EXP bar that just moved.
             results.filter((r) => r.ok).forEach((r) => {
               io.emit('sheetUpdated', { username: r.username, system });
             });
           });
+          });
+        });
+      });
+    });
+
+    /** A custom system's SET XP TO (7d2a): another number in place of what they have. */
+    socket.on('adminSetXp', (data) => {
+      if (!data || !data.token || !Array.isArray(data.usernames)) return;
+      jwt.verify(data.token, SECRET, (err, decoded) => {
+        if (err || !isMainAdmin(decoded)) return;
+        getGameSystem((sysErr, system) => {
+          if (sysErr) return;
+          awardXpModule.setXp(db, { system, definition: customSystems.definitionOf(system), usernames: data.usernames, value: data.value }, (reason, results) => {
+            if (reason) return socket.emit('xpAwardResult', { ok: false, reason });
+            socket.emit('xpAwardResult', { ok: true, results });
+            results.filter((r) => r.ok).forEach((r) => io.emit('sheetUpdated', { username: r.username, system }));
           });
         });
       });

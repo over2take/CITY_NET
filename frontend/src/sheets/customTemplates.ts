@@ -69,6 +69,7 @@ export interface CustomRender {
   resting?: import('./choicesShown').RestingShown;
   /** The guided new character (7c2): the steps to walk through, null while it is off. */
   creation?: import('./newCharacterFlow').CreationShown | null;
+  levels?: import('./xpMeter').LevelsShown | null;
 }
 
 /** Fired on window when a custom template has been loaded, so the app can redraw. */
@@ -146,6 +147,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.choices?.length ? { choices: render.choices } : {}),
     ...(render.resting ? { resting: render.resting } : {}),
     ...(render.creation ? { creation: render.creation } : {}),
+    ...(render.levels ? { levels: render.levels } : {}),
     ...tiers,
     ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived, rolls), ...tiers } } : {}),
   };

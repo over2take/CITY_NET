@@ -17,6 +17,7 @@ const { compileSystem } = require('./derived');
 const { overlayOf, choicesOf, workedOf, worksOutPicks, choicesShown, WORKED_KEY } = require('./choices');
 const { poolsOf, recoveryShown, restingShown } = require('./recovery');
 const { creationShown } = require('./creation');
+const { levelsShown } = require('./levels');
 const { fieldsRolledBy } = require('./tableRolls');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf, LIMITS: NPC_LIMITS } = require('./npc');
@@ -165,6 +166,8 @@ const renderOf = (id, definition, on = new Set()) => ({
   resting: restingShown(definition),
   // The guided new character (7c2): the steps to walk through, or null while it is off.
   creation: creationShown(definition),
+  // The XP table (7d2a), for the meter on the sheet, or null where characters don't earn XP.
+  levels: levelsShown(definition),
 });
 
 /**

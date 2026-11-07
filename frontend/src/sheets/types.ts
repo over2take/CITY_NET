@@ -303,6 +303,8 @@ export interface SheetTemplate {
   resting?: import('./choicesShown').RestingShown;
   /** The guided new character (7c2), for a custom system with it on. */
   creation?: import('./newCharacterFlow').CreationShown;
+  /** The XP table (7d2a): there while characters earn XP toward levels. */
+  levels?: import('./xpMeter').LevelsShown;
   /** The layout an NPC's sheet is drawn with, when the system gives NPCs one of their own
    *  (a custom system's stat block). Absent = NPCs use this template. */
   npcLayout?: SheetTemplate;
