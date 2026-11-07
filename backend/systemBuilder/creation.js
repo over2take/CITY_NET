@@ -41,7 +41,10 @@
 //   _creating: { at, kit: 'traveler' }   the kit picked (7c4b), changed as they like: given out at FINISH
 //   _creating: { at, money: { gold: 1200 } }   what was rolled or typed for each currency (7c4d): paid at FINISH
 //   _creating: { at, gifts: { noble: { gold: 1200 } } }   what an option's money rolled (7c4e), kept with it through a swap
-//   _creating: { done: true, uploaded?: true }   finished, or came in as an upload
+//   _creating: { done: true, given: { items, pay } }   finished, with what FINISH handed out (7c5), for START OVER
+//   _creating: { done: true, uploaded: true }   came in as an upload
+//   _creating: { done: true, skipped: true }    the GM's SKIP IT (7c5)
+//   _creating: { restarted: true }   the GM's START OVER (7c5): asked again, as a blank sheet is, until opened
 //
 // Who is asked at all is the browser's to work out (sheets/newCharacterFlow.ts): a blank sheet with
 // nothing here. Being asked only opens a window, so nothing is guarded by it, and nothing is locked
@@ -62,7 +65,7 @@
 
 const { partOn } = require('./parts');
 const { currenciesOf, formatAmount, parseAmount } = require('./currencies');
-const { choicesOf, pickedOf, meets, needsText, heldOf, MAIN_MONEY, moneyCurrencies, giftItemsOf, giftMoneyOf } = require('./choices');
+const { PICKS_KEY, USES_KEY, ROLLED_KEY, choicesOf, pickedOf, meets, needsText, heldOf, MAIN_MONEY, moneyCurrencies, giftItemsOf, giftMoneyOf } = require('./choices');
 const { fieldsOf } = require('./sheet');
 const { parse } = require('./expression');
 const { cryptoRng } = require('../utils/random');
@@ -570,19 +573,57 @@ const rollStats = (definition, sheet, action, rng) => {
 /** The dice-log line for a step's ROLL: "Wren rolled THE STATS (4d6 drop lowest): Might 14, Wits 9". */
 const statRollLine = (who, rolled) => `${who} rolled ${rolled.label} (${rolled.each}): ${rolled.totals.map((n, i) => (rolled.named ? `${rolled.named[i]} ${n}` : n)).join(', ')}`;
 
+/** The sheet's name field, and those that go with it on WHO THEY ARE, without any kept for the GM. */
+const whoFieldIds = (definition) => {
+  const sheet = isPlainObject(definition.sheet) ? definition.sheet : {};
+  const name = isPlainObject(sheet.header) && typeof sheet.header.nameField === 'string' ? sheet.header.nameField : 'name';
+  const gmOnly = new Set(fieldsOf(sheet).filter((f) => isPlainObject(f) && f.edit === 'gm').map((f) => f.id));
+  return [name, 'concept', 'description'].filter((id) => !gmOnly.has(id));
+};
+
+/**
+ * The GM's START OVER (7c5): what the flow wrote comes off the sheet, and it is asked again. What FINISH
+ * handed out is said back to the caller to take away. Anything else on the sheet stays. So does a portrait,
+ * which isn't on the sheet's data, and which nobody needs to upload twice.
+ */
+const startOver = (definition, sheet) => {
+  const place = placeOf(sheet);
+  if (!place) return { ok: false, error: 'This character wasn\'t made with the flow' };
+  const next = { ...sheet, [CREATING_KEY]: { restarted: true } };
+  const stats = stepsAsked(definition).filter((step) => STATS_STEP.test(step)).flatMap((step) => statsOfStep(definition, step).map((s) => s.id));
+  for (const key of [...whoFieldIds(definition), ...stats, PICKS_KEY, USES_KEY, ROLLED_KEY]) delete next[key];
+  const given = place.given || {};
+  return { ok: true, data: next, restarted: true, takeItems: list(given.items), takeMoney: list(given.pay) };
+};
+
+/** The GM's SKIP IT (7c5): marked done as it stands, with nothing handed out. */
+const skipFlow = (sheet) => {
+  const place = placeOf(sheet);
+  if (place && place.done === true) return { ok: false, error: 'This character is done already' };
+  return { ok: true, data: { ...sheet, [CREATING_KEY]: { done: true, skipped: true } } };
+};
+
 /**
  * One step of a character's way through the flow: { kind: 'open' }, { kind: 'at', step },
  * { kind: 'place', step, stat, value }, { kind: 'roll', step }, { kind: 'buy', step, stat, value }, { kind: 'kit', kit },
  * { kind: 'moneyRoll', id }, { kind: 'moneyTyped', id, amount }, { kind: 'giftRoll', option, id } or { kind: 'finish' }.
+ * The GM alone has { kind: 'skip' } and { kind: 'startOver' }, the second saying `takeItems` and `takeMoney`.
  * Gives back { ok: true, data } (no `data` when there is nothing to change, `rolled` for the log after a roll,
  * and on finishing `items` to give out, `pay` to pay in and `rolls` for the log, those being the caller's to do), or
  * { ok: false, error } in words. `rng` rolls the dice, 0 to 1 (the secure source unless one is handed in).
  */
-const creationAction = (definition, data, action, { rng = cryptoRng } = {}) => {
+const creationAction = (definition, data, action, { rng = cryptoRng, gm = false } = {}) => {
   const sheet = isPlainObject(data) ? data : {};
   const kind = isPlainObject(action) ? action.kind : null;
   if (!creationOf(definition).on) return { ok: false, error: 'This game has no guided new character' };
-  if (kind === 'open') return placeOf(sheet) ? { ok: true } : { ok: true, data: { ...sheet, [CREATING_KEY]: {} } };
+  if (kind === 'skip' || kind === 'startOver') {
+    if (!gm) return { ok: false, error: 'That is the GM\'s to do' };
+    return kind === 'skip' ? skipFlow(sheet) : startOver(definition, sheet);
+  }
+  if (kind === 'open') {
+    const place = placeOf(sheet);
+    return place && place.restarted !== true ? { ok: true } : { ok: true, data: { ...sheet, [CREATING_KEY]: {} } };
+  }
   if (!['at', 'finish', 'place', 'roll', 'buy', 'kit', 'moneyRoll', 'moneyTyped', 'giftRoll'].includes(kind)) return { ok: false, error: 'Nothing to do' };
   if (!creatingNow(definition, sheet)) return { ok: false, error: 'This character isn\'t being made' };
   if (kind === 'place') return placeNumber(definition, sheet, action);
@@ -605,13 +646,9 @@ const creationAction = (definition, data, action, { rng = cryptoRng } = {}) => {
     if (moneyWrong) return { ok: false, error: moneyWrong };
     const filled = statSteps.reduce((data, step) => filledIn(definition, data, step), sheet);
     const gifts = giftsOnFinish(definition, sheet, rng);
-    return {
-      ok: true,
-      data: { ...filled, [CREATING_KEY]: { done: true } },
-      items: [...kitItemsOf(definition, sheet), ...gifts.items],
-      pay: paidTogether([...moneyToPay(definition, sheet), ...gifts.pay]),
-      rolls: gifts.rolls,
-    };
+    const items = [...kitItemsOf(definition, sheet), ...gifts.items];
+    const pay = paidTogether([...moneyToPay(definition, sheet), ...gifts.pay]);
+    return { ok: true, data: { ...filled, [CREATING_KEY]: { done: true, given: { items, pay } } }, items, pay, rolls: gifts.rolls };
   }
   if (!stepsAsked(definition).includes(action.step)) return { ok: false, error: 'Not one of this game\'s steps' };
   // A point buy's stats start at their lowest as the player arrives, so what they read says so.

@@ -39,7 +39,8 @@ export interface CreationShown {
 /** Where a sheet keeps its place in the flow (backend creation.js CREATING_KEY). */
 export const CREATING_KEY = '_creating';
 
-interface Place { at?: string; done?: boolean; uploaded?: boolean; rolled?: Record<string, unknown>; kit?: string; money?: Record<string, unknown>; gifts?: Record<string, unknown> }
+interface Given { items?: KitItem[]; pay?: { id: string | null; amount: number }[] }
+interface Place { at?: string; done?: boolean; uploaded?: boolean; skipped?: boolean; restarted?: boolean; given?: Given; rolled?: Record<string, unknown>; kit?: string; money?: Record<string, unknown>; gifts?: Record<string, unknown> }
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 const placeOf = (data: Obj | null | undefined): Place | null => {
   const place = data?.[CREATING_KEY];
@@ -76,6 +77,8 @@ export type FlowState = 'none' | 'new' | 'going';
 export const flowState = (template: SheetTemplate | null | undefined, data: Obj | null | undefined): FlowState => {
   if (!template?.creation) return 'none';
   const place = placeOf(data);
+  // The GM's START OVER (7c5) asks again, whatever else stayed on the sheet.
+  if (place?.restarted === true) return 'new';
   if (place) return place.done === true ? 'none' : 'going';
   return isBlankSheet(template, data) ? 'new' : 'none';
 };
@@ -164,6 +167,37 @@ export const giftWords = (gives: GiftsShown, system: string | null | undefined):
   ...(gives.items?.length ? [kitItemsText(gives.items)] : []),
   ...(gives.money ?? []).map((m) => `${m.name}: ${m.how === 'roll' ? m.each : moneyWords(system, m.id, m.amount ?? 0)}`),
 ].join(' · ');
+
+/** What the GM's line on a player's sheet says and offers (7c5). Null: this character was never asked. */
+export interface GmFlowLine { words: string; canSkip: boolean; canStartOver: boolean }
+
+export const gmFlowLine = (template: SheetTemplate | null | undefined, data: Obj | null | undefined): GmFlowLine | null => {
+  if (!template?.creation) return null;
+  const place = placeOf(data);
+  if (place?.restarted === true) return { words: 'CREATING · STARTED OVER, NOT OPENED YET', canSkip: true, canStartOver: false };
+  if (!place) return isBlankSheet(template, data) ? { words: 'CREATING · NOT OPENED YET', canSkip: true, canStartOver: false } : null;
+  if (place.done === true) {
+    const how = place.uploaded === true ? 'UPLOADED' : place.skipped === true ? 'SKIPPED BY THE GM' : 'FINISHED';
+    return { words: `NEW CHARACTER · ${how}`, canSkip: false, canStartOver: true };
+  }
+  const at = savedStep(template, data);
+  if (!at) return { words: 'CREATING · OPENED, NOT BEGUN', canSkip: true, canStartOver: true };
+  const steps = flowSteps(template);
+  return { words: `CREATING · STEP ${steps.indexOf(at) + 1} OF ${steps.length} · ${flowStepName(template, at)}`, canSkip: true, canStartOver: true };
+};
+
+/** What the GM is told before START OVER takes effect. */
+export const startOverWords = (data: Obj | null | undefined, system: string | null | undefined): string => {
+  const clears = 'Clears their name, stats, picks and rolls, and asks them again. The rest of the sheet and their portrait stay.';
+  const place = placeOf(data);
+  if (place?.done !== true || place.uploaded === true || place.skipped === true) return clears;
+  if (!place.given) return `${clears} They finished before what FINISH gives was recorded, so what they were given stays.`;
+  const gave = [
+    ...(place.given.items?.length ? [kitItemsText(place.given.items)] : []),
+    ...(place.given.pay ?? []).map((p) => moneyWords(system, p.id ?? 'main', p.amount)),
+  ];
+  return gave.length ? `${clears} It also takes back what FINISH gave: ${gave.join(', ')}. An item they no longer have is passed over, and money stops at 0.` : clears;
+};
 
 /** A kit's items as they read: "Rope, 3x Rations". */
 export const kitItemsText = (items: KitItem[]): string => items.map((i) => (i.qty === 1 ? i.name : `${i.qty}x ${i.name}`)).join(', ');

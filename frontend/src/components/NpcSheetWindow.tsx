@@ -3,6 +3,7 @@ import { ALL_HEADSHOTS } from '../headshots';
 import ReactDOM from 'react-dom';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
+import { GmCreatingLine } from './GmCreatingLine';
 import { ImportSheetDialog } from './ImportSheetDialog';
 import { getTemplate, getMaxPairs, hiddenTabsFor, npcTemplateOf, type CharacterSheet, type SheetTemplate } from '../sheets';
 import type { SheetFieldValue, RollPick } from '../sheets/types';
@@ -283,6 +284,10 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
             style={{ background: 'none', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer', padding: '2px 8px', fontSize: '1rem', lineHeight: 1 }}
           >{'>'}</button>
         </div>
+      )}
+      {playerUsername && socket && sheet && (
+        <GmCreatingLine template={template} data={sheet.data} system={sheet.system} refused={choicesRefused}
+          onAct={(kind) => socket.emit('creationAction', { kind, username: playerUsername })} />
       )}
       {sheet && template ? (
         <SheetRenderer
