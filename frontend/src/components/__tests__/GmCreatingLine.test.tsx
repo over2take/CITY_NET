@@ -39,6 +39,16 @@ describe('the GM\'s line', () => {
     expect(onAct).toHaveBeenCalledWith('skip');
   });
 
+  it('FILL IT IN FOR THEM is there until they are done', async () => {
+    const onFillIn = vi.fn();
+    render(<GmCreatingLine template={TEMPLATE} data={{ [CREATING_KEY]: { at: 'who' } }} system={null} onAct={vi.fn()} onFillIn={onFillIn} />);
+    await userEvent.click(screen.getByRole('button', { name: 'FILL IT IN FOR THEM' }));
+    expect(onFillIn).toHaveBeenCalledTimes(1);
+    cleanup();
+    render(<GmCreatingLine template={TEMPLATE} data={{ [CREATING_KEY]: { done: true } }} system={null} onAct={vi.fn()} onFillIn={onFillIn} />);
+    expect(screen.queryByRole('button', { name: 'FILL IT IN FOR THEM' })).toBeNull();
+  });
+
   it('finished: no SKIP IT', () => {
     open({ [CREATING_KEY]: { done: true } });
     expect(screen.queryByRole('button', { name: 'SKIP IT' })).toBeNull();

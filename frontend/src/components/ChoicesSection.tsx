@@ -49,7 +49,7 @@ interface Props {
 }
 
 /** What drawing an option's gifts needs: the system, for its money's words, and asking for a roll. */
-interface GiftsAt { system: string | null | undefined; onRoll: (option: string, id: string) => void }
+interface GiftsAt { system: string | null | undefined; onRoll: (option: string, id: string) => void; onClear?: (option: string, id: string) => void }
 
 const small: React.CSSProperties = { fontSize: '0.55rem', letterSpacing: '1px', opacity: 0.7 };
 const btn: React.CSSProperties = {
@@ -203,7 +203,7 @@ function Pick({ list, p, ctx, fixed = false }: { list: ChoiceListShown; p: PickS
         {!fixed && ctx.dropping !== `${list.id}:${p.option.id}` && <Drop list={list.id} option={p.option} ctx={ctx} />}
       </div>
       {!fixed && ctx.dropping === `${list.id}:${p.option.id}` && <Drop list={list.id} option={p.option} ctx={ctx} />}
-      {ctx.gifts && p.option.gives && <GiftsHeld option={p.option} gives={p.option.gives} data={ctx.data} system={ctx.gifts.system} onRoll={ctx.gifts.onRoll} />}
+      {ctx.gifts && p.option.gives && <GiftsHeld option={p.option} gives={p.option.gives} data={ctx.data} system={ctx.gifts.system} onRoll={ctx.gifts.onRoll} onClear={ctx.gifts.onClear} />}
       {p.unlocked.map((f) => (
         <React.Fragment key={f.id}>
           <Feature f={f} ctx={ctx} />

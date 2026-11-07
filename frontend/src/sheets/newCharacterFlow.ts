@@ -186,6 +186,14 @@ export const gmFlowLine = (template: SheetTemplate | null | undefined, data: Obj
   return { words: `CREATING · STEP ${steps.indexOf(at) + 1} OF ${steps.length} · ${flowStepName(template, at)}`, canSkip: true, canStartOver: true };
 };
 
+/** What FILL IT IN FOR THEM says on a stats step: how the game sets them, with every limit off for the GM. */
+export const gmStatsWords = (way: StatWay, pool: number[] | null): string => {
+  if (way.way === 'array') return `This game places ${way.numbers.join(', ')}. Type what you like.`;
+  if (way.way === 'buy') return `This game buys them: ${way.points} points, ${way.lowest} to ${way.highest}. Type what you like.`;
+  if (way.way === 'roll') return pool ? `Rolled ${pool.join(', ')}. Type what you like, or clear it to roll again.` : `${way.each} for each stat, or type what you like.`;
+  return 'Type in what they have.';
+};
+
 /** What the GM is told before START OVER takes effect. */
 export const startOverWords = (data: Obj | null | undefined, system: string | null | undefined): string => {
   const clears = 'Clears their name, stats, picks and rolls, and asks them again. The rest of the sheet and their portrait stay.';

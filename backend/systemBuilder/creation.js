@@ -57,6 +57,12 @@
 // step's. A roll is made once, on the option's own step, and stays with that option if they swap away and
 // back. One never rolled there, as with a list everyone has or a step switched off, is rolled at FINISH.
 //
+// The GM's FILL IT IN FOR THEM (7c5) walks the same steps with every limit off: FINISH asks nothing of what
+// is filled in, a kit not met can be picked, and stats are typed in, whatever the way, as the GM's own writes
+// already may. Money left unrolled is rolled at FINISH, as an option's is. A kept roll stays kept for the GM
+// too: { kind: 'clearRoll' } takes it off, and it is then rolled again by whoever is at it, the old one
+// staying in the log. So no one has a second way of rolling, and a player can throw their own dice again.
+//
 // A way is kept under the step it sets, so one way for all and each group's keep theirs through changing
 // between them. A fixed array's numbers are placed by `place`, on the stats themselves, so there is
 // nothing else to keep: a number counts as placed while a stat holds it and the pool still has it.
@@ -87,6 +93,8 @@ const WAY_KEYS = { typed: new Set(['way']), array: new Set(['way', 'numbers']), 
 const PLACED = ['order', 'arrange'];
 const ROLL_READS = `Reads like 3d6, 4d6 drop lowest or 2d6 + 6, up to ${LIMITS.rollDice} dice of up to ${LIMITS.rollSides} sides`;
 const STEP = /^(?:who|stats(?::[a-z][a-z0-9_]{0,63})?|kits|money|list:[a-z][a-z0-9_]{0,63})$/;
+/** Why a kept roll won't roll again. */
+const ROLLED_KEPT = 'Rolled, and kept: your GM can clear it for another go';
 /** Where a sheet keeps its place in the flow. */
 const CREATING_KEY = '_creating';
 
@@ -397,13 +405,13 @@ const buyNumber = (definition, sheet, action) => {
 };
 
 /** A kit picked (7c4b), or with `kit` null, put back. One at a time: a new pick takes its place. */
-const pickKit = (definition, sheet, action) => {
+const pickKit = (definition, sheet, action, gm) => {
   if (!stepsAsked(definition).includes('kits')) return { ok: false, error: 'Not one of this game\'s steps' };
   const { kit: gone, ...place } = placeOf(sheet);
   if (action.kit === null) return { ok: true, data: { ...sheet, [CREATING_KEY]: place } };
   const kit = kitsOffered(definition).find((k) => k.id === action.kit);
   if (!kit) return { ok: false, error: 'Not a kit to pick from' };
-  if (!meets(definition, sheet, kit)) return { ok: false, error: `${kit.name} needs ${needsText(definition, kit.requires)}` };
+  if (!gm && !meets(definition, sheet, kit)) return { ok: false, error: `${kit.name} needs ${needsText(definition, kit.requires)}` };
   return { ok: true, data: { ...sheet, [CREATING_KEY]: { ...place, kit: kit.id } } };
 };
 
@@ -440,7 +448,7 @@ const setMoney = (definition, sheet, action, rng) => {
   const keep = (next) => ({ ...sheet, [CREATING_KEY]: { ...place, money: next } });
   if (action.kind === 'moneyRoll') {
     if (entry.how !== 'roll') return { ok: false, error: `${entry.name} isn't rolled` };
-    if (moneyHeld(sheet)[entry.id] !== undefined) return { ok: false, error: 'Rolled, and kept: rolling again is the GM\'s' };
+    if (moneyHeld(sheet)[entry.id] !== undefined) return { ok: false, error: ROLLED_KEPT };
     const done = rollMoney(entry.each, entry.currency, entry.name, rng);
     if (!done) return { ok: false, error: 'This game\'s roll doesn\'t read' };
     return { ok: true, data: keep({ ...moneyHeld(sheet), [entry.id]: done.amount }), rolled: done.rolled };
@@ -462,12 +470,22 @@ const moneyProblem = (definition, sheet) => {
   return missing.how === 'roll' ? `Roll for ${missing.name} first` : `Say how much ${missing.name} first`;
 };
 
-/** What a character is paid on finishing: { id, amount }, the id null for the app's single money. */
-const moneyToPay = (definition, sheet) => {
-  if (!stepsAsked(definition).includes('money')) return [];
-  return moneyOf(definition)
-    .map((e) => ({ id: e.id === MAIN_MONEY ? null : e.id, amount: e.how === 'number' ? e.amount : moneyHeld(sheet)[e.id] }))
-    .filter((p) => p.amount > 0);
+/**
+ * What a character is paid on finishing: `pay` as { id, amount }, the id null for the app's single money,
+ * and `rolls` for the log: a roll left unmade, which only the GM's FINISH can do, is made now.
+ */
+const moneyOnFinish = (definition, sheet, rng) => {
+  if (!stepsAsked(definition).includes('money')) return { pay: [], rolls: [] };
+  const rolls = [];
+  const pay = moneyOf(definition).map((e) => {
+    let amount = e.how === 'number' ? e.amount : moneyHeld(sheet)[e.id];
+    if (e.how === 'roll' && amount === undefined) {
+      const done = rollMoney(e.each, e.currency, e.name, rng);
+      if (done) { amount = done.amount; rolls.push(done.rolled); }
+    }
+    return { id: e.id === MAIN_MONEY ? null : e.id, amount };
+  }).filter((p) => p.amount > 0);
+  return { pay, rolls };
 };
 
 /** What an option's money rolled so far, by option: kept while they pick and take back. */
@@ -492,7 +510,7 @@ const rollGift = (definition, sheet, action, rng) => {
   if (!held) return { ok: false, error: 'This character doesn\'t hold that' };
   const gift = giftMoneyOf(definition, held.option).find((g) => g.currency.id === action.id);
   if (!gift || gift.how !== 'roll') return { ok: false, error: 'That isn\'t rolled' };
-  if (giftRolled(sheet, held.option, gift.currency) !== undefined) return { ok: false, error: 'Rolled, and kept: rolling again is the GM\'s' };
+  if (giftRolled(sheet, held.option, gift.currency) !== undefined) return { ok: false, error: ROLLED_KEPT };
   const done = rollMoney(gift.each, gift.currency, giftLabel(held.option, gift.currency), rng);
   if (!done) return { ok: false, error: 'This game\'s roll doesn\'t read' };
   const gifts = giftsRolled(sheet);
@@ -545,7 +563,7 @@ const rollStats = (definition, sheet, action, rng) => {
   if (!stepsAsked(definition).includes(action.step)) return { ok: false, error: 'Not one of this game\'s steps' };
   const way = wayOf(definition, action.step);
   if (way.way !== 'roll') return { ok: false, error: 'These stats aren\'t rolled' };
-  if (rolledOn(sheet, action.step)) return { ok: false, error: 'Rolled, and kept: rolling again is the GM\'s' };
+  if (rolledOn(sheet, action.step)) return { ok: false, error: ROLLED_KEPT };
   const parsed = parseStatRoll(way.each);
   if (!parsed) return { ok: false, error: 'This game\'s roll doesn\'t read' };
   const stats = statsOfStep(definition, action.step);
@@ -572,6 +590,33 @@ const rollStats = (definition, sheet, action, rng) => {
 
 /** The dice-log line for a step's ROLL: "Wren rolled THE STATS (4d6 drop lowest): Might 14, Wits 9". */
 const statRollLine = (who, rolled) => `${who} rolled ${rolled.label} (${rolled.each}): ${rolled.totals.map((n, i) => (rolled.named ? `${rolled.named[i]} ${n}` : n)).join(', ')}`;
+
+/**
+ * The GM's CLEAR THE ROLL (7c5): a kept roll off, so it can be rolled again. { step } a stats step's, the
+ * numbers it put on its stats going with it, or a good one could be kept through another try; { money } a
+ * currency's on the MONEY step; { option, id } an option's money.
+ */
+const clearRoll = (definition, sheet, action) => {
+  const place = placeOf(sheet);
+  const without = (from, key) => { const { [key]: gone, ...rest } = from; return rest; };
+  const nothing = { ok: false, error: 'Nothing rolled there to clear' };
+  if (typeof action.step === 'string') {
+    if (!rolledOn(sheet, action.step)) return nothing;
+    const next = { ...sheet, [CREATING_KEY]: { ...place, rolled: without(place.rolled, action.step) } };
+    for (const s of statsOfStep(definition, action.step)) delete next[s.id];
+    return { ok: true, data: next };
+  }
+  if (typeof action.money === 'string') {
+    const entry = moneyOf(definition).find((e) => e.id === action.money);
+    if (!entry || entry.how !== 'roll' || moneyHeld(sheet)[entry.id] === undefined) return nothing;
+    return { ok: true, data: { ...sheet, [CREATING_KEY]: { ...place, money: without(moneyHeld(sheet), entry.id) } } };
+  }
+  const kept = giftsRolled(sheet)[action.option];
+  if (!isPlainObject(kept) || kept[action.id] === undefined) return nothing;
+  const left = without(kept, action.id);
+  const gifts = Object.keys(left).length ? { ...giftsRolled(sheet), [action.option]: left } : without(giftsRolled(sheet), action.option);
+  return { ok: true, data: { ...sheet, [CREATING_KEY]: { ...place, gifts } } };
+};
 
 /** The sheet's name field, and those that go with it on WHO THEY ARE, without any kept for the GM. */
 const whoFieldIds = (definition) => {
@@ -607,7 +652,7 @@ const skipFlow = (sheet) => {
  * One step of a character's way through the flow: { kind: 'open' }, { kind: 'at', step },
  * { kind: 'place', step, stat, value }, { kind: 'roll', step }, { kind: 'buy', step, stat, value }, { kind: 'kit', kit },
  * { kind: 'moneyRoll', id }, { kind: 'moneyTyped', id, amount }, { kind: 'giftRoll', option, id } or { kind: 'finish' }.
- * The GM alone has { kind: 'skip' } and { kind: 'startOver' }, the second saying `takeItems` and `takeMoney`.
+ * The GM alone has { kind: 'skip' }, { kind: 'startOver' }, saying `takeItems` and `takeMoney`, and { kind: 'clearRoll' }.
  * Gives back { ok: true, data } (no `data` when there is nothing to change, `rolled` for the log after a roll,
  * and on finishing `items` to give out, `pay` to pay in and `rolls` for the log, those being the caller's to do), or
  * { ok: false, error } in words. `rng` rolls the dice, 0 to 1 (the secure source unless one is handed in).
@@ -624,35 +669,41 @@ const creationAction = (definition, data, action, { rng = cryptoRng, gm = false 
     const place = placeOf(sheet);
     return place && place.restarted !== true ? { ok: true } : { ok: true, data: { ...sheet, [CREATING_KEY]: {} } };
   }
-  if (!['at', 'finish', 'place', 'roll', 'buy', 'kit', 'moneyRoll', 'moneyTyped', 'giftRoll'].includes(kind)) return { ok: false, error: 'Nothing to do' };
+  if (!['at', 'finish', 'place', 'roll', 'buy', 'kit', 'moneyRoll', 'moneyTyped', 'giftRoll', 'clearRoll'].includes(kind)) return { ok: false, error: 'Nothing to do' };
   if (!creatingNow(definition, sheet)) return { ok: false, error: 'This character isn\'t being made' };
+  if (kind === 'clearRoll') return gm ? clearRoll(definition, sheet, action) : { ok: false, error: 'That is the GM\'s to do' };
   if (kind === 'place') return placeNumber(definition, sheet, action);
   if (kind === 'roll') return rollStats(definition, sheet, action, rng);
   if (kind === 'buy') return buyNumber(definition, sheet, action);
-  if (kind === 'kit') return pickKit(definition, sheet, action);
+  if (kind === 'kit') return pickKit(definition, sheet, action, gm);
   if (kind === 'moneyRoll' || kind === 'moneyTyped') return setMoney(definition, sheet, action, rng);
   if (kind === 'giftRoll') return rollGift(definition, sheet, action, rng);
   if (kind === 'finish') {
-    if (stepsAsked(definition).some((step) => STATS_STEP.test(step) && !wayDone(definition, sheet, step))) return { ok: false, error: 'Every stat needs its number first' };
     const statSteps = stepsAsked(definition).filter((step) => STATS_STEP.test(step));
-    const over = statSteps.some((step) => {
-      const way = wayOf(definition, step);
-      return way.way === 'buy' && spentOn(way, statsOfStep(definition, step), sheet) > way.points;
-    });
-    if (over) return { ok: false, error: 'More points spent than there are' };
-    const kitWrong = kitProblem(definition, sheet);
-    if (kitWrong) return { ok: false, error: kitWrong };
-    const moneyWrong = moneyProblem(definition, sheet);
-    if (moneyWrong) return { ok: false, error: moneyWrong };
+    if (!gm) {
+      if (statSteps.some((step) => !wayDone(definition, sheet, step))) return { ok: false, error: 'Every stat needs its number first' };
+      const over = statSteps.some((step) => {
+        const way = wayOf(definition, step);
+        return way.way === 'buy' && spentOn(way, statsOfStep(definition, step), sheet) > way.points;
+      });
+      if (over) return { ok: false, error: 'More points spent than there are' };
+      const kitWrong = kitProblem(definition, sheet);
+      if (kitWrong) return { ok: false, error: kitWrong };
+      const moneyWrong = moneyProblem(definition, sheet);
+      if (moneyWrong) return { ok: false, error: moneyWrong };
+    }
     const filled = statSteps.reduce((data, step) => filledIn(definition, data, step), sheet);
+    const money = moneyOnFinish(definition, sheet, rng);
     const gifts = giftsOnFinish(definition, sheet, rng);
     const items = [...kitItemsOf(definition, sheet), ...gifts.items];
-    const pay = paidTogether([...moneyToPay(definition, sheet), ...gifts.pay]);
-    return { ok: true, data: { ...filled, [CREATING_KEY]: { done: true, given: { items, pay } } }, items, pay, rolls: gifts.rolls };
+    const pay = paidTogether([...money.pay, ...gifts.pay]);
+    // What the GM typed stands, even outside a point buy's range; filling in only finds what was left empty.
+    const stats = gm ? { ...filled, ...sheet } : filled;
+    return { ok: true, data: { ...stats, [CREATING_KEY]: { done: true, given: { items, pay } } }, items, pay, rolls: [...money.rolls, ...gifts.rolls] };
   }
   if (!stepsAsked(definition).includes(action.step)) return { ok: false, error: 'Not one of this game\'s steps' };
   // A point buy's stats start at their lowest as the player arrives, so what they read says so.
-  const arrived = STATS_STEP.test(action.step) ? filledIn(definition, sheet, action.step) : sheet;
+  const arrived = !gm && STATS_STEP.test(action.step) ? filledIn(definition, sheet, action.step) : sheet;
   return { ok: true, data: { ...arrived, [CREATING_KEY]: { ...placeOf(sheet), at: action.step } } };
 };
 

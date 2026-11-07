@@ -10,10 +10,12 @@ import { ChoicesSection } from './ChoicesSection';
 import type { Socket } from 'socket.io-client';
 import { ImportSheetDialog } from './ImportSheetDialog';
 import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
+import type { CharacterSheet, SheetFieldValue, SheetTemplate } from '../sheets';
+import type { ChoicesAction } from '../sheets/choicesShown';
 import { useChoicesRefused } from '../hooks/useChoicesRefused';
 import { canImport } from '../sheets/importable';
 import {
-  flowDone, flowStepName, flowSteps, isStatsStep, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields,
+  flowDone, flowStepName, flowSteps, gmStatsWords, isStatsStep, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields,
 } from '../sheets/newCharacterFlow';
 import { themeRoot } from '../utils/themeRoot';
 
@@ -28,6 +30,9 @@ import { themeRoot } from '../utils/themeRoot';
 // uploaded on WHO THEY ARE, the sheet's own frame; the window has none above its folders, being about
 // the making of a character (the user, 2026-11-04). What it says of the open folder is inside the panel,
 // so the panel starts level with the folders and each one's lead-in meets it.
+//
+// The GM's FILL IT IN FOR THEM (7c5, FillInForThemWindow) draws the same flow for a player, on the player's
+// sheet, with every limit off: no START, every folder open, NEXT and FINISH never held, stats typed in.
 
 interface Props {
   pos: { x: number; y: number };
@@ -42,6 +47,28 @@ interface Props {
   onDone: () => void;
   /** Changes when a roll has opened the tray: this stays in front, as the next step is here. */
   raiseOn?: number;
+}
+
+/** What the flow is drawn for: a player's own sheet, or the GM filling in one (7c5). */
+export interface FlowWindowProps {
+  pos: { x: number; y: number };
+  setPos: (pos: { x: number; y: number }) => void;
+  sheet: CharacterSheet | null;
+  template: SheetTemplate | null | undefined;
+  onField: (id: string, value: SheetFieldValue) => void;
+  /** A step of the flow, for the server (backend creation.js). */
+  act: (action: Record<string, unknown>) => void;
+  /** A pick, for the server. */
+  choose: (action: ChoicesAction) => void;
+  refused: string | null;
+  upload?: (file: File) => Promise<unknown> | void;
+  onLeave: () => void;
+  onDone: () => void;
+  raiseOn?: number;
+  /** The player being filled in for. Unsaid: a player at their own. */
+  forPlayer?: string;
+  /** What UPLOAD A SHEET's import does. */
+  onImport?: (fields: Record<string, SheetFieldValue>, opts?: { replace?: boolean; cyberware?: unknown }) => void;
 }
 
 /** Before the steps, while there is a choice of how to start. */
@@ -70,6 +97,18 @@ const head: React.CSSProperties = { fontSize: 10, letterSpacing: 1, opacity: 0.8
 export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, onLeave, onDone, raiseOn }: Props) {
   const { sheet, template, handleFieldChange } = usePlayerSheet(socket, userName);
   const refused = useChoicesRefused(socket);
+  return (
+    <FlowWindow pos={pos} setPos={setPos} sheet={sheet} template={template} onField={handleFieldChange} refused={refused} raiseOn={raiseOn}
+      act={(action) => socket?.emit('creationAction', action)}
+      choose={(action) => socket?.emit('choicesAction', action)}
+      upload={authToken ? (file) => uploadSheetPortrait(authToken, file) : undefined}
+      onImport={(fields, opts) => { socket?.emit('importSheetFields', { fields, replace: opts?.replace, cyberware: opts?.cyberware }); }}
+      onLeave={onLeave} onDone={onDone} />
+  );
+}
+
+export function FlowWindow({ pos, setPos, sheet, template, onField, act, choose, refused, upload, onLeave, onDone, raiseOn, forPlayer, onImport }: FlowWindowProps) {
+  const gm = !!forPlayer;
   // The folder shown, ahead of the server's answer so NEXT doesn't wait on it. Null: as the sheet says.
   const [moved, setMoved] = useState<string | null>(null);
   // The way in shown, on START.
@@ -81,7 +120,7 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
   const done = flowDone(data);
   useEffect(() => { if (done) onDone(); }, [done]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const title = `NEW_CHARACTER.EXE · ${(template?.name ?? '').toUpperCase()}`;
+  const title = gm ? `NEW_CHARACTER.EXE · ${forPlayer.toUpperCase()} [GM]` : `NEW_CHARACTER.EXE · ${(template?.name ?? '').toUpperCase()}`;
 
   if (!sheet || !template?.creation) {
     return (
@@ -94,17 +133,17 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
 
   const steps = flowSteps(template);
   // Without SHEET IMPORT there is only one way to start, so nothing to ask.
-  const hasStart = canImport(sheet.system);
+  const hasStart = !gm && canImport(sheet.system);
   const open = moved ?? savedStep(template, data) ?? (hasStart ? START : steps[0]);
   const starting = open === START;
   const index = steps.indexOf(open);
   const answered = (id: string) => stepAnswered(template, id, data);
   /** A step opens once every step before it is answered. */
-  const reachable = (i: number) => steps.slice(0, i).every(answered);
+  const reachable = (i: number) => gm || steps.slice(0, i).every(answered);
 
   const goTo = (id: string) => {
     setMoved(id);
-    if (id !== START) socket?.emit('creationAction', { kind: 'at', step: id });
+    if (id !== START) act({ kind: 'at', step: id });
   };
 
   const folders: TerminalFolder[] = starting ? WAYS : steps.map((id, i) => {
@@ -115,7 +154,7 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
 
   const last = index === steps.length - 1;
   const everyAnswered = steps.every(answered);
-  const canGoOn = index >= 0 && (last ? everyAnswered : answered(open));
+  const canGoOn = index >= 0 && (gm || (last ? everyAnswered : answered(open)));
   const actions: TerminalAction[] = [
     ...(index >= 0 ? [{
       key: 'back', label: 'BACK', disabled: index === 0 && !hasStart,
@@ -127,7 +166,7 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
       title: canGoOn ? undefined : 'Finish this step first',
       onClick: () => {
         if (!last) return goTo(steps[index + 1]);
-        socket?.emit('creationAction', { kind: 'finish' });
+        act({ kind: 'finish' });
         return onDone();
       },
     }] : []),
@@ -168,14 +207,14 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
           <p style={why}>Who they are. The rest can wait; a name can&apos;t.</p>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <BracketPortrait initial={(name.trim() || '?').charAt(0).toUpperCase()} portraitUrl={sheet.portrait_url} size={120}
-              onUpload={authToken ? (file) => uploadSheetPortrait(authToken, file) : undefined} />
+              onUpload={upload} />
             <div style={{ ...page, flex: '1 1 160px', minWidth: 0 }}>
               {whoFields(template).map((f) => (
                 <label key={f.id} style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                   <span style={small}>{f.label.toUpperCase()}</span>
                   {f.type === 'textarea'
-                    ? <textarea aria-label={f.label} rows={3} style={{ ...box, resize: 'vertical' }} value={String(data?.[f.id] ?? '')} onChange={(e) => handleFieldChange(f.id, e.target.value)} />
-                    : <input aria-label={f.label} style={box} value={String(data?.[f.id] ?? '')} onChange={(e) => handleFieldChange(f.id, e.target.value)} />}
+                    ? <textarea aria-label={f.label} rows={3} style={{ ...box, resize: 'vertical' }} value={String(data?.[f.id] ?? '')} onChange={(e) => onField(f.id, e.target.value)} />
+                    : <input aria-label={f.label} style={box} value={String(data?.[f.id] ?? '')} onChange={(e) => onField(f.id, e.target.value)} />}
                 </label>
               ))}
             </div>
@@ -187,8 +226,9 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
       return (
         <div style={page}>
           <MoneyStep money={template.creation?.money ?? []} data={data} system={sheet.system}
-            onRoll={(id) => socket?.emit('creationAction', { kind: 'moneyRoll', id })}
-            onType={(id, amount) => socket?.emit('creationAction', { kind: 'moneyTyped', id, amount })} />
+            onRoll={(id) => act({ kind: 'moneyRoll', id })}
+            onType={(id, amount) => act({ kind: 'moneyTyped', id, amount })}
+            onClear={gm ? (id) => act({ kind: 'clearRoll', money: id }) : undefined} />
           {refused && <p role="alert" style={{ ...why, color: 'var(--warning)', opacity: 1 }}>{refused}</p>}
         </div>
       );
@@ -196,17 +236,19 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
     if (open === 'kits') {
       return (
         <div style={page}>
-          <KitsStep template={template} data={data} onPick={(kit) => socket?.emit('creationAction', { kind: 'kit', kit })} />
+          <KitsStep template={template} data={data} gm={gm} onPick={(kit) => act({ kind: 'kit', kit })} />
           {refused && <p role="alert" style={{ ...why, color: 'var(--warning)', opacity: 1 }}>{refused}</p>}
         </div>
       );
     }
-    const setBy = isStatsStep(open) ? stepWay(template, open) : null;
+    const statWay = isStatsStep(open) ? stepWay(template, open) : null;
+    // Filling it in, the GM types stats whatever the way: what the way would give is said above the boxes.
+    const setBy = gm ? null : statWay;
     if (setBy?.way === 'buy') {
       return (
         <div style={page}>
           <BuyNumbers way={setBy} groups={statsToSet(template, open)} data={data} named={open === 'stats'}
-            onBuy={(stat, value) => socket?.emit('creationAction', { kind: 'buy', step: open, stat, value })} />
+            onBuy={(stat, value) => act({ kind: 'buy', step: open, stat, value })} />
           {refused && <p role="alert" style={{ ...why, color: 'var(--warning)', opacity: 1 }}>{refused}</p>}
         </div>
       );
@@ -216,11 +258,11 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
       return (
         <div style={page}>
           <p style={why}>{pool
-            ? 'Rolled, and kept. Rolling again is the GM\'s.'
+            ? 'Rolled, and kept. Your GM can clear it for another go.'
             : setBy.placed === 'arrange' ? `${setBy.each}, once for each stat, then placed as you like.` : `${setBy.each} for each stat, in order. What comes up is yours.`}</p>
-          {!pool && <button type="button" style={confirm} onClick={() => socket?.emit('creationAction', { kind: 'roll', step: open })}>ROLL THEM</button>}
+          {!pool && <button type="button" style={confirm} onClick={() => act({ kind: 'roll', step: open })}>ROLL THEM</button>}
           <PlaceNumbers groups={statsToSet(template, open)} numbers={pool ?? []} data={data} named={open === 'stats'} fixed={!pool || setBy.placed !== 'arrange'}
-            onPlace={(stat, value) => socket?.emit('creationAction', { kind: 'place', step: open, stat, value })} />
+            onPlace={(stat, value) => act({ kind: 'place', step: open, stat, value })} />
           {refused && <p role="alert" style={{ ...why, color: 'var(--warning)', opacity: 1 }}>{refused}</p>}
         </div>
       );
@@ -229,15 +271,18 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
       return (
         <div style={page}>
           <PlaceNumbers groups={statsToSet(template, open)} numbers={setBy.numbers} data={data} named={open === 'stats'}
-            onPlace={(stat, value) => socket?.emit('creationAction', { kind: 'place', step: open, stat, value })} />
+            onPlace={(stat, value) => act({ kind: 'place', step: open, stat, value })} />
           {refused && <p role="alert" style={{ ...why, color: 'var(--warning)', opacity: 1 }}>{refused}</p>}
         </div>
       );
     }
     if (isStatsStep(open)) {
+      const pool = rolledPool(data, open);
       return (
         <div style={page}>
-          <p style={why}>Type in what you have.</p>
+          <p style={why}>{gm && statWay ? gmStatsWords(statWay, pool) : 'Type in what you have.'}</p>
+          {statWay?.way === 'roll' && !pool && <button type="button" style={confirm} onClick={() => act({ kind: 'roll', step: open })}>ROLL THEM</button>}
+          {statWay?.way === 'roll' && pool && <button type="button" style={confirm} onClick={() => act({ kind: 'clearRoll', step: open })}>CLEAR THE ROLL</button>}
           {statsToSet(template, open).map((g) => (
             <section key={g.id} aria-label={g.label} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               {open === 'stats' && <span style={small}>{g.label.toUpperCase()}</span>}
@@ -248,7 +293,7 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
                     <label key={s.id} style={{ border: '1px solid var(--green)', padding: '4px', display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center', textAlign: 'center' }}>
                       <span style={small}>{s.label}</span>
                       <input type="number" aria-label={s.label} min={s.min} max={s.max} style={{ ...box, textAlign: 'center', colorScheme: 'dark' }} value={String(data?.[s.id] ?? '')}
-                        onChange={(e) => handleFieldChange(s.id, e.target.value === '' ? '' : Number(e.target.value))} />
+                        onChange={(e) => onField(s.id, e.target.value === '' ? '' : Number(e.target.value))} />
                       {problem && <span style={{ ...small, color: 'var(--warning)', opacity: 1 }}>{problem}</span>}
                     </label>
                   );
@@ -262,10 +307,14 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
     if (listId) {
       return (
         <div style={page}>
-          <p style={why}>Pick from these. One you don&apos;t meet is off, saying what it needs.</p>
-          <ChoicesSection lists={template.choices ?? []} data={data ?? {}} readOnly={false} only={listId} takeBack
-            onChoices={(action) => socket?.emit('choicesAction', action)} refused={refused}
-            gifts={{ system: sheet.system, onRoll: (option, id) => socket?.emit('creationAction', { kind: 'giftRoll', option, id }) }} />
+          <p style={why}>{gm ? 'Pick from these. One not met can be added anyway.' : <>Pick from these. One you don&apos;t meet is off, saying what it needs.</>}</p>
+          <ChoicesSection lists={template.choices ?? []} data={data ?? {}} readOnly={false} only={listId} takeBack gm={gm}
+            onChoices={choose} refused={refused}
+            gifts={{
+              system: sheet.system,
+              onRoll: (option, id) => act({ kind: 'giftRoll', option, id }),
+              onClear: gm ? (option, id) => act({ kind: 'clearRoll', option, id }) : undefined,
+            }} />
         </div>
       );
     }
@@ -288,6 +337,7 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
       >
         <div style={page}>
           <div style={head}>{starting ? 'A NEW CHARACTER. HOW DO YOU WANT TO START?' : `${flowStepName(template, open)} · STEP ${index + 1} OF ${steps.length}`}</div>
+          {gm && <div style={{ ...head, color: 'var(--warning)', opacity: 1 }}>FILLING IT IN FOR THEM. EVERY LIMIT IS OFF.</div>}
           {body()}
         </div>
       </TerminalWindow>
@@ -298,7 +348,7 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
           pos={importPos}
           setPos={setImportPos}
           onClose={() => setIsImportOpen(false)}
-          onApply={(fields, opts) => { socket?.emit('importSheetFields', { fields, replace: opts?.replace, cyberware: opts?.cyberware }); }}
+          onApply={(fields, opts) => onImport?.(fields, opts)}
         />,
         themeRoot(),
       )}

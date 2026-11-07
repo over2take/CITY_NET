@@ -11,6 +11,8 @@ interface Props {
   data: Record<string, unknown> | null | undefined;
   /** A kit picked, or null to put it back. */
   onPick: (kit: string | null) => void;
+  /** Filling it in for a player (7c5): one not met can be picked anyway. */
+  gm?: boolean;
 }
 
 const why: React.CSSProperties = { margin: 0, fontSize: 12, lineHeight: 1.45, opacity: 0.85 };
@@ -20,7 +22,7 @@ const kitBtn = (on: boolean): React.CSSProperties => ({
   border: '1px solid var(--green)', background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)',
 });
 
-export function KitsStep({ template, data, onPick }: Props) {
+export function KitsStep({ template, data, onPick, gm = false }: Props) {
   const { everyone, offered, picked } = kitsShownOn(template, data);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -30,13 +32,14 @@ export function KitsStep({ template, data, onPick }: Props) {
         <div role="group" aria-label="Kits to pick from" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, max-content) minmax(0, 1fr)', gap: '6px 8px', alignItems: 'center' }}>
           {offered.map(({ kit, unmet }) => {
             const on = picked?.kit.id === kit.id;
+            const off = !!unmet && !on && !gm;
             return (
               <React.Fragment key={kit.id}>
-                <button type="button" className={unmet && !on ? 'choice-off' : undefined} aria-pressed={on} disabled={!!unmet && !on} style={{ ...kitBtn(on), gridColumn: 1, opacity: unmet && !on ? 0.6 : 1 }}
+                <button type="button" className={off ? 'choice-off' : undefined} aria-pressed={on} disabled={off} style={{ ...kitBtn(on), gridColumn: 1, opacity: off ? 0.6 : 1 }}
                   onClick={() => onPick(on ? null : kit.id)}>{kit.name.toUpperCase()}</button>
                 <span style={{ gridColumn: 2, display: 'flex', flexDirection: 'column', gap: 1, textAlign: 'left' }}>
                   <span style={small}>{kitItemsText(kit.items)}</span>
-                  {unmet && <span style={{ ...small, color: 'var(--warning)', opacity: 1 }}>NEEDS {unmet}</span>}
+                  {unmet && <span style={{ ...small, color: 'var(--warning)', opacity: 1 }}>NEEDS {unmet}{gm ? ' · ADD ANYWAY' : ''}</span>}
                 </span>
               </React.Fragment>
             );
@@ -44,7 +47,7 @@ export function KitsStep({ template, data, onPick }: Props) {
         </div>
       )}
       {!offered.length && <p style={why}>Nothing to pick here.</p>}
-      <p style={small}>IT ALL GOES IN YOUR INVENTORY WHEN YOU FINISH.</p>
+      <p style={small}>{gm ? 'IT ALL GOES IN THEIR INVENTORY AT FINISH.' : 'IT ALL GOES IN YOUR INVENTORY WHEN YOU FINISH.'}</p>
     </div>
   );
 }

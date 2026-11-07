@@ -413,7 +413,7 @@ describe('through the socket', () => {
         expect([(await stored()).int, (await stored()).con]).toEqual([undefined, undefined]);
         kes.handlers.creationAction({ kind: 'roll', step: 'stats' });
         await until(() => kes.refused().length === 1, { label: 'the refusal' });
-        expect(kes.refused()).toEqual(['Rolled, and kept: rolling again is the GM\'s']);
+        expect(kes.refused()).toEqual(['Rolled, and kept: your GM can clear it for another go']);
         expect((await stored())._creating.rolled.stats).toEqual(first);
         expect(shared.filter((e) => e.event === 'diceRollBroadcast')).toHaveLength(1);
       });

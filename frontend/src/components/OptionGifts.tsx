@@ -18,8 +18,10 @@ export function GiftsOffered({ gives, system, column }: { gives: GiftsShown; sys
 }
 
 /** Under a picked one: what comes, with ROLL FOR IT for money to roll, and what that came to. */
-export function GiftsHeld({ option, gives, data, system, onRoll }: {
+export function GiftsHeld({ option, gives, data, system, onRoll, onClear }: {
   option: OptionShown; gives: GiftsShown; data: Record<string, unknown>; system: string | null | undefined; onRoll: (option: string, id: string) => void;
+  /** The GM's, filling it in for a player (7c5): a kept roll cleared, to roll again. */
+  onClear?: (option: string, id: string) => void;
 }) {
   return (
     <div role="group" aria-label={`What ${option.label} gives`} style={{ display: 'flex', flexDirection: 'column', gap: '3px', color: 'var(--cyan)' }}>
@@ -32,7 +34,8 @@ export function GiftsHeld({ option, gives, data, system, onRoll }: {
           <div key={m.id} style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
             <span style={small}>{m.name}: {amount === null ? m.each : moneyWords(system, m.id, amount)}</span>
             {amount === null && <button type="button" style={btn} aria-label={`Roll ${m.name} for ${option.label}`} title={`Rolls ${m.each}, once, written to the log`} onClick={() => onRoll(option.id, m.id)}>ROLL FOR IT</button>}
-            {rolled !== null && <span style={{ ...small, opacity: 0.7 }}>ROLLED, AND KEPT</span>}
+            {rolled !== null && !onClear && <span style={{ ...small, opacity: 0.7 }}>ROLLED, AND KEPT</span>}
+            {rolled !== null && onClear && <button type="button" style={btn} aria-label={`Clear the roll of ${m.name} for ${option.label}`} onClick={() => onClear(option.id, m.id)}>CLEAR THE ROLL</button>}
           </div>
         );
       })}

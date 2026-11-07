@@ -340,7 +340,7 @@ describe('rolled (7c3c)', () => {
 
   it('once rolled it stays rolled', () => {
     const once = roll(at).data;
-    expect(roll(once)).toEqual({ ok: false, error: 'Rolled, and kept: rolling again is the GM\'s' });
+    expect(roll(once)).toEqual({ ok: false, error: 'Rolled, and kept: your GM can clear it for another go' });
     expect(creationAction(def(), once, { kind: 'at', step: 'stats' }).data[CREATING_KEY].rolled).toEqual({ stats: [14, 8] });
   });
 
@@ -757,7 +757,7 @@ describe('starting money (7c4d)', () => {
     expect(done.data[CREATING_KEY].at).toBe('money');
     expect(done.rolled).toMatchObject({ label: 'GOLD', each: '3d6 * 10', sides: 6, rolls: [3, 4, 5], totals: [120], total: 120, named: null });
     expect(statRollLine('Wren', done.rolled)).toBe('Wren rolled GOLD (3d6 * 10): 120');
-    expect(roll(done.data, d, 'gold')).toEqual({ ok: false, error: 'Rolled, and kept: rolling again is the GM\'s' });
+    expect(roll(done.data, d, 'gold')).toEqual({ ok: false, error: 'Rolled, and kept: your GM can clear it for another go' });
     const both = roll(done.data, d, 'dollars').data;
     expect(both[CREATING_KEY].money).toEqual({ gold: 12000, dollars: 1200 });
     expect(roll(both, d, 'honor').data[CREATING_KEY].money.honor).toBe(12);
@@ -918,7 +918,7 @@ describe('what an option gives, at the table (7c4e)', () => {
     expect(done.data[CREATING_KEY].at).toBe('list:bgs');
     expect(done.rolled).toMatchObject({ label: 'NOBLE · GOLD', each: '3d6 * 10', sides: 6, rolls: [3, 4, 5], totals: [120], total: 120, named: null });
     expect(statRollLine('Wren', done.rolled)).toBe('Wren rolled NOBLE · GOLD (3d6 * 10): 120');
-    expect(roll(done.data)).toEqual({ ok: false, error: 'Rolled, and kept: rolling again is the GM\'s' });
+    expect(roll(done.data)).toEqual({ ok: false, error: 'Rolled, and kept: your GM can clear it for another go' });
   });
 
   it('a second roll sits beside the first, of the same option or another', () => {
@@ -955,7 +955,7 @@ describe('what an option gives, at the table (7c4e)', () => {
     expect(back.ok).toBe(true);
     expect(back.data[CREATING_KEY].gifts).toEqual({ noble: { gold: 12000 } });
     const returned = { ...swapped, [PICKS_KEY]: { bgs: [{ option: 'noble' }] } };
-    expect(roll(returned).error).toBe('Rolled, and kept: rolling again is the GM\'s');
+    expect(roll(returned).error).toBe('Rolled, and kept: your GM can clear it for another go');
     expect(finish(returned).pay).toContainEqual({ id: 'gold', amount: 12000 });
     // One let go of pays nothing, though its roll was kept.
     expect(finish(swapped).pay).toEqual([{ id: 'gold', amount: 250 }]);
@@ -1265,5 +1265,118 @@ describe('taking a pick back while making the character (7c2)', () => {
 
   it('the GM still may, on any list, at any time', () => {
     expect(pickAction(ROLLED, held(null), { kind: 'drop', list: 'omens', option: 'storm' }, { gm: true }).ok).toBe(true);
+  });
+});
+
+describe('filling it in for them, and clearing a roll (7c5)', () => {
+  const ON = {
+    format: 1, name: 'G',
+    stats: [{ id: 'a', label: 'A', stats: [{ id: 'grit', label: 'Grit' }, { id: 'wits', label: 'Wits' }] }],
+    choices: [{ id: 'jobs', one: 'Job', many: 'Jobs', options: [
+      { id: 'dock', label: 'Dock', gives: { money: { main: { how: 'roll', each: '1d6' }, }, items: [{ name: 'Hook', qty: 1 }] } },
+    ] }],
+    creation: {
+      on: true,
+      ways: { stats: { way: 'roll', each: '3d6', placed: 'order' } },
+      kits: [{ id: 'hard', name: 'HARD', who: 'needs', requires: '@grit >= 99', items: [{ name: 'Rope', qty: 1 }] }],
+      money: { main: { how: 'roll', each: '2d6' } },
+    },
+  };
+  const dice = (...faces) => { let i = 0; return () => (faces[i++ % faces.length] - 0.5) / 6; };
+  const asGm = (data, action, def = ON, rng = dice(3)) => creationAction(def, data, action, { gm: true, rng });
+  const at = (place = {}, more = {}) => ({ ...more, [CREATING_KEY]: { at: 'who', ...place } });
+
+  describe('FILL IT IN', () => {
+    it('FINISH asks nothing of what is filled in, where a player\'s would', () => {
+      expect(creationAction(ON, at(), { kind: 'finish' }).ok).toBe(false);
+      expect(asGm(at(), { kind: 'finish' }).ok).toBe(true);
+    });
+
+    it('nor of a point buy overspent, a kit left unpicked or one not met', () => {
+      const buy = { ...ON, creation: { on: true, ways: { stats: { way: 'buy', points: 1, lowest: 8, highest: 15 } } } };
+      expect(creationAction(buy, at({}, { grit: 15, wits: 15 }), { kind: 'finish' }).error).toBe('More points spent than there are');
+      expect(asGm(at({}, { grit: 15, wits: 15 }), { kind: 'finish' }, buy).ok).toBe(true);
+      const typed = { ...ON, creation: { on: true, kits: [{ id: 'k', name: 'K', who: 'pick', items: [{ name: 'Rope', qty: 1 }] }] } };
+      expect(creationAction(typed, at(), { kind: 'finish' }).error).toBe('Pick a kit first');
+      expect(asGm(at(), { kind: 'finish' }, typed).ok).toBe(true);
+    });
+
+    it('what the GM typed stands, even outside a point buy; only what was left empty is filled', () => {
+      const buy = { ...ON, creation: { on: true, ways: { stats: { way: 'buy', points: 20, lowest: 8, highest: 15 } } } };
+      const { data } = asGm(at({}, { grit: 99 }), { kind: 'finish' }, buy);
+      expect([data.grit, data.wits]).toEqual([99, 8]);
+      // A player's number the way can't hold doesn't stand.
+      expect(creationAction(buy, at({}, { grit: 99 }), { kind: 'finish' }).data.grit).toBe(8);
+    });
+
+    it('going to a step leaves what the GM typed, where a player arriving has it filled', () => {
+      const buy = { ...ON, creation: { on: true, ways: { stats: { way: 'buy', points: 20, lowest: 8, highest: 15 } } } };
+      expect(asGm(at({}, { grit: 99 }), { kind: 'at', step: 'stats' }, buy).data.grit).toBe(99);
+      expect(creationAction(buy, at({}, { grit: 99 }), { kind: 'at', step: 'stats' }).data.grit).toBe(8);
+    });
+
+    it('picks a kit not met, which a player can\'t', () => {
+      const data = at({ at: 'kits' });
+      expect(creationAction(ON, data, { kind: 'kit', kit: 'hard' }).error).toMatch(/^HARD needs/);
+      expect(asGm(data, { kind: 'kit', kit: 'hard' }).data[CREATING_KEY].kit).toBe('hard');
+    });
+
+    it('money left unrolled is rolled at FINISH and logged; what was rolled stays', () => {
+      const unrolled = asGm(at(), { kind: 'finish' }, ON, dice(2, 3));
+      expect(unrolled.pay).toEqual([{ id: null, amount: 5 }]);
+      expect(unrolled.rolls.map((r) => r.label)).toEqual(['MONEY']);
+      const rolled = asGm(at({ money: { main: 40 } }), { kind: 'finish' });
+      expect(rolled.pay).toEqual([{ id: null, amount: 40 }]);
+      expect(rolled.rolls).toEqual([]);
+    });
+
+    it('a kept roll stays kept for the GM too: clearing it is the way', () => {
+      const error = 'Rolled, and kept: your GM can clear it for another go';
+      expect(asGm(at({ rolled: { stats: [1, 2] } }), { kind: 'roll', step: 'stats' }).error).toBe(error);
+      expect(asGm(at({ money: { main: 4 } }), { kind: 'moneyRoll', id: 'main' }).error).toBe(error);
+    });
+  });
+
+  describe('CLEAR THE ROLL', () => {
+    const roll = at({ rolled: { stats: [11, 12], other: [1] } }, { grit: 11, wits: 12, name: 'Wren' });
+
+    it('is the GM\'s alone', () => {
+      expect(creationAction(ON, roll, { kind: 'clearRoll', step: 'stats' })).toEqual({ ok: false, error: 'That is the GM\'s to do' });
+    });
+
+    it('only while they are being made', () => {
+      expect(asGm({ [CREATING_KEY]: { done: true } }, { kind: 'clearRoll', step: 'stats' })).toEqual({ ok: false, error: 'This character isn\'t being made' });
+    });
+
+    it('a stats step: the roll and the numbers it put on, and so ROLL works again', () => {
+      const { data } = asGm(roll, { kind: 'clearRoll', step: 'stats' });
+      expect(data).toEqual({ name: 'Wren', [CREATING_KEY]: { at: 'who', rolled: { other: [1] } } });
+      expect(creationAction(ON, data, { kind: 'roll', step: 'stats' }, { rng: dice(4) }).ok).toBe(true);
+    });
+
+    it('a currency: that one only, and so its roll works again', () => {
+      const d = { ...ON, currencies: [{ id: 'gold', name: 'Gold' }, { id: 'honor', name: 'Honor' }], creation: { on: true, money: { gold: { how: 'roll', each: '1d6' }, honor: { how: 'roll', each: '1d6' } } } };
+      const { data } = asGm(at({ money: { gold: 3, honor: 4 } }), { kind: 'clearRoll', money: 'gold' }, d);
+      expect(data[CREATING_KEY].money).toEqual({ honor: 4 });
+      expect(creationAction(d, data, { kind: 'moneyRoll', id: 'gold' }, { rng: dice(2) }).ok).toBe(true);
+    });
+
+    it('not an amount a player typed', () => {
+      const d = { ...ON, creation: { on: true, money: { main: { how: 'typed' } } } };
+      expect(asGm(at({ money: { main: 3 } }), { kind: 'clearRoll', money: 'main' }, d)).toEqual({ ok: false, error: 'Nothing rolled there to clear' });
+    });
+
+    it('an option\'s money: that one only, and an emptied option goes', () => {
+      const two = at({ gifts: { dock: { main: 2, gold: 9 }, noble: { main: 5 } } });
+      expect(asGm(two, { kind: 'clearRoll', option: 'dock', id: 'main' }).data[CREATING_KEY].gifts).toEqual({ dock: { gold: 9 }, noble: { main: 5 } });
+      expect(asGm(two, { kind: 'clearRoll', option: 'noble', id: 'main' }).data[CREATING_KEY].gifts).toEqual({ dock: { main: 2, gold: 9 } });
+    });
+
+    it('says when there is nothing there', () => {
+      const none = { ok: false, error: 'Nothing rolled there to clear' };
+      for (const action of [{ step: 'stats' }, { money: 'main' }, { money: 'nope' }, { option: 'dock', id: 'main' }, { option: 'noble', id: 'gold' }, {}]) {
+        expect(asGm(at({ gifts: { noble: { main: 1 } } }), { kind: 'clearRoll', ...action }), JSON.stringify(action)).toEqual(none);
+      }
+    });
   });
 });
