@@ -91,10 +91,11 @@ npx playwright test --debug
 ## In CI
 
 `.github/workflows/ci.yml` runs these on every pull request with Playwright's own Chromium (`CI`
-is set there), split across four machines at once: **Browser Journeys (1/4)** to **(4/4)**, each with
-its own servers and database, the tests shared out one by one (`--shard=N/4 --fully-parallel`), each
-part still one test at a time. About 12 minutes in place of 27. A last job named **Browser Journeys**
-passes only when all four did, so the check keeps its name. On a developer's machine nothing changes:
+is set there), split across five machines at once: **Browser Journeys (1/5)** to **(5/5)**, each with
+its own servers and database, the tests shared out one by one (`--shard=N/5 --fully-parallel`), each
+part still one test at a time. The aim is 10 minutes or less on each part's journeys step; past that in
+two runs in a row, add a part. A last job named **Browser Journeys**
+passes only when all five did, so the check keeps its name. On a developer's machine nothing changes:
 one machine, files in order.
 
 A part that hangs fails after 25 minutes (Playwright's `globalTimeout`, CI only), with its report

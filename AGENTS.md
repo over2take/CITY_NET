@@ -64,7 +64,7 @@ for tests. The journeys start their own servers on ports 5055 and 5174.
 
 ## Browser journeys
 
-- **On CI they run in four parts at once**, split test by test, each part on a fresh database. So
+- **On CI they run in five parts at once**, split test by test, each part on a fresh database. So
   every test stands alone: never lean on what an earlier test made.
 - Give each test its own system and player names: tests in a part share a database, and a system's
   name is unique. `backend/__tests__/e2e_names.test.js` checks it.
