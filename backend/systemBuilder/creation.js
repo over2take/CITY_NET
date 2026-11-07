@@ -40,6 +40,7 @@
 //   _creating: { at, rolled: { stats: [14, 9, 12] } }   what a step's ROLL came to (7c3c), kept: once only
 //   _creating: { at, kit: 'traveler' }   the kit picked (7c4b), changed as they like: given out at FINISH
 //   _creating: { at, money: { gold: 1200 } }   what was rolled or typed for each currency (7c4d): paid at FINISH
+//   _creating: { at, gifts: { noble: { gold: 1200 } } }   what an option's money rolled (7c4e), kept with it through a swap
 //   _creating: { done: true, uploaded?: true }   finished, or came in as an upload
 //
 // Who is asked at all is the browser's to work out (sheets/newCharacterFlow.ts): a blank sheet with
@@ -47,6 +48,11 @@
 // after it: the sheet works as it always has. What the flow does change on the server, while it is under
 // way: a player may take a pick back (picking.js), and may not write a stat set some way other than
 // typing (lockedWhileCreating), or a number placed could simply be typed over. Finished, it is theirs.
+//
+// What the options they hold give (7c4e, an option's `gives`) comes at FINISH, from what counts then, nested
+// picks included, with the KITS and MONEY steps on or off: their items, and their money on top of the MONEY
+// step's. A roll is made once, on the option's own step, and stays with that option if they swap away and
+// back. One never rolled there, as with a list everyone has or a step switched off, is rolled at FINISH.
 //
 // A way is kept under the step it sets, so one way for all and each group's keep theirs through changing
 // between them. A fixed array's numbers are placed by `place`, on the stats themselves, so there is
@@ -56,7 +62,7 @@
 
 const { partOn } = require('./parts');
 const { currenciesOf, formatAmount, parseAmount } = require('./currencies');
-const { choicesOf, pickedOf, meets, needsText } = require('./choices');
+const { choicesOf, pickedOf, meets, needsText, heldOf, MAIN_MONEY, moneyCurrencies, giftItemsOf, giftMoneyOf } = require('./choices');
 const { fieldsOf } = require('./sheet');
 const { parse } = require('./expression');
 const { cryptoRng } = require('../utils/random');
@@ -68,8 +74,6 @@ const list = (v) => (Array.isArray(v) ? v : []);
 const LIMITS = { steps: 40, numbers: 40, rollDice: 20, rollSides: 100, rollAdd: 1000, buyRange: 100, buyPoints: 100000, moneyMost: 1000000000000, kits: 40, kitName: 60, kitItems: 40, itemName: 80, itemQty: 99 };
 const KEYS = new Set(['on', 'order', 'off', 'statsBy', 'ways', 'kits', 'money']);
 const MONEY_KEYS = { number: new Set(['how', 'amount']), roll: new Set(['how', 'each']), typed: new Set(['how']) };
-/** What a system with no currencies of its own calls the app's single money, in `money`. */
-const MAIN_MONEY = 'main';
 const KIT_KEYS = new Set(['id', 'name', 'items', 'who', 'requires']);
 const ITEM_KEYS = new Set(['name', 'qty']);
 const GIFT_KEYS = new Set(['items', 'money']);
@@ -255,8 +259,7 @@ const kitsOffered = (definition) => kitsOf(definition).filter((k) => k.who === '
 const moneyOf = (definition) => {
   const set = creationIn(definition).money;
   if (!isPlainObject(set) || !partOn(definition, 'bank')) return [];
-  const currencies = currenciesOf(definition);
-  return (currencies.length ? currencies : [{ id: MAIN_MONEY, name: 'Money' }])
+  return moneyCurrencies(definition)
     .filter((c) => isPlainObject(set[c.id]) && Object.keys(MONEY_KEYS).includes(set[c.id].how))
     .map((c) => ({ ...set[c.id], id: c.id, name: c.name, currency: c }));
 };
@@ -274,6 +277,21 @@ const parseMoneyRoll = (text) => {
   if (!roll) return null;
   const times = m[2] === undefined ? 1 : Number(m[2]);
   return times >= 1 && times <= LIMITS.rollAdd ? { roll, times } : null;
+};
+
+/**
+ * Money rolled, once: its amount in smallest units, never below nothing, and what the log says of it.
+ * Null when the roll doesn't read.
+ */
+const rollMoney = (each, currency, label, rng) => {
+  const parsed = parseMoneyRoll(each);
+  if (!parsed) return null;
+  const rolled = rollEach(parsed.roll, rng);
+  const total = Math.max(0, rolled.total * parsed.times);
+  return {
+    amount: total * wholeOf(currency),
+    rolled: { label: String(label).toUpperCase(), each, sides: parsed.roll.sides, rolls: rolled.dice, totals: [total], total, named: null },
+  };
 };
 
 /** The steps a player is walked through, in order: those on, with something to ask. */
@@ -420,15 +438,9 @@ const setMoney = (definition, sheet, action, rng) => {
   if (action.kind === 'moneyRoll') {
     if (entry.how !== 'roll') return { ok: false, error: `${entry.name} isn't rolled` };
     if (moneyHeld(sheet)[entry.id] !== undefined) return { ok: false, error: 'Rolled, and kept: rolling again is the GM\'s' };
-    const parsed = parseMoneyRoll(entry.each);
-    if (!parsed) return { ok: false, error: 'This game\'s roll doesn\'t read' };
-    const rolled = rollEach(parsed.roll, rng);
-    const total = Math.max(0, rolled.total * parsed.times);
-    return {
-      ok: true,
-      data: keep({ ...moneyHeld(sheet), [entry.id]: total * wholeOf(entry.currency) }),
-      rolled: { label: String(entry.name).toUpperCase(), each: entry.each, sides: parsed.roll.sides, rolls: rolled.dice, totals: [total], total, named: null },
-    };
+    const done = rollMoney(entry.each, entry.currency, entry.name, rng);
+    if (!done) return { ok: false, error: 'This game\'s roll doesn\'t read' };
+    return { ok: true, data: keep({ ...moneyHeld(sheet), [entry.id]: done.amount }), rolled: done.rolled };
   }
   if (entry.how !== 'typed') return { ok: false, error: `${entry.name} isn't typed in` };
   if (action.amount === null) {
@@ -453,6 +465,66 @@ const moneyToPay = (definition, sheet) => {
   return moneyOf(definition)
     .map((e) => ({ id: e.id === MAIN_MONEY ? null : e.id, amount: e.how === 'number' ? e.amount : moneyHeld(sheet)[e.id] }))
     .filter((p) => p.amount > 0);
+};
+
+/** What an option's money rolled so far, by option: kept while they pick and take back. */
+const giftsRolled = (sheet) => {
+  const place = placeOf(sheet);
+  return place && isPlainObject(place.gifts) ? place.gifts : {};
+};
+
+/** What this option's roll in this currency came to, or undefined. */
+const giftRolled = (sheet, option, currency) => {
+  const rolled = giftsRolled(sheet)[option.id];
+  const amount = isPlainObject(rolled) ? rolled[currency.id] : undefined;
+  return Number.isInteger(amount) ? amount : undefined;
+};
+
+/** How an option's money is named in the log: "NOBLE · GOLD". */
+const giftLabel = (option, currency) => `${option.label || option.id} · ${currency.name}`;
+
+/** An option's money rolled (7c4e), for one they hold now: once, and kept with that option. */
+const rollGift = (definition, sheet, action, rng) => {
+  const held = heldOf(definition, sheet).find((p) => p.active && p.option.id === action.option);
+  if (!held) return { ok: false, error: 'This character doesn\'t hold that' };
+  const gift = giftMoneyOf(definition, held.option).find((g) => g.currency.id === action.id);
+  if (!gift || gift.how !== 'roll') return { ok: false, error: 'That isn\'t rolled' };
+  if (giftRolled(sheet, held.option, gift.currency) !== undefined) return { ok: false, error: 'Rolled, and kept: rolling again is the GM\'s' };
+  const done = rollMoney(gift.each, gift.currency, giftLabel(held.option, gift.currency), rng);
+  if (!done) return { ok: false, error: 'This game\'s roll doesn\'t read' };
+  const gifts = giftsRolled(sheet);
+  const next = { ...gifts, [held.option.id]: { ...gifts[held.option.id], [gift.currency.id]: done.amount } };
+  return { ok: true, data: { ...sheet, [CREATING_KEY]: { ...placeOf(sheet), gifts: next } }, rolled: done.rolled };
+};
+
+/**
+ * What the options a character holds give them on finishing: the items, what to pay, and any roll that
+ * had nowhere to be made before now, for the log. Each option once, as a list holds it only once.
+ */
+const giftsOnFinish = (definition, sheet, rng) => {
+  const found = { items: [], pay: [], rolls: [] };
+  for (const { option } of heldOf(definition, sheet).filter((p) => p.active)) {
+    found.items.push(...giftItemsOf(option));
+    for (const gift of giftMoneyOf(definition, option)) {
+      const { currency } = gift;
+      let amount = gift.how === 'number' ? gift.amount : giftRolled(sheet, option, currency);
+      if (amount === undefined) {
+        const done = rollMoney(gift.each, currency, giftLabel(option, currency), rng);
+        if (!done) continue;
+        amount = done.amount;
+        found.rolls.push(done.rolled);
+      }
+      found.pay.push({ id: currency.id === MAIN_MONEY ? null : currency.id, amount });
+    }
+  }
+  return found;
+};
+
+/** Amounts in the same currency added together, with nothing of 0. */
+const paidTogether = (pay) => {
+  const total = new Map();
+  for (const { id, amount } of pay) total.set(id, (total.get(id) || 0) + amount);
+  return [...total].map(([id, amount]) => ({ id, amount })).filter((p) => p.amount > 0);
 };
 
 /** What a stats step is called, in the log. */
@@ -501,9 +573,9 @@ const statRollLine = (who, rolled) => `${who} rolled ${rolled.label} (${rolled.e
 /**
  * One step of a character's way through the flow: { kind: 'open' }, { kind: 'at', step },
  * { kind: 'place', step, stat, value }, { kind: 'roll', step }, { kind: 'buy', step, stat, value }, { kind: 'kit', kit },
- * { kind: 'moneyRoll', id }, { kind: 'moneyTyped', id, amount } or { kind: 'finish' }. Gives back { ok: true,
- * data } (no `data` when there is nothing to change, `rolled` for the log after a roll, and on finishing
- * `items` to give out and `pay` to pay in, those being the caller's to do), or
+ * { kind: 'moneyRoll', id }, { kind: 'moneyTyped', id, amount }, { kind: 'giftRoll', option, id } or { kind: 'finish' }.
+ * Gives back { ok: true, data } (no `data` when there is nothing to change, `rolled` for the log after a roll,
+ * and on finishing `items` to give out, `pay` to pay in and `rolls` for the log, those being the caller's to do), or
  * { ok: false, error } in words. `rng` rolls the dice, 0 to 1 (the secure source unless one is handed in).
  */
 const creationAction = (definition, data, action, { rng = cryptoRng } = {}) => {
@@ -511,13 +583,14 @@ const creationAction = (definition, data, action, { rng = cryptoRng } = {}) => {
   const kind = isPlainObject(action) ? action.kind : null;
   if (!creationOf(definition).on) return { ok: false, error: 'This game has no guided new character' };
   if (kind === 'open') return placeOf(sheet) ? { ok: true } : { ok: true, data: { ...sheet, [CREATING_KEY]: {} } };
-  if (!['at', 'finish', 'place', 'roll', 'buy', 'kit', 'moneyRoll', 'moneyTyped'].includes(kind)) return { ok: false, error: 'Nothing to do' };
+  if (!['at', 'finish', 'place', 'roll', 'buy', 'kit', 'moneyRoll', 'moneyTyped', 'giftRoll'].includes(kind)) return { ok: false, error: 'Nothing to do' };
   if (!creatingNow(definition, sheet)) return { ok: false, error: 'This character isn\'t being made' };
   if (kind === 'place') return placeNumber(definition, sheet, action);
   if (kind === 'roll') return rollStats(definition, sheet, action, rng);
   if (kind === 'buy') return buyNumber(definition, sheet, action);
   if (kind === 'kit') return pickKit(definition, sheet, action);
   if (kind === 'moneyRoll' || kind === 'moneyTyped') return setMoney(definition, sheet, action, rng);
+  if (kind === 'giftRoll') return rollGift(definition, sheet, action, rng);
   if (kind === 'finish') {
     if (stepsAsked(definition).some((step) => STATS_STEP.test(step) && !wayDone(definition, sheet, step))) return { ok: false, error: 'Every stat needs its number first' };
     const statSteps = stepsAsked(definition).filter((step) => STATS_STEP.test(step));
@@ -531,7 +604,14 @@ const creationAction = (definition, data, action, { rng = cryptoRng } = {}) => {
     const moneyWrong = moneyProblem(definition, sheet);
     if (moneyWrong) return { ok: false, error: moneyWrong };
     const filled = statSteps.reduce((data, step) => filledIn(definition, data, step), sheet);
-    return { ok: true, data: { ...filled, [CREATING_KEY]: { done: true } }, items: kitItemsOf(definition, sheet), pay: moneyToPay(definition, sheet) };
+    const gifts = giftsOnFinish(definition, sheet, rng);
+    return {
+      ok: true,
+      data: { ...filled, [CREATING_KEY]: { done: true } },
+      items: [...kitItemsOf(definition, sheet), ...gifts.items],
+      pay: paidTogether([...moneyToPay(definition, sheet), ...gifts.pay]),
+      rolls: gifts.rolls,
+    };
   }
   if (!stepsAsked(definition).includes(action.step)) return { ok: false, error: 'Not one of this game\'s steps' };
   // A point buy's stats start at their lowest as the player arrives, so what they read says so.
@@ -655,6 +735,9 @@ const checkItems = (items, where, problems) => {
  * or a roll. There is nothing typed in here: that is the MONEY step's, as it is the player's to say.
  */
 const checkGifts = (definition, problems) => {
+  // Said once, as every option giving items has the same one answer.
+  const giving = noInventory(definition) && choicesOf(definition).find((c) => list(c.options).some((o) => isPlainObject(o) && isPlainObject(o.gives) && list(o.gives.items).length));
+  if (giving) problems.push({ where: `list ${giving.id}`, message: 'An option gives items, which land in the inventory, and this sheet has none: add one on CHARACTER SHEET' });
   for (const c of choicesOf(definition)) {
     for (const o of list(c.options).filter((x) => isPlainObject(x) && x.gives !== undefined)) {
       const where = `list ${c.id}, option ${o.id}, gives`;
@@ -677,12 +760,6 @@ const parseItems = (text) => text.split(',').map((p) => p.trim()).filter((p) => 
   const m = /^(\d+)\s*x\s+(.+)$/i.exec(p);
   return m ? { name: m[2].trim(), qty: Number(m[1]) } : { name: p, qty: 1 };
 });
-
-/** Each currency, as this system has them: the app's single money where it has none of its own. */
-const moneyCurrencies = (definition) => {
-  const own = currenciesOf(definition);
-  return own.length ? own : [{ id: MAIN_MONEY, name: 'Money' }];
-};
 
 /** What an option's money reads as in a file: "Gold: 3d6 * 10; Honor: 5", or bare for the app's money. */
 const giftMoneyText = (definition, money) => {
@@ -724,13 +801,17 @@ const giftMoneyFrom = (definition, text) => {
   return { money };
 };
 
+/** Whether the sheet was designed without an inventory, which would hide what is given. */
+const noInventory = (definition) => {
+  const designed = isPlainObject(definition.sheet) && Array.isArray(definition.sheet.sections) ? definition.sheet.sections : null;
+  return !!designed && !designed.some((s) => isPlainObject(s) && s.layout === 'inventory');
+};
+
 /** A definition's kits checked (7c4a): each named, with items in it, and saying who gets it. */
 const checkKits = (definition, kits, problems) => {
   if (kits === undefined) return;
   if (!Array.isArray(kits)) { problems.push({ where: 'creation, kits', message: 'Must be a list of kits' }); return; }
-  // Kits land in the inventory: a sheet designed without one would hide them.
-  const designed = isPlainObject(definition.sheet) && Array.isArray(definition.sheet.sections) ? definition.sheet.sections : null;
-  if (kits.length && designed && !designed.some((s) => isPlainObject(s) && s.layout === 'inventory')) {
+  if (kits.length && noInventory(definition)) {
     problems.push({ where: 'creation, kits', message: 'Kits land in the inventory, and this sheet has none: add one on CHARACTER SHEET' });
   }
   if (kits.length > LIMITS.kits) problems.push({ where: 'creation, kits', message: `At most ${LIMITS.kits} kits` });

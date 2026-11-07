@@ -29,6 +29,7 @@ const AT = changedFact('2026-10-06 14:10:00');
 let systems: LibrarySystem[];
 let calls: { url: string; method: string; body: unknown }[];
 let renameAnswer: { status: number; body: unknown } | null;
+let previewAnswer: InstallPreview;
 let examplesDown: boolean;
 let exampleGone: string | null;
 const { exampleList, exampleDefinition, exampleKind } = createRequire(import.meta.url)('../../../../backend/systemBuilder/examples.js');
@@ -59,7 +60,7 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
     systems = [row({ id: COPY, name: body.name, published: false, version: 0 }), ...systems];
     return json(200, { id: COPY, problems: [] });
   }
-  if (url === '/api/systems/install/preview') return json(200, PREVIEW);
+  if (url === '/api/systems/install/preview') return json(200, previewAnswer);
   if (url === '/api/systems/install/zip/preview') return json(200, { ...PREVIEW, inside: { ...PREVIEW.inside, images: 3 } });
   if (url === '/api/systems/install/zip?mode=new') {
     systems = [row({ id: COPY, name: 'Iron Sea', installed: true, images: 3 }), ...systems];
@@ -91,6 +92,7 @@ const fakeServer = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
 beforeEach(() => {
   calls = [];
   renameAnswer = null;
+  previewAnswer = PREVIEW;
   examplesDown = false;
   exampleGone = null;
   systems = [
@@ -342,6 +344,41 @@ describe('+ NEW and INSTALL A FILE', () => {
     // Back on the list, it is there.
     await userEvent.click(screen.getByRole('tab', { name: 'YOUR SYSTEMS · 4' }));
     expect(screen.getByTestId(`system-${COPY}`)).toBeTruthy();
+  });
+});
+
+describe('INSTALL A FILE for a system deleted here (2026-11-06)', () => {
+  const offered = async () => {
+    previewAnswer = { ...PREVIEW, restores: { id: 'sys_dddddddddddddddd', name: 'Iron Sea', replacesChanges: false } };
+    open();
+    await ready();
+    await userEvent.click(screen.getByRole('tab', { name: 'INSTALL A FILE' }));
+    await userEvent.upload(screen.getByLabelText('System file'), new File(['{"citysys":1}'], 'iron-sea.citysys'));
+    await screen.findByTestId('install-cover');
+  };
+  const sent = () => calls.filter((c) => c.url === '/api/systems/install');
+
+  it('BRING IT BACK goes straight in, as it always has', async () => {
+    await offered();
+    await userEvent.click(screen.getByRole('button', { name: 'BRING IT BACK' }));
+    await waitFor(() => expect(sent()).toHaveLength(1));
+    expect(sent()[0].body).toMatchObject({ mode: 'new' });
+  });
+
+  it('START FRESH asks first, saying what stays hidden; CANCEL sends nothing', async () => {
+    await offered();
+    await userEvent.click(screen.getByRole('button', { name: 'START FRESH' }));
+    const asking = within(screen.getByRole('alertdialog', { name: 'START FRESH' }));
+    expect(asking.getByText(/stay hidden, and installing this file won't bring them back again\.$/)).toBeTruthy();
+    expect(sent()).toHaveLength(0);
+    await userEvent.click(asking.getByText('CANCEL'));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(sent()).toHaveLength(0);
+
+    await userEvent.click(screen.getByRole('button', { name: 'START FRESH' }));
+    await userEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'START FRESH' }));
+    expect(await screen.findByText('Started Iron Sea fresh, with no characters.')).toBeTruthy();
+    expect(sent()[0].body).toMatchObject({ mode: 'fresh' });
   });
 });
 

@@ -24,7 +24,8 @@
 // definition goes through the same checks as the editor's (definition.js). It is data only,
 // never code, and it never carries characters or sheets: those belong to the server they were
 // played on. `origin` is who the system is across servers. Installing a file whose origin is
-// already here offers an update or a second copy; a deleted system with that origin comes back.
+// already here offers an update or a second copy; a deleted system with that origin comes back,
+// or stays deleted while the file starts again without it.
 
 const crypto = require('crypto');
 const { checkDefinition, LIMITS: DEFINITION_LIMITS } = require('./definition');

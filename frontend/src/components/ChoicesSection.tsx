@@ -4,6 +4,7 @@ import { pickLabel,
   type ChoiceListShown, type ChoicesAction, type FeatureShown, type OptionShown, type PickShown, type Worked,
 } from '../sheets/choicesShown';
 import { RecoveryDice } from './RecoveryDice';
+import { GiftsHeld, GiftsOffered } from './OptionGifts';
 
 // A character sheet's CHOICES block (7a3b1; approved mockup docs/mockups/builder-choices.html,
 // 2026-10-27): each list the system has, the character's picks in it with their levels (the list's
@@ -20,6 +21,8 @@ import { RecoveryDice } from './RecoveryDice';
 //
 // The recovery dice head the block (R2b, RecoveryDice.tsx): what the classes' dice make. A sheet
 // with a RESTS section has them there instead (R3b); one made before it keeps them here.
+//
+// What an option gives (7c4e, OptionGifts.tsx) shows only for NEW_CHARACTER.EXE, as only finishing there gives it.
 
 interface Props {
   lists: ChoiceListShown[];
@@ -41,7 +44,12 @@ interface Props {
   only?: string;
   /** A player may take their own picks back (7c2), while making the character; never on a list rolled only. */
   takeBack?: boolean;
+  /** Making a character: what each option gives shows, with its money to roll (7c4e). */
+  gifts?: GiftsAt;
 }
+
+/** What drawing an option's gifts needs: the system, for its money's words, and asking for a roll. */
+interface GiftsAt { system: string | null | undefined; onRoll: (option: string, id: string) => void }
 
 const small: React.CSSProperties = { fontSize: '0.55rem', letterSpacing: '1px', opacity: 0.7 };
 const btn: React.CSSProperties = {
@@ -67,6 +75,7 @@ interface Ctx {
   /** The sheet as stored, for what ROLL FOR IT last rolled (7a5b2). */
   data: Record<string, unknown>;
   takeBack: boolean;
+  gifts?: GiftsAt;
 }
 
 function Feature({ f, ctx }: { f: FeatureShown; ctx: Ctx }) {
@@ -122,6 +131,7 @@ function Offer({ label, list, from, open, onPick, ctx }: {
               title={r.byRoll && !marked ? 'Picked by roll: ROLL FOR IT' : unmet && ctx.gm ? 'Not met: as the GM, you can add it anyway' : option.description}
               onClick={() => onPick(option.id)}>{option.label.toUpperCase()}{marked ? ' · TAKE IT' : ''}</button>
             {unmet && <span style={{ ...small, gridColumn: at + 1, color: 'var(--warning)', opacity: 1 }}>NEEDS {unmet}{ctx.gm ? ' · ADD ANYWAY' : ''}</span>}
+            {ctx.gifts && option.gives && <GiftsOffered gives={option.gives} system={ctx.gifts.system} column={at + 1} />}
           </React.Fragment>
         );
       })}
@@ -193,6 +203,7 @@ function Pick({ list, p, ctx, fixed = false }: { list: ChoiceListShown; p: PickS
         {!fixed && ctx.dropping !== `${list.id}:${p.option.id}` && <Drop list={list.id} option={p.option} ctx={ctx} />}
       </div>
       {!fixed && ctx.dropping === `${list.id}:${p.option.id}` && <Drop list={list.id} option={p.option} ctx={ctx} />}
+      {ctx.gifts && p.option.gives && <GiftsHeld option={p.option} gives={p.option.gives} data={ctx.data} system={ctx.gifts.system} onRoll={ctx.gifts.onRoll} />}
       {p.unlocked.map((f) => (
         <React.Fragment key={f.id}>
           <Feature f={f} ctx={ctx} />
@@ -206,7 +217,7 @@ function Pick({ list, p, ctx, fixed = false }: { list: ChoiceListShown; p: PickS
   );
 }
 
-export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm = false, onRecoverySpend, recoveryOpen = false, recoveryElsewhere = false, only, takeBack = false }: Props) {
+export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm = false, onRecoverySpend, recoveryOpen = false, recoveryElsewhere = false, only, takeBack = false, gifts }: Props) {
   const worked = workedOn(data);
   // The pick the GM asked to take away, waiting for YES: "list:option".
   const [dropping, setDropping] = useState<string | null>(null);
@@ -220,7 +231,7 @@ export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm =
   const can = !readOnly && !!onChoices;
   // In the builder's previews nothing is published yet: the block says what will be here.
   if (!lists.length) return <div style={small}>A character&apos;s picks from the system&apos;s lists show here: classes, backgrounds, feats.</div>;
-  const ctx: Ctx = { lists, worked, can, gm, ask: (action) => onChoices?.(action), dropping, setDropping, data, takeBack };
+  const ctx: Ctx = { lists, worked, can, gm, ask: (action) => onChoices?.(action), dropping, setDropping, data, takeBack, gifts };
   const aside = keptAside(lists, worked).filter((a) => !only || a.list.id === only);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>

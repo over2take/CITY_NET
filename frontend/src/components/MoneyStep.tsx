@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { currenciesFor, formatAmount, parseAmount, type Currency } from '../sheets/currencies';
-import { moneyHeldOn, type MoneyShown } from '../sheets/newCharacterFlow';
+import { moneyHeldOn, moneyWords, type MoneyShown } from '../sheets/newCharacterFlow';
 
 // The MONEY step of NEW_CHARACTER.EXE (7c4d; approved mockup new-character): each currency's starting
 // amount, a number said, a roll made once and kept, or typed in. Paid into the bank when they finish, and
@@ -55,7 +55,7 @@ export function MoneyStep({ money, data, system, onRoll, onType }: Props) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {money.map((m) => {
         const currency = currencies.find((c) => c.id === m.id);
-        const say = (n: number) => (currency ? formatAmount(currency, n) : String(n));
+        const say = (n: number) => moneyWords(system, m.id, n);
         const held = moneyHeldOn(data, m.id);
         return (
           <section key={m.id} aria-label={m.name} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
-  buyCost, buyShown, CREATING_KEY, moneyHeldOn, kitItemsText, kitsShownOn, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, placedFrom, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields, withCreationLocks,
+  buyCost, buyShown, CREATING_KEY, giftRolledOn, giftWords, moneyHeldOn, moneyWords, kitItemsText, kitsShownOn, flowDone, flowState, flowStepName, flowSteps, isBlankSheet, isStatsStep, placedFrom, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields, withCreationLocks,
 } from '../newCharacterFlow';
 import { WORKED_KEY, type ChoiceListShown } from '../choicesShown';
+import { clearCustomTemplates, registerCustomTemplate } from '../customTemplates';
 import type { SheetTemplate } from '../types';
 
 /**
@@ -14,6 +15,7 @@ import type { SheetTemplate } from '../types';
 
 const req = createRequire(import.meta.url);
 const backend = req('../../../../backend/systemBuilder/creation.js');
+const chooser = req('../../../../backend/systemBuilder/choices.js');
 
 const list = (over: Partial<ChoiceListShown> & { id: string }): ChoiceListShown => ({
   one: over.id.toUpperCase(), many: over.id, picks: 1, again: false, levelled: false, options: [{ id: `${over.id}_a`, label: 'A', features: [] }, { id: `${over.id}_b`, label: 'B', features: [] }], ...over,
@@ -434,6 +436,74 @@ describe('starting money (7c4d)', () => {
     const done = backend.creationAction(def, { [CREATING_KEY]: {} }, { kind: 'moneyTyped', id: 'main', amount: 7 }).data;
     expect(moneyHeldOn(done, 'main')).toBe(7);
     expect(stepAnswered(template, 'money', done)).toBe(true);
+  });
+});
+
+describe('what an option gives (7c4e)', () => {
+  const roll = { id: 'gold', name: 'Gold', how: 'roll', each: '3d6 * 10' };
+  const giving = list({ id: 'bgs', one: 'Background', options: [
+    { id: 'noble', label: 'Noble', gives: { items: [{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }], money: [roll, { id: 'honor', name: 'Honor', how: 'number', amount: 5 }] }, features: [{ id: 'armed', label: 'Armed', opens: 'weapons' }] },
+    { id: 'plain', label: 'Plain', features: [] },
+  ] as never });
+  const weapons = list({ id: 'weapons', picked: 'features', options: [{ id: 'sword', label: 'Sword', gives: { money: [{ ...roll, id: 'honor' }] }, features: [] }] as never });
+  const t = { ...TEMPLATE, choices: [giving, weapons], creation: { steps: ['who', 'list:bgs'], stats: [] } } as unknown as SheetTemplate;
+  const on = (picks: object[], gifts?: object, opens: object[] = []) => ({ ...worked({ picks, opens }), [CREATING_KEY]: { at: 'list:bgs', ...(gifts ? { gifts } : {}) } });
+  const NOBLE = { list: 'bgs', option: 'noble' };
+  const SWORD = { list: 'weapons', option: 'sword', from: 'armed' };
+
+  it('reads what an option rolled, or nothing', () => {
+    expect(giftRolledOn(on([], { noble: { gold: 12 } }), 'noble', 'gold')).toBe(12);
+    expect(giftRolledOn(on([], { noble: { gold: 0 } }), 'noble', 'gold')).toBe(0);
+    expect(giftRolledOn(on([], { noble: { gold: 12 } }), 'noble', 'honor')).toBeNull();
+    expect(giftRolledOn(on([], { noble: { gold: 12 } }), 'plain', 'gold')).toBeNull();
+    expect(giftRolledOn(on([], { noble: { gold: 'x' } }), 'noble', 'gold')).toBeNull();
+    expect(giftRolledOn(on([], { noble: 'x' }), 'noble', 'gold')).toBeNull();
+    expect(giftRolledOn(on([], 'x' as never), 'noble', 'gold')).toBeNull();
+    expect(giftRolledOn({}, 'noble', 'gold')).toBeNull();
+  });
+
+  it('says it in a line: items, then each money', () => {
+    expect(giftWords({ items: [{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }], money: [roll as never, { id: 'main', name: 'Money', how: 'number', amount: 5 }] }, null)).toBe('Rope, 3x Rations · Gold: 3d6 * 10 · Money: 5');
+    expect(giftWords({ items: [{ name: 'Rope', qty: 1 }] }, null)).toBe('Rope');
+    expect(giftWords({ money: [{ id: 'main', name: 'Money', how: 'number' }] }, null)).toBe('Money: 0');
+  });
+
+  it('an amount as the currency says it, or the app\'s money as a number', () => {
+    expect(moneyWords(null, 'main', 120)).toBe('120');
+    registerCustomTemplate({ id: 'sys_0123456789abcdef', name: 'G', words: {}, parts: {}, derived: [], currencies: [{ id: 'gold', name: 'Gold', short: 'gp', decimals: 0, decimalMark: '.', debt: false, negative: false, denominations: [] }] } as never);
+    expect(moneyWords('sys_0123456789abcdef', 'gold', 120)).toBe('120 gp');
+    expect(moneyWords('sys_0123456789abcdef', 'tin', 120)).toBe('120');
+    clearCustomTemplates();
+  });
+
+  it('a step holds until each picked option\'s money is rolled; a number needs nothing', () => {
+    expect(stepAnswered(t, 'list:bgs', on([{ list: 'bgs', option: 'plain' }]))).toBe(true);
+    expect(stepAnswered(t, 'list:bgs', on([NOBLE]))).toBe(false);
+    expect(stepAnswered(t, 'list:bgs', on([NOBLE], { noble: { gold: 120 } }))).toBe(true);
+    // Another option's roll isn't this one's.
+    expect(stepAnswered(t, 'list:bgs', on([NOBLE], { plain: { gold: 120 } }))).toBe(false);
+    // Rolled, even to nothing.
+    expect(stepAnswered(t, 'list:bgs', on([NOBLE], { noble: { gold: 0 } }))).toBe(true);
+  });
+
+  it('and for a pick under a feature, however deep', () => {
+    const opens = [{ feature: 'armed', list: 'weapons', count: 1, used: 1 }];
+    expect(stepAnswered(t, 'list:bgs', on([NOBLE, SWORD], { noble: { gold: 1 } }, opens))).toBe(false);
+    expect(stepAnswered(t, 'list:bgs', on([NOBLE, SWORD], { noble: { gold: 1 }, sword: { honor: 2 } }, opens))).toBe(true);
+    // The pick above it rolled last holds it just the same.
+    expect(stepAnswered(t, 'list:bgs', on([NOBLE, SWORD], { sword: { honor: 2 } }, opens))).toBe(false);
+  });
+
+  it('reads what the server keeps, and sends', () => {
+    const def = { format: 1, name: 'H', choices: [{ id: 'bgs', one: 'B', many: 'Bs', options: [{ id: 'noble', label: 'Noble', gives: { money: { main: { how: 'roll', each: '1d6' } } } }] }], creation: { on: true } };
+    const shown = chooser.choicesShown(def);
+    const template = { ...TEMPLATE, choices: shown, creation: backend.creationShown(def) } as unknown as SheetTemplate;
+    const start = { [chooser.PICKS_KEY]: { bgs: [{ option: 'noble' }] }, [CREATING_KEY]: {} };
+    const data = (d: object) => ({ ...d, [WORKED_KEY]: { ...chooser.workedOf(def, d), recovery: null } });
+    expect(stepAnswered(template, 'list:bgs', data(start))).toBe(false);
+    const done = backend.creationAction(def, start, { kind: 'giftRoll', option: 'noble', id: 'main' }, { rng: () => 0 }).data;
+    expect(giftRolledOn(done, 'noble', 'main')).toBe(1);
+    expect(stepAnswered(template, 'list:bgs', data(done))).toBe(true);
   });
 });
 

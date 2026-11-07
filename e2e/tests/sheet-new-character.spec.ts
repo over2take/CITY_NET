@@ -536,6 +536,104 @@ test('starting money: rolled once and in the log, nothing paid until finishing, 
   await page.context().close();
 });
 
+test('what an option gives: with KITS and MONEY off, said before picking, its money rolled once and kept through a swap, a pick under a feature paying too, a roll with no step made at FINISH', async ({ browser, request }, info) => {
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const player = { username: `e2e_newchar_gifts${again}`, password: 'e2e-player-password' };
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Newfall Gifts${again}`,
+    core: { health: { model: 'pool' }, dice: ['d6'] },
+    choices: [
+      { id: 'backgrounds', one: 'Background', many: 'Backgrounds', options: [
+        { id: 'dockhand', label: 'Dockhand', gives: { items: [{ name: 'Crowbar', qty: 1 }, { name: 'Rations', qty: 3 }], money: { main: { how: 'roll', each: '2d6 * 10' } } }, features: [{ id: 'brawler', label: 'Brawler', choice: 'weapons' }] },
+        { id: 'scribe', label: 'Scribe', gives: { items: [{ name: 'Ink', qty: 1 }], money: { main: { how: 'number', amount: 25 } } } },
+      ] },
+      { id: 'weapons', one: 'Weapon', many: 'Weapons', picked: 'features', table: 'd6', options: [
+        { id: 'cudgel', label: 'Cudgel', roll: '1-3', gives: { items: [{ name: 'Cudgel', qty: 1 }] } },
+        { id: 'boat_hook', label: 'Boat Hook', roll: '4-6', gives: { items: [{ name: 'Boat hook', qty: 1 }], money: { main: { how: 'number', amount: 5 } } } },
+      ] },
+      // Everyone has it and no step asks it, so its roll waits for FINISH.
+      { id: 'commons', one: 'Common', many: 'Commons', picked: 'everyone', options: [{ id: 'share', label: 'Share', gives: { money: { main: { how: 'roll', each: '1d6' } } } }] },
+    ],
+    // Both steps switched off, so what lands is only what the options give.
+    creation: { on: true, off: ['kits', 'money'], money: { main: { how: 'number', amount: 1000 } }, kits: [{ id: 'all', name: 'ALL', items: [{ name: 'Knife', qty: 1 }], who: 'all' }] },
+  });
+  await approvedPlayer(request, gm, player);
+  const stored = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data;
+  const page = await signedIn(browser, info, player);
+  await rail(page).click();
+  await sheetButton(page).click();
+  await expect(flow(page)).toBeVisible();
+  await page.getByRole('button', { name: 'BEGIN' }).click();
+  await page.getByLabel('Name', { exact: true }).fill('Wren');
+  await expect.poll(async () => (await stored()).name, { timeout: 15_000 }).toBe('Wren');
+  await page.getByRole('button', { name: 'NEXT' }).click();
+
+  // Said beside each before picking.
+  const offer = page.getByRole('group', { name: 'Pick a Background' });
+  await expect(offer.getByText('GIVES Crowbar, 3x Rations · Money: 2d6 * 10')).toBeVisible();
+  await expect(offer.getByText('GIVES Ink · Money: 25')).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'KITS' })).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'MONEY' })).toHaveCount(0);
+
+  // Picked: FINISH held by its roll and its weapon. Rolled, thrown, kept; nothing given yet.
+  await offer.getByRole('button', { name: 'DOCKHAND' }).click();
+  const gifts = page.getByRole('group', { name: 'What Dockhand gives' });
+  const finish = page.getByRole('button', { name: 'FINISH' });
+  await expect(gifts.getByText('Crowbar, 3x Rations')).toBeVisible({ timeout: 15_000 });
+  await expect(finish).toBeDisabled();
+  await gifts.getByRole('button', { name: 'Roll Money for Dockhand' }).click();
+  await expect(page.getByText('DICE_TRAY.EXE', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(gifts.getByText('ROLLED, AND KEPT')).toBeVisible({ timeout: 15_000 });
+  const amount = (await stored())._creating.gifts.dockhand.main;
+  expect(amount).toBeGreaterThanOrEqual(20);
+  expect(amount).toBeLessThanOrEqual(120);
+  await expect(gifts.getByText(`Money: ${amount}`)).toBeVisible();
+  expect((await stored()).inventory).toBeUndefined();
+  expect((await stored()).cash ?? 0).toBe(0);
+  await expect(finish).toBeDisabled();
+
+  // Swapped away and back: the same amount, and no second roll.
+  await page.getByRole('button', { name: 'Drop Dockhand' }).click();
+  await page.getByRole('button', { name: 'YES, DROP' }).click();
+  await offer.getByRole('button', { name: 'SCRIBE' }).click();
+  await expect(page.getByRole('group', { name: 'What Scribe gives' }).getByText('Money: 25')).toBeVisible({ timeout: 15_000 });
+  await expect(finish).toBeEnabled();
+  await page.getByRole('button', { name: 'Drop Scribe' }).click();
+  await page.getByRole('button', { name: 'YES, DROP' }).click();
+  await offer.getByRole('button', { name: 'DOCKHAND' }).click();
+  await expect(gifts.getByText(`Money: ${amount}`)).toBeVisible({ timeout: 15_000 });
+  await expect(gifts.getByRole('button', { name: /^Roll/ })).toHaveCount(0);
+
+  // The weapon under its feature, with what each gives said, and picked by hand.
+  const weapons = page.getByRole('group', { name: 'Pick a Weapon' });
+  await expect(weapons.getByText('GIVES Boat hook · Money: 5')).toBeVisible();
+  await weapons.getByRole('button', { name: 'BOAT HOOK' }).click();
+  await expect(page.getByRole('group', { name: 'What Boat Hook gives' })).toBeVisible({ timeout: 15_000 });
+  await expect(finish).toBeEnabled();
+
+  // Finished: only what they hold, as inventory lines, the money added up, and neither step's own.
+  await finish.click();
+  await expect(flow(page)).toHaveCount(0);
+  await expect.poll(async () => (await stored())._creating, { timeout: 15_000 }).toEqual({ done: true });
+  await expect.poll(async () => (await stored()).cash, { timeout: 15_000 }).toBeGreaterThan(amount + 5);
+  const share = (await stored()).cash - amount - 5;
+  expect(share).toBeLessThanOrEqual(6);
+  const held = JSON.parse((await stored()).inventory).map((i: { name: string; qty: number }) => [i.name, i.qty]);
+  expect(held).toEqual([['Crowbar', 1], ['Rations', 3], ['Boat hook', 1]]);
+
+  // The plain sheet never says what an option gives.
+  await sheetTab(page, 'CHARACTER');
+  await expect(page.getByRole('group', { name: 'Dockhand', exact: true })).toBeVisible();
+  await expect(page.getByText('GIVEN AS YOU FINISH')).toHaveCount(0);
+
+  // Both rolls in the dice log: the one on its step, and the one at FINISH. The rolls left the tray open.
+  await page.getByTitle('TOGGLE_HISTORY').click();
+  await expect(page.getByTestId('dice-history')).toContainText(`rolled DOCKHAND · MONEY (2d6 * 10): ${amount}`, { timeout: 15_000 });
+  await expect(page.getByTestId('dice-history')).toContainText(`rolled SHARE · MONEY (1d6): ${share}`, { timeout: 15_000 });
+  await page.context().close();
+});
+
 test('an upload is taken as it is, and no steps follow', async ({ browser, request }, info) => {
   const again = info.retry ? `_${info.retry + 1}` : '';
   const player = { username: `e2e_uploader${again}`, password: 'e2e-player-password' };
