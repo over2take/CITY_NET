@@ -269,10 +269,12 @@ describe('GAINED BY (7d5b)', () => {
     expect(health(withHealthGain(base, 'roll'))).toEqual({ how: 'level', gain: 'roll' });
     expect(healthSet(withHealthGain(base, 'choose')).gain).toBe('choose');
     expect(health(withHealthGain(withHealthGain(base, 'roll'), 'average'))).toEqual({ how: 'level' });
-    expect(healthSet({ format: 1, name: 'L', levels: { health: { how: 'level', gain: 'reroll' } } } as never).gain).toBe('average');
+    expect(healthSet({ format: 1, name: 'L', levels: { health: { how: 'level', gain: 'beat' } } } as never).gain).toBe('average');
+    expect(healthSet(withHealthGain(base, 'reroll')).gain).toBe('reroll');
   });
   it('each says what it does', () => {
-    expect(Object.keys(GAIN_WORDS)).toEqual(['average', 'roll', 'choose']);
+    expect(Object.keys(GAIN_WORDS)).toEqual(['average', 'roll', 'choose', 'reroll']);
+    expect(GAIN_WORDS.reroll).toMatch(/^Each level, every level is rolled again/);
     expect(GAIN_WORDS.roll).toMatch(/kept once rolled/);
   });
 });

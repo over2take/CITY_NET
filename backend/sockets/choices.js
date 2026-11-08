@@ -58,7 +58,8 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
   const announceRoll = (username, stored, rolled, lineOf, board) => {
     const who = (stored && typeof stored.name === 'string' && stored.name.trim()) || username;
     const line = lineOf(who, rolled);
-    const results = { [rolled.sides]: rolled.rolls };
+    // Dice of one size, or a reroll's of several (7d5c).
+    const results = rolled.results || { [rolled.sides]: rolled.rolls };
     db.get(`SELECT color FROM locations WHERE shape = 'rhombus' AND owner = ? ORDER BY id LIMIT 1`, [username], (e, token) => {
       const color = (token && typeof token.color === 'string' && token.color) || LOG_COLOR;
       db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)', [username, rolled.total, JSON.stringify(results), color, line], (err) => {

@@ -117,3 +117,47 @@ test('ROLL: health rolled in the window and kept; the GM clears it, the player r
   await expect(mine.getByText(`${10 + second} / ${10 + second}`)).toBeVisible({ timeout: 15_000 });
   await context.close();
 });
+
+test('REROLL ALL, KEEP HIGHER: every level rolled again, the token taking the new maximum or 1 more (7d5c)', async ({ browser, request }, info) => {
+  test.setTimeout(150_000);
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Rerollfall${again}`, core: { health: { model: 'pool' }, advancement: ['levels'] },
+    choices: [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter', die: 6 }] }],
+    levels: { top: 5, first: 100, ranges: [{ to: 5, x: 2 }], health: { how: 'level', gain: 'reroll', adds: '1' } },
+  });
+  const player = { username: `e2e_rerolled${again}`, password: 'e2e-player-password' };
+  await approvedPlayer(request, gm, player);
+  await asGm(request, gm, 'post', '/api/locations', {
+    name: player.username, description: '', shape: 'rhombus', owner: player.username, x: 0, y: 0, z: 0, width: 1, height: 1, depth: 1,
+    hp_current: 1, hp_max: 1, hp_temp: 0, battle_map_id: -1, floor_index: -1,
+  });
+  const sheetOf = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data;
+
+  const context = await browser.newContext({ baseURL: info.project.use.baseURL });
+  const mine = await context.newPage();
+  await signInAsPlayer(mine, player);
+  await mine.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
+  await mine.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+  await sheetTab(mine, 'CHARACTER');
+  await mine.getByRole('group', { name: 'Pick a Class' }).getByRole('button', { name: 'FIGHTER' }).click();
+  // Level 1: the full d6 and 1.
+  await expect.poll(async () => (await sheetOf())._health?.max, { timeout: 15_000 }).toBe(7);
+  await asGm(request, gm, 'put', `/api/sheets/user/${player.username}`, { fields: { _xp: 100 } });
+
+  await mine.getByRole('button', { name: 'LEVEL UP READY' }).click();
+  await expect(mine.getByText('HEALTH · EVERY LEVEL: 2 DICE + 2')).toBeVisible();
+  await expect(mine.getByText('Every level rolled again. Over 7 and it becomes your new maximum. Otherwise you gain 1.')).toBeVisible();
+  await mine.getByRole('group', { name: 'Health this level' }).getByRole('button', { name: 'ROLL THEM ALL' }).click();
+  await expect.poll(async () => (await sheetOf())._leveling?.health?.gained, { timeout: 15_000 }).toBeGreaterThan(0);
+  const { roll, gained } = (await sheetOf())._leveling.health;
+  expect(gained).toBe(roll > 7 ? roll - 7 : 1);
+  await expect(mine.getByText(roll > 7 ? `+${gained}: ROLLED ${roll}, OVER 7: THE NEW MAXIMUM` : `+1: ROLLED ${roll}, NOT OVER 7: +1`)).toBeVisible();
+  await mine.getByRole('button', { name: 'NEXT', exact: true }).click();
+  await mine.getByRole('button', { name: 'FINISH', exact: true }).click();
+  await expect.poll(async () => (await sheetOf())._health?.max, { timeout: 15_000 }).toBe(7 + gained);
+  await mine.getByRole('button', { name: 'HIT_POINTS', exact: true }).click();
+  await expect(mine.getByText(`${7 + gained} / ${7 + gained}`)).toBeVisible({ timeout: 15_000 });
+  await context.close();
+});

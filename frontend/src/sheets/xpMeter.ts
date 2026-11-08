@@ -12,9 +12,9 @@ export interface LevelsShown {
   health?: { gain: HealthGainBy; dieOn: 'class' | 'all'; die?: number; dice: Record<string, number> };
 }
 /** How a level's health is gained (backend levels.js GAINS): THE PLAYER CHOOSES is 'choose'. */
-export type HealthGainBy = 'average' | 'roll' | 'choose';
+export type HealthGainBy = 'average' | 'roll' | 'choose' | 'reroll';
 /** The health kept with the place (7d5b): a roll and its die, or the average taken. */
-export interface LevelUpHealth { roll?: number; die?: number; average?: true }
+export interface LevelUpHealth { roll?: number; die?: number; average?: true; /** A reroll's (7d5c): what it adds, and the maximum it had to beat. */ gained?: number; over?: number }
 /** What a save works out PER LEVEL's max health to (backend runtime.js HEALTH_SHOWN_KEY). */
 export const HEALTH_SHOWN_KEY = '_health';
 
@@ -81,6 +81,7 @@ const placeOf = (data: Record<string, unknown> | null | undefined): LevelUpOffer
   const kept: LevelUpHealth = {
     ...(Number.isInteger(h.roll) ? { roll: h.roll as number } : {}), ...(Number.isInteger(h.die) ? { die: h.die as number } : {}),
     ...(h.average === true ? { average: true as const } : {}),
+    ...(Number.isInteger(h.gained) ? { gained: h.gained as number } : {}), ...(Number.isInteger(h.over) ? { over: h.over as number } : {}),
   };
   const made = (Array.isArray(picks) ? picks : []).filter((x): x is LevelUpPick => !!x && typeof x === 'object' && typeof (x as LevelUpPick).list === 'string' && typeof (x as LevelUpPick).option === 'string')
     .map((x) => ({ list: x.list, option: x.option, ...(typeof x.from === 'string' ? { from: x.from } : {}) }));

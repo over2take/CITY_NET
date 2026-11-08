@@ -218,6 +218,8 @@ describe('MAX HEALTH: PER LEVEL (7d5a)', () => {
     expect(screen.getByLabelText('How a level gains it').textContent).toMatch(/^Rolled each level in the tray/);
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'How health is gained' }), 'choose');
     expect(screen.getByLabelText('How a level gains it').textContent).toMatch(/^Each level, the player takes the average or rolls/);
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'How health is gained' }), 'reroll');
+    expect(screen.getByLabelText('How a level gains it').textContent).toMatch(/As Cities Without Number does\.$/);
     expect(screen.getByRole('textbox', { name: 'Each level adds' })).toBeTruthy();
     expect(screen.getByText(/^Level 1 has the full die/)).toBeTruthy();
     await userEvent.click(within(screen.getByRole('group', { name: 'Where the die is set' })).getByRole('button', { name: 'ONE FOR ALL' }));

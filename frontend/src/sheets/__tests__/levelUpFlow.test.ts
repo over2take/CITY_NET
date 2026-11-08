@@ -209,7 +209,7 @@ describe('HEALTH, per level (7d5a)', () => {
   });
 
   it('the class going up\'s die, half rounded up, with what each level adds; at least 1', () => {
-    const A = { by: 'average', rolled: null, tookAverage: false };
+    const A = { by: 'average', rolled: null, tookAverage: false, dice: 1, max: 0, over: null };
     expect(healthGain(tpl(ON), data(2), SOLDIER)).toEqual({ die: 10, average: 5, adds: 2, gained: 7, ...A });
     expect(healthGain(tpl(ON), data(-9), MAGE)).toEqual({ die: 6, average: 3, adds: -9, gained: 1, ...A });
     expect(healthGain(tpl(ON), data(), MAGE)).toEqual({ die: 6, average: 3, adds: 0, gained: 3, ...A });
@@ -241,7 +241,7 @@ describe('HEALTH rolled, or the player choosing (7d5b)', () => {
   });
 
   it('ROLL: nothing gained until rolled; the roll kept for this class, with what each level adds', () => {
-    expect(healthGain(tpl('roll'), data(), SOLDIER)).toEqual({ die: 10, average: 5, adds: 2, by: 'roll', rolled: null, tookAverage: false, gained: null });
+    expect(healthGain(tpl('roll'), data(), SOLDIER)).toEqual({ die: 10, average: 5, adds: 2, by: 'roll', rolled: null, tookAverage: false, gained: null, dice: 1, max: 0, over: null });
     expect(healthGain(tpl('roll'), data({ roll: 7, die: 10 }), SOLDIER)?.gained).toBe(9);
     expect(healthGain(tpl('roll'), data({ roll: 1, die: 10 }), { ...SOLDIER })?.rolled).toBe(1);
     // A low roll still gains 1.
@@ -277,5 +277,36 @@ describe('HEALTH rolled, or the player choosing (7d5b)', () => {
     expect(gmLevelingLine(tpl('roll'), { ...data(), _leveling: {} })).toEqual({ words: 'LEVELING UP · THE NEXT LEVEL', canClear: false });
     expect(gmLevelingLine(tpl('roll'), data())).toBeNull();
     expect(gmLevelingLine(null, data({ roll: 7 }))).toBeNull();
+  });
+});
+
+describe('REROLL ALL, KEEP HIGHER (7d5c)', () => {
+  const tpl = { levels: { top: 10, table: { 2: 1, 3: 2 }, health: { gain: 'reroll', dieOn: 'class', dice: { soldier: 10 } } },
+    choices: [{ id: 'classes', one: 'Class', levelled: true, options: [{ id: 'soldier', label: 'Soldier', features: [] }] }] } as unknown as SheetTemplate;
+  const data = (health?: object) => ({
+    _xp: 9, [WORKED_KEY]: { picks: [{ list: 'classes', option: 'soldier', level: 2 }], levels: { level: 2 } },
+    _health: { adds: 2, max: 19, levels: [{ level: 1, took: 10, die: 10 }, { level: 2, took: 5, die: 10 }] },
+    ...(health ? { _leveling: { list: 'classes', option: 'soldier', health } } : {}),
+  });
+
+  it('before: every level\'s die and the new one, the maximum to beat, nothing gained yet', () => {
+    expect(healthGain(tpl, data(), SOLDIER)).toMatchObject({ by: 'reroll', dice: 3, max: 19, rolled: null, gained: null, over: null });
+    // A level with no die, or a class going up with none, rolls nothing.
+    const none = { ...data(), _health: { adds: 2, max: 19, levels: [{ level: 1, took: 10, die: 10 }, { level: 2, took: 0, die: null }] } };
+    expect(healthGain(tpl, none, SOLDIER)?.dice).toBe(2);
+    expect(healthGain(tpl, none, { ...SOLDIER, option: 'monk' })?.dice).toBe(1);
+  });
+
+  it('over the maximum: what takes it there; not over: 1', () => {
+    expect(healthGain(tpl, data({ roll: 33, die: 10, gained: 14, over: 19 }), SOLDIER)).toMatchObject({ rolled: 33, gained: 14, over: true, max: 19 });
+    expect(healthGain(tpl, data({ roll: 9, die: 10, gained: 1, over: 19 }), SOLDIER)).toMatchObject({ rolled: 9, gained: 1, over: false, max: 19 });
+    // One over is still over, and gains just 1.
+    expect(healthGain(tpl, data({ roll: 20, die: 10, gained: 1, over: 19 }), SOLDIER)).toMatchObject({ rolled: 20, gained: 1, over: true });
+    // The maximum it had to beat is the one kept, though the sheet's has since moved.
+    expect(healthGain(tpl, { ...data({ roll: 9, die: 10, gained: 1, over: 17 }), _health: { adds: 2, max: 25, levels: [] } }, SOLDIER)?.max).toBe(17);
+  });
+
+  it('the GM\'s line says it was rerolled, and what it adds', () => {
+    expect(gmLevelingLine(tpl, data({ roll: 33, die: 10, gained: 14, over: 19 }))?.words).toBe('LEVELING UP · SOLDIER 2 → 3 · HEALTH REROLLED 33, +14');
   });
 });

@@ -126,6 +126,7 @@ export function LevelsPage({ definition, edit, onGoTo, api }: Props) {
               <option value="average">AVERAGE (FIXED)</option>
               <option value="roll">ROLL</option>
               <option value="choose">THE PLAYER CHOOSES</option>
+              <option value="reroll">REROLL ALL, KEEP HIGHER</option>
             </select>
             <FieldName beside hint={HINTS['levels.healthAdds']} style={small}>EACH LEVEL ADDS</FieldName>
             {adds.field}

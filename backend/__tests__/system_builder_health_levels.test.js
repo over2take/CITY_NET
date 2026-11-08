@@ -45,9 +45,9 @@ describe('the setting', () => {
   it('reads as it was set, with what it falls back to', () => {
     expect(healthOf(HALE)).toEqual({ how: 'level', dieOn: 'class', gain: 'average', adds: '@con_mod' });
     expect(healthOf({ levels: { health: { how: 'level', die_on: 'all', die: 8, adds: '  ' } } })).toEqual({ how: 'level', dieOn: 'all', die: 8, gain: 'average' });
-    expect(healthOf({ levels: { health: { how: 'level', die_on: 'some', die: 1, gain: 'reroll' } } })).toEqual({ how: 'level', dieOn: 'class', gain: 'average' });
+    expect(healthOf({ levels: { health: { how: 'level', die_on: 'some', die: 1, gain: 'beat' } } })).toEqual({ how: 'level', dieOn: 'class', gain: 'average' });
     expect(healthOf({ levels: { health: { how: 'level', gain: 'choose' } } }).gain).toBe('choose');
-    expect(GAINS).toEqual(['average', 'roll', 'choose']);
+    expect(GAINS).toEqual(['average', 'roll', 'choose', 'reroll']);
   });
 
   it('checks clean, ON EACH CLASS or ONE FOR ALL with its die', () => {
@@ -62,7 +62,8 @@ describe('the setting', () => {
     expect(problems({ how: 'level', die_on: 'all', die: 1 })).toEqual(['levels, health, die: A die of 2 to 100 sides']);
     expect(problems({ how: 'level', die: 101 })).toEqual(['levels, health, die: A die of 2 to 100 sides']);
     expect(problems({ how: 'level', die: 'd8' })).toEqual(['levels, health, die: A die of 2 to 100 sides']);
-    expect(problems({ how: 'level', gain: 'reroll' })).toEqual(['levels, health, gain: AVERAGE (FIXED), ROLL or THE PLAYER CHOOSES']);
+    expect(problems({ how: 'level', gain: 'beat' })).toEqual(['levels, health, gain: AVERAGE (FIXED), ROLL, THE PLAYER CHOOSES or REROLL ALL, KEEP HIGHER']);
+    expect(problems({ how: 'level', gain: 'reroll' })).toEqual([]);
     expect(problems({ how: 'level', gain: 'roll' })).toEqual([]);
     expect(problems({ how: 'level', adds: '@con +' })[0]).toMatch(/^levels, health, adds: /);
     expect(problems({ how: 'level', adds: 3 })).toEqual(['levels, health, adds: Must be a formula']);
@@ -99,7 +100,7 @@ describe('the setting', () => {
 
 describe('what it comes to', () => {
   it('level 1 the first class\'s full die, and what each level adds', () => {
-    expect(healthByLevel(HALE, holding([['fighter', 1]]))).toEqual({ max: 12, adds: 2, levels: [{ level: 1, took: 10 }] });
+    expect(healthByLevel(HALE, holding([['fighter', 1]]))).toEqual({ max: 12, adds: 2, levels: [{ level: 1, took: 10, die: 10 }] });
     const feat = holding([['fighter', 1]]);
     feat[PICKS_KEY].feats = [{ option: 'tough' }];
     expect(healthByLevel(HALE, feat).max).toBe(12);
@@ -109,7 +110,7 @@ describe('what it comes to', () => {
 
   it('each later level what it kept, or the average where it kept nothing, every one with what each level adds', () => {
     const data = holding([['fighter', 2], ['wizard', 1]], { [HEALTH_LEVELS_KEY]: { 2: { die: 10, took: 5 }, 3: { die: 6, took: 3 } } });
-    expect(healthByLevel(HALE, data)).toEqual({ max: 12 + 7 + 5, adds: 2, levels: [{ level: 1, took: 10 }, { level: 2, took: 5 }, { level: 3, took: 3 }] });
+    expect(healthByLevel(HALE, data)).toEqual({ max: 12 + 7 + 5, adds: 2, levels: [{ level: 1, took: 10, die: 10 }, { level: 2, took: 5, die: 10 }, { level: 3, took: 3, die: 6 }] });
     expect(healthByLevel(HALE, holding([['fighter', 3]])).max).toBe(12 + 7 + 7);
   });
 
@@ -214,7 +215,7 @@ describe('at the table', () => {
     await healthIs(19, 19, 'level 2: 12 + 5 + 2');
     const sheet = await sheetOf();
     expect(sheet[HEALTH_LEVELS_KEY]).toEqual({ 2: { die: 10, took: 5 } });
-    expect(sheet._health).toEqual({ max: 19, adds: 2, levels: [{ level: 1, took: 10 }, { level: 2, took: 5 }] });
+    expect(sheet._health).toEqual({ max: 19, adds: 2, levels: [{ level: 1, took: 10, die: 10 }, { level: 2, took: 5, die: 10 }] });
     kes.handlers.updateSheetField({ fieldId: 'con', value: 18 });
     await healthIs(23, 23, 'CON 18: 14 + 9');
   });
@@ -227,6 +228,88 @@ describe('at the table', () => {
     gm.handlers.adminAdjustLevel({ token: GM, usernames: ['kes'], delta: -1 });
     await healthIs(12, 12, 'down again');
     expect((await sheetOf())[HEALTH_LEVELS_KEY]).toEqual({});
+  });
+});
+
+describe('REROLL ALL, KEEP HIGHER (7d5c)', () => {
+  const { LEVELING_KEY, healthRollLine } = require_('../systemBuilder/levelUp');
+  const { rerollAll } = require_('../systemBuilder/healthLevels');
+  const REROLL = { ...HALE, levels: perLevel({ gain: 'reroll' }) };
+  const at = (n) => () => (n - 1) / 10 + 0.01; // every d10 lands on n
+  // Fighter 2 with CON 14 (+2): 12 + 7 = 19 now.
+  const two = { [XP_KEY]: 9e9, ...holding([['fighter', 2]]), [HEALTH_LEVELS_KEY]: { 2: { die: 10, took: 5 } } };
+
+  it('every level\'s die and the new one, each with what each level adds: over 19, the new maximum', () => {
+    expect(rerollAll(REROLL, two, 10, at(9))).toEqual({ total: 27 + 6, rolls: [{ die: 10, roll: 9 }, { die: 10, roll: 9 }, { die: 10, roll: 9 }], over: 19, gained: 33 - 19 });
+  });
+
+  it('not over: +1', () => {
+    expect(rerollAll(REROLL, two, 10, at(1))).toMatchObject({ total: 3 + 6, over: 19, gained: 1 });
+    // Equal isn't over: 5 + 4 + 4 and 6 come to 19.
+    const seq = (...rolls) => { let i = 0; return () => (rolls[i++] - 1) / 10 + 0.01; };
+    expect(rerollAll(REROLL, two, 10, seq(5, 4, 4))).toMatchObject({ total: 19, over: 19, gained: 1 });
+    expect(rerollAll(REROLL, two, 10, seq(5, 5, 4))).toMatchObject({ total: 20, over: 19, gained: 1 });
+  });
+
+  it('each level its own die, a class\'s taken up later its own; a level with none rolls nothing', () => {
+    const mixed = { ...two, ...holding([['fighter', 2], ['wizard', 1]]), [HEALTH_LEVELS_KEY]: { 2: { die: 10, took: 5 }, 3: { die: 6, took: 3 } } };
+    expect(rerollAll(REROLL, mixed, 6, () => 0.99).rolls.map((r) => r.die)).toEqual([10, 10, 6, 6]);
+    const monk = { [XP_KEY]: 9e9, ...holding([['monk', 1]]) };
+    expect(rerollAll(REROLL, monk, null, () => 0.99)).toMatchObject({ rolls: [], total: 4 });
+  });
+
+  it('rolled in the window: kept with the place, its dice for the tray, and the line saying how it went', () => {
+    const done = levelAction(REROLL, two, { kind: 'healthRoll', list: 'classes', option: 'fighter' }, { rng: at(9) });
+    expect(done.data[LEVELING_KEY].health).toEqual({ roll: 33, die: 10, gained: 14, over: 19 });
+    expect(done.rolled).toEqual({ results: { 10: [9, 9, 9] }, total: 33, over: 19, gained: 14, dice: 3 });
+    expect(healthRollLine('Wren', done.rolled)).toBe('Wren rerolled Health, 3 dice [33]: over 19, the new maximum');
+    expect(healthRollLine('Wren', { results: { 10: [1] }, total: 9, over: 19, gained: 1, dice: 1 })).toBe('Wren rerolled Health, 1 die [9]: not over 19, +1');
+  });
+
+  it('FINISH keeps what it added as that level\'s, not recounted when a stat changes', () => {
+    const rolled = levelAction(REROLL, two, { kind: 'healthRoll', list: 'classes', option: 'fighter' }, { rng: at(9) }).data;
+    const up = levelAction(REROLL, rolled, { kind: 'up', list: 'classes', option: 'fighter' }).data;
+    expect(up[HEALTH_LEVELS_KEY][3]).toEqual({ die: 10, took: 33, rolled: true, gained: 14 });
+    expect(healthByLevel(REROLL, up).max).toBe(33);
+    // CON 18 (+4): levels 1 and 2 recount, level 3 keeps its 14.
+    expect(healthByLevel(REROLL, { ...up, con: 18 }).max).toBe(14 + 9 + 14);
+    expect(healthByLevel(REROLL, up).levels[2]).toEqual({ level: 3, took: 33, die: 10, gained: 14 });
+  });
+
+  it('a kept gain that isn\'t a whole amount from 1 is passed over', () => {
+    const data = { ...holding([['fighter', 3]]), [HEALTH_LEVELS_KEY]: { 2: { die: 10, took: 5, gained: 0 }, 3: { die: 10, took: 5, gained: 2.5 } } };
+    expect(healthByLevel(REROLL, data).max).toBe(12 + 7 + 7);
+    const below = { ...holding([['fighter', 2]]), [HEALTH_LEVELS_KEY]: { 2: { die: 10, took: 5, gained: -3 } } };
+    expect(healthByLevel(REROLL, below).max).toBe(12 + 7);
+  });
+
+  it('won\'t finish without the roll; the GM goes on the average', () => {
+    expect(levelAction(REROLL, two, { kind: 'up', list: 'classes', option: 'fighter' }).error).toBe('Roll for health first');
+    expect(levelAction(REROLL, two, { kind: 'up', list: 'classes', option: 'fighter' }, { gm: true }).data[HEALTH_LEVELS_KEY][3]).toEqual({ die: 10, took: 5 });
+  });
+
+  it('through the socket: several dice thrown at once', async () => {
+    const db = await makeTestDb();
+    await run(db, 'CREATE TABLE IF NOT EXISTS dice_rolls (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, total INTEGER, results TEXT, color TEXT, historyString TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)');
+    const ID = 'sys_rerollrerollreroll';
+    const def = JSON.stringify({ ...REROLL, name: 'Rerolling' });
+    await run(db, 'INSERT INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 1)', [ID, 'Rerolling', def, def]);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    await run(db, `INSERT INTO global_settings (key, value) VALUES ('game_system', ?)`, [ID]);
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('kes', ?, ?, 0)`, [ID, JSON.stringify({ name: 'Kestrel', ...two })]);
+    let connection;
+    const shared = [];
+    socketsFactory({ on: (e, cb) => { if (e === 'connection') connection = cb; }, emit: (event, data) => shared.push({ event, data }), to: () => ({ emit: () => {} }) },
+      db, { elevatedUsers: new Set(), emitUpdate: vi.fn(), recordAction: vi.fn() });
+    const handlers = {};
+    connection({ id: 'reroll-kes', on: (e, fn) => { handlers[e] = fn; }, emit: () => {}, broadcast: { emit: () => {} }, use: () => {}, join: () => {}, disconnect: () => {} });
+    handlers.identify('kes');
+    await drain(db);
+    handlers.levelAction({ kind: 'healthRoll', list: 'classes', option: 'fighter' });
+    await until(() => shared.some((e) => e.event === 'diceRollBroadcast'), { label: 'thrown' });
+    const thrown = shared.find((e) => e.event === 'diceRollBroadcast').data;
+    expect(thrown.results[10]).toHaveLength(3);
+    expect(thrown.historyString).toMatch(/^Kestrel rerolled Health, 3 dice \[\d+\]: (over 19, the new maximum|not over 19, \+1)$/);
   });
 });
 
