@@ -299,30 +299,39 @@ function makeTestDb() {
         // let drain (helpers/until.js) read before a handler's own queries had landed, and
         // tests failed on CI only (3 times in 200 on a busy core; never serialized).
         db.serialize();
-        resolve(process.env.TEST_SLOW_DB ? slowed(db) : db);
+        resolve(counted(db));
       });
     });
   });
 }
 
 /**
- * TEST_SLOW_DB=1 (a timing check, never on in CI): every answer from the database arrives a random few
- * milliseconds late, as on a crowded runner. The queries still run in order; only when their answers reach the code
- * moves. A test that checks something before the server has finished writing it, such as reading the dice log
- * having waited only for the sheet, then fails here, on this machine, instead of now and then on CI. Run the
- * suite with it now and then: TEST_SLOW_DB=1 npx vitest run.
+ * Every query with an answer to give is counted until its answer reaches the code: `__pending` is how many are
+ * out, `__asked` how many there have been. drain (helpers/until.js) waits for both to stop moving, so it waits
+ * for a handler's whole chain of queries, however long, rather than a fixed number of round trips.
+ *
+ * TEST_SLOW_DB=1 (a timing check, never on in CI): every answer arrives a random few milliseconds late
+ * (TEST_SLOW_DB_MS, 12 unless set), as on a crowded runner. The queries still run in order; only when their
+ * answers reach the code moves. A test that checks something before the server has written it, such as reading
+ * the dice log having waited only for the sheet, then fails here instead of now and then on CI. Run the suite
+ * with it now and then: TEST_SLOW_DB=1 npx vitest run.
  */
-const SLOW_MS = Number(process.env.TEST_SLOW_DB_MS) || 12;
-function slowed(db) {
-  for (const method of ['run', 'get', 'all', 'each', 'exec']) {
+const SLOW_MS = process.env.TEST_SLOW_DB ? (Number(process.env.TEST_SLOW_DB_MS) || 12) : 0;
+function counted(db) {
+  db.__pending = 0;
+  db.__asked = 0;
+  for (const method of ['run', 'get', 'all', 'exec']) {
     const own = db[method].bind(db);
     db[method] = (...args) => {
       const at = args.findIndex((a) => typeof a === 'function');
       if (at < 0) return own(...args);
       const answer = args[at];
-      args[at] = function late(...results) {
+      db.__pending += 1;
+      db.__asked += 1;
+      args[at] = function answered(...results) {
         const self = this;
-        setTimeout(() => answer.apply(self, results), Math.floor(Math.random() * SLOW_MS));
+        const give = () => { db.__pending -= 1; answer.apply(self, results); };
+        if (SLOW_MS) setTimeout(give, Math.floor(Math.random() * SLOW_MS)); else give();
       };
       return own(...args);
     };
