@@ -277,11 +277,11 @@ describe('through the socket', () => {
       await until(() => kes.refused().length === 1, { label: 'the refusal' });
       expect(kes.refused()).toEqual(['This character isn\'t being made']);
       kes.handlers.creationAction({ kind: 'open' });
-      await until(async () => !!(await stored())._creating, { label: 'opened' });
-      const heard = shared.filter((e) => e.event === 'sheetUpdated').length;
+      // The first open is told once, a moment after it is written: wait for that, not the write.
+      await until(() => shared.filter((e) => e.event === 'sheetUpdated').length === 1, { label: 'opened, and told' });
       kes.handlers.creationAction({ kind: 'open' });
       await drain(db);
-      expect(shared.filter((e) => e.event === 'sheetUpdated')).toHaveLength(heard);
+      expect(shared.filter((e) => e.event === 'sheetUpdated')).toHaveLength(1);
     });
 
     it('says when a socket is known, so what it asked too soon can be asked again', async () => {

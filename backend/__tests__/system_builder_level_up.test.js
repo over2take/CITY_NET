@@ -385,13 +385,43 @@ describe('through the socket', () => {
     expect((await stored()).level).toBe(1);
   });
 
-  it('an uploaded sheet still sets it, an upload being king, and keeps their XP and a level given', async () => {
+  it('an uploaded sheet still sets it, an upload being king, and brings its XP (7d2c), never a level given', async () => {
     const { kes } = await table();
     await write({ level: 1, [XP_KEY]: 40, [OWED_KEY]: 1 });
     kes.handlers.importSheetFields({ fields: { level: 4, [XP_KEY]: 9000, [OWED_KEY]: 9 }, replace: true });
     await until(async () => (await stored()).level === 4, { label: 'uploaded' });
-    expect((await stored())[XP_KEY]).toBe(40);
+    expect((await stored())[XP_KEY]).toBe(9000);
     expect((await stored())[OWED_KEY]).toBe(1);
+  });
+
+  it('an upload with no XP keeps theirs; an edit, or an amount that isn\'t one, never sets it', async () => {
+    const { kes } = await table();
+    await write({ level: 1, [XP_KEY]: 40 });
+    kes.handlers.importSheetFields({ fields: { name: 'A' }, replace: true });
+    await until(async () => (await stored()).name === 'A', { label: 'a' });
+    expect((await stored())[XP_KEY]).toBe(40);
+    kes.handlers.importSheetFields({ fields: { name: 'B', [XP_KEY]: 500 } });
+    await until(async () => (await stored()).name === 'B', { label: 'b' });
+    expect((await stored())[XP_KEY]).toBe(40);
+    kes.handlers.importSheetFields({ fields: { name: 'W', [XP_KEY]: '1,250' }, replace: true });
+    await until(async () => (await stored()).name === 'W', { label: 'written' });
+    expect((await stored())[XP_KEY]).toBe(1250);
+    await write({ name: 'W', level: 1, [XP_KEY]: 40 });
+    for (const [name, bad] of [['C', -5], ['D', 2.5], ['E', 'lots'], ['F', ''], ['G', '  ']]) {
+      kes.handlers.importSheetFields({ fields: { name, [XP_KEY]: bad }, replace: true });
+      await until(async () => (await stored()).name === name, { label: name });
+      expect((await stored())[XP_KEY], String(bad)).toBe(40);
+    }
+  });
+
+  it('where characters earn no XP, an upload can\'t give them any', async () => {
+    const def = JSON.stringify({ ...DEF, core: { advancement: ['milestone'] } });
+    await run(db, 'UPDATE custom_systems SET draft = ?, published = ? WHERE id = ?', [def, def, ID]);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    const { kes } = await table();
+    kes.handlers.importSheetFields({ fields: { name: 'M', [XP_KEY]: 300 }, replace: true });
+    await until(async () => (await stored()).name === 'M', { label: 'uploaded' });
+    expect(XP_KEY in await stored()).toBe(false);
   });
 
   it('the GM can type one on their own sheet', async () => {

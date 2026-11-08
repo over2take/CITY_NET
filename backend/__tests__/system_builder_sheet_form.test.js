@@ -18,7 +18,7 @@ const require_ = createRequire(import.meta.url);
 const runtime = require_('../systemBuilder/runtime');
 const { buildCustomTemplate, printable, hintOf, leftLine } = require_('../sheets/pdfTemplate');
 const { extractPdfFields } = require_('../sheets/importers');
-const { sheetFields, customImporter, INVENTORY_ROWS } = require_('../systemBuilder/sheetImport');
+const { sheetFields, customImporter, jsonTemplate, xpLines, xpFrom, INVENTORY_ROWS } = require_('../systemBuilder/sheetImport');
 const sheetsRouteFactory = require_('../routes/sheets.js');
 const systemsRoute = require_('../routes/systems.js');
 
@@ -245,6 +245,68 @@ describe('picks on the form (7c6)', () => {
 
   it('prints how to write the names under their box', () => {
     expect(hintOf({ type: 'text', hint: 'Names, commas between: A, B' })).toBe('Names, commas between: A, B');
+  });
+});
+
+describe('XP on the form (7d2c)', () => {
+  const MARKS = { ...HEARTH, core: { advancement: ['levels'] }, levels: { top: 5 }, words: { xp: { singular: 'MARK', plural: 'MARKS', short: 'MK' } },
+    choices: [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'soldier', label: 'Soldier' }] }] };
+
+  it('a box under the game\'s word, after the sheet\'s own and before the picks, only where they earn it', async () => {
+    const names = (await formOf(await buildCustomTemplate(MARKS))).getFields().map((f) => f.getName());
+    expect(names.indexOf('_xp')).toBe(names.indexOf('inventory_12_qty') + 1);
+    expect(names.indexOf('pick_classes')).toBe(names.indexOf('_xp') + 1);
+    expect(xpLines(MARKS)).toEqual([expect.objectContaining({ id: '_xp', label: 'MK', type: 'number', min: 0, section: 'LEVELS' })]);
+    for (const none of [HEARTH, { ...MARKS, core: { advancement: ['milestone'] } }, { ...MARKS, parts: { xp: { on: false } } }]) {
+      expect(xpLines(none)).toEqual([]);
+      expect((await formOf(await buildCustomTemplate(none))).getFields().map((f) => f.getName())).not.toContain('_xp');
+    }
+    expect(xpLines({ ...MARKS, words: {} })[0].label).toBe('XP');
+  });
+
+  it('says what goes in it, and the JSON template asks for it too', () => {
+    expect(hintOf(xpLines(MARKS)[0])).toBe('What they have so far. Left empty, it stays as it is');
+    const template = jsonTemplate(MARKS);
+    const keys = Object.keys(template.fields);
+    expect(template.fields._xp).toBeNull();
+    expect(template.help._xp).toBe('MK. What they have so far. Left empty, it stays as it is');
+    expect(keys.indexOf('_xp')).toBe(keys.indexOf('pick_classes') - 1);
+    expect(keys.indexOf('_xp')).toBeGreaterThan(keys.indexOf('grit'));
+    expect(jsonTemplate(HEARTH).fields._xp).toBeUndefined();
+  });
+
+  it('comes back through the importer, filled in, and left blank brings nothing', async () => {
+    const doc = await PDFDocument.load(await buildCustomTemplate(MARKS));
+    doc.getForm().getTextField('_xp').setText('6,500');
+    expect(customImporter(MARKS).mapFields(await extractPdfFields(Buffer.from(await doc.save()))).mapped._xp).toBe(6500);
+    const blank = customImporter(MARKS).mapFields(await extractPdfFields(await buildCustomTemplate(MARKS)));
+    expect(blank.mapped._xp).toBeUndefined();
+    expect(blank.unmapped).toEqual({});
+  });
+
+  it('read by its word, its other forms, XP or its id; what isn\'t a whole amount is said, not taken', () => {
+    const read = (raw) => customImporter(MARKS).mapFields(raw);
+    for (const key of ['MK', 'Marks', 'mark', 'XP', '_xp']) expect(read({ [key]: 250 }).mapped._xp, key).toBe(250);
+    for (const bad of [-1, 1.5, 'lots', true, 1e13]) {
+      const r = read({ MK: bad });
+      expect(r.mapped._xp, String(bad)).toBeUndefined();
+      expect(r.unmapped, String(bad)).toEqual({ MK: bad });
+    }
+    expect(read({ MK: ' 1 200 ' }).mapped._xp).toBe(1200);
+    expect(customImporter(MARKS).parseText('Might 12\nMK 300').MK ?? customImporter(MARKS).parseText('Might 12\nMK 300')._xp).toBe('300');
+    // Where nothing earns it, XP is just a name the sheet doesn't have.
+    expect(customImporter(HEARTH).mapFields({ XP: 5 }).unmapped).toEqual({ XP: 5 });
+  });
+
+  it('a stat of the sheet\'s own called XP stays the stat', () => {
+    const own = { ...MARKS, stats: [{ id: 'a', label: 'A', stats: [{ id: 'xp', label: 'XP' }] }],
+      sheet: { sections: [{ id: 's', label: 'S', layout: 'grid', fields: [{ id: 'xp', label: 'XP', type: 'number' }] }] } };
+    expect(customImporter(own).mapFields({ XP: 7 }).mapped).toEqual({ xp: 7 });
+  });
+
+  it('a whole amount, in range', () => {
+    expect([0, 12, '7', '6,500', 1e12].map(xpFrom)).toEqual([0, 12, 7, 6500, 1e12]);
+    expect([-1, 2.5, '', ' ', 'x', null, undefined, {}, [5], true, 1e12 + 1].map(xpFrom)).toEqual(Array(11).fill(null));
   });
 });
 
