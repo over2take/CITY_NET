@@ -26,7 +26,6 @@ import {
 import { ChoicesSection } from './ChoicesSection';
 import { XpMeterBar } from './XpMeterBar';
 import { LevelUpReady } from './LevelUpReady';
-import type { LevelTarget } from '../sheets/xpMeter';
 import { RestSection } from './RestSection';
 import { withTempHp } from '../sheets/tempHp';
 import { choiceEffects, type ChoicesAction } from '../sheets/choicesShown';
@@ -128,8 +127,8 @@ interface SheetRendererProps {
   recoveryOpen?: boolean;
   /** Takes one of the game's rests on this character, from its RESTS section (R3b). */
   onRestTake?: (rest: string) => void;
-  /** Going up a level (7d2b): the player's own sheet offers it. */
-  onLevelUp?: (target: LevelTarget) => void;
+  /** Opens LEVEL_UP.EXE (7d3a): the player's own sheet, in the game, offers it. */
+  onLevelUp?: () => void;
 }
 
 /** Whether the viewer is the GM, for FieldInput's GM-only lock, without threading a prop
@@ -447,7 +446,7 @@ function FieldInput({ field, data, readOnly: sheetReadOnly, onFieldChange, onFie
 }
 
 function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onFieldsChange, onPharmaChange, pharmaUndo, onUndoPharma, readOnly, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, xpRate, canRoll }: {
-  onLevelUp?: (target: LevelTarget) => void;
+  onLevelUp?: () => void;
   template: SheetTemplate; data: SheetData; portraitUrl?: string | null;
   onPortraitUpload?: (file: File) => void;
   portraitShadow?: boolean;
@@ -643,7 +642,7 @@ function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUp
           </div>
         )}
         <XpMeterBar template={template} data={data as Record<string, unknown>} />
-        <LevelUpReady template={template} data={data as Record<string, unknown>} onLevelUp={onLevelUp} />
+        <LevelUpReady template={template} data={data as Record<string, unknown>} onOpen={onLevelUp} />
         {h.xpBar && (() => {
           // Under the HP bar and its chips, because it answers the same kind of question:
           // how far through something am I. Display only - the number is typed on the

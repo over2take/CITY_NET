@@ -54,6 +54,7 @@ import { ChatWindow } from './components/ChatWindow';
 import { Sidebar, NavControlsMenu, CharacterControlsMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu, hasSheetCombat } from './components/Sidebar';
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
 import { NewCharacterWindow } from './components/NewCharacterWindow';
+import { LevelUpWindow } from './components/LevelUpWindow';
 import { TERMINAL_WIDTH } from './components/TerminalWindow';
 import { useNewCharacter } from './hooks/useNewCharacter';
 import { useLevelReady } from './hooks/useLevelReady';
@@ -410,6 +411,8 @@ function App() {
   // Read by the socket handler when a roll opens the tray, as trayOpenRef is: null while it is shut.
   const newCharacterAt = useRef<{ x: number; y: number } | null>(null);
   const [raiseNewCharacter, setRaiseNewCharacter] = useState(0);
+  const [isLevelUpOpen, setIsLevelUpOpen] = useState(false);
+  const [levelUpPos, setLevelUpPos] = useState(() => ({ x: window.innerWidth / 2 - 200, y: 100 }));
   useEffect(() => { newCharacterAt.current = isNewCharacterOpen ? newCharacterPos : null; }, [isNewCharacterOpen, newCharacterPos]);
   const [vehiclesPos, setVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 200, y: 90 }));
   const [enemyVehiclesPos, setEnemyVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 160, y: 130 }));
@@ -2229,6 +2232,17 @@ function App() {
                 onOpenVehicles={() => setIsVehiclesOpen(true)}
                 currentTheme={currentTheme}
                 onContinueCreating={openNewCharacter}
+                onOpenLevelUp={() => setIsLevelUpOpen(true)}
+              />
+            )}
+            {isLevelUpOpen && (
+              <LevelUpWindow
+                pos={levelUpPos}
+                setPos={setLevelUpPos}
+                socket={socketRef.current}
+                userName={userName}
+                onLeave={() => setIsLevelUpOpen(false)}
+                onDone={() => setIsLevelUpOpen(false)}
               />
             )}
             {isNewCharacterOpen && (

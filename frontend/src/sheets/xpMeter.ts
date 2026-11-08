@@ -12,6 +12,8 @@ export interface LevelsShown { top: number; table?: Record<string, number> }
 export const XP_KEY = '_xp';
 /** A level the GM gave, not taken yet (backend levelUp.js OWED_KEY). */
 export const OWED_KEY = '_levels_owed';
+/** LEVEL_UP.EXE's place (7d3a; backend levelUp.js LEVELING_KEY): the class it's raising, {} for the level itself. */
+export const LEVELING_KEY = '_leveling';
 /** A cell per point up to this many to the next level, as the HP bar has one per hit point. */
 const ONE_PER_POINT = 40;
 /** Past that, this many. */
@@ -53,7 +55,18 @@ export const xpMeter = (template: SheetTemplate | null | undefined, data: Record
 
 /** One thing that can go up: a pick in a levelled list, or with none, the level stat (backend levelUp.js levelTargets). */
 export interface LevelTarget { list?: string; option?: string; name: string; level: number }
-export interface LevelUpOffer { ready: boolean; targets: LevelTarget[]; firstPick: string | null }
+export interface LevelUpOffer {
+  ready: boolean; targets: LevelTarget[]; firstPick: string | null;
+  /** Where LEVEL_UP.EXE was left: null when it isn't open on this sheet. */
+  leveling: { list?: string; option?: string } | null;
+}
+
+const placeOf = (data: Record<string, unknown> | null | undefined): LevelUpOffer['leveling'] => {
+  const p = data?.[LEVELING_KEY];
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
+  const { list, option } = p as Record<string, unknown>;
+  return { ...(typeof list === 'string' ? { list } : {}), ...(typeof option === 'string' ? { option } : {}) };
+};
 
 /** Whether this character can go up now, and what would. Null where levels are typed in. */
 export const levelUpOffer = (template: SheetTemplate | null | undefined, data: Record<string, unknown> | null | undefined): LevelUpOffer | null => {
@@ -63,13 +76,14 @@ export const levelUpOffer = (template: SheetTemplate | null | undefined, data: R
   const need = levels.table?.[level + 1];
   const ready = level < levels.top && (whole(data?.[OWED_KEY]) > 0 || (need !== undefined && whole(data?.[XP_KEY]) >= need));
   const lists = (template?.choices ?? []).filter((l) => l.levelled);
-  if (!lists.length) return { ready, targets: [{ name: 'LEVEL', level }], firstPick: null };
+  const leveling = placeOf(data);
+  if (!lists.length) return { ready, targets: [{ name: 'LEVEL', level }], firstPick: null, leveling };
   const targets = workedOn(data).picks.filter((p) => !p.from && !p.waiting).flatMap((p) => {
     const list = lists.find((l) => l.id === p.list);
     const option = list?.options.find((o) => o.id === p.option);
     return list && option ? [{ list: list.id, option: option.id, name: option.label, level: p.level ?? 1 }] : [];
   });
-  return { ready, targets, firstPick: targets.length ? null : lists[0].one };
+  return { ready, targets, firstPick: targets.length ? null : lists[0].one, leveling };
 };
 
 /** The line under the meter. */

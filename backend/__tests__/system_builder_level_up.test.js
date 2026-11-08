@@ -13,7 +13,7 @@ import { drain, until } from './helpers/until.js';
 process.env.JWT_SECRET = 'test-secret';
 
 const require_ = createRequire(import.meta.url);
-const { OWED_KEY, characterLevel, levelTargets, levelAction, lockedByLevels } = require_('../systemBuilder/levelUp');
+const { OWED_KEY, LEVELING_KEY, characterLevel, levelTargets, levelAction, lockedByLevels } = require_('../systemBuilder/levelUp');
 const { pickAction } = require_('../systemBuilder/picking');
 const { PICKS_KEY } = require_('../systemBuilder/choices');
 const { XP_KEY } = require_('../systemBuilder/levels');
@@ -121,6 +121,40 @@ describe('a player going up', () => {
     expect(levelAction(WITH_STAT, { [XP_KEY]: 100 }, null, GM)).toEqual({ ok: false, error: 'Nothing to do' });
     expect(levelAction(WITH_STAT, { [XP_KEY]: 100 }, { kind: 'sell' }, GM)).toEqual({ ok: false, error: 'Nothing to do' });
     expect(levelAction(WITH_STAT, null, { kind: 'up' }).error).toMatch(/^Not yet/);
+  });
+});
+
+describe('LEVEL_UP.EXE\'s place (7d3a)', () => {
+  it('keeps which class, and nothing else changes', () => {
+    const data = { ...holding(['soldier', 1], ['mage', 1]), [XP_KEY]: 9000 };
+    const done = levelAction(WITH_LIST, data, { kind: 'place', list: 'classes', option: 'mage' });
+    expect(done.data[LEVELING_KEY]).toEqual({ list: 'classes', option: 'mage' });
+    expect(done.data[PICKS_KEY]).toEqual(data[PICKS_KEY]);
+    expect(done.level).toBe(2);
+    expect(LEVELING_KEY).toBe('_leveling');
+  });
+
+  it('for the level itself, an empty place; one class needs no naming', () => {
+    expect(levelAction(NO_LIST, { [XP_KEY]: 100 }, { kind: 'place' }).data[LEVELING_KEY]).toEqual({});
+    expect(levelAction(WITH_LIST, { ...holding(['soldier', 1]), [XP_KEY]: 100 }, { kind: 'place' }).data[LEVELING_KEY]).toEqual({ list: 'classes', option: 'soldier' });
+  });
+
+  it('only once it is available, never at the top, and only what they hold', () => {
+    const two = holding(['soldier', 1], ['mage', 1]);
+    expect(levelAction(WITH_LIST, two, { kind: 'place', option: 'mage' }).error).toMatch(/^Not yet/);
+    expect(levelAction(WITH_LIST, { ...two, [OWED_KEY]: 1 }, { kind: 'place', option: 'mage' }).ok).toBe(true);
+    expect(levelAction(WITH_LIST, two, { kind: 'place', option: 'mage' }, GM).ok).toBe(true);
+    expect(levelAction(WITH_LIST, { ...holding(['soldier', 4]), [XP_KEY]: 9000 }, { kind: 'place' }, GM).error).toBe('Already the highest level');
+    expect(levelAction(WITH_LIST, { ...two, [XP_KEY]: 9000 }, { kind: 'place' }).error).toBe('Say which one goes up');
+    expect(levelAction(WITH_LIST, { ...two, [XP_KEY]: 9000 }, { kind: 'place', option: 'rogue' }).error).toBe("This character doesn't hold that");
+  });
+
+  it('goes once they go up, or a level is taken back or not taken', () => {
+    const placed = { ...holding(['soldier', 2]), [XP_KEY]: 9000, [LEVELING_KEY]: { list: 'classes', option: 'soldier' } };
+    expect(LEVELING_KEY in levelAction(WITH_LIST, placed, { kind: 'up' }).data).toBe(false);
+    expect(LEVELING_KEY in levelAction(WITH_LIST, placed, { kind: 'down' }, GM).data).toBe(false);
+    expect(LEVELING_KEY in levelAction(WITH_LIST, { ...placed, [OWED_KEY]: 1 }, { kind: 'down' }, GM).data).toBe(false);
+    expect(levelAction(WITH_LIST, placed, { kind: 'give' }, GM).data[LEVELING_KEY]).toEqual({ list: 'classes', option: 'soldier' });
   });
 });
 
@@ -367,6 +401,16 @@ describe('through the socket', () => {
     const { kes } = await table();
     kes.handlers.requestMySheet({ peek: true });
     await until(() => kes.heard.some((e) => e.event === 'sheetData' && e.data.username === 'kes'), { label: 'read' });
+  });
+
+  it('a player\'s place in LEVEL_UP.EXE is kept on their sheet, and every screen is told', async () => {
+    const { kes, shared } = await table();
+    await write({ name: 'Kestrel', level: 1, ...holding(['soldier', 1]), [XP_KEY]: 100 });
+    kes.handlers.levelAction({ kind: 'place', list: 'classes', option: 'soldier' });
+    await until(async () => !!(await stored())[LEVELING_KEY], { label: 'kept' });
+    expect((await stored())[LEVELING_KEY]).toEqual({ list: 'classes', option: 'soldier' });
+    expect((await stored()).level).toBe(1);
+    await until(() => shared.some((e) => e.event === 'sheetUpdated' && e.data.username === 'kes'), { label: 'told' });
   });
 
   it('the GM goes up for a player they name', async () => {

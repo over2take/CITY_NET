@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { characterLevel, levelUpOffer, xpMeter, xpMeterWords, OWED_KEY, XP_KEY } from '../xpMeter';
+import { characterLevel, levelUpOffer, xpMeter, xpMeterWords, LEVELING_KEY, OWED_KEY, XP_KEY } from '../xpMeter';
 import { WORKED_KEY } from '../choicesShown';
 import type { SheetTemplate } from '../types';
 
@@ -134,7 +134,7 @@ describe('whether a character can go up (7d2b)', () => {
   });
 
   it('with no levelled list, the level itself goes up', () => {
-    expect(levelUpOffer(made({ choices: [LISTS[1]] }), { level: 2 })).toEqual({ ready: false, targets: [{ name: 'LEVEL', level: 2 }], firstPick: null });
+    expect(levelUpOffer(made({ choices: [LISTS[1]] }), { level: 2 })).toEqual({ ready: false, targets: [{ name: 'LEVEL', level: 2 }], firstPick: null, leveling: null });
   });
 
   it('with one, each of their own that counts; none picked says which to pick', () => {
@@ -142,6 +142,18 @@ describe('whether a character can go up (7d2b)', () => {
     const offer = levelUpOffer(template, holding([pick('soldier', 2), pick('mage', 1), pick('spare', 1, { waiting: true }), pick('spare', 1, { from: 'x' }), pick('gone', 1), { list: 'feats', option: 'quick' }], 3));
     expect(offer?.targets).toEqual([{ list: 'classes', option: 'soldier', name: 'Soldier', level: 2 }, { list: 'classes', option: 'mage', name: 'Mage', level: 1 }]);
     expect(offer?.firstPick).toBeNull();
-    expect(levelUpOffer(template, holding([], 0))).toEqual({ ready: false, targets: [], firstPick: 'Class' });
+    expect(levelUpOffer(template, holding([], 0))).toEqual({ ready: false, targets: [], firstPick: 'Class', leveling: null });
+  });
+
+  it('where LEVEL_UP.EXE was left (7d3a), as much of it as reads', () => {
+    const template = made({ choices: LISTS });
+    const at = (place: unknown) => levelUpOffer(template, { [LEVELING_KEY]: place })?.leveling;
+    expect(at({ list: 'classes', option: 'mage' })).toEqual({ list: 'classes', option: 'mage' });
+    expect(at({})).toEqual({});
+    expect(at({ list: 3, option: 'mage' })).toEqual({ option: 'mage' });
+    expect(at({ list: 'classes', option: null })).toEqual({ list: 'classes' });
+    expect(at({ list: 'classes', option: 7 })).toEqual({ list: 'classes' });
+    for (const none of [undefined, null, 'mage', ['mage']]) expect(at(none), String(none)).toBeNull();
+    expect(levelUpOffer(made(), { [LEVELING_KEY]: {} })?.leveling).toEqual({});
   });
 });
