@@ -69,10 +69,12 @@ const withHealthKept = (definition, before, after, target, gm) => {
   const health = placedFor(before, target) ? healthPlaceOf(before) : null;
   // Nothing is rolled without a die.
   const rolled = health && Number.isInteger(health.roll) ? health.roll : null;
-  const average = h.gain === 'average' || (health && health.average === true) || die === null || gm;
+  const average = h.gain === 'average' || (health && health.average === true) || (die === null && !(h.gain === 'beat' && h.beat.way === 'pool')) || gm;
   if (rolled === null && !average) return { error: h.gain === 'choose' ? 'Take the average or roll for health first' : 'Roll for health first' };
   const kept = isPlainObject(after[HEALTH_LEVELS_KEY]) ? after[HEALTH_LEVELS_KEY] : {};
   // A reroll's level adds what took it to its new maximum (7d5c).
+  // The GM going up with no roll to beat: the level gains nothing, as an unbeaten roll would.
+  if (rolled === null && h.gain === 'beat') return { data: { ...after, [HEALTH_LEVELS_KEY]: { ...kept, [level]: { die, took: 0, gained: 0 } } } };
   const took = rolled === null ? { took: averageOf(die) }
     : Number.isInteger(health.gained) ? { took: rolled, rolled: true, gained: health.gained } : { took: rolled, rolled: true };
   return { data: { ...after, [HEALTH_LEVELS_KEY]: { ...kept, [level]: { die, ...took } } } };
@@ -219,10 +221,21 @@ const levelAction = (definition, data, action, { gm = false, rng = cryptoRng } =
     const kept = placedFor(sheet, target) ? healthPlaceOf(sheet) : null;
     if (!gm && kept && Number.isInteger(kept.roll)) return { ok: false, error: ROLLED_KEPT };
     const die = levelDie(definition, target.option || null);
-    if (die === null) return { ok: false, error: `Nothing to roll: ${target.stat ? 'there is no die for every level' : `${target.option.label || target.option.id} has no HIT DIE`}` };
+    // A pool to beat is rolled whatever the class's die (7d5d).
+    if (die === null && !(h.gain === 'beat' && h.beat.way === 'pool')) return { ok: false, error: `Nothing to roll: ${target.stat ? 'there is no die for every level' : `${target.option.label || target.option.id} has no HIT DIE`}` };
     const place = placedFor(sheet, target) ? sheet[LEVELING_KEY] : {};
     const at = { ...(target.stat ? {} : { list: target.list.id, option: target.option.id }), ...(Array.isArray(place.picks) ? { picks: place.picks } : {}) };
     if (kind === 'healthAverage') return said({ ...sheet, [LEVELING_KEY]: { ...at, health: { average: true } } });
+    if (h.gain === 'beat') {
+      // Loaded here: it reads this module's characterLevel as it loads.
+      const beat = require('./healthLevels').rollToBeat(definition, sheet, die, rng);
+      const results = {};
+      for (const r of beat.rolls) results[r.die] = [...(results[r.die] || []), r.roll];
+      return {
+        ...said({ ...sheet, [LEVELING_KEY]: { ...at, health: { roll: beat.total, die, gained: beat.gained, over: beat.over, beat: true } } }),
+        rolled: { results, total: beat.total, over: beat.over, gained: beat.gained, dice: beat.rolls.length, beat: true, ...(beat.gainRoll ? { gainDie: beat.gainRoll.die } : {}) },
+      };
+    }
     if (h.gain === 'reroll') {
       // Loaded here: it reads this module's characterLevel as it loads.
       const all = require('./healthLevels').rerollAll(definition, sheet, die, rng);
@@ -266,7 +279,9 @@ const lockedByLevels = (definition, data) => (definition && advances(definition)
  * The dice-log line for a level's health roll (7d5b): "Wren rolled Health (d10) [7]"; a reroll's (7d5c) "Wren rerolled
  * Health, 4 dice [31]: over 27, the new maximum" or "[20]: not over 27, +1".
  */
-const healthRollLine = (who, rolled) => (rolled.results
+const healthRollLine = (who, rolled) => (rolled.beat
+  ? `${who} rolled Health to beat ${rolled.over}, ${rolled.dice} ${rolled.dice === 1 ? 'die' : 'dice'} [${rolled.total}]: ${rolled.total > rolled.over ? `beaten, +${rolled.gained}${rolled.gainDie ? ` (d${rolled.gainDie})` : ''}` : 'not beaten, nothing gained'}`
+  : rolled.results
   ? `${who} rerolled Health, ${rolled.dice} ${rolled.dice === 1 ? 'die' : 'dice'} [${rolled.total}]: ${rolled.total > rolled.over ? `over ${rolled.over}, the new maximum` : `not over ${rolled.over}, +1`}`
   : `${who} rolled Health (d${rolled.sides}) [${rolled.total}]`);
 

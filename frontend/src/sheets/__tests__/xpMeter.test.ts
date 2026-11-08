@@ -161,6 +161,8 @@ describe('whether a character can go up (7d2b)', () => {
     expect(at({ health: { average: true } })).toEqual({ health: { average: true } });
     expect(at({ health: { roll: 33, die: 10, gained: 14, over: 19 } })).toEqual({ health: { roll: 33, die: 10, gained: 14, over: 19 } });
     expect(at({ health: { roll: 33, gained: '14', over: 1.5 } })).toEqual({ health: { roll: 33 } });
+    expect(at({ health: { roll: 15, gained: 0, over: 19, beat: true } })).toEqual({ health: { roll: 15, gained: 0, over: 19, beat: true } });
+    expect(at({ health: { roll: 15, beat: 'yes' } })).toEqual({ health: { roll: 15 } });
     expect(at({ health: { roll: 7.5, die: 'd10', average: 'yes' } })).toEqual({});
     expect(at({ health: [7] })).toEqual({});
     expect(at({ picks: 'x' })).toEqual({});

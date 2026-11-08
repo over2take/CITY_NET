@@ -4,7 +4,8 @@ import { signInAsGm, openBuilder, builderPage, gmToken, asGm } from './helpers';
 // The builder's LEVELS page (7d1; approved mockup docs/mockups/level-up.html, 2026-11-07): a GM turns XP levels
 // on, fills the table from a cost and two ranges, types one level over, and finds it all as they left it after
 // a reload, the server taking it with no problems. Nothing at the table yet: that is the meter's, 7d2. MAX HEALTH: A
-// FORMULA (7d4) is typed in the formula box, said in words, and kept; and PER LEVEL (7d5a), its die one for all.
+// FORMULA (7d4) is typed in the formula box, said in words, and kept; and PER LEVEL (7d5a), its die one for all;
+// and ROLL TO BEAT (7d5d), a pool's dice and the die it gains, each way with its example.
 
 const openPage = async (page: Page, name: string) => {
   await openBuilder(page);
@@ -124,4 +125,34 @@ test('MAX HEALTH: PER LEVEL, each class\'s die named, then one for all with what
   await expect(again.getByRole('button', { name: 'PER LEVEL' })).toHaveAttribute('aria-pressed', 'true');
   await expect(again.getByRole('combobox', { name: 'The die for every level' })).toHaveValue('12');
   await expect(again.getByRole('textbox', { name: 'Each level adds' })).toHaveValue('@con');
+});
+
+test('MAX HEALTH: ROLL TO BEAT, a pool of 4d8 gaining a d4, then a die per level, each with its example, kept (7d5d)', async ({ page, request }, info) => {
+  const name = `Beatbuild${info.retry ? ` ${info.retry + 1}` : ''}`;
+  const gm = await gmToken(request);
+  const { id } = await asGm(request, gm, 'post', '/api/systems', { definition: {
+    format: 1, name, choices: [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter', die: 10 }] }],
+  } });
+  await signInAsGm(page);
+  await openPage(page, name);
+  const health = page.getByRole('region', { name: 'Max health' });
+  await health.getByRole('button', { name: 'PER LEVEL' }).click();
+  await health.getByRole('combobox', { name: 'How health is gained' }).selectOption('beat');
+  await expect(health.getByLabel('An example')).toContainText('Mörk Borg rolls 6d10');
+  await health.getByRole('textbox', { name: 'Dice in the pool' }).fill('4');
+  await health.getByRole('combobox', { name: "The pool's die" }).selectOption('8');
+  await health.getByRole('combobox', { name: 'The die gained when beaten' }).selectOption('4');
+  await saved(page);
+  expect((await asGm(request, gm, 'get', `/api/systems/${id}`)).draft.levels.health).toEqual({ how: 'level', gain: 'beat', pool_count: 4, pool_die: 8, gain_die: 4 });
+  await page.reload();
+  await signInAsGm(page);
+  await openPage(page, name);
+  const again = page.getByRole('region', { name: 'Max health' });
+  await expect(again.getByRole('textbox', { name: 'Dice in the pool' })).toHaveValue('4');
+  await expect(again.getByRole('combobox', { name: "The pool's die" })).toHaveValue('8');
+  await again.getByRole('group', { name: 'What is rolled to beat' }).getByRole('button', { name: 'A DIE PER LEVEL' }).click();
+  await expect(again.getByLabel('An example')).toContainText('a die for every level');
+  await expect(again.getByRole('textbox', { name: 'Dice in the pool' })).toBeHidden();
+  await saved(page);
+  expect((await asGm(request, gm, 'get', `/api/systems/${id}`)).draft.levels.health).toMatchObject({ gain: 'beat', beat_way: 'level' });
 });

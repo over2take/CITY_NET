@@ -77,15 +77,28 @@ export const levelNotes = (d: Definition): string[] => {
 /** MAX HEALTH (7d4; backend levels.js healthOf): AS IT IS, the token's own number, A FORMULA, or PER LEVEL (7d5a). */
 export type HealthHow = 'as_is' | 'formula' | 'level';
 export type HealthDieOn = 'class' | 'all';
-export type HealthGainBy = 'average' | 'roll' | 'choose' | 'reroll';
-export interface HealthSet { how: HealthHow; formula: string; dieOn: HealthDieOn; die: number | null; adds: string; gain: HealthGainBy }
-const GAINS: HealthGainBy[] = ['average', 'roll', 'choose', 'reroll'];
+export type HealthGainBy = 'average' | 'roll' | 'choose' | 'reroll' | 'beat';
+export type BeatWay = 'pool' | 'level';
+/** ROLL TO BEAT's settings (7d5d): what starts there, and the most a pool holds (backend levels.js BEAT_DEFAULTS). */
+const BEAT_DEFAULTS = { beatWay: 'pool' as BeatWay, poolCount: 6, poolDie: 10, gainDie: 6 };
+export const POOL_MOST = 20;
+export interface HealthSet {
+  how: HealthHow; formula: string; dieOn: HealthDieOn; die: number | null; adds: string; gain: HealthGainBy;
+  beatWay: BeatWay; poolCount: number; poolDie: number; gainDie: number;
+}
+const GAINS: HealthGainBy[] = ['average', 'roll', 'choose', 'reroll', 'beat'];
 /** What each way of gaining says, under GAINED BY (7d5b). */
 export const GAIN_WORDS: Record<HealthGainBy, string> = {
   average: 'Half the die, rounded up, every time. Nothing to roll.',
   roll: 'Rolled each level in the tray, for the table to see, and kept once rolled. Only the GM clears it.',
   choose: 'Each level, the player takes the average or rolls and keeps what comes up.',
   reroll: 'Each level, every level is rolled again with what each level adds; over the current maximum, that is the new maximum, otherwise +1. As Cities Without Number does.',
+  beat: 'Each level, roll to beat the current maximum: beat it and gain more, otherwise nothing.',
+};
+/** What each way of rolling to beat is like, under it (7d5d). */
+export const BEAT_EXAMPLES: Record<BeatWay, string> = {
+  pool: 'Example: Mörk Borg rolls 6d10 against your maximum and, beaten, gains d6.',
+  level: 'Example: roll a die for every level, as REROLL ALL does; beat your maximum and gain the new level\'s die again.',
 };
 const HOWS: HealthHow[] = ['as_is', 'formula', 'level'];
 export const healthSet = (d: Definition): HealthSet => {
@@ -98,6 +111,10 @@ export const healthSet = (d: Definition): HealthSet => {
     die: Number.isInteger(h.die) ? h.die as number : null,
     adds: typeof h.adds === 'string' ? h.adds : '',
     gain: GAINS.includes(h.gain as HealthGainBy) ? h.gain as HealthGainBy : 'average',
+    beatWay: h.beat_way === 'level' ? 'level' : 'pool',
+    poolCount: Number.isInteger(h.pool_count) ? h.pool_count as number : BEAT_DEFAULTS.poolCount,
+    poolDie: Number.isInteger(h.pool_die) ? h.pool_die as number : BEAT_DEFAULTS.poolDie,
+    gainDie: Number.isInteger(h.gain_die) ? h.gain_die as number : BEAT_DEFAULTS.gainDie,
   };
 };
 const withHealthSet = (d: Definition, h: HealthSet): Definition => {
@@ -105,6 +122,8 @@ const withHealthSet = (d: Definition, h: HealthSet): Definition => {
   const kept = {
     ...(h.formula ? { formula: h.formula } : {}), ...(h.dieOn === 'all' ? { die_on: 'all' } : {}),
     ...(h.die !== null ? { die: h.die } : {}), ...(h.adds ? { adds: h.adds } : {}), ...(h.gain !== 'average' ? { gain: h.gain } : {}),
+    ...(h.beatWay !== BEAT_DEFAULTS.beatWay ? { beat_way: h.beatWay } : {}), ...(h.poolCount !== BEAT_DEFAULTS.poolCount ? { pool_count: h.poolCount } : {}),
+    ...(h.poolDie !== BEAT_DEFAULTS.poolDie ? { pool_die: h.poolDie } : {}), ...(h.gainDie !== BEAT_DEFAULTS.gainDie ? { gain_die: h.gainDie } : {}),
   };
   if (h.how === 'as_is' && !Object.keys(kept).length) delete levels.health;
   else levels.health = { how: h.how, ...kept };
@@ -119,6 +138,12 @@ export const withHealthDie = (d: Definition, die: number): Definition => withHea
 export const withHealthAdds = (d: Definition, adds: string): Definition => withHealthSet(d, { ...healthSet(d), adds });
 /** How a level's health is gained (7d5b). */
 export const withHealthGain = (d: Definition, gain: HealthGainBy): Definition => withHealthSet(d, { ...healthSet(d), gain });
+/** ROLL TO BEAT's settings (7d5d); a pool from 1 to POOL_MOST dice. */
+export const withBeat = (d: Definition, next: Partial<Pick<HealthSet, 'beatWay' | 'poolCount' | 'poolDie' | 'gainDie'>>): Definition => {
+  const now = healthSet(d);
+  const poolCount = next.poolCount === undefined ? now.poolCount : Math.min(POOL_MOST, Math.max(1, Math.trunc(next.poolCount)));
+  return withHealthSet(d, { ...now, ...next, poolCount });
+};
 
 /** Each class's HIT DIE, for ON EACH CLASS: [{ name, die }], die null where it has none. */
 export const classDice = (d: Definition): { name: string; die: number | null }[] =>

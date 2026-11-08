@@ -43,11 +43,12 @@ const problems = (health) => checkDefinition({ ...HALE, levels: { health } }).pr
 
 describe('the setting', () => {
   it('reads as it was set, with what it falls back to', () => {
-    expect(healthOf(HALE)).toEqual({ how: 'level', dieOn: 'class', gain: 'average', adds: '@con_mod' });
-    expect(healthOf({ levels: { health: { how: 'level', die_on: 'all', die: 8, adds: '  ' } } })).toEqual({ how: 'level', dieOn: 'all', die: 8, gain: 'average' });
-    expect(healthOf({ levels: { health: { how: 'level', die_on: 'some', die: 1, gain: 'beat' } } })).toEqual({ how: 'level', dieOn: 'class', gain: 'average' });
+    const beat = { way: 'pool', count: 6, die: 10, gain: 6 };
+    expect(healthOf(HALE)).toEqual({ how: 'level', dieOn: 'class', gain: 'average', adds: '@con_mod', beat });
+    expect(healthOf({ levels: { health: { how: 'level', die_on: 'all', die: 8, adds: '  ' } } })).toEqual({ how: 'level', dieOn: 'all', die: 8, gain: 'average', beat });
+    expect(healthOf({ levels: { health: { how: 'level', die_on: 'some', die: 1, gain: 'cards' } } })).toEqual({ how: 'level', dieOn: 'class', gain: 'average', beat });
     expect(healthOf({ levels: { health: { how: 'level', gain: 'choose' } } }).gain).toBe('choose');
-    expect(GAINS).toEqual(['average', 'roll', 'choose', 'reroll']);
+    expect(GAINS).toEqual(['average', 'roll', 'choose', 'reroll', 'beat']);
   });
 
   it('checks clean, ON EACH CLASS or ONE FOR ALL with its die', () => {
@@ -62,7 +63,8 @@ describe('the setting', () => {
     expect(problems({ how: 'level', die_on: 'all', die: 1 })).toEqual(['levels, health, die: A die of 2 to 100 sides']);
     expect(problems({ how: 'level', die: 101 })).toEqual(['levels, health, die: A die of 2 to 100 sides']);
     expect(problems({ how: 'level', die: 'd8' })).toEqual(['levels, health, die: A die of 2 to 100 sides']);
-    expect(problems({ how: 'level', gain: 'beat' })).toEqual(['levels, health, gain: AVERAGE (FIXED), ROLL, THE PLAYER CHOOSES or REROLL ALL, KEEP HIGHER']);
+    expect(problems({ how: 'level', gain: 'cards' })).toEqual(['levels, health, gain: AVERAGE (FIXED), ROLL, THE PLAYER CHOOSES, REROLL ALL, KEEP HIGHER or ROLL TO BEAT']);
+    expect(problems({ how: 'level', gain: 'beat' })).toEqual([]);
     expect(problems({ how: 'level', gain: 'reroll' })).toEqual([]);
     expect(problems({ how: 'level', gain: 'roll' })).toEqual([]);
     expect(problems({ how: 'level', adds: '@con +' })[0]).toMatch(/^levels, health, adds: /);
@@ -231,6 +233,123 @@ describe('at the table', () => {
   });
 });
 
+describe('ROLL TO BEAT (7d5d)', () => {
+  const { LEVELING_KEY, healthRollLine } = require_('../systemBuilder/levelUp');
+  const { rollToBeat } = require_('../systemBuilder/healthLevels');
+  const beat = (more = {}) => ({ ...HALE, levels: perLevel({ gain: 'beat', ...more }) });
+  const POOL = beat();
+  const BY_LEVEL = beat({ beat_way: 'level' });
+  // Each roll a d10's, or [roll, die] for another die.
+  const seq = (...rolls) => { let i = 0; return () => { const r = rolls[i++]; const [roll, die] = Array.isArray(r) ? r : [r, 10]; return (roll - 1) / die + 0.01; }; };
+  // Fighter 2 with CON 14 (+2): 19 now.
+  const two = { [XP_KEY]: 9e9, ...holding([['fighter', 2]]), [HEALTH_LEVELS_KEY]: { 2: { die: 10, took: 5 } } };
+
+  it('the settings, and what they start at: 6d10 to beat, d6 gained', () => {
+    expect(healthOf(POOL).beat).toEqual({ way: 'pool', count: 6, die: 10, gain: 6 });
+    expect(healthOf(beat({ beat_way: 'level', pool_count: 3, pool_die: 8, gain_die: 4 })).beat).toEqual({ way: 'level', count: 3, die: 8, gain: 4 });
+    expect(healthOf(beat({ beat_way: 'some', pool_count: 0, pool_die: 1, gain_die: 'd6' })).beat).toEqual({ way: 'pool', count: 6, die: 10, gain: 6 });
+    expect(healthOf(beat({ pool_count: 21 })).beat.count).toBe(6);
+    // Dice past 100 sides, or not whole, go back to what they start at.
+    expect(healthOf(beat({ pool_die: 101, gain_die: 101 })).beat).toMatchObject({ die: 10, gain: 6 });
+    expect(healthOf(beat({ pool_die: 7.5, gain_die: 4.5 })).beat).toMatchObject({ die: 10, gain: 6 });
+    expect(levelsShown(POOL).health.beat).toEqual({ way: 'pool', count: 6, die: 10, gain: 6 });
+    expect(levelsShown(HALE).health.beat).toBeUndefined();
+  });
+
+  it('travels in the system file, unchanged', () => {
+    const def = beat({ beat_way: 'level', pool_count: 4, pool_die: 8, gain_die: 4 });
+    const read = citysys.readFile(JSON.stringify(citysys.buildFile({ definition: def, version: 1, origin: 'sys_abcdefabcdefabcd' })));
+    expect(read.problems).toEqual([]);
+    expect(read.file.definition.levels).toEqual(def.levels);
+  });
+
+  it('checks what it is given', () => {
+    expect(problems({ how: 'level', gain: 'beat', beat_way: 'pool', pool_count: 20, pool_die: 10, gain_die: 6 })).toEqual([]);
+    expect(problems({ how: 'level', gain: 'beat', beat_way: 'cards' })).toEqual(['levels, health, beat_way: A POOL or A DIE PER LEVEL']);
+    expect(problems({ how: 'level', gain: 'beat', pool_count: 0 })).toEqual(['levels, health, pool_count: From 1 to 20 dice']);
+    expect(problems({ how: 'level', gain: 'beat', pool_count: 21 })).toEqual(['levels, health, pool_count: From 1 to 20 dice']);
+    expect(problems({ how: 'level', gain: 'beat', pool_count: 2.5 })).toEqual(['levels, health, pool_count: From 1 to 20 dice']);
+    expect(problems({ how: 'level', gain: 'beat', pool_die: 1, gain_die: 101 })).toEqual(['levels, health, pool_die: A die of 2 to 100 sides', 'levels, health, gain_die: A die of 2 to 100 sides']);
+  });
+
+  it('a pool beaten: the gain die\'s roll; not beaten, or only equalled: nothing', () => {
+    expect(rollToBeat(POOL, two, 10, seq(9, 9, 9, 9, 9, 9, [4, 6]))).toEqual({
+      total: 54, rolls: Array(6).fill({ die: 10, roll: 9 }), over: 19, beaten: true, gained: 4, gainRoll: { die: 6, roll: 4 },
+    });
+    expect(rollToBeat(POOL, two, 10, seq(1, 1, 1, 1, 1, 1))).toMatchObject({ total: 6, beaten: false, gained: 0, gainRoll: null });
+    expect(rollToBeat(POOL, two, 10, seq(4, 3, 3, 3, 3, 3))).toMatchObject({ total: 19, beaten: false, gained: 0 });
+  });
+
+  it('a die per level: every level\'s die and the new one, with what each adds; beaten, the new die again and what it adds', () => {
+    expect(rollToBeat(BY_LEVEL, two, 10, seq(9, 9, 9, 3))).toEqual({
+      total: 27 + 6, rolls: [{ die: 10, roll: 9 }, { die: 10, roll: 9 }, { die: 10, roll: 9 }], over: 19, beaten: true, gained: 3 + 2, gainRoll: { die: 10, roll: 3 },
+    });
+    expect(rollToBeat(BY_LEVEL, two, 10, seq(1, 1, 1))).toMatchObject({ beaten: false, gained: 0 });
+    // A class with no die: only what each level adds, at least 1 when beaten.
+    const weak = { ...HALE, stats: HALE.stats, levels: perLevel({ gain: 'beat', beat_way: 'level', adds: '-9' }) };
+    expect(rollToBeat(weak, { ...holding([['monk', 1]]) }, null, () => 0.99)).toMatchObject({ rolls: [], total: -18, over: 1, beaten: false, gained: 0 });
+  });
+
+  it('a die per level beaten, the new die low and what each level adds below nothing: still at least 1', () => {
+    // A d10 Fighter, -3 a level: 7. Both dice 10, less 6, is 14: beaten; the new die again is 1, less 3: 1 all the same.
+    const harsh = { ...HALE, levels: perLevel({ gain: 'beat', beat_way: 'level', adds: '-3' }) };
+    expect(rollToBeat(harsh, holding([['fighter', 1]]), 10, seq(10, 10, 1))).toMatchObject({ total: 14, over: 7, beaten: true, gained: 1 });
+  });
+
+  it('a die per level beaten with nothing to roll still gains at least 1', () => {
+    const tiny = { ...HALE, levels: perLevel({ gain: 'beat', beat_way: 'level', adds: '50' }) };
+    expect(rollToBeat(tiny, { ...holding([['monk', 1]]) }, null, () => 0.5)).toMatchObject({ beaten: true, gained: 50, gainRoll: null });
+  });
+
+  it('rolled in the window: kept, its dice for the tray, and the line', () => {
+    const done = levelAction(POOL, two, { kind: 'healthRoll', list: 'classes', option: 'fighter' }, { rng: seq(9, 9, 9, 9, 9, 9, [4, 6]) });
+    expect(done.data[LEVELING_KEY].health).toEqual({ roll: 54, die: 10, gained: 4, over: 19, beat: true });
+    expect(done.rolled).toEqual({ results: { 10: [9, 9, 9, 9, 9, 9] }, total: 54, over: 19, gained: 4, dice: 6, beat: true, gainDie: 6 });
+    expect(healthRollLine('Wren', done.rolled)).toBe('Wren rolled Health to beat 19, 6 dice [54]: beaten, +4 (d6)');
+    expect(healthRollLine('Wren', { results: { 10: [1] }, total: 6, over: 19, gained: 0, dice: 1, beat: true })).toBe('Wren rolled Health to beat 19, 1 die [6]: not beaten, nothing gained');
+  });
+
+  it('a pool is rolled even for a class with no HIT DIE', () => {
+    const monk = { [XP_KEY]: 9e9, ...holding([['monk', 1]]) };
+    expect(levelAction(POOL, monk, { kind: 'healthRoll', list: 'classes', option: 'monk' }, { rng: seq(1, 1, 1, 1, 1, 1) }).ok).toBe(true);
+    expect(levelAction(POOL, monk, { kind: 'up', list: 'classes', option: 'monk' }).error).toBe('Roll for health first');
+    expect(levelAction(BY_LEVEL, monk, { kind: 'healthRoll', list: 'classes', option: 'monk' }).error).toBe('Nothing to roll: Monk has no HIT DIE');
+  });
+
+  it('FINISH keeps what it gained, nothing included, as that level\'s; the GM without a roll gains nothing', () => {
+    const rolled = levelAction(POOL, two, { kind: 'healthRoll', list: 'classes', option: 'fighter' }, { rng: seq(1, 1, 1, 1, 1, 1) }).data;
+    const up = levelAction(POOL, rolled, { kind: 'up', list: 'classes', option: 'fighter' }).data;
+    expect(up[HEALTH_LEVELS_KEY][3]).toEqual({ die: 10, took: 6, rolled: true, gained: 0 });
+    expect(healthByLevel(POOL, up).max).toBe(19);
+    expect(levelAction(POOL, two, { kind: 'up', list: 'classes', option: 'fighter' }, { gm: true }).data[HEALTH_LEVELS_KEY][3]).toEqual({ die: 10, took: 0, gained: 0 });
+    expect(levelAction(POOL, two, { kind: 'up', list: 'classes', option: 'fighter' }).error).toBe('Roll for health first');
+  });
+
+  it('through the socket: the pool thrown, and what it gained', async () => {
+    const db = await makeTestDb();
+    await run(db, 'CREATE TABLE IF NOT EXISTS dice_rolls (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, total INTEGER, results TEXT, color TEXT, historyString TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)');
+    const ID = 'sys_beatbeatbeatbeat';
+    const def = JSON.stringify({ ...POOL, name: 'Beating' });
+    await run(db, 'INSERT INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 1)', [ID, 'Beating', def, def]);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    await run(db, `INSERT INTO global_settings (key, value) VALUES ('game_system', ?)`, [ID]);
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('wen', ?, ?, 0)`, [ID, JSON.stringify({ name: 'Wren', ...two })]);
+    let connection;
+    const shared = [];
+    socketsFactory({ on: (e, cb) => { if (e === 'connection') connection = cb; }, emit: (event, data) => shared.push({ event, data }), to: () => ({ emit: () => {} }) },
+      db, { elevatedUsers: new Set(), emitUpdate: vi.fn(), recordAction: vi.fn() });
+    const handlers = {};
+    connection({ id: 'beat-wen', on: (e, fn) => { handlers[e] = fn; }, emit: () => {}, broadcast: { emit: () => {} }, use: () => {}, join: () => {}, disconnect: () => {} });
+    handlers.identify('wen');
+    await drain(db);
+    handlers.levelAction({ kind: 'healthRoll', list: 'classes', option: 'fighter' });
+    await until(() => shared.some((e) => e.event === 'diceRollBroadcast'), { label: 'thrown' });
+    const thrown = shared.find((e) => e.event === 'diceRollBroadcast').data;
+    expect(thrown.results[10]).toHaveLength(6);
+    expect(thrown.historyString).toMatch(/^Wren rolled Health to beat 19, 6 dice \[\d+\]: (beaten, \+[1-6] \(d6\)|not beaten, nothing gained)$/);
+  });
+});
+
 describe('REROLL ALL, KEEP HIGHER (7d5c)', () => {
   const { LEVELING_KEY, healthRollLine } = require_('../systemBuilder/levelUp');
   const { rerollAll } = require_('../systemBuilder/healthLevels');
@@ -276,9 +395,10 @@ describe('REROLL ALL, KEEP HIGHER (7d5c)', () => {
     expect(healthByLevel(REROLL, up).levels[2]).toEqual({ level: 3, took: 33, die: 10, gained: 14 });
   });
 
-  it('a kept gain that isn\'t a whole amount from 1 is passed over', () => {
+  it('a kept gain that isn\'t a whole amount from 0 is passed over', () => {
+    // A gain of 0 is kept (an unbeaten roll to beat, 7d5d); one that isn't whole is passed over.
     const data = { ...holding([['fighter', 3]]), [HEALTH_LEVELS_KEY]: { 2: { die: 10, took: 5, gained: 0 }, 3: { die: 10, took: 5, gained: 2.5 } } };
-    expect(healthByLevel(REROLL, data).max).toBe(12 + 7 + 7);
+    expect(healthByLevel(REROLL, data).max).toBe(12 + 0 + 7);
     const below = { ...holding([['fighter', 2]]), [HEALTH_LEVELS_KEY]: { 2: { die: 10, took: 5, gained: -3 } } };
     expect(healthByLevel(REROLL, below).max).toBe(12 + 7);
   });

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { GAIN_WORDS, withHealthGain, classDice, healthSet, withHealth, withHealthAdds, withHealthDie, withHealthDieOn, withHealthFormula, levelHomeNote,
+import { BEAT_EXAMPLES, POOL_MOST, withBeat, GAIN_WORDS, withHealthGain, classDice, healthSet, withHealth, withHealthAdds, withHealthDie, withHealthDieOn, withHealthFormula, levelHomeNote,
   advancesBy, anyTyped, canAddRange, firstAsTyped, isTyped, levelNotes, levelTable, levelsSet, tidyRanges, topAsTyped, withAdvancement, withFilledAgain,
   withFirst, withRangeAdded, withRangeOff, withRangeTo, withRangeX, withTop, withTyped, xpWord,
 } from '../levels';
@@ -212,7 +212,7 @@ describe('the word', () => {
 describe('MAX HEALTH (7d4)', () => {
   const base = { format: 1, name: 'L', levels: { top: 6, first: 100, ranges: [{ to: 6, x: 2 }] } } as never;
   it('AS IT IS until it says otherwise', () => {
-    const none = { formula: '', dieOn: 'class', die: null, adds: '', gain: 'average' };
+    const none = { formula: '', dieOn: 'class', die: null, adds: '', gain: 'average', beatWay: 'pool', poolCount: 6, poolDie: 10, gainDie: 6 };
     expect(healthSet(base)).toEqual({ how: 'as_is', ...none });
     expect(healthSet({ format: 1, name: 'L' } as never)).toEqual({ how: 'as_is', ...none });
     expect(healthSet({ format: 1, name: 'L', levels: { health: { how: 'dice', formula: 3, die: 'd8', adds: 2 } } } as never)).toEqual({ how: 'as_is', ...none });
@@ -220,7 +220,7 @@ describe('MAX HEALTH (7d4)', () => {
   it('A FORMULA set and typed; the formula kept going back to AS IT IS; nothing kept with nothing to keep', () => {
     const on = withHealthFormula(withHealth(base, 'formula'), '10 + @con');
     expect((on as { levels: { health: unknown } }).levels.health).toEqual({ how: 'formula', formula: '10 + @con' });
-    expect(healthSet(on)).toEqual({ how: 'formula', formula: '10 + @con', dieOn: 'class', die: null, adds: '', gain: 'average' });
+    expect(healthSet(on)).toEqual({ how: 'formula', formula: '10 + @con', dieOn: 'class', die: null, adds: '', gain: 'average', beatWay: 'pool', poolCount: 6, poolDie: 10, gainDie: 6 });
     const back = withHealth(on, 'as_is');
     expect((back as { levels: { health: unknown } }).levels.health).toEqual({ how: 'as_is', formula: '10 + @con' });
     const none = withHealth(base, 'as_is');
@@ -244,7 +244,7 @@ describe('MAX HEALTH: PER LEVEL (7d5a)', () => {
   it('PER LEVEL, on each class to start; ONE FOR ALL starts at a d8 and keeps what is picked', () => {
     const on = withHealth(base, 'level');
     expect(health(on)).toEqual({ how: 'level' });
-    expect(healthSet(on)).toEqual({ how: 'level', formula: '', dieOn: 'class', die: null, adds: '', gain: 'average' });
+    expect(healthSet(on)).toEqual({ how: 'level', formula: '', dieOn: 'class', die: null, adds: '', gain: 'average', beatWay: 'pool', poolCount: 6, poolDie: 10, gainDie: 6 });
     const all = withHealthDieOn(on, 'all');
     expect(health(all)).toEqual({ how: 'level', die_on: 'all', die: 8 });
     expect(health(withHealthDieOn(withHealthDie(all, 12), 'all'))).toEqual({ how: 'level', die_on: 'all', die: 12 });
@@ -269,12 +269,38 @@ describe('GAINED BY (7d5b)', () => {
     expect(health(withHealthGain(base, 'roll'))).toEqual({ how: 'level', gain: 'roll' });
     expect(healthSet(withHealthGain(base, 'choose')).gain).toBe('choose');
     expect(health(withHealthGain(withHealthGain(base, 'roll'), 'average'))).toEqual({ how: 'level' });
-    expect(healthSet({ format: 1, name: 'L', levels: { health: { how: 'level', gain: 'beat' } } } as never).gain).toBe('average');
+    expect(healthSet({ format: 1, name: 'L', levels: { health: { how: 'level', gain: 'cards' } } } as never).gain).toBe('average');
     expect(healthSet(withHealthGain(base, 'reroll')).gain).toBe('reroll');
   });
   it('each says what it does', () => {
-    expect(Object.keys(GAIN_WORDS)).toEqual(['average', 'roll', 'choose', 'reroll']);
+    expect(Object.keys(GAIN_WORDS)).toEqual(['average', 'roll', 'choose', 'reroll', 'beat']);
     expect(GAIN_WORDS.reroll).toMatch(/^Each level, every level is rolled again/);
     expect(GAIN_WORDS.roll).toMatch(/kept once rolled/);
+  });
+});
+
+describe('ROLL TO BEAT (7d5d)', () => {
+  const base = withHealthGain(withHealth({ format: 1, name: 'L', levels: { top: 6 } } as never, 'level'), 'beat');
+  const health = (d: unknown) => (d as { levels: { health?: unknown } }).levels.health;
+  it('a pool of 6d10 and a d6 to start, nothing written for them', () => {
+    expect(healthSet(base)).toMatchObject({ gain: 'beat', beatWay: 'pool', poolCount: 6, poolDie: 10, gainDie: 6 });
+    expect(health(base)).toEqual({ how: 'level', gain: 'beat' });
+  });
+  it('each setting kept, a pool from 1 to 20 dice', () => {
+    expect(health(withBeat(base, { beatWay: 'level' }))).toEqual({ how: 'level', gain: 'beat', beat_way: 'level' });
+    expect(health(withBeat(base, { poolCount: 4, poolDie: 8, gainDie: 4 }))).toEqual({ how: 'level', gain: 'beat', pool_count: 4, pool_die: 8, gain_die: 4 });
+    expect(healthSet(withBeat(base, { poolCount: 99 })).poolCount).toBe(POOL_MOST);
+    expect(healthSet(withBeat(base, { poolCount: 0 })).poolCount).toBe(1);
+    expect(healthSet(withBeat(base, { poolCount: 3.7 })).poolCount).toBe(3);
+    expect(healthSet(withBeat(withBeat(base, { poolCount: 4 }), { gainDie: 8 })).poolCount).toBe(4);
+  });
+  it('read back as set', () => {
+    const set = { format: 1, name: 'L', levels: { health: { how: 'level', gain: 'beat', beat_way: 'level', pool_count: 3, pool_die: 8, gain_die: 4 } } } as never;
+    expect(healthSet(set)).toMatchObject({ beatWay: 'level', poolCount: 3, poolDie: 8, gainDie: 4 });
+  });
+
+  it('an example under each way', () => {
+    expect(BEAT_EXAMPLES.pool).toMatch(/Mörk Borg rolls 6d10/);
+    expect(BEAT_EXAMPLES.level).toMatch(/a die for every level/);
   });
 });

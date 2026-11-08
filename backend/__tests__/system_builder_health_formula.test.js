@@ -42,7 +42,7 @@ const sheet = (con, level = 3, feats = []) => ({ con, [PICKS_KEY]: { classes: [{
 describe('the setting', () => {
   it('AS IT IS unless it says A FORMULA, the formula kept either way', () => {
     expect(HEALTH_HOWS).toEqual(['as_is', 'formula', 'level']);
-    const D = {dieOn: 'class', gain: 'average'};
+    const D = { dieOn: 'class', gain: 'average', beat: { way: 'pool', count: 6, die: 10, gain: 6 } };
     expect(healthOf({})).toEqual({ how: 'as_is', ...D });
     expect(healthOf(null)).toEqual({ how: 'as_is', ...D });
     expect(healthOf({ levels: { health: { how: 'dice' } } })).toEqual({ how: 'as_is', ...D });

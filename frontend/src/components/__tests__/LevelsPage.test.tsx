@@ -28,12 +28,12 @@ afterEach(cleanup);
 describe('the "?" beside each setting', () => {
   it('has its words, each of them shown', () => {
     open({ levels: { health: { how: 'formula', formula: '10' } } });
-    const perLevel = ['levels.healthDie', 'levels.healthGain', 'levels.healthAdds'];
+    const perLevel = ['levels.healthDie', 'levels.healthGain', 'levels.healthAdds', 'levels.beatWay', 'levels.beatPool', 'levels.beatGain'];
     for (const [key, text] of Object.entries(HINTS).filter(([k]) => k.startsWith('levels.') && !perLevel.includes(k))) {
       expect(screen.getByRole('note', { name: text }), key).toBeTruthy();
     }
     cleanup();
-    open({ levels: { health: { how: 'level' } } });
+    open({ levels: { health: { how: 'level', gain: 'beat' } } });
     for (const [key, text] of Object.entries(HINTS).filter(([k]) => perLevel.includes(k))) {
       expect(screen.getByRole('note', { name: text }), key).toBeTruthy();
     }
@@ -220,6 +220,20 @@ describe('MAX HEALTH: PER LEVEL (7d5a)', () => {
     expect(screen.getByLabelText('How a level gains it').textContent).toMatch(/^Each level, the player takes the average or rolls/);
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'How health is gained' }), 'reroll');
     expect(screen.getByLabelText('How a level gains it').textContent).toMatch(/As Cities Without Number does\.$/);
+    expect(screen.queryByRole('group', { name: 'What is rolled to beat' })).toBeNull();
+    // ROLL TO BEAT (7d5d): a pool to start, its dice and what is gained, an example under it; or a die per level.
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'How health is gained' }), 'beat');
+    expect(screen.getByLabelText('An example').textContent).toMatch(/^Example: Mörk Borg rolls 6d10/);
+    expect((screen.getByRole('textbox', { name: 'Dice in the pool' }) as HTMLInputElement).value).toBe('6');
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Dice in the pool' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Dice in the pool' }), '4');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: "The pool's die" }), '8');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'The die gained when beaten' }), '4');
+    expect((screen.getByRole('combobox', { name: "The pool's die" }) as HTMLSelectElement).value).toBe('8');
+    expect((screen.getByRole('combobox', { name: 'The die gained when beaten' }) as HTMLSelectElement).value).toBe('4');
+    await userEvent.click(within(screen.getByRole('group', { name: 'What is rolled to beat' })).getByRole('button', { name: 'A DIE PER LEVEL' }));
+    expect(screen.getByLabelText('An example').textContent).toMatch(/^Example: roll a die for every level/);
+    expect(screen.queryByRole('textbox', { name: 'Dice in the pool' })).toBeNull();
     expect(screen.getByRole('textbox', { name: 'Each level adds' })).toBeTruthy();
     expect(screen.getByText(/^Level 1 has the full die/)).toBeTruthy();
     await userEvent.click(within(screen.getByRole('group', { name: 'Where the die is set' })).getByRole('button', { name: 'ONE FOR ALL' }));

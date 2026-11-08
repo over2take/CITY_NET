@@ -143,6 +143,12 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await page.getByRole('textbox', { name: 'Level 3 total' }).fill('5000');
       await expect(page.getByRole('button', { name: 'FILL IT AGAIN' })).toBeVisible();
       missed['LEVELS, the table'] = await faults(page);
+      // MAX HEALTH PER LEVEL, gained by ROLL TO BEAT, so the pool's rows are there (7d5d).
+      const health = page.getByRole('region', { name: 'Max health' });
+      await health.getByRole('button', { name: 'PER LEVEL' }).click();
+      await health.getByRole('combobox', { name: 'How health is gained' }).selectOption('beat');
+      await expect(health.getByRole('textbox', { name: 'Dice in the pool' })).toBeVisible();
+      missed['LEVELS, roll to beat'] = await faults(page);
     }
     if (p === 'NEW CHARACTER') {
       // THE STATS open, so how they are asked and the groups are there (7c3a), and a fixed array's numbers (7c3b).

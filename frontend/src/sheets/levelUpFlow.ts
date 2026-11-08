@@ -4,7 +4,7 @@
 // and the picks a new level opens are made in the window, FINISH waiting for them.
 
 import { listShown, pickedOf, workedOn, type ChoiceListShown, type FeatureShown, type OptionShown } from './choicesShown';
-import { characterLevel, levelUpOffer, HEALTH_SHOWN_KEY, type HealthGainBy, type LevelTarget, type LevelUpOffer, type LevelUpPick } from './xpMeter';
+import { characterLevel, levelUpOffer, HEALTH_SHOWN_KEY, type BeatShown, type HealthGainBy, type LevelTarget, type LevelUpOffer, type LevelUpPick } from './xpMeter';
 import type { SheetTemplate } from './types';
 
 export type LevelUpStep = 'which' | 'health' | 'unlocks';
@@ -34,8 +34,10 @@ export const levelUpSteps = (offer: LevelUpOffer, more = 0, health = false): Lev
  */
 export interface HealthGain {
   die: number | null; average: number; adds: number; by: HealthGainBy; rolled: number | null; tookAverage: boolean; gained: number | null;
-  /** REROLL ALL (7d5c): how many dice go, the maximum to beat, and whether the roll beat it. */
+  /** REROLL ALL (7d5c) and ROLL TO BEAT (7d5d): how many dice go, the maximum to beat, and whether the roll beat it. */
   dice: number; max: number; over: boolean | null;
+  /** ROLL TO BEAT's settings (7d5d). */
+  beat?: BeatShown;
 }
 export const healthGain = (template: SheetTemplate | null | undefined, data: Record<string, unknown> | null | undefined, target: LevelTarget): HealthGain | null => {
   const h = template?.levels?.health;
@@ -45,16 +47,18 @@ export const healthGain = (template: SheetTemplate | null | undefined, data: Rec
   const shown = data?.[HEALTH_SHOWN_KEY] as { adds?: unknown; max?: unknown; levels?: { die?: unknown }[] } | undefined;
   const adds = typeof shown?.adds === 'number' ? shown.adds : 0;
   const max = typeof shown?.max === 'number' ? shown.max : 0;
-  const dice = (Array.isArray(shown?.levels) ? shown!.levels!.filter((l) => typeof l?.die === 'number').length : 0) + (die ? 1 : 0);
+  const pool = h.gain === 'beat' && h.beat?.way === 'pool' ? h.beat : null;
+  const dice = pool ? pool.count : (Array.isArray(shown?.levels) ? shown!.levels!.filter((l) => typeof l?.die === 'number').length : 0) + (die ? 1 : 0);
   const average = die ? Math.ceil(die / 2) : 0;
   const place = levelUpOffer(template, data)?.leveling;
   const here = !!place && place.list === target.list && place.option === target.option;
   const rolled = here && typeof place?.health?.roll === 'number' ? place.health.roll : null;
   const tookAverage = here && place?.health?.average === true;
-  const fixed = h.gain === 'average' || !die || tookAverage;
+  // A class with no die has nothing to roll, but a pool to beat is rolled all the same.
+  const fixed = h.gain === 'average' || (!die && !pool) || tookAverage;
   const kept = typeof place?.health?.gained === 'number' ? place.health.gained : null;
   const gained = rolled !== null ? kept ?? Math.max(1, rolled + adds) : fixed ? Math.max(1, average + adds) : null;
-  return { die, average, adds, by: h.gain, rolled, tookAverage, gained, dice, max: typeof place?.health?.over === 'number' && rolled !== null ? place.health.over : max, over: rolled === null || kept === null ? null : kept > 1 || rolled > max };
+  return { die, average, adds, by: h.gain, rolled, tookAverage, gained, dice, max: typeof place?.health?.over === 'number' && rolled !== null ? place.health.over : max, over: rolled === null || kept === null ? null : kept > 1 || rolled > max, ...(h.beat ? { beat: h.beat } : {}) };
 };
 
 /** The class a kept health roll was made for, by name, while it's another than `target` (7d5b): it can't be left. */
@@ -73,7 +77,7 @@ export const gmLevelingLine = (template: SheetTemplate | null | undefined, data:
   const name = target ? `${target.option ? target.name.toUpperCase() : 'LEVEL'} ${target.level} → ${target.level + 1}` : place.option ? `NEW: ${place.option.toUpperCase()}` : 'THE NEXT LEVEL';
   const roll = place.health?.roll;
   return {
-    words: `LEVELING UP · ${name}${typeof roll === 'number' ? ` · HEALTH ${typeof place.health?.gained === 'number' ? `REROLLED ${roll}, +${place.health.gained}` : `ROLLED ${roll}${place.health?.die ? ` ON A D${place.health.die}` : ''}`}` : place.health?.average ? ' · HEALTH: THE AVERAGE' : ''}`,
+    words: `LEVELING UP · ${name}${typeof roll === 'number' ? ` · HEALTH ${place.health?.beat ? `ROLLED ${roll} TO BEAT ${place.health.over}, +${place.health.gained}` : typeof place.health?.gained === 'number' ? `REROLLED ${roll}, +${place.health.gained}` : `ROLLED ${roll}${place.health?.die ? ` ON A D${place.health.die}` : ''}`}` : place.health?.average ? ' · HEALTH: THE AVERAGE' : ''}`,
     canClear: typeof roll === 'number',
   };
 };
