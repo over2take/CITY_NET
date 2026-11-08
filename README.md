@@ -491,7 +491,7 @@ CITY_NET/
 │   │   └── random.js           # cryptoRng — uniform [0,1) from OS entropy (crypto.randomInt); default rng for every roll that decides an outcome, read at each call so a test can stand in for the dice
 │   └── __tests__/
 │       ├── helpers/
-│       │   ├── testDb.js               # In-memory SQLite factory for isolated test DBs, left serialized so its queries run in the order they were queued (what drain relies on)
+│       │   ├── testDb.js               # In-memory SQLite factory for isolated test DBs, left serialized so its queries run in the order they were queued (what drain relies on); TEST_SLOW_DB=1 makes every answer a few ms late, to find timing races here rather than on CI
 │       │   ├── randomSystem.js         # A whole custom system from a seed (words, parts, buildings, money, health, stats, formulas, tables, a sheet or none, NPC tiers, conditions, rests, house rules, rolls, symbols and dice), the same from the same seed, always one the server would publish; for the soak runs
 │       │   └── until.js                # Wait for a condition rather than a fixed number of milliseconds: socket handlers return before their database work lands, and a fixed sleep is a bet that loses under load; drain waits on the database itself, on a serialized connection, and only for work that stays on it
 │       ├── admin.test.js               # Admin endpoints (auth, settings, undo access); update routes — 409 with a reason rather than a false success, unauthenticated status, boot id on /version; check-update against a stubbed registry — upgrades only, dev tags per channel, and a prerelease not hiding a stable release

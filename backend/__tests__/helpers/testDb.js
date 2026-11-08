@@ -299,10 +299,35 @@ function makeTestDb() {
         // let drain (helpers/until.js) read before a handler's own queries had landed, and
         // tests failed on CI only (3 times in 200 on a busy core; never serialized).
         db.serialize();
-        resolve(db);
+        resolve(process.env.TEST_SLOW_DB ? slowed(db) : db);
       });
     });
   });
+}
+
+/**
+ * TEST_SLOW_DB=1 (a timing check, never on in CI): every answer from the database arrives a random few
+ * milliseconds late, as on a crowded runner. The queries still run in order; only when their answers reach the code
+ * moves. A test that checks something before the server has finished writing it, such as reading the dice log
+ * having waited only for the sheet, then fails here, on this machine, instead of now and then on CI. Run the
+ * suite with it now and then: TEST_SLOW_DB=1 npx vitest run.
+ */
+const SLOW_MS = Number(process.env.TEST_SLOW_DB_MS) || 12;
+function slowed(db) {
+  for (const method of ['run', 'get', 'all', 'each', 'exec']) {
+    const own = db[method].bind(db);
+    db[method] = (...args) => {
+      const at = args.findIndex((a) => typeof a === 'function');
+      if (at < 0) return own(...args);
+      const answer = args[at];
+      args[at] = function late(...results) {
+        const self = this;
+        setTimeout(() => answer.apply(self, results), Math.floor(Math.random() * SLOW_MS));
+      };
+      return own(...args);
+    };
+  }
+  return db;
 }
 
 /** Promisified db.get */

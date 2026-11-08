@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { makeTestDb, run } from './helpers/testDb.js';
-import { drain, until } from './helpers/until.js';
+import { until } from './helpers/until.js';
 
 process.env.JWT_SECRET = 'test-secret';
 process.env.DICE_ANIM_MS = '0';
@@ -37,7 +37,8 @@ const join = async (who = 'GHOST') => {
   const socket = { id: `board-${who}-${Math.random()}`, on: (e, fn) => { handlers[e] = fn; }, emit: (event, data) => emitted.push({ event, data }), broadcast: { emit: () => {} }, use: () => {}, join: () => {} };
   for (const connect of connects) connect(socket);
   handlers.identify(who);
-  await drain(db);
+  // Signed in once the server says so, not after a fixed number of queries: under load it can take longer.
+  await until(() => emitted.find((e) => e.event === 'identified'), { label: `${who} signed in` });
   const rolls = () => emitted.filter((e) => e.event === 'diceRollBroadcast').map((e) => e.data);
   const heard = (event) => until(() => emitted.find((e) => e.event === event), { label: event });
   return { handlers, rolls, heard };
