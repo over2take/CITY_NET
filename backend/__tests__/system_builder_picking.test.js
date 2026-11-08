@@ -265,6 +265,8 @@ describe('through the socket', () => {
       await until(async () => (await stored())._creating.at === 'stats', { label: 'moved' });
       kes.handlers.creationAction({ kind: 'finish' });
       await until(async () => (await stored())._creating.done === true, { label: 'finished' });
+      // Each is told a moment after it is written: wait for that, not the write.
+      await until(() => shared.filter((e) => e.event === 'sheetUpdated').length === 3, { label: 'told 3' });
       expect(shared.filter((e) => e.event === 'sheetUpdated')).toHaveLength(3);
       expect(kes.refused()).toEqual([]);
       expect((await stored()).name).toBe('Kestrel');
@@ -331,6 +333,8 @@ describe('through the socket', () => {
         kes.handlers.creationAction({ kind: 'place', step: 'stats', stat: 'int', value: 15 });
         await until(async () => (await stored()).int === 15, { label: 'placed' });
         expect((await stored())[WORKED_KEY].unmet).not.toContain('mage');
+        // Each is told a moment after it is written: wait for that, not the write.
+        await until(() => shared.filter((e) => e.event === 'sheetUpdated').length === 1, { label: 'told 1' });
         expect(shared.filter((e) => e.event === 'sheetUpdated')).toHaveLength(1);
         kes.handlers.creationAction({ kind: 'place', step: 'stats', stat: 'int', value: 99 });
         await until(() => kes.refused().length === 1, { label: 'the refusal' });
@@ -415,6 +419,8 @@ describe('through the socket', () => {
         await until(() => kes.refused().length === 1, { label: 'the refusal' });
         expect(kes.refused()).toEqual(['Rolled, and kept: your GM can clear it for another go']);
         expect((await stored())._creating.rolled.stats).toEqual(first);
+        await until(() => shared.filter((e) => e.event === 'diceRollBroadcast').length === 1, { label: 'thrown once' });
+        await drain(db);
         expect(shared.filter((e) => e.event === 'diceRollBroadcast')).toHaveLength(1);
       });
     });
@@ -484,6 +490,8 @@ describe('through the socket', () => {
           ['Coil of Rope', 2, 'stowed', '1'],
           ['Rations', 3, 'stowed', ''],
         ]);
+        // Each is told a moment after it is written: wait for that, not the write.
+        await until(() => shared.filter((e) => e.event === 'sheetUpdated').length === 2, { label: 'told 2' });
         expect(shared.filter((e) => e.event === 'sheetUpdated')).toHaveLength(2);
       });
 

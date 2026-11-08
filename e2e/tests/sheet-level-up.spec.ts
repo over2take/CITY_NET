@@ -4,8 +4,9 @@ import { signInAsGm, signInAsPlayer, gmToken, asGm, runningSystem, approvedPlaye
 // Going up a level on a custom system (7d2b; approved mockup docs/mockups/level-up.html, 2026-11-07): LEVEL UP READY
 // blinks on a player's sheet once their XP reaches the next level, or the GM gives them one, and they go up
 // themselves. What's past the level carries over, and the GM can take one back. The player has no + or - to press.
+// READY opens LEVEL_UP.EXE (7d3a): which class, what the new level unlocks, leave and come back, FINISH.
 
-const CLASSES = { id: 'classes', one: 'Class', many: 'Classes', levelled: true, again: true, options: [{ id: 'soldier', label: 'Soldier' }, { id: 'mage', label: 'Mage' }] };
+const CLASSES = { id: 'classes', one: 'Class', many: 'Classes', levelled: true, again: true, options: [{ id: 'soldier', label: 'Soldier' }, { id: 'mage', label: 'Mage', features: [{ id: 'spark', label: 'Spark', at: 2, text: 'A small magic.' }] }] };
 const signedIn = async (browser: Browser, info: TestInfo, player: { username: string; password: string }) => {
   const context = await browser.newContext({ baseURL: info.project.use.baseURL });
   const page = await context.newPage();
@@ -45,14 +46,36 @@ test('XP reaches a level: READY blinks, the player goes up, one class of two, an
   await page.getByRole('checkbox', { name: wren.username }).check();
   await page.getByRole('button', { name: 'AWARD_SELECTED' }).click();
 
-  // Which goes up is theirs to say.
-  const mage = mine.getByRole('button', { name: 'LEVEL UP: MAGE 1 → 2' });
-  await expect(mage).toBeVisible({ timeout: 15_000 });
-  await expect(mine.getByRole('button', { name: 'LEVEL UP: SOLDIER 1 → 2' })).toBeVisible();
-  await expect(mage).toHaveClass(/unread-flash/);
-  await mage.click();
+  // READY opens LEVEL_UP.EXE, where which goes up is theirs to say.
+  const ready = mine.getByRole('button', { name: 'LEVEL UP READY' });
+  await expect(ready).toBeVisible({ timeout: 15_000 });
+  await expect(ready).toHaveClass(/unread-flash/);
+  await ready.click();
+  const who = wren.username.toUpperCase();
+  await expect(mine.getByText(`LEVEL_UP.EXE · ${who} · SOLDIER 2`)).toBeVisible();
+  const which = mine.getByRole('group', { name: 'Which class goes up' });
+  await expect(which.getByRole('button', { name: 'SOLDIER 1 → 2' })).toHaveAttribute('aria-pressed', 'true');
+  await which.getByRole('button', { name: 'MAGE 1 → 2' }).click();
+  await expect(mine.getByText(`LEVEL_UP.EXE · ${who} · MAGE 2`)).toBeVisible();
+
+  // Left for now: nothing has changed, and the sheet says where they were.
+  await mine.getByRole('button', { name: 'LEAVE FOR NOW', exact: true }).click();
+  await expect.poll(async () => (await sheetOf())._leveling, { timeout: 15_000 }).toEqual({ list: 'classes', option: 'mage' });
+  expect((await sheetOf())._choices.classes.find((p: { option: string }) => p.option === 'mage').level).toBe(1);
+  await mine.getByRole('button', { name: 'LEVELING UP · CONTINUE' }).click();
+  await expect(which.getByRole('button', { name: 'MAGE 1 → 2' })).toHaveAttribute('aria-pressed', 'true');
+
+  // What Mage 2 brings, then FINISH.
+  await mine.getByRole('button', { name: 'NEXT', exact: true }).click();
+  await expect(mine.getByText('Mage 2 brings:')).toBeVisible();
+  // The sheet's own CHOICES says it's next, in its own case: the window's card is in capitals.
+  await expect(mine.getByText(/^SPARK/)).toBeVisible();
+  await expect(mine.getByText('A small magic.')).toBeVisible();
+  await mine.getByRole('button', { name: 'FINISH', exact: true }).click();
+  await expect(mine.getByText(/^LEVEL_UP\.EXE/)).toHaveCount(0);
   await expect.poll(async () => (await sheetOf())._choices.classes.find((p: { option: string }) => p.option === 'mage').level, { timeout: 15_000 }).toBe(2);
   expect((await sheetOf())._xp).toBe(340);
+  expect((await sheetOf())._leveling).toBeUndefined();
 
   // Level 3 now, the 340 still counted, and not yet enough for level 4.
   await expect(meter.getByText('340 / 700 · 360 TO LEVEL 4')).toBeVisible({ timeout: 15_000 });
@@ -61,7 +84,7 @@ test('XP reaches a level: READY blinks, the player goes up, one class of two, an
   // The GM takes one back, from the same window; it's enough again, so READY returns.
   await page.getByRole('button', { name: 'LEVEL_DOWN' }).click();
   await expect.poll(async () => (await sheetOf())._choices.classes.find((p: { option: string }) => p.option === 'mage').level, { timeout: 15_000 }).toBe(1);
-  await expect(mine.getByRole('button', { name: 'LEVEL UP: MAGE 1 → 2' })).toBeVisible({ timeout: 15_000 });
+  await expect(mine.getByRole('button', { name: 'LEVEL UP READY' })).toBeVisible({ timeout: 15_000 });
   await mine.context().close();
 });
 
@@ -103,6 +126,11 @@ test('milestone: the GM gives a level, the rail blinks, the player takes it; no 
   await openSheet(mine);
   await expect(mine.getByTestId('xp-meter')).toHaveCount(0);
   await mine.getByRole('button', { name: 'LEVEL UP READY' }).click();
+  // With nothing to choose between, the one folder: what it unlocks, here nothing.
+  await expect(mine.getByText(`LEVEL_UP.EXE · ${rook.username.toUpperCase()} · LEVEL 2`)).toBeVisible();
+  await expect(mine.getByRole('group', { name: 'Which class goes up' })).toHaveCount(0);
+  await expect(mine.getByText('Level 2. Nothing new comes with it.')).toBeVisible();
+  await mine.getByRole('button', { name: 'FINISH', exact: true }).click();
   await expect.poll(async () => (await sheetOf()).level, { timeout: 15_000 }).toBe(2);
   expect((await sheetOf())._levels_owed).toBeUndefined();
   await expect(mine.getByRole('button', { name: 'LEVEL UP READY' })).toHaveCount(0);

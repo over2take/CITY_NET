@@ -7,6 +7,9 @@
 // levelled list it is a stat called level, written whether the system has one or not, so a game with neither
 // still counts. A system with both raises the two together. Changing XP never moves a level.
 //
+// LEVEL_UP.EXE (7d3a) keeps the player's place under LEVELING_KEY, which class they're raising, so leaving the
+// window loses nothing. Nothing else changes until FINISH, which is 'up'.
+//
 // Pure: the socket (sockets/choices.js) stores it through the sheet's queue, and works the numbers out again.
 
 const { choicesOf, heldOf, levelsOf, targetsOf } = require('./choices');
@@ -15,6 +18,11 @@ const { XP_KEY, advances, earnsXp, levelTable, levelsOf: settingsOf } = require(
 const { creatingNow } = require('./creation');
 
 const OWED_KEY = '_levels_owed';
+/** Where LEVEL_UP.EXE's place is kept (7d3a): { list, option } for a class, {} for the level itself. */
+const LEVELING_KEY = '_leveling';
+const NOT_YET = 'Not yet: there isn\'t enough for the next level';
+/** The sheet without a level up's place. */
+const settled = (data) => { const { [LEVELING_KEY]: place, ...rest } = data; return rest; };
 const whole = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0; };
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 
@@ -69,6 +77,7 @@ const pickTarget = (definition, data, action) => {
 
 /**
  * { kind: 'up', list, option }: the player when it's available, or the GM any time, to go up now.
+ * { kind: 'place', list, option }: which LEVEL_UP.EXE is raising, kept until they go up.
  * { kind: 'give' }: the GM's LEVEL_UP, a level for the player to take. { kind: 'down', option }: the GM's LEVEL_DOWN.
  * Gives { ok: true, data, level, owed } or { ok: false, error }.
  */
@@ -83,12 +92,19 @@ const levelAction = (definition, data, action, { gm = false } = {}) => {
   if (kind === 'up') {
     if (atTop(definition, level)) return { ok: false, error: 'Already the highest level' };
     const byXp = xpReady(definition, sheet, level);
-    if (!gm && !byXp && !owed) return { ok: false, error: 'Not yet: there isn\'t enough for the next level' };
+    if (!gm && !byXp && !owed) return { ok: false, error: NOT_YET };
     const { target, error } = pickTarget(definition, sheet, action);
     if (error) return { ok: false, error };
-    const next = moved(definition, sheet, target, 1);
+    const next = settled(moved(definition, sheet, target, 1));
     // XP covers it, or a level the GM gave does. What was earned isn't spent on what was given.
     return said(byXp || !owed ? next : withOwed(next, owed - 1));
+  }
+  if (kind === 'place') {
+    if (atTop(definition, level)) return { ok: false, error: 'Already the highest level' };
+    if (!gm && !xpReady(definition, sheet, level) && !owed) return { ok: false, error: NOT_YET };
+    const { target, error } = pickTarget(definition, sheet, action);
+    if (error) return { ok: false, error };
+    return said({ ...sheet, [LEVELING_KEY]: target.stat ? {} : { list: target.list.id, option: target.option.id } });
   }
   if (!gm) return { ok: false, error: 'That is the GM\'s to do' };
   if (kind === 'give') {
@@ -96,13 +112,13 @@ const levelAction = (definition, data, action, { gm = false } = {}) => {
     return said(withOwed(sheet, owed + 1));
   }
   if (kind === 'down') {
-    if (owed) return said(withOwed(sheet, owed - 1));
+    if (owed) return said(withOwed(settled(sheet), owed - 1));
     const all = levelTargets(definition, sheet);
     const named = typeof action.option === 'string' ? all.find((p) => p.option && p.option.id === action.option) : null;
     // The last of them, the most recently picked, that has a level to give.
     const target = named || [...all].reverse().find((p) => p.level > 1);
     if (!target || target.level <= 1) return { ok: false, error: 'Already level 1' };
-    return said(moved(definition, sheet, target, -1));
+    return said(settled(moved(definition, sheet, target, -1)));
   }
   return { ok: false, error: 'Nothing to do' };
 };
@@ -110,4 +126,4 @@ const levelAction = (definition, data, action, { gm = false } = {}) => {
 /** The stat a player can't type while levels go up on their own, once the character is made. */
 const lockedByLevels = (definition, data) => (definition && advances(definition) && !creatingNow(definition, isPlainObject(data) ? data : {}) ? new Set(['level']) : new Set());
 
-module.exports = { OWED_KEY, characterLevel, levelTargets, levelAction, lockedByLevels };
+module.exports = { OWED_KEY, LEVELING_KEY, characterLevel, levelTargets, levelAction, lockedByLevels };

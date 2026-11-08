@@ -36,9 +36,11 @@ interface CharacterSheetWindowProps {
   currentTheme?: string;
   /** Opens NEW_CHARACTER.EXE where they left it (7c2), from the line a sheet being made shows. */
   onContinueCreating?: () => void;
+  /** Opens LEVEL_UP.EXE (7d3a), from LEVEL UP READY. */
+  onOpenLevelUp?: () => void;
 }
 
-export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, onOpenVehicles, currentTheme, onContinueCreating }: CharacterSheetWindowProps) {
+export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, onOpenVehicles, currentTheme, onContinueCreating, onOpenLevelUp }: CharacterSheetWindowProps) {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   const { sheet, template, handleFieldChange, handleFieldsChange, allowFumbleShield, xpRate, encumbranceEnforced, hiddenTabs, actions } =
@@ -135,7 +137,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           onStabilize={actions.onStabilize}
           onCastSpell={actions.onCastSpell}
           onRollAbility={actions.onRollAbility}
-          onLevelUp={actions.onLevelUp}
+          onLevelUp={onOpenLevelUp}
           onResistDrain={actions.onResistDrain}
           allowFumbleShield={allowFumbleShield}
           xpRate={xpRate}
