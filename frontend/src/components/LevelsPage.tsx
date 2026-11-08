@@ -6,7 +6,8 @@ import {
   MOST_LEVEL, MULTIPLIERS, advancesBy, levelHomeNote, anyTyped, canAddRange, firstAsTyped, isTyped, topAsTyped, levelNotes, levelTable, levelsSet, withAdvancement, withFilledAgain,
   withFirst, withRangeAdded, withRangeOff, withRangeTo, withRangeX, withTop, withTyped, xpWord,
 } from '../sheets/levels';
-import { healthSet, withHealth, withHealthFormula } from '../sheets/levels';
+import { classDice, healthSet, withHealth, withHealthAdds, withHealthDie, withHealthDieOn, withHealthFormula } from '../sheets/levels';
+import { DIE_CHOICES } from '../sheets/recovery';
 import { partIsOn } from '../sheets/wordsFeatures';
 import { useFormulaBox } from '../hooks/useFormulaBox';
 import type { systemsApi } from '../sheets/systemsApi';
@@ -61,6 +62,11 @@ export function LevelsPage({ definition, edit, onGoTo, api }: Props) {
     definition, api, kind: 'formula', value: health.formula, label: 'Max health formula', inputStyle: formulaInput,
     placeholder: '10 + @con * @level', onChange: (text) => edit(withHealthFormula(definition, text)),
   });
+  const adds = useFormulaBox({
+    definition, api, kind: 'formula', value: health.adds, label: 'Each level adds', inputStyle: formulaInput,
+    placeholder: '@con_mod', onChange: (text) => edit(withHealthAdds(definition, text)),
+  });
+  const dice = classDice(definition);
   const [asking, setAsking] = useState(false);
   const xp = advancesBy(definition, 'levels');
   const milestone = advancesBy(definition, 'milestone');
@@ -100,17 +106,49 @@ export function LevelsPage({ definition, edit, onGoTo, api }: Props) {
           <span role="group" aria-label="Max health" style={segGroup}>
             <button type="button" aria-pressed={health.how === 'as_is'} style={seg(health.how === 'as_is')} onClick={() => edit(withHealth(definition, 'as_is'))}>AS IT IS</button>
             <button type="button" aria-pressed={health.how === 'formula'} style={seg(health.how === 'formula')} onClick={() => edit(withHealth(definition, 'formula'))}>A FORMULA</button>
+            <button type="button" aria-pressed={health.how === 'level'} style={seg(health.how === 'level')} onClick={() => edit(withHealth(definition, 'level'))}>PER LEVEL</button>
           </span>
+          {health.how === 'level' && <>
+            <FieldName beside hint={HINTS['levels.healthDie']} style={small}>THE DIE</FieldName>
+            <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <span role="group" aria-label="Where the die is set" style={segGroup}>
+                <button type="button" aria-pressed={health.dieOn === 'class'} style={seg(health.dieOn === 'class')} onClick={() => edit(withHealthDieOn(definition, 'class'))}>ON EACH CLASS</button>
+                <button type="button" aria-pressed={health.dieOn === 'all'} style={seg(health.dieOn === 'all')} onClick={() => edit(withHealthDieOn(definition, 'all'))}>ONE FOR ALL</button>
+              </span>
+              {health.dieOn === 'all' && (
+                <select aria-label="The die for every level" value={health.die ?? 8} style={formulaInput as React.CSSProperties & { width: string }} onChange={(e) => edit(withHealthDie(definition, Number(e.target.value)))}>
+                  {[...new Set([...DIE_CHOICES, ...(health.die !== null ? [health.die] : [])])].sort((a, b) => a - b).map((n) => <option key={n} value={n}>D{n}</option>)}
+                </select>
+              )}
+            </span>
+            <FieldName beside hint={HINTS['levels.healthGain']} style={small}>GAINED BY</FieldName>
+            <select aria-label="How health is gained" value="average" style={formulaInput} onChange={() => {}}>
+              <option value="average">AVERAGE (FIXED)</option>
+            </select>
+            <FieldName beside hint={HINTS['levels.healthAdds']} style={small}>EACH LEVEL ADDS</FieldName>
+            {adds.field}
+          </>}
           {health.how === 'formula' && <>
             <FieldName beside hint={HINTS['levels.healthFormula']} style={small}>IT IS</FieldName>
             {formula.field}
           </>}
         </div>
         {health.how === 'formula' && formula.help}
+        {health.how === 'level' && adds.help}
+        {health.how === 'level' && health.dieOn === 'class' && (
+          <p style={why} aria-label="Each class's die">{dice.length
+            ? dice.map((c) => `${c.name.toUpperCase()} ${c.die ? `D${c.die}` : 'NO HIT DIE'}`).join(' · ')
+            : 'No list here has levels: pick ONE FOR ALL, or make a list levelled on CHOICES.'}</p>
+        )}
+        {health.how === 'level' && health.dieOn === 'class' && dice.some((c) => !c.die) && (
+          <p role="note" style={note}>A class with no HIT DIE gains only what each level adds. Set one on CHOICES.</p>
+        )}
         <p style={why}>{health.how === 'formula'
           ? 'The token\'s max health is worked out from the sheet after every change, and its health moves with it. Typed over on the token, it goes back to the formula at the next change.'
-          : 'The number on each token, as the GM or the player sets it.'}</p>
-        {health.how === 'formula' && !tokenHealth && <p role="note" style={note}>TOKEN HEALTH is off on SETUP, so there is no token health to set. The formula waits until it is on.</p>}
+          : health.how === 'level'
+            ? 'Level 1 has the full die; each level after it gains half the die, rounded up, and what each level adds. Kept as they go up, and recounted when a stat changes. The token follows it.'
+            : 'The number on each token, as the GM or the player sets it.'}</p>
+        {health.how !== 'as_is' && !tokenHealth && <p role="note" style={note}>TOKEN HEALTH is off on SETUP, so there is no token health to set. It waits until that is on.</p>}
       </section>
       {xp && (
         <section aria-label="The XP table" style={panel}>

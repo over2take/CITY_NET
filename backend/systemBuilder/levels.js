@@ -29,9 +29,17 @@ const XP_KEY = '_xp';
 
 const LIMITS = { top: 30, xp: 1000000000000, ranges: 30, times: 100, formula: 1000 };
 const KEYS = new Set(['top', 'first', 'ranges', 'typed', 'health']);
-/** MAX HEALTH (7d4): AS IT IS, the token's own number, or A FORMULA it is worked out from. PER LEVEL comes with 7d5. */
-const HEALTH_HOWS = ['as_is', 'formula'];
-const HEALTH_KEYS = new Set(['how', 'formula']);
+/** MAX HEALTH (7d4): AS IT IS, the token's own number, A FORMULA it is worked out from, or PER LEVEL (7d5a). */
+const HEALTH_HOWS = ['as_is', 'formula', 'level'];
+const HEALTH_KEYS = new Set(['how', 'formula', 'die_on', 'die', 'gain', 'adds']);
+/** PER LEVEL: the die is each class's HIT DIE (choices.js), or one for every level. */
+const DIE_ONS = ['class', 'all'];
+/** How a level's health is gained: AVERAGE (FIXED) first; ROLL and the rest come with 7d5b and 7d5c. */
+const GAINS = ['average'];
+/** The dice a level's health can roll: as a class's HIT DIE takes. */
+const HEALTH_DIE = { least: 2, most: 100 };
+/** Where a sheet keeps what each level gained (7d5a): { "<character level>": { die, took } }, level 1 left to the full die. */
+const HEALTH_LEVELS_KEY = '_health_levels';
 const RANGE_KEYS = new Set(['to', 'x']);
 /** What the page starts from, and a system saying nothing has. */
 const DEFAULTS = { top: 10, first: 300, ranges: [{ to: 10, x: 2 }] };
@@ -73,29 +81,72 @@ const advances = (definition) => earnsXp(definition)
   || (!!definition && isPlainObject(definition.core) && Array.isArray(definition.core.advancement) && definition.core.advancement.includes('milestone'));
 
 /** What the browser needs (7d2): the highest level, and the XP table if there's a meter. Null where they don't go up. */
-const levelsShown = (definition) => (advances(definition)
-  ? { top: levelsOf(definition).top, ...(earnsXp(definition) ? { table: levelTable(definition) } : {}) } : null);
+const levelsShown = (definition) => {
+  if (!advances(definition)) return null;
+  const h = healthOf(definition);
+  // PER LEVEL (7d5a): how a level gains it, and the die of each class, for LEVEL_UP.EXE's HEALTH.
+  const dice = {};
+  for (const c of (Array.isArray(definition.choices) ? definition.choices : []).filter((l) => isPlainObject(l) && l.levelled === true)) {
+    for (const o of (Array.isArray(c.options) ? c.options : []).filter(isPlainObject)) if (typeof o.id === 'string' && levelDie(definition, o) !== null) dice[o.id] = levelDie(definition, o);
+  }
+  return {
+    top: levelsOf(definition).top, ...(earnsXp(definition) ? { table: levelTable(definition) } : {}),
+    ...(h.how === 'level' ? { health: { gain: h.gain, dieOn: h.dieOn, ...(h.die ? { die: h.die } : {}), dice } } : {}),
+  };
+};
 
-/** A definition's levels checked, its problems added to `problems`. */
-/** MAX HEALTH as set (7d4): { how, formula? }. A formula is kept while AS IT IS, for going back to it. */
+/**
+ * MAX HEALTH as set (7d4): { how, formula? }, and PER LEVEL's (7d5a) { dieOn, die?, gain, adds? }. What isn't the
+ * way chosen is kept, for going back to it.
+ */
 const healthOf = (definition) => {
   const h = definition && isPlainObject(definition.levels) && isPlainObject(definition.levels.health) ? definition.levels.health : {};
-  return { how: HEALTH_HOWS.includes(h.how) ? h.how : 'as_is', ...(typeof h.formula === 'string' ? { formula: h.formula } : {}) };
+  return {
+    how: HEALTH_HOWS.includes(h.how) ? h.how : 'as_is',
+    ...(typeof h.formula === 'string' ? { formula: h.formula } : {}),
+    dieOn: DIE_ONS.includes(h.die_on) ? h.die_on : 'class',
+    ...(Number.isInteger(h.die) && h.die >= HEALTH_DIE.least && h.die <= HEALTH_DIE.most ? { die: h.die } : {}),
+    gain: GAINS.includes(h.gain) ? h.gain : 'average',
+    ...(typeof h.adds === 'string' && h.adds.trim() ? { adds: h.adds } : {}),
+  };
+};
+
+/** The die a level rolls (7d5a): `option`'s HIT DIE, or the one for all. Null without one. */
+const levelDie = (definition, option) => {
+  const h = healthOf(definition);
+  if (h.dieOn === 'all') return h.die ?? null;
+  return option && Number.isInteger(option.die) ? option.die : null;
+};
+/** AVERAGE (FIXED): half the die, rounded up. */
+const averageOf = (die) => (Number.isInteger(die) ? Math.ceil(die / 2) : 0);
+
+/**
+ * A formula of max health's, read only while the way it belongs to is chosen (one kept for going back to it isn't);
+ * `required` says one must be written then.
+ */
+const checkHealthFormula = (definition, text, where, inUse, required, problems) => {
+  if (text !== undefined && typeof text !== 'string') { problems.push({ where, message: 'Must be a formula' }); return; }
+  if (!inUse) return;
+  if (text === undefined || !text.trim()) { if (required) problems.push({ where, message: 'Write the formula max health is worked out from' }); return; }
+  if (text.length > LIMITS.formula) { problems.push({ where, message: `At most ${LIMITS.formula} characters` }); return; }
+  const tables = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
+  try { parse(text, (name) => Object.prototype.hasOwnProperty.call(tables, name)); } catch (e) { problems.push({ where, message: e.message }); }
 };
 
 const checkHealth = (definition, h, problems) => {
   const where = 'levels, health';
   if (!isPlainObject(h)) { problems.push({ where, message: 'Must say how max health is set' }); return; }
   for (const key of Object.keys(h)) if (!HEALTH_KEYS.has(key)) problems.push({ where: `${where}, ${key}`, message: 'Not part of max health' });
-  if (!HEALTH_HOWS.includes(h.how)) problems.push({ where: `${where}, how`, message: 'AS IT IS or A FORMULA' });
-  if (h.formula !== undefined && typeof h.formula !== 'string') problems.push({ where: `${where}, formula`, message: 'Must be a formula' });
-  if (h.how !== 'formula') return;
-  if (typeof h.formula !== 'string' || !h.formula.trim()) { problems.push({ where: `${where}, formula`, message: 'Write the formula max health is worked out from' }); return; }
-  if (h.formula.length > LIMITS.formula) { problems.push({ where: `${where}, formula`, message: `At most ${LIMITS.formula} characters` }); return; }
-  const tables = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
-  try { parse(h.formula, (name) => Object.prototype.hasOwnProperty.call(tables, name)); } catch (e) { problems.push({ where: `${where}, formula`, message: e.message }); }
+  if (!HEALTH_HOWS.includes(h.how)) problems.push({ where: `${where}, how`, message: 'AS IT IS, A FORMULA or PER LEVEL' });
+  checkHealthFormula(definition, h.formula, `${where}, formula`, h.how === 'formula', true, problems);
+  checkHealthFormula(definition, h.adds, `${where}, adds`, h.how === 'level', false, problems);
+  if (h.die_on !== undefined && !DIE_ONS.includes(h.die_on)) problems.push({ where: `${where}, die_on`, message: 'ON EACH CLASS or ONE FOR ALL' });
+  if (h.die !== undefined && (!Number.isInteger(h.die) || h.die < HEALTH_DIE.least || h.die > HEALTH_DIE.most)) problems.push({ where: `${where}, die`, message: `A die of ${HEALTH_DIE.least} to ${HEALTH_DIE.most} sides` });
+  if (h.gain !== undefined && !GAINS.includes(h.gain)) problems.push({ where: `${where}, gain`, message: 'AVERAGE (FIXED)' });
+  if (h.how === 'level' && h.die_on === 'all' && h.die === undefined) problems.push({ where: `${where}, die`, message: 'Pick the die every level rolls' });
 };
 
+/** A definition's levels checked, its problems added to `problems`. */
 const checkLevels = (definition, problems) => {
   const set = definition.levels;
   if (set === undefined) return;
@@ -137,4 +188,4 @@ const checkLevels = (definition, problems) => {
   }
 };
 
-module.exports = { LIMITS, DEFAULTS, XP_KEY, levelsOf, levelTable, earnsXp, advances, levelsShown, checkLevels, healthOf, HEALTH_HOWS };
+module.exports = { LIMITS, DEFAULTS, XP_KEY, levelsOf, levelTable, earnsXp, advances, levelsShown, checkLevels, healthOf, HEALTH_HOWS, GAINS, HEALTH_LEVELS_KEY, levelDie, averageOf };

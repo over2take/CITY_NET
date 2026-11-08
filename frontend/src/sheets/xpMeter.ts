@@ -6,7 +6,13 @@ import { workedOn } from './choicesShown';
 import type { SheetTemplate } from './types';
 
 /** What the server sends (backend levels.js levelsShown): the total to reach each level from 2. */
-export interface LevelsShown { top: number; table?: Record<string, number> }
+export interface LevelsShown {
+  top: number; table?: Record<string, number>;
+  /** MAX HEALTH: PER LEVEL (7d5a; backend levels.js levelsShown): how a level gains it, and each class's die. */
+  health?: { gain: 'average'; dieOn: 'class' | 'all'; die?: number; dice: Record<string, number> };
+}
+/** What a save works out PER LEVEL's max health to (backend runtime.js HEALTH_SHOWN_KEY). */
+export const HEALTH_SHOWN_KEY = '_health';
 
 /** Where a sheet keeps its XP (backend levels.js XP_KEY). */
 export const XP_KEY = '_xp';

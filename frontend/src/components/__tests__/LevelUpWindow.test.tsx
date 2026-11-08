@@ -247,3 +247,39 @@ describe('the picks a new level opens (7d3b)', () => {
     expect(button('FINISH').disabled).toBe(false);
   });
 });
+
+describe('HEALTH, per level (7d5a)', () => {
+  const withHealth = (health: object) => registerCustomTemplate({
+    id: ID, name: 'Hearth', words: {}, parts: {}, derived: [], sheet: { sections: [] },
+    levels: { top: 5, table: { 2: 100, 3: 300, 4: 700, 5: 1500 }, health }, choices: [ONE],
+  } as unknown as CustomRender);
+  const openWith = async (health: object, data: Record<string, unknown>) => {
+    withHealth(health);
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })));
+    const socket = makeSocket(data);
+    render(<LevelUpWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={socket as never} userName="WREN" onLeave={vi.fn()} onDone={vi.fn()} />);
+    await screen.findByRole('tablist', { name: 'Folders' });
+  };
+
+  it('a HEALTH folder saying what the level adds, fixed, before what it unlocks', async () => {
+    await openWith({ gain: 'average', dieOn: 'class', dice: { soldier: 10 } }, holding([['soldier', 2]], 9000, { _health: { adds: 2 } }));
+    expect(folders()).toEqual(['HEALTH', 'WHAT IT UNLOCKS']);
+    expect(screen.getByText('HEALTH · d10 + 2')).toBeTruthy();
+    expect(screen.getByText('+7: 5 AVERAGE, +2 EACH LEVEL')).toBeTruthy();
+    expect(screen.getByText('Fixed in this game. Nothing to roll.')).toBeTruthy();
+    await userEvent.click(button('NEXT'));
+    expect(screen.getByText('Soldier 3 brings:')).toBeTruthy();
+  });
+
+  it('a class with no HIT DIE, and a level that would come to less than 1', async () => {
+    await openWith({ gain: 'average', dieOn: 'class', dice: {} }, holding([['soldier', 2]], 9000, { _health: { adds: -2 } }));
+    expect(screen.getByText('HEALTH · NO DIE − 2')).toBeTruthy();
+    expect(screen.getByText('+1: 0 AVERAGE, −2 EACH LEVEL, AT LEAST 1')).toBeTruthy();
+    expect(screen.getByText('Soldier has no HIT DIE, so only what each level adds.')).toBeTruthy();
+  });
+
+  it('no HEALTH folder where health isn\'t per level', async () => {
+    await open(holding([['soldier', 2]]), [ONE]);
+    expect(folders()).toEqual(['WHAT IT UNLOCKS']);
+  });
+});
