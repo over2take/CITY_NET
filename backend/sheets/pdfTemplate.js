@@ -301,7 +301,7 @@ const leftLine = (left) => {
  */
 async function buildCustomTemplate(definition, { name, version } = {}) {
   // Required here rather than at the top: it is a builder module, and this file loads first.
-  const { sheetFields, pickLines, INVENTORY_ROWS } = require('../systemBuilder/sheetImport');
+  const { sheetFields, xpLines, pickLines, INVENTORY_ROWS } = require('../systemBuilder/sheetImport');
   const { ask, left } = sheetFields(definition);
   const title = printable(name || (definition && definition.name) || 'System').toUpperCase();
 
@@ -365,8 +365,8 @@ async function buildCustomTemplate(definition, { name, version } = {}) {
     y -= size + 12;
   };
 
-  // The picks after the sheet's own fields (7c6): a line per list.
-  for (const f of [...ask, ...pickLines(definition)]) {
+  // After the sheet's own fields: their XP (7d2c), then a line per list (7c6).
+  for (const f of [...ask, ...xpLines(definition), ...pickLines(definition)]) {
     if (f.tab !== tab) { tab = f.tab; section = undefined; if (tab) heading(tab, 12, 120); }
     if (f.section !== section) { section = f.section; heading(section, 9, 72); }
     if (f.type === 'inventory') {

@@ -26,7 +26,8 @@ const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
 const { withUpload, lockedWhileCreating, kitsGivable } = require('../systemBuilder/creation');
 const { lockedByLevels } = require('../systemBuilder/levelUp');
-const { withImportedPicks } = require('../systemBuilder/sheetImport');
+const { XP_KEY, earnsXp } = require('../systemBuilder/levels');
+const { xpFrom, withImportedPicks } = require('../systemBuilder/sheetImport');
 const { inventoryAdded } = require('../sheets/inventoryImport');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
@@ -1474,11 +1475,15 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         // The GM's values are left out of a player's import or batch edit, as from a single
         // edit: uploading a sheet does not set your own XP.
         const gm = isAdminSocket(socket);
-        const entries = Object.entries(payload.fields)
-          .filter(([k, v]) => !linked[k] && (gm || sheetTemplates.playerMayEdit(system, k))
-            && (typeof v === 'string' || typeof v === 'number'));
-        // A custom system's upload can name its picks too (7c6), checked again as they are written.
         const definition = customSystems.definitionOf(system);
+        // Their own XP only in a whole upload, where characters earn it, and only a whole amount (7d2c).
+        const uploadsXp = (k, v) => k === XP_KEY && payload.replace === true && earnsXp(definition) && xpFrom(v) !== null;
+        const entries = Object.entries(payload.fields)
+          .filter(([k, v]) => !linked[k] && (gm || sheetTemplates.playerMayEdit(system, k) || uploadsXp(k, v))
+            && (typeof v === 'string' || typeof v === 'number'))
+          // XP kept as a number, however it was written.
+          .map(([k, v]) => [k, k === XP_KEY && xpFrom(v) !== null ? xpFrom(v) : v]);
+        // A custom system's upload can name its picks too (7c6), checked again as they are written.
         const picks = definition && payload.picks && typeof payload.picks === 'object' ? payload.picks : null;
         if (entries.length === 0 && !cyber && !picks) return;
         // Through the queue: an import replaces the whole sheet, so a concurrent edit

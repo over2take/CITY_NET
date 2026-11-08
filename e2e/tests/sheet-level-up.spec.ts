@@ -114,3 +114,41 @@ test('milestone: the GM gives a level, the rail blinks, the player takes it; no 
   await expect.poll(async () => (await sheetOf()).level, { timeout: 15_000 }).toBe(1);
   await mine.context().close();
 });
+
+test('an uploaded sheet brings its XP, under the game\'s word; one with none keeps what they have (7d2c)', async ({ browser, request }, info) => {
+  test.setTimeout(120_000);
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const wren = { username: `e2e_lvlform${again}`, password: 'e2e-player-password' };
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, { format: 1, name: `Formupfall${again}`, core: { health: { model: 'pool' }, advancement: ['levels'] }, words: { xp: { singular: 'MARK', plural: 'MARKS', short: 'MK' } }, levels: { top: 5, first: 100, ranges: [{ to: 5, x: 2 }] } });
+  await approvedPlayer(request, gm, wren);
+  const sheetOf = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${wren.username}`)).data;
+
+  // The JSON template asks for it, by its id, saying what goes in.
+  const template = await (await request.get('/api/sheets/import/template.json')).json();
+  expect(template.fields._xp).toBeNull();
+  expect(template.help._xp).toBe('MK. What they have so far. Left empty, it stays as it is');
+  expect((await request.get('/api/sheets/import/template.pdf')).ok()).toBe(true);
+
+  const mine = await signedIn(browser, info, wren);
+  await openSheet(mine);
+  const meter = mine.getByTestId('xp-meter');
+  await expect(meter.getByText('0 / 100 · 100 TO LEVEL 2')).toBeVisible({ timeout: 15_000 });
+  const upload = async (sheet: object) => {
+    await mine.getByRole('button', { name: 'IMPORT', exact: true }).click();
+    await mine.getByRole('textbox', { name: 'Paste JSON or a stat block' }).fill(JSON.stringify(sheet));
+    await mine.getByRole('button', { name: 'PREVIEW', exact: true }).click();
+    await mine.getByRole('button', { name: /REPLACE SHEET WITH/ }).click();
+    await expect(mine.getByRole('button', { name: '✓ APPLIED' })).toBeVisible({ timeout: 15_000 });
+    await mine.getByRole('button', { name: 'CLOSE', exact: true }).click();
+  };
+  await upload({ name: 'Wren', MK: '250' });
+  await expect.poll(async () => (await sheetOf())._xp, { timeout: 15_000 }).toBe(250);
+  await expect(meter.getByText('250 / 100 · ENOUGH FOR LEVEL 2 · 150 CARRIES OVER')).toBeVisible({ timeout: 15_000 });
+  await expect(mine.getByRole('button', { name: 'LEVEL UP READY' })).toBeVisible();
+
+  await upload({ name: 'Wren Again' });
+  await expect.poll(async () => (await sheetOf()).name, { timeout: 15_000 }).toBe('Wren Again');
+  expect((await sheetOf())._xp).toBe(250);
+  await mine.context().close();
+});
