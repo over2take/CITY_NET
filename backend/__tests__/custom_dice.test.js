@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { until } from './helpers/until.js';
 import express from 'express';
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
@@ -81,8 +82,8 @@ describe('POST /api/custom_dice', () => {
 
   it('broadcasts the full list after creating', async () => {
     await post({ name: 'Fate', sides: 6, faces: FATE_FACES });
-    // broadcast() runs async after the response; give it a tick
-    await new Promise(r => setTimeout(r, 20));
+    // broadcast() runs after the response: wait for it, rather than a fixed tick.
+    await until(() => emitted.find(e => e.event === 'customDiceUpdated'), { label: 'the broadcast' });
     const update = emitted.find(e => e.event === 'customDiceUpdated');
     expect(update).toBeDefined();
     expect(update.payload).toHaveLength(1);
@@ -195,7 +196,7 @@ describe('PUT /api/custom_dice/:id', () => {
 
   it('broadcasts after updating', async () => {
     await put({ name: 'Fudge', sides: 2, faces: [{ value: '+' }, { value: '-' }] });
-    await new Promise(r => setTimeout(r, 20));
+    await until(() => emitted.find(e => e.event === 'customDiceUpdated'), { label: 'the broadcast' });
     expect(emitted.some(e => e.event === 'customDiceUpdated')).toBe(true);
   });
 });
@@ -229,7 +230,7 @@ describe('DELETE /api/custom_dice/:id', () => {
 
   it('broadcasts after deleting', async () => {
     await request(app).delete(`/api/custom_dice/${id}`).set('Authorization', `Bearer ${ADMIN_TOKEN}`);
-    await new Promise(r => setTimeout(r, 20));
+    await until(() => emitted.find(e => e.event === 'customDiceUpdated'), { label: 'the broadcast' });
     const update = emitted.find(e => e.event === 'customDiceUpdated');
     expect(update).toBeDefined();
     expect(update.payload).toEqual([]);

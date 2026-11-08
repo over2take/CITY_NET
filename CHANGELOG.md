@@ -831,6 +831,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Timing races in the backend tests, swept.** Some socket tests checked a log line, a token or a message the server writes just after the sheet they had waited for, and failed now and then on CI's slower machines. Each now waits for exactly what it checks. `TEST_SLOW_DB=1 npx vitest run` makes every database answer arrive a few milliseconds late, so these show up on your own machine rather than in CI.
 - **The browser journeys run in five parts on CI, up from four.** Two runs in a row had a part past 10 minutes on its journeys step, so each part now gets a smaller share. The aim is 10 minutes or less per part, and a part is added when one passes that in two runs in a row.
 - **Browser journeys:** a backend test now fails when two journeys use the same system or player name. On CI the tests of a part share a database, so a clash passed as flaky on its retry until a third test used up the retry.
 - A Browser Journeys part that hangs on CI now fails after 25 minutes, with its report kept, and the job stops at 30, instead of holding a machine for GitHub's default six hours.

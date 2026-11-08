@@ -234,6 +234,8 @@ describe('through the socket', () => {
     const data = await stored();
     expect(data[WORKED_KEY].uses).toEqual({ rally: { max: 3, spent: 1 } });
     expect(data.defense).toBe(11);
+    // Each save is told a moment after it is written: wait for the third, not the write.
+    await until(() => shared.filter((e) => e.event === 'sheetUpdated').length === 3, { label: 'told 3' });
     expect(shared.filter((e) => e.event === 'sheetUpdated').map((e) => e.data)).toEqual(Array(3).fill({ username: 'kes', system: ID }));
     expect(kes.refused()).toEqual([]);
   });

@@ -120,6 +120,8 @@ describe('at the table', () => {
     const gm = await join('gm', { userName: 'gm', isAdmin: true, token: GM });
     gm.handlers.choicesAction({ kind: 'pick', list: 'feats', option: 'tough', username: 'kes' });
     await healthIs(26, 26, 'Tough at level 3');
+    // The map is told after the token moves.
+    await until(() => gm.shared.some((e) => e.event === 'dataUpdated'), { label: 'the map told' });
     expect(gm.shared.filter((e) => e.event === 'dataUpdated')).toEqual([{ event: 'dataUpdated', data: { isRhombusOnly: true } }]);
     gm.handlers.choicesAction({ kind: 'level', list: 'classes', option: 'fighter', level: 4, username: 'kes' });
     await healthIs(28, 28, 'level 4');
@@ -149,6 +151,8 @@ describe('at the table', () => {
     const kes = await join('kes', 'kes');
     kes.handlers.updateSheetField({ fieldId: 'con', value: 5 });
     await healthIs(25, 25, 'CON 5');
+    // The map is told after the token moves.
+    await until(() => emitUpdate.mock.calls.some(([e]) => e && e.isRhombusOnly === true), { label: 'the map told' });
     expect(emitUpdate).toHaveBeenCalledWith({ isRhombusOnly: true });
     kes.handlers.updateSheetField({ fieldId: 'name', value: 'Kestrel' });
     await until(async () => (await sheetOf()).name === 'Kestrel', { label: 'the name saved' });

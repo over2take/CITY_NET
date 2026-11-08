@@ -21,6 +21,7 @@ from the code, `CHANGELOG.md` and the README.
 | What | Where | Command |
 |---|---|---|
 | Backend tests | `backend/` | `npx vitest run [files]`. Vitest, never `npx jest`. |
+| Timing check | `backend/` | `TEST_SLOW_DB=1 npx vitest run [files]`: every database answer a few ms late, as on CI. Run it on a socket test before pushing. |
 | Frontend tests | `frontend/` | `npx vitest run [files] --maxWorkers=2` |
 | Frontend typecheck | `frontend/` | `npx tsc -b`. Plain `tsc --noEmit` checks nothing here. |
 | Frontend lint | `frontend/` | `npx eslint <files>` |
@@ -29,7 +30,9 @@ from the code, `CHANGELOG.md` and the README.
 | Changelog entry | root | `node scripts/changelog-add.js "### Added" <entry.md>` |
 
 Check a test run by its exit code, not its summary line: Vitest can print every test green and
-still exit 1 on an error outside a test. The person you're working for is usually on the same
+still exit 1 on an error outside a test. In a socket test, wait for exactly what you then check
+(`until`, `expect.poll`), never for something written before it: a sheet saved, then a log line, a
+token or a message read straight after, passes here and fails now and then on CI. The person you're working for is usually on the same
 machine, so go easy on it: `--maxWorkers=2`, one headless browser, a small viewport, and stop
 servers when done. Their dev server and live database (`backend/city.db`) are theirs: never use them
 for tests. The journeys start their own servers on ports 5055 and 5174.
