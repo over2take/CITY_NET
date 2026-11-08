@@ -77,14 +77,15 @@ export const levelNotes = (d: Definition): string[] => {
 /** MAX HEALTH (7d4; backend levels.js healthOf): AS IT IS, the token's own number, A FORMULA, or PER LEVEL (7d5a). */
 export type HealthHow = 'as_is' | 'formula' | 'level';
 export type HealthDieOn = 'class' | 'all';
-export type HealthGainBy = 'average' | 'roll' | 'choose';
+export type HealthGainBy = 'average' | 'roll' | 'choose' | 'reroll';
 export interface HealthSet { how: HealthHow; formula: string; dieOn: HealthDieOn; die: number | null; adds: string; gain: HealthGainBy }
-const GAINS: HealthGainBy[] = ['average', 'roll', 'choose'];
+const GAINS: HealthGainBy[] = ['average', 'roll', 'choose', 'reroll'];
 /** What each way of gaining says, under GAINED BY (7d5b). */
 export const GAIN_WORDS: Record<HealthGainBy, string> = {
   average: 'Half the die, rounded up, every time. Nothing to roll.',
   roll: 'Rolled each level in the tray, for the table to see, and kept once rolled. Only the GM clears it.',
   choose: 'Each level, the player takes the average or rolls and keeps what comes up.',
+  reroll: 'Each level, every level is rolled again with what each level adds; over the current maximum, that is the new maximum, otherwise +1. As Cities Without Number does.',
 };
 const HOWS: HealthHow[] = ['as_is', 'formula', 'level'];
 export const healthSet = (d: Definition): HealthSet => {

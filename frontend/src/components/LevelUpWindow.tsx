@@ -80,7 +80,7 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
     { key: 'leave', label: 'LEAVE FOR NOW', onClick: onLeave },
     {
       key: 'next', label: last ? 'FINISH' : 'NEXT', tone: 'primary', disabled: (last && !allMade) || ((last || open === 'health') && !healthSettled),
-      title: (last || open === 'health') && !healthSettled ? (gain?.by === 'roll' ? 'Roll for health first' : 'Take the average or roll first') : last && !allMade ? 'Make the picks first' : undefined,
+      title: (last || open === 'health') && !healthSettled ? (gain?.by === 'choose' ? 'Take the average or roll first' : 'Roll for health first') : last && !allMade ? 'Make the picks first' : undefined,
       onClick: () => {
         if (!last) return setStep(index + 1);
         socket?.emit('levelAction', { kind: 'up', ...(target.list ? { list: target.list, option: target.option } : {}), ...(picks.length ? { picks } : {}) });
@@ -136,8 +136,13 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
         )}
         {open === 'health' && gain && (
           <>
-            <span style={{ fontSize: '0.75rem' }}>HEALTH · {gain.die ? `d${gain.die}` : 'NO DIE'}{gain.adds ? ` ${gain.adds > 0 ? '+' : '−'} ${Math.abs(gain.adds)}` : ''}</span>
-            {gain.gained !== null && (
+            <span style={{ fontSize: '0.75rem' }}>HEALTH · {gain.by === 'reroll' && gain.die ? `EVERY LEVEL: ${gain.dice} DICE${gain.adds ? ` ${gain.adds > 0 ? '+' : '−'} ${Math.abs(gain.adds * gain.dice)}` : ''}` : <>{gain.die ? `d${gain.die}` : 'NO DIE'}{gain.adds ? ` ${gain.adds > 0 ? '+' : '−'} ${Math.abs(gain.adds)}` : ''}</>}</span>
+            {gain.by === 'reroll' && gain.gained !== null && gain.rolled !== null && (
+              <span style={{ ...why, color: 'var(--cyan)', opacity: 1 }}>
+                +{gain.gained}: ROLLED {gain.rolled}, {gain.over ? `OVER ${gain.max}: THE NEW MAXIMUM` : `NOT OVER ${gain.max}: +1`}
+              </span>
+            )}
+            {gain.gained !== null && !(gain.by === 'reroll' && gain.rolled !== null) && (
               <span style={{ ...why, color: 'var(--cyan)', opacity: 1 }}>
                 +{gain.gained}: {gain.rolled !== null ? `ROLLED ${gain.rolled}` : `${gain.average} AVERAGE`}{gain.adds ? `, ${gain.adds > 0 ? '+' : '−'}${Math.abs(gain.adds)} EACH LEVEL` : ''}{(gain.rolled ?? gain.average) + gain.adds < 1 ? ', AT LEAST 1' : ''}
               </span>
@@ -145,7 +150,7 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
             {gain.gained === null && gain.die && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }} role="group" aria-label="Health this level">
                 {gain.by === 'choose' && <button type="button" style={btn} onClick={() => health('healthAverage')}>TAKE {gain.average}{gain.adds ? ` ${gain.adds > 0 ? '+' : '−'} ${Math.abs(gain.adds)}` : ''}</button>}
-                <button type="button" style={{ ...btn, borderColor: 'var(--warning)', color: 'var(--warning)' }} onClick={() => health('healthRoll')}>ROLL D{gain.die}</button>
+                <button type="button" style={{ ...btn, borderColor: 'var(--warning)', color: 'var(--warning)' }} onClick={() => health('healthRoll')}>{gain.by === 'reroll' ? 'ROLL THEM ALL' : `ROLL D${gain.die}`}</button>
               </div>
             )}
             {gain.tookAverage && gain.die && (
@@ -153,6 +158,7 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
             )}
             <p style={why}>{!gain.die ? `${target.name} has no HIT DIE, so only what each level adds.`
               : gain.rolled !== null ? 'Rolled, and kept. Your GM can clear it for another go.'
+                : gain.by === 'reroll' ? `Every level rolled again. Over ${gain.max} and it becomes your new maximum. Otherwise you gain 1.`
                 : gain.by === 'average' ? 'Fixed in this game. Nothing to roll.'
                   : gain.by === 'choose' ? (gain.tookAverage ? 'The average, taken. You can still roll instead, and keep what comes up.' : 'Take the average, or roll and keep what comes up.')
                     : 'Thrown in the tray, for the table to see. Kept once it\'s rolled.'}</p>

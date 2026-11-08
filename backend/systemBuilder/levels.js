@@ -34,8 +34,8 @@ const HEALTH_HOWS = ['as_is', 'formula', 'level'];
 const HEALTH_KEYS = new Set(['how', 'formula', 'die_on', 'die', 'gain', 'adds']);
 /** PER LEVEL: the die is each class's HIT DIE (choices.js), or one for every level. */
 const DIE_ONS = ['class', 'all'];
-/** How a level's health is gained: AVERAGE (FIXED), ROLL, or THE PLAYER CHOOSES (7d5b); the rest come with 7d5c. */
-const GAINS = ['average', 'roll', 'choose'];
+/** How a level's health is gained: AVERAGE (FIXED), ROLL, THE PLAYER CHOOSES (7d5b), or REROLL ALL, KEEP HIGHER (7d5c). */
+const GAINS = ['average', 'roll', 'choose', 'reroll'];
 /** The dice a level's health can roll: as a class's HIT DIE takes. */
 const HEALTH_DIE = { least: 2, most: 100 };
 /** Where a sheet keeps what each level gained (7d5a): { "<character level>": { die, took } }, level 1 left to the full die. */
@@ -142,7 +142,7 @@ const checkHealth = (definition, h, problems) => {
   checkHealthFormula(definition, h.adds, `${where}, adds`, h.how === 'level', false, problems);
   if (h.die_on !== undefined && !DIE_ONS.includes(h.die_on)) problems.push({ where: `${where}, die_on`, message: 'ON EACH CLASS or ONE FOR ALL' });
   if (h.die !== undefined && (!Number.isInteger(h.die) || h.die < HEALTH_DIE.least || h.die > HEALTH_DIE.most)) problems.push({ where: `${where}, die`, message: `A die of ${HEALTH_DIE.least} to ${HEALTH_DIE.most} sides` });
-  if (h.gain !== undefined && !GAINS.includes(h.gain)) problems.push({ where: `${where}, gain`, message: 'AVERAGE (FIXED), ROLL or THE PLAYER CHOOSES' });
+  if (h.gain !== undefined && !GAINS.includes(h.gain)) problems.push({ where: `${where}, gain`, message: 'AVERAGE (FIXED), ROLL, THE PLAYER CHOOSES or REROLL ALL, KEEP HIGHER' });
   if (h.how === 'level' && h.die_on === 'all' && h.die === undefined) problems.push({ where: `${where}, die`, message: 'Pick the die every level rolls' });
 };
 

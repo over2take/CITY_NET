@@ -358,3 +358,39 @@ describe('HEALTH rolled, or the player choosing (7d5b)', () => {
     expect(button('FINISH').title).toBe('Roll for health first');
   });
 });
+
+describe('REROLL ALL, KEEP HIGHER (7d5c)', () => {
+  const open = async (health?: object) => {
+    registerCustomTemplate({
+      id: ID, name: 'Hearth', words: {}, parts: {}, derived: [], sheet: { sections: [] },
+      levels: { top: 5, table: { 2: 100, 3: 300, 4: 700, 5: 1500 }, health: { gain: 'reroll', dieOn: 'class', dice: { soldier: 10 } } }, choices: [ONE],
+    } as unknown as CustomRender);
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })));
+    const socket = makeSocket(holding([['soldier', 2]], 9000, {
+      _health: { adds: 2, max: 19, levels: [{ level: 1, took: 10, die: 10 }, { level: 2, took: 5, die: 10 }] },
+      _leveling: { list: 'classes', option: 'soldier', ...(health ? { health } : {}) },
+    }));
+    render(<LevelUpWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={socket as never} userName="WREN" onLeave={vi.fn()} onDone={vi.fn()} />);
+    await screen.findByRole('tablist', { name: 'Folders' });
+    return socket;
+  };
+
+  it('every level\'s dice, what each adds for all, ROLL THEM ALL; NEXT waits', async () => {
+    const socket = await open();
+    expect(screen.getByText('HEALTH · EVERY LEVEL: 3 DICE + 6')).toBeTruthy();
+    expect(screen.getByText('Every level rolled again. Over 19 and it becomes your new maximum. Otherwise you gain 1.')).toBeTruthy();
+    expect(button('NEXT').title).toBe('Roll for health first');
+    await userEvent.click(screen.getByRole('button', { name: 'ROLL THEM ALL' }));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'healthRoll', list: 'classes', option: 'soldier' });
+  });
+
+  it('over: the new maximum; not over: 1; kept either way', async () => {
+    await open({ roll: 33, die: 10, gained: 14, over: 19 });
+    expect(screen.getByText('+14: ROLLED 33, OVER 19: THE NEW MAXIMUM')).toBeTruthy();
+    expect(screen.getByText('Rolled, and kept. Your GM can clear it for another go.')).toBeTruthy();
+    expect(button('NEXT').disabled).toBe(false);
+    cleanup();
+    await open({ roll: 9, die: 10, gained: 1, over: 19 });
+    expect(screen.getByText('+1: ROLLED 9, NOT OVER 19: +1')).toBeTruthy();
+  });
+});

@@ -32,22 +32,29 @@ export const levelUpSteps = (offer: LevelUpOffer, more = 0, health = false): Lev
  * gained, the roll kept for this class, and what it all comes to: `gained` null while there is still something to
  * roll or choose. Null where health isn't per level.
  */
-export interface HealthGain { die: number | null; average: number; adds: number; by: HealthGainBy; rolled: number | null; tookAverage: boolean; gained: number | null }
+export interface HealthGain {
+  die: number | null; average: number; adds: number; by: HealthGainBy; rolled: number | null; tookAverage: boolean; gained: number | null;
+  /** REROLL ALL (7d5c): how many dice go, the maximum to beat, and whether the roll beat it. */
+  dice: number; max: number; over: boolean | null;
+}
 export const healthGain = (template: SheetTemplate | null | undefined, data: Record<string, unknown> | null | undefined, target: LevelTarget): HealthGain | null => {
   const h = template?.levels?.health;
   if (!h) return null;
   // The level itself, there being no class, goes up by the die for all, as the server does.
   const die = h.dieOn === 'all' ? h.die ?? null : (target.option ? h.dice[target.option] ?? null : null);
-  const shown = data?.[HEALTH_SHOWN_KEY] as { adds?: unknown } | undefined;
+  const shown = data?.[HEALTH_SHOWN_KEY] as { adds?: unknown; max?: unknown; levels?: { die?: unknown }[] } | undefined;
   const adds = typeof shown?.adds === 'number' ? shown.adds : 0;
+  const max = typeof shown?.max === 'number' ? shown.max : 0;
+  const dice = (Array.isArray(shown?.levels) ? shown!.levels!.filter((l) => typeof l?.die === 'number').length : 0) + (die ? 1 : 0);
   const average = die ? Math.ceil(die / 2) : 0;
   const place = levelUpOffer(template, data)?.leveling;
   const here = !!place && place.list === target.list && place.option === target.option;
   const rolled = here && typeof place?.health?.roll === 'number' ? place.health.roll : null;
   const tookAverage = here && place?.health?.average === true;
   const fixed = h.gain === 'average' || !die || tookAverage;
-  const gained = rolled !== null ? Math.max(1, rolled + adds) : fixed ? Math.max(1, average + adds) : null;
-  return { die, average, adds, by: h.gain, rolled, tookAverage, gained };
+  const kept = typeof place?.health?.gained === 'number' ? place.health.gained : null;
+  const gained = rolled !== null ? kept ?? Math.max(1, rolled + adds) : fixed ? Math.max(1, average + adds) : null;
+  return { die, average, adds, by: h.gain, rolled, tookAverage, gained, dice, max: typeof place?.health?.over === 'number' && rolled !== null ? place.health.over : max, over: rolled === null || kept === null ? null : kept > 1 || rolled > max };
 };
 
 /** The class a kept health roll was made for, by name, while it's another than `target` (7d5b): it can't be left. */
@@ -66,7 +73,7 @@ export const gmLevelingLine = (template: SheetTemplate | null | undefined, data:
   const name = target ? `${target.option ? target.name.toUpperCase() : 'LEVEL'} ${target.level} → ${target.level + 1}` : place.option ? `NEW: ${place.option.toUpperCase()}` : 'THE NEXT LEVEL';
   const roll = place.health?.roll;
   return {
-    words: `LEVELING UP · ${name}${typeof roll === 'number' ? ` · HEALTH ROLLED ${roll}${place.health?.die ? ` ON A D${place.health.die}` : ''}` : place.health?.average ? ' · HEALTH: THE AVERAGE' : ''}`,
+    words: `LEVELING UP · ${name}${typeof roll === 'number' ? ` · HEALTH ${typeof place.health?.gained === 'number' ? `REROLLED ${roll}, +${place.health.gained}` : `ROLLED ${roll}${place.health?.die ? ` ON A D${place.health.die}` : ''}`}` : place.health?.average ? ' · HEALTH: THE AVERAGE' : ''}`,
     canClear: typeof roll === 'number',
   };
 };

@@ -70,9 +70,11 @@ const withHealthKept = (definition, before, after, target, gm) => {
   // Nothing is rolled without a die.
   const rolled = health && Number.isInteger(health.roll) ? health.roll : null;
   const average = h.gain === 'average' || (health && health.average === true) || die === null || gm;
-  if (rolled === null && !average) return { error: h.gain === 'roll' ? 'Roll for health first' : 'Take the average or roll for health first' };
+  if (rolled === null && !average) return { error: h.gain === 'choose' ? 'Take the average or roll for health first' : 'Roll for health first' };
   const kept = isPlainObject(after[HEALTH_LEVELS_KEY]) ? after[HEALTH_LEVELS_KEY] : {};
-  const took = rolled === null ? { took: averageOf(die) } : { took: rolled, rolled: true };
+  // A reroll's level adds what took it to its new maximum (7d5c).
+  const took = rolled === null ? { took: averageOf(die) }
+    : Number.isInteger(health.gained) ? { took: rolled, rolled: true, gained: health.gained } : { took: rolled, rolled: true };
   return { data: { ...after, [HEALTH_LEVELS_KEY]: { ...kept, [level]: { die, ...took } } } };
 };
 /** The sheet without what a level it has left gained. */
@@ -221,6 +223,16 @@ const levelAction = (definition, data, action, { gm = false, rng = cryptoRng } =
     const place = placedFor(sheet, target) ? sheet[LEVELING_KEY] : {};
     const at = { ...(target.stat ? {} : { list: target.list.id, option: target.option.id }), ...(Array.isArray(place.picks) ? { picks: place.picks } : {}) };
     if (kind === 'healthAverage') return said({ ...sheet, [LEVELING_KEY]: { ...at, health: { average: true } } });
+    if (h.gain === 'reroll') {
+      // Loaded here: it reads this module's characterLevel as it loads.
+      const all = require('./healthLevels').rerollAll(definition, sheet, die, rng);
+      const results = {};
+      for (const r of all.rolls) results[r.die] = [...(results[r.die] || []), r.roll];
+      return {
+        ...said({ ...sheet, [LEVELING_KEY]: { ...at, health: { roll: all.total, die, gained: all.gained, over: all.over } } }),
+        rolled: { results, total: all.total, over: all.over, gained: all.gained, dice: all.rolls.length },
+      };
+    }
     const roll = Math.floor(rng() * die) + 1;
     return { ...said({ ...sheet, [LEVELING_KEY]: { ...at, health: { roll, die } } }), rolled: { sides: die, rolls: [roll], total: roll } };
   }
@@ -250,7 +262,12 @@ const levelAction = (definition, data, action, { gm = false, rng = cryptoRng } =
 /** The stat a player can't type while levels go up on their own, once the character is made. */
 const lockedByLevels = (definition, data) => (definition && advances(definition) && !creatingNow(definition, isPlainObject(data) ? data : {}) ? new Set(['level']) : new Set());
 
-/** The dice-log line for a level's health roll (7d5b): "Wren rolled Health (d10) [7]". */
-const healthRollLine = (who, rolled) => `${who} rolled Health (d${rolled.sides}) [${rolled.total}]`;
+/**
+ * The dice-log line for a level's health roll (7d5b): "Wren rolled Health (d10) [7]"; a reroll's (7d5c) "Wren rerolled
+ * Health, 4 dice [31]: over 27, the new maximum" or "[20]: not over 27, +1".
+ */
+const healthRollLine = (who, rolled) => (rolled.results
+  ? `${who} rerolled Health, ${rolled.dice} ${rolled.dice === 1 ? 'die' : 'dice'} [${rolled.total}]: ${rolled.total > rolled.over ? `over ${rolled.over}, the new maximum` : `not over ${rolled.over}, +1`}`
+  : `${who} rolled Health (d${rolled.sides}) [${rolled.total}]`);
 
 module.exports = { OWED_KEY, LEVELING_KEY, characterLevel, levelTargets, levelAction, lockedByLevels, healthRollLine };
