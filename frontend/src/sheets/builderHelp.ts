@@ -281,6 +281,8 @@ export const HINTS = {
   'sheet.whoSees': 'OWNER AND GM: only the character\'s player and the GM. EVERYONE: other players too, on the card they open from the token.',
   'levels.how': 'The same answer as SETUP\'s. XP LEVELS: the GM awards XP, and the sheet counts toward the next level. MILESTONE: no XP is kept, and the GM levels up whoever they tick. Pick both, or neither.',
   'levels.top': 'The most a character can reach, from 2 to 30.',
+  'levels.health': 'Where a character\'s max health comes from. AS IT IS: the number on their token, set by hand. A FORMULA: worked out from the sheet, so it follows the stats and levels on its own.',
+  'levels.healthFormula': 'Reads stats, formulas and levels, as a formula on STATS & RULES does: 10 + @con * @level. Features that add to max health still add on top.',
   'levels.word': 'What this game calls experience, like KARMA or MARKS. It is one of the words on the WORDS page.',
   'levels.first': 'The XP to go from level 1 to level 2. The rest of the table grows from this.',
   'levels.ranges': 'Each level costs its range\'s multiple of the level before it, so a curve can double early and slow down later. Add a range to change it partway. Level 2 costs what you said, so a multiplier first counts at level 3.',

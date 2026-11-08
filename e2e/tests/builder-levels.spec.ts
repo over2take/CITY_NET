@@ -3,7 +3,8 @@ import { signInAsGm, openBuilder, builderPage, gmToken, asGm } from './helpers';
 
 // The builder's LEVELS page (7d1; approved mockup docs/mockups/level-up.html, 2026-11-07): a GM turns XP levels
 // on, fills the table from a cost and two ranges, types one level over, and finds it all as they left it after
-// a reload, the server taking it with no problems. Nothing at the table yet: that is the meter's, 7d2.
+// a reload, the server taking it with no problems. Nothing at the table yet: that is the meter's, 7d2. MAX HEALTH: A
+// FORMULA (7d4) is typed in the formula box, said in words, and kept.
 
 const openPage = async (page: Page, name: string) => {
   await openBuilder(page);
@@ -76,4 +77,23 @@ test('a table from a cost and two ranges, one level typed over, kept after a rel
   // RENAME ON WORDS goes there.
   await page.getByRole('button', { name: 'RENAME ON WORDS' }).click();
   await expect(page.getByTestId('levels-page')).toHaveCount(0);
+});
+
+test('MAX HEALTH: A FORMULA typed, said in words, and kept after a reload (7d4)', async ({ page, request }, info) => {
+  const name = `Heartfall${info.retry ? ` ${info.retry + 1}` : ''}`;
+  const gm = await gmToken(request);
+  const { id } = await asGm(request, gm, 'post', '/api/systems', { definition: { format: 1, name, stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'con', label: 'Constitution' }] }] } });
+  await signInAsGm(page);
+  await openPage(page, name);
+  const health = page.getByRole('region', { name: 'Max health' });
+  await expect(health.getByRole('button', { name: 'AS IT IS' })).toHaveAttribute('aria-pressed', 'true');
+  await health.getByRole('button', { name: 'A FORMULA' }).click();
+  await health.getByRole('textbox', { name: 'Max health formula' }).fill('10 + @con * 2');
+  await expect(health.getByTestId('formula-words')).toContainText('Constitution');
+  await saved(page);
+  expect((await asGm(request, gm, 'get', `/api/systems/${id}`)).draft.levels.health).toEqual({ how: 'formula', formula: '10 + @con * 2' });
+  await page.reload();
+  await signInAsGm(page);
+  await openPage(page, name);
+  await expect(page.getByRole('region', { name: 'Max health' }).getByRole('textbox', { name: 'Max health formula' })).toHaveValue('10 + @con * 2');
 });

@@ -569,7 +569,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
             )}
             {ready && page === 'choices' && <ChoicesPage definition={definition!} edit={edit} api={api} startList={choicesStart} />}
             {ready && page === 'new_character' && <NewCharacterPage definition={definition!} edit={edit} api={api} onGoTo={(p, list) => { setChoicesStart(list); setPage(p); setStatus(null); }} />}
-            {ready && page === 'levels' && <LevelsPage definition={definition!} edit={edit} onGoTo={(p) => { setPage(p); setStatus(null); }} />}
+            {ready && page === 'levels' && <LevelsPage definition={definition!} edit={edit} api={api} onGoTo={(p) => { setPage(p); setStatus(null); }} />}
             {ready && page === 'sheet' && <SheetPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'npcs' && <NpcsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'conditions' && <ConditionsPage definition={definition!} edit={edit} api={looking ? undefined : api} />}

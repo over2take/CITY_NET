@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { levelHomeNote,
+import { healthSet, withHealth, withHealthFormula, levelHomeNote,
   advancesBy, anyTyped, canAddRange, firstAsTyped, isTyped, levelNotes, levelTable, levelsSet, tidyRanges, topAsTyped, withAdvancement, withFilledAgain,
   withFirst, withRangeAdded, withRangeOff, withRangeTo, withRangeX, withTop, withTyped, xpWord,
 } from '../levels';
@@ -206,5 +206,30 @@ describe('the word', () => {
     expect(xpWord(def())).toBe('XP');
     expect(xpWord(def({ words: { xp: { short: 'KARMA' } } }))).toBe('KARMA');
     expect(xpWord(def({ words: { xp: { short: ' ' } } }))).toBe('XP');
+  });
+});
+
+describe('MAX HEALTH (7d4)', () => {
+  const base = { format: 1, name: 'L', levels: { top: 6, first: 100, ranges: [{ to: 6, x: 2 }] } } as never;
+  it('AS IT IS until it says otherwise', () => {
+    expect(healthSet(base)).toEqual({ how: 'as_is', formula: '' });
+    expect(healthSet({ format: 1, name: 'L' } as never)).toEqual({ how: 'as_is', formula: '' });
+    expect(healthSet({ format: 1, name: 'L', levels: { health: { how: 'level', formula: 3 } } } as never)).toEqual({ how: 'as_is', formula: '' });
+  });
+  it('A FORMULA set and typed; the formula kept going back to AS IT IS; nothing kept with nothing to keep', () => {
+    const on = withHealthFormula(withHealth(base, 'formula'), '10 + @con');
+    expect((on as { levels: { health: unknown } }).levels.health).toEqual({ how: 'formula', formula: '10 + @con' });
+    expect(healthSet(on)).toEqual({ how: 'formula', formula: '10 + @con' });
+    const back = withHealth(on, 'as_is');
+    expect((back as { levels: { health: unknown } }).levels.health).toEqual({ how: 'as_is', formula: '10 + @con' });
+    const none = withHealth(base, 'as_is');
+    expect('health' in (none as { levels: object }).levels).toBe(false);
+    expect((withHealth(base, 'formula') as { levels: { health: unknown } }).levels.health).toEqual({ how: 'formula' });
+  });
+  it('the table\'s own edits keep it', () => {
+    const on = withHealthFormula(withHealth(base, 'formula'), '10 + @con');
+    for (const next of [withTop(on, 8), withFirst(on, 200), withRangeX(on, 0, 3), withTyped(on, 3, 900)]) {
+      expect((next as { levels: { health: unknown } }).levels.health, JSON.stringify(next)).toEqual({ how: 'formula', formula: '10 + @con' });
+    }
   });
 });
