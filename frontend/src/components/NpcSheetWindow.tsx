@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
 import { GmCreatingLine } from './GmCreatingLine';
+import { GmLevelingLine } from './GmLevelingLine';
 import { FillInForThemWindow } from './FillInForThemWindow';
 import { ImportSheetDialog } from './ImportSheetDialog';
 import { getTemplate, getMaxPairs, hiddenTabsFor, npcTemplateOf, type CharacterSheet, type SheetTemplate } from '../sheets';
@@ -292,6 +293,9 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
         <GmCreatingLine template={template} data={sheet.data} system={sheet.system} refused={choicesRefused}
           onAct={(kind) => socket.emit('creationAction', { kind, username: playerUsername })}
           onFillIn={() => { socket.emit('creationAction', { kind: 'open', username: playerUsername }); setFillingIn(true); }} />
+      )}
+      {playerUsername && socket && sheet && (
+        <GmLevelingLine template={template} data={sheet.data} onClear={() => socket.emit('levelAction', { kind: 'clearHealth', username: playerUsername })} />
       )}
       {sheet && template ? (
         <SheetRenderer

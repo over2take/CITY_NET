@@ -413,6 +413,10 @@ function App() {
   const [raiseNewCharacter, setRaiseNewCharacter] = useState(0);
   const [isLevelUpOpen, setIsLevelUpOpen] = useState(false);
   const [levelUpPos, setLevelUpPos] = useState(() => ({ x: window.innerWidth / 2 - 200, y: 100 }));
+  // As NEW_CHARACTER.EXE's: where LEVEL_UP.EXE is while open, so a health roll's tray (7d5b) opens beside it, not over it.
+  const levelUpAt = useRef<{ x: number; y: number } | null>(null);
+  const [raiseLevelUp, setRaiseLevelUp] = useState(0);
+  useEffect(() => { levelUpAt.current = isLevelUpOpen ? levelUpPos : null; }, [isLevelUpOpen, levelUpPos]);
   useEffect(() => { newCharacterAt.current = isNewCharacterOpen ? newCharacterPos : null; }, [isNewCharacterOpen, newCharacterPos]);
   const [vehiclesPos, setVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 200, y: 90 }));
   const [enemyVehiclesPos, setEnemyVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 160, y: 130 }));
@@ -964,9 +968,10 @@ function App() {
       // display name (handle), which may differ.
       // A quiet line (a rest that rolled nothing) only joins the log.
       if (rollOpensTray(data, userName)) {
-        // Not on top of the new character window: the player's next step is in it (7c3c, 7c4d).
-        const flow = newCharacterAt.current;
-        if (flow) setRaiseNewCharacter((n) => n + 1);
+        // Not on top of the new character window, or LEVEL_UP.EXE (7d5b): the player's next step is in it (7c3c, 7c4d).
+        const flow = newCharacterAt.current ?? levelUpAt.current;
+        if (newCharacterAt.current) setRaiseNewCharacter((n) => n + 1);
+        if (levelUpAt.current) setRaiseLevelUp((n) => n + 1);
         if (!trayOpenRef.current) {
           setTrayOpener(data);
           if (flow) setDiceTrayPos((tray) => trayBeside(tray, { ...flow, width: TERMINAL_WIDTH }, window.innerWidth));
@@ -2237,6 +2242,7 @@ function App() {
             )}
             {isLevelUpOpen && (
               <LevelUpWindow
+                raiseOn={raiseLevelUp}
                 pos={levelUpPos}
                 setPos={setLevelUpPos}
                 socket={socketRef.current}

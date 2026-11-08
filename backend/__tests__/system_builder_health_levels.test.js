@@ -45,8 +45,9 @@ describe('the setting', () => {
   it('reads as it was set, with what it falls back to', () => {
     expect(healthOf(HALE)).toEqual({ how: 'level', dieOn: 'class', gain: 'average', adds: '@con_mod' });
     expect(healthOf({ levels: { health: { how: 'level', die_on: 'all', die: 8, adds: '  ' } } })).toEqual({ how: 'level', dieOn: 'all', die: 8, gain: 'average' });
-    expect(healthOf({ levels: { health: { how: 'level', die_on: 'some', die: 1, gain: 'roll' } } })).toEqual({ how: 'level', dieOn: 'class', gain: 'average' });
-    expect(GAINS).toEqual(['average']);
+    expect(healthOf({ levels: { health: { how: 'level', die_on: 'some', die: 1, gain: 'reroll' } } })).toEqual({ how: 'level', dieOn: 'class', gain: 'average' });
+    expect(healthOf({ levels: { health: { how: 'level', gain: 'choose' } } }).gain).toBe('choose');
+    expect(GAINS).toEqual(['average', 'roll', 'choose']);
   });
 
   it('checks clean, ON EACH CLASS or ONE FOR ALL with its die', () => {
@@ -61,7 +62,8 @@ describe('the setting', () => {
     expect(problems({ how: 'level', die_on: 'all', die: 1 })).toEqual(['levels, health, die: A die of 2 to 100 sides']);
     expect(problems({ how: 'level', die: 101 })).toEqual(['levels, health, die: A die of 2 to 100 sides']);
     expect(problems({ how: 'level', die: 'd8' })).toEqual(['levels, health, die: A die of 2 to 100 sides']);
-    expect(problems({ how: 'level', gain: 'roll' })).toEqual(['levels, health, gain: AVERAGE (FIXED)']);
+    expect(problems({ how: 'level', gain: 'reroll' })).toEqual(['levels, health, gain: AVERAGE (FIXED), ROLL or THE PLAYER CHOOSES']);
+    expect(problems({ how: 'level', gain: 'roll' })).toEqual([]);
     expect(problems({ how: 'level', adds: '@con +' })[0]).toMatch(/^levels, health, adds: /);
     expect(problems({ how: 'level', adds: 3 })).toEqual(['levels, health, adds: Must be a formula']);
     expect(problems({ how: 'level', adds: '' })).toEqual([]);
@@ -225,5 +227,131 @@ describe('at the table', () => {
     gm.handlers.adminAdjustLevel({ token: GM, usernames: ['kes'], delta: -1 });
     await healthIs(12, 12, 'down again');
     expect((await sheetOf())[HEALTH_LEVELS_KEY]).toEqual({});
+  });
+});
+
+describe('ROLL and THE PLAYER CHOOSES (7d5b)', () => {
+  const { LEVELING_KEY, healthRollLine } = require_('../systemBuilder/levelUp');
+  const { ROLLED_KEPT } = require_('../systemBuilder/creation');
+  const gained = (gain) => ({ ...HALE, levels: perLevel({ gain }) });
+  const ROLL = gained('roll');
+  const CHOOSE = gained('choose');
+  const fixed = (n) => () => (n - 1) / 10 + 0.01; // a d10 lands on n
+  const ready = (more = {}) => ({ [XP_KEY]: 9e9, ...holding([['fighter', 1], ['wizard', 1]]), ...more });
+  const act = (def, data, action, opts = {}) => levelAction(def, data, action, opts);
+
+  it('a roll of the class\'s die, kept with the place for that class, given back for the tray', () => {
+    const done = act(ROLL, ready(), { kind: 'healthRoll', list: 'classes', option: 'fighter' }, { rng: fixed(7) });
+    expect(done.data[LEVELING_KEY]).toEqual({ list: 'classes', option: 'fighter', health: { roll: 7, die: 10 } });
+    expect(done.rolled).toEqual({ sides: 10, rolls: [7], total: 7 });
+    expect(healthRollLine('Wren', done.rolled)).toBe('Wren rolled Health (d10) [7]');
+  });
+
+  it('kept: no second roll, no average, no other class for a player; the GM may', () => {
+    const rolled = act(ROLL, ready(), { kind: 'healthRoll', list: 'classes', option: 'fighter' }, { rng: fixed(2) }).data;
+    expect(act(ROLL, rolled, { kind: 'healthRoll', list: 'classes', option: 'fighter' }).error).toBe(ROLLED_KEPT);
+    expect(act(CHOOSE, rolled, { kind: 'healthAverage', list: 'classes', option: 'fighter' }).error).toBe(ROLLED_KEPT);
+    expect(act(ROLL, rolled, { kind: 'place', list: 'classes', option: 'wizard' }).error).toBe('Rolled for health, and kept: your GM can clear it to change class');
+    expect(act(ROLL, rolled, { kind: 'healthRoll', list: 'classes', option: 'wizard' }).error).toBe('Rolled for health, and kept: your GM can clear it to change class');
+    expect(act(ROLL, rolled, { kind: 'healthRoll', list: 'classes', option: 'fighter' }, { gm: true, rng: fixed(9) }).data[LEVELING_KEY].health.roll).toBe(9);
+    expect(act(ROLL, rolled, { kind: 'place', list: 'classes', option: 'wizard' }, { gm: true }).ok).toBe(true);
+  });
+
+  it('the average taken is no roll: another class can still be chosen', () => {
+    const took = act(CHOOSE, ready(), { kind: 'healthAverage', list: 'classes', option: 'fighter' }).data;
+    expect(act(CHOOSE, took, { kind: 'place', list: 'classes', option: 'wizard' }).data[LEVELING_KEY]).toEqual({ list: 'classes', option: 'wizard' });
+  });
+
+  it('a class with no HIT DIE has nothing to roll: ROLL finishes on what each level adds', () => {
+    const monk = ready({ ...holding([['monk', 1]]) });
+    expect(act(ROLL, monk, { kind: 'up', list: 'classes', option: 'monk' }).data[HEALTH_LEVELS_KEY]).toEqual({ 2: { die: null, took: 0 } });
+  });
+
+  it('the same class placed again keeps the roll, and its picks', () => {
+    const rolled = act(ROLL, ready(), { kind: 'healthRoll', list: 'classes', option: 'fighter' }, { rng: fixed(2) }).data;
+    const placed = act(ROLL, rolled, { kind: 'place', list: 'classes', option: 'fighter', picks: [{ list: 'x', option: 'y' }] }).data;
+    expect(placed[LEVELING_KEY]).toEqual({ list: 'classes', option: 'fighter', picks: [{ list: 'x', option: 'y' }], health: { roll: 2, die: 10 } });
+    expect(act(ROLL, placed, { kind: 'healthRoll', list: 'classes', option: 'fighter' }, { gm: true, rng: fixed(5) }).data[LEVELING_KEY].picks).toEqual([{ list: 'x', option: 'y' }]);
+  });
+
+  it('FINISH takes the roll as the level\'s, and won\'t go without one; the GM goes on the average', () => {
+    expect(act(ROLL, ready(), { kind: 'up', list: 'classes', option: 'fighter' }).error).toBe('Roll for health first');
+    const rolled = act(ROLL, ready(), { kind: 'healthRoll', list: 'classes', option: 'fighter' }, { rng: fixed(9) }).data;
+    const up = act(ROLL, rolled, { kind: 'up', list: 'classes', option: 'fighter' });
+    expect(up.data[HEALTH_LEVELS_KEY]).toEqual({ 3: { die: 10, took: 9, rolled: true } });
+    expect(LEVELING_KEY in up.data).toBe(false);
+    expect(act(ROLL, ready(), { kind: 'up', list: 'classes', option: 'fighter' }, { gm: true }).data[HEALTH_LEVELS_KEY]).toEqual({ 3: { die: 10, took: 5 } });
+    // A roll for another class is none for this one.
+    expect(act(ROLL, rolled, { kind: 'up', list: 'classes', option: 'wizard' }, { gm: true }).data[HEALTH_LEVELS_KEY]).toEqual({ 3: { die: 6, took: 3 } });
+  });
+
+  it('THE PLAYER CHOOSES: the average taken, then FINISH; or a roll; neither yet, not yet', () => {
+    expect(act(CHOOSE, ready(), { kind: 'up', list: 'classes', option: 'fighter' }).error).toBe('Take the average or roll for health first');
+    const took = act(CHOOSE, ready(), { kind: 'healthAverage', list: 'classes', option: 'fighter' }).data;
+    expect(took[LEVELING_KEY].health).toEqual({ average: true });
+    expect(act(CHOOSE, took, { kind: 'up', list: 'classes', option: 'fighter' }).data[HEALTH_LEVELS_KEY]).toEqual({ 3: { die: 10, took: 5 } });
+    // Taking the average isn't a roll: they can still roll, and that is kept.
+    const then = act(CHOOSE, took, { kind: 'healthRoll', list: 'classes', option: 'fighter' }, { rng: fixed(1) });
+    expect(then.data[LEVELING_KEY].health).toEqual({ roll: 1, die: 10 });
+  });
+
+  it('only where health is rolled or chosen, a die there is, and the level is ready', () => {
+    expect(act(HALE, ready(), { kind: 'healthRoll', list: 'classes', option: 'fighter' }).error).toBe("Health isn't rolled in this game");
+    expect(act(ROLL, ready(), { kind: 'healthAverage', list: 'classes', option: 'fighter' }).error).toBe("Health here isn't the player's to choose");
+    expect(act({ ...HALE, levels: { health: { how: 'formula', formula: '3' } } }, ready(), { kind: 'healthRoll', list: 'classes', option: 'fighter' }).error).toBe("Health isn't rolled in this game");
+    expect(act(ROLL, ready({ ...holding([['monk', 1]]) }), { kind: 'healthRoll', list: 'classes', option: 'monk' }).error).toBe('Nothing to roll: Monk has no HIT DIE');
+    const stat = { ...ROLL, choices: [], levels: perLevel({ gain: 'roll' }) };
+    expect(act(stat, { [XP_KEY]: 9e9, level: 1 }, { kind: 'healthRoll' }).error).toBe('Nothing to roll: there is no die for every level');
+    expect(act(ROLL, { ...ready(), [XP_KEY]: 0 }, { kind: 'healthRoll', list: 'classes', option: 'fighter' }).error).toMatch(/^Not yet/);
+    expect(act(ROLL, ready({ ...holding([['fighter', 10]]) }), { kind: 'healthRoll', list: 'classes', option: 'fighter' }).error).toBe('Already the highest level');
+    expect(act(ROLL, ready(), { kind: 'healthRoll', list: 'classes', option: 'rogue' }).error).toBe("This character doesn't hold that");
+    expect(act(ROLL, { ...ready(), [XP_KEY]: 0 }, { kind: 'healthRoll', list: 'classes', option: 'fighter' }, { gm: true, rng: fixed(3) }).ok).toBe(true);
+  });
+
+  it('the level itself rolls the die for all', () => {
+    const stat = { ...ROLL, choices: [], levels: perLevel({ gain: 'roll', die_on: 'all', die: 8 }) };
+    const rolled = act(stat, { [XP_KEY]: 9e9, level: 1 }, { kind: 'healthRoll' }, { rng: () => 0.99 });
+    expect(rolled.data[LEVELING_KEY]).toEqual({ health: { roll: 8, die: 8 } });
+    expect(act(stat, rolled.data, { kind: 'up' }).data[HEALTH_LEVELS_KEY]).toEqual({ 2: { die: 8, took: 8, rolled: true } });
+  });
+
+  it('CLEAR THE ROLL: the GM\'s, taking the roll off and leaving the place', () => {
+    const rolled = act(ROLL, ready(), { kind: 'healthRoll', list: 'classes', option: 'fighter' }, { rng: fixed(2) }).data;
+    expect(act(ROLL, rolled, { kind: 'clearHealth' }).error).toBe("That is the GM's to do");
+    const cleared = act(ROLL, rolled, { kind: 'clearHealth' }, { gm: true }).data;
+    expect(cleared[LEVELING_KEY]).toEqual({ list: 'classes', option: 'fighter' });
+    expect(act(ROLL, cleared, { kind: 'clearHealth' }, { gm: true }).error).toBe('Nothing rolled there to clear');
+    const took = act(CHOOSE, ready(), { kind: 'healthAverage', list: 'classes', option: 'fighter' }).data;
+    expect(act(CHOOSE, took, { kind: 'clearHealth' }, { gm: true }).error).toBe('Nothing rolled there to clear');
+    expect(act(ROLL, ready(), { kind: 'clearHealth' }, { gm: true }).error).toBe('Nothing rolled there to clear');
+    expect(act(ROLL, cleared, { kind: 'healthRoll', list: 'classes', option: 'fighter' }, { rng: fixed(10) }).data[LEVELING_KEY].health.roll).toBe(10);
+  });
+
+  it('through the socket: thrown in the tray and the log, under the character\'s name', async () => {
+    const db = await makeTestDb();
+    await run(db, 'CREATE TABLE IF NOT EXISTS dice_rolls (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, total INTEGER, results TEXT, color TEXT, historyString TEXT, timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)');
+    const ID = 'sys_rollrollrollrollro';
+    const def = JSON.stringify({ ...ROLL, name: 'Rolling' });
+    await run(db, 'INSERT INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 1)', [ID, 'Rolling', def, def]);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    await run(db, `INSERT INTO global_settings (key, value) VALUES ('game_system', ?)`, [ID]);
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('kes', ?, ?, 0)`, [ID, JSON.stringify({ name: 'Kestrel', ...ready() })]);
+    let connection;
+    const shared = [];
+    socketsFactory({ on: (e, cb) => { if (e === 'connection') connection = cb; }, emit: (event, data) => shared.push({ event, data }), to: () => ({ emit: () => {} }) },
+      db, { elevatedUsers: new Set(), emitUpdate: vi.fn(), recordAction: vi.fn() });
+    const handlers = {};
+    connection({ id: 'roll-kes', on: (e, fn) => { handlers[e] = fn; }, emit: () => {}, broadcast: { emit: () => {} }, use: () => {}, join: () => {}, disconnect: () => {} });
+    handlers.identify('kes');
+    await drain(db);
+    handlers.levelAction({ kind: 'healthRoll', list: 'classes', option: 'fighter' });
+    await until(() => shared.some((e) => e.event === 'diceRollBroadcast'), { label: 'thrown' });
+    const thrown = shared.find((e) => e.event === 'diceRollBroadcast').data;
+    expect(thrown.historyString).toMatch(/^Kestrel rolled Health \(d10\) \[(10|[1-9])\]$/);
+    expect(thrown.board).toEqual({ label: 'HEALTH' });
+    await until(async () => (await get(db, 'SELECT historyString FROM dice_rolls')) !== undefined, { label: 'logged' });
+    expect((await get(db, 'SELECT historyString FROM dice_rolls')).historyString).toBe(thrown.historyString);
+    const kept = JSON.parse((await get(db, "SELECT data FROM character_sheets WHERE username = 'kes'")).data)[LEVELING_KEY].health;
+    expect(kept.roll).toBe(thrown.total);
   });
 });

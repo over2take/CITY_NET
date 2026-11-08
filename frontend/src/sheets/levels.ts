@@ -77,7 +77,15 @@ export const levelNotes = (d: Definition): string[] => {
 /** MAX HEALTH (7d4; backend levels.js healthOf): AS IT IS, the token's own number, A FORMULA, or PER LEVEL (7d5a). */
 export type HealthHow = 'as_is' | 'formula' | 'level';
 export type HealthDieOn = 'class' | 'all';
-export interface HealthSet { how: HealthHow; formula: string; dieOn: HealthDieOn; die: number | null; adds: string }
+export type HealthGainBy = 'average' | 'roll' | 'choose';
+export interface HealthSet { how: HealthHow; formula: string; dieOn: HealthDieOn; die: number | null; adds: string; gain: HealthGainBy }
+const GAINS: HealthGainBy[] = ['average', 'roll', 'choose'];
+/** What each way of gaining says, under GAINED BY (7d5b). */
+export const GAIN_WORDS: Record<HealthGainBy, string> = {
+  average: 'Half the die, rounded up, every time. Nothing to roll.',
+  roll: 'Rolled each level in the tray, for the table to see, and kept once rolled. Only the GM clears it.',
+  choose: 'Each level, the player takes the average or rolls and keeps what comes up.',
+};
 const HOWS: HealthHow[] = ['as_is', 'formula', 'level'];
 export const healthSet = (d: Definition): HealthSet => {
   const raw = (isObject(d.levels) ? d.levels : {}) as Record<string, unknown>;
@@ -88,13 +96,14 @@ export const healthSet = (d: Definition): HealthSet => {
     dieOn: h.die_on === 'all' ? 'all' : 'class',
     die: Number.isInteger(h.die) ? h.die as number : null,
     adds: typeof h.adds === 'string' ? h.adds : '',
+    gain: GAINS.includes(h.gain as HealthGainBy) ? h.gain as HealthGainBy : 'average',
   };
 };
 const withHealthSet = (d: Definition, h: HealthSet): Definition => {
   const levels = { ...(isObject(d.levels) ? d.levels as Record<string, unknown> : {}) };
   const kept = {
     ...(h.formula ? { formula: h.formula } : {}), ...(h.dieOn === 'all' ? { die_on: 'all' } : {}),
-    ...(h.die !== null ? { die: h.die } : {}), ...(h.adds ? { adds: h.adds } : {}),
+    ...(h.die !== null ? { die: h.die } : {}), ...(h.adds ? { adds: h.adds } : {}), ...(h.gain !== 'average' ? { gain: h.gain } : {}),
   };
   if (h.how === 'as_is' && !Object.keys(kept).length) delete levels.health;
   else levels.health = { how: h.how, ...kept };
@@ -107,6 +116,8 @@ export const withHealthFormula = (d: Definition, formula: string): Definition =>
 export const withHealthDieOn = (d: Definition, dieOn: HealthDieOn): Definition => withHealthSet(d, { ...healthSet(d), dieOn, die: dieOn === 'all' ? healthSet(d).die ?? 8 : healthSet(d).die });
 export const withHealthDie = (d: Definition, die: number): Definition => withHealthSet(d, { ...healthSet(d), die });
 export const withHealthAdds = (d: Definition, adds: string): Definition => withHealthSet(d, { ...healthSet(d), adds });
+/** How a level's health is gained (7d5b). */
+export const withHealthGain = (d: Definition, gain: HealthGainBy): Definition => withHealthSet(d, { ...healthSet(d), gain });
 
 /** Each class's HIT DIE, for ON EACH CLASS: [{ name, die }], die null where it has none. */
 export const classDice = (d: Definition): { name: string; die: number | null }[] =>

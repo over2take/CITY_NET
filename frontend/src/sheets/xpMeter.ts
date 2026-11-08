@@ -9,8 +9,12 @@ import type { SheetTemplate } from './types';
 export interface LevelsShown {
   top: number; table?: Record<string, number>;
   /** MAX HEALTH: PER LEVEL (7d5a; backend levels.js levelsShown): how a level gains it, and each class's die. */
-  health?: { gain: 'average'; dieOn: 'class' | 'all'; die?: number; dice: Record<string, number> };
+  health?: { gain: HealthGainBy; dieOn: 'class' | 'all'; die?: number; dice: Record<string, number> };
 }
+/** How a level's health is gained (backend levels.js GAINS): THE PLAYER CHOOSES is 'choose'. */
+export type HealthGainBy = 'average' | 'roll' | 'choose';
+/** The health kept with the place (7d5b): a roll and its die, or the average taken. */
+export interface LevelUpHealth { roll?: number; die?: number; average?: true }
 /** What a save works out PER LEVEL's max health to (backend runtime.js HEALTH_SHOWN_KEY). */
 export const HEALTH_SHOWN_KEY = '_health';
 
@@ -66,16 +70,21 @@ export interface LevelUpPick { list: string; option: string; from?: string }
 export interface LevelUpOffer {
   ready: boolean; targets: LevelTarget[]; firstPick: string | null;
   /** Where LEVEL_UP.EXE was left: null when it isn't open on this sheet. */
-  leveling: { list?: string; option?: string; picks?: LevelUpPick[] } | null;
+  leveling: { list?: string; option?: string; picks?: LevelUpPick[]; health?: LevelUpHealth } | null;
 }
 
 const placeOf = (data: Record<string, unknown> | null | undefined): LevelUpOffer['leveling'] => {
   const p = data?.[LEVELING_KEY];
   if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
-  const { list, option, picks } = p as Record<string, unknown>;
+  const { list, option, picks, health } = p as Record<string, unknown>;
+  const h = health && typeof health === 'object' ? health as Record<string, unknown> : {};
+  const kept: LevelUpHealth = {
+    ...(Number.isInteger(h.roll) ? { roll: h.roll as number } : {}), ...(Number.isInteger(h.die) ? { die: h.die as number } : {}),
+    ...(h.average === true ? { average: true as const } : {}),
+  };
   const made = (Array.isArray(picks) ? picks : []).filter((x): x is LevelUpPick => !!x && typeof x === 'object' && typeof (x as LevelUpPick).list === 'string' && typeof (x as LevelUpPick).option === 'string')
     .map((x) => ({ list: x.list, option: x.option, ...(typeof x.from === 'string' ? { from: x.from } : {}) }));
-  return { ...(typeof list === 'string' ? { list } : {}), ...(typeof option === 'string' ? { option } : {}), ...(made.length ? { picks: made } : {}) };
+  return { ...(typeof list === 'string' ? { list } : {}), ...(typeof option === 'string' ? { option } : {}), ...(made.length ? { picks: made } : {}), ...(Object.keys(kept).length ? { health: kept } : {}) };
 };
 
 /** Whether this character can go up now, and what would. Null where levels are typed in. */

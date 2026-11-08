@@ -4,7 +4,7 @@ import { TerminalWindow, type TerminalAction, type TerminalFolder } from './Term
 import { usePlayerSheet } from '../hooks/usePlayerSheet';
 import { useChoicesRefused } from '../hooks/useChoicesRefused';
 import { levelUpOffer, type LevelTarget, type LevelUpPick } from '../sheets/xpMeter';
-import { LEVEL_UP_STEP_NAMES, chosenTarget, healthGain, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted, unlockedBy, withPickToggled } from '../sheets/levelUpFlow';
+import { LEVEL_UP_STEP_NAMES, chosenTarget, healthGain, healthRolledFor, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted, unlockedBy, withPickToggled } from '../sheets/levelUpFlow';
 
 // LEVEL_UP.EXE (7d3a; approved mockup docs/mockups/level-up.html, 2026-11-07): the same kind of window as
 // NEW_CHARACTER.EXE. WHICH CLASS when there's a choice, a class not held yet among them (7d3b), then WHAT IT
@@ -69,6 +69,8 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
   const unlocked = unlockedBy(template, data, target);
   const asked = picksAsked(template, data, unlocked);
   const allMade = picksMade(asked, picks);
+  // ROLL or THE PLAYER CHOOSES (7d5b): settled once rolled, or the average taken.
+  const healthSettled = !gain || gain.gained !== null;
   const index = Math.min(step, steps.length - 1);
   const open = steps[index];
   const last = index === steps.length - 1;
@@ -77,8 +79,8 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
     { key: 'back', label: 'BACK', disabled: index === 0, onClick: () => setStep(index - 1) },
     { key: 'leave', label: 'LEAVE FOR NOW', onClick: onLeave },
     {
-      key: 'next', label: last ? 'FINISH' : 'NEXT', tone: 'primary', disabled: last && !allMade,
-      title: last && !allMade ? 'Make the picks first' : undefined,
+      key: 'next', label: last ? 'FINISH' : 'NEXT', tone: 'primary', disabled: (last && !allMade) || ((last || open === 'health') && !healthSettled),
+      title: (last || open === 'health') && !healthSettled ? (gain?.by === 'roll' ? 'Roll for health first' : 'Take the average or roll first') : last && !allMade ? 'Make the picks first' : undefined,
       onClick: () => {
         if (!last) return setStep(index + 1);
         socket?.emit('levelAction', { kind: 'up', ...(target.list ? { list: target.list, option: target.option } : {}), ...(picks.length ? { picks } : {}) });
@@ -87,6 +89,8 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
     },
   ];
   const choose = (t: LevelTarget) => { setPicked(t); setMade([]); place(t); };
+  const health = (kind: 'healthRoll' | 'healthAverage') => socket?.emit('levelAction', { kind, ...(target.list ? { list: target.list, option: target.option } : {}) });
+  const lockedTo = healthRolledFor(offer, [...offer.targets, ...joinable], target) ?? (gain?.rolled !== null && gain?.rolled !== undefined ? target.name : null);
   const toggle = (a: (typeof asked)[number], option: string) => { const next = withPickToggled(picks, a, option); setMade(next); place(target, next); };
 
   return (
@@ -101,13 +105,14 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
               {offer.targets.map((t) => {
                 const on = t.list === target.list && t.option === target.option;
                 return (
-                  <button key={t.option ?? 'level'} type="button" aria-pressed={on} onClick={() => choose(t)}
+                  <button key={t.option ?? 'level'} type="button" aria-pressed={on} disabled={!!lockedTo && !on} onClick={() => choose(t)}
                     style={{ ...btn, ...(on ? { background: 'var(--green)', color: 'var(--black)', borderColor: 'var(--green)' } : {}) }}>
                     {t.name.toUpperCase()} {t.level} → {t.level + 1}
                   </button>
                 );
               })}
             </div>
+            {lockedTo && <p style={{ ...why, color: 'var(--warning)', opacity: 1 }}>Health was rolled for {lockedTo.toUpperCase()}, and kept: your GM can clear it to change class.</p>}
             {joinable.length > 0 && (
               <>
                 <p style={why}>Or take up one they don&apos;t have, at level 1:</p>
@@ -116,7 +121,7 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
                     const on = t.list === target.list && t.option === target.option;
                     return (
                       <span key={`${t.list}-${t.option}`} style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px' }}>
-                        <button type="button" aria-pressed={on} disabled={!!t.unmet} onClick={() => choose(t)}
+                        <button type="button" aria-pressed={on} disabled={!!t.unmet || (!!lockedTo && !on)} onClick={() => choose(t)}
                           style={{ ...btn, ...(on ? { background: 'var(--green)', color: 'var(--black)', borderColor: 'var(--green)' } : {}), ...(t.unmet ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }}>
                           NEW: {t.name.toUpperCase()} 1
                         </button>
@@ -132,10 +137,25 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
         {open === 'health' && gain && (
           <>
             <span style={{ fontSize: '0.75rem' }}>HEALTH · {gain.die ? `d${gain.die}` : 'NO DIE'}{gain.adds ? ` ${gain.adds > 0 ? '+' : '−'} ${Math.abs(gain.adds)}` : ''}</span>
-            <span style={{ ...why, color: 'var(--cyan)', opacity: 1 }}>
-              +{gain.gained}: {gain.average} AVERAGE{gain.adds ? `, ${gain.adds > 0 ? '+' : '−'}${Math.abs(gain.adds)} EACH LEVEL` : ''}{gain.average + gain.adds < 1 ? ', AT LEAST 1' : ''}
-            </span>
-            <p style={why}>{gain.die ? 'Fixed in this game. Nothing to roll.' : `${target.name} has no HIT DIE, so only what each level adds.`}</p>
+            {gain.gained !== null && (
+              <span style={{ ...why, color: 'var(--cyan)', opacity: 1 }}>
+                +{gain.gained}: {gain.rolled !== null ? `ROLLED ${gain.rolled}` : `${gain.average} AVERAGE`}{gain.adds ? `, ${gain.adds > 0 ? '+' : '−'}${Math.abs(gain.adds)} EACH LEVEL` : ''}{(gain.rolled ?? gain.average) + gain.adds < 1 ? ', AT LEAST 1' : ''}
+              </span>
+            )}
+            {gain.gained === null && gain.die && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }} role="group" aria-label="Health this level">
+                {gain.by === 'choose' && <button type="button" style={btn} onClick={() => health('healthAverage')}>TAKE {gain.average}{gain.adds ? ` ${gain.adds > 0 ? '+' : '−'} ${Math.abs(gain.adds)}` : ''}</button>}
+                <button type="button" style={{ ...btn, borderColor: 'var(--warning)', color: 'var(--warning)' }} onClick={() => health('healthRoll')}>ROLL D{gain.die}</button>
+              </div>
+            )}
+            {gain.tookAverage && gain.die && (
+              <div style={{ display: 'flex', gap: '6px' }}><button type="button" style={btn} onClick={() => health('healthRoll')}>ROLL D{gain.die} INSTEAD</button></div>
+            )}
+            <p style={why}>{!gain.die ? `${target.name} has no HIT DIE, so only what each level adds.`
+              : gain.rolled !== null ? 'Rolled, and kept. Your GM can clear it for another go.'
+                : gain.by === 'average' ? 'Fixed in this game. Nothing to roll.'
+                  : gain.by === 'choose' ? (gain.tookAverage ? 'The average, taken. You can still roll instead, and keep what comes up.' : 'Take the average, or roll and keep what comes up.')
+                    : 'Thrown in the tray, for the table to see. Kept once it\'s rolled.'}</p>
           </>
         )}
         {open === 'unlocks' && (

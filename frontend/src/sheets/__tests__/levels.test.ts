@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { classDice, healthSet, withHealth, withHealthAdds, withHealthDie, withHealthDieOn, withHealthFormula, levelHomeNote,
+import { GAIN_WORDS, withHealthGain, classDice, healthSet, withHealth, withHealthAdds, withHealthDie, withHealthDieOn, withHealthFormula, levelHomeNote,
   advancesBy, anyTyped, canAddRange, firstAsTyped, isTyped, levelNotes, levelTable, levelsSet, tidyRanges, topAsTyped, withAdvancement, withFilledAgain,
   withFirst, withRangeAdded, withRangeOff, withRangeTo, withRangeX, withTop, withTyped, xpWord,
 } from '../levels';
@@ -212,7 +212,7 @@ describe('the word', () => {
 describe('MAX HEALTH (7d4)', () => {
   const base = { format: 1, name: 'L', levels: { top: 6, first: 100, ranges: [{ to: 6, x: 2 }] } } as never;
   it('AS IT IS until it says otherwise', () => {
-    const none = { formula: '', dieOn: 'class', die: null, adds: '' };
+    const none = { formula: '', dieOn: 'class', die: null, adds: '', gain: 'average' };
     expect(healthSet(base)).toEqual({ how: 'as_is', ...none });
     expect(healthSet({ format: 1, name: 'L' } as never)).toEqual({ how: 'as_is', ...none });
     expect(healthSet({ format: 1, name: 'L', levels: { health: { how: 'dice', formula: 3, die: 'd8', adds: 2 } } } as never)).toEqual({ how: 'as_is', ...none });
@@ -220,7 +220,7 @@ describe('MAX HEALTH (7d4)', () => {
   it('A FORMULA set and typed; the formula kept going back to AS IT IS; nothing kept with nothing to keep', () => {
     const on = withHealthFormula(withHealth(base, 'formula'), '10 + @con');
     expect((on as { levels: { health: unknown } }).levels.health).toEqual({ how: 'formula', formula: '10 + @con' });
-    expect(healthSet(on)).toEqual({ how: 'formula', formula: '10 + @con', dieOn: 'class', die: null, adds: '' });
+    expect(healthSet(on)).toEqual({ how: 'formula', formula: '10 + @con', dieOn: 'class', die: null, adds: '', gain: 'average' });
     const back = withHealth(on, 'as_is');
     expect((back as { levels: { health: unknown } }).levels.health).toEqual({ how: 'as_is', formula: '10 + @con' });
     const none = withHealth(base, 'as_is');
@@ -244,7 +244,7 @@ describe('MAX HEALTH: PER LEVEL (7d5a)', () => {
   it('PER LEVEL, on each class to start; ONE FOR ALL starts at a d8 and keeps what is picked', () => {
     const on = withHealth(base, 'level');
     expect(health(on)).toEqual({ how: 'level' });
-    expect(healthSet(on)).toEqual({ how: 'level', formula: '', dieOn: 'class', die: null, adds: '' });
+    expect(healthSet(on)).toEqual({ how: 'level', formula: '', dieOn: 'class', die: null, adds: '', gain: 'average' });
     const all = withHealthDieOn(on, 'all');
     expect(health(all)).toEqual({ how: 'level', die_on: 'all', die: 8 });
     expect(health(withHealthDieOn(withHealthDie(all, 12), 'all'))).toEqual({ how: 'level', die_on: 'all', die: 12 });
@@ -259,5 +259,20 @@ describe('MAX HEALTH: PER LEVEL (7d5a)', () => {
   it('each class\'s HIT DIE, from the levelled lists only', () => {
     expect(classDice(base)).toEqual([{ name: 'Fighter', die: 10 }, { name: 'Monk', die: null }]);
     expect(classDice({ format: 1, name: 'L' } as never)).toEqual([]);
+  });
+});
+
+describe('GAINED BY (7d5b)', () => {
+  const base = withHealth({ format: 1, name: 'L', levels: { top: 6 } } as never, 'level');
+  const health = (d: unknown) => (d as { levels: { health?: unknown } }).levels.health;
+  it('ROLL and THE PLAYER CHOOSES kept; AVERAGE is what it says with nothing written', () => {
+    expect(health(withHealthGain(base, 'roll'))).toEqual({ how: 'level', gain: 'roll' });
+    expect(healthSet(withHealthGain(base, 'choose')).gain).toBe('choose');
+    expect(health(withHealthGain(withHealthGain(base, 'roll'), 'average'))).toEqual({ how: 'level' });
+    expect(healthSet({ format: 1, name: 'L', levels: { health: { how: 'level', gain: 'reroll' } } } as never).gain).toBe('average');
+  });
+  it('each says what it does', () => {
+    expect(Object.keys(GAIN_WORDS)).toEqual(['average', 'roll', 'choose']);
+    expect(GAIN_WORDS.roll).toMatch(/kept once rolled/);
   });
 });

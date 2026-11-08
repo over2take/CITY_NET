@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
+import { signInAsGm, signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
 
 // MAX HEALTH: PER LEVEL (7d5a; approved mockup docs/mockups/level-up.html, 2026-11-07): a Fighter with a d10 HIT DIE
 // and +2 for each level from Constitution has 12 at level 1. Going up, LEVEL_UP.EXE's HEALTH says the level adds 7,
-// and the token follows; a higher Constitution then recounts every level.
+// and the token follows; a higher Constitution then recounts every level. With ROLL (7d5b) it is rolled in the window and
+// kept, the GM clearing it for another go.
 
 test('a level up adds its average and what each level adds to the token; a stat recounts every level', async ({ browser, request }, info) => {
   test.setTimeout(150_000);
@@ -51,5 +52,68 @@ test('a level up adds its average and what each level adds to the token; a stat 
   await con.fill('18');
   await con.blur();
   await expect(mine.getByText('23 / 23')).toBeVisible({ timeout: 15_000 });
+  await context.close();
+});
+
+test('ROLL: health rolled in the window and kept; the GM clears it, the player rolls again and finishes (7d5b)', async ({ page, browser, request }, info) => {
+  test.setTimeout(180_000);
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Hproll${again}`, core: { health: { model: 'pool' }, advancement: ['levels'] },
+    choices: [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter', die: 10 }] }],
+    levels: { top: 5, first: 100, ranges: [{ to: 5, x: 2 }], health: { how: 'level', gain: 'roll' } },
+  });
+  const player = { username: `e2e_hproller${again}`, password: 'e2e-player-password' };
+  await approvedPlayer(request, gm, player);
+  await asGm(request, gm, 'post', '/api/locations', {
+    name: player.username, description: '', shape: 'rhombus', owner: player.username, x: 0, y: 0, z: 0, width: 1, height: 1, depth: 1,
+    hp_current: 1, hp_max: 1, hp_temp: 0, battle_map_id: -1, floor_index: -1,
+  });
+  const sheetOf = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data;
+
+  const context = await browser.newContext({ baseURL: info.project.use.baseURL });
+  const mine = await context.newPage();
+  await signInAsPlayer(mine, player);
+  await mine.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
+  await mine.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+  await sheetTab(mine, 'CHARACTER');
+  await mine.getByRole('group', { name: 'Pick a Class' }).getByRole('button', { name: 'FIGHTER' }).click();
+  await expect.poll(async () => (await sheetOf())._choices?.classes?.length, { timeout: 15_000 }).toBe(1);
+  await asGm(request, gm, 'put', `/api/sheets/user/${player.username}`, { fields: { _xp: 100 } });
+
+  // The HEALTH folder: nothing to finish on until it's rolled.
+  await mine.getByRole('button', { name: 'LEVEL UP READY' }).click();
+  await expect(mine.getByText('HEALTH · STEP 1 OF 2')).toBeVisible();
+  await expect(mine.getByRole('button', { name: 'NEXT', exact: true })).toBeDisabled();
+  await mine.getByRole('group', { name: 'Health this level' }).getByRole('button', { name: 'ROLL D10' }).click();
+  await expect.poll(async () => (await sheetOf())._leveling?.health?.roll, { timeout: 15_000 }).toBeGreaterThan(0);
+  const first = (await sheetOf())._leveling.health.roll;
+  await expect(mine.getByText(`+${first}: ROLLED ${first}`)).toBeVisible();
+  await expect(mine.getByText('Rolled, and kept. Your GM can clear it for another go.')).toBeVisible();
+  await expect(mine.getByRole('button', { name: 'ROLL D10' })).toHaveCount(0);
+  await mine.getByRole('button', { name: 'LEAVE FOR NOW', exact: true }).click();
+
+  // The GM sees the roll on their sheet and clears it.
+  await signInAsGm(page);
+  await page.getByRole('button', { name: 'GLOBAL_CHAT', exact: true }).click();
+  await page.getByText(player.username, { exact: true }).first().click();
+  await page.getByRole('button', { name: 'VIEW_PLAYER_INFO', exact: true }).click();
+  await page.getByRole('button', { name: 'OPEN_SHEET', exact: true }).click();
+  const line = page.getByRole('group', { name: 'Leveling up' });
+  await expect(line.getByText(`LEVELING UP · FIGHTER 1 → 2 · HEALTH ROLLED ${first} ON A D10`)).toBeVisible({ timeout: 15_000 });
+  await line.getByRole('button', { name: 'CLEAR THE ROLL' }).click();
+  await expect.poll(async () => (await sheetOf())._leveling?.health, { timeout: 15_000 }).toBeUndefined();
+
+  // Rolled again, and finished: the token gains that roll on top of level 1's full d10.
+  await mine.getByRole('button', { name: 'LEVELING UP · CONTINUE' }).click();
+  await mine.getByRole('group', { name: 'Health this level' }).getByRole('button', { name: 'ROLL D10' }).click();
+  await expect.poll(async () => (await sheetOf())._leveling?.health?.roll, { timeout: 15_000 }).toBeGreaterThan(0);
+  const second = (await sheetOf())._leveling.health.roll;
+  await mine.getByRole('button', { name: 'NEXT', exact: true }).click();
+  await mine.getByRole('button', { name: 'FINISH', exact: true }).click();
+  await expect.poll(async () => (await sheetOf())._health_levels, { timeout: 15_000 }).toEqual({ 2: { die: 10, took: second, rolled: true } });
+  await mine.getByRole('button', { name: 'HIT_POINTS', exact: true }).click();
+  await expect(mine.getByText(`${10 + second} / ${10 + second}`)).toBeVisible({ timeout: 15_000 });
   await context.close();
 });
