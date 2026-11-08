@@ -128,6 +128,8 @@ describe('through the socket', () => {
     const { rook, shared } = await table();
     rook.handlers.restTake({ rest: 'short_rest', username: 'ash' });
     await until(async () => (await stored())._uses.second_wind === 0, { label: 'the use refilled' });
+    // The token and the log are written a moment after the sheet: wait for them, not the sheet.
+    await until(async () => (await token()) === 12 && (await lines()).length === 1, { label: 'the token and the log' });
     expect(await token()).toBe(12);
     expect((await lines()).map((l) => l.historyString)).toEqual(['SHORT REST · Rook: HP 10 → 12, Second Wind uses 0 → 1']);
     expect((await stored('ash'))._uses.second_wind).toBe(1);
@@ -141,6 +143,7 @@ describe('through the socket', () => {
     const { rook } = await table();
     rook.handlers.restTake({ rest: 'long_rest' });
     await until(async () => (await stored())[RECOVERY_KEY].fighter === 0, { label: 'the dice back' });
+    await until(async () => (await token()) === 30, { label: 'the token healed' });
     expect(await token()).toBe(30);
     expect((await stored())[REST_CALL_KEY]).toBeUndefined();
   });
@@ -155,6 +158,7 @@ describe('through the socket', () => {
     await run(db, 'UPDATE character_sheets SET data = ? WHERE username = ?', [JSON.stringify({ name: 'Rook', [REST_CALL_KEY]: { rest: 'end_of_session', name: 'End of session' } }), 'rook']);
     rook.handlers.restTake({ rest: 'end_of_session' });
     await until(async () => (await stored())[REST_CALL_KEY] === undefined, { label: 'the call finished' });
+    await until(async () => (await lines()).length === 2, { label: 'the end of session logged' });
     expect((await lines()).at(-1).historyString).toBe('END OF SESSION · Rook: nothing changed');
   });
 
