@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LEVEL_UP_STEP_NAMES, chosenTarget, levelUpSteps, levelUpTitle, unlockedBy } from '../levelUpFlow';
+import { LEVEL_UP_STEP_NAMES, chosenTarget, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted, unlockedBy, withPickToggled, type Unlocked } from '../levelUpFlow';
 import { WORKED_KEY } from '../choicesShown';
 import type { LevelUpOffer } from '../xpMeter';
 import type { SheetTemplate } from '../types';
@@ -17,7 +17,7 @@ const TEMPLATE = {
       { id: 'soldier', label: 'Soldier', features: [
         { id: 'guard', label: 'Guard', at: 1 },
         { id: 'extra', label: 'Extra Attack', at: 3, text: 'Attack twice.' },
-        { id: 'path', label: 'Path', at: 3, opens: 'paths' },
+        { id: 'path', label: 'Path', at: 3, opens: 'paths', opensCount: 2 },
         { id: 'veteran', label: 'Veteran', at: 4 },
       ] },
       { id: 'mage', label: 'Mage', features: [{ id: 'spark', label: 'Spark', at: 2 }, { id: 'school', label: 'School', at: 1, opens: 'schools' }, { id: 'cantrip', label: 'Cantrip' }] },
@@ -40,6 +40,9 @@ describe('the folders', () => {
   it('WHICH CLASS only when there is a choice', () => {
     expect(levelUpSteps(offer())).toEqual(['which', 'unlocks']);
     expect(levelUpSteps(offer([SOLDIER]))).toEqual(['unlocks']);
+    // A class they could take up is a choice too (7d3b).
+    expect(levelUpSteps(offer([SOLDIER]), 1)).toEqual(['which', 'unlocks']);
+    expect(levelUpSteps(offer([SOLDIER]), 0)).toEqual(['unlocks']);
     expect(LEVEL_UP_STEP_NAMES).toEqual({ which: 'WHICH CLASS', unlocks: 'WHAT IT UNLOCKS' });
   });
 });
@@ -68,7 +71,7 @@ describe('what the new level unlocks', () => {
   it('the class\'s features at its new level, a pick under it following along, and what everyone has at the new total', () => {
     expect(unlockedBy(TEMPLATE, sheet(picks, 3), SOLDIER)).toEqual([
       { id: 'extra', label: 'Extra Attack', text: 'Attack twice.', from: 'Soldier' },
-      { id: 'path', label: 'Path', from: 'Soldier', opens: 'paths' },
+      { id: 'path', label: 'Path', from: 'Soldier', opens: 'paths', opensList: 'paths', count: 2 },
       { id: 'crit', label: 'Better Crits', from: 'Champion' },
       { id: 'second', label: 'Second Wind', from: 'Breath' },
     ]);
@@ -78,7 +81,7 @@ describe('what the new level unlocks', () => {
     expect(unlockedBy(TEMPLATE, sheet(picks, 1), MAGE)).toEqual([{ id: 'spark', label: 'Spark', from: 'Mage' }]);
     const school = unlockedBy(TEMPLATE, sheet([], 0), { ...MAGE, level: 0 });
     // A feature with no level of its own comes with the first.
-    expect(school).toEqual([{ id: 'school', label: 'School', from: 'Mage', opens: 'schools' }, { id: 'cantrip', label: 'Cantrip', from: 'Mage' }]);
+    expect(school).toEqual([{ id: 'school', label: 'School', from: 'Mage', opens: 'schools', opensList: 'schools', count: 1 }, { id: 'cantrip', label: 'Cantrip', from: 'Mage' }]);
     const named = unlockedBy({ ...TEMPLATE, choices: [...(TEMPLATE.choices ?? []), { id: 'schools', one: 'School of magic', options: [] }] } as unknown as SheetTemplate, sheet([], 0), { ...MAGE, level: 0 });
     expect(named[0].opens).toBe('School of magic');
   });
@@ -102,5 +105,94 @@ describe('the title', () => {
     expect(levelUpTitle('Wren', SOLDIER)).toBe('LEVEL_UP.EXE · WREN · SOLDIER 3');
     expect(levelUpTitle('Wren', { name: 'LEVEL', level: 4 })).toBe('LEVEL_UP.EXE · WREN · LEVEL 5');
     expect(levelUpTitle('Wren', null)).toBe('LEVEL_UP.EXE · WREN');
+  });
+});
+
+describe('a class not held yet (7d3b)', () => {
+  const LISTS = [
+    { id: 'classes', one: 'Class', many: 'Classes', picks: 'any', again: true, levelled: true, options: [
+      { id: 'soldier', label: 'Soldier', features: [] }, { id: 'mage', label: 'Mage', features: [], needs: 'WITS >= 13' }, { id: 'rogue', label: 'Rogue', features: [] },
+    ] },
+    { id: 'callings', one: 'Calling', many: 'Callings', picks: 1, levelled: true, options: [{ id: 'priest', label: 'Priest', features: [] }, { id: 'bard', label: 'Bard', features: [] }] },
+    { id: 'sub', one: 'Sub', many: 'Subs', levelled: true, picked: 'features', options: [{ id: 'x', label: 'X', features: [] }] },
+    { id: 'fated', one: 'Fate', many: 'Fates', picks: 1, levelled: true, table: 'd6', players: 'roll', options: [{ id: 'doom', label: 'Doom', features: [] }] },
+    { id: 'feats', one: 'Feat', many: 'Feats', picks: 'any', options: [{ id: 'tough', label: 'Tough', features: [] }] },
+  ];
+  const tpl = { levels: { top: 10 }, choices: LISTS } as unknown as SheetTemplate;
+  const data = { [WORKED_KEY]: { picks: [{ list: 'classes', option: 'soldier', level: 2 }, { list: 'callings', option: 'priest', level: 1 }], levels: { level: 3 }, unmet: ['mage'] } };
+  const held = offer([SOLDIER, { list: 'callings', option: 'priest', name: 'Priest', level: 1 }]);
+
+  it('from a levelled list of their own picking with room, not held, saying what one needs', () => {
+    expect(newClasses(tpl, data, held)).toEqual([
+      { list: 'classes', option: 'mage', name: 'Mage', level: 0, new: true, unmet: 'WITS >= 13' },
+      { list: 'classes', option: 'rogue', name: 'Rogue', level: 0, new: true },
+    ]);
+  });
+
+  it('none until they hold a class, nor where levels are the level itself', () => {
+    expect(newClasses(tpl, data, offer([]))).toEqual([]);
+    expect(newClasses(tpl, data, offer([{ name: 'LEVEL', level: 3 }]))).toEqual([]);
+    expect(newClasses(null, data, held)).toEqual([]);
+  });
+
+  it('chosen when their place names it, and only if they meet it', () => {
+    const joinable = newClasses(tpl, data, held);
+    expect(chosenTarget({ ...held, leveling: { list: 'classes', option: 'rogue' } }, joinable)?.option).toBe('rogue');
+    expect(chosenTarget({ ...held, leveling: { list: 'classes', option: 'mage' } }, joinable)?.option).toBe('soldier');
+    expect(chosenTarget({ ...held, leveling: { list: 'classes', option: 'rogue' } })?.option).toBe('soldier');
+  });
+});
+
+describe('the picks a new level asks for (7d3b)', () => {
+  const LISTS = [
+    { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'soldier', label: 'Soldier', features: [] }] },
+    { id: 'paths', one: 'Path', many: 'Paths', picked: 'features', options: [
+      { id: 'duelist', label: 'Duelist', features: [] }, { id: 'vanguard', label: 'Vanguard', features: [], needs: 'MIGHT >= 15' }, { id: 'scout', label: 'Scout', features: [] },
+    ] },
+    { id: 'both', one: 'Trick', many: 'Tricks', picked: 'both', options: [{ id: 'feint', label: 'Feint', features: [] }] },
+    { id: 'own', one: 'Feat', many: 'Feats', options: [{ id: 'tough', label: 'Tough', features: [] }] },
+    { id: 'rolled', one: 'Scar', many: 'Scars', picked: 'features', table: 'd6', players: 'roll', options: [{ id: 'burn', label: 'Burn', features: [] }] },
+  ];
+  const tpl = { choices: LISTS } as unknown as SheetTemplate;
+  const data = { [WORKED_KEY]: { picks: [{ list: 'paths', option: 'scout', from: 'old' }], levels: {}, unmet: ['vanguard'] } };
+  const u = (id: string, opensList: string, count = 1): Unlocked => ({ id, label: id, from: 'Soldier', opens: opensList, opensList, count });
+
+  it('one per feature opening a list picked under features, with what is left to pick and what it needs', () => {
+    const asked = picksAsked(tpl, data, [u('path', 'paths', 2), u('trick', 'both'), u('feat', 'own'), u('scar', 'rolled'), u('gone', 'nowhere'), { id: 'plain', label: 'Plain', from: 'Soldier' }]);
+    expect(asked.map((a) => [a.feature, a.list.id, a.count, a.rolled])).toEqual([['path', 'paths', 2, false], ['trick', 'both', 1, false], ['scar', 'rolled', 1, true]]);
+    expect(asked[0].options.map((o) => [o.option.id, o.unmet])).toEqual([['duelist', null], ['vanguard', 'MIGHT >= 15']]);
+  });
+
+  it('how many each still wants: as many as it opens, as far as there are ones they meet; a roll, none here', () => {
+    const [path, trick, scar] = picksAsked(tpl, data, [u('path', 'paths', 2), u('trick', 'both'), u('scar', 'rolled')]);
+    expect(picksWanted(path)).toBe(1);
+    expect(picksWanted({ ...path, count: 1 })).toBe(1);
+    expect(picksWanted(trick)).toBe(1);
+    expect(picksWanted(scar)).toBe(0);
+    expect(picksWanted({ ...path, options: [] })).toBe(0);
+  });
+
+  it('FINISH waits until each is made, counting only its own', () => {
+    const asked = picksAsked(tpl, data, [u('path', 'paths'), u('trick', 'both')]);
+    expect(picksMade(asked, [])).toBe(false);
+    expect(picksMade(asked, [{ list: 'paths', option: 'duelist', from: 'path' }])).toBe(false);
+    expect(picksMade(asked, [{ list: 'paths', option: 'duelist', from: 'path' }, { list: 'both', option: 'feint', from: 'trick' }])).toBe(true);
+    expect(picksMade(asked, [{ list: 'paths', option: 'duelist', from: 'trick' }, { list: 'both', option: 'feint', from: 'trick' }])).toBe(false);
+    expect(picksMade(asked, [{ list: 'both', option: 'duelist', from: 'path' }, { list: 'both', option: 'feint', from: 'trick' }])).toBe(false);
+    expect(picksMade([], [])).toBe(true);
+  });
+
+  it('a pick toggled: made while there is room, taken back, others left alone', () => {
+    const [path] = picksAsked(tpl, data, [u('path', 'paths')]);
+    const other = { list: 'both', option: 'feint', from: 'trick' };
+    const one = withPickToggled([other], path, 'duelist');
+    expect(one).toEqual([other, { list: 'paths', option: 'duelist', from: 'path' }]);
+    expect(withPickToggled(one, path, 'scout')).toBe(one);
+    expect(withPickToggled(one, path, 'duelist')).toEqual([other]);
+    // Another list's pick under a feature of the same name is its own.
+    const elsewhere = { list: 'both', option: 'duelist', from: 'path' };
+    expect(withPickToggled([elsewhere], path, 'duelist')).toEqual([elsewhere, { list: 'paths', option: 'duelist', from: 'path' }]);
+    const two = withPickToggled(withPickToggled([], { ...path, count: 2 }, 'duelist'), { ...path, count: 2 }, 'scout');
+    expect(two.map((p) => p.option)).toEqual(['duelist', 'scout']);
   });
 });

@@ -158,6 +158,76 @@ describe('LEVEL_UP.EXE\'s place (7d3a)', () => {
   });
 });
 
+describe('a class not held yet, and the picks a level opens (7d3b)', () => {
+  const RICH = { ...WITH_LIST, stats: [{ id: 'a', label: 'A', stats: [{ id: 'wits', label: 'Wits' }] }], choices: [
+    { ...CLASSES, options: [
+      { id: 'soldier', label: 'Soldier', features: [{ id: 'path', label: 'Path', at: 2, choice: 'paths' }] },
+      { id: 'mage', label: 'Mage', requires: '@wits >= 13', features: [{ id: 'school', label: 'School', choice: 'schools' }] },
+    ] },
+    { id: 'paths', one: 'Path', many: 'Paths', picked: 'features', options: [{ id: 'duelist', label: 'Duelist' }, { id: 'vanguard', label: 'Vanguard', requires: '@wits >= 15' }] },
+    { id: 'schools', one: 'School', many: 'Schools', picked: 'features', options: [{ id: 'fire', label: 'Fire' }] },
+    { id: 'subs', one: 'Sub', many: 'Subs', levelled: true, picked: 'features', options: [{ id: 'x', label: 'X' }] },
+  ] };
+  const ready = (more = {}) => ({ wits: 14, ...holding(['soldier', 1]), [XP_KEY]: 9000, ...more });
+
+  it('a class they don\'t hold comes in at level 1, as they\'d pick it', () => {
+    const done = levelAction(RICH, ready(), { kind: 'up', list: 'classes', option: 'mage' });
+    expect(done.data[PICKS_KEY].classes).toEqual([{ option: 'soldier', level: 1 }, { option: 'mage', level: 1 }]);
+    expect(done.level).toBe(2);
+  });
+
+  it('one they don\'t meet is refused, said; the GM takes it up anyway', () => {
+    expect(levelAction(RICH, ready({ wits: 9 }), { kind: 'up', list: 'classes', option: 'mage' }).error).toMatch(/^Mage needs/);
+    expect(levelAction(RICH, ready({ wits: 9 }), { kind: 'up', list: 'classes', option: 'mage' }, GM).ok).toBe(true);
+  });
+
+  it('only from a list of their own picking, once they hold a class, and one that is there', () => {
+    expect(levelAction(RICH, ready(), { kind: 'up', list: 'subs', option: 'x' }).error).toBe("This character doesn't hold that");
+    expect(levelAction(RICH, ready(), { kind: 'up', list: 'classes', option: 'rogue' }).error).toBe("This character doesn't hold that");
+    expect(levelAction(RICH, { wits: 14, [XP_KEY]: 9000 }, { kind: 'up', list: 'classes', option: 'mage' }).error).toBe('Pick a Class first');
+    const one = { ...RICH, choices: [{ ...RICH.choices[0], again: false, picks: 1 }, ...RICH.choices.slice(1)] };
+    expect(levelAction(one, ready(), { kind: 'up', list: 'classes', option: 'mage' }).error).toBe('No more Classes can be picked');
+  });
+
+  it('a level stat beside the list goes up with a new class too', () => {
+    const both = { ...RICH, stats: [{ id: 'a', label: 'A', stats: [{ id: 'wits', label: 'Wits' }, { id: 'level', label: 'Level' }] }] };
+    expect(levelAction(both, ready({ level: 1 }), { kind: 'up', list: 'classes', option: 'mage' }).data.level).toBe(2);
+  });
+
+  it('the picks the new level opens are made once it is, under what opens them', () => {
+    const done = levelAction(RICH, ready(), { kind: 'up', picks: [{ list: 'paths', option: 'duelist', from: 'path' }] });
+    expect(done.data[PICKS_KEY].paths).toEqual([{ option: 'duelist', from: 'path' }]);
+    expect(levelIn(done.data, 'soldier')).toBe(2);
+    const fresh = levelAction(RICH, ready(), { kind: 'up', list: 'classes', option: 'mage', picks: [{ list: 'schools', option: 'fire', from: 'school' }] });
+    expect(fresh.data[PICKS_KEY].schools).toEqual([{ option: 'fire', from: 'school' }]);
+  });
+
+  it('one that can\'t be made changes nothing, said', () => {
+    const data = ready();
+    const unmet = levelAction(RICH, data, { kind: 'up', picks: [{ list: 'paths', option: 'vanguard', from: 'path' }] });
+    expect(unmet).toEqual({ ok: false, error: expect.stringMatching(/^Vanguard needs/) });
+    const two = levelAction(RICH, data, { kind: 'up', picks: [{ list: 'paths', option: 'duelist', from: 'path' }, { list: 'paths', option: 'vanguard', from: 'path' }] });
+    expect(two.ok).toBe(false);
+    expect(levelAction(RICH, data, { kind: 'up', picks: [{ list: 'schools', option: 'fire', from: 'school' }] }).error).toBe('Nothing unlocked there opens the Schools');
+    expect(levelIn(data, 'soldier')).toBe(1);
+  });
+
+  it('what isn\'t a pick is left out; at most twenty', () => {
+    const done = levelAction(RICH, ready(), { kind: 'up', picks: [null, 'duelist', { list: 'paths' }, { option: 'vanguard', from: 'path' }, { list: 'paths', option: 'duelist', from: 'path' }] });
+    expect(done.data[PICKS_KEY].paths).toEqual([{ option: 'duelist', from: 'path' }]);
+    expect(levelAction(RICH, ready(), { kind: 'up', picks: 'duelist' }).ok).toBe(true);
+    const many = Array.from({ length: 25 }, (_, i) => ({ list: 'paths', option: `p${i}` }));
+    expect(levelAction(RICH, ready(), { kind: 'place', picks: many }).data[LEVELING_KEY].picks).toHaveLength(20);
+  });
+
+  it('kept with the place, read as far as they read, gone once they go up', () => {
+    const placed = levelAction(RICH, ready(), { kind: 'place', list: 'classes', option: 'mage', picks: [{ list: 'schools', option: 'fire', from: 'school', extra: 1 }, { list: 'x' }] });
+    expect(placed.data[LEVELING_KEY]).toEqual({ list: 'classes', option: 'mage', picks: [{ list: 'schools', option: 'fire', from: 'school' }] });
+    expect(levelAction(RICH, ready(), { kind: 'place', picks: [{ list: 'paths', option: 'duelist' }] }).data[LEVELING_KEY]).toEqual({ list: 'classes', option: 'soldier', picks: [{ list: 'paths', option: 'duelist' }] });
+    expect(LEVELING_KEY in levelAction(RICH, placed.data, { kind: 'up', list: 'classes', option: 'mage', picks: [{ list: 'schools', option: 'fire', from: 'school' }] }).data).toBe(false);
+  });
+});
+
 describe('a level the GM gives', () => {
   it('only the GM gives one or takes one back', () => {
     expect(levelAction(MILESTONE, {}, { kind: 'give' })).toEqual({ ok: false, error: "That is the GM's to do" });

@@ -54,18 +54,22 @@ export const xpMeter = (template: SheetTemplate | null | undefined, data: Record
 };
 
 /** One thing that can go up: a pick in a levelled list, or with none, the level stat (backend levelUp.js levelTargets). */
-export interface LevelTarget { list?: string; option?: string; name: string; level: number }
+export interface LevelTarget { list?: string; option?: string; name: string; level: number; /** One they don't hold yet (7d3b), coming in at 1. */ new?: true; /** What it needs, when they don't meet it. */ unmet?: string }
+/** A pick made in LEVEL_UP.EXE (7d3b): from a list a feature of the new level opens. */
+export interface LevelUpPick { list: string; option: string; from?: string }
 export interface LevelUpOffer {
   ready: boolean; targets: LevelTarget[]; firstPick: string | null;
   /** Where LEVEL_UP.EXE was left: null when it isn't open on this sheet. */
-  leveling: { list?: string; option?: string } | null;
+  leveling: { list?: string; option?: string; picks?: LevelUpPick[] } | null;
 }
 
 const placeOf = (data: Record<string, unknown> | null | undefined): LevelUpOffer['leveling'] => {
   const p = data?.[LEVELING_KEY];
   if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
-  const { list, option } = p as Record<string, unknown>;
-  return { ...(typeof list === 'string' ? { list } : {}), ...(typeof option === 'string' ? { option } : {}) };
+  const { list, option, picks } = p as Record<string, unknown>;
+  const made = (Array.isArray(picks) ? picks : []).filter((x): x is LevelUpPick => !!x && typeof x === 'object' && typeof (x as LevelUpPick).list === 'string' && typeof (x as LevelUpPick).option === 'string')
+    .map((x) => ({ list: x.list, option: x.option, ...(typeof x.from === 'string' ? { from: x.from } : {}) }));
+  return { ...(typeof list === 'string' ? { list } : {}), ...(typeof option === 'string' ? { option } : {}), ...(made.length ? { picks: made } : {}) };
 };
 
 /** Whether this character can go up now, and what would. Null where levels are typed in. */

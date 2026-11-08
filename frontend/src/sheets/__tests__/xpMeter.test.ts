@@ -153,6 +153,10 @@ describe('whether a character can go up (7d2b)', () => {
     expect(at({ list: 3, option: 'mage' })).toEqual({ option: 'mage' });
     expect(at({ list: 'classes', option: null })).toEqual({ list: 'classes' });
     expect(at({ list: 'classes', option: 7 })).toEqual({ list: 'classes' });
+    // Picks kept with it (7d3b), as far as they read.
+    expect(at({ picks: [{ list: 'paths', option: 'duelist', from: 'path' }, { list: 'paths', option: 'scout', from: 3 }, { option: 'fire' }, { list: 'paths' }, null, 'x'] })).toEqual({ picks: [{ list: 'paths', option: 'duelist', from: 'path' }, { list: 'paths', option: 'scout' }] });
+    expect(at({ picks: [] })).toEqual({});
+    expect(at({ picks: 'x' })).toEqual({});
     for (const none of [undefined, null, 'mage', ['mage']]) expect(at(none), String(none)).toBeNull();
     expect(levelUpOffer(made(), { [LEVELING_KEY]: {} })?.leveling).toEqual({});
   });
