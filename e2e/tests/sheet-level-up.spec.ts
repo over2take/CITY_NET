@@ -5,6 +5,7 @@ import { signInAsGm, signInAsPlayer, gmToken, asGm, runningSystem, approvedPlaye
 // blinks on a player's sheet once their XP reaches the next level, or the GM gives them one, and they go up
 // themselves. What's past the level carries over, and the GM can take one back. The player has no + or - to press.
 // READY opens LEVEL_UP.EXE (7d3a): which class, what the new level unlocks, leave and come back, FINISH.
+// In it (7d3b), the picks a new level opens are made, and a class not held yet can be taken up at level 1.
 
 const CLASSES = { id: 'classes', one: 'Class', many: 'Classes', levelled: true, again: true, options: [{ id: 'soldier', label: 'Soldier' }, { id: 'mage', label: 'Mage', features: [{ id: 'spark', label: 'Spark', at: 2, text: 'A small magic.' }] }] };
 const signedIn = async (browser: Browser, info: TestInfo, player: { username: string; password: string }) => {
@@ -178,5 +179,59 @@ test('an uploaded sheet brings its XP, under the game\'s word; one with none kee
   await upload({ name: 'Wren Again' });
   await expect.poll(async () => (await sheetOf()).name, { timeout: 15_000 }).toBe('Wren Again');
   expect((await sheetOf())._xp).toBe(250);
+  await mine.context().close();
+});
+
+test('in LEVEL_UP.EXE, a pick the new level opens is made, then a class not held yet is taken up (7d3b)', async ({ browser, request }, info) => {
+  test.setTimeout(150_000);
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const kes = { username: `e2e_lvlpick${again}`, password: 'e2e-player-password' };
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Pickupfall${again}`, core: { health: { model: 'pool' }, advancement: ['levels'] },
+    choices: [
+      { id: 'classes', one: 'Class', many: 'Classes', levelled: true, again: true, options: [
+        { id: 'soldier', label: 'Soldier', features: [{ id: 'path', label: 'Path', at: 2, choice: 'paths' }] },
+        { id: 'mage', label: 'Mage', features: [{ id: 'cantrip', label: 'Cantrip', text: 'A small magic.' }] },
+      ] },
+      { id: 'paths', one: 'Path', many: 'Paths', picked: 'features', options: [{ id: 'duelist', label: 'Duelist' }, { id: 'vanguard', label: 'Vanguard' }] },
+    ],
+    levels: { top: 5, first: 100, ranges: [{ to: 5, x: 2 }] },
+  });
+  await approvedPlayer(request, gm, kes);
+  const sheetOf = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${kes.username}`)).data;
+  const give = (xp: number) => asGm(request, gm, 'put', `/api/sheets/user/${kes.username}`, { fields: { _xp: xp } });
+
+  const mine = await signedIn(browser, info, kes);
+  await openSheet(mine);
+  await sheetTab(mine, 'CHARACTER');
+  await mine.getByRole('group', { name: 'Pick a Class' }).getByRole('button', { name: 'SOLDIER' }).click();
+  await expect(mine.getByRole('group', { name: 'Soldier' }).getByText('LV 1')).toBeVisible({ timeout: 15_000 });
+  await give(100);
+
+  // Soldier 2 opens a Path: picked in the window, FINISH waiting for it.
+  await mine.getByRole('button', { name: 'LEVEL UP READY' }).click();
+  const fresh = mine.getByRole('group', { name: 'Or a new class' });
+  await expect(fresh.getByRole('button', { name: 'NEW: MAGE 1' })).toBeVisible();
+  await mine.getByRole('button', { name: 'NEXT', exact: true }).click();
+  await expect(mine.getByText('Pick a Path.')).toBeVisible();
+  await expect(mine.getByRole('button', { name: 'FINISH', exact: true })).toBeDisabled();
+  await mine.getByRole('group', { name: 'Pick a Path' }).getByRole('button', { name: 'DUELIST' }).click();
+  await expect.poll(async () => (await sheetOf())._leveling?.picks, { timeout: 15_000 }).toEqual([{ list: 'paths', option: 'duelist', from: 'path' }]);
+  await mine.getByRole('button', { name: 'FINISH', exact: true }).click();
+  await expect.poll(async () => (await sheetOf())._choices.paths, { timeout: 15_000 }).toEqual([{ option: 'duelist', from: 'path' }]);
+  expect((await sheetOf())._choices.classes).toEqual([{ option: 'soldier', level: 2 }]);
+
+  // Enough for level 3: this time a class they don't have, at level 1.
+  await give(300);
+  await mine.getByRole('button', { name: 'LEVEL UP READY' }).click();
+  await fresh.getByRole('button', { name: 'NEW: MAGE 1' }).click();
+  await expect(mine.getByText(`LEVEL_UP.EXE · ${kes.username.toUpperCase()} · MAGE 1`)).toBeVisible();
+  await mine.getByRole('button', { name: 'NEXT', exact: true }).click();
+  await expect(mine.getByText('Mage 1 brings:')).toBeVisible();
+  await expect(mine.getByText('A small magic.')).toBeVisible();
+  await mine.getByRole('button', { name: 'FINISH', exact: true }).click();
+  await expect.poll(async () => (await sheetOf())._choices.classes, { timeout: 15_000 }).toEqual([{ option: 'soldier', level: 2 }, { option: 'mage', level: 1 }]);
+  await expect(mine.getByTestId('xp-meter').getByText('300 / 700 · 400 TO LEVEL 4')).toBeVisible({ timeout: 15_000 });
   await mine.context().close();
 });
