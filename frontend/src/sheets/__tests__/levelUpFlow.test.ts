@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LEVEL_UP_STEP_NAMES, chosenTarget, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted, unlockedBy, withPickToggled, type Unlocked } from '../levelUpFlow';
+import { LEVEL_UP_STEP_NAMES, healthGain, chosenTarget, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted, unlockedBy, withPickToggled, type Unlocked } from '../levelUpFlow';
 import { WORKED_KEY } from '../choicesShown';
 import type { LevelUpOffer } from '../xpMeter';
 import type { SheetTemplate } from '../types';
@@ -43,7 +43,7 @@ describe('the folders', () => {
     // A class they could take up is a choice too (7d3b).
     expect(levelUpSteps(offer([SOLDIER]), 1)).toEqual(['which', 'unlocks']);
     expect(levelUpSteps(offer([SOLDIER]), 0)).toEqual(['unlocks']);
-    expect(LEVEL_UP_STEP_NAMES).toEqual({ which: 'WHICH CLASS', unlocks: 'WHAT IT UNLOCKS' });
+    expect(LEVEL_UP_STEP_NAMES).toEqual({ which: 'WHICH CLASS', health: 'HEALTH', unlocks: 'WHAT IT UNLOCKS' });
   });
 });
 
@@ -194,5 +194,39 @@ describe('the picks a new level asks for (7d3b)', () => {
     expect(withPickToggled([elsewhere], path, 'duelist')).toEqual([elsewhere, { list: 'paths', option: 'duelist', from: 'path' }]);
     const two = withPickToggled(withPickToggled([], { ...path, count: 2 }, 'duelist'), { ...path, count: 2 }, 'scout');
     expect(two.map((p) => p.option)).toEqual(['duelist', 'scout']);
+  });
+});
+
+describe('HEALTH, per level (7d5a)', () => {
+  const tpl = (health: object | undefined) => ({ levels: { top: 10, ...(health ? { health } : {}) }, choices: [{ id: 'classes', levelled: true, options: [{ id: 'soldier', label: 'Soldier', features: [] }, { id: 'mage', label: 'Mage', features: [] }] }] }) as unknown as SheetTemplate;
+  const ON = { gain: 'average', dieOn: 'class', dice: { soldier: 10, mage: 6 } };
+  const data = (adds?: number) => ({ [WORKED_KEY]: { picks: [{ list: 'classes', option: 'mage', level: 1 }, { list: 'classes', option: 'soldier', level: 2 }], levels: { level: 3 } }, ...(adds === undefined ? {} : { _health: { adds } }) });
+
+  it('a folder only where health is per level', () => {
+    expect(levelUpSteps(offer([SOLDIER]), 0, true)).toEqual(['health', 'unlocks']);
+    expect(levelUpSteps(offer(), 0, true)).toEqual(['which', 'health', 'unlocks']);
+    expect(LEVEL_UP_STEP_NAMES.health).toBe('HEALTH');
+  });
+
+  it('the class going up\'s die, half rounded up, with what each level adds; at least 1', () => {
+    expect(healthGain(tpl(ON), data(2), SOLDIER)).toEqual({ die: 10, average: 5, adds: 2, gained: 7 });
+    expect(healthGain(tpl(ON), data(-9), MAGE)).toEqual({ die: 6, average: 3, adds: -9, gained: 1 });
+    expect(healthGain(tpl(ON), data(), MAGE)).toEqual({ die: 6, average: 3, adds: 0, gained: 3 });
+  });
+
+  it('the level itself has only the die for all; one for all; none', () => {
+    expect(healthGain(tpl(ON), data(1), { name: 'LEVEL', level: 3 })?.die).toBeNull();
+    expect(healthGain(tpl({ ...ON, dieOn: 'all', die: 8 }), data(1), { name: 'LEVEL', level: 3 })?.die).toBe(8);
+    // An odd die rounds up.
+    expect(healthGain(tpl({ ...ON, dice: { soldier: 7 } }), data(0), SOLDIER)).toEqual({ die: 7, average: 4, adds: 0, gained: 4 });
+    expect(healthGain(tpl({ ...ON, dieOn: 'all', die: 8 }), data(1), SOLDIER)?.die).toBe(8);
+    expect(healthGain(tpl({ ...ON, dieOn: 'all' }), data(1), SOLDIER)).toEqual({ die: null, average: 0, adds: 1, gained: 1 });
+    expect(healthGain(tpl(ON), data(1), { ...SOLDIER, option: 'rogue' })?.die).toBeNull();
+    expect(healthGain(tpl(ON), {}, { name: 'LEVEL', level: 1 })?.die).toBeNull();
+  });
+
+  it('nothing where health isn\'t per level', () => {
+    expect(healthGain(tpl(undefined), data(2), SOLDIER)).toBeNull();
+    expect(healthGain(null, data(2), SOLDIER)).toBeNull();
   });
 });

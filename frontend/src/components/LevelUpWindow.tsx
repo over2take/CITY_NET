@@ -4,7 +4,7 @@ import { TerminalWindow, type TerminalAction, type TerminalFolder } from './Term
 import { usePlayerSheet } from '../hooks/usePlayerSheet';
 import { useChoicesRefused } from '../hooks/useChoicesRefused';
 import { levelUpOffer, type LevelTarget, type LevelUpPick } from '../sheets/xpMeter';
-import { LEVEL_UP_STEP_NAMES, chosenTarget, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted, unlockedBy, withPickToggled } from '../sheets/levelUpFlow';
+import { LEVEL_UP_STEP_NAMES, chosenTarget, healthGain, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted, unlockedBy, withPickToggled } from '../sheets/levelUpFlow';
 
 // LEVEL_UP.EXE (7d3a; approved mockup docs/mockups/level-up.html, 2026-11-07): the same kind of window as
 // NEW_CHARACTER.EXE. WHICH CLASS when there's a choice, a class not held yet among them (7d3b), then WHAT IT
@@ -64,7 +64,8 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
     );
   }
 
-  const steps = levelUpSteps(offer, joinable.length);
+  const gain = healthGain(template, data, target);
+  const steps = levelUpSteps(offer, joinable.length, !!gain);
   const unlocked = unlockedBy(template, data, target);
   const asked = picksAsked(template, data, unlocked);
   const allMade = picksMade(asked, picks);
@@ -126,6 +127,15 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
                 </div>
               </>
             )}
+          </>
+        )}
+        {open === 'health' && gain && (
+          <>
+            <span style={{ fontSize: '0.75rem' }}>HEALTH · {gain.die ? `d${gain.die}` : 'NO DIE'}{gain.adds ? ` ${gain.adds > 0 ? '+' : '−'} ${Math.abs(gain.adds)}` : ''}</span>
+            <span style={{ ...why, color: 'var(--cyan)', opacity: 1 }}>
+              +{gain.gained}: {gain.average} AVERAGE{gain.adds ? `, ${gain.adds > 0 ? '+' : '−'}${Math.abs(gain.adds)} EACH LEVEL` : ''}{gain.average + gain.adds < 1 ? ', AT LEAST 1' : ''}
+            </span>
+            <p style={why}>{gain.die ? 'Fixed in this game. Nothing to roll.' : `${target.name} has no HIT DIE, so only what each level adds.`}</p>
           </>
         )}
         {open === 'unlocks' && (

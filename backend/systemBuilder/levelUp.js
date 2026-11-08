@@ -16,7 +16,7 @@
 
 const { choicesOf, heldOf, levelsOf, targetsOf, pickedOf } = require('./choices');
 const { pickAction } = require('./picking');
-const { XP_KEY, advances, earnsXp, levelTable, levelsOf: settingsOf } = require('./levels');
+const { XP_KEY, advances, earnsXp, levelTable, levelsOf: settingsOf, healthOf, levelDie, averageOf, HEALTH_LEVELS_KEY } = require('./levels');
 const { creatingNow } = require('./creation');
 
 const OWED_KEY = '_levels_owed';
@@ -28,6 +28,24 @@ const MOST_PICKS = 20;
 /** The picks sent with a level up, as far as they read: [{ list, option, from? }]. */
 const picksOf = (v) => (Array.isArray(v) ? v : []).filter((p) => isPlainObject(p) && typeof p.list === 'string' && typeof p.option === 'string')
   .slice(0, MOST_PICKS).map((p) => ({ list: p.list, option: p.option, ...(typeof p.from === 'string' ? { from: p.from } : {}) }));
+/**
+ * MAX HEALTH: PER LEVEL (7d5a): the sheet with what the level it reached gained, from the die of the class going up
+ * (the die for all for the level itself, there being no class). Nothing kept where health isn't per level.
+ */
+const withHealthKept = (definition, after, target) => {
+  if (healthOf(definition).how !== 'level') return after;
+  const level = characterLevel(definition, after);
+  const die = levelDie(definition, target.option || null);
+  const kept = isPlainObject(after[HEALTH_LEVELS_KEY]) ? after[HEALTH_LEVELS_KEY] : {};
+  return { ...after, [HEALTH_LEVELS_KEY]: { ...kept, [level]: { die, took: averageOf(die) } } };
+};
+/** The sheet without what a level it has left gained. */
+const withHealthGone = (data, level) => {
+  if (!isPlainObject(data[HEALTH_LEVELS_KEY]) || !(String(level) in data[HEALTH_LEVELS_KEY])) return data;
+  const { [level]: gone, ...rest } = data[HEALTH_LEVELS_KEY];
+  return { ...data, [HEALTH_LEVELS_KEY]: rest };
+};
+
 /** The sheet without a level up's place. */
 const settled = (data) => { const { [LEVELING_KEY]: place, ...rest } = data; return rest; };
 const whole = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0; };
@@ -127,7 +145,7 @@ const levelAction = (definition, data, action, { gm = false } = {}) => {
     if (error) return { ok: false, error };
     const raised = moved(definition, sheet, target, 1, gm);
     if (raised.error) return { ok: false, error: raised.error };
-    const picked = withPicksMade(definition, raised.data, picksOf(action.picks), gm);
+    const picked = withPicksMade(definition, withHealthKept(definition, raised.data, target), picksOf(action.picks), gm);
     if (picked.error) return { ok: false, error: picked.error };
     const next = settled(picked.data);
     // XP covers it, or a level the GM gave does. What was earned isn't spent on what was given.
@@ -153,7 +171,7 @@ const levelAction = (definition, data, action, { gm = false } = {}) => {
     // The last of them, the most recently picked, that has a level to give.
     const target = named || [...all].reverse().find((p) => p.level > 1);
     if (!target || target.level <= 1) return { ok: false, error: 'Already level 1' };
-    return said(settled(moved(definition, sheet, target, -1, true).data));
+    return said(withHealthGone(settled(moved(definition, sheet, target, -1, true).data), level));
   }
   return { ok: false, error: 'Nothing to do' };
 };

@@ -74,23 +74,45 @@ export const levelNotes = (d: Definition): string[] => {
   return notes;
 };
 
-/** MAX HEALTH (7d4; backend levels.js healthOf): AS IT IS, the token's own number, or A FORMULA. */
-export type HealthHow = 'as_is' | 'formula';
-export interface HealthSet { how: HealthHow; formula: string }
+/** MAX HEALTH (7d4; backend levels.js healthOf): AS IT IS, the token's own number, A FORMULA, or PER LEVEL (7d5a). */
+export type HealthHow = 'as_is' | 'formula' | 'level';
+export type HealthDieOn = 'class' | 'all';
+export interface HealthSet { how: HealthHow; formula: string; dieOn: HealthDieOn; die: number | null; adds: string }
+const HOWS: HealthHow[] = ['as_is', 'formula', 'level'];
 export const healthSet = (d: Definition): HealthSet => {
   const raw = (isObject(d.levels) ? d.levels : {}) as Record<string, unknown>;
   const h = isObject(raw.health) ? raw.health : {};
-  return { how: h.how === 'formula' ? 'formula' : 'as_is', formula: typeof h.formula === 'string' ? h.formula : '' };
+  return {
+    how: HOWS.includes(h.how as HealthHow) ? h.how as HealthHow : 'as_is',
+    formula: typeof h.formula === 'string' ? h.formula : '',
+    dieOn: h.die_on === 'all' ? 'all' : 'class',
+    die: Number.isInteger(h.die) ? h.die as number : null,
+    adds: typeof h.adds === 'string' ? h.adds : '',
+  };
 };
 const withHealthSet = (d: Definition, h: HealthSet): Definition => {
   const levels = { ...(isObject(d.levels) ? d.levels as Record<string, unknown> : {}) };
-  if (h.how === 'as_is' && !h.formula) delete levels.health;
-  else levels.health = { how: h.how, ...(h.formula ? { formula: h.formula } : {}) };
+  const kept = {
+    ...(h.formula ? { formula: h.formula } : {}), ...(h.dieOn === 'all' ? { die_on: 'all' } : {}),
+    ...(h.die !== null ? { die: h.die } : {}), ...(h.adds ? { adds: h.adds } : {}),
+  };
+  if (h.how === 'as_is' && !Object.keys(kept).length) delete levels.health;
+  else levels.health = { how: h.how, ...kept };
   return { ...d, levels };
 };
-/** How max health is set. The formula is kept while AS IT IS, for going back to it. */
+/** How max health is set. What the others had is kept, for going back to them. */
 export const withHealth = (d: Definition, how: HealthHow): Definition => withHealthSet(d, { ...healthSet(d), how });
 export const withHealthFormula = (d: Definition, formula: string): Definition => withHealthSet(d, { ...healthSet(d), formula });
+/** PER LEVEL (7d5a): the die is each class's HIT DIE, or one for all, which then starts at a d8. */
+export const withHealthDieOn = (d: Definition, dieOn: HealthDieOn): Definition => withHealthSet(d, { ...healthSet(d), dieOn, die: dieOn === 'all' ? healthSet(d).die ?? 8 : healthSet(d).die });
+export const withHealthDie = (d: Definition, die: number): Definition => withHealthSet(d, { ...healthSet(d), die });
+export const withHealthAdds = (d: Definition, adds: string): Definition => withHealthSet(d, { ...healthSet(d), adds });
+
+/** Each class's HIT DIE, for ON EACH CLASS: [{ name, die }], die null where it has none. */
+export const classDice = (d: Definition): { name: string; die: number | null }[] =>
+  (Array.isArray(d.choices) ? d.choices as Array<{ levelled?: unknown; options?: Array<{ id?: unknown; label?: unknown; die?: unknown }> }> : [])
+    .filter((l) => l?.levelled === true)
+    .flatMap((l) => (Array.isArray(l.options) ? l.options : []).map((o) => ({ name: String(o.label || o.id || ''), die: Number.isInteger(o.die) ? o.die as number : null })));
 
 /** Said when going up has nothing to show it on: no levelled list, and no stat or formula called level (7d2b). */
 export const levelHomeNote = (d: Definition): string | null => {

@@ -13,17 +13,14 @@ const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 
-/** What the formula comes to for this sheet now, or null. */
-const healthFormulaValue = (definition, data) => {
-  const h = healthOf(definition);
-  // A missing or blank formula doesn't read, so it comes to nothing below.
-  if (h.how !== 'formula') return null;
+/** What `source` comes to for this sheet now, read as a derived value is: unrounded, or null when it can't be worked out. */
+const formulaValueOf = (definition, data, source) => {
   // A system with no formulas of its own has none to work out first.
   const compiled = compileSystem({ lookups: definition.lookups, derived: Array.isArray(definition.derived) ? definition.derived : [] });
   if (!compiled.ok) return null;
   const tables = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
   let tree;
-  try { tree = parse(h.formula, (name) => own(tables, name)); } catch { return null; }
+  try { tree = parse(source, (name) => own(tables, name)); } catch { return null; }
   const sheet = isPlainObject(data) ? data : {};
   const overlay = overlayOf(definition, sheet);
   const values = compiled.system.evaluate(sheet, overlay);
@@ -33,7 +30,16 @@ const healthFormulaValue = (definition, data) => {
     rule: (name) => ruleValue(name, sheet),
     table: (name, x) => lookupIn(own(tables, name) ? tables[name] : [], x),
   });
-  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null;
+  return Number.isFinite(value) ? value : null;
 };
 
-module.exports = { healthFormulaValue };
+/** What the formula comes to for this sheet now, whole and never below 0, or null. */
+const healthFormulaValue = (definition, data) => {
+  const h = healthOf(definition);
+  // A missing or blank formula doesn't read, so it comes to nothing.
+  if (h.how !== 'formula') return null;
+  const value = formulaValueOf(definition, data, h.formula);
+  return value === null ? null : Math.max(0, Math.floor(value));
+};
+
+module.exports = { healthFormulaValue, formulaValueOf };

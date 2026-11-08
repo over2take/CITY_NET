@@ -28,7 +28,13 @@ afterEach(cleanup);
 describe('the "?" beside each setting', () => {
   it('has its words, each of them shown', () => {
     open({ levels: { health: { how: 'formula', formula: '10' } } });
-    for (const [key, text] of Object.entries(HINTS).filter(([k]) => k.startsWith('levels.'))) {
+    const perLevel = ['levels.healthDie', 'levels.healthGain', 'levels.healthAdds'];
+    for (const [key, text] of Object.entries(HINTS).filter(([k]) => k.startsWith('levels.') && !perLevel.includes(k))) {
+      expect(screen.getByRole('note', { name: text }), key).toBeTruthy();
+    }
+    cleanup();
+    open({ levels: { health: { how: 'level' } } });
+    for (const [key, text] of Object.entries(HINTS).filter(([k]) => perLevel.includes(k))) {
       expect(screen.getByRole('note', { name: text }), key).toBeTruthy();
     }
   });
@@ -193,6 +199,37 @@ describe('MAX HEALTH (7d4)', () => {
 
   it('says the formula waits with TOKEN HEALTH off', () => {
     open({ parts: { token_health: { on: false } }, levels: { health: { how: 'formula', formula: '10' } } });
+    expect(screen.getByText(/^TOKEN HEALTH is off on SETUP/)).toBeTruthy();
+  });
+});
+
+describe('MAX HEALTH: PER LEVEL (7d5a)', () => {
+  const CLASSES = [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter', die: 10 }, { id: 'monk', label: 'Monk' }] }];
+  it('its die on each class, each one named, one with none said; or one for all, picked', async () => {
+    open({ choices: CLASSES });
+    await userEvent.click(within(screen.getByRole('group', { name: 'Max health' })).getByRole('button', { name: 'PER LEVEL' }));
+    expect(screen.getByLabelText("Each class's die").textContent).toBe('FIGHTER D10 · MONK NO HIT DIE');
+    expect(screen.queryByRole('combobox', { name: 'The die for every level' })).toBeNull();
+    expect(screen.getByText('A class with no HIT DIE gains only what each level adds. Set one on CHOICES.')).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'How health is gained' })).toHaveProperty('value', 'average');
+    expect(screen.getByRole('textbox', { name: 'Each level adds' })).toBeTruthy();
+    expect(screen.getByText(/^Level 1 has the full die/)).toBeTruthy();
+    await userEvent.click(within(screen.getByRole('group', { name: 'Where the die is set' })).getByRole('button', { name: 'ONE FOR ALL' }));
+    const die = screen.getByRole('combobox', { name: 'The die for every level' }) as HTMLSelectElement;
+    expect(die.value).toBe('8');
+    await userEvent.selectOptions(die, '12');
+    expect((screen.getByRole('combobox', { name: 'The die for every level' }) as HTMLSelectElement).value).toBe('12');
+    expect(screen.queryByLabelText("Each class's die")).toBeNull();
+  });
+
+  it('with no class list, says to pick one for all', async () => {
+    open({ levels: { health: { how: 'level' } } });
+    expect(screen.getByLabelText("Each class's die").textContent).toBe('No list here has levels: pick ONE FOR ALL, or make a list levelled on CHOICES.');
+    expect(screen.queryByText(/^A class with no HIT DIE/)).toBeNull();
+  });
+
+  it('TOKEN HEALTH off: it waits', () => {
+    open({ parts: { token_health: { on: false } }, levels: { health: { how: 'level' } } });
     expect(screen.getByText(/^TOKEN HEALTH is off on SETUP/)).toBeTruthy();
   });
 });

@@ -41,13 +41,14 @@ const sheet = (con, level = 3, feats = []) => ({ con, [PICKS_KEY]: { classes: [{
 
 describe('the setting', () => {
   it('AS IT IS unless it says A FORMULA, the formula kept either way', () => {
-    expect(HEALTH_HOWS).toEqual(['as_is', 'formula']);
-    expect(healthOf({})).toEqual({ how: 'as_is' });
-    expect(healthOf(null)).toEqual({ how: 'as_is' });
-    expect(healthOf({ levels: { health: { how: 'level' } } })).toEqual({ how: 'as_is' });
-    expect(healthOf(KEEP)).toEqual({ how: 'formula', formula: '10 + @con_mod * @level' });
-    expect(healthOf({ levels: { health: { how: 'as_is', formula: '7' } } })).toEqual({ how: 'as_is', formula: '7' });
-    expect(healthOf({ levels: { health: { how: 'formula', formula: 7 } } })).toEqual({ how: 'formula' });
+    expect(HEALTH_HOWS).toEqual(['as_is', 'formula', 'level']);
+    const D = {dieOn: 'class', gain: 'average'};
+    expect(healthOf({})).toEqual({ how: 'as_is', ...D });
+    expect(healthOf(null)).toEqual({ how: 'as_is', ...D });
+    expect(healthOf({ levels: { health: { how: 'dice' } } })).toEqual({ how: 'as_is', ...D });
+    expect(healthOf(KEEP)).toEqual({ how: 'formula', formula: '10 + @con_mod * @level', ...D });
+    expect(healthOf({ levels: { health: { how: 'as_is', formula: '7' } } })).toEqual({ how: 'as_is', formula: '7', ...D });
+    expect(healthOf({ levels: { health: { how: 'formula', formula: 7 } } })).toEqual({ how: 'formula', ...D });
   });
 
   it('checks clean as written, and with a formula kept while AS IT IS', () => {
@@ -59,8 +60,8 @@ describe('the setting', () => {
 
   it('says what is wrong', () => {
     expect(problems({ health: 'formula' })).toEqual(['levels, health: Must say how max health is set']);
-    expect(problems({ health: { how: 'roll' } })).toEqual(['levels, health, how: AS IT IS or A FORMULA']);
-    expect(problems({ health: { how: 'formula', die: 8, formula: '1' } })).toEqual(['levels, health, die: Not part of max health']);
+    expect(problems({ health: { how: 'roll' } })).toEqual(['levels, health, how: AS IT IS, A FORMULA or PER LEVEL']);
+    expect(problems({ health: { how: 'formula', dice: 8, formula: '1' } })).toEqual(['levels, health, dice: Not part of max health']);
     expect(problems({ health: { how: 'formula' } })).toEqual(['levels, health, formula: Write the formula max health is worked out from']);
     expect(problems({ health: { how: 'formula', formula: '  ' } })).toEqual(['levels, health, formula: Write the formula max health is worked out from']);
     expect(problems({ health: { how: 'as_is', formula: 3 } })).toEqual(['levels, health, formula: Must be a formula']);

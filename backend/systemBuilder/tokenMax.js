@@ -12,14 +12,15 @@
 // Only for the game running, whose vitals are on the token (another system's wait in token_vitals),
 // and only while it has token health on: off, the bonus stays as it was until the part is back.
 //
-// With MAX HEALTH: A FORMULA (7d4) the maximum is no longer the GM's number with the bonus added: it is set
-// outright, to the formula's value and the bonus, after each change to the sheet, the current moving by as much.
+// With MAX HEALTH: A FORMULA (7d4) or PER LEVEL (7d5a) the maximum is no longer the GM's number with the bonus
+// added: it is set outright, to what it works out to and the bonus, after each change to the sheet, the current
+// moving by as much.
 
 const { overlayOf, tokenMaxFieldOf } = require('./choices');
 const { partOn } = require('./parts');
 const { healthOf } = require('./levels');
 const runtime = require('./runtime');
-const { healthFormulaValue } = require('./healthFormula');
+const { healthBase } = require('./healthLevels');
 const { mutateSheetForUser } = require('../sheets/mutate');
 
 /** Where a sheet keeps what it has added to its token's maximum: { token, amount }. */
@@ -55,7 +56,7 @@ const moveFor = (definition, data, token) => {
  * sheet recording the bonus; null when nothing moves. Null too without a formula that works out.
  */
 const moveToFormula = (definition, data, token, max) => {
-  const base = healthFormulaValue(definition, data);
+  const base = healthBase(definition, data);
   if (base === null) return null;
   const bonus = bonusOf(definition, data);
   const by = base + bonus - (Number.isFinite(max) ? max : 0);
@@ -75,8 +76,8 @@ const TOKEN_SQL = `SELECT id, hp_max FROM locations WHERE shape = 'rhombus' AND 
 const syncTokenMax = (db, system, username, cb = () => {}) => {
   const definition = runtime.definitionOf(system);
   if (!definition || !partOn(definition, 'token_health')) return cb(false);
-  const formula = healthOf(definition).how === 'formula';
-  if (!formula && !tokenMaxFieldOf(definition)) return cb(false);
+  const worked = healthOf(definition).how !== 'as_is';
+  if (!worked && !tokenMaxFieldOf(definition)) return cb(false);
   return db.get(TOKEN_SQL, [username], (err, token) => {
     if (err || !token) return cb(false);
     let by = 0;

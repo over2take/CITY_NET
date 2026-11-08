@@ -4,7 +4,7 @@ import { signInAsGm, openBuilder, builderPage, gmToken, asGm } from './helpers';
 // The builder's LEVELS page (7d1; approved mockup docs/mockups/level-up.html, 2026-11-07): a GM turns XP levels
 // on, fills the table from a cost and two ranges, types one level over, and finds it all as they left it after
 // a reload, the server taking it with no problems. Nothing at the table yet: that is the meter's, 7d2. MAX HEALTH: A
-// FORMULA (7d4) is typed in the formula box, said in words, and kept.
+// FORMULA (7d4) is typed in the formula box, said in words, and kept; and PER LEVEL (7d5a), its die one for all.
 
 const openPage = async (page: Page, name: string) => {
   await openBuilder(page);
@@ -96,4 +96,32 @@ test('MAX HEALTH: A FORMULA typed, said in words, and kept after a reload (7d4)'
   await signInAsGm(page);
   await openPage(page, name);
   await expect(page.getByRole('region', { name: 'Max health' }).getByRole('textbox', { name: 'Max health formula' })).toHaveValue('10 + @con * 2');
+});
+
+test('MAX HEALTH: PER LEVEL, each class\'s die named, then one for all with what each level adds, kept (7d5a)', async ({ page, request }, info) => {
+  const name = `Halebuild${info.retry ? ` ${info.retry + 1}` : ''}`;
+  const gm = await gmToken(request);
+  const { id } = await asGm(request, gm, 'post', '/api/systems', { definition: {
+    format: 1, name, stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'con', label: 'Constitution' }] }],
+    choices: [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter', die: 10 }, { id: 'monk', label: 'Monk' }] }],
+  } });
+  await signInAsGm(page);
+  await openPage(page, name);
+  const health = page.getByRole('region', { name: 'Max health' });
+  await health.getByRole('button', { name: 'PER LEVEL' }).click();
+  await expect(health.getByLabel("Each class's die")).toHaveText('FIGHTER D10 · MONK NO HIT DIE');
+  await expect(health.getByText('A class with no HIT DIE gains only what each level adds. Set one on CHOICES.')).toBeVisible();
+  await health.getByRole('button', { name: 'ONE FOR ALL' }).click();
+  await health.getByRole('combobox', { name: 'The die for every level' }).selectOption('12');
+  await health.getByRole('textbox', { name: 'Each level adds' }).fill('@con');
+  await expect(health.getByTestId('formula-words')).toContainText('Constitution');
+  await saved(page);
+  expect((await asGm(request, gm, 'get', `/api/systems/${id}`)).draft.levels.health).toEqual({ how: 'level', die_on: 'all', die: 12, adds: '@con' });
+  await page.reload();
+  await signInAsGm(page);
+  await openPage(page, name);
+  const again = page.getByRole('region', { name: 'Max health' });
+  await expect(again.getByRole('button', { name: 'PER LEVEL' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(again.getByRole('combobox', { name: 'The die for every level' })).toHaveValue('12');
+  await expect(again.getByRole('textbox', { name: 'Each level adds' })).toHaveValue('@con');
 });

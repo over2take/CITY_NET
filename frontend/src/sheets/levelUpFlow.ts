@@ -4,11 +4,11 @@
 // and the picks a new level opens are made in the window, FINISH waiting for them.
 
 import { listShown, pickedOf, workedOn, type ChoiceListShown, type FeatureShown, type OptionShown } from './choicesShown';
-import { characterLevel, type LevelTarget, type LevelUpOffer, type LevelUpPick } from './xpMeter';
+import { characterLevel, HEALTH_SHOWN_KEY, type LevelTarget, type LevelUpOffer, type LevelUpPick } from './xpMeter';
 import type { SheetTemplate } from './types';
 
-export type LevelUpStep = 'which' | 'unlocks';
-export const LEVEL_UP_STEP_NAMES: Record<LevelUpStep, string> = { which: 'WHICH CLASS', unlocks: 'WHAT IT UNLOCKS' };
+export type LevelUpStep = 'which' | 'health' | 'unlocks';
+export const LEVEL_UP_STEP_NAMES: Record<LevelUpStep, string> = { which: 'WHICH CLASS', health: 'HEALTH', unlocks: 'WHAT IT UNLOCKS' };
 
 /**
  * The classes they could take up (7d3b): those of a levelled list they pick from themselves, not held, while it has
@@ -23,8 +23,22 @@ export const newClasses = (template: SheetTemplate | null | undefined, data: Rec
   });
 };
 
-/** The folders: WHICH CLASS only when there's a choice of what goes up. */
-export const levelUpSteps = (offer: LevelUpOffer, more = 0): LevelUpStep[] => (offer.targets.length + more > 1 ? ['which', 'unlocks'] : ['unlocks']);
+/** The folders: WHICH CLASS only when there's a choice of what goes up, HEALTH only where it's per level (7d5a). */
+export const levelUpSteps = (offer: LevelUpOffer, more = 0, health = false): LevelUpStep[] =>
+  [...(offer.targets.length + more > 1 ? ['which' as const] : []), ...(health ? ['health' as const] : []), 'unlocks'];
+
+/** What a level gains (7d5a), AVERAGE (FIXED): { die, average, adds, gained }, or null where health isn't per level. */
+export interface HealthGain { die: number | null; average: number; adds: number; gained: number }
+export const healthGain = (template: SheetTemplate | null | undefined, data: Record<string, unknown> | null | undefined, target: LevelTarget): HealthGain | null => {
+  const h = template?.levels?.health;
+  if (!h) return null;
+  // The level itself, there being no class, goes up by the die for all, as the server does.
+  const die = h.dieOn === 'all' ? h.die ?? null : (target.option ? h.dice[target.option] ?? null : null);
+  const shown = data?.[HEALTH_SHOWN_KEY] as { adds?: unknown } | undefined;
+  const adds = typeof shown?.adds === 'number' ? shown.adds : 0;
+  const average = die ? Math.ceil(die / 2) : 0;
+  return { die, average, adds, gained: Math.max(1, average + adds) };
+};
 
 const same = (t: LevelTarget, place: { list?: string; option?: string }) => t.list === place.list && t.option === place.option;
 

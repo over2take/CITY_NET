@@ -18,6 +18,8 @@ const { overlayOf, choicesOf, workedOf, worksOutPicks, choicesShown, WORKED_KEY 
 const { poolsOf, recoveryShown, restingShown } = require('./recovery');
 const { creationShown } = require('./creation');
 const { levelsShown } = require('./levels');
+/** Where a save writes what PER LEVEL's max health comes to (7d5a; healthLevels.js healthByLevel). */
+const HEALTH_SHOWN_KEY = '_health';
 const { fieldsRolledBy } = require('./tableRolls');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf, LIMITS: NPC_LIMITS } = require('./npc');
@@ -78,6 +80,10 @@ const metaOf = (definition) => {
           const pools = poolsOf(definition, data);
           if (pools.length) data[WORKED_KEY].recovery = { ...recoveryShown(definition), pools: pools.map(({ id, label, die, total, spent }) => ({ id, label, die, total, spent })) };
         } else delete data[WORKED_KEY];
+        // MAX HEALTH: PER LEVEL (7d5a): what it comes to, each level, for the sheet and LEVEL_UP.EXE. Loaded here, as it
+        // reads the levels this module's own load leads to.
+        const byLevel = require('./healthLevels').healthByLevel(definition, data);
+        if (byLevel) data[HEALTH_SHOWN_KEY] = byLevel; else delete data[HEALTH_SHOWN_KEY];
         return changed;
       } catch (err) {
         console.error(`[systems] ${definition.name}: derived values not worked out:`, err.message);
@@ -325,4 +331,4 @@ const hiddenConditionsIn = (system) => {
 /** A published system's house rules, each with whether the table has it on; empty for any other. */
 const houseRulesIn = (system) => (loaded.has(system) ? loaded.get(system).render.house_rules : []);
 
-module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, catalogueCurrencyIn, conditionsIn, hiddenConditionsIn, definitionOf, houseRulesIn, metaOf, renderOf };
+module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, catalogueCurrencyIn, conditionsIn, hiddenConditionsIn, definitionOf, houseRulesIn, metaOf, renderOf, HEALTH_SHOWN_KEY };
