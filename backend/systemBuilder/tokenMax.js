@@ -11,10 +11,15 @@
 //
 // Only for the game running, whose vitals are on the token (another system's wait in token_vitals),
 // and only while it has token health on: off, the bonus stays as it was until the part is back.
+//
+// With MAX HEALTH: A FORMULA (7d4) the maximum is no longer the GM's number with the bonus added: it is set
+// outright, to the formula's value and the bonus, after each change to the sheet, the current moving by as much.
 
 const { overlayOf, tokenMaxFieldOf } = require('./choices');
 const { partOn } = require('./parts');
+const { healthOf } = require('./levels');
 const runtime = require('./runtime');
+const { healthFormulaValue } = require('./healthFormula');
 const { mutateSheetForUser } = require('../sheets/mutate');
 
 /** Where a sheet keeps what it has added to its token's maximum: { token, amount }. */
@@ -45,8 +50,21 @@ const moveFor = (definition, data, token) => {
   return by ? { by, data: { ...data, [TOKEN_MAX_KEY]: { token, amount: want } } } : null;
 };
 
+/**
+ * With a formula (7d4): how far `token`'s maximum, now `max`, moves to the formula and the bonus, { by, data }, the
+ * sheet recording the bonus; null when nothing moves. Null too without a formula that works out.
+ */
+const moveToFormula = (definition, data, token, max) => {
+  const base = healthFormulaValue(definition, data);
+  if (base === null) return null;
+  const bonus = bonusOf(definition, data);
+  const by = base + bonus - (Number.isFinite(max) ? max : 0);
+  const kept = by || addedTo(data, token) !== bonus;
+  return kept ? { by, data: { ...data, [TOKEN_MAX_KEY]: { token, amount: bonus } } } : null;
+};
+
 /** The player's token the bonus is kept against: the world map's, as the sheet reads its health. */
-const TOKEN_SQL = `SELECT id FROM locations WHERE shape = 'rhombus' AND owner = ?
+const TOKEN_SQL = `SELECT id, hp_max FROM locations WHERE shape = 'rhombus' AND owner = ?
   ORDER BY (battle_map_id IS NULL) DESC, id LIMIT 1`;
 
 /**
@@ -56,12 +74,16 @@ const TOKEN_SQL = `SELECT id FROM locations WHERE shape = 'rhombus' AND owner = 
  */
 const syncTokenMax = (db, system, username, cb = () => {}) => {
   const definition = runtime.definitionOf(system);
-  if (!definition || !partOn(definition, 'token_health') || !tokenMaxFieldOf(definition)) return cb(false);
+  if (!definition || !partOn(definition, 'token_health')) return cb(false);
+  const formula = healthOf(definition).how === 'formula';
+  if (!formula && !tokenMaxFieldOf(definition)) return cb(false);
   return db.get(TOKEN_SQL, [username], (err, token) => {
     if (err || !token) return cb(false);
     let by = 0;
     return mutateSheetForUser(db, { username, system }, (data) => {
-      const move = moveFor(definition, data, token.id);
+      // Where the formula is already met, the bonus is too, so moveFor finds nothing either; one that won't work out
+      // leaves the GM's number, with the bonus as before.
+      const move = moveToFormula(definition, data, token.id, token.hp_max) || moveFor(definition, data, token.id);
       if (!move) return undefined;
       by = move.by;
       return move.data;
@@ -93,4 +115,4 @@ const syncAllTokenMax = (db, system, cb = () => {}) => {
   });
 };
 
-module.exports = { TOKEN_MAX_KEY, bonusOf, addedTo, moveFor, syncTokenMax, syncAllTokenMax };
+module.exports = { TOKEN_MAX_KEY, bonusOf, addedTo, moveFor, moveToFormula, syncTokenMax, syncAllTokenMax };

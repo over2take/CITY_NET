@@ -27,7 +27,7 @@ afterEach(cleanup);
 
 describe('the "?" beside each setting', () => {
   it('has its words, each of them shown', () => {
-    open();
+    open({ levels: { health: { how: 'formula', formula: '10' } } });
     for (const [key, text] of Object.entries(HINTS).filter(([k]) => k.startsWith('levels.'))) {
       expect(screen.getByRole('note', { name: text }), key).toBeTruthy();
     }
@@ -169,5 +169,30 @@ describe('FILL IT AGAIN', () => {
     expect(total(3).value).toBe('900');
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(screen.queryByRole('button', { name: 'FILL IT AGAIN' })).toBeNull();
+  });
+});
+
+describe('MAX HEALTH (7d4)', () => {
+  it('AS IT IS to start, saying so; A FORMULA shows its box, its words and what it does', async () => {
+    open();
+    const group = screen.getByRole('group', { name: 'Max health' });
+    expect(within(group).getByRole('button', { name: 'AS IT IS' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('The number on each token, as the GM or the player sets it.')).toBeTruthy();
+    expect(screen.queryByRole('textbox', { name: 'Max health formula' })).toBeNull();
+    await userEvent.click(within(group).getByRole('button', { name: 'A FORMULA' }));
+    const box = screen.getByRole('textbox', { name: 'Max health formula' });
+    await userEvent.type(box, '10 + 2');
+    expect((box as HTMLInputElement).value).toBe('10 + 2');
+    expect(screen.getByText(/^The token's max health is worked out from the sheet after every change/)).toBeTruthy();
+    expect(screen.queryByText(/^TOKEN HEALTH is off/)).toBeNull();
+    await userEvent.click(within(group).getByRole('button', { name: 'AS IT IS' }));
+    expect(screen.queryByRole('textbox', { name: 'Max health formula' })).toBeNull();
+    await userEvent.click(within(group).getByRole('button', { name: 'A FORMULA' }));
+    expect((screen.getByRole('textbox', { name: 'Max health formula' }) as HTMLInputElement).value).toBe('10 + 2');
+  });
+
+  it('says the formula waits with TOKEN HEALTH off', () => {
+    open({ parts: { token_health: { on: false } }, levels: { health: { how: 'formula', formula: '10' } } });
+    expect(screen.getByText(/^TOKEN HEALTH is off on SETUP/)).toBeTruthy();
   });
 });

@@ -19,14 +19,19 @@
 // Pure: checks and reads only. The browser's copy of levelTable is sheets/levels.ts, held to this by its test.
 
 const { partOn } = require('./parts');
+const { parse } = require('./expression');
+const { tablesOf } = require('./derived');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /** Where a sheet keeps its XP. */
 const XP_KEY = '_xp';
 
-const LIMITS = { top: 30, xp: 1000000000000, ranges: 30, times: 100 };
-const KEYS = new Set(['top', 'first', 'ranges', 'typed']);
+const LIMITS = { top: 30, xp: 1000000000000, ranges: 30, times: 100, formula: 1000 };
+const KEYS = new Set(['top', 'first', 'ranges', 'typed', 'health']);
+/** MAX HEALTH (7d4): AS IT IS, the token's own number, or A FORMULA it is worked out from. PER LEVEL comes with 7d5. */
+const HEALTH_HOWS = ['as_is', 'formula'];
+const HEALTH_KEYS = new Set(['how', 'formula']);
 const RANGE_KEYS = new Set(['to', 'x']);
 /** What the page starts from, and a system saying nothing has. */
 const DEFAULTS = { top: 10, first: 300, ranges: [{ to: 10, x: 2 }] };
@@ -72,10 +77,30 @@ const levelsShown = (definition) => (advances(definition)
   ? { top: levelsOf(definition).top, ...(earnsXp(definition) ? { table: levelTable(definition) } : {}) } : null);
 
 /** A definition's levels checked, its problems added to `problems`. */
+/** MAX HEALTH as set (7d4): { how, formula? }. A formula is kept while AS IT IS, for going back to it. */
+const healthOf = (definition) => {
+  const h = definition && isPlainObject(definition.levels) && isPlainObject(definition.levels.health) ? definition.levels.health : {};
+  return { how: HEALTH_HOWS.includes(h.how) ? h.how : 'as_is', ...(typeof h.formula === 'string' ? { formula: h.formula } : {}) };
+};
+
+const checkHealth = (definition, h, problems) => {
+  const where = 'levels, health';
+  if (!isPlainObject(h)) { problems.push({ where, message: 'Must say how max health is set' }); return; }
+  for (const key of Object.keys(h)) if (!HEALTH_KEYS.has(key)) problems.push({ where: `${where}, ${key}`, message: 'Not part of max health' });
+  if (!HEALTH_HOWS.includes(h.how)) problems.push({ where: `${where}, how`, message: 'AS IT IS or A FORMULA' });
+  if (h.formula !== undefined && typeof h.formula !== 'string') problems.push({ where: `${where}, formula`, message: 'Must be a formula' });
+  if (h.how !== 'formula') return;
+  if (typeof h.formula !== 'string' || !h.formula.trim()) { problems.push({ where: `${where}, formula`, message: 'Write the formula max health is worked out from' }); return; }
+  if (h.formula.length > LIMITS.formula) { problems.push({ where: `${where}, formula`, message: `At most ${LIMITS.formula} characters` }); return; }
+  const tables = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
+  try { parse(h.formula, (name) => Object.prototype.hasOwnProperty.call(tables, name)); } catch (e) { problems.push({ where: `${where}, formula`, message: e.message }); }
+};
+
 const checkLevels = (definition, problems) => {
   const set = definition.levels;
   if (set === undefined) return;
   if (!isPlainObject(set)) { problems.push({ where: 'levels', message: 'Must say how levels work' }); return; }
+  if (set.health !== undefined) checkHealth(definition, set.health, problems);
   for (const key of Object.keys(set)) if (!KEYS.has(key)) problems.push({ where: `levels, ${key}`, message: 'Not part of levels' });
   if (set.top !== undefined && (!Number.isInteger(set.top) || set.top < 2 || set.top > LIMITS.top)) problems.push({ where: 'levels, top', message: `The highest level is from 2 to ${LIMITS.top}` });
   if (set.first !== undefined && (!Number.isInteger(set.first) || set.first < 1 || set.first > LIMITS.xp)) problems.push({ where: 'levels, first', message: 'Level 2 costs a whole amount, 1 or more' });
@@ -112,4 +137,4 @@ const checkLevels = (definition, problems) => {
   }
 };
 
-module.exports = { LIMITS, DEFAULTS, XP_KEY, levelsOf, levelTable, earnsXp, advances, levelsShown, checkLevels };
+module.exports = { LIMITS, DEFAULTS, XP_KEY, levelsOf, levelTable, earnsXp, advances, levelsShown, checkLevels, healthOf, HEALTH_HOWS };

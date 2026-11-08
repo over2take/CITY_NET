@@ -6,6 +6,10 @@ import {
   MOST_LEVEL, MULTIPLIERS, advancesBy, levelHomeNote, anyTyped, canAddRange, firstAsTyped, isTyped, topAsTyped, levelNotes, levelTable, levelsSet, withAdvancement, withFilledAgain,
   withFirst, withRangeAdded, withRangeOff, withRangeTo, withRangeX, withTop, withTyped, xpWord,
 } from '../sheets/levels';
+import { healthSet, withHealth, withHealthFormula } from '../sheets/levels';
+import { partIsOn } from '../sheets/wordsFeatures';
+import { useFormulaBox } from '../hooks/useFormulaBox';
+import type { systemsApi } from '../sheets/systemsApi';
 import { FieldName } from './HelpHint';
 import { WholeBox } from './WholeBox';
 
@@ -19,11 +23,14 @@ interface Props {
   edit: (next: Definition) => void;
   /** Where the XP word is changed. */
   onGoTo?: (page: BuilderPage) => void;
+  /** Reads a formula for the words under it. */
+  api?: Pick<ReturnType<typeof systemsApi>, 'previewFormulas'>;
 }
 
 const small: React.CSSProperties = { fontSize: 10, letterSpacing: 2, opacity: 0.75 };
 const why: React.CSSProperties = { fontSize: 12, lineHeight: 1.45, opacity: 0.85, margin: 0 };
 const btn: React.CSSProperties = { fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, padding: '4px 9px' };
+const formulaInput: React.CSSProperties = { background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--dark-green)', fontFamily: 'monospace', fontSize: 12, padding: '3px 6px', width: '100%', boxSizing: 'border-box' };
 const mini: React.CSSProperties = { fontFamily: 'monospace', fontSize: 11, padding: '0 6px', background: 'none', color: 'var(--green)', border: '1px solid var(--dark-green)', cursor: 'pointer' };
 const panel: React.CSSProperties = { border: '1px solid var(--dark-green)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 };
 const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '160px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' };
@@ -47,7 +54,13 @@ function RangeEnd({ value, label, onChange }: { value: number; label: string; on
   );
 }
 
-export function LevelsPage({ definition, edit, onGoTo }: Props) {
+export function LevelsPage({ definition, edit, onGoTo, api }: Props) {
+  const health = healthSet(definition);
+  const tokenHealth = partIsOn(definition, 'token_health');
+  const formula = useFormulaBox({
+    definition, api, kind: 'formula', value: health.formula, label: 'Max health formula', inputStyle: formulaInput,
+    placeholder: '10 + @con * @level', onChange: (text) => edit(withHealthFormula(definition, text)),
+  });
   const [asking, setAsking] = useState(false);
   const xp = advancesBy(definition, 'levels');
   const milestone = advancesBy(definition, 'milestone');
@@ -80,6 +93,24 @@ export function LevelsPage({ definition, edit, onGoTo }: Props) {
         {!xp && !milestone && <p style={why}>Off: characters don&apos;t go up here. Levels stay what the GM or the player types.</p>}
         {later.length > 0 && <p role="note" style={{ ...why, fontSize: 11 }}>SETUP also picks {later.map((id) => (id === 'spend' ? 'SPEND XP' : 'IMPROVE BY USE')).join(' and ')}. {later.length === 1 ? 'That comes' : 'Those come'} later, as their own pieces.</p>}
         {levelHomeNote(definition) && <p role="note" style={note}>{levelHomeNote(definition)}</p>}
+      </section>
+      <section aria-label="Max health" style={panel}>
+        <div style={grid}>
+          <FieldName beside hint={HINTS['levels.health']} style={small}>MAX HEALTH</FieldName>
+          <span role="group" aria-label="Max health" style={segGroup}>
+            <button type="button" aria-pressed={health.how === 'as_is'} style={seg(health.how === 'as_is')} onClick={() => edit(withHealth(definition, 'as_is'))}>AS IT IS</button>
+            <button type="button" aria-pressed={health.how === 'formula'} style={seg(health.how === 'formula')} onClick={() => edit(withHealth(definition, 'formula'))}>A FORMULA</button>
+          </span>
+          {health.how === 'formula' && <>
+            <FieldName beside hint={HINTS['levels.healthFormula']} style={small}>IT IS</FieldName>
+            {formula.field}
+          </>}
+        </div>
+        {health.how === 'formula' && formula.help}
+        <p style={why}>{health.how === 'formula'
+          ? 'The token\'s max health is worked out from the sheet after every change, and its health moves with it. Typed over on the token, it goes back to the formula at the next change.'
+          : 'The number on each token, as the GM or the player sets it.'}</p>
+        {health.how === 'formula' && !tokenHealth && <p role="note" style={note}>TOKEN HEALTH is off on SETUP, so there is no token health to set. The formula waits until it is on.</p>}
       </section>
       {xp && (
         <section aria-label="The XP table" style={panel}>

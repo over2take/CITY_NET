@@ -74,6 +74,24 @@ export const levelNotes = (d: Definition): string[] => {
   return notes;
 };
 
+/** MAX HEALTH (7d4; backend levels.js healthOf): AS IT IS, the token's own number, or A FORMULA. */
+export type HealthHow = 'as_is' | 'formula';
+export interface HealthSet { how: HealthHow; formula: string }
+export const healthSet = (d: Definition): HealthSet => {
+  const raw = (isObject(d.levels) ? d.levels : {}) as Record<string, unknown>;
+  const h = isObject(raw.health) ? raw.health : {};
+  return { how: h.how === 'formula' ? 'formula' : 'as_is', formula: typeof h.formula === 'string' ? h.formula : '' };
+};
+const withHealthSet = (d: Definition, h: HealthSet): Definition => {
+  const levels = { ...(isObject(d.levels) ? d.levels as Record<string, unknown> : {}) };
+  if (h.how === 'as_is' && !h.formula) delete levels.health;
+  else levels.health = { how: h.how, ...(h.formula ? { formula: h.formula } : {}) };
+  return { ...d, levels };
+};
+/** How max health is set. The formula is kept while AS IT IS, for going back to it. */
+export const withHealth = (d: Definition, how: HealthHow): Definition => withHealthSet(d, { ...healthSet(d), how });
+export const withHealthFormula = (d: Definition, formula: string): Definition => withHealthSet(d, { ...healthSet(d), formula });
+
 /** Said when going up has nothing to show it on: no levelled list, and no stat or formula called level (7d2b). */
 export const levelHomeNote = (d: Definition): string | null => {
   const lists = Array.isArray(d.choices) ? d.choices as Array<{ levelled?: unknown }> : [];
@@ -87,7 +105,8 @@ export const levelHomeNote = (d: Definition): string | null => {
 const write = (d: Definition, next: Partial<LevelsSet>): Definition => {
   const now = levelsSet(d);
   const raw = stored(d);
-  const merged = { top: raw.top ?? now.top, first: raw.first ?? now.first, ranges: now.ranges, typed: now.typed, ...next };
+  // Whatever else levels holds (MAX HEALTH, 7d4) is kept as it is.
+  const merged = { ...raw, top: raw.top ?? now.top, first: raw.first ?? now.first, ranges: now.ranges, typed: now.typed, ...next };
   const { typed, ...rest } = merged;
   return { ...d, levels: { ...rest, ranges: tidyRanges(rest.ranges, topOf(rest.top)), ...(Object.keys(typed).length ? { typed } : {}) } };
 };
