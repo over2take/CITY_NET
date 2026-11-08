@@ -32,7 +32,7 @@ const { withThrow, boardOf } = require('../utils/diceThrow');
 const { syncTokenMax } = require('../systemBuilder/tokenMax');
 const { maySpend, restingOf, OPEN_SETTING } = require('../systemBuilder/recovery');
 const { creationAction, statRollLine } = require('../systemBuilder/creation');
-const { levelAction } = require('../systemBuilder/levelUp');
+const { levelAction, healthRollLine } = require('../systemBuilder/levelUp');
 const { kitPatch, kitTakenBack } = require('../sheets/kitGiving');
 const identity = require('../sheets/identity');
 const { takeRest } = require('../sheets/rests');
@@ -177,15 +177,19 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
     if (!payload || typeof payload !== 'object') return;
     withCaller(payload, 'choicesRefused', ({ gm, username, system, definition, refuse }) => {
       let error = null;
+      let rolled = null;
       mutateSheetForUser(db, { username, system }, (data) => {
-        const done = levelAction(definition, data, payload, { gm });
+        const done = levelAction(definition, data, payload, { gm, rng });
         if (!done.ok) { error = done.error; return undefined; }
+        rolled = done.rolled || null;
         sheetTemplates.applyDerived(system, done.data);
         return done.data;
       }, (err2, stored) => {
         if (error) return refuse(error);
         if (err2) return refuse('That character has no sheet yet');
         if (!stored) return undefined;
+        // A level's health rolled (7d5b): in the log and the tray, for the table to see.
+        if (rolled) announceRoll(username, stored, rolled, healthRollLine, 'HEALTH');
         return syncTokenMax(db, system, username, (moved) => {
           if (moved) io.emit('dataUpdated', { isRhombusOnly: true });
           io.emit('sheetUpdated', { username, system });

@@ -7,6 +7,10 @@
 // levelled list it is a stat called level, written whether the system has one or not, so a game with neither
 // still counts. A system with both raises the two together. Changing XP never moves a level.
 //
+// MAX HEALTH: PER LEVEL by ROLL or THE PLAYER CHOOSES (7d5b): the level's die is rolled in the window and kept with the
+// place, for the class it was rolled for, the moment it's rolled, as every roll in the flow is: the player can't roll
+// again, take the average instead, or move to another class until the GM clears it. FINISH takes it as the level's.
+//
 // LEVEL_UP.EXE (7d3a) keeps the player's place under LEVELING_KEY, which class they're raising, so leaving the
 // window loses nothing. Nothing else changes until FINISH, which is 'up'. From 7d3b the class can be one they don't
 // hold yet, from a levelled list with room, coming in at level 1, and FINISH brings the picks the new level opens:
@@ -17,7 +21,10 @@
 const { choicesOf, heldOf, levelsOf, targetsOf, pickedOf } = require('./choices');
 const { pickAction } = require('./picking');
 const { XP_KEY, advances, earnsXp, levelTable, levelsOf: settingsOf, healthOf, levelDie, averageOf, HEALTH_LEVELS_KEY } = require('./levels');
-const { creatingNow } = require('./creation');
+const { creatingNow, ROLLED_KEPT } = require('./creation');
+const crypto = require('crypto');
+
+const cryptoRng = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32;
 
 const OWED_KEY = '_levels_owed';
 /** Where LEVEL_UP.EXE's place is kept (7d3a): { list, option } for a class, {} for the level itself. */
@@ -28,16 +35,45 @@ const MOST_PICKS = 20;
 /** The picks sent with a level up, as far as they read: [{ list, option, from? }]. */
 const picksOf = (v) => (Array.isArray(v) ? v : []).filter((p) => isPlainObject(p) && typeof p.list === 'string' && typeof p.option === 'string')
   .slice(0, MOST_PICKS).map((p) => ({ list: p.list, option: p.option, ...(typeof p.from === 'string' ? { from: p.from } : {}) }));
+/** The place's health (7d5b): { roll, die } once rolled, { average: true } once the average was taken. Null before. */
+const healthPlaceOf = (data) => {
+  const place = isPlainObject(data) ? data[LEVELING_KEY] : null;
+  // Whatever reads it checks the roll and the average for itself.
+  return isPlainObject(place) && place.health ? place.health : null;
+};
+/** Whether the place is for this target: the class, or the level itself. */
+const placedFor = (data, target) => {
+  const place = isPlainObject(data) ? data[LEVELING_KEY] : null;
+  if (!isPlainObject(place)) return false;
+  // An option's id is the system's own, across every list.
+  return !!target.stat || place.option === target.option.id;
+};
+/** A kept roll for another class: what to say, or null. */
+const rolledForAnother = (data, target) => {
+  const health = healthPlaceOf(data);
+  if (!health || !Number.isInteger(health.roll) || placedFor(data, target)) return null;
+  return 'Rolled for health, and kept: your GM can clear it to change class';
+};
+
 /**
  * MAX HEALTH: PER LEVEL (7d5a): the sheet with what the level it reached gained, from the die of the class going up
- * (the die for all for the level itself, there being no class). Nothing kept where health isn't per level.
+ * (the die for all for the level itself, there being no class): { data } or { error }. AVERAGE (FIXED) takes half the
+ * die; ROLL (7d5b) the roll kept with the place, which it must have but from the GM; THE PLAYER CHOOSES either.
+ * Nothing kept where health isn't per level.
  */
-const withHealthKept = (definition, after, target) => {
-  if (healthOf(definition).how !== 'level') return after;
+const withHealthKept = (definition, before, after, target, gm) => {
+  const h = healthOf(definition);
+  if (h.how !== 'level') return { data: after };
   const level = characterLevel(definition, after);
   const die = levelDie(definition, target.option || null);
+  const health = placedFor(before, target) ? healthPlaceOf(before) : null;
+  // Nothing is rolled without a die.
+  const rolled = health && Number.isInteger(health.roll) ? health.roll : null;
+  const average = h.gain === 'average' || (health && health.average === true) || die === null || gm;
+  if (rolled === null && !average) return { error: h.gain === 'roll' ? 'Roll for health first' : 'Take the average or roll for health first' };
   const kept = isPlainObject(after[HEALTH_LEVELS_KEY]) ? after[HEALTH_LEVELS_KEY] : {};
-  return { ...after, [HEALTH_LEVELS_KEY]: { ...kept, [level]: { die, took: averageOf(die) } } };
+  const took = rolled === null ? { took: averageOf(die) } : { took: rolled, rolled: true };
+  return { data: { ...after, [HEALTH_LEVELS_KEY]: { ...kept, [level]: { die, ...took } } } };
 };
 /** The sheet without what a level it has left gained. */
 const withHealthGone = (data, level) => {
@@ -126,10 +162,12 @@ const pickTarget = (definition, data, action) => {
  * { kind: 'up', list, option }: the player when it's available, or the GM any time, to go up now.
  * { kind: 'place', list, option, picks }: which LEVEL_UP.EXE is raising, and the picks made in it, kept until they go up.
  * 'up' takes the picks too: [{ list, option, from }], made once the level is.
+ * { kind: 'healthRoll' | 'healthAverage', list, option } (7d5b): the level's health rolled, or its average taken, kept
+ * with the place; a roll comes back as `rolled` for the tray. { kind: 'clearHealth' }: the GM's CLEAR THE ROLL.
  * { kind: 'give' }: the GM's LEVEL_UP, a level for the player to take. { kind: 'down', option }: the GM's LEVEL_DOWN.
  * Gives { ok: true, data, level, owed } or { ok: false, error }.
  */
-const levelAction = (definition, data, action, { gm = false } = {}) => {
+const levelAction = (definition, data, action, { gm = false, rng = cryptoRng } = {}) => {
   const sheet = isPlainObject(data) ? data : {};
   const kind = isPlainObject(action) ? action.kind : null;
   if (!advances(definition)) return { ok: false, error: 'Levels here are typed in' };
@@ -145,7 +183,9 @@ const levelAction = (definition, data, action, { gm = false } = {}) => {
     if (error) return { ok: false, error };
     const raised = moved(definition, sheet, target, 1, gm);
     if (raised.error) return { ok: false, error: raised.error };
-    const picked = withPicksMade(definition, withHealthKept(definition, raised.data, target), picksOf(action.picks), gm);
+    const health = withHealthKept(definition, sheet, raised.data, target, gm);
+    if (health.error) return { ok: false, error: health.error };
+    const picked = withPicksMade(definition, health.data, picksOf(action.picks), gm);
     if (picked.error) return { ok: false, error: picked.error };
     const next = settled(picked.data);
     // XP covers it, or a level the GM gave does. What was earned isn't spent on what was given.
@@ -156,10 +196,41 @@ const levelAction = (definition, data, action, { gm = false } = {}) => {
     if (!gm && !xpReady(definition, sheet, level) && !owed) return { ok: false, error: NOT_YET };
     const { target, error } = pickTarget(definition, sheet, action);
     if (error) return { ok: false, error };
+    const another = !gm && rolledForAnother(sheet, target);
+    if (another) return { ok: false, error: another };
     const picks = picksOf(action.picks);
-    return said({ ...sheet, [LEVELING_KEY]: { ...(target.stat ? {} : { list: target.list.id, option: target.option.id }), ...(picks.length ? { picks } : {}) } });
+    // The health already settled for this class stays with it.
+    const health = placedFor(sheet, target) ? healthPlaceOf(sheet) : null;
+    return said({ ...sheet, [LEVELING_KEY]: { ...(target.stat ? {} : { list: target.list.id, option: target.option.id }), ...(picks.length ? { picks } : {}), ...(health ? { health } : {}) } });
+  }
+  if (kind === 'healthRoll' || kind === 'healthAverage') {
+    const h = healthOf(definition);
+    if (h.how !== 'level' || h.gain === 'average' || (kind === 'healthAverage' && h.gain !== 'choose')) {
+      return { ok: false, error: kind === 'healthRoll' ? 'Health isn\'t rolled in this game' : 'Health here isn\'t the player\'s to choose' };
+    }
+    if (atTop(definition, level)) return { ok: false, error: 'Already the highest level' };
+    if (!gm && !xpReady(definition, sheet, level) && !owed) return { ok: false, error: NOT_YET };
+    const { target, error } = pickTarget(definition, sheet, action);
+    if (error) return { ok: false, error };
+    const another = !gm && rolledForAnother(sheet, target);
+    if (another) return { ok: false, error: another };
+    const kept = placedFor(sheet, target) ? healthPlaceOf(sheet) : null;
+    if (!gm && kept && Number.isInteger(kept.roll)) return { ok: false, error: ROLLED_KEPT };
+    const die = levelDie(definition, target.option || null);
+    if (die === null) return { ok: false, error: `Nothing to roll: ${target.stat ? 'there is no die for every level' : `${target.option.label || target.option.id} has no HIT DIE`}` };
+    const place = placedFor(sheet, target) ? sheet[LEVELING_KEY] : {};
+    const at = { ...(target.stat ? {} : { list: target.list.id, option: target.option.id }), ...(Array.isArray(place.picks) ? { picks: place.picks } : {}) };
+    if (kind === 'healthAverage') return said({ ...sheet, [LEVELING_KEY]: { ...at, health: { average: true } } });
+    const roll = Math.floor(rng() * die) + 1;
+    return { ...said({ ...sheet, [LEVELING_KEY]: { ...at, health: { roll, die } } }), rolled: { sides: die, rolls: [roll], total: roll } };
   }
   if (!gm) return { ok: false, error: 'That is the GM\'s to do' };
+  if (kind === 'clearHealth') {
+    const health = healthPlaceOf(sheet);
+    if (!health || !Number.isInteger(health.roll)) return { ok: false, error: 'Nothing rolled there to clear' };
+    const { health: gone, ...place } = sheet[LEVELING_KEY];
+    return said({ ...sheet, [LEVELING_KEY]: place });
+  }
   if (kind === 'give') {
     if (atTop(definition, level + owed)) return { ok: false, error: 'Already the highest level' };
     return said(withOwed(sheet, owed + 1));
@@ -179,4 +250,7 @@ const levelAction = (definition, data, action, { gm = false } = {}) => {
 /** The stat a player can't type while levels go up on their own, once the character is made. */
 const lockedByLevels = (definition, data) => (definition && advances(definition) && !creatingNow(definition, isPlainObject(data) ? data : {}) ? new Set(['level']) : new Set());
 
-module.exports = { OWED_KEY, LEVELING_KEY, characterLevel, levelTargets, levelAction, lockedByLevels };
+/** The dice-log line for a level's health roll (7d5b): "Wren rolled Health (d10) [7]". */
+const healthRollLine = (who, rolled) => `${who} rolled Health (d${rolled.sides}) [${rolled.total}]`;
+
+module.exports = { OWED_KEY, LEVELING_KEY, characterLevel, levelTargets, levelAction, lockedByLevels, healthRollLine };

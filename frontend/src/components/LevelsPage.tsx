@@ -6,7 +6,7 @@ import {
   MOST_LEVEL, MULTIPLIERS, advancesBy, levelHomeNote, anyTyped, canAddRange, firstAsTyped, isTyped, topAsTyped, levelNotes, levelTable, levelsSet, withAdvancement, withFilledAgain,
   withFirst, withRangeAdded, withRangeOff, withRangeTo, withRangeX, withTop, withTyped, xpWord,
 } from '../sheets/levels';
-import { classDice, healthSet, withHealth, withHealthAdds, withHealthDie, withHealthDieOn, withHealthFormula } from '../sheets/levels';
+import { classDice, healthSet, withHealth, withHealthAdds, withHealthDie, withHealthDieOn, withHealthFormula, withHealthGain, GAIN_WORDS, type HealthGainBy } from '../sheets/levels';
 import { DIE_CHOICES } from '../sheets/recovery';
 import { partIsOn } from '../sheets/wordsFeatures';
 import { useFormulaBox } from '../hooks/useFormulaBox';
@@ -122,8 +122,10 @@ export function LevelsPage({ definition, edit, onGoTo, api }: Props) {
               )}
             </span>
             <FieldName beside hint={HINTS['levels.healthGain']} style={small}>GAINED BY</FieldName>
-            <select aria-label="How health is gained" value="average" style={formulaInput} onChange={() => {}}>
+            <select aria-label="How health is gained" value={health.gain} style={formulaInput} onChange={(e) => edit(withHealthGain(definition, e.target.value as HealthGainBy))}>
               <option value="average">AVERAGE (FIXED)</option>
+              <option value="roll">ROLL</option>
+              <option value="choose">THE PLAYER CHOOSES</option>
             </select>
             <FieldName beside hint={HINTS['levels.healthAdds']} style={small}>EACH LEVEL ADDS</FieldName>
             {adds.field}
@@ -135,6 +137,7 @@ export function LevelsPage({ definition, edit, onGoTo, api }: Props) {
         </div>
         {health.how === 'formula' && formula.help}
         {health.how === 'level' && adds.help}
+        {health.how === 'level' && <p style={why} aria-label="How a level gains it">{GAIN_WORDS[health.gain]}</p>}
         {health.how === 'level' && health.dieOn === 'class' && (
           <p style={why} aria-label="Each class's die">{dice.length
             ? dice.map((c) => `${c.name.toUpperCase()} ${c.die ? `D${c.die}` : 'NO HIT DIE'}`).join(' · ')
@@ -146,7 +149,7 @@ export function LevelsPage({ definition, edit, onGoTo, api }: Props) {
         <p style={why}>{health.how === 'formula'
           ? 'The token\'s max health is worked out from the sheet after every change, and its health moves with it. Typed over on the token, it goes back to the formula at the next change.'
           : health.how === 'level'
-            ? 'Level 1 has the full die; each level after it gains half the die, rounded up, and what each level adds. Kept as they go up, and recounted when a stat changes. The token follows it.'
+            ? 'Level 1 has the full die; each level after it gains what GAINED BY says, and what each level adds. Kept as they go up, and recounted when a stat changes. The token follows it.'
             : 'The number on each token, as the GM or the player sets it.'}</p>
         {health.how !== 'as_is' && !tokenHealth && <p role="note" style={note}>TOKEN HEALTH is off on SETUP, so there is no token health to set. It waits until that is on.</p>}
       </section>

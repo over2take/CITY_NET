@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { LEVEL_UP_STEP_NAMES, healthGain, chosenTarget, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted, unlockedBy, withPickToggled, type Unlocked } from '../levelUpFlow';
+import { LEVEL_UP_STEP_NAMES, gmLevelingLine, healthGain, healthRolledFor, chosenTarget, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted, unlockedBy, withPickToggled, type Unlocked } from '../levelUpFlow';
 import { WORKED_KEY } from '../choicesShown';
-import type { LevelUpOffer } from '../xpMeter';
+import { levelUpOffer, type LevelUpOffer } from '../xpMeter';
 import type { SheetTemplate } from '../types';
 
 /** LEVEL_UP.EXE as logic (7d3a): its folders, which is going up, what the new level brings, and its title. */
@@ -209,18 +209,19 @@ describe('HEALTH, per level (7d5a)', () => {
   });
 
   it('the class going up\'s die, half rounded up, with what each level adds; at least 1', () => {
-    expect(healthGain(tpl(ON), data(2), SOLDIER)).toEqual({ die: 10, average: 5, adds: 2, gained: 7 });
-    expect(healthGain(tpl(ON), data(-9), MAGE)).toEqual({ die: 6, average: 3, adds: -9, gained: 1 });
-    expect(healthGain(tpl(ON), data(), MAGE)).toEqual({ die: 6, average: 3, adds: 0, gained: 3 });
+    const A = { by: 'average', rolled: null, tookAverage: false };
+    expect(healthGain(tpl(ON), data(2), SOLDIER)).toEqual({ die: 10, average: 5, adds: 2, gained: 7, ...A });
+    expect(healthGain(tpl(ON), data(-9), MAGE)).toEqual({ die: 6, average: 3, adds: -9, gained: 1, ...A });
+    expect(healthGain(tpl(ON), data(), MAGE)).toEqual({ die: 6, average: 3, adds: 0, gained: 3, ...A });
   });
 
   it('the level itself has only the die for all; one for all; none', () => {
     expect(healthGain(tpl(ON), data(1), { name: 'LEVEL', level: 3 })?.die).toBeNull();
     expect(healthGain(tpl({ ...ON, dieOn: 'all', die: 8 }), data(1), { name: 'LEVEL', level: 3 })?.die).toBe(8);
     // An odd die rounds up.
-    expect(healthGain(tpl({ ...ON, dice: { soldier: 7 } }), data(0), SOLDIER)).toEqual({ die: 7, average: 4, adds: 0, gained: 4 });
+    expect(healthGain(tpl({ ...ON, dice: { soldier: 7 } }), data(0), SOLDIER)).toMatchObject({ die: 7, average: 4, adds: 0, gained: 4 });
     expect(healthGain(tpl({ ...ON, dieOn: 'all', die: 8 }), data(1), SOLDIER)?.die).toBe(8);
-    expect(healthGain(tpl({ ...ON, dieOn: 'all' }), data(1), SOLDIER)).toEqual({ die: null, average: 0, adds: 1, gained: 1 });
+    expect(healthGain(tpl({ ...ON, dieOn: 'all' }), data(1), SOLDIER)).toMatchObject({ die: null, average: 0, adds: 1, gained: 1 });
     expect(healthGain(tpl(ON), data(1), { ...SOLDIER, option: 'rogue' })?.die).toBeNull();
     expect(healthGain(tpl(ON), {}, { name: 'LEVEL', level: 1 })?.die).toBeNull();
   });
@@ -228,5 +229,53 @@ describe('HEALTH, per level (7d5a)', () => {
   it('nothing where health isn\'t per level', () => {
     expect(healthGain(tpl(undefined), data(2), SOLDIER)).toBeNull();
     expect(healthGain(null, data(2), SOLDIER)).toBeNull();
+  });
+});
+
+describe('HEALTH rolled, or the player choosing (7d5b)', () => {
+  const tpl = (gain: string) => ({ levels: { top: 10, table: { 2: 1, 3: 2, 4: 3 }, health: { gain, dieOn: 'class', dice: { soldier: 10, mage: 6 } } },
+    choices: [{ id: 'classes', one: 'Class', levelled: true, options: [{ id: 'soldier', label: 'Soldier', features: [] }, { id: 'mage', label: 'Mage', features: [] }] }] }) as unknown as SheetTemplate;
+  const data = (health?: object, place: object = { list: 'classes', option: 'soldier' }) => ({
+    _xp: 9, [WORKED_KEY]: { picks: [{ list: 'classes', option: 'soldier', level: 2 }, { list: 'classes', option: 'mage', level: 1 }], levels: { level: 3 } }, _health: { adds: 2 },
+    ...(health === undefined ? {} : { _leveling: { ...place, health } }),
+  });
+
+  it('ROLL: nothing gained until rolled; the roll kept for this class, with what each level adds', () => {
+    expect(healthGain(tpl('roll'), data(), SOLDIER)).toEqual({ die: 10, average: 5, adds: 2, by: 'roll', rolled: null, tookAverage: false, gained: null });
+    expect(healthGain(tpl('roll'), data({ roll: 7, die: 10 }), SOLDIER)?.gained).toBe(9);
+    expect(healthGain(tpl('roll'), data({ roll: 1, die: 10 }), { ...SOLDIER })?.rolled).toBe(1);
+    // A low roll still gains 1.
+    expect(healthGain(tpl('roll'), { ...data({ roll: 1, die: 10 }), _health: { adds: -3 } }, SOLDIER)?.gained).toBe(1);
+    // A roll kept for Soldier is no roll for Mage.
+    expect(healthGain(tpl('roll'), data({ roll: 7, die: 10 }), MAGE)?.rolled).toBeNull();
+    expect(healthGain(tpl('roll'), data({ roll: 7, die: 10 }), MAGE)?.gained).toBeNull();
+  });
+
+  it('THE PLAYER CHOOSES: the average once taken, or the roll', () => {
+    expect(healthGain(tpl('choose'), data(), SOLDIER)?.gained).toBeNull();
+    expect(healthGain(tpl('choose'), data({ average: true }), SOLDIER)).toMatchObject({ tookAverage: true, gained: 7 });
+    expect(healthGain(tpl('choose'), data({ roll: 2, die: 10 }), SOLDIER)).toMatchObject({ rolled: 2, gained: 4 });
+    expect(healthGain(tpl('choose'), data({ average: true }), MAGE)?.tookAverage).toBe(false);
+  });
+
+  it('a class with no die has nothing to roll: what each level adds, settled', () => {
+    expect(healthGain(tpl('roll'), data(), { list: 'classes', option: 'rogue', name: 'Rogue', level: 1 })?.gained).toBe(2);
+  });
+
+  it('the class a kept roll belongs to, while another is shown', () => {
+    const offer = levelUpOffer(tpl('roll'), data({ roll: 7, die: 10 }))!;
+    expect(healthRolledFor(offer, offer.targets, MAGE)).toBe('Soldier');
+    expect(healthRolledFor(offer, offer.targets, SOLDIER)).toBeNull();
+    expect(healthRolledFor(levelUpOffer(tpl('roll'), data({ average: true }))!, offer.targets, MAGE)).toBeNull();
+    expect(healthRolledFor(levelUpOffer(tpl('roll'), data())!, offer.targets, MAGE)).toBeNull();
+  });
+
+  it('the GM\'s line: where they are, a kept roll to clear', () => {
+    expect(gmLevelingLine(tpl('roll'), data({ roll: 7, die: 10 }))).toEqual({ words: 'LEVELING UP · SOLDIER 2 → 3 · HEALTH ROLLED 7 ON A D10', canClear: true });
+    expect(gmLevelingLine(tpl('roll'), data({ average: true }))).toEqual({ words: 'LEVELING UP · SOLDIER 2 → 3 · HEALTH: THE AVERAGE', canClear: false });
+    expect(gmLevelingLine(tpl('roll'), data({}, { list: 'classes', option: 'rogue' }))).toEqual({ words: 'LEVELING UP · NEW: ROGUE', canClear: false });
+    expect(gmLevelingLine(tpl('roll'), { ...data(), _leveling: {} })).toEqual({ words: 'LEVELING UP · THE NEXT LEVEL', canClear: false });
+    expect(gmLevelingLine(tpl('roll'), data())).toBeNull();
+    expect(gmLevelingLine(null, data({ roll: 7 }))).toBeNull();
   });
 });

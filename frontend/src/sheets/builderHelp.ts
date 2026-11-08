@@ -283,7 +283,7 @@ export const HINTS = {
   'levels.top': 'The most a character can reach, from 2 to 30.',
   'levels.health': 'Where a character\'s max health comes from. AS IT IS: the number on their token, set by hand. A FORMULA: worked out from the sheet, so it follows the stats and levels on its own. PER LEVEL: a die each level, kept as they go up.',
   'levels.healthDie': 'ON EACH CLASS: a level rolls the HIT DIE of the class going up, set on CHOICES. ONE FOR ALL: every level rolls the same die.',
-  'levels.healthGain': 'How a level gains health from its die. AVERAGE (FIXED): half the die, rounded up, every time, with nothing to roll.',
+  'levels.healthGain': 'How a level gains health from its die. AVERAGE (FIXED): half the die, rounded up, with nothing to roll. ROLL: rolled in LEVEL_UP.EXE and kept. THE PLAYER CHOOSES: the average, or a roll.',
   'levels.healthAdds': 'Added to every level, as the sheet is now, so changing a stat recounts them all: @con_mod. Never less than 1 in a level. Level 1 has the full die.',
   'levels.healthFormula': 'Reads stats, formulas and levels, as a formula on STATS & RULES does: 10 + @con * @level. Features that add to max health still add on top.',
   'levels.word': 'What this game calls experience, like KARMA or MARKS. It is one of the words on the WORDS page.',

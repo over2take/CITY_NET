@@ -212,6 +212,12 @@ describe('MAX HEALTH: PER LEVEL (7d5a)', () => {
     expect(screen.queryByRole('combobox', { name: 'The die for every level' })).toBeNull();
     expect(screen.getByText('A class with no HIT DIE gains only what each level adds. Set one on CHOICES.')).toBeTruthy();
     expect(screen.getByRole('combobox', { name: 'How health is gained' })).toHaveProperty('value', 'average');
+    expect(screen.getByLabelText('How a level gains it').textContent).toBe('Half the die, rounded up, every time. Nothing to roll.');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'How health is gained' }), 'roll');
+    expect(screen.getByRole('combobox', { name: 'How health is gained' })).toHaveProperty('value', 'roll');
+    expect(screen.getByLabelText('How a level gains it').textContent).toMatch(/^Rolled each level in the tray/);
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'How health is gained' }), 'choose');
+    expect(screen.getByLabelText('How a level gains it').textContent).toMatch(/^Each level, the player takes the average or rolls/);
     expect(screen.getByRole('textbox', { name: 'Each level adds' })).toBeTruthy();
     expect(screen.getByText(/^Level 1 has the full die/)).toBeTruthy();
     await userEvent.click(within(screen.getByRole('group', { name: 'Where the die is set' })).getByRole('button', { name: 'ONE FOR ALL' }));

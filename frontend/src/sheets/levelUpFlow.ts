@@ -4,7 +4,7 @@
 // and the picks a new level opens are made in the window, FINISH waiting for them.
 
 import { listShown, pickedOf, workedOn, type ChoiceListShown, type FeatureShown, type OptionShown } from './choicesShown';
-import { characterLevel, HEALTH_SHOWN_KEY, type LevelTarget, type LevelUpOffer, type LevelUpPick } from './xpMeter';
+import { characterLevel, levelUpOffer, HEALTH_SHOWN_KEY, type HealthGainBy, type LevelTarget, type LevelUpOffer, type LevelUpPick } from './xpMeter';
 import type { SheetTemplate } from './types';
 
 export type LevelUpStep = 'which' | 'health' | 'unlocks';
@@ -27,8 +27,12 @@ export const newClasses = (template: SheetTemplate | null | undefined, data: Rec
 export const levelUpSteps = (offer: LevelUpOffer, more = 0, health = false): LevelUpStep[] =>
   [...(offer.targets.length + more > 1 ? ['which' as const] : []), ...(health ? ['health' as const] : []), 'unlocks'];
 
-/** What a level gains (7d5a), AVERAGE (FIXED): { die, average, adds, gained }, or null where health isn't per level. */
-export interface HealthGain { die: number | null; average: number; adds: number; gained: number }
+/**
+ * What a level gains (7d5a; ROLL and THE PLAYER CHOOSES, 7d5b): the die, its average, what each level adds, how it's
+ * gained, the roll kept for this class, and what it all comes to: `gained` null while there is still something to
+ * roll or choose. Null where health isn't per level.
+ */
+export interface HealthGain { die: number | null; average: number; adds: number; by: HealthGainBy; rolled: number | null; tookAverage: boolean; gained: number | null }
 export const healthGain = (template: SheetTemplate | null | undefined, data: Record<string, unknown> | null | undefined, target: LevelTarget): HealthGain | null => {
   const h = template?.levels?.health;
   if (!h) return null;
@@ -37,7 +41,34 @@ export const healthGain = (template: SheetTemplate | null | undefined, data: Rec
   const shown = data?.[HEALTH_SHOWN_KEY] as { adds?: unknown } | undefined;
   const adds = typeof shown?.adds === 'number' ? shown.adds : 0;
   const average = die ? Math.ceil(die / 2) : 0;
-  return { die, average, adds, gained: Math.max(1, average + adds) };
+  const place = levelUpOffer(template, data)?.leveling;
+  const here = !!place && place.list === target.list && place.option === target.option;
+  const rolled = here && typeof place?.health?.roll === 'number' ? place.health.roll : null;
+  const tookAverage = here && place?.health?.average === true;
+  const fixed = h.gain === 'average' || !die || tookAverage;
+  const gained = rolled !== null ? Math.max(1, rolled + adds) : fixed ? Math.max(1, average + adds) : null;
+  return { die, average, adds, by: h.gain, rolled, tookAverage, gained };
+};
+
+/** The class a kept health roll was made for, by name, while it's another than `target` (7d5b): it can't be left. */
+export const healthRolledFor = (offer: LevelUpOffer, targets: LevelTarget[], target: LevelTarget): string | null => {
+  const place = offer.leveling;
+  if (typeof place?.health?.roll !== 'number' || (place.list === target.list && place.option === target.option)) return null;
+  return targets.find((t) => t.list === place.list && t.option === place.option)?.name ?? null;
+};
+
+/** The GM's line on a player's sheet while they level up (7d5b): where they are, and a kept health roll to clear. */
+export const gmLevelingLine = (template: SheetTemplate | null | undefined, data: Record<string, unknown> | null | undefined): { words: string; canClear: boolean } | null => {
+  const offer = levelUpOffer(template, data);
+  if (!offer?.leveling) return null;
+  const place = offer.leveling;
+  const target = offer.targets.find((t) => t.list === place.list && t.option === place.option);
+  const name = target ? `${target.option ? target.name.toUpperCase() : 'LEVEL'} ${target.level} → ${target.level + 1}` : place.option ? `NEW: ${place.option.toUpperCase()}` : 'THE NEXT LEVEL';
+  const roll = place.health?.roll;
+  return {
+    words: `LEVELING UP · ${name}${typeof roll === 'number' ? ` · HEALTH ROLLED ${roll}${place.health?.die ? ` ON A D${place.health.die}` : ''}` : place.health?.average ? ' · HEALTH: THE AVERAGE' : ''}`,
+    canClear: typeof roll === 'number',
+  };
 };
 
 const same = (t: LevelTarget, place: { list?: string; option?: string }) => t.list === place.list && t.option === place.option;

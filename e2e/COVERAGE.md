@@ -94,6 +94,8 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 | Levels | MAX HEALTH: A FORMULA (7d4) | `levels` | `builder-levels`, `sheet-health-formula` | Proven at the table |
 | Levels | MAX HEALTH: PER LEVEL, ON EACH CLASS, AVERAGE (FIXED), EACH LEVEL ADDS (7d5a) | `levels` | `builder-levels`, `sheet-health-levels` | Proven at the table |
 | Levels | MAX HEALTH: PER LEVEL, ONE FOR ALL (7d5a) | `levels` | `builder-levels` | **BUILDER AND SERVER TESTS**: the table's journey uses each class's die |
+| Levels | MAX HEALTH: PER LEVEL, GAINED BY ROLL, and CLEAR THE ROLL (7d5b) | `levels` | `sheet-health-levels` | Proven at the table |
+| Levels | MAX HEALTH: PER LEVEL, GAINED BY THE PLAYER CHOOSES (7d5b) | `levels` | none yet | **COMPONENT AND SERVER TESTS**: TAKE and ROLL INSTEAD in the window |
 | Levels | The XP part switched off | `parts`, `levels` | none yet | **BACKEND AND COMPONENT TESTS** only |
 | New character, uploads | A line per list on the form and template, read by name: one not met, one not found, one replacing a lock, one under a feature, one not named cleared, the inventory added to | `sheet_import`, `sheet_form` | `sheet-import-picks` | Proven at the table (7c6) through a pasted file; the PDF's round trip **BACKEND TESTS** only |
 | New character, the GM's side | FILL IT IN FOR THEM, every limit off; CLEAR THE ROLL | `_creating` | `sheet-new-character-gm` | Proven at the table (7c5b) for stats; CLEAR THE ROLL on money and an option's money **BACKEND AND COMPONENT TESTS** only |
