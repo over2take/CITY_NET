@@ -503,3 +503,57 @@ describe('ABILITY INCREASE (7d6b)', () => {
     expect(folders()).toEqual(['WHAT IT UNLOCKS']);
   });
 });
+
+describe('OR A FEAT INSTEAD (7d6c)', () => {
+  const STATS = [{ id: 'might', label: 'Might' }, { id: 'wits', label: 'Wits' }];
+  const FEATS = { id: 'feats', one: 'Feat', many: 'Feats', picks: 1, again: false, levelled: false, picked: 'features', options: [
+    { id: 'tough', label: 'Tough', features: [] }, { id: 'quick', label: 'Quick', needs: 'WITS >= 15', features: [] },
+  ] };
+  const RAISING = { ...ONE, options: [{ id: 'soldier', label: 'Soldier', features: [
+    { id: 'asi', label: 'Ability Score Improvement', at: 3, increase: { points: 2, most: 2, stats: STATS, instead: 'feats' } },
+  ] }] };
+  const data = () => holding([['soldier', 2]], 9000, { might: 14, wits: 12, _worked: { picks: [{ list: 'classes', option: 'soldier', level: 2 }], levels: { level: 2 }, unmet: ['quick'] } });
+  const spend = () => within(screen.getByRole('group', { name: 'Spend Ability Score Improvement' }));
+  const toIncrease = async () => {
+    expect(screen.getByText('2 points to spend, or a Feat, in ABILITY INCREASE.')).toBeTruthy();
+    await userEvent.click(button('NEXT'));
+  };
+
+  it('a Feat in place of the points: the points dropped, one picked, FINISH with it', async () => {
+    const { socket } = await open(data(), [RAISING, FEATS]);
+    await toIncrease();
+    await userEvent.click(spend().getByRole('button', { name: 'More Might' }));
+    await userEvent.click(spend().getByRole('button', { name: 'OR A FEAT INSTEAD' }));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'place', list: 'classes', option: 'soldier' });
+    expect(spend().getByText('A FEAT INSTEAD OF THE POINTS')).toBeTruthy();
+    expect(button('FINISH').disabled).toBe(true);
+    const offer = within(spend().getByRole('group', { name: 'Pick a Feat instead' }));
+    expect((offer.getByRole('button', { name: 'QUICK' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(offer.getByText('NEEDS WITS >= 15')).toBeTruthy();
+    await userEvent.click(offer.getByRole('button', { name: 'TOUGH' }));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'place', list: 'classes', option: 'soldier', picks: [{ list: 'feats', option: 'tough', from: 'asi' }] });
+    expect(offer.getByRole('button', { name: 'TOUGH' }).getAttribute('aria-pressed')).toBe('true');
+    expect(button('FINISH').disabled).toBe(false);
+    await userEvent.click(button('FINISH'));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'up', list: 'classes', option: 'soldier', picks: [{ list: 'feats', option: 'tough', from: 'asi' }] });
+  });
+
+  it('USE THE POINTS INSTEAD: the pick dropped, the stats back', async () => {
+    const { socket } = await open({ ...data(), _leveling: { list: 'classes', option: 'soldier', picks: [{ list: 'feats', option: 'tough', from: 'asi' }] } }, [RAISING, FEATS]);
+    await toIncrease();
+    // Kept with the place, it opens on the Feat.
+    expect(spend().getByText('A FEAT INSTEAD OF THE POINTS')).toBeTruthy();
+    await userEvent.click(spend().getByRole('button', { name: 'USE THE POINTS INSTEAD' }));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'place', list: 'classes', option: 'soldier' });
+    expect(spend().getByText('2 POINTS LEFT · AT MOST 2 ON ONE')).toBeTruthy();
+    expect(button('FINISH').disabled).toBe(true);
+  });
+
+  it('switched to the Feat and back with nothing picked, the points are still to spend', async () => {
+    await open(data(), [RAISING, FEATS]);
+    await toIncrease();
+    await userEvent.click(spend().getByRole('button', { name: 'OR A FEAT INSTEAD' }));
+    await userEvent.click(spend().getByRole('button', { name: 'USE THE POINTS INSTEAD' }));
+    expect(spend().getByRole('button', { name: 'More Might' })).toBeTruthy();
+  });
+});

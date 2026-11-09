@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canRaise, increasesSpent, pointsLeft, statNow, withRaised } from '../levelUpFlow';
+import { canRaise, increasesSpent, insteadAsked, insteadTaken, pointsLeft, statNow, withRaised, withoutSpread } from '../levelUpFlow';
 import { LEVEL_UP_STEP_NAMES, gmLevelingLine, healthGain, healthRolledFor, chosenTarget, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted, unlockedBy, withPickToggled, type Unlocked } from '../levelUpFlow';
 import { WORKED_KEY } from '../choicesShown';
 import { levelUpOffer, type LevelUpOffer } from '../xpMeter';
@@ -406,5 +406,40 @@ describe('ABILITY INCREASE (7d6b)', () => {
     expect(increasesSpent([ASI], { asi: { might: 2 } })).toBe(true);
     expect(increasesSpent(unlocked, { asi: { wits: 2 }, boost: { might: 1, wits: 1 } })).toBe(true);
     expect(increasesSpent([{ id: 'extra', label: 'Extra', from: 'Soldier' } as Unlocked], {})).toBe(true);
+  });
+});
+
+describe('OR A FEAT INSTEAD (7d6c)', () => {
+  const STATS = [{ id: 'might', label: 'Might' }];
+  const ASI = { id: 'asi', label: 'Ability Score Improvement', from: 'Soldier', increase: { points: 2, most: 2, stats: STATS, instead: 'archetypes' } } as Unlocked;
+  const PLAIN = { id: 'plain', label: 'Plain', from: 'Soldier', increase: { points: 1, most: 1, stats: STATS } } as Unlocked;
+  const CHAMPION = { list: 'archetypes', option: 'champion', from: 'asi' };
+
+  it('taken: a pick from its list, under it', () => {
+    expect(insteadTaken([CHAMPION], ASI)).toBe(true);
+    expect(insteadTaken([{ ...CHAMPION, from: 'other' }], ASI)).toBe(false);
+    expect(insteadTaken([{ ...CHAMPION, list: 'drills' }], ASI)).toBe(false);
+    expect(insteadTaken([CHAMPION], PLAIN)).toBe(false);
+  });
+
+  it('asked as one pick from its list, what is held left out', () => {
+    const asked = insteadAsked(TEMPLATE, sheet([{ list: 'classes', option: 'soldier', level: 1 }], 1), ASI)!;
+    expect(asked).toMatchObject({ feature: 'asi', count: 1, rolled: false });
+    expect(asked.list.id).toBe('archetypes');
+    expect(asked.options.map((o) => o.option.id)).toEqual(['champion']);
+    expect(insteadAsked(TEMPLATE, sheet([], 1), PLAIN)).toBeNull();
+    expect(insteadAsked(TEMPLATE, sheet([], 1), { ...ASI, increase: { ...ASI.increase!, instead: 'classes' } })).toBeNull();
+  });
+
+  it('FINISH goes with the points or the pick', () => {
+    expect(increasesSpent([ASI], {}, [])).toBe(false);
+    expect(increasesSpent([ASI], {}, [CHAMPION])).toBe(true);
+    expect(increasesSpent([ASI], { asi: { might: 2 } })).toBe(true);
+    expect(increasesSpent([ASI, PLAIN], {}, [CHAMPION])).toBe(false);
+  });
+
+  it('a feature\'s spread taken away', () => {
+    expect(withoutSpread({ asi: { might: 1 }, plain: { might: 1 } }, 'asi')).toEqual({ plain: { might: 1 } });
+    expect(withoutSpread({}, 'asi')).toEqual({});
   });
 });

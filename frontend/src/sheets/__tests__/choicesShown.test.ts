@@ -142,6 +142,9 @@ describe('uses and what a feature does', () => {
     const stats = [{ id: 'might', label: 'Might' }];
     expect(featureDoes({ id: 'asi', label: 'ASI', increase: { points: 2, most: 2, stats } }, lists)).toEqual(['RAISES STATS: 2 POINTS']);
     expect(featureDoes({ id: 'nudge', label: 'Nudge', increase: { points: 1, most: 1, stats } }, lists)).toEqual(['RAISES STATS: 1 POINT']);
+    // OR A FEAT INSTEAD (7d6c), by what the list calls one.
+    expect(featureDoes({ id: 'asi', label: 'ASI', increase: { points: 2, most: 2, stats, instead: 'paths' } }, lists)).toEqual(['RAISES STATS: 2 POINTS, OR A PATH']);
+    expect(featureDoes({ id: 'asi', label: 'ASI', increase: { points: 2, most: 2, stats, instead: 'gone' } }, lists)).toEqual(['RAISES STATS: 2 POINTS, OR A GONE']);
   });
 });
 

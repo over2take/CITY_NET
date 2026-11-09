@@ -18,7 +18,7 @@ import type { SheetEffects, FieldEffect } from './cyberwareEffects';
 import type { SheetTemplate } from './types';
 
 /** An INCREASE as the server shows it (7d6b; backend choices.js increaseShown): its points, the most on one, its stats by name, where they stop. */
-export interface IncreaseShown { points: number; most: number; stats: { id: string; label: string }[]; cap?: number }
+export interface IncreaseShown { points: number; most: number; stats: { id: string; label: string }[]; cap?: number; /** OR A FEAT INSTEAD (7d6c): the list offered. */ instead?: string }
 export interface FeatureShown {
   id: string; label: string; text?: string; at?: number;
   modifies?: string[]; uses?: { refill: string | null }; rolls?: string[]; changes?: string[]; opens?: string;
@@ -42,8 +42,8 @@ export interface ChoiceListShown { id: string; one: string; many: string; picks:
 export interface Worked {
   /** Every pick kept: `from` the feature it was picked under, `waiting` when that no longer counts. */
   picks: { list: string; option: string; level?: number; from?: string; waiting?: true; locked?: true; roll?: number }[];
-  /** Each unlocked feature opening a list picked through features, and how many it gives and has. */
-  opens: { feature: string; list: string; count: number; used: number }[];
+  /** Each unlocked feature opening a list picked through features, and how many it gives and has; `instead` a list an increase offers (7d6c). */
+  opens: { feature: string; list: string; count: number; used: number; instead?: true }[];
   levels: Record<string, number>;
   from: Record<string, { feature: string; amount: number }[]>;
   uses: Record<string, { max: number; spent: number }>;
@@ -255,12 +255,18 @@ export interface UnderFeature {
   open: { option: OptionShown; unmet: string | null }[];
 }
 
-/** Under `feature`, when it opens a list picked through features or both. Null otherwise. */
-export const underFeature = (feature: FeatureShown, lists: ChoiceListShown[], worked: Worked): UnderFeature | null => {
-  const list = lists.find((l) => l.id === feature.opens);
+/** The lists picked under a feature: the one it opens, and the one its increase offers instead (7d6c). */
+export const listsUnder = (feature: FeatureShown): string[] => [feature.opens, feature.increase?.instead].filter((id): id is string => !!id);
+
+/**
+ * Under `feature`, for a list picked through features or both: the one it opens, or another named (7d6c: the one its
+ * increase offers instead). Null otherwise.
+ */
+export const underFeature = (feature: FeatureShown, lists: ChoiceListShown[], worked: Worked, listId = feature.opens): UnderFeature | null => {
+  const list = lists.find((l) => l.id === listId);
   if (!list || (pickedOf(list) !== 'features' && pickedOf(list) !== 'both')) return null;
   const mine = worked.picks.filter((p) => p.list === list.id && p.from === feature.id);
-  const opening = worked.opens.find((o) => o.feature === feature.id);
+  const opening = worked.opens.find((o) => o.feature === feature.id && o.list === list.id);
   const taken = new Set(worked.picks.filter((p) => p.list === list.id).map((p) => p.option));
   const unmet = new Set(worked.unmet);
   return {
@@ -298,7 +304,7 @@ export const spentAfterClick = (pip: number, spent: number): number => (pip < sp
 /** What a feature does, in a few words: MODIFIES DEFENSE, ROLL SPARK, ADVANTAGE ON MIND SAVE, OPENS SPECIALTY. */
 export const featureDoes = (f: FeatureShown, lists: ChoiceListShown[]): string[] => [
   ...(f.modifies?.length ? [`+ ${f.modifies.join(', ').toUpperCase()}`] : []),
-  ...(f.increase ? [`RAISES STATS: ${f.increase.points} ${f.increase.points === 1 ? 'POINT' : 'POINTS'}`] : []),
+  ...(f.increase ? [`RAISES STATS: ${f.increase.points} ${f.increase.points === 1 ? 'POINT' : 'POINTS'}${f.increase.instead ? `, OR A ${(lists.find((l) => l.id === f.increase!.instead)?.one ?? f.increase.instead).toUpperCase()}` : ''}`] : []),
   ...(f.rolls ?? []).map((r) => `ROLL ${r.toUpperCase()}`),
   ...(f.changes ?? []).map((c) => c.toUpperCase()),
   ...(f.opens ? [`PICK ${(lists.find((l) => l.id === f.opens)?.one ?? f.opens).toUpperCase()}`] : []),

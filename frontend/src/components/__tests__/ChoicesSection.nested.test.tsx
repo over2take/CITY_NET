@@ -150,3 +150,51 @@ describe('ROLL FOR IT under a feature (7a5b2)', () => {
     expect(onChoices).toHaveBeenLastCalledWith({ kind: 'roll', list: 'specs', from: 'specialty', again: 'duelist' });
   });
 });
+
+describe('OR A FEAT INSTEAD under an increase (7d6c)', () => {
+  const RAISED = {
+    format: 1, name: 'Raised', core: { advancement: ['levels'] },
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'int', label: 'Intellect' }] }],
+    choices: [
+      { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [
+        { id: 'soldier', label: 'Soldier', features: [{ id: 'asi', label: 'Ability Score Improvement', at: 2, choice: 'specs', increase: { points: 2, instead: 'feats' } }] },
+      ] },
+      { id: 'specs', one: 'Specialty', many: 'Specialties', picked: 'features', options: [{ id: 'duelist', label: 'Duelist' }] },
+      { id: 'feats', one: 'Feat', many: 'Feats', picked: 'features', options: [{ id: 'tough', label: 'Tough' }, { id: 'quick', label: 'Quick' }] },
+    ],
+  };
+  const raisedLists = backend.choicesShown(RAISED) as ChoiceListShown[];
+  const show = (stored: Record<string, unknown>, more: Record<string, unknown> = {}) => {
+    const data = { int: 10, _choices: stored, ...more };
+    const onChoices = vi.fn();
+    render(<ChoicesSection lists={raisedLists} data={{ ...data, [WORKED_KEY]: backend.workedOf(RAISED, data) }} onChoices={onChoices} />);
+    return onChoices;
+  };
+  const instead = () => within(screen.getByRole('group', { name: 'Instead of Ability Score Improvement\'s points' }));
+  const soldier2 = { classes: [{ option: 'soldier', level: 2 }] };
+
+  it('the points not spent: a Feat to pick in their place, beside the list the feature opens', async () => {
+    const onChoices = show(soldier2);
+    expect(screen.getByRole('group', { name: 'Under Ability Score Improvement' })).toBeTruthy();
+    expect(instead().getByText('OR A FEAT IN PLACE OF THE POINTS')).toBeTruthy();
+    await userEvent.click(instead().getByRole('button', { name: 'TOUGH' }));
+    expect(onChoices).toHaveBeenCalledWith({ kind: 'pick', list: 'feats', option: 'tough', from: 'asi' });
+  });
+
+  it('taken: the Feat shows there, with no room for another', () => {
+    show({ ...soldier2, feats: [{ option: 'tough', from: 'asi' }] });
+    expect(instead().getByRole('group', { name: 'Tough' })).toBeTruthy();
+    expect(instead().queryByText('OR A FEAT IN PLACE OF THE POINTS')).toBeNull();
+  });
+
+  it('the points spent: nothing there', () => {
+    show(soldier2, { _increases: { asi: { int: 2 } } });
+    expect(screen.queryByRole('group', { name: 'Instead of Ability Score Improvement\'s points' })).toBeNull();
+    expect(screen.getByRole('group', { name: 'Under Ability Score Improvement' })).toBeTruthy();
+  });
+
+  it('locked again, a Feat taken there waits', () => {
+    show({ classes: [{ option: 'soldier', level: 1 }], feats: [{ option: 'tough', from: 'asi' }] });
+    expect(instead().getByText(/^TOUGH · WAITS FOR ABILITY SCORE IMPROVEMENT AT LEVEL 2, KEPT/)).toBeTruthy();
+  });
+});
