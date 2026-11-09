@@ -100,7 +100,7 @@ test('ROLL: health rolled in the window and kept; the GM clears it, the player r
   await page.getByText(player.username, { exact: true }).first().click();
   await page.getByRole('button', { name: 'VIEW_PLAYER_INFO', exact: true }).click();
   await page.getByRole('button', { name: 'OPEN_SHEET', exact: true }).click();
-  const line = page.getByRole('group', { name: 'Leveling up' });
+  const line = page.getByRole('group', { name: 'Their level' });
   await expect(line.getByText(`LEVELING UP · FIGHTER 1 → 2 · HEALTH ROLLED ${first} ON A D10`)).toBeVisible({ timeout: 15_000 });
   await line.getByRole('button', { name: 'CLEAR THE ROLL' }).click();
   await expect.poll(async () => (await sheetOf())._leveling?.health, { timeout: 15_000 }).toBeUndefined();

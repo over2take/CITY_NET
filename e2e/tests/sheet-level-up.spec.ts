@@ -6,6 +6,7 @@ import { signInAsGm, signInAsPlayer, gmToken, asGm, runningSystem, approvedPlaye
 // themselves. What's past the level carries over, and the GM can take one back. The player has no + or - to press.
 // READY opens LEVEL_UP.EXE (7d3a): which class, what the new level unlocks, leave and come back, FINISH.
 // In it (7d3b), the picks a new level opens are made, and a class not held yet can be taken up at level 1.
+// FILL IT IN FOR THEM (7d7a): the GM opens the same window on a player's sheet, with every limit off.
 
 const CLASSES = { id: 'classes', one: 'Class', many: 'Classes', levelled: true, again: true, options: [{ id: 'soldier', label: 'Soldier' }, { id: 'mage', label: 'Mage', features: [{ id: 'spark', label: 'Spark', at: 2, text: 'A small magic.' }] }] };
 const signedIn = async (browser: Browser, info: TestInfo, player: { username: string; password: string }) => {
@@ -233,5 +234,53 @@ test('in LEVEL_UP.EXE, a pick the new level opens is made, then a class not held
   await mine.getByRole('button', { name: 'FINISH', exact: true }).click();
   await expect.poll(async () => (await sheetOf())._choices.classes, { timeout: 15_000 }).toEqual([{ option: 'soldier', level: 2 }, { option: 'mage', level: 1 }]);
   await expect(mine.getByTestId('xp-meter').getByText('300 / 700 · 400 TO LEVEL 4')).toBeVisible({ timeout: 15_000 });
+  await mine.context().close();
+});
+
+test('FILL IT IN FOR THEM: the GM levels a player up with no XP, a pick they don\'t meet added, health at its average (7d7a)', async ({ page, browser, request }, info) => {
+  test.setTimeout(180_000);
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Levelfillfall${again}`, core: { health: { model: 'pool' }, advancement: ['levels'] },
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'might', label: 'Might' }] }],
+    choices: [
+      { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'soldier', label: 'Soldier', die: 10, features: [{ id: 'path', label: 'Path', at: 2, choice: 'paths' }] }] },
+      { id: 'paths', one: 'Path', many: 'Paths', picked: 'features', options: [{ id: 'duelist', label: 'Duelist', requires: '@might >= 15' }] },
+    ],
+    levels: { top: 5, first: 100, ranges: [{ to: 5, x: 2 }], health: { how: 'level', gain: 'roll' } },
+  });
+  const player = { username: `e2e_filled${again}`, password: 'e2e-player-password' };
+  await approvedPlayer(request, gm, player);
+  const sheetOf = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data;
+
+  const mine = await signedIn(browser, info, player);
+  await openSheet(mine);
+  await sheetTab(mine, 'CHARACTER');
+  await mine.getByRole('group', { name: 'Pick a Class' }).getByRole('button', { name: 'SOLDIER' }).click();
+  await expect.poll(async () => (await sheetOf())._choices?.classes?.length, { timeout: 15_000 }).toBe(1);
+
+  // The GM, on their sheet (they're signed in, so the chat lists them): level 1, nothing ready, and FILL IT IN FOR THEM.
+  await signInAsGm(page);
+  await page.getByRole('button', { name: 'GLOBAL_CHAT', exact: true }).click();
+  await page.getByText(player.username, { exact: true }).first().click();
+  await page.getByRole('button', { name: 'VIEW_PLAYER_INFO', exact: true }).click();
+  await page.getByRole('button', { name: 'OPEN_SHEET', exact: true }).click();
+  const line = page.getByRole('group', { name: 'Their level' });
+  await expect(line.getByText('LEVEL 1', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await line.getByRole('button', { name: 'FILL IT IN FOR THEM' }).click();
+  await expect(page.getByText(`LEVEL_UP.EXE · ${player.username.toUpperCase()} · SOLDIER 2`)).toBeVisible();
+  // Nothing rolled: on to what it unlocks, a Path they don't meet added anyway.
+  await page.getByRole('button', { name: 'NEXT', exact: true }).click();
+  await expect(page.getByText('NEEDS MIGHT >= 15 · ADD ANYWAY')).toBeVisible();
+  await page.getByRole('group', { name: 'Pick a Path' }).getByRole('button', { name: 'DUELIST' }).click();
+  await expect(page.getByText('FOR THE PLAYER, LIMITS OFF: FINISH goes as it is, health at its average.')).toBeVisible();
+  await page.getByRole('button', { name: 'FINISH', exact: true }).click();
+  await expect.poll(async () => (await sheetOf())._choices?.classes?.[0]?.level, { timeout: 15_000 }).toBe(2);
+  const data = await sheetOf();
+  expect(data._choices.paths).toEqual([{ option: 'duelist', from: 'path' }]);
+  expect(data._health_levels).toEqual({ 2: { die: 10, took: 5 } });
+  expect(data._xp ?? 0).toBe(0);
+  await expect(line.getByText('LEVEL 2', { exact: true })).toBeVisible({ timeout: 15_000 });
   await mine.context().close();
 });

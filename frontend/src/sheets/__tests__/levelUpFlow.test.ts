@@ -271,12 +271,20 @@ describe('HEALTH rolled, or the player choosing (7d5b)', () => {
     expect(healthRolledFor(levelUpOffer(tpl('roll'), data())!, offer.targets, MAGE)).toBeNull();
   });
 
-  it('the GM\'s line: where they are, a kept roll to clear', () => {
-    expect(gmLevelingLine(tpl('roll'), data({ roll: 7, die: 10 }))).toEqual({ words: 'LEVELING UP · SOLDIER 2 → 3 · HEALTH ROLLED 7 ON A D10', canClear: true });
-    expect(gmLevelingLine(tpl('roll'), data({ average: true }))).toEqual({ words: 'LEVELING UP · SOLDIER 2 → 3 · HEALTH: THE AVERAGE', canClear: false });
-    expect(gmLevelingLine(tpl('roll'), data({}, { list: 'classes', option: 'rogue' }))).toEqual({ words: 'LEVELING UP · NEW: ROGUE', canClear: false });
-    expect(gmLevelingLine(tpl('roll'), { ...data(), _leveling: {} })).toEqual({ words: 'LEVELING UP · THE NEXT LEVEL', canClear: false });
-    expect(gmLevelingLine(tpl('roll'), data())).toBeNull();
+  it('the GM\'s line: where they are, a kept roll to clear, and FILL IT IN FOR THEM while there\'s a level to go (7d7a)', () => {
+    expect(gmLevelingLine(tpl('roll'), data({ roll: 7, die: 10 }))).toEqual({ words: 'LEVELING UP · SOLDIER 2 → 3 · HEALTH ROLLED 7 ON A D10', canClear: true, canFill: true });
+    expect(gmLevelingLine(tpl('roll'), data({ average: true }))).toEqual({ words: 'LEVELING UP · SOLDIER 2 → 3 · HEALTH: THE AVERAGE', canClear: false, canFill: true });
+    expect(gmLevelingLine(tpl('roll'), data({}, { list: 'classes', option: 'rogue' }))).toEqual({ words: 'LEVELING UP · NEW: ROGUE', canClear: false, canFill: true });
+    expect(gmLevelingLine(tpl('roll'), { ...data(), _leveling: {} })).toEqual({ words: 'LEVELING UP · THE NEXT LEVEL', canClear: false, canFill: true });
+    // Not leveling up: their level, and whether one is ready.
+    expect(gmLevelingLine(tpl('roll'), data())).toEqual({ words: 'LEVEL 3 · LEVEL UP READY', canClear: false, canFill: true });
+    expect(gmLevelingLine(tpl('roll'), { ...data(), _xp: 0 })).toEqual({ words: 'LEVEL 3', canClear: false, canFill: true });
+    // At the highest level, nothing to fill in.
+    const top = { ...tpl('roll'), levels: { ...tpl('roll').levels, top: 3 } } as SheetTemplate;
+    expect(gmLevelingLine(top, data())).toEqual({ words: 'LEVEL 3', canClear: false, canFill: false });
+    expect(gmLevelingLine(top, data({ roll: 7, die: 10 }))?.canFill).toBe(false);
+    // Before a class is picked, and where levels are typed in, nothing.
+    expect(gmLevelingLine(tpl('roll'), { _xp: 9, [WORKED_KEY]: { picks: [], levels: { level: 0 } } })).toBeNull();
     expect(gmLevelingLine(null, data({ roll: 7 }))).toBeNull();
   });
 });
@@ -441,5 +449,18 @@ describe('OR A FEAT INSTEAD (7d6c)', () => {
   it('a feature\'s spread taken away', () => {
     expect(withoutSpread({ asi: { might: 1 }, plain: { might: 1 } }, 'asi')).toEqual({ plain: { might: 1 } });
     expect(withoutSpread({}, 'asi')).toEqual({});
+  });
+});
+
+describe('the GM counts picks they don\'t meet (7d7a)', () => {
+  const asked = { feature: 'path', list: { id: 'paths', one: 'Path', many: 'Paths' }, count: 2, rolled: false,
+    options: [{ option: { id: 'a', label: 'A' }, unmet: 'MIGHT >= 15' }, { option: { id: 'b', label: 'B' }, unmet: null }] } as never;
+  it('wanted, and made', () => {
+    expect(picksWanted(asked)).toBe(1);
+    expect(picksWanted(asked, true)).toBe(2);
+    const one = [{ list: 'paths', option: 'b', from: 'path' }];
+    expect(picksMade([asked], one)).toBe(true);
+    expect(picksMade([asked], one, true)).toBe(false);
+    expect(picksMade([asked], [...one, { list: 'paths', option: 'a', from: 'path' }], true)).toBe(true);
   });
 });

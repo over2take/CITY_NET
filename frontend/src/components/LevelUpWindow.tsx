@@ -3,7 +3,8 @@ import type { Socket } from 'socket.io-client';
 import { TerminalWindow, type TerminalAction, type TerminalFolder } from './TerminalWindow';
 import { usePlayerSheet } from '../hooks/usePlayerSheet';
 import { useChoicesRefused } from '../hooks/useChoicesRefused';
-import { levelUpOffer, type LevelTarget, type LevelUpIncreases, type LevelUpPick } from '../sheets/xpMeter';
+import type { SheetTemplate } from '../sheets/types';
+import { characterLevel, levelUpOffer, type LevelTarget, type LevelUpIncreases, type LevelUpPick } from '../sheets/xpMeter';
 import {
   LEVEL_UP_STEP_NAMES, canRaise, chosenTarget, healthGain, healthRolledFor, increasesSpent, insteadAsked, insteadTaken, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted,
   pointsLeft, statNow, unlockedBy, withPickToggled, withRaised, withoutSpread,
@@ -16,6 +17,10 @@ import {
 // LEVELING UP · CONTINUE. What it shows is sheets/levelUpFlow.ts; going up is the server's (backend levelUp.js).
 // ABILITY INCREASE (7d6b): each INCREASE the new level unlocks, its points spread with − and +, FINISH waiting for all;
 // or (7d6c) OR A FEAT INSTEAD, a pick from the list it offers, and USE THE POINTS INSTEAD back again.
+//
+// The flow itself is LevelUpFlow, drawn on whichever sheet it's given: the player's own here, or (7d7a) a player's
+// as the GM fills it in for them (FillLevelUpWindow), with every limit off: it opens whenever there's a level to
+// go, FINISH needs no roll (the average is taken), no pick and no points, and what isn't met can be added anyway.
 
 interface Props {
   pos: { x: number; y: number };
@@ -43,6 +48,30 @@ const mini: React.CSSProperties = { ...btn, padding: '1px 8px', fontSize: '0.75r
 export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, raiseOn }: Props) {
   const { sheet, template } = usePlayerSheet(socket, userName);
   const refused = useChoicesRefused(socket);
+  return (
+    <LevelUpFlow sheet={sheet} template={template} refused={refused} name={userName} emit={(action) => socket?.emit('levelAction', action)}
+      pos={pos} setPos={setPos} onLeave={onLeave} onDone={onDone} raiseOn={raiseOn} />
+  );
+}
+
+interface FlowProps {
+  sheet: { data?: Record<string, unknown> } | null;
+  template: SheetTemplate | null | undefined;
+  refused: string | null;
+  /** Whose: their sheet's name when it has one. */
+  name: string;
+  /** A levelAction, sent as the window's own: the GM's names the player. */
+  emit: (action: Record<string, unknown>) => void;
+  /** The GM filling it in for them (7d7a): every limit off. */
+  gm?: boolean;
+  pos: { x: number; y: number };
+  setPos: (pos: { x: number; y: number }) => void;
+  onLeave: () => void;
+  onDone: () => void;
+  raiseOn?: number;
+}
+
+export function LevelUpFlow({ sheet, template, refused, name: fallbackName, emit, gm = false, pos, setPos, onLeave, onDone, raiseOn }: FlowProps) {
   const data = sheet?.data;
   const offer = levelUpOffer(template, data);
   const [step, setStep] = useState(0);
@@ -56,14 +85,16 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
   const target = picked ?? (offer ? chosenTarget(offer, joinable) : null);
   const picks = made ?? offer?.leveling?.picks ?? [];
   const spreads = raised ?? offer?.leveling?.increases ?? {};
-  const name = String((data?.name as string) || userName);
-  const place = (t: LevelTarget, p: LevelUpPick[] = [], inc: LevelUpIncreases = {}) => socket?.emit('levelAction', {
+  const name = String((data?.name as string) || fallbackName);
+  const place = (t: LevelTarget, p: LevelUpPick[] = [], inc: LevelUpIncreases = {}) => emit({
     kind: 'place', ...(t.list ? { list: t.list, option: t.option } : {}), ...(p.length ? { picks: p } : {}), ...(Object.keys(inc).length ? { increases: inc } : {}),
   });
 
   // Opened, their place is kept from the start: closing it is leaving it.
   const kept = !!offer?.leveling;
-  const ready = !!offer?.ready && !offer.firstPick && !!target;
+  // The GM fills it in whenever there's a level to go (7d7a), ready or not.
+  const below = characterLevel(data) < (template?.levels?.top ?? 0);
+  const ready = (gm ? below : !!offer?.ready) && !offer?.firstPick && !!target;
   useEffect(() => { if (ready && !kept && target) place(target); }, [ready, kept]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const title = levelUpTitle(name, ready ? target : null);
@@ -82,7 +113,7 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
   const raising = unlocked.filter((u) => u.increase);
   const steps = levelUpSteps(offer, joinable.length, !!gain, raising.length > 0);
   const asked = picksAsked(template, data, unlocked);
-  const allMade = picksMade(asked, picks);
+  const allMade = picksMade(asked, picks, gm);
   const allSpent = increasesSpent(unlocked, spreads, picks);
   // ROLL or THE PLAYER CHOOSES (7d5b): settled once rolled, or the average taken.
   const healthSettled = !gain || gain.gained !== null;
@@ -94,19 +125,20 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
     { key: 'back', label: 'BACK', disabled: index === 0, onClick: () => setStep(index - 1) },
     { key: 'leave', label: 'LEAVE FOR NOW', onClick: onLeave },
     {
-      key: 'next', label: last ? 'FINISH' : 'NEXT', tone: 'primary', disabled: (last && (!allMade || !allSpent)) || ((last || open === 'health') && !healthSettled),
-      title: (last || open === 'health') && !healthSettled ? (gain?.by === 'choose' ? 'Take the average or roll first' : 'Roll for health first')
+      key: 'next', label: last ? 'FINISH' : 'NEXT', tone: 'primary', disabled: !gm && ((last && (!allMade || !allSpent)) || ((last || open === 'health') && !healthSettled)),
+      title: gm ? undefined : (last || open === 'health') && !healthSettled ? (gain?.by === 'choose' ? 'Take the average or roll first' : 'Roll for health first')
         : last && !allMade ? 'Make the picks first' : last && !allSpent ? 'Spend the points first' : undefined,
       onClick: () => {
         if (!last) return setStep(index + 1);
-        socket?.emit('levelAction', { kind: 'up', ...(target.list ? { list: target.list, option: target.option } : {}), ...(picks.length ? { picks } : {}), ...(Object.keys(spreads).length ? { increases: spreads } : {}) });
+        emit({ kind: 'up', ...(target.list ? { list: target.list, option: target.option } : {}), ...(picks.length ? { picks } : {}), ...(Object.keys(spreads).length ? { increases: spreads } : {}) });
         return onDone();
       },
     },
   ];
   const choose = (t: LevelTarget) => { setPicked(t); setMade([]); setRaised({}); place(t); };
-  const health = (kind: 'healthRoll' | 'healthAverage') => socket?.emit('levelAction', { kind, ...(target.list ? { list: target.list, option: target.option } : {}) });
-  const lockedTo = healthRolledFor(offer, [...offer.targets, ...joinable], target) ?? (gain?.rolled !== null && gain?.rolled !== undefined ? target.name : null);
+  const health = (kind: 'healthRoll' | 'healthAverage') => emit({ kind, ...(target.list ? { list: target.list, option: target.option } : {}) });
+  // The GM may change class whatever was rolled.
+  const lockedTo = gm ? null : healthRolledFor(offer, [...offer.targets, ...joinable], target) ?? (gain?.rolled !== null && gain?.rolled !== undefined ? target.name : null);
   const toggle = (a: (typeof asked)[number], option: string) => { const next = withPickToggled(picks, a, option); setMade(next); place(target, next, spreads); };
   const raise = (feature: string, stat: string, by: 1 | -1) => { const next = withRaised(spreads, feature, stat, by); setRaised(next); place(target, picks, next); };
   // The points or a pick in their place (7d6c): switching drops what the other way had.
@@ -148,11 +180,11 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
                     const on = t.list === target.list && t.option === target.option;
                     return (
                       <span key={`${t.list}-${t.option}`} style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px' }}>
-                        <button type="button" aria-pressed={on} disabled={!!t.unmet || (!!lockedTo && !on)} onClick={() => choose(t)}
-                          style={{ ...btn, ...(on ? { background: 'var(--green)', color: 'var(--black)', borderColor: 'var(--green)' } : {}), ...(t.unmet ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }}>
+                        <button type="button" aria-pressed={on} disabled={(!!t.unmet && !gm) || (!!lockedTo && !on)} onClick={() => choose(t)}
+                          style={{ ...btn, ...(on ? { background: 'var(--green)', color: 'var(--black)', borderColor: 'var(--green)' } : {}), ...(t.unmet && !gm ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }}>
                           NEW: {t.name.toUpperCase()} 1
                         </button>
-                        {t.unmet && <span style={{ ...why, fontSize: '0.6rem' }}>NEEDS {t.unmet.toUpperCase()}</span>}
+                        {t.unmet && <span style={{ ...why, fontSize: '0.6rem' }}>NEEDS {t.unmet.toUpperCase()}{gm ? ' · ADD ANYWAY' : ''}</span>}
                       </span>
                     );
                   })}
@@ -204,7 +236,7 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
             <p style={why}>{target.option ? `${target.name} ${target.level + 1}` : `Level ${target.level + 1}`}{unlocked.length ? ' brings:' : '. Nothing new comes with it.'}</p>
             {unlocked.map((u) => {
               const a = asked.find((x) => x.feature === u.id);
-              const wanted = a ? picksWanted(a) : 0;
+              const wanted = a ? picksWanted(a, gm) : 0;
               return (
                 <div key={`${u.from}-${u.id}`} style={card}>
                   <span style={{ fontSize: '0.75rem' }}>{u.label.toUpperCase()} <span style={{ ...why, display: 'inline' }}>· {u.from}</span></span>
@@ -219,11 +251,11 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
                           const on = picks.some((p) => p.from === a.feature && p.list === a.list.id && p.option === option.id);
                           return (
                             <span key={option.id} style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px' }}>
-                              <button type="button" aria-pressed={on} disabled={!!unmet && !on} onClick={() => toggle(a, option.id)}
-                                style={{ ...btn, ...(on ? { background: 'var(--green)', color: 'var(--black)', borderColor: 'var(--green)' } : {}), ...(unmet && !on ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }}>
+                              <button type="button" aria-pressed={on} disabled={!!unmet && !on && !gm} onClick={() => toggle(a, option.id)}
+                                style={{ ...btn, ...(on ? { background: 'var(--green)', color: 'var(--black)', borderColor: 'var(--green)' } : {}), ...(unmet && !on && !gm ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }}>
                                 {option.label.toUpperCase()}
                               </button>
-                              {unmet && <span style={{ ...why, fontSize: '0.6rem' }}>NEEDS {unmet.toUpperCase()}</span>}
+                              {unmet && <span style={{ ...why, fontSize: '0.6rem' }}>NEEDS {unmet.toUpperCase()}{gm ? ' · ADD ANYWAY' : ''}</span>}
                             </span>
                           );
                         })}
@@ -253,11 +285,11 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
                     const on = picks.some((p) => p.from === u.id && p.list === other.list.id && p.option === option.id);
                     return (
                       <span key={option.id} style={{ display: 'inline-flex', flexDirection: 'column', gap: '2px' }}>
-                        <button type="button" aria-pressed={on} disabled={!!unmet && !on} onClick={() => pickInstead(other, option.id)}
-                          style={{ ...btn, ...(on ? { background: 'var(--green)', color: 'var(--black)', borderColor: 'var(--green)' } : {}), ...(unmet && !on ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }}>
+                        <button type="button" aria-pressed={on} disabled={!!unmet && !on && !gm} onClick={() => pickInstead(other, option.id)}
+                          style={{ ...btn, ...(on ? { background: 'var(--green)', color: 'var(--black)', borderColor: 'var(--green)' } : {}), ...(unmet && !on && !gm ? { opacity: 0.45, cursor: 'not-allowed' } : {}) }}>
                           {option.label.toUpperCase()}
                         </button>
-                        {unmet && <span style={{ ...why, fontSize: '0.6rem' }}>NEEDS {unmet.toUpperCase()}</span>}
+                        {unmet && <span style={{ ...why, fontSize: '0.6rem' }}>NEEDS {unmet.toUpperCase()}{gm ? ' · ADD ANYWAY' : ''}</span>}
                       </span>
                     );
                   })}
@@ -292,6 +324,11 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
             </div>
           );
         })}
+        {gm && last && (!healthSettled || !allMade || !allSpent) && (
+          <p style={{ ...why, color: 'var(--warning)', opacity: 1 }}>
+            FOR THE PLAYER, LIMITS OFF: FINISH goes as it is{!healthSettled ? ', health at its average' : ''}{!allMade ? ', picks left to make on the sheet' : ''}{!allSpent ? ', points left unspent' : ''}.
+          </p>
+        )}
         {refused && <p role="alert" style={{ ...why, color: 'var(--danger)', opacity: 1 }}>{refused}</p>}
       </div>
     </TerminalWindow>
