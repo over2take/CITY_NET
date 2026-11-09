@@ -350,3 +350,21 @@ describe('an INCREASE on a feature (7d6a)', () => {
     expect(increaseWords(RAISED, { points: 1, stats: 'gone', cap: 0 })).toBe('1 POINT · ANY STAT · STOPS AT 0');
   });
 });
+
+describe('OR A FEAT INSTEAD (7d6c)', () => {
+  const OFFERED = { ...HEARTH, stats: [{ id: 'abilities', label: 'Abilities', stats: [{ id: 'might', label: 'Might' }] }],
+    choices: [...(HEARTH.choices as object[]), { id: 'feats', one: 'Feat', many: 'Feats', picked: 'features', options: [] }] } as unknown as Definition;
+  const made = withNewFeature(OFFERED, 'classes', 'soldier')!;
+  const set = (increase: unknown) => featureList(choiceLists(withFeature(made.definition, 'classes', 'soldier', made.id, { increase } as never))
+    .find((c) => c.id === 'classes')!.options.find((o) => o.id === 'soldier')!).find((f) => f.id === made.id)!;
+
+  it('kept by its list, nothing for none', () => {
+    expect(set({ points: 2, instead: 'feats' }).increase).toEqual({ points: 2, instead: 'feats' });
+    expect(set({ points: 2, instead: '' }).increase).toEqual({ points: 2 });
+  });
+
+  it('said in words, by what the list calls one', () => {
+    expect(increaseWords(OFFERED, { points: 2, instead: 'feats' })).toBe('2 POINTS · ALL ON ONE IF THEY LIKE · ANY STAT · NO LIMIT · OR A FEAT INSTEAD');
+    expect(increaseWords(OFFERED, { points: 2, instead: 'gone' })).toBe('2 POINTS · ALL ON ONE IF THEY LIKE · ANY STAT · NO LIMIT · OR A GONE INSTEAD');
+  });
+});

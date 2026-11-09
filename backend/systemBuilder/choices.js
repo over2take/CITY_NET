@@ -31,10 +31,11 @@
 //               rolls: ['rally'],                               // rolls of the system it gives
 //               changes: [{ roll: 'mind_save', change: 'advantage' }], // a change it lets one roll take
 //               choice: 'specialties', choice_count: 2,         // a list picked from when it unlocks, and how many (1)
-//               increase: { points: 2, most: 2, stats: 'abilities', cap: 20 } }, // 7d6a: points the player spreads on
-//                                                               // stats, at most `most` on one (all of them when
+//               increase: { points: 2, most: 2, stats: 'abilities', cap: 20, instead: 'feats' } }, // 7d6a: points the player
+//                                                               // spreads on stats, at most `most` on one (all of them when
 //                                                               // absent), from one group (all stats when absent),
-//                                                               // none raised past `cap` (no cap when absent)
+//                                                               // none raised past `cap` (no cap when absent); 7d6c: or a
+//                                                               // pick from `instead`, a list picked through features
 //           ] },
 //       ] },
 //   ]
@@ -91,6 +92,10 @@
 // INCREASES_KEY by feature: { asi: { str: 1, dex: 1 } }. It is worked out onto the stats as a modifier is, named by
 // its feature, while the feature is unlocked and what is kept still holds: stats it may raise, whole points from 1,
 // no more than its most on one, no more than its points in all.
+//
+// OR A FEAT INSTEAD (7d6c): an increase may name a list picked through features (or both) as the other choice. Its
+// feature then opens that list for one pick, as a feature opening a list does: that pick, or the points, never both.
+// A pick taken there means the points don't count; once the points are spent, the list has no room there.
 //
 // At the table (7a3a): how many of each feature's uses are spent is kept under USES_KEY, by feature,
 // and a rest that refills them sets them back (resting.js). Every save writes what the sheet shows of
@@ -151,7 +156,7 @@ const PLAYERS = ['hand', 'either', 'roll'];
 const LIST_KEYS = new Set(['id', 'one', 'many', 'picks', 'levelled', 'again', 'picked', 'table', 'players', 'options']);
 const OPTION_KEYS = new Set(['id', 'label', 'description', 'requires', 'die', 'roll', 'gives', 'features']);
 const FEATURE_KEYS = new Set(['id', 'label', 'text', 'at', 'modifiers', 'uses', 'rolls', 'changes', 'choice', 'choice_count', 'increase']);
-const INCREASE_KEYS = new Set(['points', 'most', 'stats', 'cap']);
+const INCREASE_KEYS = new Set(['points', 'most', 'stats', 'cap', 'instead']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
@@ -384,6 +389,13 @@ const checkChoices = (definition, problems) => {
         if (inc.most !== undefined && (!Number.isInteger(inc.most) || inc.most < 1 || (points && inc.most > inc.points))) problems.push({ where: `${at}, most`, message: 'From 1 to the points it gives' });
         if (inc.stats !== undefined && !statGroups.has(inc.stats)) problems.push({ where: `${at}, stats`, message: 'Not one of this system\'s groups of stats' });
         if (inc.cap !== undefined && (!Number.isInteger(inc.cap) || Math.abs(inc.cap) > LIMITS.cap)) problems.push({ where: `${at}, cap`, message: `A whole number from -${LIMITS.cap} to ${LIMITS.cap}` });
+        // OR A FEAT INSTEAD (7d6c): a list picked through features, never its own.
+        if (inc.instead !== undefined) {
+          const other = choicesOf(definition).find((c) => c.id === inc.instead);
+          if (!other) problems.push({ where: `${at}, instead`, message: 'Not one of this system\'s lists' });
+          else if (inc.instead === ownList) problems.push({ where: `${at}, instead`, message: 'A list can\'t be picked from inside itself' });
+          else if (!['features', 'both'].includes(pickedOf(other))) problems.push({ where: `${at}, instead`, message: `${String(other.many || other.id).toUpperCase()} is picked on its own: set it to THROUGH FEATURES or BOTH` });
+        }
       }
     }
     if (f.choice !== undefined) {
@@ -459,6 +471,7 @@ const opensOf = (definition) => {
   const lists = choicesOf(definition);
   const ids = new Set(lists.map((c) => c.id));
   return new Map(lists.map((c) => [c.id, [...new Set(optionsOf(c).flatMap((o) => list(o.features)).filter(isPlainObject)
+    .flatMap((f) => [f, ...(isPlainObject(f.increase) && typeof f.increase.instead === 'string' ? [{ choice: f.increase.instead }] : [])])
     .map((f) => f.choice).filter((id) => typeof id === 'string' && id !== c.id && ids.has(id)))]]));
 };
 
@@ -496,13 +509,24 @@ const openCountOf = (f) => (Number.isInteger(f.choice_count) && f.choice_count >
 
 /**
  * The features among `picks` that open a list picked through features (or both), each with how
- * many picks it gives and how many of them are taken: [{ feature, list, count, used }].
+ * many picks it gives and how many of them are taken: [{ feature, list, count, used }]. An INCREASE's list
+ * offered instead (7d6c) is one more, `instead: true`, giving one pick, or none once `data` has its points spent.
  */
-const openingsOf = (definition, picks) => {
+const openingsOf = (definition, picks, data = null) => {
   const lists = new Map(choicesOf(definition).map((c) => [c.id, c]));
-  return unlockedOf(picks)
-    .filter(({ feature }) => typeof feature.choice === 'string' && lists.has(feature.choice) && ['features', 'both'].includes(pickedOf(lists.get(feature.choice))))
-    .map(({ feature }) => ({ feature, list: lists.get(feature.choice), count: openCountOf(feature), used: picks.filter((p) => p.from === feature.id).length }));
+  const unlocked = unlockedOf(picks);
+  const used = (feature, c) => picks.filter((p) => p.from === feature.id && p.list === c).length;
+  const increases = isPlainObject(data) && isPlainObject(data[INCREASES_KEY]) ? data[INCREASES_KEY] : {};
+  return [
+    ...unlocked.filter(({ feature }) => typeof feature.choice === 'string' && lists.has(feature.choice) && ['features', 'both'].includes(pickedOf(lists.get(feature.choice))))
+      .map(({ feature }) => ({ feature, list: lists.get(feature.choice), count: openCountOf(feature), used: used(feature, lists.get(feature.choice)) })),
+    ...unlocked.flatMap(({ feature }) => {
+      const inc = increaseOf(definition, feature);
+      if (!inc || !inc.instead) return [];
+      const c = lists.get(inc.instead);
+      return [{ feature, list: c, count: spentOf(inc, increases[feature.id]) ? 0 : 1, used: used(feature, c), instead: true }];
+    }),
+  ];
 };
 
 /**
@@ -590,11 +614,12 @@ const heldOf = (definition, data) => {
       const level = opener ? opener.level : null;
       if (level !== p.level) { p.level = level; changed = true; }
     }
+    // By feature and list: a feature may open one list and offer another instead of its increase (7d6c).
     const room = new Map(openingsOf(definition, held.filter((p) => p.active === true))
-      .map((o) => [o.feature.id, { list: o.list, left: o.count - o.used }]));
+      .map((o) => [`${o.feature.id} ${o.list.id}`, { left: o.count - o.used }]));
     for (const p of held.filter((x) => x.active === null)) {
-      const r = room.get(p.from);
-      if (r && r.list === p.list && r.left > 0) { p.active = true; r.left -= 1; changed = true; }
+      const r = room.get(`${p.from} ${p.list.id}`);
+      if (r && r.left > 0) { p.active = true; r.left -= 1; changed = true; }
     }
   }
   for (const p of held) if (p.active === null) p.active = false;
@@ -619,7 +644,10 @@ const increaseOf = (definition, feature) => {
   const stats = list(definition.stats).filter((g) => isPlainObject(g) && (inc.stats === undefined || g.id === inc.stats))
     .flatMap((g) => list(g.stats)).filter((s) => isPlainObject(s) && typeof s.id === 'string').map((s) => s.id);
   const most = Number.isInteger(inc.most) && inc.most >= 1 ? Math.min(inc.most, inc.points) : inc.points;
-  return { points: inc.points, most, stats, cap: Number.isInteger(inc.cap) ? inc.cap : null };
+  const other = choicesOf(definition).find((c) => c.id === inc.instead) || null;
+  // A list picked on its own has no pick to give here (7d6c).
+  const instead = other && ['features', 'both'].includes(pickedOf(other)) ? other.id : null;
+  return { points: inc.points, most, stats, cap: Number.isInteger(inc.cap) ? inc.cap : null, instead };
 };
 
 /** How an increase was spent, while it holds: { stat: points } on stats it may raise, whole from 1, within its most and its points. */
@@ -727,7 +755,10 @@ const overlayOf = (definition, data) => {
   };
   for (const { feature } of unlockedOf(picks)) {
     // An INCREASE as it was spent (7d6b), on the stats it raises.
-    const spent = own(increases, feature.id) ? spentOf(increaseOf(definition, feature), increases[feature.id]) : null;
+    const inc = own(increases, feature.id) ? increaseOf(definition, feature) : null;
+    // A pick taken instead (7d6c): the points don't count.
+    const instead = inc && inc.instead && picks.some((p) => p.from === feature.id && p.list.id === inc.instead);
+    const spent = inc && !instead ? spentOf(inc, increases[feature.id]) : null;
     for (const [stat, n] of Object.entries(spent || {})) added(stat, n, feature);
     for (const m of list(feature.modifiers).slice(0, LIMITS.modifiers)) {
       if (!isPlainObject(m) || typeof m.target !== 'string' || !targets.has(m.target) || typeof m.amount !== 'string') continue;
@@ -836,7 +867,7 @@ const workedOf = (definition, data) => {
     picks: held.map((p) => ({ list: p.list.id, option: p.option.id, ...(p.level === null ? {} : { level: p.level }),
       ...(p.from ? { from: p.from } : {}), ...(p.active ? {} : { waiting: true }), ...(p.locked ? { locked: true } : {}), ...(p.roll === undefined ? {} : { roll: p.roll }) })),
     // 7a5a: each unlocked feature opening a list picked through features, and how many it gives and has.
-    opens: openingsOf(definition, picks).map((o) => ({ feature: o.feature.id, list: o.list.id, count: o.count, used: o.used })),
+    opens: openingsOf(definition, picks, data).map((o) => ({ feature: o.feature.id, list: o.list.id, count: o.count, used: o.used, ...(o.instead ? { instead: true } : {}) })),
     levels: levelsOf(definition, picks),
     from: overlayOf(definition, data).from,
     uses: Object.fromEntries(usesOf(definition, data).map((u) => [u.feature.id, { max: u.max, spent: u.spent }])),
@@ -879,6 +910,7 @@ const giftsShown = (definition, option) => {
 /** An increase as the sheet and LEVEL_UP.EXE draw it (7d6b). */
 const increaseShown = (inc, names) => ({
   points: inc.points, most: inc.most, stats: inc.stats.map((id) => ({ id, label: String(names.get(id) || id) })), ...(inc.cap === null ? {} : { cap: inc.cap }),
+  ...(inc.instead ? { instead: inc.instead } : {}),
 });
 
 /**

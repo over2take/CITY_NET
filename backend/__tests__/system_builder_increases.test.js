@@ -9,7 +9,9 @@ import { createRequire } from 'module';
  */
 
 const require_ = createRequire(import.meta.url);
-const { PICKS_KEY, INCREASES_KEY, increaseOf, spentOf, effectiveData, workedOf, choicesShown } = require_('../systemBuilder/choices');
+const { PICKS_KEY, INCREASES_KEY, increaseOf, spentOf, effectiveData, workedOf, choicesShown, heldOf } = require_('../systemBuilder/choices');
+const { checkDefinition } = require_('../systemBuilder/definition');
+const { pickAction } = require_('../systemBuilder/picking');
 const { LEVELING_KEY, levelAction } = require_('../systemBuilder/levelUp');
 const { XP_KEY } = require_('../systemBuilder/levels');
 
@@ -40,8 +42,8 @@ const feature = (option, id) => RAISED.choices.flatMap((c) => c.options).find((o
 
 describe('an increase as it reads', () => {
   it('its points, the most on one, the stats it may raise and where they stop', () => {
-    expect(increaseOf(RAISED, feature('soldier', 'asi'))).toEqual({ points: 2, most: 2, stats: ['might', 'wits'], cap: 20 });
-    expect(increaseOf(RAISED, feature('mage', 'spark'))).toEqual({ points: 1, most: 1, stats: ['might', 'wits', 'lore'], cap: null });
+    expect(increaseOf(RAISED, feature('soldier', 'asi'))).toEqual({ points: 2, most: 2, stats: ['might', 'wits'], cap: 20, instead: null });
+    expect(increaseOf(RAISED, feature('mage', 'spark'))).toEqual({ points: 1, most: 1, stats: ['might', 'wits', 'lore'], cap: null, instead: null });
     expect(increaseOf(RAISED, { increase: { points: 2, most: 5 } }).most).toBe(2);
     expect(increaseOf(RAISED, { increase: { points: 4, most: 0 } }).most).toBe(4);
     expect(increaseOf(RAISED, { increase: { points: 2, stats: 'gone' } }).stats).toEqual([]);
@@ -184,5 +186,97 @@ describe('the sheet\'s view of the lists', () => {
     expect(of('soldier', 'asi').increase).toEqual({ points: 2, most: 2, stats: [{ id: 'might', label: 'Might' }, { id: 'wits', label: 'Wits' }], cap: 20 });
     expect(of('mage', 'spark').increase).toEqual({ points: 1, most: 1, stats: [{ id: 'might', label: 'Might' }, { id: 'wits', label: 'Wits' }, { id: 'lore', label: 'Lore' }] });
     expect(of('soldier', 'grit')).not.toHaveProperty('increase');
+  });
+});
+
+describe('OR A FEAT INSTEAD (7d6c)', () => {
+  const FEATS = { id: 'feats', one: 'Feat', many: 'Feats', picked: 'features', options: [
+    { id: 'tough', label: 'Tough', features: [{ id: 'tough_f', label: 'Tough', modifiers: [{ target: 'wits', amount: '1' }] }] },
+    { id: 'quick', label: 'Quick' },
+  ] };
+  const PATHS = { id: 'paths', one: 'Path', many: 'Paths', picked: 'features', options: [{ id: 'duelist', label: 'Duelist' }] };
+  const withAsi = (increase, more = {}, lists = [FEATS, PATHS]) => ({ ...RAISED, choices: [
+    { ...RAISED.choices[0], options: [{ ...RAISED.choices[0].options[0], features: RAISED.choices[0].options[0].features.map((f) => (f.id === 'asi' ? { ...f, increase, ...more } : f)) }, RAISED.choices[0].options[1]] },
+    RAISED.choices[1], ...lists,
+  ] });
+  const FEATED = withAsi({ points: 2, stats: 'abilities', cap: 20, instead: 'feats' });
+  const go = (definition, data, action, opts = {}) => levelAction(definition, data, { kind: 'up', list: 'classes', option: 'soldier', ...action }, opts);
+  const said = (definition) => checkDefinition(definition).problems.map((p) => `${p.where}: ${p.message}`);
+  const AT = 'list classes, option soldier, feature asi, increase, instead';
+  const TOUGH = [{ list: 'feats', option: 'tough', from: 'asi' }];
+
+  it('a list picked through features, or both; never its own, or one picked on its own', () => {
+    expect(said(FEATED)).toEqual([]);
+    expect(said(withAsi({ points: 2, instead: 'feats' }, {}, [{ ...FEATS, picked: 'both' }, PATHS]))).toEqual([]);
+    expect(said(withAsi({ points: 2, instead: 'gone' }))).toEqual([`${AT}: Not one of this system's lists`]);
+    expect(said(withAsi({ points: 2, instead: 7 }))).toEqual([`${AT}: Not one of this system's lists`]);
+    expect(said(withAsi({ points: 2, instead: 'classes' }))).toEqual([`${AT}: A list can't be picked from inside itself`]);
+    expect(said(withAsi({ points: 2, instead: 'feats' }, {}, [{ ...FEATS, picked: undefined }, PATHS]))).toEqual([`${AT}: FEATS is picked on its own: set it to THROUGH FEATURES or BOTH`]);
+  });
+
+  it('a list offered instead counts as opened, for the lists never to go round in a loop', () => {
+    const back = { ...FEATS, options: [{ id: 'tough', label: 'Tough', features: [{ id: 'again', label: 'Again', choice: 'paths' }] }] };
+    const round = { ...PATHS, options: [{ id: 'duelist', label: 'Duelist', features: [{ id: 'more', label: 'More', increase: { points: 1, instead: 'feats' } }] }] };
+    expect(said(withAsi({ points: 2, instead: 'feats' }, {}, [back, round]))).toContain('list feats: Its features open lists that lead back to it: FEATS → PATHS → FEATS');
+  });
+
+  it('read with its list, none for one picked on its own; in the sheet\'s view', () => {
+    expect(increaseOf(FEATED, { increase: { points: 2, instead: 'feats' } }).instead).toBe('feats');
+    expect(increaseOf(withAsi({ points: 2 }, {}, [{ ...FEATS, picked: 'own' }]), { increase: { points: 2, instead: 'feats' } }).instead).toBeNull();
+    expect(increaseOf(FEATED, { increase: { points: 2, instead: 'gone' } }).instead).toBeNull();
+    const asi = choicesShown(FEATED)[0].options[0].features.find((f) => f.id === 'asi');
+    expect(asi.increase.instead).toBe('feats');
+    expect(choicesShown(RAISED)[0].options[0].features.find((f) => f.id === 'asi').increase).not.toHaveProperty('instead');
+  });
+
+  it('going up: the points or a pick from the list, never both, never neither', () => {
+    expect(go(FEATED, sheet()).error).toBe('Spend Ability Score Improvement\'s points, or pick a Feat, first');
+    expect(go(FEATED, sheet(), { picks: TOUGH, increases: { asi: { wits: 1 } } }).error).toBe('Ability Score Improvement: the points or a Feat, not both');
+    const feat = go(FEATED, sheet(), { picks: TOUGH });
+    expect(feat.ok).toBe(true);
+    expect(feat.data[PICKS_KEY].feats).toEqual([{ option: 'tough', from: 'asi' }]);
+    expect(feat.data).not.toHaveProperty(INCREASES_KEY);
+    expect(effectiveData(FEATED, feat.data).wits).toBe(19);
+    const points = go(FEATED, sheet(), { increases: { asi: { wits: 2 } } });
+    expect(points.data[INCREASES_KEY]).toEqual({ asi: { wits: 2 } });
+    // Only one pick there.
+    expect(go(FEATED, sheet(), { picks: [...TOUGH, { list: 'feats', option: 'quick', from: 'asi' }] }).error).toBe('No more Feats can be picked there');
+  });
+
+  it('on the sheet: one pick there while the points aren\'t spent; none once they are', () => {
+    const open = go(FEATED, sheet(), {}, { gm: true }).data;
+    expect(workedOf(FEATED, open).opens).toEqual([{ feature: 'asi', list: 'feats', count: 1, used: 0, instead: true }]);
+    expect(pickAction(FEATED, open, { kind: 'pick', list: 'feats', option: 'quick', from: 'asi' }).ok).toBe(true);
+    const spent = go(FEATED, sheet(), { increases: { asi: { wits: 2 } } }).data;
+    expect(workedOf(FEATED, spent).opens).toEqual([{ feature: 'asi', list: 'feats', count: 0, used: 0, instead: true }]);
+    expect(pickAction(FEATED, spent, { kind: 'pick', list: 'feats', option: 'quick', from: 'asi' }).error).toBe('The points were spent there instead: no Feats as well');
+    expect(pickAction(FEATED, spent, { kind: 'pick', list: 'feats', option: 'quick', from: 'asi' }, { gm: true }).error).toBe('The points were spent there instead: no Feats as well');
+  });
+
+  it('a pick taken there means the points don\'t count', () => {
+    const both = { ...sheet(holding(['soldier', 2])), [INCREASES_KEY]: { asi: { wits: 2 } }, [PICKS_KEY]: { ...holding(['soldier', 2])[PICKS_KEY], feats: [{ option: 'quick', from: 'asi' }] } };
+    expect(effectiveData(FEATED, both).wits).toBe(18);
+    expect(workedOf(FEATED, both).from).not.toHaveProperty('wits');
+    // Without the list offered instead, the points count whatever else is picked.
+    expect(effectiveData(withAsi({ points: 2, stats: 'abilities' }), both).wits).toBe(20);
+  });
+
+  it('a feature opening one list and offering another: a pick under each, each with its own room', () => {
+    const def = withAsi({ points: 2, stats: 'abilities', instead: 'feats' }, { choice: 'paths' });
+    const data = { ...sheet(), [PICKS_KEY]: { ...holding(['soldier', 2])[PICKS_KEY], feats: [{ option: 'tough', from: 'asi' }], paths: [{ option: 'duelist', from: 'asi' }] } };
+    expect(heldOf(def, data).filter((p) => p.from === 'asi').map((p) => [p.list.id, p.active])).toEqual([['feats', true], ['paths', true]]);
+    expect(workedOf(def, data).opens).toEqual([{ feature: 'asi', list: 'paths', count: 1, used: 1 }, { feature: 'asi', list: 'feats', count: 1, used: 1, instead: true }]);
+  });
+
+  it('there, a pick from the list it opens is never the one taken instead', () => {
+    const def = withAsi({ points: 2, stats: 'abilities', instead: 'feats' }, { choice: 'paths' });
+    const DUELIST = [{ list: 'paths', option: 'duelist', from: 'asi' }];
+    // Going up with a Path picked and the points spent.
+    const up2 = go(def, sheet(), { picks: DUELIST, increases: { asi: { wits: 2 } } });
+    expect(up2.ok).toBe(true);
+    // The points count with a Path picked there.
+    expect(effectiveData(def, up2.data).wits).toBe(20);
+    // The points spent: no Feat there, while the Path was taken all the same.
+    expect(pickAction(def, up2.data, { kind: 'pick', list: 'feats', option: 'quick', from: 'asi' }).error).toBe('The points were spent there instead: no Feats as well');
   });
 });

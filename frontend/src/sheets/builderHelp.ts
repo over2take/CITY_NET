@@ -255,6 +255,7 @@ export const HINTS = {
   'choices.increasePoints': 'How many points it gives, and the most on any one stat. D&D: 2, at most 2. Pathfinder 2e: 4, at most 1. 13th Age: 3, at most 1.',
   'choices.increaseStats': 'Which stats it may raise: every stat, or one group of them, as ABILITIES.',
   'choices.increaseCap': 'No stat is raised past this, as D&D\'s 20. Leave it blank for no limit.',
+  'choices.increaseInstead': 'A list the player may pick one from instead of the points, as D&D\'s feat in place of an Ability Score Improvement. It must be picked THROUGH FEATURES or BOTH.',
   'choices.import': 'Fill this list from a file: paste or upload a table of options and features, PREVIEW what it changes, then APPLY. Names are matched, nothing is deleted, and a line with a mistake is skipped and named. DOWNLOAD EXAMPLE shows the shape; DOWNLOAD THIS LIST keeps a copy first.',
   'rolls.preset': 'A ready-made roll from a game, like a PbtA move or a Blades action, put into the five steps. The roll\'s name and ROLLED BY stay; change anything after.',
   'rolls.dice': 'What is rolled: how many, as a number or a formula like @this, and of which size, or the system\'s own dice. Name a kind, like Hunger, to show it apart and give it effects.',

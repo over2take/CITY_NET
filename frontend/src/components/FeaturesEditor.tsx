@@ -91,6 +91,8 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
   // A list everyone has is never picked, so no feature opens it.
   const otherLists = choiceLists(definition).filter((c) => c.id !== list.id && pickedOf(c) !== 'everyone');
   const opened = otherLists.find((c) => c.id === feature.choice);
+  // OR A FEAT INSTEAD (7d6c): the list an increase offers in place of its points.
+  const instead = otherLists.find((c) => c.id === feature.increase?.instead);
   const mods = feature.modifiers ?? [];
   const changes = feature.changes ?? [];
   const given = new Set(feature.rolls ?? []);
@@ -159,6 +161,18 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
             <input id={id('cap')} type="number" min={-LIMITS.cap} max={LIMITS.cap} step={1} value={inc.cap ?? ''} placeholder="NO LIMIT" style={{ ...input, width: 90 }}
               onChange={(e) => { const n = whole(e.target.value); set({ increase: { ...inc, cap: n ?? undefined } }); }} />
             <span style={{ ...why, fontSize: 11 }} aria-label="The increase in words">{increaseWords(definition, inc)}</span>
+          </span>
+          <FieldName beside htmlFor={id('instead')} hint={HINTS['choices.increaseInstead']} style={small}>OR INSTEAD</FieldName>
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <select id={id('instead')} value={inc.instead ?? ''} style={{ ...input, justifySelf: 'start', alignSelf: 'start' }} onChange={(e) => set({ increase: { ...inc, instead: e.target.value } })}>
+              <option value="">NOTHING: THE POINTS ONLY</option>
+              {otherLists.map((c) => <option key={c.id} value={c.id}>A {(c.one || c.id).toUpperCase()}</option>)}
+            </select>
+            {instead && pickedOf(instead) === 'own' && (
+              <span style={{ ...why, fontSize: 11, color: 'var(--warning)' }}>
+                {(instead.many || instead.id).toUpperCase()} is picked on its own, so there is nothing to pick here. Set it to THROUGH FEATURES or BOTH on its page.
+              </span>
+            )}
           </span>
         </>}
 
