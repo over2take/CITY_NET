@@ -1,14 +1,15 @@
 // LEVEL_UP.EXE as logic (7d3a; approved mockup docs/mockups/level-up.html, 2026-11-07): its folders, which class is
 // going up, and what the new level unlocks. The window only draws it. Nothing changes until FINISH: the server keeps
 // only the player's place (backend levelUp.js LEVELING_KEY). From 7d3b, a class they don't hold yet can be taken up,
-// and the picks a new level opens are made in the window, FINISH waiting for them.
+// and the picks a new level opens are made in the window, FINISH waiting for them. 7d6b: an INCREASE the new level
+// unlocks is spent in ABILITY INCREASE, FINISH waiting for every point.
 
-import { listShown, pickedOf, workedOn, type ChoiceListShown, type FeatureShown, type OptionShown } from './choicesShown';
-import { characterLevel, levelUpOffer, HEALTH_SHOWN_KEY, type BeatShown, type HealthGainBy, type LevelTarget, type LevelUpOffer, type LevelUpPick } from './xpMeter';
+import { listShown, pickedOf, workedOn, type ChoiceListShown, type FeatureShown, type IncreaseShown, type OptionShown } from './choicesShown';
+import { characterLevel, levelUpOffer, HEALTH_SHOWN_KEY, type BeatShown, type HealthGainBy, type LevelTarget, type LevelUpIncreases, type LevelUpOffer, type LevelUpPick } from './xpMeter';
 import type { SheetTemplate } from './types';
 
-export type LevelUpStep = 'which' | 'health' | 'unlocks';
-export const LEVEL_UP_STEP_NAMES: Record<LevelUpStep, string> = { which: 'WHICH CLASS', health: 'HEALTH', unlocks: 'WHAT IT UNLOCKS' };
+export type LevelUpStep = 'which' | 'health' | 'unlocks' | 'increase';
+export const LEVEL_UP_STEP_NAMES: Record<LevelUpStep, string> = { which: 'WHICH CLASS', health: 'HEALTH', unlocks: 'WHAT IT UNLOCKS', increase: 'ABILITY INCREASE' };
 
 /**
  * The classes they could take up (7d3b): those of a levelled list they pick from themselves, not held, while it has
@@ -23,9 +24,12 @@ export const newClasses = (template: SheetTemplate | null | undefined, data: Rec
   });
 };
 
-/** The folders: WHICH CLASS only when there's a choice of what goes up, HEALTH only where it's per level (7d5a). */
-export const levelUpSteps = (offer: LevelUpOffer, more = 0, health = false): LevelUpStep[] =>
-  [...(offer.targets.length + more > 1 ? ['which' as const] : []), ...(health ? ['health' as const] : []), 'unlocks'];
+/**
+ * The folders: WHICH CLASS only when there's a choice of what goes up, HEALTH only where it's per level (7d5a), and
+ * ABILITY INCREASE only when the new level unlocks one (7d6b).
+ */
+export const levelUpSteps = (offer: LevelUpOffer, more = 0, health = false, increases = false): LevelUpStep[] =>
+  [...(offer.targets.length + more > 1 ? ['which' as const] : []), ...(health ? ['health' as const] : []), 'unlocks', ...(increases ? ['increase' as const] : [])];
 
 /**
  * What a level gains (7d5a; ROLL and THE PLAYER CHOOSES, 7d5b): the die, its average, what each level adds, how it's
@@ -88,8 +92,8 @@ const same = (t: LevelTarget, place: { list?: string; option?: string }) => t.li
 export const chosenTarget = (offer: LevelUpOffer, joinable: LevelTarget[] = []): LevelTarget | null =>
   (offer.leveling ? [...offer.targets, ...joinable.filter((t) => !t.unmet)].find((t) => same(t, offer.leveling!)) : undefined) ?? offer.targets[0] ?? null;
 
-/** One thing the new level brings: a feature, what it comes from, and the list it opens a pick of: its name, id and how many. */
-export interface Unlocked { id: string; label: string; text?: string; from: string; opens?: string; opensList?: string; count?: number }
+/** One thing the new level brings: a feature, what it comes from, the list it opens a pick of (its name, id and how many), and an INCREASE (7d6b). */
+export interface Unlocked { id: string; label: string; text?: string; from: string; opens?: string; opensList?: string; count?: number; increase?: IncreaseShown }
 
 const at = (f: FeatureShown) => f.at ?? 1;
 
@@ -103,7 +107,7 @@ export const unlockedBy = (template: SheetTemplate | null | undefined, data: Rec
   const out: Unlocked[] = [];
   const add = (f: FeatureShown, from: string) => {
     const opens = f.opens ? (lists.find((l) => l.id === f.opens)?.one ?? f.opens) : undefined;
-    out.push({ id: f.id, label: f.label, ...(f.text ? { text: f.text } : {}), from, ...(opens ? { opens, opensList: f.opens, count: f.opensCount ?? 1 } : {}) });
+    out.push({ id: f.id, label: f.label, ...(f.text ? { text: f.text } : {}), from, ...(opens ? { opens, opensList: f.opens, count: f.opensCount ?? 1 } : {}), ...(f.increase ? { increase: f.increase } : {}) });
   };
   const optionOf = (list: string, option: string) => lists.find((l) => l.id === list)?.options.find((o) => o.id === option);
   if (target.list && target.option) {
@@ -157,6 +161,36 @@ export const withPickToggled = (picks: LevelUpPick[], asked: PickAsked, option: 
   if (picks.filter(mine).length >= asked.count) return picks;
   return [...picks, { list: asked.list.id, option, from: asked.feature }];
 };
+
+/** A stat as the sheet reads it now (7d6b): as typed, with what the picks add (the server's worked.from). */
+export const statNow = (data: Record<string, unknown> | null | undefined, stat: string): number => {
+  const typed = Number(data?.[stat]);
+  return (Number.isFinite(typed) ? typed : 0) + (workedOn(data).from[stat] ?? []).reduce((n, s) => n + (Number.isFinite(s.amount) ? s.amount : 0), 0);
+};
+
+/** How many of an increase's points are still to spend. */
+export const pointsLeft = (u: Unlocked, spread: Record<string, number> = {}): number =>
+  (u.increase?.points ?? 0) - Object.values(spread).reduce((n, p) => n + p, 0);
+
+/** Whether a point more can go on a stat: one left, under the most on one, and not past where it stops. */
+export const canRaise = (data: Record<string, unknown> | null | undefined, u: Unlocked, spread: Record<string, number>, stat: string): boolean => {
+  const inc = u.increase;
+  const on = spread[stat] ?? 0;
+  return !!inc && pointsLeft(u, spread) > 0 && on < inc.most && (inc.cap === undefined || statNow(data, stat) + on + 1 <= inc.cap);
+};
+
+/** The spreads with a point more (by 1) or less (by -1) on a stat; one emptied is left out. */
+export const withRaised = (spreads: LevelUpIncreases, feature: string, stat: string, by: 1 | -1): LevelUpIncreases => {
+  const spread = { ...(spreads[feature] ?? {}) };
+  const now = (spread[stat] ?? 0) + by;
+  if (now > 0) spread[stat] = now; else delete spread[stat];
+  const rest = Object.fromEntries(Object.entries(spreads).filter(([id]) => id !== feature));
+  return Object.keys(spread).length ? { ...rest, [feature]: spread } : rest;
+};
+
+/** Whether every increase the new level unlocks has every point spent, so FINISH can go. Anything else has none to spend. */
+export const increasesSpent = (unlocked: Unlocked[], spreads: LevelUpIncreases): boolean =>
+  unlocked.every((u) => pointsLeft(u, spreads[u.id]) === 0);
 
 /** The window's title: whose, and what it goes to. */
 export const levelUpTitle = (name: string, target: LevelTarget | null): string =>

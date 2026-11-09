@@ -69,16 +69,18 @@ export const xpMeter = (template: SheetTemplate | null | undefined, data: Record
 export interface LevelTarget { list?: string; option?: string; name: string; level: number; /** One they don't hold yet (7d3b), coming in at 1. */ new?: true; /** What it needs, when they don't meet it. */ unmet?: string }
 /** A pick made in LEVEL_UP.EXE (7d3b): from a list a feature of the new level opens. */
 export interface LevelUpPick { list: string; option: string; from?: string }
+/** How each INCREASE a new level unlocks is being spent (7d6b; backend levelUp.js): { feature: { stat: points } }. */
+export type LevelUpIncreases = Record<string, Record<string, number>>;
 export interface LevelUpOffer {
   ready: boolean; targets: LevelTarget[]; firstPick: string | null;
   /** Where LEVEL_UP.EXE was left: null when it isn't open on this sheet. */
-  leveling: { list?: string; option?: string; picks?: LevelUpPick[]; health?: LevelUpHealth } | null;
+  leveling: { list?: string; option?: string; picks?: LevelUpPick[]; health?: LevelUpHealth; increases?: LevelUpIncreases } | null;
 }
 
 const placeOf = (data: Record<string, unknown> | null | undefined): LevelUpOffer['leveling'] => {
   const p = data?.[LEVELING_KEY];
   if (!p || typeof p !== 'object' || Array.isArray(p)) return null;
-  const { list, option, picks, health } = p as Record<string, unknown>;
+  const { list, option, picks, health, increases } = p as Record<string, unknown>;
   const h = health && typeof health === 'object' ? health as Record<string, unknown> : {};
   const kept: LevelUpHealth = {
     ...(Number.isInteger(h.roll) ? { roll: h.roll as number } : {}), ...(Number.isInteger(h.die) ? { die: h.die as number } : {}),
@@ -88,7 +90,14 @@ const placeOf = (data: Record<string, unknown> | null | undefined): LevelUpOffer
   };
   const made = (Array.isArray(picks) ? picks : []).filter((x): x is LevelUpPick => !!x && typeof x === 'object' && typeof (x as LevelUpPick).list === 'string' && typeof (x as LevelUpPick).option === 'string')
     .map((x) => ({ list: x.list, option: x.option, ...(typeof x.from === 'string' ? { from: x.from } : {}) }));
-  return { ...(typeof list === 'string' ? { list } : {}), ...(typeof option === 'string' ? { option } : {}), ...(made.length ? { picks: made } : {}), ...(Object.keys(kept).length ? { health: kept } : {}) };
+  const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+  const spent: LevelUpIncreases = {};
+  for (const [feature, spread] of Object.entries(isObj(increases) ? increases : {})) {
+    const points = Object.fromEntries(Object.entries(isObj(spread) ? spread : {}).filter(([, n]) => Number.isInteger(n) && (n as number) >= 1)) as Record<string, number>;
+    if (Object.keys(points).length) spent[feature] = points;
+  }
+  return { ...(typeof list === 'string' ? { list } : {}), ...(typeof option === 'string' ? { option } : {}), ...(made.length ? { picks: made } : {}), ...(Object.keys(kept).length ? { health: kept } : {}),
+    ...(Object.keys(spent).length ? { increases: spent } : {}) };
 };
 
 /** Whether this character can go up now, and what would. Null where levels are typed in. */

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { canRaise, increasesSpent, pointsLeft, statNow, withRaised } from '../levelUpFlow';
 import { LEVEL_UP_STEP_NAMES, gmLevelingLine, healthGain, healthRolledFor, chosenTarget, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted, unlockedBy, withPickToggled, type Unlocked } from '../levelUpFlow';
 import { WORKED_KEY } from '../choicesShown';
 import { levelUpOffer, type LevelUpOffer } from '../xpMeter';
@@ -43,7 +44,7 @@ describe('the folders', () => {
     // A class they could take up is a choice too (7d3b).
     expect(levelUpSteps(offer([SOLDIER]), 1)).toEqual(['which', 'unlocks']);
     expect(levelUpSteps(offer([SOLDIER]), 0)).toEqual(['unlocks']);
-    expect(LEVEL_UP_STEP_NAMES).toEqual({ which: 'WHICH CLASS', health: 'HEALTH', unlocks: 'WHAT IT UNLOCKS' });
+    expect(LEVEL_UP_STEP_NAMES).toEqual({ which: 'WHICH CLASS', health: 'HEALTH', unlocks: 'WHAT IT UNLOCKS', increase: 'ABILITY INCREASE' });
   });
 });
 
@@ -339,5 +340,71 @@ describe('ROLL TO BEAT (7d5d)', () => {
 
   it('the GM\'s line', () => {
     expect(gmLevelingLine(tpl(POOL), data({ roll: 31, die: 10, gained: 4, over: 19, beat: true }))?.words).toBe('LEVELING UP · SOLDIER 2 → 3 · HEALTH ROLLED 31 TO BEAT 19, +4');
+  });
+});
+
+describe('ABILITY INCREASE (7d6b)', () => {
+  const STATS = [{ id: 'might', label: 'Might' }, { id: 'wits', label: 'Wits' }];
+  const ASI = { id: 'asi', label: 'Ability Score Improvement', from: 'Soldier', increase: { points: 2, most: 2, stats: STATS, cap: 20 } } as Unlocked;
+  const ONE_EACH = { id: 'boost', label: 'Boost', from: 'Everyone', increase: { points: 2, most: 1, stats: STATS } } as Unlocked;
+  // Might 18 typed, +1 from Grit: 19.
+  const data = { might: 18, wits: '12', [WORKED_KEY]: { picks: [], levels: { level: 3 }, from: { might: [{ feature: 'Grit', amount: 1 }] } } };
+
+  it('a folder of its own, after what it unlocks, only when there is one to spend', () => {
+    expect(LEVEL_UP_STEP_NAMES.increase).toBe('ABILITY INCREASE');
+    expect(levelUpSteps(offer([SOLDIER]), 0, true, true)).toEqual(['health', 'unlocks', 'increase']);
+    expect(levelUpSteps(offer([SOLDIER]), 0, false, false)).toEqual(['unlocks']);
+  });
+
+  it('carried with what the new level unlocks', () => {
+    const tpl = { ...TEMPLATE, choices: [{ ...(TEMPLATE.choices as object[])[0] as object, options: [{ id: 'soldier', label: 'Soldier', features: [{ id: 'asi', label: 'Ability Score Improvement', at: 3, increase: ASI.increase }] }] }] } as unknown as SheetTemplate;
+    expect(unlockedBy(tpl, sheet([{ list: 'classes', option: 'soldier', level: 2 }], 2), SOLDIER)).toEqual([{ id: 'asi', label: 'Ability Score Improvement', from: 'Soldier', increase: ASI.increase }]);
+  });
+
+  it('a stat as it reads now: as typed, with what the picks add', () => {
+    expect(statNow(data, 'might')).toBe(19);
+    expect(statNow(data, 'wits')).toBe(12);
+    expect(statNow(data, 'lore')).toBe(0);
+    expect(statNow({ might: 'x', [WORKED_KEY]: { picks: [], from: { might: [{ feature: 'A', amount: 2 }, { feature: 'B', amount: Number.NaN }] } } }, 'might')).toBe(2);
+    expect(statNow(null, 'might')).toBe(0);
+  });
+
+  it('points left, and whether one more can go on a stat', () => {
+    expect(pointsLeft(ASI)).toBe(2);
+    expect(pointsLeft(ASI, { wits: 1 })).toBe(1);
+    expect(pointsLeft({ id: 'x', label: 'X', from: 'Y' })).toBe(0);
+    expect(canRaise(data, ASI, {}, 'wits')).toBe(true);
+    expect(canRaise(data, ASI, { wits: 1 }, 'wits')).toBe(true);
+    // None left.
+    expect(canRaise(data, ASI, { wits: 2 }, 'might')).toBe(false);
+    // At most 1 on one.
+    expect(canRaise(data, ONE_EACH, { might: 1 }, 'might')).toBe(false);
+    expect(canRaise(data, ONE_EACH, { might: 1 }, 'wits')).toBe(true);
+    // Stops at 20: Might is 19 with Grit, so one more and no further.
+    expect(canRaise(data, ASI, {}, 'might')).toBe(true);
+    expect(canRaise(data, ASI, { might: 1 }, 'might')).toBe(false);
+    expect(canRaise(data, ONE_EACH, {}, 'might')).toBe(true);
+    expect(canRaise(data, { id: 'x', label: 'X', from: 'Y' }, {}, 'might')).toBe(false);
+  });
+
+  it('a point on and off, an emptied one left out', () => {
+    let spreads = withRaised({}, 'asi', 'might', 1);
+    expect(spreads).toEqual({ asi: { might: 1 } });
+    spreads = withRaised(withRaised(spreads, 'asi', 'wits', 1), 'boost', 'wits', 1);
+    expect(spreads).toEqual({ asi: { might: 1, wits: 1 }, boost: { wits: 1 } });
+    spreads = withRaised(spreads, 'asi', 'might', -1);
+    expect(spreads).toEqual({ asi: { wits: 1 }, boost: { wits: 1 } });
+    expect(withRaised(spreads, 'boost', 'wits', -1)).toEqual({ asi: { wits: 1 } });
+    expect(withRaised({}, 'asi', 'might', -1)).toEqual({});
+  });
+
+  it('FINISH waits for every point of each', () => {
+    const unlocked = [ASI, ONE_EACH, { id: 'extra', label: 'Extra', from: 'Soldier' } as Unlocked];
+    expect(increasesSpent(unlocked, {})).toBe(false);
+    expect(increasesSpent(unlocked, { asi: { might: 1, wits: 1 } })).toBe(false);
+    expect(increasesSpent([ASI], { asi: { might: 1 } })).toBe(false);
+    expect(increasesSpent([ASI], { asi: { might: 2 } })).toBe(true);
+    expect(increasesSpent(unlocked, { asi: { wits: 2 }, boost: { might: 1, wits: 1 } })).toBe(true);
+    expect(increasesSpent([{ id: 'extra', label: 'Extra', from: 'Soldier' } as Unlocked], {})).toBe(true);
   });
 });

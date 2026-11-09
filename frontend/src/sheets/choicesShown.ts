@@ -17,11 +17,14 @@
 import type { SheetEffects, FieldEffect } from './cyberwareEffects';
 import type { SheetTemplate } from './types';
 
+/** An INCREASE as the server shows it (7d6b; backend choices.js increaseShown): its points, the most on one, its stats by name, where they stop. */
+export interface IncreaseShown { points: number; most: number; stats: { id: string; label: string }[]; cap?: number }
 export interface FeatureShown {
   id: string; label: string; text?: string; at?: number;
   modifies?: string[]; uses?: { refill: string | null }; rolls?: string[]; changes?: string[]; opens?: string;
   /** How many picks it opens (7a5a): 1 when it says nothing. */
   opensCount?: number;
+  increase?: IncreaseShown;
 }
 /** An option as the sheet draws it; on a list with a table, the roll that gives it (7a5b2). */
 export interface OptionShown { id: string; label: string; description?: string; needs?: string; roll?: string; gives?: GiftsShown; features: FeatureShown[] }
@@ -295,6 +298,7 @@ export const spentAfterClick = (pip: number, spent: number): number => (pip < sp
 /** What a feature does, in a few words: MODIFIES DEFENSE, ROLL SPARK, ADVANTAGE ON MIND SAVE, OPENS SPECIALTY. */
 export const featureDoes = (f: FeatureShown, lists: ChoiceListShown[]): string[] => [
   ...(f.modifies?.length ? [`+ ${f.modifies.join(', ').toUpperCase()}`] : []),
+  ...(f.increase ? [`RAISES STATS: ${f.increase.points} ${f.increase.points === 1 ? 'POINT' : 'POINTS'}`] : []),
   ...(f.rolls ?? []).map((r) => `ROLL ${r.toUpperCase()}`),
   ...(f.changes ?? []).map((c) => c.toUpperCase()),
   ...(f.opens ? [`PICK ${(lists.find((l) => l.id === f.opens)?.one ?? f.opens).toUpperCase()}`] : []),

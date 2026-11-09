@@ -3,14 +3,18 @@ import type { Socket } from 'socket.io-client';
 import { TerminalWindow, type TerminalAction, type TerminalFolder } from './TerminalWindow';
 import { usePlayerSheet } from '../hooks/usePlayerSheet';
 import { useChoicesRefused } from '../hooks/useChoicesRefused';
-import { levelUpOffer, type LevelTarget, type LevelUpPick } from '../sheets/xpMeter';
-import { LEVEL_UP_STEP_NAMES, chosenTarget, healthGain, healthRolledFor, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted, unlockedBy, withPickToggled } from '../sheets/levelUpFlow';
+import { levelUpOffer, type LevelTarget, type LevelUpIncreases, type LevelUpPick } from '../sheets/xpMeter';
+import {
+  LEVEL_UP_STEP_NAMES, canRaise, chosenTarget, healthGain, healthRolledFor, increasesSpent, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted, pointsLeft, statNow,
+  unlockedBy, withPickToggled, withRaised,
+} from '../sheets/levelUpFlow';
 
 // LEVEL_UP.EXE (7d3a; approved mockup docs/mockups/level-up.html, 2026-11-07): the same kind of window as
 // NEW_CHARACTER.EXE. WHICH CLASS when there's a choice, a class not held yet among them (7d3b), then WHAT IT
 // UNLOCKS at the new level, with the picks it opens made right there, FINISH waiting for them. Nothing changes
 // until FINISH. Closing it, or LEAVE FOR NOW, loses nothing: which class is kept on the sheet, which then says
 // LEVELING UP · CONTINUE. What it shows is sheets/levelUpFlow.ts; going up is the server's (backend levelUp.js).
+// ABILITY INCREASE (7d6b): each INCREASE the new level unlocks, its points spread with − and +, FINISH waiting for all.
 
 interface Props {
   pos: { x: number; y: number };
@@ -32,6 +36,8 @@ const btn: React.CSSProperties = {
   fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', padding: '5px 12px', lineHeight: 'normal',
 };
 const card: React.CSSProperties = { border: '1px solid var(--dark-green)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '3px' };
+const statBox: React.CSSProperties = { border: '1px solid var(--dark-green)', padding: '5px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', minWidth: 72 };
+const mini: React.CSSProperties = { ...btn, padding: '1px 8px', fontSize: '0.75rem' };
 
 export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, raiseOn }: Props) {
   const { sheet, template } = usePlayerSheet(socket, userName);
@@ -43,10 +49,14 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
   // Which is going up, and the picks made, ahead of the server's answer so a click shows at once. Null: as the sheet says.
   const [picked, setPicked] = useState<LevelTarget | null>(null);
   const [made, setMade] = useState<LevelUpPick[] | null>(null);
+  const [raised, setRaised] = useState<LevelUpIncreases | null>(null);
   const target = picked ?? (offer ? chosenTarget(offer, joinable) : null);
   const picks = made ?? offer?.leveling?.picks ?? [];
+  const spreads = raised ?? offer?.leveling?.increases ?? {};
   const name = String((data?.name as string) || userName);
-  const place = (t: LevelTarget, p: LevelUpPick[] = []) => socket?.emit('levelAction', { kind: 'place', ...(t.list ? { list: t.list, option: t.option } : {}), ...(p.length ? { picks: p } : {}) });
+  const place = (t: LevelTarget, p: LevelUpPick[] = [], inc: LevelUpIncreases = {}) => socket?.emit('levelAction', {
+    kind: 'place', ...(t.list ? { list: t.list, option: t.option } : {}), ...(p.length ? { picks: p } : {}), ...(Object.keys(inc).length ? { increases: inc } : {}),
+  });
 
   // Opened, their place is kept from the start: closing it is leaving it.
   const kept = !!offer?.leveling;
@@ -65,10 +75,12 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
   }
 
   const gain = healthGain(template, data, target);
-  const steps = levelUpSteps(offer, joinable.length, !!gain);
   const unlocked = unlockedBy(template, data, target);
+  const raising = unlocked.filter((u) => u.increase);
+  const steps = levelUpSteps(offer, joinable.length, !!gain, raising.length > 0);
   const asked = picksAsked(template, data, unlocked);
   const allMade = picksMade(asked, picks);
+  const allSpent = increasesSpent(unlocked, spreads);
   // ROLL or THE PLAYER CHOOSES (7d5b): settled once rolled, or the average taken.
   const healthSettled = !gain || gain.gained !== null;
   const index = Math.min(step, steps.length - 1);
@@ -79,19 +91,21 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
     { key: 'back', label: 'BACK', disabled: index === 0, onClick: () => setStep(index - 1) },
     { key: 'leave', label: 'LEAVE FOR NOW', onClick: onLeave },
     {
-      key: 'next', label: last ? 'FINISH' : 'NEXT', tone: 'primary', disabled: (last && !allMade) || ((last || open === 'health') && !healthSettled),
-      title: (last || open === 'health') && !healthSettled ? (gain?.by === 'choose' ? 'Take the average or roll first' : 'Roll for health first') : last && !allMade ? 'Make the picks first' : undefined,
+      key: 'next', label: last ? 'FINISH' : 'NEXT', tone: 'primary', disabled: (last && (!allMade || !allSpent)) || ((last || open === 'health') && !healthSettled),
+      title: (last || open === 'health') && !healthSettled ? (gain?.by === 'choose' ? 'Take the average or roll first' : 'Roll for health first')
+        : last && !allMade ? 'Make the picks first' : last && !allSpent ? 'Spend the points first' : undefined,
       onClick: () => {
         if (!last) return setStep(index + 1);
-        socket?.emit('levelAction', { kind: 'up', ...(target.list ? { list: target.list, option: target.option } : {}), ...(picks.length ? { picks } : {}) });
+        socket?.emit('levelAction', { kind: 'up', ...(target.list ? { list: target.list, option: target.option } : {}), ...(picks.length ? { picks } : {}), ...(Object.keys(spreads).length ? { increases: spreads } : {}) });
         return onDone();
       },
     },
   ];
-  const choose = (t: LevelTarget) => { setPicked(t); setMade([]); place(t); };
+  const choose = (t: LevelTarget) => { setPicked(t); setMade([]); setRaised({}); place(t); };
   const health = (kind: 'healthRoll' | 'healthAverage') => socket?.emit('levelAction', { kind, ...(target.list ? { list: target.list, option: target.option } : {}) });
   const lockedTo = healthRolledFor(offer, [...offer.targets, ...joinable], target) ?? (gain?.rolled !== null && gain?.rolled !== undefined ? target.name : null);
-  const toggle = (a: (typeof asked)[number], option: string) => { const next = withPickToggled(picks, a, option); setMade(next); place(target, next); };
+  const toggle = (a: (typeof asked)[number], option: string) => { const next = withPickToggled(picks, a, option); setMade(next); place(target, next, spreads); };
+  const raise = (feature: string, stat: string, by: 1 | -1) => { const next = withRaised(spreads, feature, stat, by); setRaised(next); place(target, picks, next); };
 
   return (
     <TerminalWindow raiseOn={raiseOn} title={title} pos={pos} setPos={setPos} onClose={onLeave} panelMode="controls"
@@ -204,11 +218,41 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
                     </>
                   )}
                   {u.opens && !a && <span style={why}>Opens the {u.opens}: picked on its own, on your sheet.</span>}
+                  {u.increase && <span style={{ ...why, color: 'var(--cyan)', opacity: 1 }}>{u.increase.points} {u.increase.points === 1 ? 'point' : 'points'} to spend, in {LEVEL_UP_STEP_NAMES.increase}.</span>}
                 </div>
               );
             })}
           </>
         )}
+        {open === 'increase' && raising.map((u) => {
+          const inc = u.increase!;
+          const spread = spreads[u.id] ?? {};
+          const left = pointsLeft(u, spread);
+          return (
+            <div key={u.id} style={card} role="group" aria-label={`Spend ${u.label}`}>
+              <span style={{ fontSize: '0.75rem' }}>{u.label.toUpperCase()} <span style={{ ...why, display: 'inline' }}>· {u.from}</span></span>
+              <span style={{ ...why, color: left ? 'var(--cyan)' : 'var(--green)', opacity: 1 }}>
+                {left} {left === 1 ? 'POINT' : 'POINTS'} LEFT{inc.points > 1 ? ` · AT MOST ${inc.most} ON ONE` : ''}{inc.cap !== undefined ? ` · STOPS AT ${inc.cap}` : ''}
+              </span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {inc.stats.map((s) => {
+                  const on = spread[s.id] ?? 0;
+                  return (
+                    <div key={s.id} style={statBox}>
+                      <span style={{ fontSize: '0.6rem', letterSpacing: '1px', opacity: 0.8 }}>{s.label.toUpperCase()}</span>
+                      <b aria-label={`${s.label} with the points`} style={{ fontSize: '0.9rem', color: on ? 'var(--cyan)' : 'var(--green)' }}>{statNow(data, s.id) + on}</b>
+                      <span style={{ display: 'flex', gap: '4px' }}>
+                        <button type="button" style={mini} aria-label={`Less ${s.label}`} disabled={!on} onClick={() => raise(u.id, s.id, -1)}>−</button>
+                        <button type="button" style={mini} aria-label={`More ${s.label}`} disabled={!canRaise(data, u, spread, s.id)} onClick={() => raise(u.id, s.id, 1)}>+</button>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              {u.text && <span style={why}>{u.text}</span>}
+            </div>
+          );
+        })}
         {refused && <p role="alert" style={{ ...why, color: 'var(--danger)', opacity: 1 }}>{refused}</p>}
       </div>
     </TerminalWindow>

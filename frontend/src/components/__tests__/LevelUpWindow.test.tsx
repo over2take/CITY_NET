@@ -449,3 +449,57 @@ describe('ROLL TO BEAT (7d5d)', () => {
     expect(button('NEXT').disabled).toBe(false);
   });
 });
+
+describe('ABILITY INCREASE (7d6b)', () => {
+  const STATS = [{ id: 'might', label: 'Might' }, { id: 'wits', label: 'Wits' }];
+  const RAISING = { ...ONE, options: [{ id: 'soldier', label: 'Soldier', features: [
+    { id: 'asi', label: 'Ability Score Improvement', at: 3, text: 'Raise your stats.', increase: { points: 2, most: 2, stats: STATS, cap: 20 } },
+  ] }] };
+  const data = (more: object = {}) => holding([['soldier', 2]], 9000, { might: 19, wits: 12, ...more });
+  const spend = () => within(screen.getByRole('group', { name: 'Spend Ability Score Improvement' }));
+
+  it('its own folder after what it unlocks; − and +, within what it allows; FINISH waits for every point', async () => {
+    const { socket, onDone } = await open(data(), [RAISING]);
+    expect(folders()).toEqual(['WHAT IT UNLOCKS', 'ABILITY INCREASE']);
+    expect(screen.getByText('2 points to spend, in ABILITY INCREASE.')).toBeTruthy();
+    await userEvent.click(button('NEXT'));
+    expect(spend().getByText('2 POINTS LEFT · AT MOST 2 ON ONE · STOPS AT 20')).toBeTruthy();
+    expect(button('FINISH').disabled).toBe(true);
+    expect(button('FINISH').title).toBe('Spend the points first');
+    expect(spend().getByLabelText('Might with the points').textContent).toBe('19');
+    expect((spend().getByRole('button', { name: 'Less Might' }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(spend().getByRole('button', { name: 'More Might' }));
+    expect(spend().getByLabelText('Might with the points').textContent).toBe('20');
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'place', list: 'classes', option: 'soldier', increases: { asi: { might: 1 } } });
+    // Might stops at 20.
+    expect((spend().getByRole('button', { name: 'More Might' }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(spend().getByRole('button', { name: 'More Wits' }));
+    expect(spend().getByText('0 POINTS LEFT · AT MOST 2 ON ONE · STOPS AT 20')).toBeTruthy();
+    expect((spend().getByRole('button', { name: 'More Wits' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(button('FINISH').disabled).toBe(false);
+    await userEvent.click(button('FINISH'));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'up', list: 'classes', option: 'soldier', increases: { asi: { might: 1, wits: 1 } } });
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it('a point taken back; what was spent is kept with the place', async () => {
+    const { socket } = await open(data({ _leveling: { list: 'classes', option: 'soldier', increases: { asi: { wits: 2 } } } }), [RAISING]);
+    await userEvent.click(within(screen.getByRole('tablist', { name: 'Folders' })).getByRole('tab', { name: /ABILITY INCREASE/ }));
+    expect(spend().getByLabelText('Wits with the points').textContent).toBe('14');
+    await userEvent.click(spend().getByRole('button', { name: 'Less Wits' }));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'place', list: 'classes', option: 'soldier', increases: { asi: { wits: 1 } } });
+    expect(spend().getByText('1 POINT LEFT · AT MOST 2 ON ONE · STOPS AT 20')).toBeTruthy();
+  });
+
+  it('one point, and no cap: said without AT MOST or STOPS AT', async () => {
+    const NUDGE = { ...ONE, options: [{ id: 'soldier', label: 'Soldier', features: [{ id: 'nudge', label: 'Nudge', at: 3, increase: { points: 1, most: 1, stats: STATS } }] }] };
+    await open(data(), [NUDGE]);
+    await userEvent.click(button('NEXT'));
+    expect(within(screen.getByRole('group', { name: 'Spend Nudge' })).getByText('1 POINT LEFT')).toBeTruthy();
+  });
+
+  it('no folder when the level unlocks none', async () => {
+    await open(holding([['soldier', 1]]), [RAISING]);
+    expect(folders()).toEqual(['WHAT IT UNLOCKS']);
+  });
+});

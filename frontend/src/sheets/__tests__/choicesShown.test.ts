@@ -138,6 +138,10 @@ describe('uses and what a feature does', () => {
     expect(featureDoes(soldier.find((f) => f.id === 'specialty')!, lists)).toEqual(['PICK PATH']);
     expect(featureDoes(lists[0].options[1].features[0], lists)).toEqual(['ROLL SPARK']);
     expect(featureDoes(soldier.find((f) => f.id === 'rally')!, lists)).toEqual([]);
+    // An INCREASE (7d6b).
+    const stats = [{ id: 'might', label: 'Might' }];
+    expect(featureDoes({ id: 'asi', label: 'ASI', increase: { points: 2, most: 2, stats } }, lists)).toEqual(['RAISES STATS: 2 POINTS']);
+    expect(featureDoes({ id: 'nudge', label: 'Nudge', increase: { points: 1, most: 1, stats } }, lists)).toEqual(['RAISES STATS: 1 POINT']);
   });
 });
 

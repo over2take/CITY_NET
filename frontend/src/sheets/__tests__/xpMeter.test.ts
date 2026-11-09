@@ -156,6 +156,11 @@ describe('whether a character can go up (7d2b)', () => {
     // Picks kept with it (7d3b), as far as they read.
     expect(at({ picks: [{ list: 'paths', option: 'duelist', from: 'path' }, { list: 'paths', option: 'scout', from: 3 }, { option: 'fire' }, { list: 'paths' }, null, 'x'] })).toEqual({ picks: [{ list: 'paths', option: 'duelist', from: 'path' }, { list: 'paths', option: 'scout' }] });
     expect(at({ picks: [] })).toEqual({});
+    // How increases are being spent (7d6b), whole points from 1.
+    expect(at({ increases: { asi: { might: 1, wits: 1 } } })).toEqual({ increases: { asi: { might: 1, wits: 1 } } });
+    expect(at({ increases: { asi: { might: 1.5, wits: 0, lore: '2', grit: 2 }, boost: {}, spark: [1], drill: null } })).toEqual({ increases: { asi: { grit: 2 } } });
+    expect(at({ increases: [{ might: 1 }] })).toEqual({});
+    expect(at({ increases: 'all' })).toEqual({});
     // The health kept with it (7d5b), as far as it reads.
     expect(at({ health: { roll: 7, die: 10 } })).toEqual({ health: { roll: 7, die: 10 } });
     expect(at({ health: { average: true } })).toEqual({ health: { average: true } });
