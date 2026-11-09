@@ -6,6 +6,7 @@ import { SheetRenderer } from './SheetRenderer';
 import { GmCreatingLine } from './GmCreatingLine';
 import { GmLevelingLine } from './GmLevelingLine';
 import { FillInForThemWindow } from './FillInForThemWindow';
+import { FillLevelUpWindow } from './FillLevelUpWindow';
 import { ImportSheetDialog } from './ImportSheetDialog';
 import { getTemplate, getMaxPairs, hiddenTabsFor, npcTemplateOf, type CharacterSheet, type SheetTemplate } from '../sheets';
 import type { SheetFieldValue, RollPick } from '../sheets/types';
@@ -65,6 +66,9 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [fillingIn, setFillingIn] = useState(false);
   const [fillInPos, setFillInPos] = useState({ x: pos.x + 40, y: pos.y + 40 });
+  // FILL IT IN FOR THEM for a level up (7d7a).
+  const [levelingIn, setLevelingIn] = useState(false);
+  const [levelInPos, setLevelInPos] = useState({ x: pos.x + 40, y: pos.y + 40 });
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   const [reloadKey, setReloadKey] = useState(0);
   const [ruleSettings, setRuleSettings] = useState<{ key: string; value: string }[]>([]);
@@ -295,7 +299,8 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
           onFillIn={() => { socket.emit('creationAction', { kind: 'open', username: playerUsername }); setFillingIn(true); }} />
       )}
       {playerUsername && socket && sheet && (
-        <GmLevelingLine template={template} data={sheet.data} onClear={() => socket.emit('levelAction', { kind: 'clearHealth', username: playerUsername })} />
+        <GmLevelingLine template={template} data={sheet.data} onClear={() => socket.emit('levelAction', { kind: 'clearHealth', username: playerUsername })}
+          onFillIn={() => setLevelingIn(true)} />
       )}
       {sheet && template ? (
         <SheetRenderer
@@ -329,6 +334,9 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
     </DraggableWindow>
     {fillingIn && playerUsername && socket && (
       <FillInForThemWindow key={playerUsername} token={token} socket={socket} username={playerUsername} pos={fillInPos} setPos={setFillInPos} onClose={() => setFillingIn(false)} />
+    )}
+    {levelingIn && playerUsername && socket && (
+      <FillLevelUpWindow key={playerUsername} token={token} socket={socket} username={playerUsername} pos={levelInPos} setPos={setLevelInPos} onClose={() => setLevelingIn(false)} />
     )}
     {isImportOpen && ReactDOM.createPortal(
       <ImportSheetDialog

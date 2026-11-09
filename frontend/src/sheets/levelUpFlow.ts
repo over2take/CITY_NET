@@ -72,10 +72,17 @@ export const healthRolledFor = (offer: LevelUpOffer, targets: LevelTarget[], tar
   return targets.find((t) => t.list === place.list && t.option === place.option)?.name ?? null;
 };
 
-/** The GM's line on a player's sheet while they level up (7d5b): where they are, and a kept health roll to clear. */
-export const gmLevelingLine = (template: SheetTemplate | null | undefined, data: Record<string, unknown> | null | undefined): { words: string; canClear: boolean } | null => {
+/**
+ * The GM's line on a player's sheet (7d5b): where they are in LEVEL_UP.EXE, and a kept health roll to clear. From 7d7a
+ * there whatever they're doing, their level and whether one is ready, with FILL IT IN FOR THEM while there's a level to
+ * go. Null where levels are typed in, or before their first pick.
+ */
+export const gmLevelingLine = (template: SheetTemplate | null | undefined, data: Record<string, unknown> | null | undefined): { words: string; canClear: boolean; canFill: boolean } | null => {
   const offer = levelUpOffer(template, data);
-  if (!offer?.leveling) return null;
+  if (!offer || offer.firstPick) return null;
+  const level = characterLevel(data);
+  const canFill = level < (template?.levels?.top ?? 0);
+  if (!offer.leveling) return { words: `LEVEL ${level}${offer.ready ? ' · LEVEL UP READY' : ''}`, canClear: false, canFill };
   const place = offer.leveling;
   const target = offer.targets.find((t) => t.list === place.list && t.option === place.option);
   const name = target ? `${target.option ? target.name.toUpperCase() : 'LEVEL'} ${target.level} → ${target.level + 1}` : place.option ? `NEW: ${place.option.toUpperCase()}` : 'THE NEXT LEVEL';
@@ -83,6 +90,7 @@ export const gmLevelingLine = (template: SheetTemplate | null | undefined, data:
   return {
     words: `LEVELING UP · ${name}${typeof roll === 'number' ? ` · HEALTH ${place.health?.beat ? `ROLLED ${roll} TO BEAT ${place.health.over}, +${place.health.gained}` : typeof place.health?.gained === 'number' ? `REROLLED ${roll}, +${place.health.gained}` : `ROLLED ${roll}${place.health?.die ? ` ON A D${place.health.die}` : ''}`}` : place.health?.average ? ' · HEALTH: THE AVERAGE' : ''}`,
     canClear: typeof roll === 'number',
+    canFill,
   };
 };
 
@@ -147,12 +155,15 @@ export const picksAsked = (template: SheetTemplate | null | undefined, data: Rec
   });
 };
 
-/** How many picks one feature still wants: as many as it opens, or as many as there are to pick. Rolled for, none here. */
-export const picksWanted = (asked: PickAsked): number => (asked.rolled ? 0 : Math.min(asked.count, asked.options.filter((o) => !o.unmet).length));
+/**
+ * How many picks one feature still wants: as many as it opens, or as many as there are to pick, those not met left out
+ * but for the GM (7d7a), who may add them anyway. Rolled for, none here.
+ */
+export const picksWanted = (asked: PickAsked, anyway = false): number => (asked.rolled ? 0 : Math.min(asked.count, asked.options.filter((o) => anyway || !o.unmet).length));
 
 /** Whether every pick the new level asks for is made, so FINISH can go. */
-export const picksMade = (asked: PickAsked[], picks: LevelUpPick[]): boolean =>
-  asked.every((a) => picks.filter((p) => p.from === a.feature && p.list === a.list.id).length >= picksWanted(a));
+export const picksMade = (asked: PickAsked[], picks: LevelUpPick[], anyway = false): boolean =>
+  asked.every((a) => picks.filter((p) => p.from === a.feature && p.list === a.list.id).length >= picksWanted(a, anyway));
 
 /** A pick in or out: taken back if made, or made while the feature has room. */
 export const withPickToggled = (picks: LevelUpPick[], asked: PickAsked, option: string): LevelUpPick[] => {
