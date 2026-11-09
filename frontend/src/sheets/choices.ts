@@ -47,7 +47,7 @@ export interface RollChange { roll: string; change: string }
  * An INCREASE (7d6a; backend choices.js): points the player spreads on stats, at most `most` on one
  * (all the points when absent), from one group of stats (all when absent), none past `cap` (no cap).
  */
-export interface Increase { points: number; most?: number; stats?: string; cap?: number }
+export interface Increase { points: number; most?: number; stats?: string; cap?: number; /** OR A FEAT INSTEAD (7d6c): a list picked through features. */ instead?: string }
 export interface Feature { id: string; label: string; text?: string; at?: number; modifiers?: Modifier[]; uses?: Uses; rolls?: string[]; changes?: RollChange[]; choice?: string; choice_count?: number; increase?: Increase }
 /** A change to a feature: `uses: null`, `choice: null` and `increase: null` take them away. */
 export type FeaturePatch = Partial<Omit<Feature, 'id' | 'uses' | 'choice' | 'increase'>> & { uses?: Uses | null; choice?: string | null; increase?: Increase | null };
@@ -347,6 +347,7 @@ const increaseKept = (inc: Increase): Increase => {
     ...(most < points ? { most } : {}),
     ...(typeof inc.stats === 'string' && inc.stats ? { stats: inc.stats } : {}),
     ...(Number.isFinite(inc.cap) ? { cap: whole(inc.cap, -LIMITS.cap, LIMITS.cap, 0) } : {}),
+    ...(typeof inc.instead === 'string' && inc.instead ? { instead: inc.instead } : {}),
   };
 };
 
@@ -362,11 +363,13 @@ export const increaseGroups = (def: Definition): { id: string; label: string }[]
 export const increaseWords = (def: Definition, inc: Increase): string => {
   const group = increaseGroups(def).find((g) => g.id === inc.stats);
   const most = inc.most ?? inc.points;
+  const other = inc.instead ? choiceLists(def).find((c) => c.id === inc.instead) : undefined;
   return [
     `${inc.points} ${inc.points === 1 ? 'POINT' : 'POINTS'}`,
     ...(inc.points > 1 ? [most < inc.points ? `AT MOST ${most} ON ONE` : 'ALL ON ONE IF THEY LIKE'] : []),
     group ? `FROM ${group.label}` : 'ANY STAT',
     inc.cap === undefined ? 'NO LIMIT' : `STOPS AT ${inc.cap}`,
+    ...(inc.instead ? [`OR A ${(other?.one || inc.instead).toUpperCase()} INSTEAD`] : []),
   ].join(' · ');
 };
 

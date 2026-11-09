@@ -205,6 +205,24 @@ describe('a feature open', () => {
     expect(features()[1]).not.toHaveProperty('increase');
   });
 
+  it('OR INSTEAD: another list, never its own or one everyone has; one picked on its own said so (7d6c)', async () => {
+    const lists = [...(HEARTH.choices as object[]), { id: 'feats', one: 'Feat', many: 'Feats', picked: 'features', options: [] }, { id: 'commons', one: 'Common', many: 'Commons', picked: 'everyone', options: [] }];
+    const { features } = open({ ...HEARTH, choices: lists } as unknown as Definition);
+    await userEvent.click(row(/RALLY/));
+    const f = form('Rally');
+    await userEvent.click(f.getByRole('switch', { name: 'RAISES STATS' }));
+    const instead = f.getByRole('combobox', { name: 'OR INSTEAD' });
+    expect([...instead.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['NOTHING: THE POINTS ONLY', 'A PATH', 'A FEAT']);
+    fireEvent.change(instead, { target: { value: 'feats' } });
+    expect(features()[1].increase).toEqual({ points: 2, instead: 'feats' });
+    expect(f.getByLabelText('The increase in words').textContent).toBe('2 POINTS · ALL ON ONE IF THEY LIKE · ANY STAT · NO LIMIT · OR A FEAT INSTEAD');
+    expect(f.queryByText(/is picked on its own/)).toBeNull();
+    fireEvent.change(instead, { target: { value: 'paths' } });
+    expect(f.getByText('PATHS is picked on its own, so there is nothing to pick here. Set it to THROUGH FEATURES or BOTH on its page.')).toBeTruthy();
+    fireEvent.change(instead, { target: { value: '' } });
+    expect(features()[1].increase).toEqual({ points: 2 });
+  });
+
   it('an INCREASE naming a group no longer there still shows it, to be put right', async () => {
     open({ ...HEARTH, choices: [{ ...(HEARTH.choices as object[])[0], options: [{ id: 'soldier', label: 'Soldier', features: [{ id: 'asi', label: 'Boost', increase: { points: 2, stats: 'gone' } }] }] }, (HEARTH.choices as object[])[1]] } as unknown as Definition);
     await userEvent.click(row(/BOOST/));
@@ -243,7 +261,7 @@ describe('a feature open', () => {
       expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
     }
     await userEvent.click(form('Guard Stance').getByRole('switch', { name: 'RAISES STATS' }));
-    for (const k of ['choices.increasePoints', 'choices.increaseStats', 'choices.increaseCap'] as const) {
+    for (const k of ['choices.increasePoints', 'choices.increaseStats', 'choices.increaseCap', 'choices.increaseInstead'] as const) {
       expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
     }
   });

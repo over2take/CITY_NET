@@ -19,7 +19,8 @@
 // An INCREASE (7d6b) unlocked by the new level, a class's or what everyone has at the character's, is spent with
 // FINISH too: { feature: { stat: points } }, every point, no more than its most on one stat, on stats it may raise,
 // none past where they stop. The GM may go up without spending it. LEVEL_DOWN takes off what the levels it takes
-// away were spent on.
+// away were spent on. OR A FEAT INSTEAD (7d6c): a pick from the list it offers, made with FINISH's picks, in place of
+// the points, never with them.
 //
 // Pure: the socket (sockets/choices.js) stores it through the sheet's queue, and works the numbers out again.
 
@@ -74,9 +75,15 @@ const withIncreasesSpent = (definition, before, after, increases, gm) => {
     if (!inc) continue;
     const name = feature.label || feature.id;
     const spread = increases[feature.id];
+    const other = inc.instead ? choicesOf(definition).find((c) => c.id === inc.instead) : null;
+    // A pick taken in its place (7d6c), with FINISH's picks: then nothing is spent.
+    if (other && activePicks(definition, sheet).some((p) => p.from === feature.id && p.list === other)) {
+      if (spread) return { error: `${name}: the points or a ${other.one || other.id}, not both` };
+      continue;
+    }
     if (!spread) {
       if (gm) continue;
-      return { error: `Spend ${name}'s points first` };
+      return { error: other ? `Spend ${name}'s points, or pick a ${other.one || other.id}, first` : `Spend ${name}'s points first` };
     }
     let total = 0;
     const now = effectiveData(definition, sheet);

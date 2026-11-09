@@ -62,13 +62,15 @@ const withRolled = (data, key, rolled) => {
  * Why a list has no room for another pick here, or null: under a feature that opens it (`from`),
  * that feature unlocked with picks to give; on its own, below what the list allows.
  */
-const noRoom = (definition, held, c, from) => {
+const noRoom = (definition, held, c, from, data = null) => {
   const many = c.many || c.id;
   const mode = pickedOf(c);
   if (from) {
     if (mode === 'own') return `The ${many} aren't picked under features`;
-    const opening = openingsOf(definition, held.filter((p) => p.active)).find((o) => o.feature.id === from);
-    if (!opening || opening.list !== c) return `Nothing unlocked there opens the ${many}`;
+    const opening = openingsOf(definition, held.filter((p) => p.active), data).find((o) => o.feature.id === from && o.list === c);
+    if (!opening) return `Nothing unlocked there opens the ${many}`;
+    // OR A FEAT INSTEAD (7d6c), once the points went on stats.
+    if (opening.instead && opening.count === 0) return `The points were spent there instead: no ${many} as well`;
     if (opening.used >= opening.count) return `No more ${many} can be picked there`;
     return null;
   }
@@ -118,7 +120,7 @@ const pickAction = (definition, data, action, { gm = false, rng = cryptoRng } = 
     const base = gm && typeof action.again === 'string'
       ? withPicks(sheet, c.id, storedPicks(heldOf(definition, sheet), c).filter((p) => p.option !== action.again)) : sheet;
     const before = heldOf(definition, base);
-    const room = noRoom(definition, before, c, from);
+    const room = noRoom(definition, before, c, from, base);
     if (room) return fail(room);
     if (!gm && rolledOf(base, c.id, from)) return fail(ROLLED_KEPT);
     const rolls = Array.from({ length: table.count }, () => Math.floor(rng() * table.sides) + 1);
@@ -149,7 +151,7 @@ const pickAction = (definition, data, action, { gm = false, rng = cryptoRng } = 
 
   if (action.kind === 'pick') {
     if (taken) return fail(`${name} is already picked`);
-    const room = noRoom(definition, held, c, from);
+    const room = noRoom(definition, held, c, from, sheet);
     if (room) return fail(room);
     // Rolled only (7a5b2): a player takes what was rolled; the GM picks anything.
     const rolled = rolledOf(sheet, c.id, from);
