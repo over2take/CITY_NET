@@ -373,19 +373,22 @@ describe('picks on the form (7c6)', () => {
       expect(write(data, { classes: [{ option: 'soldier', level: 2 }] })).toEqual({ classes: [{ option: 'soldier', level: 2 }] });
     });
 
-    it('as a whole upload, a list it doesn\'t name is cleared, and any roll waiting goes', () => {
-      const data = { _rolled: { classes: { option: 'mage', roll: 4 } }, _choices: { classes: [{ option: 'mage', level: 1 }], feats: [{ option: 'quick' }] } };
+    it('as a whole upload, a list it doesn\'t name is cleared, any roll waiting goes, and what increases were spent on (7d6b)', () => {
+      const data = { _rolled: { classes: { option: 'mage', roll: 4 } }, _increases: { asi: { int: 2 } }, _choices: { classes: [{ option: 'mage', level: 1 }], feats: [{ option: 'quick' }] } };
       const whole = withImportedPicks(PICKS, data, { feats: [{ option: 'tough' }] }, { whole: true });
       expect(whole._choices).toEqual({ classes: [], feats: [{ option: 'tough' }], skills: [] });
       expect(whole).not.toHaveProperty('_rolled');
+      // Its stats come as they are, increases already in them: none is counted twice.
+      expect(whole).not.toHaveProperty('_increases');
       expect(withImportedPicks(PICKS, data, undefined, { whole: true })._choices).toEqual({ classes: [], feats: [], skills: [] });
     });
 
-    it('not as a whole upload, a list it doesn\'t name stays, and a roll waiting too', () => {
-      const data = { _rolled: { classes: { option: 'mage', roll: 4 } }, _choices: { classes: [{ option: 'mage', level: 1 }] } };
+    it('not as a whole upload, a list it doesn\'t name stays, and a roll waiting too, and the increases', () => {
+      const data = { _rolled: { classes: { option: 'mage', roll: 4 } }, _increases: { asi: { int: 2 } }, _choices: { classes: [{ option: 'mage', level: 1 }] } };
       const part = withImportedPicks(PICKS, data, { feats: [{ option: 'tough' }] });
       expect(part._choices.classes).toEqual([{ option: 'mage', level: 1 }]);
       expect(part._rolled).toEqual(data._rolled);
+      expect(part._increases).toEqual(data._increases);
     });
 
     it('nothing sent, or no system, is the sheet as it was', () => {

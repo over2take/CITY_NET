@@ -87,6 +87,11 @@
 // versionDiff.js read the overlay. The token's maximum (HP MAX, WOUNDS) is the one exception: it lives
 // on the token, so its modifiers are moved onto the token itself, and back off (tokenMax.js, 7a5a3).
 //
+// An INCREASE (7d6b) is spent by the player as its feature unlocks, going up a level (levelUp.js), and kept under
+// INCREASES_KEY by feature: { asi: { str: 1, dex: 1 } }. It is worked out onto the stats as a modifier is, named by
+// its feature, while the feature is unlocked and what is kept still holds: stats it may raise, whole points from 1,
+// no more than its most on one, no more than its points in all.
+//
 // At the table (7a3a): how many of each feature's uses are spent is kept under USES_KEY, by feature,
 // and a rest that refills them sets them back (resting.js). Every save writes what the sheet shows of
 // the picks under WORKED_KEY (workedOf): the picks and their levels, what each modifier comes from,
@@ -106,6 +111,8 @@ const { currenciesOf } = require('./currencies');
 const PICKS_KEY = '_choices';
 /** Where a sheet keeps each feature's uses spent, by feature id. */
 const USES_KEY = '_uses';
+/** Where a sheet keeps how each INCREASE was spent (7d6b): { feature: { stat: points } }. Players never write it. */
+const INCREASES_KEY = '_increases';
 /** Where every save writes what the sheet shows of the picks (workedOf). Never read back as input. */
 const WORKED_KEY = '_worked';
 /**
@@ -602,6 +609,30 @@ const heldOf = (definition, data) => {
 const picksOf = (definition, data) => heldOf(definition, data).filter((p) => p.active)
   .map(({ list: c, option, level, from }) => ({ list: c, option, level, from }));
 
+/**
+ * A feature's INCREASE as it reads (7d6b): its points, the most on one stat (all of them when unsaid), the ids of the
+ * stats it may raise (a group's, or every stat's), and where they stop (null for no limit). Null without one.
+ */
+const increaseOf = (definition, feature) => {
+  const inc = isPlainObject(feature) ? feature.increase : null;
+  if (!isPlainObject(inc) || !Number.isInteger(inc.points) || inc.points < 1) return null;
+  const stats = list(definition.stats).filter((g) => isPlainObject(g) && (inc.stats === undefined || g.id === inc.stats))
+    .flatMap((g) => list(g.stats)).filter((s) => isPlainObject(s) && typeof s.id === 'string').map((s) => s.id);
+  const most = Number.isInteger(inc.most) && inc.most >= 1 ? Math.min(inc.most, inc.points) : inc.points;
+  return { points: inc.points, most, stats, cap: Number.isInteger(inc.cap) ? inc.cap : null };
+};
+
+/** How an increase was spent, while it holds: { stat: points } on stats it may raise, whole from 1, within its most and its points. */
+const spentOf = (inc, spread) => {
+  if (!inc || !isPlainObject(spread)) return null;
+  let total = 0;
+  for (const [stat, n] of Object.entries(spread)) {
+    if (!inc.stats.includes(stat) || !Number.isInteger(n) || n < 1 || n > inc.most) return null;
+    total += n;
+  }
+  return total >= 1 && total <= inc.points ? spread : null;
+};
+
 /** The levels `picks` give, by the names formulas read them (levelNamesOf): untaken options read 0. */
 const levelsOf = (definition, picks) => {
   const levels = {};
@@ -689,14 +720,21 @@ const overlayOf = (definition, data) => {
   const fields = fieldTargetsOf(definition);
   const from = {};
   const totals = {};
+  const increases = isPlainObject(sheet[INCREASES_KEY]) ? sheet[INCREASES_KEY] : {};
+  const added = (target, amount, feature) => {
+    totals[target] = (own(totals, target) ? totals[target] : 0) + amount;
+    (own(from, target) ? from[target] : (from[target] = [])).push({ feature: feature.label || feature.id, amount });
+  };
   for (const { feature } of unlockedOf(picks)) {
+    // An INCREASE as it was spent (7d6b), on the stats it raises.
+    const spent = own(increases, feature.id) ? spentOf(increaseOf(definition, feature), increases[feature.id]) : null;
+    for (const [stat, n] of Object.entries(spent || {})) added(stat, n, feature);
     for (const m of list(feature.modifiers).slice(0, LIMITS.modifiers)) {
       if (!isPlainObject(m) || typeof m.target !== 'string' || !targets.has(m.target) || typeof m.amount !== 'string') continue;
       let amount;
       try { amount = evaluate(parse(m.amount, isTable), env); } catch { continue; }
       if (!Number.isFinite(amount)) continue;
-      totals[m.target] = (own(totals, m.target) ? totals[m.target] : 0) + amount;
-      (own(from, m.target) ? from[m.target] : (from[m.target] = [])).push({ feature: feature.label || feature.id, amount });
+      added(m.target, amount, feature);
     }
   }
   const over = { ...levels, ...owned };
@@ -838,6 +876,11 @@ const giftsShown = (definition, option) => {
   return { ...(items.length ? { items } : {}), ...(money.length ? { money } : {}) };
 };
 
+/** An increase as the sheet and LEVEL_UP.EXE draw it (7d6b). */
+const increaseShown = (inc, names) => ({
+  points: inc.points, most: inc.most, stats: inc.stats.map((id) => ({ id, label: String(names.get(id) || id) })), ...(inc.cap === null ? {} : { cap: inc.cap }),
+});
+
 /**
  * The lists as the sheet draws them (7a3a): names, how many and how, each option's words and what
  * it needs in words, what it gives (7c4e), and each feature's words, level and what it does, named.
@@ -875,13 +918,15 @@ const choicesShown = (definition) => {
           return `${(change && change.label) || ch.change} on ${(roll && roll.label) || ch.roll}`;
         }) } : {}),
         ...(typeof f.choice === 'string' && lists.some((l) => l.id === f.choice) ? { opens: f.choice, opensCount: openCountOf(f) } : {}),
+        // An INCREASE (7d6b): its points, the most on one, the stats it may raise by name, and where they stop.
+        ...(increaseOf(definition, f) ? { increase: increaseShown(increaseOf(definition, f), names) } : {}),
       })),
     })),
   }));
 };
 
 module.exports = {
-  LIMITS, PICKED, PLAYERS, PICKS_KEY, USES_KEY, WORKED_KEY, ROLLED_KEY, rolledOn, rolledKey, rolledOf, checkChoices, checkHasNames, ownableOf, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
+  LIMITS, PICKED, PLAYERS, PICKS_KEY, USES_KEY, INCREASES_KEY, increaseOf, spentOf, WORKED_KEY, ROLLED_KEY, rolledOn, rolledKey, rolledOf, checkChoices, checkHasNames, ownableOf, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
   tableOf, rollRangeOf, playersOf,
   capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, worksOutPicks, choicesShown, tokenMaxFieldOf,
   MAIN_MONEY, moneyCurrencies, giftItemsOf, giftMoneyOf, openCountOf, targetsOf,
