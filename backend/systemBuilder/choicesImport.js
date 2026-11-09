@@ -17,8 +17,8 @@
 // A levelled list's options take their die too (R1a: d10, or 10), and a list with a table to roll
 // on, each option's roll (7a5b: 4, or a range, 4-5). Only words, levels, requirements, dice, table
 // rolls and uses come from a file, with what an option gives (7c4e: gives, as Rope, 3x Rations, and money,
-// as Gold: 3d6 * 10; Honor: 5, or bare in a system with the app's single money): modifiers, rolls, roll changes and the
-// list a feature opens stay as the builder has them. A row with a mistake is skipped and said, by its
+// as Gold: 3d6 * 10; Honor: 5, or bare in a system with the app's single money): modifiers, rolls, roll changes, the
+// list a feature opens and an INCREASE (7d6a) stay as the builder has them. A row with a mistake is skipped and said, by its
 // line, and the rest goes in (the user asked for the GM to be warned of each, 2026-10-28).
 //
 // The rows are read with the catalogue import's own splitter (quotes, tabs, Excel's semicolons). The

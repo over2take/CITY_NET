@@ -230,3 +230,45 @@ describe('a list\'s table to roll on (7a5b)', () => {
     expect(problems([{ ...BGS, picked: 'everyone', players: undefined }])).toEqual(['list bgs, table: A list everyone has is never picked, so never rolled for']);
   });
 });
+
+describe('an INCREASE on a feature (7d6a)', () => {
+  const ASI = (increase) => withChoices([{ ...CLASSES, options: [{ ...CLASSES.options[0], features: [...CLASSES.options[0].features, { id: 'asi', label: 'Ability Score Improvement', at: 4, increase }] }, CLASSES.options[1]] }, SPECIALTIES]);
+  const said = (increase, over = {}) => checkDefinition({ ...ASI(increase), ...over }).problems.map((p) => `${p.where}: ${p.message}`);
+  const AT = 'list classes, option soldier, feature asi, increase';
+
+  it('D&D\'s, Pathfinder 2e\'s and 13th Age\'s all fit', () => {
+    expect(said({ points: 2 })).toEqual([]);
+    expect(said({ points: 2, most: 2, stats: 'abilities', cap: 20 })).toEqual([]);
+    expect(said({ points: 4, most: 1 })).toEqual([]);
+    expect(said({ points: 3, most: 1, cap: -5 })).toEqual([]);
+    expect(said({ points: LIMITS.increase, most: 1, cap: LIMITS.cap })).toEqual([]);
+    expect(said({ points: 1, cap: -LIMITS.cap })).toEqual([]);
+  });
+
+  it('says what is wrong', () => {
+    expect(said('two')).toEqual([`${AT}: Must say how many points, and the most on one stat`]);
+    expect(said([2])).toEqual([`${AT}: Must say how many points, and the most on one stat`]);
+    expect(said({ points: 2, on: 'str' })).toEqual([`${AT}, on: Not part of an increase`]);
+    for (const points of [undefined, 0, 11, 1.5, '2']) expect(said({ points }), String(points)).toEqual([`${AT}, points: From 1 to 10 points`]);
+    for (const most of [0, 3, 1.5, '1']) expect(said({ points: 2, most }), String(most)).toEqual([`${AT}, most: From 1 to the points it gives`]);
+    // With the points wrong, only the points are said.
+    expect(said({ points: 0, most: 5 })).toEqual([`${AT}, points: From 1 to 10 points`]);
+    expect(said({ points: 2, stats: 'skills' })).toEqual([`${AT}, stats: Not one of this system's groups of stats`]);
+    expect(said({ points: 2, stats: 7 })).toEqual([`${AT}, stats: Not one of this system's groups of stats`]);
+    for (const cap of [20.5, '20', 10000, -10000]) expect(said({ points: 2, cap }), String(cap)).toEqual([`${AT}, cap: A whole number from -9999 to 9999`]);
+  });
+
+  it('names only a group with a stat in it, and needs the system to have one', () => {
+    const empty = { stats: [...HEARTH.stats, { id: 'skills', label: 'SKILLS', stats: [] }] };
+    expect(said({ points: 2, stats: 'skills' }, empty)).toEqual([`${AT}, stats: Not one of this system's groups of stats`]);
+    expect(said({ points: 2 }, { stats: [{ id: 'skills', label: 'SKILLS', stats: [] }], derived: [{ id: 'defense', formula: '10' }, { id: 'max_hp', formula: '10' }] }))
+      .toContain(`${AT}: This system has no stats to raise: make them on STATS & RULES`);
+  });
+
+  it('travels in the system file, unchanged', () => {
+    const def = ASI({ points: 4, most: 1, stats: 'abilities', cap: 20 });
+    const read = citysys.readFile(JSON.stringify(citysys.buildFile({ definition: def, version: 2, origin: 'sys_abcdefabcdefabcd' })));
+    expect(read.problems).toEqual([]);
+    expect(read.file.definition.choices).toEqual(def.choices);
+  });
+});

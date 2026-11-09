@@ -4,7 +4,7 @@ import { createRequire } from 'module';
 import {
   LIMITS, choiceLists, picksOf, withNewList, withList, withoutList, withNewOption, withOption, withoutOption, levelNames,
   featureList, levelOf, kindsOf, withNewFeature, withFeature, withoutFeature, modifierTargets, refillRests, rollChoices,
-  tableOf, rollRangeOf, playersOf, tableDiceChoices, evenRolls, tableProblems, type ChoiceList,
+  tableOf, rollRangeOf, playersOf, tableDiceChoices, evenRolls, tableProblems, type ChoiceList, NEW_INCREASE, increaseGroups, increaseWords
 } from '../choices';
 import type { Definition } from '../systemsApi';
 
@@ -302,5 +302,51 @@ describe('what a feature can name', () => {
       { id: 'spark', label: 'SPARK', changes: [] },
       { id: 'mind_save', label: 'MIND SAVE', changes: [{ id: 'advantage', label: 'ADVANTAGE' }] },
     ]);
+  });
+});
+
+describe('an INCREASE on a feature (7d6a)', () => {
+  const RAISED = { ...HEARTH, stats: [
+    { id: 'abilities', label: 'Abilities', stats: [{ id: 'might', label: 'Might' }] },
+    { id: 'skills', label: 'SKILLS', stats: [] },
+    { id: 'traits', stats: [{ id: 'grit', label: 'Grit' }] },
+  ] } as unknown as Definition;
+  const made = withNewFeature(RAISED, 'classes', 'soldier')!;
+  const set = (increase: unknown) => featureList(choiceLists(withFeature(made.definition, 'classes', 'soldier', made.id, { increase } as never))
+    .find((c) => c.id === 'classes')!.options.find((o) => o.id === 'soldier')!).find((f) => f.id === made.id)!;
+
+  it('starts as D&D\'s: 2 points, all on one if they like, any stat, no limit', () => {
+    expect(NEW_INCREASE).toEqual({ points: 2 });
+    expect(set(NEW_INCREASE).increase).toEqual({ points: 2 });
+    expect(kindsOf(set(NEW_INCREASE))).toEqual(['increase']);
+    expect(kindsOf(set({ points: 2 }))).not.toContain('text');
+  });
+
+  it('kept as whole numbers within their limits, nothing for what is all or none', () => {
+    expect(set({ points: 4, most: 1, stats: 'abilities', cap: 20 }).increase).toEqual({ points: 4, most: 1, stats: 'abilities', cap: 20 });
+    expect(set({ points: 0 }).increase).toEqual({ points: 1 });
+    expect(set({ points: 99 }).increase).toEqual({ points: LIMITS.increase });
+    expect(set({ points: 2.7 }).increase).toEqual({ points: 2 });
+    expect(set({ points: Number.NaN }).increase).toEqual({ points: 1 });
+    expect(set({ points: 2, most: 2 }).increase).toEqual({ points: 2 });
+    expect(set({ points: 2, most: 5 }).increase).toEqual({ points: 2 });
+    expect(set({ points: 3, most: 0 }).increase).toEqual({ points: 3, most: 1 });
+    expect(set({ points: 3, most: 1.9 }).increase).toEqual({ points: 3, most: 1 });
+    expect(set({ points: 2, stats: '' }).increase).toEqual({ points: 2 });
+    expect(set({ points: 2, cap: 99999 }).increase).toEqual({ points: 2, cap: LIMITS.cap });
+    expect(set({ points: 2, cap: -99999 }).increase).toEqual({ points: 2, cap: -LIMITS.cap });
+    expect(set({ points: 2, cap: 0 }).increase).toEqual({ points: 2, cap: 0 });
+    expect(set({ points: 2, cap: Number.NaN }).increase).toEqual({ points: 2 });
+    expect(set(null)).not.toHaveProperty('increase');
+  });
+
+  it('the groups it may raise: those with a stat, by name', () => {
+    expect(increaseGroups(RAISED)).toEqual([{ id: 'abilities', label: 'ABILITIES' }, { id: 'traits', label: 'TRAITS' }]);
+  });
+
+  it('said in words', () => {
+    expect(increaseWords(RAISED, { points: 2 })).toBe('2 POINTS · ALL ON ONE IF THEY LIKE · ANY STAT · NO LIMIT');
+    expect(increaseWords(RAISED, { points: 4, most: 1, stats: 'abilities', cap: 20 })).toBe('4 POINTS · AT MOST 1 ON ONE · FROM ABILITIES · STOPS AT 20');
+    expect(increaseWords(RAISED, { points: 1, stats: 'gone', cap: 0 })).toBe('1 POINT · ANY STAT · STOPS AT 0');
   });
 });

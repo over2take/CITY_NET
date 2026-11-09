@@ -126,6 +126,9 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await feature.getByRole('button', { name: '+ MODIFIER' }).click();
       await feature.getByRole('combobox', { name: 'OPENS A LIST' }).selectOption({ label: 'NEW CHOICE' });
       await expect(feature.getByRole('spinbutton', { name: 'HOW MANY' })).toBeVisible();
+      // RAISES STATS on, so an INCREASE's boxes are there (7d6a): STATS & RULES made a stat before.
+      await feature.getByRole('switch', { name: 'RAISES STATS' }).click();
+      await expect(feature.getByRole('spinbutton', { name: 'STOPS AT' })).toBeVisible();
       // The modifier's formula box with its help open, so SHAPE and INSERT are there (formula box 1).
       await feature.getByRole('button', { name: 'Help writing Modifier 1: by' }).click();
       await expect(feature.getByRole('group', { name: 'Help writing Modifier 1: by' })).toBeVisible();

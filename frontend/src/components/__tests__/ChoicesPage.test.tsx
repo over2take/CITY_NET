@@ -303,7 +303,7 @@ describe('help', () => {
     // The page's own; a feature's are FeaturesEditor.test's, shown once one is open.
     const keys = ['choices.lists', 'choices.names', 'choices.picked', 'choices.picks', 'choices.again', 'choices.levelled', 'choices.table', 'choices.options', 'choices.optionName', 'choices.description', 'choices.requires', 'choices.die', 'choices.features'] as (keyof typeof HINTS)[];
     // The two for what an option gives are that panel's: their test is below (7c4e).
-    expect(Object.keys(HINTS).filter((k) => k.startsWith('choices.'))).toHaveLength(26);
+    expect(Object.keys(HINTS).filter((k) => k.startsWith('choices.'))).toHaveLength(30);
     for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
   });
 

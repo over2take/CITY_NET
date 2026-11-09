@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
-  featureList, levelOf, kindsOf, withNewFeature, withFeature, withoutFeature, modifierTargets, refillRests, rollChoices, choiceLists, pickedOf, unlocksByLevel, LIMITS,
+  featureList, levelOf, kindsOf, withNewFeature, withFeature, withoutFeature, modifierTargets, refillRests, rollChoices, choiceLists, pickedOf, unlocksByLevel, increaseGroups, increaseWords, LIMITS, NEW_INCREASE,
   type ChoiceList, type ChoiceOption, type Feature, type FeatureKind, type FeaturePatch,
 } from '../sheets/choices';
 import { HINTS } from '../sheets/builderHelp';
@@ -13,7 +13,8 @@ import { useFormulaBox } from '../hooks/useFormulaBox';
 // 2026-10-27): what a pick gives, grouped by the level each unlocks at in a levelled list. Each row
 // names a feature and tags what it does; the open one shows its name, words, level and every kind
 // of thing it can do, several at once: modifiers on a stat, formula or health field, uses a rest
-// refills, rolls it gives, changes it lets a roll take, a list it opens. What it reads and writes is
+// refills, rolls it gives, changes it lets a roll take, a list it opens, and (7d6a) an INCREASE, points
+// the player spreads on stats as it unlocks. What it reads and writes is
 // sheets/choices.ts; every change goes through the builder's `edit`.
 
 interface Props {
@@ -40,7 +41,7 @@ const choice = (on: boolean): React.CSSProperties => ({
 
 /** Each kind as a tag: its word and its color, as the mockup has them. */
 const TAGS: Record<FeatureKind, [string, string]> = {
-  modifier: ['MODIFIER', 'var(--green)'], uses: ['USES', 'var(--cyan)'], roll: ['ROLL', 'var(--warning)'],
+  modifier: ['MODIFIER', 'var(--green)'], increase: ['INCREASE', 'var(--green)'], uses: ['USES', 'var(--cyan)'], roll: ['ROLL', 'var(--warning)'],
   change: ['CHANGE', 'var(--warning)'], choice: ['CHOICE', 'var(--warning)'], text: ['TEXT', 'color-mix(in srgb, var(--green) 60%, transparent)'],
 };
 const Tag = ({ kind }: { kind: FeatureKind }) => (
@@ -94,6 +95,10 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
   const changes = feature.changes ?? [];
   const given = new Set(feature.rolls ?? []);
   const id = (part: string) => `feature-${feature.id}-${part}`;
+  const groups = increaseGroups(definition);
+  const inc = feature.increase;
+  // Whole numbers only: a box left empty, or typed past a limit, keeps what it had or its limit.
+  const whole = (v: string) => { const n = Math.trunc(Number(v)); return v.trim() && Number.isFinite(n) ? n : null; };
   const name = feature.label.trim() || 'this feature';
   // Made whether or not it has uses (a hook can't wait behind HAS USES); shown only when it does.
   const usesBox = useFormulaBox({
@@ -126,6 +131,36 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
             onClick={() => set({ modifiers: [...mods, { target: targets[0].items[0].id, amount: '1' }] })}>+ MODIFIER</button></div>
           {!targets.length && <span style={{ ...why, fontSize: 11 }}>No stats or formulas yet to change: make them on STATS &amp; RULES.</span>}
         </div>
+
+        <FieldName beside hint={HINTS['choices.increase']} style={small}>INCREASE</FieldName>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <ToggleSwitch label="RAISES STATS" on={!!inc} disabled={!inc && !groups.length} style={{ alignSelf: 'start' }}
+            onChange={(has) => set({ increase: has ? NEW_INCREASE : null })} />
+          {!groups.length && <span style={{ ...why, fontSize: 11 }}>No stats yet to raise: make them on STATS &amp; RULES.</span>}
+        </div>
+        {inc && <>
+          <FieldName beside htmlFor={id('points')} hint={HINTS['choices.increasePoints']} style={small}>POINTS</FieldName>
+          <span style={row}>
+            <input id={id('points')} type="number" min={1} max={LIMITS.increase} step={1} value={inc.points} style={{ ...input, width: 64 }}
+              onChange={(e) => { const n = whole(e.target.value); if (n !== null) set({ increase: { ...inc, points: n } }); }} />
+            <label htmlFor={id('most')} style={small}>AT MOST ON ONE</label>
+            <input id={id('most')} type="number" min={1} max={inc.points} step={1} value={inc.most ?? inc.points} style={{ ...input, width: 64 }}
+              onChange={(e) => { const n = whole(e.target.value); if (n !== null) set({ increase: { ...inc, most: n } }); }} />
+          </span>
+          <FieldName beside htmlFor={id('stats')} hint={HINTS['choices.increaseStats']} style={small}>FROM</FieldName>
+          <select id={id('stats')} value={inc.stats ?? ''} style={{ ...input, justifySelf: 'start' }}
+            onChange={(e) => set({ increase: { ...inc, stats: e.target.value } })}>
+            <option value="">ANY STAT</option>
+            {inc.stats && !groups.some((g) => g.id === inc.stats) && <option value={inc.stats}>{inc.stats}</option>}
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.label}</option>)}
+          </select>
+          <FieldName beside htmlFor={id('cap')} hint={HINTS['choices.increaseCap']} style={small}>STOPS AT</FieldName>
+          <span style={row}>
+            <input id={id('cap')} type="number" min={-LIMITS.cap} max={LIMITS.cap} step={1} value={inc.cap ?? ''} placeholder="NO LIMIT" style={{ ...input, width: 90 }}
+              onChange={(e) => { const n = whole(e.target.value); set({ increase: { ...inc, cap: n ?? undefined } }); }} />
+            <span style={{ ...why, fontSize: 11 }} aria-label="The increase in words">{increaseWords(definition, inc)}</span>
+          </span>
+        </>}
 
         <FieldName beside hint={HINTS['choices.uses']} style={small}>USES</FieldName>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
