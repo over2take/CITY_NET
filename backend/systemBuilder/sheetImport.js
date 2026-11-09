@@ -17,7 +17,8 @@
 // a roll or the GM or not. A list picked under a feature is on the form too, its picks placed under whatever
 // opens them, so nothing is left to set up. A list it doesn't name is cleared, as a field left blank is. Only
 // what it can't place is left out: a name it can't find, no room, or nothing opening it, each said by its line.
-// Applying reads the names again (withImportedPicks), as the browser only hands back what it was told. The
+// Applying reads the names again (withImportedPicks), as the browser only hands back what it was told. A whole
+// upload brings its stats as they are, increases already in them, so what increases were spent on here goes (7d6b). The
 // inventory is the one thing it adds to (inventoryAdded), to be tidied on the sheet. What an option gives comes
 // only through FINISH.
 //
@@ -27,7 +28,7 @@
 // Pure, needing no pdf-lib, so the browser's tests can hold the PDF form and this to each other.
 
 const { effectiveSheet } = require('./sheet');
-const { PICKS_KEY, ROLLED_KEY, LIMITS: CHOICE_LIMITS, choicesOf, pickedOf, capOf, meets, needsText, heldOf, openingsOf, openCountOf } = require('./choices');
+const { PICKS_KEY, ROLLED_KEY, INCREASES_KEY, LIMITS: CHOICE_LIMITS, choicesOf, pickedOf, capOf, meets, needsText, heldOf, openingsOf, openCountOf } = require('./choices');
 const { normaliseInventory } = require('../sheets/inventoryImport');
 const { XP_KEY, LIMITS: XP_LIMITS, earnsXp } = require('./levels');
 const { wordFor } = require('./terms');
@@ -192,7 +193,8 @@ const placePicks = (definition, data, wanted) => {
 /**
  * The sheet with an upload's picks on it (7c6), each list named taking them in place of whatever it held.
  * What was sent is read again here, and placed again against the sheet as it is now. With `whole`, the upload
- * is the whole character: a list it doesn't name is cleared too, and any roll waiting goes with it.
+ * is the whole character: a list it doesn't name is cleared too, and any roll waiting goes with it, and what increases
+ * were spent on (7d6b), its stats being as they are.
  */
 const withImportedPicks = (definition, data, sent, { whole = false } = {}) => {
   if (!definition || (!isPlainObject(sent) && !whole)) return data;
@@ -211,7 +213,7 @@ const withImportedPicks = (definition, data, sent, { whole = false } = {}) => {
     }
     wanted[c.id] = picks;
   }
-  const { [ROLLED_KEY]: rolled, ...rest } = data;
+  const { [ROLLED_KEY]: rolled, [INCREASES_KEY]: increases, ...rest } = data;
   return { ...(whole ? rest : data), [PICKS_KEY]: placePicks(definition, data, wanted).stored };
 };
 
