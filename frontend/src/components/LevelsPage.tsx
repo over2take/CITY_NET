@@ -6,7 +6,7 @@ import {
   MOST_LEVEL, MULTIPLIERS, advancesBy, levelHomeNote, anyTyped, canAddRange, firstAsTyped, isTyped, topAsTyped, levelNotes, levelTable, levelsSet, withAdvancement, withFilledAgain,
   withFirst, withRangeAdded, withRangeOff, withRangeTo, withRangeX, withTop, withTyped, xpWord,
 } from '../sheets/levels';
-import { classDice, healthSet, withHealth, withHealthAdds, withHealthDie, withHealthDieOn, withHealthFormula, withHealthGain, GAIN_WORDS, type HealthGainBy } from '../sheets/levels';
+import { classDice, healthSet, withBeat, withHealth, withHealthAdds, withHealthDie, withHealthDieOn, withHealthFormula, withHealthGain, BEAT_EXAMPLES, GAIN_WORDS, type HealthGainBy } from '../sheets/levels';
 import { DIE_CHOICES } from '../sheets/recovery';
 import { partIsOn } from '../sheets/wordsFeatures';
 import { useFormulaBox } from '../hooks/useFormulaBox';
@@ -127,7 +127,28 @@ export function LevelsPage({ definition, edit, onGoTo, api }: Props) {
               <option value="roll">ROLL</option>
               <option value="choose">THE PLAYER CHOOSES</option>
               <option value="reroll">REROLL ALL, KEEP HIGHER</option>
+              <option value="beat">ROLL TO BEAT</option>
             </select>
+            {health.gain === 'beat' && <>
+              <FieldName beside hint={HINTS['levels.beatWay']} style={small}>WHAT IS ROLLED</FieldName>
+              <span role="group" aria-label="What is rolled to beat" style={segGroup}>
+                <button type="button" aria-pressed={health.beatWay === 'pool'} style={seg(health.beatWay === 'pool')} onClick={() => edit(withBeat(definition, { beatWay: 'pool' }))}>A POOL</button>
+                <button type="button" aria-pressed={health.beatWay === 'level'} style={seg(health.beatWay === 'level')} onClick={() => edit(withBeat(definition, { beatWay: 'level' }))}>A DIE PER LEVEL</button>
+              </span>
+              {health.beatWay === 'pool' && <>
+                <FieldName beside hint={HINTS['levels.beatPool']} style={small}>THE POOL</FieldName>
+                <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                  <WholeBox value={health.poolCount} label="Dice in the pool" width={48} onChange={(n) => edit(withBeat(definition, { poolCount: n }))} />
+                  <select aria-label="The pool's die" value={health.poolDie} style={{ ...formulaInput, width: 'auto' }} onChange={(e) => edit(withBeat(definition, { poolDie: Number(e.target.value) }))}>
+                    {[...new Set([...DIE_CHOICES, health.poolDie])].sort((a, b) => a - b).map((n) => <option key={n} value={n}>D{n}</option>)}
+                  </select>
+                </span>
+                <FieldName beside hint={HINTS['levels.beatGain']} style={small}>BEATEN, GAINS</FieldName>
+                <select aria-label="The die gained when beaten" value={health.gainDie} style={{ ...formulaInput, width: 'auto' }} onChange={(e) => edit(withBeat(definition, { gainDie: Number(e.target.value) }))}>
+                  {[...new Set([...DIE_CHOICES, health.gainDie])].sort((a, b) => a - b).map((n) => <option key={n} value={n}>D{n}</option>)}
+                </select>
+              </>}
+            </>}
             <FieldName beside hint={HINTS['levels.healthAdds']} style={small}>EACH LEVEL ADDS</FieldName>
             {adds.field}
           </>}
@@ -139,6 +160,7 @@ export function LevelsPage({ definition, edit, onGoTo, api }: Props) {
         {health.how === 'formula' && formula.help}
         {health.how === 'level' && adds.help}
         {health.how === 'level' && <p style={why} aria-label="How a level gains it">{GAIN_WORDS[health.gain]}</p>}
+        {health.how === 'level' && health.gain === 'beat' && <p style={why} aria-label="An example">{BEAT_EXAMPLES[health.beatWay]}</p>}
         {health.how === 'level' && health.dieOn === 'class' && (
           <p style={why} aria-label="Each class's die">{dice.length
             ? dice.map((c) => `${c.name.toUpperCase()} ${c.die ? `D${c.die}` : 'NO HIT DIE'}`).join(' · ')

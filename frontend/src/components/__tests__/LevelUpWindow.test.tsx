@@ -394,3 +394,58 @@ describe('REROLL ALL, KEEP HIGHER (7d5c)', () => {
     expect(screen.getByText('+1: ROLLED 9, NOT OVER 19: +1')).toBeTruthy();
   });
 });
+
+describe('ROLL TO BEAT (7d5d)', () => {
+  const open = async (beat: object, health?: object, dice: Record<string, number> = { soldier: 10 }) => {
+    registerCustomTemplate({
+      id: ID, name: 'Hearth', words: {}, parts: {}, derived: [], sheet: { sections: [] },
+      levels: { top: 5, table: { 2: 100, 3: 300, 4: 700, 5: 1500 }, health: { gain: 'beat', dieOn: 'class', dice, beat } }, choices: [ONE],
+    } as unknown as CustomRender);
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })));
+    const socket = makeSocket(holding([['soldier', 2]], 9000, {
+      _health: { adds: 2, max: 19, levels: [{ level: 1, took: 10, die: 10 }, { level: 2, took: 5, die: 10 }] },
+      _leveling: { list: 'classes', option: 'soldier', ...(health ? { health } : {}) },
+    }));
+    render(<LevelUpWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={socket as never} userName="WREN" onLeave={vi.fn()} onDone={vi.fn()} />);
+    await screen.findByRole('tablist', { name: 'Folders' });
+    return socket;
+  };
+  const POOL = { way: 'pool', count: 6, die: 10, gain: 6 };
+
+  it('a pool: what is rolled, what beating it gains, ROLL TO BEAT; NEXT waits', async () => {
+    const socket = await open(POOL);
+    expect(screen.getByText('HEALTH · ROLL 6D10 TO BEAT 19')).toBeTruthy();
+    expect(screen.getByText('Beat 19 and gain a d6. Otherwise nothing.')).toBeTruthy();
+    expect(button('NEXT').disabled).toBe(true);
+    await userEvent.click(screen.getByRole('button', { name: 'ROLL TO BEAT' }));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'healthRoll', list: 'classes', option: 'soldier' });
+  });
+
+  it('a class with no HIT DIE still rolls the pool, and is never told it only gains what each level adds', async () => {
+    await open(POOL, undefined, {});
+    expect(screen.getByRole('button', { name: 'ROLL TO BEAT' })).toBeTruthy();
+    cleanup();
+    await open(POOL, { roll: 15, gained: 0, over: 19, beat: true }, {});
+    expect(screen.getByText('Rolled, and kept. Your GM can clear it for another go.')).toBeTruthy();
+    expect(screen.queryByText(/has no HIT DIE/)).toBeNull();
+  });
+
+  it('a die per level: every level\'s dice with what each adds', async () => {
+    await open({ ...POOL, way: 'level' });
+    expect(screen.getByText('HEALTH · EVERY LEVEL: 3 DICE + 6 TO BEAT 19')).toBeTruthy();
+    expect(screen.getByText("Beat 19 and gain the new level's die again, and what each level adds. Otherwise nothing.")).toBeTruthy();
+  });
+
+  it('beaten: what it gained; not beaten: nothing, and NEXT goes on either way', async () => {
+    await open(POOL, { roll: 31, die: 10, gained: 4, over: 19, beat: true });
+    expect(screen.getByText('+4: ROLLED 31, OVER 19: GAINED 4')).toBeTruthy();
+    // Said once, not again as a plain roll with what each level adds.
+    expect(screen.getAllByText(/^\+4: ROLLED/)).toHaveLength(1);
+    expect(button('NEXT').disabled).toBe(false);
+    cleanup();
+    await open(POOL, { roll: 15, die: 10, gained: 0, over: 19, beat: true });
+    expect(screen.getByText('+0: ROLLED 15, NOT OVER 19: NOTHING GAINED')).toBeTruthy();
+    expect(screen.getByText('Rolled, and kept. Your GM can clear it for another go.')).toBeTruthy();
+    expect(button('NEXT').disabled).toBe(false);
+  });
+});

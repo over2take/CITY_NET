@@ -31,11 +31,16 @@ const LIMITS = { top: 30, xp: 1000000000000, ranges: 30, times: 100, formula: 10
 const KEYS = new Set(['top', 'first', 'ranges', 'typed', 'health']);
 /** MAX HEALTH (7d4): AS IT IS, the token's own number, A FORMULA it is worked out from, or PER LEVEL (7d5a). */
 const HEALTH_HOWS = ['as_is', 'formula', 'level'];
-const HEALTH_KEYS = new Set(['how', 'formula', 'die_on', 'die', 'gain', 'adds']);
+const HEALTH_KEYS = new Set(['how', 'formula', 'die_on', 'die', 'gain', 'adds', 'beat_way', 'pool_count', 'pool_die', 'gain_die']);
 /** PER LEVEL: the die is each class's HIT DIE (choices.js), or one for every level. */
 const DIE_ONS = ['class', 'all'];
 /** How a level's health is gained: AVERAGE (FIXED), ROLL, THE PLAYER CHOOSES (7d5b), or REROLL ALL, KEEP HIGHER (7d5c). */
-const GAINS = ['average', 'roll', 'choose', 'reroll'];
+const GAINS = ['average', 'roll', 'choose', 'reroll', 'beat'];
+/** ROLL TO BEAT (7d5d): what is rolled to beat the maximum: A POOL (6d10, Mörk Borg) or A DIE PER LEVEL. */
+const BEAT_WAYS = ['pool', 'level'];
+const POOL_MOST = 20;
+/** What ROLL TO BEAT starts with: a pool of 6d10, a d6 gained. */
+const BEAT_DEFAULTS = { way: 'pool', count: 6, die: 10, gain: 6 };
 /** The dice a level's health can roll: as a class's HIT DIE takes. */
 const HEALTH_DIE = { least: 2, most: 100 };
 /** Where a sheet keeps what each level gained (7d5a): { "<character level>": { die, took } }, level 1 left to the full die. */
@@ -91,7 +96,7 @@ const levelsShown = (definition) => {
   }
   return {
     top: levelsOf(definition).top, ...(earnsXp(definition) ? { table: levelTable(definition) } : {}),
-    ...(h.how === 'level' ? { health: { gain: h.gain, dieOn: h.dieOn, ...(h.die ? { die: h.die } : {}), dice } } : {}),
+    ...(h.how === 'level' ? { health: { gain: h.gain, dieOn: h.dieOn, ...(h.die ? { die: h.die } : {}), dice, ...(h.gain === 'beat' ? { beat: h.beat } : {}) } } : {}),
   };
 };
 
@@ -108,6 +113,12 @@ const healthOf = (definition) => {
     ...(Number.isInteger(h.die) && h.die >= HEALTH_DIE.least && h.die <= HEALTH_DIE.most ? { die: h.die } : {}),
     gain: GAINS.includes(h.gain) ? h.gain : 'average',
     ...(typeof h.adds === 'string' && h.adds.trim() ? { adds: h.adds } : {}),
+    beat: {
+      way: BEAT_WAYS.includes(h.beat_way) ? h.beat_way : BEAT_DEFAULTS.way,
+      count: Number.isInteger(h.pool_count) && h.pool_count >= 1 && h.pool_count <= POOL_MOST ? h.pool_count : BEAT_DEFAULTS.count,
+      die: Number.isInteger(h.pool_die) && h.pool_die >= HEALTH_DIE.least && h.pool_die <= HEALTH_DIE.most ? h.pool_die : BEAT_DEFAULTS.die,
+      gain: Number.isInteger(h.gain_die) && h.gain_die >= HEALTH_DIE.least && h.gain_die <= HEALTH_DIE.most ? h.gain_die : BEAT_DEFAULTS.gain,
+    },
   };
 };
 
@@ -142,7 +153,12 @@ const checkHealth = (definition, h, problems) => {
   checkHealthFormula(definition, h.adds, `${where}, adds`, h.how === 'level', false, problems);
   if (h.die_on !== undefined && !DIE_ONS.includes(h.die_on)) problems.push({ where: `${where}, die_on`, message: 'ON EACH CLASS or ONE FOR ALL' });
   if (h.die !== undefined && (!Number.isInteger(h.die) || h.die < HEALTH_DIE.least || h.die > HEALTH_DIE.most)) problems.push({ where: `${where}, die`, message: `A die of ${HEALTH_DIE.least} to ${HEALTH_DIE.most} sides` });
-  if (h.gain !== undefined && !GAINS.includes(h.gain)) problems.push({ where: `${where}, gain`, message: 'AVERAGE (FIXED), ROLL, THE PLAYER CHOOSES or REROLL ALL, KEEP HIGHER' });
+  if (h.gain !== undefined && !GAINS.includes(h.gain)) problems.push({ where: `${where}, gain`, message: 'AVERAGE (FIXED), ROLL, THE PLAYER CHOOSES, REROLL ALL, KEEP HIGHER or ROLL TO BEAT' });
+  if (h.beat_way !== undefined && !BEAT_WAYS.includes(h.beat_way)) problems.push({ where: `${where}, beat_way`, message: 'A POOL or A DIE PER LEVEL' });
+  if (h.pool_count !== undefined && (!Number.isInteger(h.pool_count) || h.pool_count < 1 || h.pool_count > POOL_MOST)) problems.push({ where: `${where}, pool_count`, message: `From 1 to ${POOL_MOST} dice` });
+  for (const key of ['pool_die', 'gain_die']) {
+    if (h[key] !== undefined && (!Number.isInteger(h[key]) || h[key] < HEALTH_DIE.least || h[key] > HEALTH_DIE.most)) problems.push({ where: `${where}, ${key}`, message: `A die of ${HEALTH_DIE.least} to ${HEALTH_DIE.most} sides` });
+  }
   if (h.how === 'level' && h.die_on === 'all' && h.die === undefined) problems.push({ where: `${where}, die`, message: 'Pick the die every level rolls' });
 };
 

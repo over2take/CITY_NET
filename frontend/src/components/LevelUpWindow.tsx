@@ -136,27 +136,35 @@ export function LevelUpWindow({ pos, setPos, socket, userName, onLeave, onDone, 
         )}
         {open === 'health' && gain && (
           <>
-            <span style={{ fontSize: '0.75rem' }}>HEALTH · {gain.by === 'reroll' && gain.die ? `EVERY LEVEL: ${gain.dice} DICE${gain.adds ? ` ${gain.adds > 0 ? '+' : '−'} ${Math.abs(gain.adds * gain.dice)}` : ''}` : <>{gain.die ? `d${gain.die}` : 'NO DIE'}{gain.adds ? ` ${gain.adds > 0 ? '+' : '−'} ${Math.abs(gain.adds)}` : ''}</>}</span>
+            <span style={{ fontSize: '0.75rem' }}>HEALTH · {gain.by === 'beat' && gain.beat?.way === 'pool' ? `ROLL ${gain.beat.count}D${gain.beat.die} TO BEAT ${gain.max}`
+              : gain.by === 'beat' && gain.die ? `EVERY LEVEL: ${gain.dice} DICE${gain.adds ? ` ${gain.adds > 0 ? '+' : '−'} ${Math.abs(gain.adds * gain.dice)}` : ''} TO BEAT ${gain.max}`
+              : gain.by === 'reroll' && gain.die ? `EVERY LEVEL: ${gain.dice} DICE${gain.adds ? ` ${gain.adds > 0 ? '+' : '−'} ${Math.abs(gain.adds * gain.dice)}` : ''}` : <>{gain.die ? `d${gain.die}` : 'NO DIE'}{gain.adds ? ` ${gain.adds > 0 ? '+' : '−'} ${Math.abs(gain.adds)}` : ''}</>}</span>
             {gain.by === 'reroll' && gain.gained !== null && gain.rolled !== null && (
               <span style={{ ...why, color: 'var(--cyan)', opacity: 1 }}>
                 +{gain.gained}: ROLLED {gain.rolled}, {gain.over ? `OVER ${gain.max}: THE NEW MAXIMUM` : `NOT OVER ${gain.max}: +1`}
               </span>
             )}
-            {gain.gained !== null && !(gain.by === 'reroll' && gain.rolled !== null) && (
+            {gain.by === 'beat' && gain.gained !== null && gain.rolled !== null && (
+              <span style={{ ...why, color: 'var(--cyan)', opacity: 1 }}>
+                +{gain.gained}: ROLLED {gain.rolled}, {gain.over ? `OVER ${gain.max}: GAINED ${gain.gained}` : `NOT OVER ${gain.max}: NOTHING GAINED`}
+              </span>
+            )}
+            {gain.gained !== null && !((gain.by === 'reroll' || gain.by === 'beat') && gain.rolled !== null) && (
               <span style={{ ...why, color: 'var(--cyan)', opacity: 1 }}>
                 +{gain.gained}: {gain.rolled !== null ? `ROLLED ${gain.rolled}` : `${gain.average} AVERAGE`}{gain.adds ? `, ${gain.adds > 0 ? '+' : '−'}${Math.abs(gain.adds)} EACH LEVEL` : ''}{(gain.rolled ?? gain.average) + gain.adds < 1 ? ', AT LEAST 1' : ''}
               </span>
             )}
-            {gain.gained === null && gain.die && (
+            {gain.gained === null && (gain.die || gain.beat?.way === 'pool') && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }} role="group" aria-label="Health this level">
                 {gain.by === 'choose' && <button type="button" style={btn} onClick={() => health('healthAverage')}>TAKE {gain.average}{gain.adds ? ` ${gain.adds > 0 ? '+' : '−'} ${Math.abs(gain.adds)}` : ''}</button>}
-                <button type="button" style={{ ...btn, borderColor: 'var(--warning)', color: 'var(--warning)' }} onClick={() => health('healthRoll')}>{gain.by === 'reroll' ? 'ROLL THEM ALL' : `ROLL D${gain.die}`}</button>
+                <button type="button" style={{ ...btn, borderColor: 'var(--warning)', color: 'var(--warning)' }} onClick={() => health('healthRoll')}>{gain.by === 'reroll' ? 'ROLL THEM ALL' : gain.by === 'beat' ? 'ROLL TO BEAT' : `ROLL D${gain.die}`}</button>
               </div>
             )}
             {gain.tookAverage && gain.die && (
               <div style={{ display: 'flex', gap: '6px' }}><button type="button" style={btn} onClick={() => health('healthRoll')}>ROLL D{gain.die} INSTEAD</button></div>
             )}
-            <p style={why}>{!gain.die ? `${target.name} has no HIT DIE, so only what each level adds.`
+            <p style={why}>{gain.by === 'beat' && gain.rolled === null ? (gain.beat?.way === 'pool' ? `Beat ${gain.max} and gain a d${gain.beat.gain}. Otherwise nothing.` : `Beat ${gain.max} and gain the new level's die again, and what each level adds. Otherwise nothing.`)
+              : !gain.die && gain.beat?.way !== 'pool' ? `${target.name} has no HIT DIE, so only what each level adds.`
               : gain.rolled !== null ? 'Rolled, and kept. Your GM can clear it for another go.'
                 : gain.by === 'reroll' ? `Every level rolled again. Over ${gain.max} and it becomes your new maximum. Otherwise you gain 1.`
                 : gain.by === 'average' ? 'Fixed in this game. Nothing to roll.'

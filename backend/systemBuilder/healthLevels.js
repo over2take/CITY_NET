@@ -6,6 +6,10 @@
 // REROLL ALL, KEEP HIGHER (7d5c, Cities Without Number): going up, every level's die is rolled again with what each
 // level adds for each; over the current maximum, that total is the new maximum, otherwise it goes up by 1. What that
 // level added is kept as `gained`, the level's own share, already counted, so it isn't recounted when a stat changes.
+//
+// ROLL TO BEAT (7d5d): going up, a pool (6d10, Mörk Borg's) or a die for every level is rolled against the current
+// maximum; beaten, the level gains the gain die (or, by level, the new level's die and what each level adds); not
+// beaten, nothing: a `gained` of 0.
 
 const { heldOf } = require('./choices');
 const { healthOf, levelDie, averageOf, HEALTH_LEVELS_KEY } = require('./levels');
@@ -21,11 +25,11 @@ const keptOf = (data) => {
   for (const [level, k] of Object.entries(kept)) if (isPlainObject(k) && Number.isInteger(k.took) && k.took >= 0) out[level] = k.took;
   return out;
 };
-/** What a level was kept as adding outright (7d5c): { level: gained }, from a reroll. */
+/** What a level was kept as adding outright (7d5c): { level: gained }, from a reroll, or a roll to beat that may add nothing. */
 const gainedOf = (data) => {
   const kept = isPlainObject(data) && isPlainObject(data[HEALTH_LEVELS_KEY]) ? data[HEALTH_LEVELS_KEY] : {};
   const out = {};
-  for (const [level, k] of Object.entries(kept)) if (isPlainObject(k) && Number.isInteger(k.gained) && k.gained >= 1) out[level] = k.gained;
+  for (const [level, k] of Object.entries(kept)) if (isPlainObject(k) && Number.isInteger(k.gained) && k.gained >= 0) out[level] = k.gained;
   return out;
 };
 /** The die each level had, as kept, or the first class's. */
@@ -50,7 +54,7 @@ const healthByLevel = (definition, data) => {
   const dieAt = diesOf(sheet, die);
   const levels = [{ level: 1, took: die ?? 0, die }];
   for (let level = 2; level <= characterLevel(definition, sheet); level += 1) {
-    levels.push({ level, took: kept[level] ?? averageOf(die), die: dieAt(level), ...(fixed[level] ? { gained: fixed[level] } : {}) });
+    levels.push({ level, took: kept[level] ?? averageOf(die), die: dieAt(level), ...(level in fixed ? { gained: fixed[level] } : {}) });
   }
   return { max: levels.reduce((n, l) => n + (l.gained ?? Math.max(1, l.took + adds)), 0), adds, levels };
 };
@@ -75,4 +79,23 @@ const healthBase = (definition, data) => {
   return h.how === 'level' ? healthByLevel(definition, data).max : null;
 };
 
-module.exports = { healthByLevel, healthBase, keptOf, rerollAll };
+/**
+ * ROLL TO BEAT (7d5d): { total, rolls: [{ die, roll }], over, beaten, gained, gainRoll }: the pool, or every level's
+ * die and the new level's with what each level adds, against the current maximum. Beaten, `gained` is the gain die's
+ * roll (by level: the new level's die again and what each level adds, at least 1); not beaten, 0.
+ */
+const rollToBeat = (definition, data, die, rng) => {
+  const { beat } = healthOf(definition);
+  const now = healthByLevel(definition, data);
+  const roll = (d) => ({ die: d, roll: Math.floor(rng() * d) + 1 });
+  const dice = beat.way === 'pool' ? Array(beat.count).fill(beat.die) : [...now.levels.map((l) => l.die), die];
+  const rolls = dice.filter((d) => Number.isInteger(d)).map(roll);
+  const total = rolls.reduce((n, r) => n + r.roll, 0) + (beat.way === 'pool' ? 0 : now.adds * dice.length);
+  const beaten = total > now.max;
+  const gainDie = beat.way === 'pool' ? beat.gain : die;
+  const gainRoll = beaten && Number.isInteger(gainDie) ? roll(gainDie) : null;
+  const gained = !beaten ? 0 : beat.way === 'pool' ? gainRoll.roll : Math.max(1, (gainRoll ? gainRoll.roll : 0) + now.adds);
+  return { total, rolls, over: now.max, beaten, gained, gainRoll };
+};
+
+module.exports = { healthByLevel, healthBase, keptOf, rerollAll, rollToBeat };

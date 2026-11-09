@@ -310,3 +310,34 @@ describe('REROLL ALL, KEEP HIGHER (7d5c)', () => {
     expect(gmLevelingLine(tpl, data({ roll: 33, die: 10, gained: 14, over: 19 }))?.words).toBe('LEVELING UP · SOLDIER 2 → 3 · HEALTH REROLLED 33, +14');
   });
 });
+
+describe('ROLL TO BEAT (7d5d)', () => {
+  const tpl = (beat: object, dice: Record<string, number> = { soldier: 10 }) => ({ levels: { top: 10, table: { 2: 1, 3: 2 }, health: { gain: 'beat', dieOn: 'class', dice, beat } },
+    choices: [{ id: 'classes', one: 'Class', levelled: true, options: [{ id: 'soldier', label: 'Soldier', features: [] }] }] }) as unknown as SheetTemplate;
+  const POOL = { way: 'pool', count: 6, die: 10, gain: 6 };
+  const data = (health?: object) => ({
+    _xp: 9, [WORKED_KEY]: { picks: [{ list: 'classes', option: 'soldier', level: 2 }], levels: { level: 2 } },
+    _health: { adds: 2, max: 19, levels: [{ level: 1, took: 10, die: 10 }, { level: 2, took: 5, die: 10 }] },
+    ...(health ? { _leveling: { list: 'classes', option: 'soldier', health } } : {}),
+  });
+
+  it('a pool: its own dice, whatever the levels; nothing settled until rolled', () => {
+    expect(healthGain(tpl(POOL), data(), SOLDIER)).toMatchObject({ by: 'beat', dice: 6, max: 19, gained: null, beat: POOL });
+    // A class with no die still has the pool to roll.
+    expect(healthGain(tpl(POOL, {}), data(), SOLDIER)?.gained).toBeNull();
+  });
+
+  it('a die per level: every level\'s and the new one', () => {
+    expect(healthGain(tpl({ ...POOL, way: 'level' }), data(), SOLDIER)).toMatchObject({ dice: 3, gained: null });
+    expect(healthGain(tpl({ ...POOL, way: 'level' }, {}), data(), SOLDIER)?.gained).toBe(2);
+  });
+
+  it('beaten: what it gained; not: nothing, settled', () => {
+    expect(healthGain(tpl(POOL), data({ roll: 31, die: 10, gained: 4, over: 19, beat: true }), SOLDIER)).toMatchObject({ rolled: 31, gained: 4, over: true });
+    expect(healthGain(tpl(POOL), data({ roll: 15, die: 10, gained: 0, over: 19, beat: true }), SOLDIER)).toMatchObject({ rolled: 15, gained: 0, over: false });
+  });
+
+  it('the GM\'s line', () => {
+    expect(gmLevelingLine(tpl(POOL), data({ roll: 31, die: 10, gained: 4, over: 19, beat: true }))?.words).toBe('LEVELING UP · SOLDIER 2 → 3 · HEALTH ROLLED 31 TO BEAT 19, +4');
+  });
+});
