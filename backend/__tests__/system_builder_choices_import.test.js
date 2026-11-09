@@ -199,6 +199,13 @@ describe('a file read against a list', () => {
     expect(r.notes).toEqual([{ line: 3, message: 'Soldier · Guard Stance keeps its modifiers, set in the builder' }]);
   });
 
+  it('keeps an INCREASE, set in the builder (7d6a)', () => {
+    const RAISED = { ...HEARTH, choices: [{ ...HEARTH.choices[0], options: [{ ...HEARTH.choices[0].options[0], features: HEARTH.choices[0].options[0].features.map((f) => (f.id === 'asi' ? { ...f, increase: { points: 2, stats: 'abilities', cap: 20 } } : f)) }, HEARTH.choices[0].options[1]] }, HEARTH.choices[1]] };
+    const r = read(FILE('[features]', 'option, feature, level, words', 'Soldier, Ability Score Improvement, 4, Raise your stats.'), 'classes', RAISED);
+    expect(featureIn(r, 'Soldier', 'Ability Score Improvement')[0]).toEqual({ id: 'asi', label: 'Ability Score Improvement', at: 4, text: 'Raise your stats.', increase: { points: 2, stats: 'abilities', cap: 20 } });
+    expect(checkDefinition(withList(r, 'classes', RAISED)).problems).toEqual([]);
+  });
+
   it('reads levels into a list that follows its opener\'s level, and one everyone has (7a5d)', () => {
     const FORGE = { ...HEARTH, choices: [
       { ...HEARTH.choices[0], options: [{ ...HEARTH.choices[0].options[0], features: [...HEARTH.choices[0].options[0].features, { id: 'path', label: 'Path', at: 3, choice: 'archetypes' }] }, HEARTH.choices[0].options[1]] },

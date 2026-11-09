@@ -8,17 +8,18 @@
 // which checks what is written and works out what picks do; the tests hold the two together.
 // 7a5a2: how a list is picked (on its own, through the features that open it, both, or everyone has
 // it) and how many picks a feature opening a list gives. 7a5b: a list's table to roll on, each
-// option's roll on it, and how players pick from it.
+// option's roll on it, and how players pick from it. 7d6a: an INCREASE, points the player spreads on
+// stats as it unlocks.
 
 import type { Definition } from './systemsApi';
 import { idFor } from './setup';
-import { allStats, formulaList } from './statsRules';
+import { allStats, formulaList, statGroups } from './statsRules';
 import { healthLayout } from './setup';
 import { restList } from './rests';
 import { rollList } from './rolls';
 
 /** backend choices.js LIMITS, held equal by a test. */
-export const LIMITS = { lists: 20, options: 100, features: 40, modifiers: 10, rolls: 10, level: 30, picks: 100, label: 40, description: 1000, opens: 10, dieLeast: 2, dieMost: 100, tableDice: 4 } as const;
+export const LIMITS = { lists: 20, options: 100, features: 40, modifiers: 10, rolls: 10, level: 30, picks: 100, label: 40, description: 1000, opens: 10, dieLeast: 2, dieMost: 100, tableDice: 4, increase: 10, cap: 9999 } as const;
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -42,9 +43,14 @@ export type OptionPatch = Partial<Pick<ChoiceOption, 'label' | 'description' | '
 export interface Modifier { target: string; amount: string }
 export interface Uses { count: string; refill?: string }
 export interface RollChange { roll: string; change: string }
-export interface Feature { id: string; label: string; text?: string; at?: number; modifiers?: Modifier[]; uses?: Uses; rolls?: string[]; changes?: RollChange[]; choice?: string; choice_count?: number }
-/** A change to a feature: `uses: null` and `choice: null` take them away. */
-export type FeaturePatch = Partial<Omit<Feature, 'id' | 'uses' | 'choice'>> & { uses?: Uses | null; choice?: string | null };
+/**
+ * An INCREASE (7d6a; backend choices.js): points the player spreads on stats, at most `most` on one
+ * (all the points when absent), from one group of stats (all when absent), none past `cap` (no cap).
+ */
+export interface Increase { points: number; most?: number; stats?: string; cap?: number }
+export interface Feature { id: string; label: string; text?: string; at?: number; modifiers?: Modifier[]; uses?: Uses; rolls?: string[]; changes?: RollChange[]; choice?: string; choice_count?: number; increase?: Increase }
+/** A change to a feature: `uses: null`, `choice: null` and `increase: null` take them away. */
+export type FeaturePatch = Partial<Omit<Feature, 'id' | 'uses' | 'choice' | 'increase'>> & { uses?: Uses | null; choice?: string | null; increase?: Increase | null };
 
 const text = (v: unknown) => (typeof v === 'string' ? v : '');
 
@@ -270,10 +276,11 @@ export const featureList = (o: ChoiceOption): Feature[] => (Array.isArray(o.feat
 export const levelOf = (f: Feature): number => (Number.isInteger(f.at) && (f.at as number) >= 1 ? f.at as number : 1);
 
 /** What a feature does, in the order the page lists them; none is words only. */
-export type FeatureKind = 'modifier' | 'uses' | 'roll' | 'change' | 'choice' | 'text';
+export type FeatureKind = 'modifier' | 'increase' | 'uses' | 'roll' | 'change' | 'choice' | 'text';
 export const kindsOf = (f: Feature): FeatureKind[] => {
   const kinds: FeatureKind[] = [];
   if (f.modifiers?.length) kinds.push('modifier');
+  if (f.increase) kinds.push('increase');
   if (f.uses) kinds.push('uses');
   if (f.rolls?.length) kinds.push('roll');
   if (f.changes?.length) kinds.push('change');
@@ -306,13 +313,15 @@ export const withNewFeature = (def: Definition, listId: string, optionId: string
 
 /**
  * The definition with one feature changed; its id stays. Blank words, level 1 (or any level outside a
- * levelled list), no modifiers, rolls or changes, no uses and no list store nothing; a level past the
- * highest is the highest, and uses refilled by nothing keep no refill.
+ * levelled list), no modifiers, rolls or changes, no uses, no list and no increase store nothing; a level past the
+ * highest is the highest, and uses refilled by nothing keep no refill. An increase keeps its points
+ * from 1 to the most, its most on one from 1 to its points (stored as nothing when it is all of them),
+ * and stores no group for all stats and no cap for none.
  */
 export const withFeature = (def: Definition, listId: string, optionId: string, featureId: string, patch: FeaturePatch): Definition =>
   withFeatures(def, listId, optionId, (fs, c) => fs.map((f) => {
     if (f.id !== featureId) return f;
-    const next = { ...f, ...patch } as Feature & { uses?: Uses | null; choice?: string | null };
+    const next = { ...f, ...patch } as Feature & { uses?: Uses | null; choice?: string | null; increase?: Increase | null };
     if (typeof next.text === 'string' && !next.text.trim()) delete next.text;
     if (!unlocksByLevel(def, c) || !(Number.isInteger(next.at) && (next.at as number) > 1)) delete next.at;
     else next.at = Math.min(next.at as number, LIMITS.level);
@@ -323,8 +332,43 @@ export const withFeature = (def: Definition, listId: string, optionId: string, f
     // How many it opens: only with a list, 1 stored as nothing, no more than the most.
     if (!next.choice || !Number.isInteger(next.choice_count) || (next.choice_count as number) <= 1) delete next.choice_count;
     else next.choice_count = Math.min(next.choice_count as number, LIMITS.opens);
+    if (!next.increase) delete next.increase;
+    else next.increase = increaseKept(next.increase);
     return next as Feature;
   }));
+
+/** An increase as it is stored (7d6a): whole numbers within their limits, nothing for what is all or none. */
+const increaseKept = (inc: Increase): Increase => {
+  const whole = (n: unknown, least: number, most: number, none: number) => (Number.isFinite(n) ? Math.min(most, Math.max(least, Math.trunc(n as number))) : none);
+  const points = whole(inc.points, 1, LIMITS.increase, 1);
+  const most = whole(inc.most, 1, points, points);
+  return {
+    points,
+    ...(most < points ? { most } : {}),
+    ...(typeof inc.stats === 'string' && inc.stats ? { stats: inc.stats } : {}),
+    ...(Number.isFinite(inc.cap) ? { cap: whole(inc.cap, -LIMITS.cap, LIMITS.cap, 0) } : {}),
+  };
+};
+
+/** What a new INCREASE starts as: D&D's, 2 points and at most 2 on one, from every stat, with no cap. */
+export const NEW_INCREASE: Increase = { points: 2 };
+
+/** The groups of stats an INCREASE may raise (7d6a): those with a stat in them, by name. */
+export const increaseGroups = (def: Definition): { id: string; label: string }[] => statGroups(def)
+  .filter((g) => g.stats.some((s) => isObject(s) && typeof s.id === 'string'))
+  .map((g) => ({ id: g.id, label: (g.label || g.id).toUpperCase() }));
+
+/** An increase in words, as the CHOICES page says it under its rows: 2 POINTS · AT MOST 1 ON ONE · FROM ABILITIES · STOPS AT 20. */
+export const increaseWords = (def: Definition, inc: Increase): string => {
+  const group = increaseGroups(def).find((g) => g.id === inc.stats);
+  const most = inc.most ?? inc.points;
+  return [
+    `${inc.points} ${inc.points === 1 ? 'POINT' : 'POINTS'}`,
+    ...(inc.points > 1 ? [most < inc.points ? `AT MOST ${most} ON ONE` : 'ALL ON ONE IF THEY LIKE'] : []),
+    group ? `FROM ${group.label}` : 'ANY STAT',
+    inc.cap === undefined ? 'NO LIMIT' : `STOPS AT ${inc.cap}`,
+  ].join(' · ');
+};
 
 /** The definition without one feature. */
 export const withoutFeature = (def: Definition, listId: string, optionId: string, featureId: string): Definition =>

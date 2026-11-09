@@ -5,7 +5,8 @@ import { signInAsGm, openBuilder, builderPage, gmToken, asGm } from './helpers';
 // a GM makes the list characters pick their class from, levelled and taken more than once, gives it
 // two options, one with a requirement, gives the SOLDIER a feature at level 2 (7a2b2) with a
 // modifier on Intellect and uses a long rest refills, and finds it all as they left it after a
-// reload; the server takes it with no problems.
+// reload; the server takes it with no problems. An INCREASE (7d6a): Pathfinder's four points, at most
+// one on a stat, from ABILITIES, stopping at 20.
 
 test('what an option gives: items and money set, then changed by a file, kept after a reload', async ({ page, request }, info) => {
   const name = `Giving Hearth ${info.retry + 1}`;
@@ -121,4 +122,42 @@ test('a class list made on CHOICES, with two options, kept after a reload', asyn
   await expect(page.getByRole('region', { name: 'Soldier option' }).getByRole('region', { name: 'Level 2' })).toContainText('SHARP MIND');
   await options.getByRole('button', { name: 'MAGE' }).click();
   await expect(page.getByRole('region', { name: 'Mage option' }).getByRole('textbox', { name: 'REQUIRES' })).toHaveValue('@int >= 13');
+});
+
+test('an INCREASE on a feature: points, the most on one, which stats and where they stop, kept after a reload (7d6a)', async ({ page, request }, info) => {
+  const name = `Raising Hearth ${info.retry + 1}`;
+  const token = await gmToken(request);
+  const { id } = await asGm(request, token, 'post', '/api/systems', { definition: { format: 1, name,
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'might', label: 'Might' }, { id: 'wits', label: 'Wits' }] }],
+    choices: [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'soldier', label: 'Soldier', features: [{ id: 'boost', label: 'Boost', at: 5 }] }] }] } });
+  const openIt = async () => {
+    await signInAsGm(page);
+    await openBuilder(page);
+    const card = page.getByTestId(/^system-/).filter({ hasText: name.toUpperCase() });
+    if (!(await card.getByRole('button', { name: 'OPEN', exact: true }).isVisible())) await card.getByRole('button').first().click();
+    await card.getByRole('button', { name: 'OPEN', exact: true }).click();
+    await builderPage(page, 'CHOICES');
+  };
+  await openIt();
+  const soldier = page.getByRole('region', { name: 'Soldier option' });
+  await soldier.getByRole('button', { name: /BOOST/ }).click();
+  const boost = soldier.getByRole('group', { name: 'Feature Boost' });
+  await boost.getByRole('switch', { name: 'RAISES STATS' }).click();
+  await expect(boost.getByLabel('The increase in words')).toHaveText('2 POINTS · ALL ON ONE IF THEY LIKE · ANY STAT · NO LIMIT');
+  await boost.getByRole('spinbutton', { name: 'POINTS' }).fill('4');
+  await boost.getByRole('spinbutton', { name: 'AT MOST ON ONE' }).fill('1');
+  await boost.getByRole('combobox', { name: 'FROM' }).selectOption('abilities');
+  await boost.getByRole('spinbutton', { name: 'STOPS AT' }).fill('20');
+  await expect(boost.getByLabel('The increase in words')).toHaveText('4 POINTS · AT MOST 1 ON ONE · FROM ABILITIES · STOPS AT 20');
+  await expect(soldier.getByRole('button', { name: /BOOST/ })).toContainText('INCREASE');
+
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  const saved = await asGm(request, token, 'get', `/api/systems/${id}`);
+  expect(saved.problems).toEqual([]);
+  expect(saved.draft.choices[0].options[0].features[0]).toEqual({ id: 'boost', label: 'Boost', at: 5, increase: { points: 4, most: 1, stats: 'abilities', cap: 20 } });
+
+  await page.reload();
+  await openIt();
+  await page.getByRole('region', { name: 'Soldier option' }).getByRole('button', { name: /BOOST/ }).click();
+  await expect(page.getByRole('group', { name: 'Feature Boost' }).getByLabel('The increase in words')).toHaveText('4 POINTS · AT MOST 1 ON ONE · FROM ABILITIES · STOPS AT 20');
 });

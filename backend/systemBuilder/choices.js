@@ -30,7 +30,11 @@
 //               uses: { count: '1', refill: 'short_rest' },     // ticked off on the sheet, refilled by a rest
 //               rolls: ['rally'],                               // rolls of the system it gives
 //               changes: [{ roll: 'mind_save', change: 'advantage' }], // a change it lets one roll take
-//               choice: 'specialties', choice_count: 2 },       // a list picked from when it unlocks, and how many (1)
+//               choice: 'specialties', choice_count: 2,         // a list picked from when it unlocks, and how many (1)
+//               increase: { points: 2, most: 2, stats: 'abilities', cap: 20 } }, // 7d6a: points the player spreads on
+//                                                               // stats, at most `most` on one (all of them when
+//                                                               // absent), from one group (all stats when absent),
+//                                                               // none raised past `cap` (no cap when absent)
 //           ] },
 //       ] },
 //   ]
@@ -129,6 +133,9 @@ const LIMITS = {
   dieMost: 100,
   /** How many dice a list's table rolls (7a5b): 2d6, 3d6. */
   tableDice: 4,
+  /** The most points one INCREASE gives (7d6a), and how far from 0 the stat it stops at may be. */
+  increase: 10,
+  cap: 9999,
 };
 /** How a list is picked (7a5a): on its own, only under the features that open it, both, or not at all (everyone has it). */
 const PICKED = ['own', 'features', 'both', 'everyone'];
@@ -136,7 +143,8 @@ const PICKED = ['own', 'features', 'both', 'everyone'];
 const PLAYERS = ['hand', 'either', 'roll'];
 const LIST_KEYS = new Set(['id', 'one', 'many', 'picks', 'levelled', 'again', 'picked', 'table', 'players', 'options']);
 const OPTION_KEYS = new Set(['id', 'label', 'description', 'requires', 'die', 'roll', 'gives', 'features']);
-const FEATURE_KEYS = new Set(['id', 'label', 'text', 'at', 'modifiers', 'uses', 'rolls', 'changes', 'choice', 'choice_count']);
+const FEATURE_KEYS = new Set(['id', 'label', 'text', 'at', 'modifiers', 'uses', 'rolls', 'changes', 'choice', 'choice_count', 'increase']);
+const INCREASE_KEYS = new Set(['points', 'most', 'stats', 'cap']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
@@ -248,6 +256,8 @@ const checkChoices = (definition, problems) => {
   const rolls = new Map(list(definition.rolls).filter((r) => isPlainObject(r) && typeof r.id === 'string')
     .map((r) => [r.id, new Set(list(r.changes).filter(isPlainObject).map((c) => c.id))]));
   const listIds = new Set(choicesOf(definition).map((c) => c.id));
+  // The groups an INCREASE may name (7d6a): those with a stat in them.
+  const statGroups = new Set(list(definition.stats).filter((g) => isPlainObject(g) && typeof g.id === 'string' && list(g.stats).some((s) => isPlainObject(s) && typeof s.id === 'string')).map((g) => g.id));
   const listSeen = new Set();
   const named = new Set();
 
@@ -353,6 +363,20 @@ const checkChoices = (definition, problems) => {
           if (typeof c.roll !== 'string' || !rolls.has(c.roll)) problems.push({ where: `${at}, roll`, message: 'Not one of this system\'s rolls' });
           else if (typeof c.change !== 'string' || !rolls.get(c.roll).has(c.change)) problems.push({ where: `${at}, change`, message: 'Not one of that roll\'s changes' });
         });
+      }
+    }
+    if (f.increase !== undefined) {
+      const at = `${where}, increase`;
+      const inc = f.increase;
+      if (!isPlainObject(inc)) problems.push({ where: at, message: 'Must say how many points, and the most on one stat' });
+      else {
+        keys(inc, INCREASE_KEYS, at, 'an increase');
+        if (!statGroups.size) problems.push({ where: at, message: 'This system has no stats to raise: make them on STATS & RULES' });
+        const points = Number.isInteger(inc.points) && inc.points >= 1 && inc.points <= LIMITS.increase;
+        if (!points) problems.push({ where: `${at}, points`, message: `From 1 to ${LIMITS.increase} points` });
+        if (inc.most !== undefined && (!Number.isInteger(inc.most) || inc.most < 1 || (points && inc.most > inc.points))) problems.push({ where: `${at}, most`, message: 'From 1 to the points it gives' });
+        if (inc.stats !== undefined && !statGroups.has(inc.stats)) problems.push({ where: `${at}, stats`, message: 'Not one of this system\'s groups of stats' });
+        if (inc.cap !== undefined && (!Number.isInteger(inc.cap) || Math.abs(inc.cap) > LIMITS.cap)) problems.push({ where: `${at}, cap`, message: `A whole number from -${LIMITS.cap} to ${LIMITS.cap}` });
       }
     }
     if (f.choice !== undefined) {

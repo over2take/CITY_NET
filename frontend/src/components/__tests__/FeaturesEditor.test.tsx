@@ -179,10 +179,46 @@ describe('a feature open', () => {
     expect(features()[2]).not.toHaveProperty('choice');
   });
 
+  it('an INCREASE: switched on as D&D\'s, its points, the most on one, which stats and where they stop, in words (7d6a)', async () => {
+    const { features } = open({ ...HEARTH, stats: [...(HEARTH.stats as object[]), { id: 'skills', label: 'SKILLS', stats: [] }] } as unknown as Definition);
+    await userEvent.click(row(/RALLY/));
+    const f = form('Rally');
+    expect(f.queryByRole('spinbutton', { name: 'POINTS' })).toBeNull();
+    await userEvent.click(f.getByRole('switch', { name: 'RAISES STATS' }));
+    expect(features()[1].increase).toEqual({ points: 2 });
+    expect(row(/RALLY/).textContent).toBe('▾ RALLYINCREASEUSES');
+    expect(f.getByLabelText('The increase in words').textContent).toBe('2 POINTS · ALL ON ONE IF THEY LIKE · ANY STAT · NO LIMIT');
+    fireEvent.change(f.getByRole('spinbutton', { name: 'POINTS' }), { target: { value: '4' } });
+    fireEvent.change(f.getByRole('spinbutton', { name: 'AT MOST ON ONE' }), { target: { value: '1' } });
+    const from = f.getByRole('combobox', { name: 'FROM' });
+    expect([...from.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['ANY STAT', 'ABILITIES']);
+    fireEvent.change(from, { target: { value: 'abilities' } });
+    fireEvent.change(f.getByRole('spinbutton', { name: 'STOPS AT' }), { target: { value: '20' } });
+    expect(features()[1].increase).toEqual({ points: 4, most: 1, stats: 'abilities', cap: 20 });
+    expect(f.getByLabelText('The increase in words').textContent).toBe('4 POINTS · AT MOST 1 ON ONE · FROM ABILITIES · STOPS AT 20');
+    // A box emptied keeps what it had; STOPS AT emptied is no limit, and any stat again stores no group.
+    fireEvent.change(f.getByRole('spinbutton', { name: 'POINTS' }), { target: { value: '' } });
+    fireEvent.change(f.getByRole('spinbutton', { name: 'STOPS AT' }), { target: { value: '' } });
+    fireEvent.change(from, { target: { value: '' } });
+    expect(features()[1].increase).toEqual({ points: 4, most: 1 });
+    await userEvent.click(f.getByRole('switch', { name: 'RAISES STATS' }));
+    expect(features()[1]).not.toHaveProperty('increase');
+  });
+
+  it('an INCREASE naming a group no longer there still shows it, to be put right', async () => {
+    open({ ...HEARTH, choices: [{ ...(HEARTH.choices as object[])[0], options: [{ id: 'soldier', label: 'Soldier', features: [{ id: 'asi', label: 'Boost', increase: { points: 2, stats: 'gone' } }] }] }, (HEARTH.choices as object[])[1]] } as unknown as Definition);
+    await userEvent.click(row(/BOOST/));
+    const from = form('Boost').getByRole('combobox', { name: 'FROM' });
+    expect([...from.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['ANY STAT', 'gone', 'ABILITIES']);
+    expect(from).toHaveProperty('value', 'gone');
+  });
+
   it('says where to make what it could name, when the system has none yet', async () => {
     open({ ...HEARTH, stats: [], derived: [], rolls: [], core: { health: { model: 'none' } } } as unknown as Definition);
     await userEvent.click(row(/GUARD STANCE/));
     const f = form('Guard Stance');
+    expect(f.getByText(/No stats yet to raise: make them on STATS & RULES\./)).toBeTruthy();
+    expect(f.getByRole('switch', { name: 'RAISES STATS' })).toHaveProperty('disabled', true);
     expect(f.getByText(/No rolls yet: make them on STATS & RULES' ROLLS tab\./)).toBeTruthy();
     expect(f.getByText(/None of the system's rolls has a change to pick yet/)).toBeTruthy();
     expect(f.getByRole('button', { name: '+ CHANGE' })).toHaveProperty('disabled', true);
@@ -203,7 +239,11 @@ describe('a feature open', () => {
   it('a "?" beside every setting', async () => {
     open();
     await userEvent.click(row(/GUARD STANCE/));
-    for (const k of ['choices.features', 'choices.featureName', 'choices.at', 'choices.text', 'choices.modifiers', 'choices.uses', 'choices.rolls', 'choices.changes', 'choices.choice'] as const) {
+    for (const k of ['choices.features', 'choices.featureName', 'choices.at', 'choices.text', 'choices.modifiers', 'choices.increase', 'choices.uses', 'choices.rolls', 'choices.changes', 'choices.choice'] as const) {
+      expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
+    }
+    await userEvent.click(form('Guard Stance').getByRole('switch', { name: 'RAISES STATS' }));
+    for (const k of ['choices.increasePoints', 'choices.increaseStats', 'choices.increaseCap'] as const) {
       expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
     }
   });
