@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { pickLabel,
-  workedOn, listShown, spentAfterClick, featureDoes, pickedOf, listsOnTheirOwn, underFeature, keptAside, rolledOf, rollOffer,
+  workedOn, listShown, spentAfterClick, featureDoes, pickedOf, listsOnTheirOwn, underFeature, listsUnder, keptAside, rolledOf, rollOffer,
   type ChoiceListShown, type ChoicesAction, type FeatureShown, type OptionShown, type PickShown, type Worked,
 } from '../sheets/choicesShown';
 import { RecoveryDice } from './RecoveryDice';
@@ -168,12 +168,16 @@ function Drop({ list, option, ctx }: { list: string; option: OptionShown; ctx: C
   );
 }
 
-/** What hangs under a feature opening a list: its picks (each a card, and so on down), those waiting, and PICK. */
-function Under({ f, unlocked, ctx }: { f: FeatureShown; unlocked: boolean; ctx: Ctx }) {
-  const under = underFeature(f, ctx.lists, ctx.worked);
-  if (!under || (!unlocked && !under.waiting.length && !under.picks.length)) return null;
+/**
+ * What hangs under a feature opening a list: its picks (each a card, and so on down), those waiting, and PICK. A list
+ * its increase offers instead (7d6c) has its own, gone once the points were spent there with nothing picked.
+ */
+function Under({ f, listId, unlocked, ctx }: { f: FeatureShown; listId: string; unlocked: boolean; ctx: Ctx }) {
+  const under = underFeature(f, ctx.lists, ctx.worked, listId);
+  const instead = listId !== f.opens;
+  if (!under || ((!unlocked || (instead && under.room === 0)) && !under.waiting.length && !under.picks.length)) return null;
   return (
-    <div role="group" aria-label={`Under ${f.label}`}
+    <div role="group" aria-label={instead ? `Instead of ${f.label}'s points` : `Under ${f.label}`}
       style={{ marginLeft: '10px', paddingLeft: '8px', borderLeft: '2px solid var(--warning)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
       {under.picks.map((p) => <Pick key={p.option.id} list={under.list} p={p} ctx={ctx} />)}
       {under.waiting.map((o) => (
@@ -182,6 +186,7 @@ function Under({ f, unlocked, ctx }: { f: FeatureShown; unlocked: boolean; ctx: 
           <Drop list={under.list.id} option={o} ctx={ctx} />
         </div>
       ))}
+      {instead && unlocked && under.room > 0 && <span style={{ ...small, color: 'var(--cyan)', opacity: 1 }}>OR A {under.list.one.toUpperCase()} IN PLACE OF THE POINTS</span>}
       {unlocked && under.room > 0 && ctx.can && under.open.length > 0 && (
         <Offer label={pickLabel(under.list.one)} list={under.list} from={f.id} open={under.open} ctx={ctx}
           onPick={(option) => ctx.ask({ kind: 'pick', list: under.list.id, option, from: f.id })} />
@@ -232,10 +237,10 @@ function Pick({ list, p, ctx, fixed = false }: { list: ChoiceListShown; p: PickS
       {p.unlocked.map((f) => (
         <React.Fragment key={f.id}>
           <Feature f={f} ctx={ctx} />
-          <Under f={f} unlocked ctx={ctx} />
+          {listsUnder(f).map((id) => <Under key={id} f={f} listId={id} unlocked ctx={ctx} />)}
         </React.Fragment>
       ))}
-      {locked.map((f) => <Under key={f.id} f={f} unlocked={false} ctx={ctx} />)}
+      {locked.flatMap((f) => listsUnder(f).map((id) => <Under key={`${f.id} ${id}`} f={f} listId={id} unlocked={false} ctx={ctx} />))}
       {!p.unlocked.length && <span style={small}>Nothing unlocked yet.</span>}
       {p.next && <span style={{ ...small, opacity: 0.5 }}>NEXT · LV {p.next.at ?? 1}: {p.next.label}</span>}
     </div>

@@ -2,7 +2,7 @@
 // going up, and what the new level unlocks. The window only draws it. Nothing changes until FINISH: the server keeps
 // only the player's place (backend levelUp.js LEVELING_KEY). From 7d3b, a class they don't hold yet can be taken up,
 // and the picks a new level opens are made in the window, FINISH waiting for them. 7d6b: an INCREASE the new level
-// unlocks is spent in ABILITY INCREASE, FINISH waiting for every point.
+// unlocks is spent in ABILITY INCREASE, FINISH waiting for every point, or (7d6c) a pick from the list it offers instead.
 
 import { listShown, pickedOf, workedOn, type ChoiceListShown, type FeatureShown, type IncreaseShown, type OptionShown } from './choicesShown';
 import { characterLevel, levelUpOffer, HEALTH_SHOWN_KEY, type BeatShown, type HealthGainBy, type LevelTarget, type LevelUpIncreases, type LevelUpOffer, type LevelUpPick } from './xpMeter';
@@ -184,13 +184,28 @@ export const withRaised = (spreads: LevelUpIncreases, feature: string, stat: str
   const spread = { ...(spreads[feature] ?? {}) };
   const now = (spread[stat] ?? 0) + by;
   if (now > 0) spread[stat] = now; else delete spread[stat];
-  const rest = Object.fromEntries(Object.entries(spreads).filter(([id]) => id !== feature));
+  const rest = withoutSpread(spreads, feature);
   return Object.keys(spread).length ? { ...rest, [feature]: spread } : rest;
 };
 
-/** Whether every increase the new level unlocks has every point spent, so FINISH can go. Anything else has none to spend. */
-export const increasesSpent = (unlocked: Unlocked[], spreads: LevelUpIncreases): boolean =>
-  unlocked.every((u) => pointsLeft(u, spreads[u.id]) === 0);
+/** Whether a pick from the list an increase offers instead was taken (7d6c). */
+export const insteadTaken = (picks: LevelUpPick[], u: Unlocked): boolean =>
+  picks.some((p) => p.from === u.id && p.list === u.increase?.instead);
+
+/** The pick an increase offers instead (7d6c), as a pick a feature opens: one, from that list. Null without one. */
+export const insteadAsked = (template: SheetTemplate | null | undefined, data: Record<string, unknown> | null | undefined, u: Unlocked): PickAsked | null =>
+  (u.increase?.instead ? picksAsked(template, data, [{ id: u.id, label: u.label, from: u.from, opensList: u.increase.instead, count: 1 }])[0] ?? null : null);
+
+/** The spreads without a feature's (7d6c: the pick taken instead). */
+export const withoutSpread = (spreads: LevelUpIncreases, feature: string): LevelUpIncreases =>
+  Object.fromEntries(Object.entries(spreads).filter(([id]) => id !== feature));
+
+/**
+ * Whether every increase the new level unlocks has every point spent, or the pick taken instead (7d6c), so FINISH can
+ * go. Anything else has none to spend.
+ */
+export const increasesSpent = (unlocked: Unlocked[], spreads: LevelUpIncreases, picks: LevelUpPick[] = []): boolean =>
+  unlocked.every((u) => pointsLeft(u, spreads[u.id]) === 0 || insteadTaken(picks, u));
 
 /** The window's title: whose, and what it goes to. */
 export const levelUpTitle = (name: string, target: LevelTarget | null): string =>
