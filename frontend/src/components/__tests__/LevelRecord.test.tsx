@@ -149,6 +149,28 @@ describe('WHAT EACH LEVEL GAINED', () => {
     expect(screen.queryByLabelText('Max health')).toBeNull();
   });
 
+  it('an uploaded maximum: one line for its levels; the GM clears it', async () => {
+    const based = { _health: { adds: 2, max: 39, base: { max: 31, level: 3 }, levels: [
+      { level: 1, took: 10, die: 10, base: true }, { level: 2, took: 5, die: 10, base: true }, { level: 3, took: 5, die: 10, base: true }, { level: 4, took: 6, die: 10, rolled: true },
+    ] } };
+    draw(false, based);
+    await userEvent.click(screen.getByRole('button', { name: /WHAT EACH GAINED/ }));
+    const line = within(screen.getByRole('group', { name: 'Uploaded maximum' }));
+    expect(line.getByText('L1–3 · HEALTH 31')).toBeTruthy();
+    expect(line.queryByRole('button')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Level 2' })).toBeNull();
+    expect(screen.getByRole('group', { name: 'Level 4' })).toBeTruthy();
+    cleanup();
+    const onLevel = draw(true, based);
+    await userEvent.click(screen.getByRole('button', { name: /WHAT EACH GAINED/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'Clear the uploaded maximum' }));
+    expect(onLevel).toHaveBeenCalledWith({ kind: 'clearBase' });
+    cleanup();
+    render(<LevelRecord template={TEMPLATE} data={data(based)} gm />);
+    await userEvent.click(screen.getByRole('button', { name: /WHAT EACH GAINED/ }));
+    expect(within(screen.getByRole('group', { name: 'Uploaded maximum' })).queryByRole('button')).toBeNull();
+  });
+
   it('nothing at all where there is no record', () => {
     const { container } = render(<LevelRecord template={{ choices: [] } as unknown as SheetTemplate} data={{}} />);
     expect(container.innerHTML).toBe('');

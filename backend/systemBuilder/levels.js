@@ -45,6 +45,26 @@ const BEAT_DEFAULTS = { way: 'pool', count: 6, die: 10, gain: 6 };
 const HEALTH_DIE = { least: 2, most: 100 };
 /** Where a sheet keeps what each level gained (7d5a): { "<character level>": { die, took } }, level 1 left to the full die. */
 const HEALTH_LEVELS_KEY = '_health_levels';
+/**
+ * Where a sheet keeps an uploaded maximum (7d7c): { max, level }, the base for its first `level` levels, each level
+ * gained after them adding to it. It counts while the character is at that level or above.
+ */
+const HEALTH_BASE_KEY = '_health_base';
+/** The most an uploaded maximum can be. */
+const HEALTH_BASE_MOST = 9999;
+/** An uploaded maximum, as kept: { max, level }, or null. */
+const healthBaseOf = (data) => {
+  const b = isPlainObject(data) ? data[HEALTH_BASE_KEY] : null;
+  return isPlainObject(b) && Number.isInteger(b.max) && b.max >= 1 && b.max <= HEALTH_BASE_MOST && Number.isInteger(b.level) && b.level >= 1
+    ? { max: b.max, level: b.level } : null;
+};
+/** A maximum as uploaded, commas and all, or null when it isn't a whole one from 1 to the most. */
+const healthBaseFrom = (value) => {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  const digits = String(value).replace(/[,\s]/g, '');
+  const n = digits === '' ? NaN : Number(digits);
+  return Number.isInteger(n) && n >= 1 && n <= HEALTH_BASE_MOST ? n : null;
+};
 const RANGE_KEYS = new Set(['to', 'x']);
 /** What the page starts from, and a system saying nothing has. */
 const DEFAULTS = { top: 10, first: 300, ranges: [{ to: 10, x: 2 }] };
@@ -204,4 +224,4 @@ const checkLevels = (definition, problems) => {
   }
 };
 
-module.exports = { LIMITS, DEFAULTS, XP_KEY, levelsOf, levelTable, earnsXp, advances, levelsShown, checkLevels, healthOf, HEALTH_HOWS, GAINS, HEALTH_LEVELS_KEY, levelDie, averageOf };
+module.exports = { LIMITS, DEFAULTS, XP_KEY, levelsOf, levelTable, earnsXp, advances, levelsShown, checkLevels, healthOf, HEALTH_HOWS, GAINS, HEALTH_LEVELS_KEY, HEALTH_BASE_KEY, HEALTH_BASE_MOST, healthBaseOf, healthBaseFrom, levelDie, averageOf };

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { levelRecord, levelTools, recordHead, spreadWords, type RecordLevel } from '../levelRecord';
+import { baseLevels, levelRecord, levelTools, recordHead, spreadWords, type RecordLevel } from '../levelRecord';
 import type { SheetTemplate } from '../types';
 
 /**
@@ -66,6 +66,28 @@ describe('levelRecord: each level', () => {
 
   it('what isn\'t a level is passed over', () => {
     expect(levelRecord(tpl(), sheet([{ level: 1, took: 10, die: 10 }, { level: 'x', took: 1 }, { level: 2 }, null]))!.health!.levels).toHaveLength(1);
+  });
+});
+
+describe('levelRecord: an uploaded maximum (7d7c)', () => {
+  const levels = [{ level: 1, took: 10, die: 10, base: true }, { level: 2, took: 5, die: 10, base: true }, { level: 3, took: 5, die: 10, base: true }, { level: 4, took: 6, die: 10, rolled: true }];
+  it('its levels are its: one base, and the levels after it', () => {
+    const h = levelRecord(tpl(), { ...sheet(levels), _health: { adds: 2, max: 39, levels, base: { max: 31, level: 3 } } })!.health!;
+    expect(h.base).toEqual({ max: 31, level: 3 });
+    expect(h.levels.map((l) => l.level)).toEqual([4]);
+    expect(h.max).toBe(39);
+  });
+  it('added up from the base where the server didn\'t say', () => {
+    expect(levelRecord(tpl(), { ...sheet(levels), _health: { adds: 2, levels, base: { max: 31, level: 3 } } })!.health!.max).toBe(39);
+  });
+  it('none: every level, as before; a base that isn\'t one, none', () => {
+    expect(levelRecord(tpl(), sheet(levels))!.health!.base).toBeNull();
+    expect(levelRecord(tpl(), { ...sheet(levels), _health: { adds: 2, levels, base: { max: 'x', level: 3 } } })!.health!.levels).toHaveLength(4);
+    expect(levelRecord(tpl(), { ...sheet(levels), _health: { adds: 2, levels, base: { max: 31 } } })!.health!.base).toBeNull();
+  });
+  it('which levels it stands for', () => {
+    expect(baseLevels({ level: 3 })).toBe('L1–3');
+    expect(baseLevels({ level: 1 })).toBe('L1');
   });
 });
 

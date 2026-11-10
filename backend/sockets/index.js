@@ -26,7 +26,8 @@ const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
 const { withUpload, lockedWhileCreating, kitsGivable } = require('../systemBuilder/creation');
 const { lockedByLevels } = require('../systemBuilder/levelUp');
-const { XP_KEY, earnsXp } = require('../systemBuilder/levels');
+const { XP_KEY, earnsXp, HEALTH_BASE_KEY } = require('../systemBuilder/levels');
+const { withUploadedHealth } = require('../systemBuilder/healthLevels');
 const { xpFrom, withImportedPicks } = require('../systemBuilder/sheetImport');
 const { inventoryAdded } = require('../sheets/inventoryImport');
 const tableRolls = require('../systemBuilder/tableRolls');
@@ -1522,6 +1523,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               const whole = withImportedPicks(definition, data, picks, { whole: true });
               delete data._rolled;
               Object.assign(data, whole);
+              // Its maximum the base for the levels it has, where health is per level (7d7c), once its picks say the level.
+              const health = withUploadedHealth(definition, data, payload.fields[HEALTH_BASE_KEY]);
+              Object.keys(data).forEach((k) => { if (!(k in health)) delete data[k]; });
+              Object.assign(data, health);
               sheetTemplates.applyDerived(system, data);
             }
             // A PDF or a pasted block offers one line of cyberware, since a paper form

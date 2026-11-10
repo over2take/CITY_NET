@@ -4,6 +4,9 @@
 // spent, open to spend, or a pick taken in its place. The GM puts it right (CLEAR THE ROLL, SET TO, CLEAR); the
 // player rolls a cleared level again and spends an increase left open. Nothing here works a number out: the
 // server does (backend levelUp.js), and this only says what it kept, in the sheet's words.
+//
+// An uploaded sheet's maximum (7d7c) stands for the levels it had: one line, UPLOADED, that the GM can clear, each
+// level after it as before.
 
 import { workedOn, type IncreaseShown } from './choicesShown';
 import { characterLevel, HEALTH_SHOWN_KEY } from './xpMeter';
@@ -29,8 +32,8 @@ export interface RecordIncrease {
 
 export interface LevelRecord {
   level: number;
-  /** The health part: null where health isn't per level. */
-  health: { max: number; adds: number; levels: RecordLevel[] } | null;
+  /** The health part: null where health isn't per level. `base`, an uploaded maximum for its first levels (7d7c). */
+  health: { max: number; adds: number; levels: RecordLevel[]; base: { max: number; level: number } | null } | null;
   increases: RecordIncrease[];
 }
 
@@ -66,14 +69,17 @@ const healthOf = (template: SheetTemplate | null | undefined, data: Obj | null |
   if (!template?.levels?.health || !isObject(shown) || !Array.isArray(shown.levels)) return null;
   const adds = typeof shown.adds === 'number' ? shown.adds : 0;
   const beat = template.levels.health.gain === 'beat';
-  const levels = (shown.levels as unknown[]).filter((l): l is Obj => isObject(l) && Number.isInteger(l.level) && typeof l.took === 'number').map((l) => {
+  const b = shown.base;
+  const base = isObject(b) && Number.isInteger(b.max) && Number.isInteger(b.level) ? { max: b.max as number, level: b.level as number } : null;
+  // The levels the upload stands for are its.
+  const levels = (shown.levels as unknown[]).filter((l): l is Obj => isObject(l) && Number.isInteger(l.level) && typeof l.took === 'number' && !(base && (l.level as number) <= base.level)).map((l) => {
     const die = Number.isInteger(l.die) ? l.die as number : null;
     const took = l.took as number;
     const kept = keptOf(l, beat);
     const gained = typeof l.gained === 'number' ? l.gained : Math.max(1, took + adds);
     return { level: l.level as number, die, took, gained, kept, words: wordsOf(kept, took, die, adds, gained) };
   });
-  return { max: typeof shown.max === 'number' ? shown.max : levels.reduce((n, l) => n + l.gained, 0), adds, levels };
+  return { max: typeof shown.max === 'number' ? shown.max : levels.reduce((n, l) => n + l.gained, base ? base.max : 0), adds, levels, base };
 };
 
 /** A spread in words: +1 MIGHT, +1 WITS, each stat by the name the increase gives it. */
@@ -127,6 +133,9 @@ export const levelTools = (l: RecordLevel, gm: boolean): LevelTools => ({
   back: gm && l.kept === 'set',
   roll: !gm && l.kept === 'cleared' && l.die !== null,
 });
+
+/** The uploaded maximum's line (7d7c): which levels, L1 or L1–3. */
+export const baseLevels = (base: { level: number }): string => (base.level === 1 ? 'L1' : `L1–${base.level}`);
 
 /** The record's head: LEVELS · 5 · MAX HEALTH 37. */
 export const recordHead = (r: LevelRecord): string => `LEVELS · ${r.level}${r.health ? ` · MAX HEALTH ${r.health.max}` : ''}`;

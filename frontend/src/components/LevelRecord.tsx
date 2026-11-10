@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { SheetTemplate } from '../sheets/types';
-import { levelRecord, levelTools, recordHead, type RecordIncrease, type RecordLevel } from '../sheets/levelRecord';
+import { baseLevels, levelRecord, levelTools, recordHead, type RecordIncrease, type RecordLevel } from '../sheets/levelRecord';
 import { canRaise, pointsLeft, statNow, withRaised, type Unlocked } from '../sheets/levelUpFlow';
 import type { LevelUpIncreases } from '../sheets/xpMeter';
 
@@ -10,6 +10,7 @@ import type { LevelUpIncreases } from '../sheets/xpMeter';
 // The GM, on a player's sheet, has CLEAR THE ROLL on a past roll, SET TO on any level with a die, CLEAR on one set
 // (back to the average, level 1 to the full die) and CLEAR on an increase spent, each on a line of its own. What it
 // says is sheets/levelRecord.ts; every change is the server's (backend levelUp.js), asked with a levelAction.
+// An uploaded sheet's maximum (7d7c) is one line for the levels it stands for, which the GM can CLEAR.
 
 interface Props {
   template: SheetTemplate;
@@ -139,6 +140,20 @@ export function LevelRecord({ template, data, gm = false, onLevel }: Props) {
         </button>
       </div>
       {open && <>
+        {record.health?.base && (
+          <div role="group" aria-label="Uploaded maximum" style={row}>
+            <span style={{ ...line, gridColumn: '1 / -1' }}>
+              <span style={{ color: 'var(--cyan)' }}>{baseLevels(record.health.base)} · HEALTH {record.health.base.max}</span>
+              <span style={small}>THE UPLOADED SHEET&apos;S MAXIMUM</span>
+            </span>
+            {onLevel && gm && (
+              <span style={tools}>
+                <button type="button" style={btn} aria-label="Clear the uploaded maximum" onClick={() => onLevel({ kind: 'clearBase' })}>CLEAR</button>
+                <span style={small}>EACH LEVEL COUNTED AS HERE</span>
+              </span>
+            )}
+          </div>
+        )}
         {record.health?.levels.map((l) => <Level key={l.level} l={l} gm={gm} ask={onLevel} />)}
         {record.increases.map((inc) => <Increase key={inc.feature} inc={inc} gm={gm} data={data} ask={onLevel} />)}
         {record.health && (

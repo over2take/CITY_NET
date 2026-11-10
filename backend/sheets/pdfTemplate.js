@@ -301,8 +301,11 @@ const leftLine = (left) => {
  */
 async function buildCustomTemplate(definition, { name, version } = {}) {
   // Required here rather than at the top: it is a builder module, and this file loads first.
-  const { sheetFields, xpLines, pickLines, INVENTORY_ROWS } = require('../systemBuilder/sheetImport');
-  const { ask, left } = sheetFields(definition);
+  const { sheetFields, xpLines, healthLines, leftOut, pickLines, INVENTORY_ROWS } = require('../systemBuilder/sheetImport');
+  const { ask } = sheetFields(definition);
+  // The token's maximum is asked for where health is per level (7d7c): not left out.
+  const health = healthLines(definition);
+  const left = leftOut(definition);
   const title = printable(name || (definition && definition.name) || 'System').toUpperCase();
 
   const pdf = await PDFDocument.create();
@@ -365,8 +368,8 @@ async function buildCustomTemplate(definition, { name, version } = {}) {
     y -= size + 12;
   };
 
-  // After the sheet's own fields: their XP (7d2c), then a line per list (7c6).
-  for (const f of [...ask, ...xpLines(definition), ...pickLines(definition)]) {
+  // After the sheet's own fields: their XP (7d2c), their maximum (7d7c), then a line per list (7c6).
+  for (const f of [...ask, ...xpLines(definition), ...health, ...pickLines(definition)]) {
     if (f.tab !== tab) { tab = f.tab; section = undefined; if (tab) heading(tab, 12, 120); }
     if (f.section !== section) { section = f.section; heading(section, 9, 72); }
     if (f.type === 'inventory') {
