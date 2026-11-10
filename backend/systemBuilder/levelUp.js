@@ -251,9 +251,11 @@ const xpReady = (definition, data, level) => {
  */
 const moved = (definition, data, target, by, gm) => {
   if (target.stat) return { data: { ...data, level: target.level + by } };
-  const done = target.new
-    ? pickAction(definition, data, { kind: 'pick', list: target.list.id, option: target.option.id }, { gm })
-    : pickAction(definition, data, { kind: 'level', list: target.list.id, option: target.option.id, level: target.level + by }, { gm: true });
+  const pick = { list: target.list.id, option: target.option.id };
+  // Down from a class's level 1 (7d7d): the class goes, the picks under its features waiting.
+  const done = target.new ? pickAction(definition, data, { kind: 'pick', ...pick }, { gm })
+    : target.level + by < 1 ? pickAction(definition, data, { kind: 'drop', ...pick }, { gm: true })
+      : pickAction(definition, data, { kind: 'level', ...pick, level: target.level + by }, { gm: true });
   if (!done.ok) return { error: done.error };
   return { data: targetsOf(definition).has('level') ? { ...done.data, level: Math.max(1, whole(data.level) + by) } : done.data };
 };
@@ -296,7 +298,8 @@ const pickTarget = (definition, data, action) => {
  * 'place' keeps them as they're being spent.
  * { kind: 'healthRoll' | 'healthAverage', list, option } (7d5b): the level's health rolled, or its average taken, kept
  * with the place; a roll comes back as `rolled` for the tray. { kind: 'clearHealth' }: the GM's CLEAR THE ROLL.
- * { kind: 'give' }: the GM's LEVEL_UP, a level for the player to take. { kind: 'down', option }: the GM's LEVEL_DOWN.
+ * { kind: 'give' }: the GM's LEVEL_UP, a level for the player to take. { kind: 'down', option }: the GM's LEVEL_DOWN; a class
+ * held at level 1 goes (7d7d), unless it is their only one.
  * The record (7d7b): { kind: 'rollLevel', level } a cleared level rolled again, and { kind: 'spendIncrease', feature, spread },
  * the player's or the GM's; { kind: 'clearLevel', level }, { kind: 'setLevel', level, took } and { kind: 'clearIncrease', feature }, the GM's.
  * { kind: 'clearBase' } (7d7c): the GM's, an uploaded maximum gone, each level counted as here.
@@ -453,9 +456,10 @@ const levelAction = (definition, data, action, { gm = false, rng = cryptoRng } =
     if (owed) return said(withOwed(settled(sheet), owed - 1));
     const all = levelTargets(definition, sheet);
     const named = typeof action.option === 'string' ? all.find((p) => p.option && p.option.id === action.option) : null;
-    // The last of them, the most recently picked, that has a level to give.
-    const target = named || [...all].reverse().find((p) => p.level > 1);
-    if (!target || target.level <= 1) return { ok: false, error: 'Already level 1' };
+    // The last of them, the most recently picked, that has a level to give; with none, the last class held at level 1,
+    // which goes (7d7d). A character's only class at level 1 stays.
+    const target = named || [...all].reverse().find((p) => p.level > 1) || all[all.length - 1];
+    if (!target || (target.level <= 1 && all.length < 2)) return { ok: false, error: 'Already level 1' };
     const lowered = settled(moved(definition, sheet, target, -1, true).data);
     return said(withIncreasesGone(definition, sheet, withHealthGone(lowered, level)));
   }
