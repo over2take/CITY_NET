@@ -25,12 +25,16 @@
 // An XP line (7d2c; approved mockup docs/mockups/level-up.html, 2026-11-07) where characters earn XP, under the
 // game's own word: an upload is the character, so it brings what they have. Left empty, their XP stays as it is.
 //
+// Its maximum (7d7c; the user's call of 2026-11-08), where health is per level: the token's HP MAX, asked for here as
+// it can't be typed on the sheet, the base for the levels the upload has. Left empty, each level counts as here.
+//
 // Pure, needing no pdf-lib, so the browser's tests can hold the PDF form and this to each other.
 
 const { effectiveSheet } = require('./sheet');
-const { PICKS_KEY, ROLLED_KEY, INCREASES_KEY, LIMITS: CHOICE_LIMITS, choicesOf, pickedOf, capOf, meets, needsText, heldOf, openingsOf, openCountOf } = require('./choices');
+const { PICKS_KEY, ROLLED_KEY, INCREASES_KEY, LIMITS: CHOICE_LIMITS, choicesOf, pickedOf, capOf, meets, needsText, heldOf, openingsOf, openCountOf, tokenMaxFieldOf } = require('./choices');
 const { normaliseInventory } = require('../sheets/inventoryImport');
-const { XP_KEY, LIMITS: XP_LIMITS, earnsXp } = require('./levels');
+const { XP_KEY, LIMITS: XP_LIMITS, earnsXp, healthOf, HEALTH_BASE_KEY, HEALTH_BASE_MOST, healthBaseFrom } = require('./levels');
+const { partOn } = require('./parts');
 const { wordFor } = require('./terms');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -92,6 +96,26 @@ const xpLines = (definition) => (earnsXp(definition) ? [{
   id: XP_KEY, label: wordFor(definition, 'xp', 'short'), type: 'number', xp: true, min: 0, tab: null,
   section: wordFor(definition, 'level', 'plural'), hint: 'What they have so far. Left empty, it stays as it is',
 }] : []);
+
+/**
+ * The maximum line (7d7c), where health is per level on the token: { id: '_health_base', label: the token's maximum's
+ * own, field, type, health, min, max, hint, section }, or none.
+ */
+const healthLines = (definition) => {
+  const field = definition ? tokenMaxFieldOf(definition) : null;
+  if (!field || !partOn(definition, 'token_health') || healthOf(definition).how !== 'level') return [];
+  const label = (sheetFields(definition).left.find((f) => f.id === field) || {}).label || 'HP MAX';
+  return [{
+    id: HEALTH_BASE_KEY, label, field, type: 'number', health: true, min: 1, max: HEALTH_BASE_MOST, tab: null,
+    section: wordFor(definition, 'level', 'plural'), hint: 'Their maximum now, for the levels they have. Left empty, each level counts as here',
+  }];
+};
+
+/** What the form leaves out, said at its foot: not the token's maximum where its line asks for it (7d7c). */
+const leftOut = (definition) => {
+  const health = healthLines(definition);
+  return sheetFields(definition).left.filter((f) => !health.some((h) => h.field === f.id));
+};
 
 /** An amount of XP as written, commas and all ("6,500"), or null when it isn't a whole one in range. */
 const xpFrom = (value) => {
@@ -259,6 +283,10 @@ const customImporter = (definition) => {
   for (const f of xpLines(definition)) {
     for (const k of [f.id, f.label, wordFor(definition, 'xp'), wordFor(definition, 'xp', 'plural'), 'xp']) if (!byKey.has(norm(k))) byKey.set(norm(k), f);
   }
+  // The maximum (7d7c), by its label or its field's id: over the field on the token it is.
+  for (const f of healthLines(definition)) {
+    for (const k of [f.id, f.label, f.field]) byKey.set(norm(k), f);
+  }
   // A field called Class is the field.
   for (const f of pickLines(definition)) {
     const words = f.list ? [f.id, f.label, f.list.one, f.list.many] : [f.id, f.label];
@@ -277,6 +305,11 @@ const customImporter = (definition) => {
       if (f.xp) {
         const xp = xpFrom(value);
         if (xp === null) out.unmapped[key] = value; else mapped[XP_KEY] = xp;
+        continue;
+      }
+      if (f.health) {
+        const max = healthBaseFrom(value);
+        if (max === null) out.unmapped[key] = value; else mapped[HEALTH_BASE_KEY] = max;
         continue;
       }
       if (f.list) { lines.set(f.list, { key, value }); continue; }
@@ -390,7 +423,7 @@ const helpFor = (f) => {
  */
 const jsonTemplate = (definition, { name, version } = {}) => {
   const { ask } = sheetFields(definition);
-  const lines = [...xpLines(definition), ...pickLines(definition)];
+  const lines = [...xpLines(definition), ...healthLines(definition), ...pickLines(definition)];
   return {
     system: String(name || (definition && definition.name) || ''),
     version: Number.isSafeInteger(version) ? version : null,
@@ -404,4 +437,4 @@ const jsonTemplate = (definition, { name, version } = {}) => {
   };
 };
 
-module.exports = { INVENTORY, INVENTORY_ROWS, sheetFields, xpLines, xpFrom, pickLines, withImportedPicks, customImporter, jsonTemplate, norm };
+module.exports = { INVENTORY, INVENTORY_ROWS, sheetFields, xpLines, xpFrom, healthLines, leftOut, pickLines, withImportedPicks, customImporter, jsonTemplate, norm };

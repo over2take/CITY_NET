@@ -31,7 +31,7 @@
 
 const { choicesOf, heldOf, levelsOf, targetsOf, pickedOf, picksOf: activePicks, unlockedOf, increaseOf, effectiveData, namesOf, INCREASES_KEY } = require('./choices');
 const { pickAction } = require('./picking');
-const { XP_KEY, advances, earnsXp, levelTable, levelsOf: settingsOf, healthOf, levelDie, averageOf, HEALTH_LEVELS_KEY } = require('./levels');
+const { XP_KEY, advances, earnsXp, levelTable, levelsOf: settingsOf, healthOf, levelDie, averageOf, HEALTH_LEVELS_KEY, HEALTH_BASE_KEY, healthBaseOf } = require('./levels');
 const { spentOf } = require('./choices');
 const { creatingNow, ROLLED_KEPT } = require('./creation');
 const crypto = require('crypto');
@@ -125,7 +125,11 @@ const withIncreasesSpent = (definition, before, after, increases, gm) => {
 const recordLevel = (definition, sheet, action) => {
   if (healthOf(definition).how !== 'level') return { error: 'Health isn\'t kept per level in this game' };
   const level = Number(action.level);
-  if (!Number.isInteger(level) || level < 1 || level > characterLevel(definition, sheet)) return { error: 'No such level' };
+  const top = characterLevel(definition, sheet);
+  if (!Number.isInteger(level) || level < 1 || level > top) return { error: 'No such level' };
+  // An uploaded maximum stands for its levels (7d7c), while it counts.
+  const base = healthBaseOf(sheet);
+  if (base && top >= base.level && level <= base.level) return { error: 'Counted in the uploaded maximum: the GM clears that first' };
   const kept = isPlainObject(sheet[HEALTH_LEVELS_KEY]) ? sheet[HEALTH_LEVELS_KEY] : {};
   const record = isPlainObject(kept[level]) ? kept[level] : {};
   return { level, kept, record };
@@ -295,6 +299,7 @@ const pickTarget = (definition, data, action) => {
  * { kind: 'give' }: the GM's LEVEL_UP, a level for the player to take. { kind: 'down', option }: the GM's LEVEL_DOWN.
  * The record (7d7b): { kind: 'rollLevel', level } a cleared level rolled again, and { kind: 'spendIncrease', feature, spread },
  * the player's or the GM's; { kind: 'clearLevel', level }, { kind: 'setLevel', level, took } and { kind: 'clearIncrease', feature }, the GM's.
+ * { kind: 'clearBase' } (7d7c): the GM's, an uploaded maximum gone, each level counted as here.
  * Gives { ok: true, data, level, owed } or { ok: false, error }.
  */
 const levelAction = (definition, data, action, { gm = false, rng = cryptoRng } = {}) => {
@@ -427,6 +432,12 @@ const levelAction = (definition, data, action, { gm = false, rng = cryptoRng } =
     if (Object.keys(rest).length) return said({ ...sheet, [INCREASES_KEY]: rest });
     const { [INCREASES_KEY]: all, ...without } = sheet;
     return said(without);
+  }
+  if (kind === 'clearBase') {
+    // Back to each level counted as here: the full die, then each kept or the average (7d7c).
+    if (!(HEALTH_BASE_KEY in sheet)) return { ok: false, error: 'No uploaded maximum to clear' };
+    const { [HEALTH_BASE_KEY]: gone, ...rest } = sheet;
+    return said(rest);
   }
   if (kind === 'clearHealth') {
     const health = healthPlaceOf(sheet);

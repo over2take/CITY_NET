@@ -28,6 +28,8 @@ const rests = require('../sheets/rests');
 const { restsOf } = require('../systemBuilder/rests');
 const { recoveryShown, restingOf } = require('../systemBuilder/recovery');
 const { jsonTemplate, withImportedPicks } = require('../systemBuilder/sheetImport');
+const { HEALTH_BASE_KEY } = require('../systemBuilder/levels');
+const { withUploadedHealth } = require('../systemBuilder/healthLevels');
 const { inventoryAdded } = require('../sheets/inventoryImport');
 
 // Admin-facing character sheet routes. Player self-service (open/edit own
@@ -213,8 +215,10 @@ module.exports = (db, io) => {
               // As a player's upload is (sockets/index.js): their picks whole, and adding to the inventory.
               if (current.inventory !== undefined) next.inventory = inventoryAdded(current.inventory, patch.inventory);
               const picked = withImportedPicks(definition, next, picks, { whole: true });
-              applyDerived(system, picked);
-              return picked;
+              // Its maximum the base for the levels it has, where health is per level (7d7c).
+              const health = withUploadedHealth(definition, picked, fields[HEALTH_BASE_KEY]);
+              applyDerived(system, health);
+              return health;
             },
             (err3, data) => {
               if (err3) return res.status(500).json({ error: err3.message });

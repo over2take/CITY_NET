@@ -15,9 +15,13 @@
 // the GM clears is kept as `cleared`, counting as its die's average until the player rolls it again; a level the
 // GM sets is kept as `set`, the die's part, what each level adds still on top. Level 1, the full die, may be set
 // too. Each level says how it was kept (rolled, set, cleared), for the record on the sheet.
+//
+// An uploaded sheet's maximum (7d7c; the user's call of 2026-11-08): the base for the levels it had, each level
+// gained here adding to it. Those levels are still listed, `base`, their dice counted by a reroll or a roll to beat,
+// but what they gained is the base's. It counts while the character is at its level or above.
 
 const { heldOf } = require('./choices');
-const { healthOf, levelDie, averageOf, HEALTH_LEVELS_KEY } = require('./levels');
+const { healthOf, levelDie, averageOf, HEALTH_LEVELS_KEY, HEALTH_BASE_KEY, healthBaseOf, healthBaseFrom } = require('./levels');
 const { characterLevel } = require('./levelUp');
 const { formulaValueOf, healthFormulaValue } = require('./healthFormula');
 
@@ -70,14 +74,19 @@ const healthByLevel = (definition, data) => {
   const fixed = gainedOf(sheet);
   const dieAt = diesOf(sheet, die);
   const how = howOf(sheet);
+  const top = characterLevel(definition, sheet);
+  const uploaded = healthBaseOf(sheet);
+  const base = uploaded && top >= uploaded.level ? uploaded : null;
+  const based = (level) => (base && level <= base.level ? { base: true } : {});
   // Level 1 is the full die, unless the GM set it (7d7b).
   const one = how[1] && how[1].set && 1 in kept ? kept[1] : die ?? 0;
-  const levels = [{ level: 1, took: one, die, ...(how[1] && how[1].set ? { set: true } : {}) }];
-  for (let level = 2; level <= characterLevel(definition, sheet); level += 1) {
+  const levels = [{ level: 1, took: one, die, ...(how[1] && how[1].set ? { set: true } : {}), ...based(1) }];
+  for (let level = 2; level <= top; level += 1) {
     // Nothing kept, or cleared: the average of that level's own die.
-    levels.push({ level, took: kept[level] ?? averageOf(dieAt(level)), die: dieAt(level), ...(level in fixed ? { gained: fixed[level] } : {}), ...(how[level] || {}) });
+    levels.push({ level, took: kept[level] ?? averageOf(dieAt(level)), die: dieAt(level), ...(level in fixed ? { gained: fixed[level] } : {}), ...(how[level] || {}), ...based(level) });
   }
-  return { max: levels.reduce((n, l) => n + (l.gained ?? Math.max(1, l.took + adds)), 0), adds, levels };
+  const gained = levels.filter((l) => !l.base).reduce((n, l) => n + (l.gained ?? Math.max(1, l.took + adds)), 0);
+  return { max: (base ? base.max : 0) + gained, adds, levels, ...(base ? { base } : {}) };
 };
 
 /**
@@ -119,4 +128,15 @@ const rollToBeat = (definition, data, die, rng) => {
   return { total, rolls, over: now.max, beaten, gained, gainRoll };
 };
 
-module.exports = { healthByLevel, healthBase, keptOf, rerollAll, rollToBeat };
+/**
+ * A whole upload's health (7d7c): the upload is the character, so what each level kept goes with any maximum uploaded
+ * before, and its own maximum, given, is the base for the level it has. As it is where health isn't per level.
+ */
+const withUploadedHealth = (definition, data, max) => {
+  if (healthOf(definition).how !== 'level') return data;
+  const { [HEALTH_LEVELS_KEY]: kept, [HEALTH_BASE_KEY]: was, ...rest } = data;
+  const n = healthBaseFrom(max);
+  return n === null ? rest : { ...rest, [HEALTH_BASE_KEY]: { max: n, level: characterLevel(definition, rest) } };
+};
+
+module.exports = { healthByLevel, healthBase, keptOf, rerollAll, rollToBeat, withUploadedHealth };
