@@ -24,6 +24,7 @@ import {
   carriedToStashed, compactCarried, type StashedWeapon,
 } from '../sheets/cwnWeaponStash';
 import { ChoicesSection } from './ChoicesSection';
+import { LevelRecord } from './LevelRecord';
 import { XpMeterBar } from './XpMeterBar';
 import { LevelUpReady } from './LevelUpReady';
 import { RestSection } from './RestSection';
@@ -121,6 +122,8 @@ interface SheetRendererProps {
   onChoices?: (action: ChoicesAction) => void;
   /** Why the server last refused one of those, shown under the block. */
   choicesRefused?: string | null;
+  /** WHAT EACH LEVEL GAINED (7d7b2), under the CHOICES block: asks the server to put a level right (a levelAction). */
+  onLevel?: (action: Record<string, unknown>) => void;
   /** Spends and rolls recovery dice (R2b). */
   onRecoverySpend?: (pool: string, count: number) => void;
   /** Whether the GM has spending recovery dice open. */
@@ -1783,7 +1786,7 @@ function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection 
   return fields.length === 0 ? null : { ...section, fields };
 }
 
-export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onRecoverySpend, recoveryOpen, onRestTake }: SheetRendererProps) {
+export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   // The tab it opens on: the one the template names (a built system's starter opens on STATS,
   // with CHARACTER first in the row), else the first.
@@ -2013,6 +2016,7 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
                   {section.layout === 'cyberware' && <CyberwareSection section={section} template={template} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
                   {section.layout === 'choices' && <ChoicesSection levelsFixed={!!template.levels} lists={template.choices ?? []} data={data as Record<string, unknown>} readOnly={readOnly} gm={gm} onChoices={onChoices} refused={choicesRefused} onRecoverySpend={onRecoverySpend} recoveryOpen={recoveryOpen}
                     recoveryElsewhere={template.sections.some((s) => s.layout === 'rests')} />}
+                  {section.layout === 'choices' && <LevelRecord template={template} data={data as Record<string, unknown>} gm={gm} onLevel={readOnly ? undefined : onLevel} />}
                   {section.layout === 'rests' && <RestSection resting={template.resting} data={data as Record<string, unknown>} readOnly={readOnly} gm={gm} onChoices={onChoices}
                     onRecoverySpend={onRecoverySpend} recoveryOpen={recoveryOpen} onRestTake={onRestTake}
                     refused={template.sections.some((s) => s.layout === 'choices') ? null : choicesRefused} />}

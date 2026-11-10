@@ -45,9 +45,10 @@ describe('the server\'s worked-out view', () => {
   });
 
   it('empty when a sheet has none yet, or something else is there', () => {
-    expect(workedOn({})).toEqual({ picks: [], opens: [], levels: {}, from: {}, uses: {}, unmet: [], recovery: null });
+    expect(workedOn({})).toEqual({ picks: [], opens: [], levels: {}, from: {}, uses: {}, unmet: [], recovery: null, increasesOpen: [] });
     expect(workedOn(null).picks).toEqual([]);
-    expect(workedOn({ [WORKED_KEY]: { picks: 'soldier', opens: [{ feature: 3 }], uses: [], unmet: [1, 'mage'] } })).toEqual({ picks: [], opens: [], levels: {}, from: {}, uses: {}, unmet: ['mage'], recovery: null });
+    expect(workedOn({ [WORKED_KEY]: { picks: 'soldier', opens: [{ feature: 3 }], uses: [], unmet: [1, 'mage'], increasesOpen: 'asi' } })).toEqual({ picks: [], opens: [], levels: {}, from: {}, uses: {}, unmet: ['mage'], recovery: null, increasesOpen: [] });
+    expect(workedOn({ [WORKED_KEY]: { increasesOpen: [2, 'asi'] } }).increasesOpen).toEqual(['asi']);
   });
 });
 

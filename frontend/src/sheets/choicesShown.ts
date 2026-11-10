@@ -50,6 +50,8 @@ export interface Worked {
   unmet: string[];
   /** The recovery dice (R2b), in the sheet's words, with the character's pools; null without. */
   recovery: RecoveryWorked | null;
+  /** Each unlocked INCREASE with nothing spent and no pick taken in its place (7d7b), by feature id. */
+  increasesOpen: string[];
 }
 
 /** One pool of recovery dice: a class's die and how many, or a formula's count of the largest die. */
@@ -117,6 +119,7 @@ export const workedOn = (data: Obj | null | undefined): Worked => {
     uses: isObject(w.uses) ? w.uses as Worked['uses'] : {},
     unmet: Array.isArray(w.unmet) ? (w.unmet as unknown[]).filter((x): x is string => typeof x === 'string') : [],
     recovery: recoveryOn(w.recovery),
+    increasesOpen: Array.isArray(w.increasesOpen) ? (w.increasesOpen as unknown[]).filter((x): x is string => typeof x === 'string') : [],
   };
 };
 

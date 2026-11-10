@@ -322,6 +322,8 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
           // A player's picks (7a3b2): the GM picks, drops and changes them for the player named.
           {...(playerUsername && socket ? {
             onChoices: (action: ChoicesAction) => socket.emit('choicesAction', { ...action, username: playerUsername }), choicesRefused,
+            // What each level gained (7d7b2), put right for the player named.
+            onLevel: (action: Record<string, unknown>) => socket.emit('levelAction', { ...action, username: playerUsername }),
             onRecoverySpend: (pool: string, count: number) => socket.emit('recoverySpend', { pool, count, username: playerUsername }), recoveryOpen,
             onRestTake: (rest: string) => socket.emit('restTake', { rest, username: playerUsername }),
           } : {})}
