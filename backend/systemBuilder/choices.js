@@ -871,6 +871,15 @@ const workedOf = (definition, data) => {
     levels: levelsOf(definition, picks),
     from: overlayOf(definition, data).from,
     uses: Object.fromEntries(usesOf(definition, data).map((u) => [u.feature.id, { max: u.max, spent: u.spent }])),
+    // 7d7b: each unlocked INCREASE with nothing spent and no pick taken in its place, for the player to spend on the sheet.
+    ...(() => {
+      const spent = isPlainObject(data) && isPlainObject(data[INCREASES_KEY]) ? data[INCREASES_KEY] : {};
+      const open = unlockedOf(picks).map((u) => u.feature).filter((f) => {
+        const inc = increaseOf(definition, f);
+        return inc && !spentOf(inc, spent[f.id]) && !(inc.instead && picks.some((p) => p.from === f.id && p.list.id === inc.instead));
+      }).map((f) => f.id);
+      return open.length ? { increasesOpen: open } : {};
+    })(),
     unmet: choicesOf(definition).flatMap((c) => optionsOf(c).filter((o) => !taken.has(o.id) && !meets(definition, data, o)).map((o) => o.id)),
   };
 };

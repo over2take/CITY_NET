@@ -392,7 +392,7 @@ describe('REROLL ALL, KEEP HIGHER (7d5c)', () => {
     expect(healthByLevel(REROLL, up).max).toBe(33);
     // CON 18 (+4): levels 1 and 2 recount, level 3 keeps its 14.
     expect(healthByLevel(REROLL, { ...up, con: 18 }).max).toBe(14 + 9 + 14);
-    expect(healthByLevel(REROLL, up).levels[2]).toEqual({ level: 3, took: 33, die: 10, gained: 14 });
+    expect(healthByLevel(REROLL, up).levels[2]).toEqual({ level: 3, took: 33, die: 10, gained: 14, rolled: true });
   });
 
   it('a kept gain that isn\'t a whole amount from 0 is passed over', () => {

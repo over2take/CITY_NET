@@ -10,6 +10,11 @@
 // ROLL TO BEAT (7d5d): going up, a pool (6d10, Mörk Borg's) or a die for every level is rolled against the current
 // maximum; beaten, the level gains the gain die (or, by level, the new level's die and what each level adds); not
 // beaten, nothing: a `gained` of 0.
+//
+// What each level gained, put right (7d7b; approved mockup docs/mockups/level-record.html, 2026-11-09): a kept roll
+// the GM clears is kept as `cleared`, counting as its die's average until the player rolls it again; a level the
+// GM sets is kept as `set`, the die's part, what each level adds still on top. Level 1, the full die, may be set
+// too. Each level says how it was kept (rolled, set, cleared), for the record on the sheet.
 
 const { heldOf } = require('./choices');
 const { healthOf, levelDie, averageOf, HEALTH_LEVELS_KEY } = require('./levels');
@@ -38,6 +43,18 @@ const diesOf = (data, first) => {
   return (level) => (isPlainObject(kept[level]) && Number.isInteger(kept[level].die) ? kept[level].die : first);
 };
 
+/** How each level was kept, for the record (7d7b): { level: { rolled?, set?, cleared? } }. */
+const howOf = (data) => {
+  const kept = isPlainObject(data) && isPlainObject(data[HEALTH_LEVELS_KEY]) ? data[HEALTH_LEVELS_KEY] : {};
+  const out = {};
+  for (const [level, k] of Object.entries(kept)) {
+    if (!isPlainObject(k)) continue;
+    const how = { ...(k.rolled === true ? { rolled: true } : {}), ...(k.set === true ? { set: true } : {}), ...(k.cleared === true ? { cleared: true } : {}) };
+    out[level] = how;
+  }
+  return out;
+};
+
 /** The first class they hold, whose die level 1 is. */
 const firstClassOf = (definition, data) => heldOf(definition, data).find((p) => p.active && !p.from && p.list.levelled === true) || null;
 
@@ -52,9 +69,13 @@ const healthByLevel = (definition, data) => {
   const kept = keptOf(sheet);
   const fixed = gainedOf(sheet);
   const dieAt = diesOf(sheet, die);
-  const levels = [{ level: 1, took: die ?? 0, die }];
+  const how = howOf(sheet);
+  // Level 1 is the full die, unless the GM set it (7d7b).
+  const one = how[1] && how[1].set && 1 in kept ? kept[1] : die ?? 0;
+  const levels = [{ level: 1, took: one, die, ...(how[1] && how[1].set ? { set: true } : {}) }];
   for (let level = 2; level <= characterLevel(definition, sheet); level += 1) {
-    levels.push({ level, took: kept[level] ?? averageOf(die), die: dieAt(level), ...(level in fixed ? { gained: fixed[level] } : {}) });
+    // Nothing kept, or cleared: the average of that level's own die.
+    levels.push({ level, took: kept[level] ?? averageOf(dieAt(level)), die: dieAt(level), ...(level in fixed ? { gained: fixed[level] } : {}), ...(how[level] || {}) });
   }
   return { max: levels.reduce((n, l) => n + (l.gained ?? Math.max(1, l.took + adds)), 0), adds, levels };
 };
