@@ -26,7 +26,8 @@
 //           features: [
 //             { id: 'guard_stance', label: 'Guard Stance', text: 'Words for the table.',
 //               at: 1,                                          // the pick's level it unlocks at (levelled lists)
-//               modifiers: [{ target: 'defense', amount: '1' }], // added to a stat, formula or health field
+//               modifiers: [{ target: 'defense', amount: '1' }], // added to a stat, formula or health field;
+//                                                               // 7e1: how: 'least', AT LEAST that much instead
 //               uses: { count: '1', refill: 'short_rest' },     // ticked off on the sheet, refilled by a rest
 //               rolls: ['rally'],                               // rolls of the system it gives
 //               changes: [{ roll: 'mind_save', change: 'advantage' }], // a change it lets one roll take
@@ -88,6 +89,11 @@
 // versionDiff.js read the overlay. The token's maximum (HP MAX, WOUNDS) is the one exception: it lives
 // on the token, so its modifiers are moved onto the token itself, and back off (tokenMax.js, 7a5a3).
 //
+// Three ways a bonus counts (7e1; approved mockup docs/mockups/items.html, 2026-11-10, bonuses.js): a modifier ADDs, or
+// sets AT LEAST (how: 'least'); a stat or formula may say BONUSES STOP AT (its `stop`). Every ADD is summed, then the cap,
+// then AT LEAST. Each modifier says what it really gave, for the sheet to name what the cap cut. The token's maximum only
+// ADDs (tokenMax.js moves the token by it).
+//
 // An INCREASE (7d6b) is spent by the player as its feature unlocks, going up a level (levelUp.js), and kept under
 // INCREASES_KEY by feature: { asi: { str: 1, dex: 1 } }. It is worked out onto the stats as a modifier is, named by
 // its feature, while the feature is unlocked and what is kept still holds: stats it may raise, whole points from 1,
@@ -106,7 +112,8 @@
 const { parse, evaluate, references, NAME } = require('./expression');
 const { ruleValue } = require('./rules');
 const { tablesOf, lookupIn } = require('./derived');
-const { statIdsOf } = require('./stats');
+const { statIdsOf, allStats } = require('./stats');
+const { LEAST, applyBonuses, stopOf } = require('./bonuses');
 const { restIdsOf } = require('./rests');
 const { healthLayout } = require('./core');
 const { partOn } = require('./parts');
@@ -331,8 +338,11 @@ const checkChoices = (definition, problems) => {
         f.modifiers.slice(0, LIMITS.modifiers).forEach((m, i) => {
           const at = `${where}, modifier ${i + 1}`;
           if (!isPlainObject(m)) { problems.push({ where: at, message: 'Must say what it changes and by how much' }); return; }
-          keys(m, new Set(['target', 'amount']), at, 'a modifier');
+          keys(m, new Set(['target', 'amount', 'how']), at, 'a modifier');
           if (typeof m.target !== 'string' || !targets.has(m.target)) problems.push({ where: `${at}, target`, message: 'Not one of this system\'s stats, formulas or health fields' });
+          // 7e1: ADD (as when absent) or AT LEAST; the token's maximum only adds.
+          if (m.how !== undefined && m.how !== LEAST) problems.push({ where: `${at}, how`, message: 'ADD, or AT LEAST' });
+          else if (m.how === LEAST && m.target === tokenMaxFieldOf(definition)) problems.push({ where: `${at}, how`, message: 'The token\'s maximum is only added to' });
           formula(m.amount, `${at}, amount`);
           // Worked out from the sheet as typed and the levels: a formula could read this modifier back.
           if (typeof m.amount === 'string') {
@@ -724,11 +734,24 @@ const checkHasNames = (definition, problems) => {
   walk(definition, []);
 };
 
+/** Each stat's and formula's BONUSES STOP AT (7e1): { id: cap }. */
+const stopsOf = (definition) => {
+  const out = {};
+  for (const s of allStats(definition.stats)) if (stopOf(s.stop) !== null) out[s.id] = s.stop;
+  for (const d of list(definition.derived)) if (isPlainObject(d) && typeof d.id === 'string' && stopOf(d.stop) !== null) out[d.id] = d.stop;
+  return out;
+};
+
+/** A bonus as the sheet names it: what it gave only where that differs, AT LEAST and the cap where they count. */
+const lineShown = (l) => ({ feature: l.feature, amount: l.amount, ...(l.got !== l.amount ? { got: l.got } : {}), ...(l.least ? { least: true } : {}), ...(l.stop !== undefined && l.stop !== null ? { stop: l.stop } : {}) });
+
 /**
- * What a character's picks do to their numbers: `{ sheet, add, levels, from }`, the overlay
+ * What a character's picks do to their numbers: `{ sheet, add, bonus, levels, from, applied }`, the overlay
  * derived.js reads. `sheet` holds the levels and each stat or health field a feature changes, as
- * modified; `add` each formula's modifiers, added once it is worked out; `from` every modifier by
- * what it changes, [{ feature, amount }], for the sheet to name. Empty for a sheet with no picks.
+ * modified; `bonus` each formula's bonuses, { adds, least, stop }, counted once it is worked out (7e1), and `add`
+ * their ADDs summed; `from` every modifier by what it changes, [{ feature, amount }], for the sheet to name, with what
+ * it really gave (`got`) where the cap cut it, and `least`; `applied`, filled in as derived.js works the formulas
+ * out, the same for each formula. Empty for a sheet with no picks.
  */
 const overlayOf = (definition, data) => {
   const sheet = isPlainObject(data) ? data : {};
@@ -746,12 +769,11 @@ const overlayOf = (definition, data) => {
   const isTable = (name) => own(tables, name);
   const targets = targetsOf(definition);
   const fields = fieldTargetsOf(definition);
-  const from = {};
-  const totals = {};
+  const bonuses = {};
   const increases = isPlainObject(sheet[INCREASES_KEY]) ? sheet[INCREASES_KEY] : {};
-  const added = (target, amount, feature) => {
-    totals[target] = (own(totals, target) ? totals[target] : 0) + amount;
-    (own(from, target) ? from[target] : (from[target] = [])).push({ feature: feature.label || feature.id, amount });
+  const added = (target, amount, feature, least = false) => {
+    const b = own(bonuses, target) ? bonuses[target] : (bonuses[target] = { adds: [], least: [] });
+    b[least ? 'least' : 'adds'].push({ feature: feature.label || feature.id, amount });
   };
   for (const { feature } of unlockedOf(picks)) {
     // An INCREASE as it was spent (7d6b), on the stats it raises.
@@ -765,19 +787,31 @@ const overlayOf = (definition, data) => {
       let amount;
       try { amount = evaluate(parse(m.amount, isTable), env); } catch { continue; }
       if (!Number.isFinite(amount)) continue;
-      added(m.target, amount, feature);
+      added(m.target, amount, feature, m.how === LEAST);
     }
   }
   const over = { ...levels, ...owned };
   const add = {};
-  // The token's maximum already holds its modifiers (7a5a3, tokenMax.js): read as it is, never added twice.
+  const bonus = {};
+  const from = {};
+  const stops = stopsOf(definition);
+  // The token's maximum already holds its modifiers (7a5a3, tokenMax.js): read as it is, never added twice. It only adds.
   const onToken = tokenMaxFieldOf(definition);
-  for (const [target, amount] of Object.entries(totals)) {
-    if (target === onToken) continue;
-    if (fields.has(target)) over[target] = num(sheet[target]) + amount;
-    else add[target] = amount;
+  for (const [target, b] of Object.entries(bonuses)) {
+    const stop = own(stops, target) ? stops[target] : null;
+    // The checks refuse AT LEAST there.
+    if (target === onToken) from[target] = b.adds;
+    else if (fields.has(target)) {
+      const done = applyBonuses(num(sheet[target]), { ...b, stop });
+      over[target] = done.value;
+      from[target] = done.lines.map(lineShown);
+    } else {
+      bonus[target] = { ...b, stop };
+      add[target] = b.adds.reduce((n, a) => n + a.amount, 0);
+      from[target] = [...b.adds, ...b.least.map((l) => ({ ...l, least: true }))];
+    }
   }
-  return { sheet: over, add, levels, from };
+  return { sheet: over, add, bonus, levels, from, applied: {} };
 };
 
 /** The sheet as rolls read it: the stats and health fields with their modifiers, and the levels. Never stored. */
@@ -857,7 +891,7 @@ const worksOutPicks = (definition) => choicesOf(definition).length > 0 || kitsNe
  * ({ max, spent }), the options not taken whose requirement isn't met, and any kits going ONLY IF that
  * aren't met (7c4b), which a player can't see the formula of any more than an option's.
  */
-const workedOf = (definition, data) => {
+const workedOf = (definition, data, overlay = overlayOf(definition, data)) => {
   const held = heldOf(definition, data);
   const picks = held.filter((p) => p.active);
   const taken = new Set(held.map((p) => p.option.id));
@@ -869,7 +903,8 @@ const workedOf = (definition, data) => {
     // 7a5a: each unlocked feature opening a list picked through features, and how many it gives and has.
     opens: openingsOf(definition, picks, data).map((o) => ({ feature: o.feature.id, list: o.list.id, count: o.count, used: o.used, ...(o.instead ? { instead: true } : {}) })),
     levels: levelsOf(definition, picks),
-    from: overlayOf(definition, data).from,
+    // A formula's bonuses as derived.js counted them (7e1), when it has: what each really gave.
+    from: { ...overlay.from, ...Object.fromEntries(Object.entries(overlay.applied || {}).map(([id, lines]) => [id, lines.map(lineShown)])) },
     uses: Object.fromEntries(usesOf(definition, data).map((u) => [u.feature.id, { max: u.max, spent: u.spent }])),
     // 7d7b: each unlocked INCREASE with nothing spent and no pick taken in its place, for the player to spend on the sheet.
     ...(() => {
