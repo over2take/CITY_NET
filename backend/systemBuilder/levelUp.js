@@ -22,11 +22,17 @@
 // away were spent on. OR A FEAT INSTEAD (7d6c): a pick from the list it offers, made with FINISH's picks, in place of
 // the points, never with them.
 //
+// What each level gained, put right (7d7b; approved mockup docs/mockups/level-record.html, 2026-11-09): the GM clears a
+// past level's kept roll ('clearLevel') for the player to roll again ('rollLevel', to the tray, kept), or sets the
+// die's part of any level ('setLevel'; with none, back to the average, level 1 to the full die); and clears an increase
+// ('clearIncrease') for the player to spend again ('spendIncrease', checked as at FINISH).
+//
 // Pure: the socket (sockets/choices.js) stores it through the sheet's queue, and works the numbers out again.
 
 const { choicesOf, heldOf, levelsOf, targetsOf, pickedOf, picksOf: activePicks, unlockedOf, increaseOf, effectiveData, namesOf, INCREASES_KEY } = require('./choices');
 const { pickAction } = require('./picking');
 const { XP_KEY, advances, earnsXp, levelTable, levelsOf: settingsOf, healthOf, levelDie, averageOf, HEALTH_LEVELS_KEY } = require('./levels');
+const { spentOf } = require('./choices');
 const { creatingNow, ROLLED_KEPT } = require('./creation');
 const crypto = require('crypto');
 
@@ -64,12 +70,35 @@ const newlyUnlocked = (definition, before, after) => {
 };
 
 /**
+ * What's wrong with spending an increase so, or null (7d6b): every point, no more than its most on one stat, on stats it
+ * raises, none past where they stop, each stat read as it is with everything else on it.
+ */
+const spreadProblem = (definition, sheet, feature, inc, spread) => {
+  const names = namesOf(definition);
+  const name = feature.label || feature.id;
+  let total = 0;
+  const now = effectiveData(definition, sheet);
+  for (const [stat, n] of Object.entries(spread)) {
+    const statName = String(names.get(stat) || stat);
+    if (!inc.stats.includes(stat)) return `${name} doesn't raise ${statName}`;
+    if (n > inc.most) return `${name}: at most ${inc.most} on one stat`;
+    // A stat that isn't a number is never past it.
+    if (inc.cap !== null && Number(now[stat]) + n > inc.cap) return `${name}: ${statName} stops at ${inc.cap}`;
+    total += n;
+  }
+  return total === inc.points ? null : `${name}: spend all ${inc.points} ${inc.points === 1 ? 'point' : 'points'}`;
+};
+/** The sheet with an increase spent so, kept by its feature. */
+const withSpread = (sheet, feature, spread) => ({ ...sheet, [INCREASES_KEY]: { ...(isPlainObject(sheet[INCREASES_KEY]) ? sheet[INCREASES_KEY] : {}), [feature.id]: spread } });
+/** Whether a pick was taken in place of an increase's points (7d6c). */
+const takenInstead = (definition, sheet, feature, inc) => !!inc.instead && activePicks(definition, sheet).some((p) => p.from === feature.id && p.list.id === inc.instead);
+
+/**
  * The sheet with each INCREASE the new level unlocked spent (7d6b): { data } or { error }. Each stat is checked as it
  * reads with everything else on it, the increases spent before it included. The GM may leave one unspent.
  */
 const withIncreasesSpent = (definition, before, after, increases, gm) => {
   let sheet = after;
-  const names = namesOf(definition);
   for (const feature of newlyUnlocked(definition, before, after)) {
     const inc = increaseOf(definition, feature);
     if (!inc) continue;
@@ -77,7 +106,7 @@ const withIncreasesSpent = (definition, before, after, increases, gm) => {
     const spread = increases[feature.id];
     const other = inc.instead ? choicesOf(definition).find((c) => c.id === inc.instead) : null;
     // A pick taken in its place (7d6c), with FINISH's picks: then nothing is spent.
-    if (other && activePicks(definition, sheet).some((p) => p.from === feature.id && p.list === other)) {
+    if (other && takenInstead(definition, sheet, feature, inc)) {
       if (spread) return { error: `${name}: the points or a ${other.one || other.id}, not both` };
       continue;
     }
@@ -85,21 +114,39 @@ const withIncreasesSpent = (definition, before, after, increases, gm) => {
       if (gm) continue;
       return { error: other ? `Spend ${name}'s points, or pick a ${other.one || other.id}, first` : `Spend ${name}'s points first` };
     }
-    let total = 0;
-    const now = effectiveData(definition, sheet);
-    for (const [stat, n] of Object.entries(spread)) {
-      const statName = String(names.get(stat) || stat);
-      if (!inc.stats.includes(stat)) return { error: `${name} doesn't raise ${statName}` };
-      if (n > inc.most) return { error: `${name}: at most ${inc.most} on one stat` };
-      // A stat that isn't a number is never past it.
-      if (inc.cap !== null && Number(now[stat]) + n > inc.cap) return { error: `${name}: ${statName} stops at ${inc.cap}` };
-      total += n;
-    }
-    if (total !== inc.points) return { error: `${name}: spend all ${inc.points} ${inc.points === 1 ? 'point' : 'points'}` };
-    const kept = isPlainObject(sheet[INCREASES_KEY]) ? sheet[INCREASES_KEY] : {};
-    sheet = { ...sheet, [INCREASES_KEY]: { ...kept, [feature.id]: spread } };
+    const problem = spreadProblem(definition, sheet, feature, inc, spread);
+    if (problem) return { error: problem };
+    sheet = withSpread(sheet, feature, spread);
   }
   return { data: sheet };
+};
+
+/** A level of the record (7d7b): a whole number from 1 to the character's level, or why not. */
+const recordLevel = (definition, sheet, action) => {
+  if (healthOf(definition).how !== 'level') return { error: 'Health isn\'t kept per level in this game' };
+  const level = Number(action.level);
+  if (!Number.isInteger(level) || level < 1 || level > characterLevel(definition, sheet)) return { error: 'No such level' };
+  const kept = isPlainObject(sheet[HEALTH_LEVELS_KEY]) ? sheet[HEALTH_LEVELS_KEY] : {};
+  const record = isPlainObject(kept[level]) ? kept[level] : {};
+  return { level, kept, record };
+};
+/** That level's die, as kept, or the first class's (level 1's). Null with none. */
+const recordDie = (definition, sheet, record) => {
+  if (Number.isInteger(record.die)) return record.die;
+  const first = levelTargets(definition, sheet).find((t) => t.option);
+  return levelDie(definition, first ? first.option : null);
+};
+/** The sheet with one level of the record kept so (null: nothing kept). */
+const withRecord = (sheet, kept, level, record) => {
+  const { [level]: gone, ...rest } = kept;
+  const next = record ? { ...rest, [level]: record } : rest;
+  return { ...sheet, [HEALTH_LEVELS_KEY]: next };
+};
+/** An unlocked feature's increase, by id, with the feature (7d7b), or why not. */
+const unlockedIncrease = (definition, sheet, id) => {
+  const feature = unlockedOf(activePicks(definition, sheet)).map((u) => u.feature).find((f) => f.id === id);
+  const inc = feature ? increaseOf(definition, feature) : null;
+  return inc ? { feature, inc } : { error: 'No increase unlocked there' };
 };
 /** The sheet without what the increases a level down locks again were spent on (7d6b). */
 const withIncreasesGone = (definition, before, after) => {
@@ -246,6 +293,8 @@ const pickTarget = (definition, data, action) => {
  * { kind: 'healthRoll' | 'healthAverage', list, option } (7d5b): the level's health rolled, or its average taken, kept
  * with the place; a roll comes back as `rolled` for the tray. { kind: 'clearHealth' }: the GM's CLEAR THE ROLL.
  * { kind: 'give' }: the GM's LEVEL_UP, a level for the player to take. { kind: 'down', option }: the GM's LEVEL_DOWN.
+ * The record (7d7b): { kind: 'rollLevel', level } a cleared level rolled again, and { kind: 'spendIncrease', feature, spread },
+ * the player's or the GM's; { kind: 'clearLevel', level }, { kind: 'setLevel', level, took } and { kind: 'clearIncrease', feature }, the GM's.
  * Gives { ok: true, data, level, owed } or { ok: false, error }.
  */
 const levelAction = (definition, data, action, { gm = false, rng = cryptoRng } = {}) => {
@@ -331,7 +380,54 @@ const levelAction = (definition, data, action, { gm = false, rng = cryptoRng } =
     const roll = Math.floor(rng() * die) + 1;
     return { ...said({ ...sheet, [LEVELING_KEY]: { ...at, health: { roll, die } } }), rolled: { sides: die, rolls: [roll], total: roll } };
   }
+  if (kind === 'rollLevel') {
+    const at = recordLevel(definition, sheet, action);
+    if (at.error) return { ok: false, error: at.error };
+    if (at.record.cleared !== true) return { ok: false, error: 'Nothing to roll there: your GM clears a roll first' };
+    const die = recordDie(definition, sheet, at.record);
+    if (!Number.isInteger(die)) return { ok: false, error: 'Nothing to roll: no die at that level' };
+    const roll = Math.floor(rng() * die) + 1;
+    return { ...said(withRecord(sheet, at.kept, at.level, { die, took: roll, rolled: true })), rolled: { sides: die, rolls: [roll], total: roll, level: at.level } };
+  }
+  if (kind === 'spendIncrease') {
+    const found = unlockedIncrease(definition, sheet, action.feature);
+    if (found.error) return { ok: false, error: found.error };
+    const { feature, inc } = found;
+    const kept = isPlainObject(sheet[INCREASES_KEY]) ? sheet[INCREASES_KEY] : {};
+    if (spentOf(inc, kept[feature.id])) return { ok: false, error: 'Already spent: your GM can clear it' };
+    if (takenInstead(definition, sheet, feature, inc)) return { ok: false, error: 'Taken as a pick in place of the points' };
+    const spread = increasesOf({ [feature.id]: action.spread })[feature.id];
+    if (!spread) return { ok: false, error: `Spend ${feature.label || feature.id}'s points first` };
+    const problem = spreadProblem(definition, sheet, feature, inc, spread);
+    if (problem) return { ok: false, error: problem };
+    return said(withSpread(sheet, feature, spread));
+  }
   if (!gm) return { ok: false, error: 'That is the GM\'s to do' };
+  if (kind === 'clearLevel') {
+    const at = recordLevel(definition, sheet, action);
+    if (at.error) return { ok: false, error: at.error };
+    // Level 1 is the full die, or set: never rolled.
+    if (at.record.rolled !== true) return { ok: false, error: 'Nothing rolled there to clear' };
+    return said(withRecord(sheet, at.kept, at.level, { die: recordDie(definition, sheet, at.record), cleared: true }));
+  }
+  if (kind === 'setLevel') {
+    const at = recordLevel(definition, sheet, action);
+    if (at.error) return { ok: false, error: at.error };
+    const die = recordDie(definition, sheet, at.record);
+    // None: back to the average, or level 1's full die: nothing kept but its die.
+    if (action.took === null || action.took === undefined) return said(withRecord(sheet, at.kept, at.level, at.level === 1 ? null : { die }));
+    if (!Number.isInteger(die)) return { ok: false, error: 'Nothing to set: no die at that level' };
+    if (!Number.isInteger(action.took) || action.took < 1 || action.took > die) return { ok: false, error: `A whole number from 1 to ${die}` };
+    return said(withRecord(sheet, at.kept, at.level, { die, took: action.took, set: true }));
+  }
+  if (kind === 'clearIncrease') {
+    const kept = isPlainObject(sheet[INCREASES_KEY]) ? sheet[INCREASES_KEY] : {};
+    if (!Object.prototype.hasOwnProperty.call(kept, action.feature)) return { ok: false, error: 'Nothing spent there to clear' };
+    const { [action.feature]: gone, ...rest } = kept;
+    if (Object.keys(rest).length) return said({ ...sheet, [INCREASES_KEY]: rest });
+    const { [INCREASES_KEY]: all, ...without } = sheet;
+    return said(without);
+  }
   if (kind === 'clearHealth') {
     const health = healthPlaceOf(sheet);
     if (!health || !Number.isInteger(health.roll)) return { ok: false, error: 'Nothing rolled there to clear' };
@@ -366,6 +462,6 @@ const healthRollLine = (who, rolled) => (rolled.beat
   ? `${who} rolled Health to beat ${rolled.over}, ${rolled.dice} ${rolled.dice === 1 ? 'die' : 'dice'} [${rolled.total}]: ${rolled.total > rolled.over ? `beaten, +${rolled.gained}${rolled.gainDie ? ` (d${rolled.gainDie})` : ''}` : 'not beaten, nothing gained'}`
   : rolled.results
   ? `${who} rerolled Health, ${rolled.dice} ${rolled.dice === 1 ? 'die' : 'dice'} [${rolled.total}]: ${rolled.total > rolled.over ? `over ${rolled.over}, the new maximum` : `not over ${rolled.over}, +1`}`
-  : `${who} rolled Health (d${rolled.sides}) [${rolled.total}]`);
+  : `${who} rolled Health${rolled.level ? ` for level ${rolled.level}` : ''} (d${rolled.sides}) [${rolled.total}]`);
 
 module.exports = { OWED_KEY, LEVELING_KEY, characterLevel, levelTargets, levelAction, lockedByLevels, healthRollLine };
