@@ -94,7 +94,7 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 | Levels | MAX HEALTH: A FORMULA (7d4) | `levels` | `builder-levels`, `sheet-health-formula` | Proven at the table |
 | Levels | MAX HEALTH: PER LEVEL, ON EACH CLASS, AVERAGE (FIXED), EACH LEVEL ADDS (7d5a) | `levels` | `builder-levels`, `sheet-health-levels` | Proven at the table |
 | Levels | MAX HEALTH: PER LEVEL, ONE FOR ALL (7d5a) | `levels` | `builder-levels` | **BUILDER AND SERVER TESTS**: the table's journey uses each class's die |
-| Levels | MAX HEALTH: PER LEVEL, GAINED BY ROLL, and CLEAR THE ROLL (7d5b) | `levels` | `sheet-health-levels` | Proven at the table |
+| Levels | MAX HEALTH: PER LEVEL, GAINED BY ROLL, and CLEAR THE ROLL (7d5b) | `levels` | `sheet-health-levels`, `sheet-level-record` | Proven at the table; a past level's roll cleared, rolled again and set in the record (7d7b2) |
 | Levels | MAX HEALTH: PER LEVEL, GAINED BY THE PLAYER CHOOSES (7d5b) | `levels` | none yet | **COMPONENT AND SERVER TESTS**: TAKE and ROLL INSTEAD in the window |
 | Levels | MAX HEALTH: PER LEVEL, GAINED BY REROLL ALL, KEEP HIGHER (7d5c) | `levels` | `sheet-health-levels` | Proven at the table |
 | Levels | MAX HEALTH: PER LEVEL, GAINED BY ROLL TO BEAT, A POOL, its dice and the die gained (7d5d) | `levels` | `builder-levels`, `sheet-health-levels` | Proven at the table |
