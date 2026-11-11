@@ -2,8 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   insertGroups, shapesOf, writeShape, levelTokens, DIE_SIDES, isMistake,
-  type FormulaKind, type FormulaRead, type Shape,
-} from '../sheets/formulaBox';
+  type FormulaKind, type FormulaRead, type Shape, serverKind } from '../sheets/formulaBox';
 import { FormulaWords } from '../components/FormulaWords';
 import { allStats, formulaList, insertToken } from '../sheets/statsRules';
 import { FormulaIcon } from '../components/FormulaIcon';
@@ -47,7 +46,7 @@ const askBox: React.CSSProperties = { background: 'var(--black)', color: 'var(--
 const startOf = (s: Shape, kind: FormulaKind) => (s.id === 'at_least' || (kind === 'against' && s.id === 'number') ? 13
   : s.id === 'level_at_least' ? 5 : s.id === 'per_level' || s.id === 'per_class_level' ? 2 : 1);
 /** What a shape's ask row starts with. */
-const LEAD: Partial<Record<FormulaKind, string>> = { requires: 'NEEDS', amount: 'ADD', add: 'ADD', against: 'AGAINST' };
+const LEAD: Partial<Record<FormulaKind, string>> = { requires: 'NEEDS', amount: 'ADD', least: 'AT LEAST', add: 'ADD', against: 'AGAINST' };
 
 /**
  * The box, as two parts the caller places: `field`, the text and its FORMULA button, where the
@@ -67,7 +66,7 @@ export function useFormulaBox({ definition, api, kind, roll, value, onChange, la
     if (!api || !value.trim()) return undefined;
     let live = true;
     const timer = setTimeout(() => {
-      api.previewFormulas(definition, [{ text: value, kind, ...(roll ? { roll } : {}) }]).then((r) => { if (live && r.ok && r.value.results[0]) setRead({ text: value, result: r.value.results[0] }); });
+      api.previewFormulas(definition, [{ text: value, kind: serverKind(kind), ...(roll ? { roll } : {}) }]).then((r) => { if (live && r.ok && r.value.results[0]) setRead({ text: value, result: r.value.results[0] }); });
     }, PREVIEW_DELAY_MS);
     return () => { live = false; clearTimeout(timer); };
   }, [api, definition, value, kind, roll]);

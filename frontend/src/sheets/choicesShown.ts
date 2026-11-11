@@ -14,7 +14,7 @@
 // again is kept and shown waiting. A list EVERYONE HAS has nothing to pick: its options are held, at
 // the character's level.
 
-import type { SheetEffects, FieldEffect } from './cyberwareEffects';
+import type { SheetEffects, FieldEffect, ModSource } from './cyberwareEffects';
 import type { SheetTemplate } from './types';
 
 /** An INCREASE as the server shows it (7d6b; backend choices.js increaseShown): its points, the most on one, its stats by name, where they stop. */
@@ -45,7 +45,8 @@ export interface Worked {
   /** Each unlocked feature opening a list picked through features, and how many it gives and has; `instead` a list an increase offers (7d6c). */
   opens: { feature: string; list: string; count: number; used: number; instead?: true }[];
   levels: Record<string, number>;
-  from: Record<string, { feature: string; amount: number }[]>;
+  /** 7e1: what a bonus really gave (`got`) where a cap (`stop`) cut it, and AT LEAST (`least`). */
+  from: Record<string, { feature: string; amount: number; got?: number; least?: true; stop?: number }[]>;
   uses: Record<string, { max: number; spent: number }>;
   unmet: string[];
   /** The recovery dice (R2b), in the sheet's words, with the character's pools; null without. */
@@ -320,6 +321,17 @@ export const featureDoes = (f: FeatureShown, lists: ChoiceListShown[]): string[]
  * bonuses on the token (7a5a3), and with no token there is nothing to show. Fields the sheet doesn't
  * show are left out.
  */
+/**
+ * One bonus as the badge names it (7e1): an AT LEAST as "Amulet → 19", or "(already higher)" where it did nothing; one
+ * a cap cut as "Ring (+2, stops at 20) +1".
+ */
+export const sourceOf = (s: { feature: string; amount: number; got?: number; least?: true; stop?: number }): ModSource => {
+  if (s.least) return s.got === 0 ? { name: `${s.feature} (already higher)`, value: 0, kind: 'stat' } : { name: s.feature, value: s.amount, kind: 'statFloor' };
+  // The server says what it gave only where that differs (backend choices.js lineShown).
+  if (s.got !== undefined) return { name: `${s.feature} (${s.amount >= 0 ? '+' : ''}${s.amount}${s.stop !== undefined ? `, stops at ${s.stop}` : ''})`, value: s.got, kind: 'stat' };
+  return { name: s.feature, value: s.amount, kind: 'stat' };
+};
+
 export const choiceEffects = (data: Obj | null | undefined, template: SheetTemplate): SheetEffects => {
   const worked = workedOn(data);
   const fields = new Map(template.sections.flatMap((s) => s.fields).map((f) => [f.id, f]));
@@ -330,11 +342,13 @@ export const choiceEffects = (data: Obj | null | undefined, template: SheetTempl
     if (!field || !Array.isArray(from) || !from.length) continue;
     const onToken = field.source === 'token_hp_max';
     if (onToken && (!isObject(data) || data[id] === null || data[id] === undefined)) continue;
-    const delta = from.reduce((n, s) => n + num(s.amount), 0);
+    // What each really gave (7e1): a cut bonus less, an AT LEAST what it lifted.
+    const gave = (s: (typeof from)[number]) => (s.got === undefined ? num(s.amount) : num(s.got));
+    const delta = from.reduce((n, s) => n + gave(s), 0);
     const stored = num(isObject(data) ? data[id] : 0);
     // A formula is saved with its bonuses in, the token's maximum holds them; a stat keeps what the player typed.
     const base = field.derived || onToken ? stored - delta : stored;
-    out[id] = { id, base, value: base + delta, delta, sources: from.map((s) => ({ name: s.feature, value: num(s.amount), kind: 'stat' as const })) };
+    out[id] = { id, base, value: base + delta, delta, sources: from.map(sourceOf) };
   }
   return { fields: out, unmatched: [] };
 };

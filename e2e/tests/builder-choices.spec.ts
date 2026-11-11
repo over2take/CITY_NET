@@ -148,7 +148,7 @@ test('an INCREASE on a feature: points, the most on one, which stats, where they
   await boost.getByRole('spinbutton', { name: 'POINTS' }).fill('4');
   await boost.getByRole('spinbutton', { name: 'AT MOST ON ONE' }).fill('1');
   await boost.getByRole('combobox', { name: 'FROM' }).selectOption('abilities');
-  await boost.getByRole('spinbutton', { name: 'STOPS AT' }).fill('20');
+  await boost.getByRole('spinbutton', { name: 'STOPS AT', exact: true }).fill('20');
   await boost.getByRole('combobox', { name: 'OR INSTEAD' }).selectOption('feats');
   await expect(boost.getByLabel('The increase in words')).toHaveText('4 POINTS · AT MOST 1 ON ONE · FROM ABILITIES · STOPS AT 20 · OR A FEAT INSTEAD');
   await expect(soldier.getByRole('button', { name: /BOOST/ })).toContainText('INCREASE');
@@ -162,4 +162,32 @@ test('an INCREASE on a feature: points, the most on one, which stats, where they
   await openIt();
   await page.getByRole('region', { name: 'Soldier option' }).getByRole('button', { name: /BOOST/ }).click();
   await expect(page.getByRole('group', { name: 'Feature Boost' }).getByLabel('The increase in words')).toHaveText('4 POINTS · AT MOST 1 ON ONE · FROM ABILITIES · STOPS AT 20 · OR A FEAT INSTEAD');
+});
+
+test('AT LEAST on one modifier, STOPS AT on another, saved as set (7e1b)', async ({ page, request }, info) => {
+  const name = `Capping Hearth ${info.retry + 1}`;
+  const token = await gmToken(request);
+  const { id } = await asGm(request, token, 'post', '/api/systems', { definition: { format: 1, name, core: { health: { model: 'pool' } },
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'con', label: 'Con' }] }],
+    choices: [{ id: 'feats', one: 'Feat', many: 'Feats', options: [{ id: 'amulet', label: 'Amulet', features: [{ id: 'vigor', label: 'Vigor', modifiers: [{ target: 'con', amount: '19' }, { target: 'con', amount: '2' }] }] }] }] } });
+  await signInAsGm(page);
+  await openBuilder(page);
+  const card = page.getByTestId(/^system-/).filter({ hasText: name.toUpperCase() });
+  if (!(await card.getByRole('button', { name: 'OPEN', exact: true }).isVisible())) await card.getByRole('button').first().click();
+  await card.getByRole('button', { name: 'OPEN', exact: true }).click();
+
+  // CHOICES: the Amulet's first modifier set AT LEAST, its second an ADD stopping at 20.
+  await builderPage(page, 'CHOICES');
+  const amulet = page.getByRole('region', { name: 'Amulet option' });
+  await amulet.getByRole('button', { name: /VIGOR/ }).click();
+  const how = amulet.getByRole('group', { name: 'Modifier 1: how' });
+  await how.getByRole('button', { name: 'AT LEAST' }).click();
+  await expect(how.getByRole('button', { name: 'AT LEAST' })).toHaveAttribute('aria-pressed', 'true');
+  await amulet.getByRole('spinbutton', { name: 'Modifier 2: stops at' }).fill('20');
+  await expect(amulet.getByText('NEVER TAKES IT PAST 20')).toBeVisible();
+
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  const saved = await asGm(request, token, 'get', `/api/systems/${id}`);
+  expect(saved.problems).toEqual([]);
+  expect(saved.draft.choices[0].options[0].features[0].modifiers).toEqual([{ target: 'con', amount: '19', how: 'least' }, { target: 'con', amount: '2', cap: 20 }]);
 });

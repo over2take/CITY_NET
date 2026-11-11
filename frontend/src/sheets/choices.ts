@@ -40,7 +40,11 @@ export interface ChoiceList { id: string; one: string; many: string; picks?: num
 export type ListPatch = Partial<Pick<ChoiceList, 'one' | 'many' | 'picks' | 'levelled' | 'again' | 'picked' | 'players'>> & { table?: string | null };
 /** A change to an option: `die: null` takes its die away; an empty roll takes its roll away. */
 export type OptionPatch = Partial<Pick<ChoiceOption, 'label' | 'description' | 'requires' | 'roll' | 'gives'>> & { die?: number | null };
-export interface Modifier { target: string; amount: string }
+/**
+ * A feature's modifier: what it changes, by how much; 7e1: AT LEAST that much (`how: 'least'`) instead of adding, or an ADD
+ * that STOPS AT `cap` ("+2 Con, no higher than 20").
+ */
+export interface Modifier { target: string; amount: string; how?: 'least'; cap?: number }
 export interface Uses { count: string; refill?: string }
 export interface RollChange { roll: string; change: string }
 /**
@@ -386,6 +390,22 @@ export const modifierTargets = (def: Definition): { group: string; items: { id: 
     { group: 'FORMULAS', items: formulaList(def).map((f) => named(f.id, f.label)) },
     { group: 'HEALTH', items: health.map((f) => named(f.id, f.label)) },
   ].filter((g) => g.items.length);
+};
+
+/** The health field the token's maximum is (HP MAX, WOUNDS), or null: it is only ever added to (7e1; backend choices.js). */
+export const tokenMaxTarget = (def: Definition): string | null =>
+  healthLayout(isObject(def.core) ? (def.core as Obj).health : undefined).sections.flatMap((s) => s.fields).find((f) => f.source === 'token_hp_max')?.id ?? null;
+
+/** A modifier with its way: ADD (nothing said, keeping where it stops) or AT LEAST (7e1), which never stops anywhere. */
+export const withHow = (m: Modifier, least: boolean): Modifier => {
+  const plain: Modifier = { target: m.target, amount: m.amount };
+  return least ? { ...plain, how: 'least' } : { ...plain, ...(m.cap === undefined ? {} : { cap: m.cap }) };
+};
+
+/** An ADD with where it STOPS AT (7e1), or none (null). */
+export const withCap = (m: Modifier, cap: number | null): Modifier => {
+  const rest: Modifier = { target: m.target, amount: m.amount, ...(m.how ? { how: m.how } : {}) };
+  return cap === null ? rest : { ...rest, cap };
 };
 
 /** The rests that can refill uses, by name, the off ones said so (the server takes any of them). */
