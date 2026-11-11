@@ -73,9 +73,10 @@ const metaOf = (definition) => {
     // and what the sheet shows of them (7a3a, choices.js workedOf), written beside the values.
     recompute: compiled.ok ? (data) => {
       try {
-        const changed = compiled.system.apply(data, overlayOf(definition, data));
+        const overlay = overlayOf(definition, data);
+        const changed = compiled.system.apply(data, overlay);
         if (worksOutPicks(definition)) {
-          data[WORKED_KEY] = workedOf(definition, data);
+          data[WORKED_KEY] = workedOf(definition, data, overlay);
           // The recovery dice (R2a, R2b): in the sheet's words, with each pool's die, how many and how many spent.
           const pools = poolsOf(definition, data);
           if (pools.length) data[WORKED_KEY].recovery = { ...recoveryShown(definition), pools: pools.map(({ id, label, die, total, spent }) => ({ id, label, die, total, spent })) };

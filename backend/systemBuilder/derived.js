@@ -25,6 +25,7 @@
 // Checking is separate from running, and reports every problem at once rather than the first,
 // because the builder will show them as a list beside the graph.
 
+const { applyBonuses } = require('./bonuses');
 const { parse, evaluate, references, NAME, BUILTINS } = require('./expression');
 const { ruleValue, hasRule } = require('./rules');
 
@@ -101,7 +102,8 @@ const partsOf = (entry) => (entry.kind === 'condition'
  *
  * Both take an optional `overlay` (7a1b, choices.js overlayOf): `sheet`, values read in place of
  * the sheet's own (a stat with its features' modifiers, a pick's level), and `add`, an amount added
- * to a derived value once it is worked out, before anything reading it is.
+ * to a derived value once it is worked out, before anything reading it is. From 7e1, `bonus` in its place where given:
+ * { adds, least, stop } counted as bonuses.js says, what each really gave written into `applied` when the overlay has it.
  */
 const compileSystem = (definition) => {
   const problems = [];
@@ -187,6 +189,7 @@ const compileSystem = (definition) => {
     const sheet = data || {};
     const over = overlay.sheet || {};
     const add = overlay.add || {};
+    const bonus = overlay.bonus || null;
     const own = (o, name) => Object.prototype.hasOwnProperty.call(o, name);
     const values = {};
     const ruleCache = new Map();
@@ -203,7 +206,13 @@ const compileSystem = (definition) => {
       values[id] = c.kind === 'condition'
         ? (evaluate(c.trees.when, env) !== 0 ? evaluate(c.trees.then, env) : evaluate(c.trees.else, env))
         : evaluate(c.trees.formula, env);
-      if (own(add, id)) values[id] += num(add[id]);
+      if (bonus) {
+        if (own(bonus, id)) {
+          const done = applyBonuses(values[id], bonus[id]);
+          values[id] = done.value;
+          if (overlay.applied) overlay.applied[id] = done.lines;
+        }
+      } else if (own(add, id)) values[id] += num(add[id]);
     }
     return values;
   };
