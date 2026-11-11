@@ -119,6 +119,7 @@ const { restIdsOf } = require('./rests');
 const { healthLayout } = require('./core');
 const { partOn } = require('./parts');
 const { currenciesOf } = require('./currencies');
+const { checkItems } = require('./items');
 
 /** Where a sheet keeps its picks: starting with _, so no stat, formula or field can be called it. */
 const PICKS_KEY = '_choices';
@@ -260,9 +261,10 @@ const unlocksByLevelOf = (definition) => {
 
 /** A definition's `choices` checked, its problems added to `problems`. */
 const checkChoices = (definition, problems) => {
-  const lists = definition.choices;
-  if (lists === undefined) return;
-  if (!Array.isArray(lists)) { problems.push({ where: 'choices', message: 'Must be a list of choices' }); return; }
+  // Items (7e2) are checked here too, their features as a pick's, so they are checked with no lists at all.
+  if (definition.choices === undefined && definition.items === undefined) return;
+  if (definition.choices !== undefined && !Array.isArray(definition.choices)) { problems.push({ where: 'choices', message: 'Must be a list of choices' }); return; }
+  const lists = list(definition.choices);
   if (lists.length > LIMITS.lists) problems.push({ where: 'choices', message: `At most ${LIMITS.lists} lists` });
 
   const tables = new Set(isPlainObject(definition.lookups) ? Object.keys(definition.lookups) : []);
@@ -323,8 +325,15 @@ const checkChoices = (definition, problems) => {
     if (gaps.length) problems.push({ where: `${where}, table`, message: `Nothing on ${gaps.slice(0, 6).join(', ')}${gaps.length > 6 ? '…' : ''}` });
   };
 
-  const checkFeature = (f, where, levelled, ownList) => {
-    keys(f, FEATURE_KEYS, where, 'a feature');
+  /** A feature; an item's (7e2) counts while the item is worn, so it has no level, list or increase. */
+  const checkFeature = (feature, where, levelled, ownList, item = false) => {
+    keys(feature, FEATURE_KEYS, where, 'a feature');
+    if (item) {
+      for (const k of ['at', 'choice', 'choice_count', 'increase']) {
+        if (feature[k] !== undefined) problems.push({ where: `${where}, ${k}`, message: 'An item\'s feature counts while it is worn: no level, list or increase' });
+      }
+    }
+    const f = item ? { ...feature, at: undefined, choice: undefined, choice_count: undefined, increase: undefined } : feature;
     id(f.id, where, named, 'Another option or feature');
     text(f.label, `${where}, label`, LIMITS.label, { required: true });
     text(f.text, `${where}, text`, LIMITS.description);
@@ -480,6 +489,10 @@ const checkChoices = (definition, problems) => {
         checkFeature(f, fw, byLevel.has(c.id), c.id);
       });
     });
+  });
+  checkItems(definition, problems, {
+    id, text, keys, named, labelMost: LIMITS.label, descriptionMost: LIMITS.description,
+    checkFeature: (f, where) => checkFeature(f, where, false, null, true),
   });
 };
 

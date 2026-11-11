@@ -75,7 +75,7 @@ const LIMITS = {
   word: 40,
 };
 
-const SECTIONS = new Set(['levels', 'format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules', 'graph', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'resting', 'creation']);
+const SECTIONS = new Set(['levels', 'format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules', 'graph', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'items', 'resting', 'creation']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
