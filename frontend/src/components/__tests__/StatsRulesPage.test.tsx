@@ -331,7 +331,7 @@ describe('the "?"', () => {
     for (const k of keys) expect(seen.has(HINTS[k]), k).toBe(true);
   };
     open({ ...HEARTH, lookups: { mod: { bands: [{ upTo: 9, value: -1 }, { value: 1 }] } }, derived: [{ id: 'str_mod', formula: 'mod(@str)' }] });
-    for (const name of ['ID', 'LOWEST', 'HIGHEST', 'TIED TO', 'SAMPLE']) expect(screen.getAllByRole('columnheader', { name }).length, name).toBe(2);
+    for (const name of ['ID', 'LOWEST', 'HIGHEST', 'STOPS AT', 'TIED TO', 'SAMPLE']) expect(screen.getAllByRole('columnheader', { name }).length, name).toBe(2);
     expect(within(screen.getAllByRole('columnheader', { name: 'NAME' })[0]).queryByRole('note')).toBeNull();
     look();
     await userEvent.click(screen.getByRole('tab', { name: 'FORMULAS' }));
@@ -340,7 +340,8 @@ describe('the "?"', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'TABLES' }));
     for (const name of ['UP TO', 'GIVES']) expect(screen.getByRole('columnheader', { name }), name).toBeTruthy();
     look();
-    allSeen('rules', 10);
+    // 7e1b: STOPS AT, on a stat and under a formula's name.
+    allSeen('rules', 11);
   });
 });
 

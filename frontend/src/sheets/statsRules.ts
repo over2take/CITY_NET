@@ -13,10 +13,11 @@ import { idFor, healthLayout } from './setup';
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 
-export interface Stat { id: string; label: string; min?: number; max?: number; tie?: string }
+/** A stat; `stop` is BONUSES STOP AT (7e1, backend bonuses.js): the most its bonuses take it to. */
+export interface Stat { id: string; label: string; min?: number; max?: number; tie?: string; stop?: number }
 export interface StatGroup { id: string; label: string; stats: Stat[] }
 /** A formula, and the one it is worked out by instead while a house rule is on (sheets/houseRules.ts, 4j). */
-export interface Formula { id: string; label?: string; formula: string; alternative?: { rule: string; formula: string } }
+export interface Formula { id: string; label?: string; formula: string; alternative?: { rule: string; formula: string }; stop?: number }
 /** A condition's three parts (5b6a): IF `when` is not 0, THEN, ELSE (derived.js). */
 export type ConditionPart = 'when' | 'then' | 'else';
 export const CONDITION_PARTS: ConditionPart[] = ['when', 'then', 'else'];
@@ -89,14 +90,14 @@ export const withNewStat = (def: Definition, groupId: string, label = 'New stat'
  * A stat changed; its id stays. An empty lowest or highest (null) is left out; an empty tie means
  * none.
  */
-export const withStat = (def: Definition, statId: string, patch: { label?: string; min?: number | null; max?: number | null; tie?: string | null }): Definition =>
+export const withStat = (def: Definition, statId: string, patch: { label?: string; min?: number | null; max?: number | null; tie?: string | null; stop?: number | null }): Definition =>
   withList(def, 'stats', statGroups(def).map((g) => ({
     ...g,
     stats: g.stats.map((s) => {
       if (s.id !== statId) return s;
       const next: Stat = { ...s };
       if (patch.label !== undefined) next.label = patch.label;
-      for (const end of ['min', 'max'] as const) {
+      for (const end of ['min', 'max', 'stop'] as const) {
         if (patch[end] === null) delete next[end];
         else if (patch[end] !== undefined) next[end] = patch[end]!;
       }
@@ -166,12 +167,17 @@ export const withNewCondition = (def: Definition, label = 'New condition'): Defi
 export const withCondition = (def: Definition, id: string, patch: Partial<Record<ConditionPart, string>>): Definition =>
   withList(def, 'derived', formulaList(def).map((f) => (f.id === id && isCondition(f) ? { ...f, ...patch } : f)));
 
-/** A formula's name or text changed; its id stays. A blank name shows its id, so it isn't stored. */
-export const withFormula = (def: Definition, id: string, patch: { label?: string; formula?: string }): Definition =>
+/**
+ * A formula's name, text or BONUSES STOP AT (7e1) changed; its id stays. A blank name shows its id, so it isn't stored;
+ * a cap of null is none.
+ */
+export const withFormula = (def: Definition, id: string, patch: { label?: string; formula?: string; stop?: number | null }): Definition =>
   withList(def, 'derived', formulaList(def).map((f) => {
     if (f.id !== id) return f;
-    const next: Formula = { ...f, ...patch };
+    const { stop, ...rest } = patch;
+    const next: Formula = { ...f, ...rest };
     if (patch.label !== undefined && !patch.label.trim()) delete next.label;
+    if (stop === null) delete next.stop; else if (stop !== undefined) next.stop = stop;
     return next;
   }));
 

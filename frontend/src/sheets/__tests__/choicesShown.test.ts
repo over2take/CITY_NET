@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
+import { describeSources } from '../cyberwareEffects';
 
 import {
-  pickLabel, workedOn, listShown, spentAfterClick, featureDoes, choiceEffects, pickedOf, listsOnTheirOwn, underFeature, keptAside, maySpendRecovery, spentAtText, spendCount,
+  pickLabel, workedOn, listShown, spentAfterClick, featureDoes, choiceEffects, sourceOf, pickedOf, listsOnTheirOwn, underFeature, keptAside, maySpendRecovery, spentAtText, spendCount,
   WORKED_KEY, type ChoiceListShown,
 } from '../choicesShown';
 
@@ -174,6 +175,28 @@ describe('what the picks do, on the fields (7a3b2)', () => {
     expect(choiceEffects({ hp_max: 26, [WORKED_KEY]: { from } }, linked).fields.hp_max).toMatchObject({ base: 20, value: 26, delta: 6 });
     expect(choiceEffects({ hp_max: null, [WORKED_KEY]: { from } }, linked).fields).toEqual({});
     expect(choiceEffects({ [WORKED_KEY]: { from } }, linked).fields).toEqual({});
+  });
+
+  it('what a bonus really gave (7e1b): a cut one less, said with its cap; an AT LEAST what it lifted, said as a floor', () => {
+    const data = { int: 18, defense: 21, [WORKED_KEY]: { from: {
+      int: [{ feature: 'Sharp', amount: 1 }, { feature: 'Ring', amount: 2, got: 1, stop: 20 }],
+      defense: [{ feature: 'Ward', amount: 2, got: 0, stop: 21 }, { feature: 'Amulet', amount: 19, got: 0, least: true }],
+    } } };
+    const { fields } = choiceEffects(data, template);
+    expect(fields.int).toMatchObject({ base: 18, value: 20, delta: 2 });
+    expect(fields.int.sources).toEqual([{ name: 'Sharp', value: 1, kind: 'stat' }, { name: 'Ring (+2, stops at 20)', value: 1, kind: 'stat' }]);
+    expect(fields.defense).toMatchObject({ base: 21, value: 21, delta: 0 });
+    expect(fields.defense.sources.map((x) => x.name)).toEqual(['Ward (+2, stops at 21)', 'Amulet (already higher)']);
+    const lifted = choiceEffects({ int: 12, [WORKED_KEY]: { from: { int: [{ feature: 'Amulet', amount: 19, got: 7, least: true }] } } }, template).fields.int;
+    expect(lifted).toMatchObject({ base: 12, value: 19, delta: 7 });
+    expect(lifted.sources).toEqual([{ name: 'Amulet', value: 19, kind: 'statFloor' }]);
+  });
+
+  it('a bonus as the badge names it, word for word', () => {
+    expect(describeSources({ id: 'x', base: 18, value: 20, delta: 2, sources: [
+      sourceOf({ feature: 'Tough', amount: 1 }), sourceOf({ feature: 'Ring', amount: 2, got: 1, stop: 20 }), sourceOf({ feature: 'Amulet', amount: 19, got: 1, least: true }),
+      sourceOf({ feature: 'Curse', amount: -2 }), sourceOf({ feature: 'Belt', amount: 21, got: 0, least: true }), sourceOf({ feature: 'Odd', amount: 3, got: 2 }),
+    ] })).toBe('Tough +1, Ring (+2, stops at 20) +1, Amulet → 19, Curse -2, Belt (already higher) +0, Odd (+3) +2');
   });
 
   it('nothing for a field the sheet doesn\'t show, or a sheet with no picks', () => {

@@ -163,3 +163,38 @@ test('an INCREASE on a feature: points, the most on one, which stats, where they
   await page.getByRole('region', { name: 'Soldier option' }).getByRole('button', { name: /BOOST/ }).click();
   await expect(page.getByRole('group', { name: 'Feature Boost' }).getByLabel('The increase in words')).toHaveText('4 POINTS · AT MOST 1 ON ONE · FROM ABILITIES · STOPS AT 20 · OR A FEAT INSTEAD');
 });
+
+test('AT LEAST on a modifier, BONUSES STOP AT on a stat and a formula, saved as set (7e1b)', async ({ page, request }, info) => {
+  const name = `Capping Hearth ${info.retry + 1}`;
+  const token = await gmToken(request);
+  const { id } = await asGm(request, token, 'post', '/api/systems', { definition: { format: 1, name, core: { health: { model: 'pool' } },
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'con', label: 'Con' }] }],
+    derived: [{ id: 'defense', label: 'Defense', formula: '10 + @con' }],
+    choices: [{ id: 'feats', one: 'Feat', many: 'Feats', options: [{ id: 'amulet', label: 'Amulet', features: [{ id: 'vigor', label: 'Vigor', modifiers: [{ target: 'con', amount: '19' }] }] }] }] } });
+  await signInAsGm(page);
+  await openBuilder(page);
+  const card = page.getByTestId(/^system-/).filter({ hasText: name.toUpperCase() });
+  if (!(await card.getByRole('button', { name: 'OPEN', exact: true }).isVisible())) await card.getByRole('button').first().click();
+  await card.getByRole('button', { name: 'OPEN', exact: true }).click();
+
+  // STATS & RULES: Con's STOPS AT, and Defense's BONUSES STOP AT under its name.
+  await builderPage(page, 'STATS & RULES');
+  await page.getByTestId('stat-con').getByRole('spinbutton', { name: 'Con bonuses stop at' }).fill('20');
+  await page.getByRole('tab', { name: 'FORMULAS' }).click();
+  await page.getByTestId('formula-defense').getByRole('spinbutton', { name: 'BONUSES STOP AT' }).fill('25');
+
+  // CHOICES: the Amulet's modifier set AT LEAST.
+  await builderPage(page, 'CHOICES');
+  const amulet = page.getByRole('region', { name: 'Amulet option' });
+  await amulet.getByRole('button', { name: /VIGOR/ }).click();
+  const how = amulet.getByRole('group', { name: 'Modifier 1: how' });
+  await how.getByRole('button', { name: 'AT LEAST' }).click();
+  await expect(how.getByRole('button', { name: 'AT LEAST' })).toHaveAttribute('aria-pressed', 'true');
+
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  const saved = await asGm(request, token, 'get', `/api/systems/${id}`);
+  expect(saved.problems).toEqual([]);
+  expect(saved.draft.stats[0].stats[0]).toEqual({ id: 'con', label: 'Con', stop: 20 });
+  expect(saved.draft.derived[0]).toEqual({ id: 'defense', label: 'Defense', formula: '10 + @con', stop: 25 });
+  expect(saved.draft.choices[0].options[0].features[0].modifiers).toEqual([{ target: 'con', amount: '19', how: 'least' }]);
+});

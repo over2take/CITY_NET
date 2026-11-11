@@ -16,7 +16,11 @@ import { choiceLists, featureList } from './choices';
  * What a box holds: a modifier's amount, an option's requirement, a feature's uses; a roll's ADD and
  * AGAINST; a rest's amount; a formula of STATS & RULES (formula box 3).
  */
-export type FormulaKind = 'amount' | 'requires' | 'uses' | 'add' | 'against' | 'refill' | 'formula';
+/** `least` (7e1b): a modifier's amount set AT LEAST, read as an amount is, said as "at least". */
+export type FormulaKind = 'amount' | 'least' | 'requires' | 'uses' | 'add' | 'against' | 'refill' | 'formula';
+
+/** The kind the server reads a box as: an AT LEAST is an amount. */
+export const serverKind = (kind: FormulaKind): FormulaKind => (kind === 'least' ? 'amount' : kind);
 
 /** One name a formula reads, as the server worked it out for the sample. */
 export interface FormulaReads { id: string; label: string; value: number }
@@ -50,6 +54,8 @@ export const wordsOf = (kind: FormulaKind, text: string, reads: FormulaReads[] =
     const names = [...new Set(reads.length ? reads.map((r) => r.label) : [...t.matchAll(/@([a-z][a-z0-9_]*)/g)].map((x) => x[1]))];
     return names.length ? `worked out from ${names.join(', ')}` : 'a fixed number';
   };
+  // AT LEAST (7e1b): as a value is said, unsigned: at least 19, at least your Con.
+  if (kind === 'least') return /^-?\d+$/.test(t) ? `at least ${t}` : `at least ${wordsOf('formula', t, reads)}`;
   // A rest's amount, dice and all, said with names in place of the @ids: 1d8 + CON modifier.
   if (kind === 'refill') return t.replace(/@([a-z][a-z0-9_]*)/g, (_, id: string) => word(id, reads)).replace(/\s+/g, ' ');
   if (kind === 'against') {
@@ -90,6 +96,7 @@ export const sampleLine = (kind: FormulaKind, read: FormulaRead & { ok: true }):
   const said = kind === 'uses' ? `${v} use${v === 1 ? '' : 's'}`
     : kind === 'against' ? `target ${v}`
     : kind === 'refill' ? (read.most !== undefined ? `${v} to ${round(read.most)}` : String(v))
+    : kind === 'least' ? `at least ${v}`
     : signed(v);
   const sample = read.rolling ? `sample, rolling ${read.rolling}${names ? ',' : ''}` : 'sample';
   return names || read.rolling ? `${sample}${names ? ` ${names}` : ''}: ${said}` : said;
@@ -146,7 +153,7 @@ export const insertGroups = (def: Definition, kind: FormulaKind): InsertGroup[] 
   { title: 'THIS ROLL', items: kind === 'add' || kind === 'against' ? ROLL_TOKENS : [] },
   { title: 'LEVELS', items: levelTokens(def) },
   { title: 'STATS', items: allStats(def).map((s) => ({ token: `@${s.id}`, label: (s.label || s.id).toUpperCase() })) },
-  { title: 'FORMULAS', items: kind === 'amount' ? [] : formulaList(def).map((f) => ({ token: `@${f.id}`, label: (f.label || f.id).toUpperCase() })) },
+  { title: 'FORMULAS', items: kind === 'amount' || kind === 'least' ? [] : formulaList(def).map((f) => ({ token: `@${f.id}`, label: (f.label || f.id).toUpperCase() })) },
   { title: 'TABLES', items: kind === 'refill' ? [] : tableList(def).map((t) => ({ token: `${t.id}()`, label: 'A TABLE' })) },
   { title: 'CHOICES', items: hasTokens(def) },
   { title: 'WORKINGS', items: FUNCTIONS.filter((fn) => fn !== 'has').map((fn) => ({ token: `${fn}()`, label: WORKINGS[fn] ?? '' })) },
