@@ -59,6 +59,11 @@ describe('SLOTS', () => {
     expect(last().items!.list![0]).not.toHaveProperty('needs');
   });
 
+  it('the page says what slots are, at the top', () => {
+    open();
+    expect(screen.getByText(/^SLOTS limit how many items can work at once, like D&D's attunement/)).toBeTruthy();
+  });
+
   it('none: says what one is for', () => {
     open({ ...WORN, items: { list: [] } } as unknown as Definition);
     expect(screen.getByText(/None: every item counts carried or worn/)).toBeTruthy();
