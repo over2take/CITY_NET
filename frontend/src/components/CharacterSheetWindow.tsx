@@ -146,6 +146,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           onChoices={(action) => socket?.emit('choicesAction', action)}
           choicesRefused={refused}
           onLevel={(action) => socket?.emit('levelAction', action)}
+          onItem={(action) => socket?.emit('itemAction', action)}
           onRecoverySpend={(pool, count) => socket?.emit('recoverySpend', { pool, count })}
           onRestTake={(rest) => socket?.emit('restTake', { rest })}
           recoveryOpen={recoveryOpen}

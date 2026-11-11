@@ -3,7 +3,7 @@ import { createRequire } from 'module';
 import { describeSources } from '../cyberwareEffects';
 
 import {
-  pickLabel, workedOn, listShown, spentAfterClick, featureDoes, choiceEffects, sourceOf, pickedOf, listsOnTheirOwn, underFeature, keptAside, maySpendRecovery, spentAtText, spendCount,
+  pickLabel, workedOn, listShown, spentAfterClick, featureDoes, choiceEffects, effectsWorked, sourceOf, pickedOf, listsOnTheirOwn, underFeature, keptAside, maySpendRecovery, spentAtText, spendCount,
   WORKED_KEY, type ChoiceListShown,
 } from '../choicesShown';
 
@@ -197,6 +197,14 @@ describe('what the picks do, on the fields (7a3b2)', () => {
       sourceOf({ feature: 'Tough', amount: 1 }), sourceOf({ feature: 'Ring', amount: 2, got: 1, stop: 20 }), sourceOf({ feature: 'Amulet', amount: 19, got: 1, least: true }),
       sourceOf({ feature: 'Curse', amount: -2 }), sourceOf({ feature: 'Belt', amount: 21, got: 0, least: true }), sourceOf({ feature: 'Odd', amount: 3, got: 2 }),
     ] })).toBe('Tough +1, Ring (+2, stops at 20) +1, Amulet → 19, Curse -2, Belt (already higher) +0, Odd (+3) +2');
+  });
+
+  it('the server\'s bonuses for a system with lists, or with items and no lists (7e3b); the built-in games\' own', () => {
+    const t = template as import('../types').SheetTemplate;
+    expect(effectsWorked({ ...t, choices: lists })).toBe(true);
+    expect(effectsWorked(t)).toBe(false);
+    expect(effectsWorked({ ...t, choices: [] })).toBe(false);
+    expect(effectsWorked({ ...t, items: { slots: [], list: [] } })).toBe(true);
   });
 
   it('nothing for a field the sheet doesn\'t show, or a sheet with no picks', () => {

@@ -70,6 +70,8 @@ export interface CustomRender {
   /** The guided new character (7c2): the steps to walk through, null while it is off. */
   creation?: import('./newCharacterFlow').CreationShown | null;
   levels?: import('./xpMeter').LevelsShown | null;
+  /** Its items and slots (7e3b), null where it has none. */
+  items?: import('./gearItems').ItemsShown | null;
 }
 
 /** Fired on window when a custom template has been loaded, so the app can redraw. */
@@ -148,6 +150,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.resting ? { resting: render.resting } : {}),
     ...(render.creation ? { creation: render.creation } : {}),
     ...(render.levels ? { levels: render.levels } : {}),
+    ...(render.items ? { items: render.items } : {}),
     ...tiers,
     ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived, rolls), ...tiers } } : {}),
   };

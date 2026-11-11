@@ -29,7 +29,7 @@ import { XpMeterBar } from './XpMeterBar';
 import { LevelUpReady } from './LevelUpReady';
 import { RestSection } from './RestSection';
 import { withTempHp } from '../sheets/tempHp';
-import { choiceEffects, type ChoicesAction } from '../sheets/choicesShown';
+import { choiceEffects, effectsWorked, type ChoicesAction } from '../sheets/choicesShown';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
   return (
@@ -132,6 +132,8 @@ interface SheetRendererProps {
   onRestTake?: (rest: string) => void;
   /** Opens LEVEL_UP.EXE (7d3a): the player's own sheet, in the game, offers it. */
   onLevelUp?: () => void;
+  /** WEAR and ATTUNE a custom system's items on the GEAR tab (7e3b): asks the server (an itemAction). */
+  onItem?: (action: import('../sheets/gearItems').ItemAction) => void;
 }
 
 /** Whether the viewer is the GM, for FieldInput's GM-only lock, without threading a prop
@@ -1786,7 +1788,7 @@ function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection 
   return fields.length === 0 ? null : { ...section, fields };
 }
 
-export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake }: SheetRendererProps) {
+export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   // The tab it opens on: the one the template names (a built system's starter opens on STATS,
   // with CHARACTER first in the row), else the first.
@@ -1795,8 +1797,8 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
   // What the character's chrome is doing to their numbers. Computed once for the whole
   // sheet rather than per field: it reads the cyberware list, which every stat and skill
   // would otherwise re-read and re-scan for itself.
-  // A custom system's picks show on its fields as CWN's chrome does (7a3b2); the built-in games as before.
-  const effects = useMemo(() => (template.choices?.length ? choiceEffects(data as Record<string, unknown>, template) : sheetEffects(data, template)), [data, template]);
+  // A custom system's picks show on its fields as CWN's chrome does (7a3b2), and its items' (7e3b); the built-in games as before.
+  const effects = useMemo(() => (effectsWorked(template) ? choiceEffects(data as Record<string, unknown>, template) : sheetEffects(data, template)), [data, template]);
   // How many carried weapon rows this template declares. Counted rather than imported, so
   // the stash cannot disagree with the sheet it is moving weapons into.
   const weaponRows = useMemo(
@@ -2010,7 +2012,8 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
                   {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} />}
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
-                  {section.layout === 'inventory' && <InventorySection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} rowActions={[consumeAction, loadAction].filter(Boolean) as RowAction[]} />}
+                  {section.layout === 'inventory' && <InventorySection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} rowActions={[consumeAction, loadAction].filter(Boolean) as RowAction[]}
+                    itemsShown={template.items} gm={gm} onItem={onItem} onChoices={onChoices} refused={choicesRefused} />}
                   {section.layout === 'weapon_stash' && <WeaponStashSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} rows={weaponRows} />}
                   {section.layout === 'encumbrance' && <EncumbranceSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} enforced={encumbranceEnforced} />}
                   {section.layout === 'cyberware' && <CyberwareSection section={section} template={template} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}

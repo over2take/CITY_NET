@@ -122,7 +122,7 @@ const { restIdsOf } = require('./rests');
 const { healthLayout } = require('./core');
 const { partOn } = require('./parts');
 const { currenciesOf } = require('./currencies');
-const { checkItems, itemsOf, workingFeatures, itemsOwned, itemsShown } = require('./items');
+const { checkItems, itemsOf, slotsOf, workingFeatures, itemsOwned, itemsShown } = require('./items');
 
 /** Where a sheet keeps its picks: starting with _, so no stat, formula or field can be called it. */
 const PICKS_KEY = '_choices';
@@ -975,17 +975,41 @@ const increaseShown = (inc, names) => ({
 });
 
 /**
- * The lists as the sheet draws them (7a3a): names, how many and how, each option's words and what
- * it needs in words, what it gives (7c4e), and each feature's words, level and what it does, named.
- * Never a formula.
+ * How the sheet reads a system's features (7a3a; shared with its items, 7e3b): each feature's words, its level where
+ * its list unlocks by level, and what it does, named. Never a formula.
  */
-const choicesShown = (definition) => {
+const featuresShownBy = (definition) => {
   const names = namesOf(definition);
   const rolls = new Map(list(definition.rolls).filter((r) => typeof r.id === 'string').map((r) => [r.id, r]));
   const restName = new Map(list(Object.entries(isPlainObject(definition.rests) ? definition.rests : {}).map(([id, r]) => ({ id, ...r }))).map((r) => [r.id, r.name]));
   const STANDARD_REST = { short_rest: 'Short rest', long_rest: 'Long rest', end_of_scene: 'End of scene', end_of_session: 'End of session' };
   const lists = choicesOf(definition);
+  return (features, { levelled = false } = {}) => list(features).filter((f) => isPlainObject(f) && typeof f.id === 'string').map((f) => ({
+    id: f.id, label: f.label || f.id,
+    ...(typeof f.text === 'string' && f.text.trim() ? { text: f.text } : {}),
+    ...(levelled ? { at: Number.isInteger(f.at) && f.at >= 1 ? f.at : 1 } : {}),
+    ...(list(f.modifiers).length ? { modifies: [...new Set(list(f.modifiers).map((m) => String(names.get(m.target) || m.target)))] } : {}),
+    ...(isPlainObject(f.uses) ? { uses: { refill: typeof f.uses.refill === 'string' ? (restName.get(f.uses.refill) || STANDARD_REST[f.uses.refill] || f.uses.refill) : null } } : {}),
+    ...(Array.isArray(f.rolls) && f.rolls.length ? { rolls: f.rolls.map((id) => (rolls.get(id) ? rolls.get(id).label || id : id)) } : {}),
+    ...(list(f.changes).length ? { changes: list(f.changes).map((ch) => {
+      const roll = rolls.get(ch.roll);
+      const change = roll ? list(roll.changes).find((x) => x.id === ch.change) : null;
+      return `${(change && change.label) || ch.change} on ${(roll && roll.label) || ch.roll}`;
+    }) } : {}),
+    ...(typeof f.choice === 'string' && lists.some((l) => l.id === f.choice) ? { opens: f.choice, opensCount: openCountOf(f) } : {}),
+    // An INCREASE (7d6b): its points, the most on one, the stats it may raise by name, and where they stop.
+    ...(increaseOf(definition, f) ? { increase: increaseShown(increaseOf(definition, f), names) } : {}),
+  }));
+};
+
+/**
+ * The lists as the sheet draws them (7a3a): names, how many and how, each option's words and what
+ * it needs in words, what it gives (7c4e), and each feature as featuresShownBy reads it.
+ */
+const choicesShown = (definition) => {
+  const lists = choicesOf(definition);
   const byLevel = unlocksByLevelOf(definition);
+  const featuresShown = featuresShownBy(definition);
   return lists.map((c) => ({
     id: c.id, one: c.one, many: c.many,
     picks: c.picks === 'any' ? 'any' : Number.isInteger(c.picks) ? c.picks : 1,
@@ -998,29 +1022,34 @@ const choicesShown = (definition) => {
       ...(typeof o.description === 'string' && o.description.trim() ? { description: o.description } : {}),
       ...(typeof o.requires === 'string' && o.requires.trim() ? { needs: needsText(definition, o.requires) } : {}),
       ...(giftsShown(definition, o) ? { gives: giftsShown(definition, o) } : {}),
-      features: list(o.features).filter((f) => typeof f.id === 'string').map((f) => ({
-        id: f.id, label: f.label || f.id,
-        ...(typeof f.text === 'string' && f.text.trim() ? { text: f.text } : {}),
-        ...(byLevel.has(c.id) ? { at: Number.isInteger(f.at) && f.at >= 1 ? f.at : 1 } : {}),
-        ...(list(f.modifiers).length ? { modifies: [...new Set(list(f.modifiers).map((m) => String(names.get(m.target) || m.target)))] } : {}),
-        ...(isPlainObject(f.uses) ? { uses: { refill: typeof f.uses.refill === 'string' ? (restName.get(f.uses.refill) || STANDARD_REST[f.uses.refill] || f.uses.refill) : null } } : {}),
-        ...(Array.isArray(f.rolls) && f.rolls.length ? { rolls: f.rolls.map((id) => (rolls.get(id) ? rolls.get(id).label || id : id)) } : {}),
-        ...(list(f.changes).length ? { changes: list(f.changes).map((ch) => {
-          const roll = rolls.get(ch.roll);
-          const change = roll ? list(roll.changes).find((x) => x.id === ch.change) : null;
-          return `${(change && change.label) || ch.change} on ${(roll && roll.label) || ch.roll}`;
-        }) } : {}),
-        ...(typeof f.choice === 'string' && lists.some((l) => l.id === f.choice) ? { opens: f.choice, opensCount: openCountOf(f) } : {}),
-        // An INCREASE (7d6b): its points, the most on one, the stats it may raise by name, and where they stop.
-        ...(increaseOf(definition, f) ? { increase: increaseShown(increaseOf(definition, f), names) } : {}),
-      })),
+      features: featuresShown(o.features, { levelled: byLevel.has(c.id) }),
     })),
   }));
+};
+
+/**
+ * A system's items as the sheet draws them (7e3b): its slots, each by name and how many a character has, and each item's
+ * words, what it needs, and its features read as a pick's are. Null for a system without items or slots.
+ */
+const itemsRenderedOf = (definition) => {
+  const slots = slotsOf(definition);
+  const items = itemsOf(definition);
+  if (!slots.length && !items.length) return null;
+  const featuresShown = featuresShownBy(definition);
+  return {
+    slots: slots.map((s) => ({ id: s.id, label: s.label || s.id, count: Number.isInteger(s.count) ? s.count : 0 })),
+    list: items.map((i) => ({
+      id: i.id, label: i.label || i.id,
+      ...(typeof i.description === 'string' && i.description.trim() ? { description: i.description } : {}),
+      needs: i.needs || 'worn',
+      features: featuresShown(i.features),
+    })),
+  };
 };
 
 module.exports = {
   LIMITS, PICKED, PLAYERS, PICKS_KEY, USES_KEY, INCREASES_KEY, increaseOf, spentOf, WORKED_KEY, ROLLED_KEY, rolledOn, rolledKey, rolledOf, checkChoices, checkHasNames, ownableOf, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
   tableOf, rollRangeOf, playersOf,
-  capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, worksOutPicks, choicesShown, tokenMaxFieldOf,
+  capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, worksOutPicks, choicesShown, itemsRenderedOf, tokenMaxFieldOf,
   MAIN_MONEY, moneyCurrencies, giftItemsOf, giftMoneyOf, openCountOf, targetsOf,
 };

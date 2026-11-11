@@ -12,7 +12,7 @@ import { drain, until } from './helpers/until.js';
 
 const require_ = createRequire(import.meta.url);
 const { itemAction, carriedNames, slotUsed, slotCount, workingItems, itemsShown, WORN_KEY, SLOTS_KEY } = require_('../systemBuilder/items');
-const { effectiveData, overlayOf, workedOf, usesOf } = require_('../systemBuilder/choices');
+const { effectiveData, overlayOf, workedOf, usesOf, itemsRenderedOf, choicesShown } = require_('../systemBuilder/choices');
 const { pickAction } = require_('../systemBuilder/picking');
 const { compileSystem } = require_('../systemBuilder/derived');
 const runtime = require_('../systemBuilder/runtime');
@@ -167,6 +167,37 @@ describe('what a working item does', () => {
     expect(itemsShown(WORN, { inventory: gear(['Boots']) }).items).toEqual([{ id: 'boots', needs: 'worn' }]);
     expect(workedOf(WORN, tuned)).toMatchObject({ items: shown.items, slots: shown.slots });
     expect(workedOf({ ...WORN, items: undefined }, tuned)).not.toHaveProperty('items');
+  });
+});
+
+describe('the render copy (7e3b)', () => {
+  it('each slot by name and count, each item\'s words, what it needs and its features in words; null without', () => {
+    const shown = itemsRenderedOf({ ...WORN, items: { ...WORN.items, list: [...WORN.items.list, { id: 'pin', description: '  ', features: [{ label: 'no id' }, { id: 'f' }] }] } });
+    expect(shown.slots).toEqual([{ id: 'attuned', label: 'ATTUNED', count: 1 }]);
+    expect(shown.list.map((i) => [i.id, i.label, i.needs])).toEqual([
+      ['ring', 'Ring of Constitution', 'attuned'], ['cloak', 'Cloak', 'attuned'], ['boots', 'Boots', 'worn'], ['lucky_coin', 'Lucky Coin', 'carried'], ['pin', 'pin', 'worn'],
+    ]);
+    // Read as a pick's features are, by the same hand: what it changes by name, its uses and when they come back.
+    expect(shown.list[0].features).toEqual([{ id: 'hardy', label: 'Hardy', modifies: ['Con', 'HP MAX'] }]);
+    expect(shown.list[2].features).toEqual([{ id: 'quiet', label: 'Quiet', uses: { refill: 'Long rest' } }]);
+    // Never a level, as only a levelled list's are.
+    expect(shown.list[0].features[0]).not.toHaveProperty('at');
+    expect(shown.list[4]).toEqual({ id: 'pin', label: 'pin', needs: 'worn', features: [{ id: 'f', label: 'f' }] });
+    expect(itemsRenderedOf({ ...WORN, items: { slots: [{ id: 'bond', label: 'BONDED' }, { id: 'tied', count: 2 }] } })).toEqual({ slots: [{ id: 'bond', label: 'BONDED', count: 0 }, { id: 'tied', label: 'tied', count: 2 }], list: [] });
+    expect(itemsRenderedOf({ ...WORN, items: { list: [{ id: 'x', label: 'X', description: 'Shiny.' }] } })).toEqual({ slots: [], list: [{ id: 'x', label: 'X', description: 'Shiny.', needs: 'worn', features: [] }] });
+    expect(itemsRenderedOf({ ...WORN, items: undefined })).toBeNull();
+    expect(itemsRenderedOf({ ...WORN, items: {} })).toBeNull();
+    // On the copy the sheet loads.
+    expect(runtime.renderOf('sys_x', WORN).items).toEqual(itemsRenderedOf(WORN));
+    expect(runtime.renderOf('sys_x', { ...WORN, items: undefined }).items).toBeNull();
+  });
+
+  it('a pick\'s features read as they did, the level where its list unlocks by level', () => {
+    const def = { ...WORN, choices: [{ id: 'class', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter', features: [{ id: 'tough', label: 'Tough', at: 3, text: 'Hard.', modifiers: [{ target: 'con', amount: '1' }] }, { id: 'grit' }] }] },
+      { id: 'feat', one: 'Feat', many: 'Feats', options: [{ id: 'alert', features: [{ id: 'quick', label: 'Quick', at: 2 }] }] }] };
+    const [cls, feat] = choicesShown(def);
+    expect(cls.options[0].features).toEqual([{ id: 'tough', label: 'Tough', text: 'Hard.', at: 3, modifies: ['Con'] }, { id: 'grit', label: 'grit', at: 1 }]);
+    expect(feat.options[0].features).toEqual([{ id: 'quick', label: 'Quick' }]);
   });
 });
 
