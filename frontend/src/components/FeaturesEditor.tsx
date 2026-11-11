@@ -8,6 +8,7 @@ import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
 import { ToggleSwitch } from './ToggleSwitch';
 import { useFormulaBox } from '../hooks/useFormulaBox';
+import { itemFeatures, withNewItemFeature, withItemFeature, withoutItemFeature, LIMITS as ITEM_LIMITS, type Item } from '../sheets/items';
 
 // An option's features on the CHOICES page (7a2b2; approved mockup docs/mockups/builder-choices.html,
 // 2026-10-27): what a pick gives, grouped by the level each unlocks at in a levelled list. Each row
@@ -17,6 +18,9 @@ import { useFormulaBox } from '../hooks/useFormulaBox';
 // the player spreads on stats as it unlocks. A modifier ADDs, stopping where it says (STOPS AT), or (7e1) sets AT LEAST
 // that much. What it reads and writes is
 // sheets/choices.ts; every change goes through the builder's `edit`.
+//
+// An item's features (7e2b, ItemFeaturesEditor) are the same form, on ITEMS: never at a level, opening a list or giving
+// an increase, as an item's feature counts while it is worn (backend items.js). Where the features live is a FeaturePlace.
 
 interface Props {
   definition: Definition;
@@ -50,6 +54,20 @@ const Tag = ({ kind }: { kind: FeatureKind }) => (
 );
 
 type Modifier = NonNullable<Feature['modifiers']>[number];
+
+/** Where a feature lives, and how it is changed there: an option's on CHOICES, or an item's on ITEMS (7e2b). */
+interface FeaturePlace {
+  /** Its features unlock by level: a levelled list's, one everyone has, or one those open. */
+  levelled: boolean;
+  /** An item's: no level, list or increase. */
+  item: boolean;
+  /** The list it is in, which it can't open: none for an item. */
+  ownList: string | null;
+  /** How many features it may have. */
+  most: number;
+  patch: (def: Definition, featureId: string, patch: FeaturePatch) => Definition;
+  remove: (def: Definition, featureId: string) => Definition;
+}
 
 /** One modifier: what it changes, by how much (a formula box), and × in red; the box's words and help under the row. */
 function ModifierRow({ definition, api, i, m, targets, onChange, onRemove }: {
@@ -97,9 +115,9 @@ function ModifierRow({ definition, api, i, m, targets, onChange, onRemove }: {
   );
 }
 
-function FeatureForm({ definition, edit, list, option, feature, api }: Props & { feature: Feature }) {
+function FeatureForm({ definition, edit, place, feature, api }: { definition: Definition; edit: (next: Definition) => void; place: FeaturePlace; feature: Feature; api?: Props['api'] }) {
   const [asking, setAsking] = useState(false);
-  const set = (patch: FeaturePatch) => edit(withFeature(definition, list.id, option.id, feature.id, patch));
+  const set = (patch: FeaturePatch) => edit(place.patch(definition, feature.id, patch));
   // The level is set when the box is left (or on Enter), not as it is typed: a new level moves the
   // feature to its group, and typing 12 would otherwise move it to 1 and lose the box after the 1.
   const [levelText, setLevelText] = useState(String(levelOf(feature)));
@@ -112,7 +130,7 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
   const rolls = rollChoices(definition);
   const withChanges = rolls.filter((r) => r.changes.length);
   // A list everyone has is never picked, so no feature opens it.
-  const otherLists = choiceLists(definition).filter((c) => c.id !== list.id && pickedOf(c) !== 'everyone');
+  const otherLists = choiceLists(definition).filter((c) => c.id !== place.ownList && pickedOf(c) !== 'everyone');
   const opened = otherLists.find((c) => c.id === feature.choice);
   // OR A FEAT INSTEAD (7d6c): the list an increase offers in place of its points.
   const instead = otherLists.find((c) => c.id === feature.increase?.instead);
@@ -136,7 +154,7 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
         <FieldName beside htmlFor={id('name')} hint={HINTS['choices.featureName']} style={small}>NAME</FieldName>
         <input id={id('name')} type="text" maxLength={LIMITS.label} value={feature.label} style={input}
           aria-invalid={!feature.label.trim() ? true : undefined} onChange={(e) => set({ label: e.target.value })} />
-        {unlocksByLevel(definition, list) && <>
+        {place.levelled && <>
           <FieldName beside htmlFor={id('at')} hint={HINTS['choices.at']} style={small}>AT LEVEL</FieldName>
           <input id={id('at')} type="number" min={1} max={LIMITS.level} step={1} value={levelText} style={{ ...input, width: 64 }}
             onChange={(e) => setLevelText(e.target.value)} onBlur={commitLevel} onKeyDown={(e) => { if (e.key === 'Enter') commitLevel(); }} />
@@ -157,6 +175,8 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
           {!targets.length && <span style={{ ...why, fontSize: 11 }}>No stats or formulas yet to change: make them on STATS &amp; RULES.</span>}
         </div>
 
+        {/* An item's feature counts while it is worn (7e2b): no increase, and below, no list. */}
+        {!place.item && <>
         <FieldName beside hint={HINTS['choices.increase']} style={small}>INCREASE</FieldName>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
           <ToggleSwitch label="RAISES STATS" on={!!inc} disabled={!inc && !groups.length} style={{ alignSelf: 'start' }}
@@ -197,6 +217,7 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
               </span>
             )}
           </span>
+        </>}
         </>}
 
         <FieldName beside hint={HINTS['choices.uses']} style={small}>USES</FieldName>
@@ -254,6 +275,7 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
           {!withChanges.length && <span style={{ ...why, fontSize: 11 }}>None of the system&apos;s rolls has a change to pick yet, like ADVANTAGE: add one in a roll&apos;s step 5.</span>}
         </div>
 
+        {!place.item && <>
         <FieldName beside htmlFor={id('choice')} hint={HINTS['choices.choice']} style={small}>OPENS A LIST</FieldName>
         <select id={id('choice')} value={feature.choice ?? ''} style={{ ...input, justifySelf: 'start' }} onChange={(e) => set({ choice: e.target.value || null })}>
           <option value="">NOTHING</option>
@@ -271,12 +293,13 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
             )}
           </span>
         </>}
+        </>}
       </div>
       <div style={{ ...row, justifyContent: 'flex-end' }}>
         {asking
           ? <span role="group" aria-label={`Delete ${name}`} style={row}>
               <span style={{ ...why, color: 'var(--danger)' }}>Delete {name}?</span>
-              <button type="button" className="utility-btn danger-btn" style={btn} onClick={() => edit(withoutFeature(definition, list.id, option.id, feature.id))}>DELETE</button>
+              <button type="button" className="utility-btn danger-btn" style={btn} onClick={() => edit(place.remove(definition, feature.id))}>DELETE</button>
               <button type="button" className="utility-btn" style={btn} onClick={() => setAsking(false)}>KEEP</button>
             </span>
           : <button type="button" className="utility-btn danger-btn" style={btn} onClick={() => setAsking(true)}>DELETE FEATURE</button>}
@@ -286,12 +309,44 @@ function FeatureForm({ definition, edit, list, option, feature, api }: Props & {
 }
 
 export function FeaturesEditor({ definition, edit, list, option, api }: Props) {
+  const levelled = unlocksByLevel(definition, list);
   const features = featureList(option);
+  const place: FeaturePlace = {
+    levelled, item: false, ownList: list.id, most: LIMITS.features,
+    patch: (def, featureId, patch) => withFeature(def, list.id, option.id, featureId, patch),
+    remove: (def, featureId) => withoutFeature(def, list.id, option.id, featureId),
+  };
+  return (
+    <FeaturesPanel definition={definition} edit={edit} features={features} place={place} api={api}
+      onAdd={() => withNewFeature(definition, list.id, option.id, levelled && features.length ? Math.max(...features.map(levelOf)) : undefined)}
+      none="None yet. A feature is what this pick gives a character: a bonus, uses a rest refills, a roll, another list to pick from, or words for the table." />
+  );
+}
+
+/** An item's features on ITEMS (7e2b): the same form, never at a level, opening a list or giving an increase. */
+export function ItemFeaturesEditor({ definition, edit, item, api }: { definition: Definition; edit: (next: Definition) => void; item: Item; api?: Props['api'] }) {
+  const place: FeaturePlace = {
+    levelled: false, item: true, ownList: null, most: ITEM_LIMITS.features,
+    patch: (def, featureId, patch) => withItemFeature(def, item.id, featureId, patch),
+    remove: (def, featureId) => withoutItemFeature(def, item.id, featureId),
+  };
+  return (
+    <FeaturesPanel definition={definition} edit={edit} features={itemFeatures(item)} place={place} api={api}
+      onAdd={() => withNewItemFeature(definition, item.id)}
+      none="None yet. A feature is what the item does while it counts: a bonus, uses a rest refills, a roll, or words for the table." />
+  );
+}
+
+/** The features of one place, grouped by the level each unlocks at where they do, + FEATURE, and the open one's form. */
+function FeaturesPanel({ definition, edit, features, place, api, onAdd, none }: {
+  definition: Definition; edit: (next: Definition) => void; features: Feature[]; place: FeaturePlace; api?: Props['api'];
+  onAdd: () => { definition: Definition; id: string } | null; none: string;
+}) {
   const [open, setOpen] = useState<string | null>(null);
   // In a list with levels (levelled, everyone's, or opened from one of those), by the level each unlocks at; otherwise all together.
-  const levels = unlocksByLevel(definition, list) ? [...new Set(features.map(levelOf))].sort((a, b) => a - b) : [null];
+  const levels = place.levelled ? [...new Set(features.map(levelOf))].sort((a, b) => a - b) : [null];
   const add = () => {
-    const made = withNewFeature(definition, list.id, option.id, unlocksByLevel(definition, list) && features.length ? Math.max(...features.map(levelOf)) : undefined);
+    const made = onAdd();
     if (!made) return;
     edit(made.definition);
     setOpen(made.id);
@@ -299,10 +354,10 @@ export function FeaturesEditor({ definition, edit, list, option, api }: Props) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ ...row, justifyContent: 'space-between' }}>
-        <FieldName hint={HINTS['choices.features']} style={small}>FEATURES · {features.length} OF {LIMITS.features}</FieldName>
-        <button type="button" className="utility-btn" style={btn} disabled={features.length >= LIMITS.features} onClick={add}>+ FEATURE</button>
+        <FieldName hint={HINTS['choices.features']} style={small}>FEATURES · {features.length} OF {place.most}</FieldName>
+        <button type="button" className="utility-btn" style={btn} disabled={features.length >= place.most} onClick={add}>+ FEATURE</button>
       </div>
-      {!features.length && <p style={{ ...why, fontSize: 11 }}>None yet. A feature is what this pick gives a character: a bonus, uses a rest refills, a roll, another list to pick from, or words for the table.</p>}
+      {!features.length && <p style={{ ...why, fontSize: 11 }}>{none}</p>}
       {features.length > 0 && levels.map((lv) => (
         <section key={lv ?? 'all'} aria-label={lv === null ? 'Features' : `Level ${lv}`} style={{ display: 'flex', flexDirection: 'column', gap: 4, borderLeft: '2px solid var(--dark-green)', paddingLeft: 8 }}>
           {lv !== null && <span style={small}>LEVEL {lv}</span>}
@@ -314,7 +369,7 @@ export function FeaturesEditor({ definition, edit, list, option, api }: Props) {
                 <span>{open === f.id ? '▾' : '▸'} {(f.label.trim() || 'NEEDS A NAME').toUpperCase()}</span>
                 {kindsOf(f).map((k) => <Tag key={k} kind={k} />)}
               </button>
-              {open === f.id && <FeatureForm key={`form:${f.id}`} definition={definition} edit={edit} list={list} option={option} feature={f} api={api} />}
+              {open === f.id && <FeatureForm key={`form:${f.id}`} definition={definition} edit={edit} place={place} feature={f} api={api} />}
             </React.Fragment>
           ))}
         </section>

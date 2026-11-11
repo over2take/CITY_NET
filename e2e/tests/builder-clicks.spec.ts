@@ -99,7 +99,7 @@ test('every control in the builder takes a click, on every page', async ({ page 
   // ROLLS is swept: + MODIFIER gives the open condition ALL ROLLS -1.
   await builderPage(page, 'CONDITIONS');
   await page.getByRole('button', { name: '+ MODIFIER' }).click();
-  for (const p of ['SETUP', 'WORDS', 'PARTS', 'STATS & RULES', 'CHOICES', 'CHARACTER SHEET', 'NEW CHARACTER', 'LEVELS', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
+  for (const p of ['SETUP', 'WORDS', 'PARTS', 'STATS & RULES', 'CHOICES', 'ITEMS', 'CHARACTER SHEET', 'NEW CHARACTER', 'LEVELS', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
     await builderPage(page, p);
     if (p === 'CHOICES') {
       // A list picking several, with an option, so every box on the page is there (7a2b1); a second
@@ -133,6 +133,19 @@ test('every control in the builder takes a click, on every page', async ({ page 
       // The modifier's formula box with its help open, so SHAPE and INSERT are there (formula box 1).
       await feature.getByRole('button', { name: 'Help writing Modifier 1: by' }).click();
       await expect(feature.getByRole('group', { name: 'Help writing Modifier 1: by' })).toBeVisible();
+    }
+    if (p === 'ITEMS') {
+      // A slot, and an item open with a feature giving uses and a modifier, so every box of the page is there (7e2b).
+      await page.getByRole('button', { name: '+ SLOT' }).click();
+      await expect(page.getByTestId('slot-new_slot')).toBeVisible();
+      await page.getByRole('button', { name: '+ ITEM' }).click();
+      const item = page.getByRole('region', { name: 'NEW ITEM item' });
+      await item.getByRole('combobox', { name: 'ITS FEATURES NEED' }).selectOption('new_slot');
+      await item.getByRole('button', { name: '+ FEATURE' }).click();
+      const feature = item.getByRole('group', { name: 'Feature NEW FEATURE' });
+      await feature.getByRole('switch', { name: /HAS USES/ }).click();
+      await feature.getByRole('button', { name: '+ MODIFIER' }).click();
+      await expect(feature.getByRole('spinbutton', { name: 'Modifier 1: stops at' })).toBeVisible();
     }
     if (p === 'STATS & RULES') {
       // A group with a stat, so its table and column heads are there.

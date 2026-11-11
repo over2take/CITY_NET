@@ -80,8 +80,12 @@ const withLists = (def: Definition, lists: ChoiceList[]): Definition => {
  * Ids a new option may not take: every option's and feature's (they share one set, as has() will
  * read them), and any whose level name (@x_level) a stat or formula already has.
  */
-const takenIds = (def: Definition): string[] => [
+/** Every id a new option, feature or item (7e2b) must not take: they share one set of names, as has() reads them. */
+export const takenIds = (def: Definition): string[] => [
   ...choiceLists(def).flatMap((c) => c.options.flatMap((o) => [o.id, ...(o.features ?? []).filter(isObject).map((f) => f.id).filter((id): id is string => typeof id === 'string')])),
+  // Items' ids and their features' (backend items.js).
+  ...(isObject(def.items) && Array.isArray((def.items as Obj).list) ? ((def.items as Obj).list as unknown[]) : []).filter(isObject)
+    .flatMap((i) => [i.id, ...(Array.isArray(i.features) ? i.features : []).filter(isObject).map((f) => f.id)]).filter((id): id is string => typeof id === 'string'),
   ...[...allStats(def).map((s) => s.id), ...formulaList(def).map((f) => f.id)].filter((id) => typeof id === 'string' && id.endsWith('_level')).map((id) => id.slice(0, -'_level'.length)),
 ];
 
@@ -323,11 +327,13 @@ export const withNewFeature = (def: Definition, listId: string, optionId: string
  * and stores no group for all stats and no cap for none.
  */
 export const withFeature = (def: Definition, listId: string, optionId: string, featureId: string, patch: FeaturePatch): Definition =>
-  withFeatures(def, listId, optionId, (fs, c) => fs.map((f) => {
-    if (f.id !== featureId) return f;
+  withFeatures(def, listId, optionId, (fs, c) => fs.map((f) => (f.id !== featureId ? f : keptFeature(f, patch, unlocksByLevel(def, c)))));
+
+/** A feature with a change, kept as withFeature says; `levelled` where it unlocks by level. An item's (7e2b) never does. */
+export const keptFeature = (f: Feature, patch: FeaturePatch, levelled: boolean): Feature => {
     const next = { ...f, ...patch } as Feature & { uses?: Uses | null; choice?: string | null; increase?: Increase | null };
     if (typeof next.text === 'string' && !next.text.trim()) delete next.text;
-    if (!unlocksByLevel(def, c) || !(Number.isInteger(next.at) && (next.at as number) > 1)) delete next.at;
+    if (!levelled || !(Number.isInteger(next.at) && (next.at as number) > 1)) delete next.at;
     else next.at = Math.min(next.at as number, LIMITS.level);
     for (const k of ['modifiers', 'rolls', 'changes'] as const) if (!next[k]?.length) delete next[k];
     if (!next.uses) delete next.uses;
@@ -339,7 +345,7 @@ export const withFeature = (def: Definition, listId: string, optionId: string, f
     if (!next.increase) delete next.increase;
     else next.increase = increaseKept(next.increase);
     return next as Feature;
-  }));
+};
 
 /** An increase as it is stored (7d6a): whole numbers within their limits, nothing for what is all or none. */
 const increaseKept = (inc: Increase): Increase => {
