@@ -59,7 +59,6 @@ function ModifierRow({ definition, api, i, m, targets, onChange, onRemove }: {
   // The token's maximum is only added to (7e1).
   const onToken = m.target === tokenMaxTarget(definition);
   const least = m.how === 'least';
-  const stopId = React.useId();
   const amount = useFormulaBox({
     definition, api, kind: m.how === 'least' ? 'least' : 'amount', value: m.amount, onChange: (text) => onChange({ ...m, amount: text }),
     label: `Modifier ${i + 1}: by`, placeholder: '1 · @mage_level', inputStyle: input,
@@ -86,8 +85,9 @@ function ModifierRow({ definition, api, i, m, targets, onChange, onRemove }: {
       </span>
       {!least && !onToken && (
         <span style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11 }}>
-          <label htmlFor={stopId} style={{ fontSize: 9, letterSpacing: 1, opacity: 0.75 }}>STOPS AT</label>
-          <input id={stopId} type="number" value={m.cap ?? ''} placeholder="none" style={{ ...input, width: 64 }}
+          {/* Named by its modifier: an INCREASE on the same feature has a STOPS AT of its own. */}
+          <span aria-hidden style={{ fontSize: 9, letterSpacing: 1, opacity: 0.75 }}>STOPS AT</span>
+          <input type="number" aria-label={`Modifier ${i + 1}: stops at`} value={m.cap ?? ''} placeholder="none" style={{ ...input, width: 64 }}
             onChange={(e) => { const n = Math.trunc(Number(e.target.value)); onChange(withCap(m, e.target.value.trim() && Number.isFinite(n) ? n : null)); }} />
           <span style={{ opacity: 0.6 }}>{m.cap === undefined ? 'NO LIMIT' : `NEVER TAKES IT PAST ${m.cap}`}</span>
         </span>

@@ -62,7 +62,7 @@ describe('ADD or AT LEAST on a modifier', () => {
     expect(atLeast.title).toBe('The token\'s maximum is only added to');
     await userEvent.selectOptions(screen.getByLabelText('Modifier 2: changes'), 'hp_max');
     expect(mods()![1]).toEqual({ target: 'hp_max', amount: '2' });
-    expect(screen.queryByLabelText('STOPS AT')).toBeNull();
+    expect(screen.queryAllByLabelText(/stops at/)).toEqual([]);
     // Another target keeps what it had.
     await userEvent.selectOptions(screen.getByLabelText('Modifier 1: changes'), 'con');
     await userEvent.click(how(1).getByRole('button', { name: 'AT LEAST' }));
@@ -80,12 +80,20 @@ describe('ADD or AT LEAST on a modifier', () => {
 });
 
 describe('STOPS AT on an ADD', () => {
+  it('an INCREASE\'s STOPS AT on the same feature is never confused with it', async () => {
+    const both = { ...HARDY, choices: [{ ...(HARDY.choices as object[])[0] as object, options: [{ id: 'amulet', label: 'Amulet', features: [{ id: 'vigor', label: 'Vigor', modifiers: [{ target: 'str', amount: '2', cap: 20 }], increase: { points: 2, cap: 18 } }] }] }] } as unknown as Definition;
+    openFeature(both);
+    await vigor();
+    expect((screen.getByLabelText('Modifier 1: stops at') as HTMLInputElement).value).toBe('20');
+    expect((screen.getByRole('spinbutton', { name: 'STOPS AT' }) as HTMLInputElement).value).toBe('18');
+  });
+
   it('beside an ADD only, saying where it stops; set, changed and emptied', async () => {
     const { mods } = openFeature();
     await vigor();
-    const boxes = screen.getAllByLabelText('STOPS AT') as HTMLInputElement[];
-    // Only the ADD has one.
-    expect(boxes).toHaveLength(1);
+    // Only the ADD has one, named by its modifier.
+    expect(screen.queryByLabelText('Modifier 1: stops at')).toBeNull();
+    const boxes = [screen.getByLabelText('Modifier 2: stops at') as HTMLInputElement];
     expect(boxes[0].value).toBe('20');
     expect(screen.getByText('NEVER TAKES IT PAST 20')).toBeTruthy();
     fireEvent.change(boxes[0], { target: { value: '22' } });
@@ -97,7 +105,7 @@ describe('STOPS AT on an ADD', () => {
     expect(mods()![1]).toEqual({ target: 'str', amount: '2', cap: 19 });
     // Switched to ADD, the AT LEAST gets one too.
     await userEvent.click(how(1).getByRole('button', { name: 'ADD' }));
-    expect(screen.getAllByLabelText('STOPS AT')).toHaveLength(2);
+    expect(screen.getByLabelText('Modifier 1: stops at')).toBeTruthy();
   });
 
   it('the logic: set, changed, taken away, the rest kept', () => {
