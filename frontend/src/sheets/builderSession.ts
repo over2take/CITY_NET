@@ -139,7 +139,7 @@ export const publishedMessage = (version: number, running: boolean): string =>
 
 // ─── The sidebar ────────────────────────────────────────────────────────────
 
-export type BuilderPage = 'setup' | 'words' | 'features' | 'rules' | 'choices' | 'sheet' | 'new_character' | 'levels' | 'npcs' | 'conditions' | 'rests' | 'house_rules' | 'try' | 'problems';
+export type BuilderPage = 'setup' | 'words' | 'features' | 'rules' | 'choices' | 'items' | 'sheet' | 'new_character' | 'levels' | 'npcs' | 'conditions' | 'rests' | 'house_rules' | 'try' | 'problems';
 
 /**
  * The builder's pages, in the sidebar's order, each with the line that says what it is for
@@ -152,6 +152,7 @@ export const BUILDER_PAGES: { id: BuilderPage; label: string; what: string }[] =
   { id: 'features', label: 'PARTS', what: 'Which parts of the app this game uses.' },
   { id: 'rules', label: 'STATS & RULES', what: 'Stats, formulas and tables.' },
   { id: 'choices', label: 'CHOICES', what: 'What characters pick, like classes and feats, and what each gives.' },
+  { id: 'items', label: 'ITEMS', what: 'Things a character carries, wears or attunes to that do something, and the slots they need.' },
   { id: 'sheet', label: 'CHARACTER SHEET', what: 'How a character sheet is laid out.' },
   { id: 'new_character', label: 'NEW CHARACTER', what: 'The steps a player is walked through to make a character.' },
   { id: 'levels', label: 'LEVELS', what: 'How characters go up, and the XP each level takes.' },
