@@ -95,6 +95,9 @@
 // then plain ADDs, then AT LEAST. Each modifier says what it really gave, for the sheet to name what a cap cut. The token's
 // maximum only ADDs, uncapped (tokenMax.js moves the token by it).
 //
+// An item working (7e3, items.js): its features count as an unlocked feature's do, in the numbers, has() and their uses,
+// each bonus named by the item.
+//
 // An INCREASE (7d6b) is spent by the player as its feature unlocks, going up a level (levelUp.js), and kept under
 // INCREASES_KEY by feature: { asi: { str: 1, dex: 1 } }. It is worked out onto the stats as a modifier is, named by
 // its feature, while the feature is unlocked and what is kept still holds: stats it may raise, whole points from 1,
@@ -119,7 +122,7 @@ const { restIdsOf } = require('./rests');
 const { healthLayout } = require('./core');
 const { partOn } = require('./parts');
 const { currenciesOf } = require('./currencies');
-const { checkItems } = require('./items');
+const { checkItems, itemsOf, workingFeatures, itemsOwned, itemsShown } = require('./items');
 
 /** Where a sheet keeps its picks: starting with _, so no stat, formula or field can be called it. */
 const PICKS_KEY = '_choices';
@@ -720,11 +723,11 @@ function ownedBy(picks) {
   return owned;
 }
 
-/** Every option and feature has() can name, by id, with what players call it. */
-const ownableOf = (definition) => new Map(choicesOf(definition).flatMap((c) => optionsOf(c).flatMap((o) => [
+/** Every option, feature and item (7e3) has() can name, by id, with what players call it. */
+const ownableOf = (definition) => new Map([...choicesOf(definition).flatMap((c) => optionsOf(c)), ...itemsOf(definition)].flatMap((o) => [
   [o.id, o.label || o.id],
   ...list(o.features).filter((f) => isPlainObject(f) && typeof f.id === 'string').map((f) => [f.id, f.label || f.id]),
-])));
+]));
 
 /** The keys of a definition that hold formula text, wherever they sit. */
 const FORMULA_KEYS = new Set(['formula', 'when', 'then', 'else', 'requires', 'amount', 'count', 'add', 'against', 'plus']);
@@ -769,7 +772,8 @@ const overlayOf = (definition, data) => {
   const sheet = isPlainObject(data) ? data : {};
   const picks = picksOf(definition, sheet);
   const levels = levelsOf(definition, picks);
-  const owned = ownedBy(picks);
+  // What the picks hold, and the items working (7e3).
+  const owned = { ...ownedBy(picks), ...itemsOwned(definition, sheet) };
   const own = (o, name) => Object.prototype.hasOwnProperty.call(o, name);
   const tables = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -783,11 +787,12 @@ const overlayOf = (definition, data) => {
   const fields = fieldTargetsOf(definition);
   const bonuses = {};
   const increases = isPlainObject(sheet[INCREASES_KEY]) ? sheet[INCREASES_KEY] : {};
-  const added = (target, amount, feature, least = false, cap = null) => {
+  const added = (target, amount, feature, least = false, cap = null, item = null) => {
     const b = own(bonuses, target) ? bonuses[target] : (bonuses[target] = { adds: [], least: [] });
-    b[least ? 'least' : 'adds'].push({ feature: feature.label || feature.id, amount, ...(cap === null ? {} : { cap }) });
+    // An item's bonus is named by the item (7e3): Ring of Constitution +2.
+    b[least ? 'least' : 'adds'].push({ feature: item ? item.label || item.id : feature.label || feature.id, amount, ...(cap === null ? {} : { cap }) });
   };
-  for (const { feature } of unlockedOf(picks)) {
+  for (const { feature, item = null } of [...unlockedOf(picks), ...workingFeatures(definition, sheet)]) {
     // An INCREASE as it was spent (7d6b), on the stats it raises.
     const inc = own(increases, feature.id) ? increaseOf(definition, feature) : null;
     // A pick taken instead (7d6c): the points don't count.
@@ -799,7 +804,7 @@ const overlayOf = (definition, data) => {
       let amount;
       try { amount = evaluate(parse(m.amount, isTable), env); } catch { continue; }
       if (!Number.isFinite(amount)) continue;
-      added(m.target, amount, feature, m.how === LEAST, m.how === LEAST ? null : stopOf(m.cap));
+      added(m.target, amount, feature, m.how === LEAST, m.how === LEAST ? null : stopOf(m.cap), item);
     }
   }
   const over = { ...levels, ...owned };
@@ -877,10 +882,10 @@ const needsText = (definition, text) => {
     .replace(/@([a-z][a-z0-9_]*)/g, (_, id) => String(names.get(id) || id).toUpperCase()).trim();
 };
 
-/** Each unlocked feature with uses: how many it has (its count worked out), how many are spent, and its rest. */
+/** Each unlocked feature, and each working item's (7e3), with uses: how many it has (its count worked out), how many are spent, and its rest. */
 const usesOf = (definition, data) => {
   const stored = isPlainObject(data) && isPlainObject(data[USES_KEY]) ? data[USES_KEY] : {};
-  return unlockedOf(picksOf(definition, data)).filter(({ feature }) => isPlainObject(feature.uses)).map(({ feature }) => {
+  return [...unlockedOf(picksOf(definition, data)), ...workingFeatures(definition, data)].filter(({ feature }) => isPlainObject(feature.uses)).map(({ feature }) => {
     const max = Math.max(0, Math.floor(valueOn(definition, data, feature.uses.count) ?? 0));
     const had = Object.prototype.hasOwnProperty.call(stored, feature.id) ? Number(stored[feature.id]) : 0;
     const spent = Math.max(0, Math.min(max, Number.isInteger(had) ? had : 0));
@@ -892,7 +897,7 @@ const usesOf = (definition, data) => {
 const kitsNeedingOf = (definition) => list(isPlainObject(definition.creation) ? definition.creation.kits : undefined).filter((k) => isPlainObject(k) && k.who === 'needs');
 
 /** Whether a system has anything for workedOf to say: a list to pick from, or a kit with a requirement. */
-const worksOutPicks = (definition) => choicesOf(definition).length > 0 || kitsNeedingOf(definition).length > 0;
+const worksOutPicks = (definition) => choicesOf(definition).length > 0 || kitsNeedingOf(definition).length > 0 || itemsOf(definition).length > 0;
 
 /**
  * What the sheet shows of a character's picks, worked out on every save: every pick kept with its
@@ -926,6 +931,8 @@ const workedOf = (definition, data, overlay = overlayOf(definition, data)) => {
       return open.length ? { increasesOpen: open } : {};
     })(),
     unmet: choicesOf(definition).flatMap((c) => optionsOf(c).filter((o) => !taken.has(o.id) && !meets(definition, data, o)).map((o) => o.id)),
+    // 7e3: each carried item's state and each slot's count, for the sheet's gear.
+    ...(itemsOf(definition).length ? itemsShown(definition, data) : {}),
   };
 };
 
