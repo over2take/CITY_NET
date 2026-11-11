@@ -46,7 +46,6 @@ export function GroupSection({ definition, edit, group: g }: Edits & { group: St
           <thead><tr>
             <ColumnHead style={th}>NAME</ColumnHead><ColumnHead style={th} hint={HINTS['rules.id']}>ID</ColumnHead>
             <ColumnHead style={th} hint={HINTS['rules.lowest']}>LOWEST</ColumnHead><ColumnHead style={th} hint={HINTS['rules.highest']}>HIGHEST</ColumnHead>
-            <ColumnHead style={th} hint={HINTS['rules.stop']}>STOPS AT</ColumnHead>
             <ColumnHead style={th} hint={HINTS['rules.tiedTo']}>TIED TO</ColumnHead><ColumnHead style={th} hint={HINTS['rules.sample']}>SAMPLE</ColumnHead><ColumnHead style={th} />
           </tr></thead>
           <tbody>
@@ -59,8 +58,6 @@ export function GroupSection({ definition, edit, group: g }: Edits & { group: St
                   onChange={(e) => edit(withStat(definition, s.id, { min: wholeOrNone(e.target.value) }))} /></td>
                 <td style={td}><input type="number" aria-label={`${s.label} highest`} value={s.max ?? ''} placeholder="none" style={{ ...field, width: 70 }}
                   onChange={(e) => edit(withStat(definition, s.id, { max: wholeOrNone(e.target.value) }))} /></td>
-                <td style={td}><input type="number" aria-label={`${s.label} bonuses stop at`} value={s.stop ?? ''} placeholder="none" style={{ ...field, width: 70 }}
-                  onChange={(e) => edit(withStat(definition, s.id, { stop: wholeOrNone(e.target.value) }))} /></td>
                 <td style={td}>
                   <select aria-label={`${s.label} tied to`} value={s.tie ?? ''} style={field}
                     onChange={(e) => edit(withStat(definition, s.id, { tie: e.target.value || null }))}>
@@ -172,20 +169,14 @@ export function Alternative({ f, definition, edit, tried }: Edits & { f: Formula
   );
 }
 
-/** A formula's name, its id with what reads it, and (7e1) BONUSES STOP AT. */
+/** A formula's name, and its id with what reads it. */
 export function FormulaName({ definition, edit, f }: Edits & { f: Formula }) {
   const users = usedBy(definition, f.id);
-  const stopId = React.useId();
   return (
     <>
       <input type="text" aria-label={`${f.label || f.id} name`} maxLength={40} value={f.label ?? ''} placeholder={f.id} style={{ ...field, width: '100%' }}
         onChange={(e) => edit(withFormula(definition, f.id, { label: e.target.value }))} />
       <div style={{ fontSize: 11, opacity: 0.6 }}>@{f.id}{users.length > 0 && ` · used by ${users.join(', ')}`}</div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3 }}>
-        <FieldName htmlFor={stopId} hint={HINTS['rules.stop']} style={{ fontSize: 9, letterSpacing: 1, opacity: 0.7 }}>BONUSES STOP AT</FieldName>
-        <input id={stopId} type="number" value={f.stop ?? ''} placeholder="none" style={{ ...field, width: 64 }}
-          onChange={(e) => edit(withFormula(definition, f.id, { stop: wholeOrNone(e.target.value) }))} />
-      </div>
     </>
   );
 }

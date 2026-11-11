@@ -17,17 +17,12 @@
 // A derived value may also carry a `label`, the name players see on the sheet ("Physical save");
 // its id stays what formulas read (same day).
 //
-// BONUSES STOP AT (7e1; approved mockup docs/mockups/items.html, 2026-11-10): a stat or a derived value may say `stop`,
-// the most its bonuses take it to (bonuses.js). A whole number.
-//
 // Pure: the definition checks and the starter sheet both use it.
 
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const LIMITS = { groups: 20, stats: 100, label: 40 };
 const GROUP_KEYS = new Set(['id', 'label', 'stats']);
-const STAT_KEYS = new Set(['id', 'label', 'min', 'max', 'tie', 'stop']);
-const { STOP_LIMIT, stopOf } = require('./bonuses');
-const STOP_SAYS = `A whole number from -${STOP_LIMIT} to ${STOP_LIMIT}`;
+const STAT_KEYS = new Set(['id', 'label', 'min', 'max', 'tie']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 
@@ -79,7 +74,6 @@ const checkStats = (stats, taken, problems) => {
         if (s[end] !== undefined && !Number.isSafeInteger(s[end])) problems.push({ where: `${sw}, ${end}`, message: 'Must be a whole number' });
       }
       if (Number.isSafeInteger(s.min) && Number.isSafeInteger(s.max) && s.min > s.max) problems.push({ where: sw, message: 'The lowest is above the highest' });
-      if (s.stop !== undefined && stopOf(s.stop) === null) problems.push({ where: `${sw}, stop`, message: STOP_SAYS });
       if (s.tie !== undefined) ties.push([sw, s.id, s.tie]);
     });
   });
@@ -89,15 +83,12 @@ const checkStats = (stats, taken, problems) => {
   }
 };
 
-/** Problems with derived values' names and BONUSES STOP AT (7e1), pushed onto `problems`; the rest of each is derived.js's. */
+/** Problems with derived values' names, pushed onto `problems`; the rest of each is derived.js's. */
 const checkDerivedLabels = (derived, problems) => {
   if (!Array.isArray(derived)) return;
   derived.forEach((d, i) => {
-    if (!isPlainObject(d)) return;
-    const where = typeof d.id === 'string' ? `derived ${d.id}` : `derived value ${i + 1}`;
-    if (d.stop !== undefined && stopOf(d.stop) === null) problems.push({ where: `${where}, stop`, message: STOP_SAYS });
-    if (d.label === undefined) return;
-    text(d.label, `${where}, label`, problems);
+    if (!isPlainObject(d) || d.label === undefined) return;
+    text(d.label, `${typeof d.id === 'string' ? `derived ${d.id}` : `derived value ${i + 1}`}, label`, problems);
   });
 };
 
@@ -141,4 +132,4 @@ const statSections = (definition) => (Array.isArray(definition && definition.sta
 /** A derived value's name on the sheet: its label, or its id in capitals as before. */
 const derivedLabel = (d) => (typeof d.label === 'string' && d.label.trim() ? d.label : d.id.replace(/_/g, ' ').toUpperCase());
 
-module.exports = { checkStats, checkDerivedLabels, checkSamples, statIdsOf, allStats, statSections, derivedLabel, rangeHint, LIMITS };
+module.exports = { checkStats, checkDerivedLabels, checkSamples, statIdsOf, statSections, derivedLabel, rangeHint, LIMITS };

@@ -103,7 +103,7 @@ const partsOf = (entry) => (entry.kind === 'condition'
  * Both take an optional `overlay` (7a1b, choices.js overlayOf): `sheet`, values read in place of
  * the sheet's own (a stat with its features' modifiers, a pick's level), and `add`, an amount added
  * to a derived value once it is worked out, before anything reading it is. From 7e1, `bonus` in its place where given:
- * { adds, least, stop } counted as bonuses.js says, what each really gave written into `applied` when the overlay has it.
+ * { adds, least } counted as bonuses.js says, what each really gave written into `applied` when the overlay has it.
  */
 const compileSystem = (definition) => {
   const problems = [];

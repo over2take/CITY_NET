@@ -1,20 +1,20 @@
 import { test, expect } from '@playwright/test';
 import { signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
 
-// Three ways a bonus counts, at the table (7e1; approved mockup docs/mockups/items.html, 2026-11-10): a feat's +2 and a
-// ring's +2 on CON stop at 20, the ring named as cut; an Amulet's AT LEAST 19 lifts a CON of 12 past them. The stat's
-// badge says each.
+// The ways a bonus counts, at the table (7e1; approved mockup docs/mockups/items.html, 2026-11-10; the cap on the bonus,
+// the user's call): a feat's +2 and a ring's +2 on CON, each STOPS AT 20, never pass it, the ring named as cut; an Amulet's
+// AT LEAST 19 lifts a CON of 12 past them. The stat's badge says each.
 
-test('BONUSES STOP AT and AT LEAST: two +2s stop at 20, the cut one named; an AT LEAST lifts what they leave (7e1)', async ({ browser, request }, info) => {
+test('STOPS AT and AT LEAST: two +2s stopping at 20 never pass it, the cut one named; an AT LEAST lifts what they leave (7e1)', async ({ browser, request }, info) => {
   test.setTimeout(120_000);
   const again = info.retry ? `_${info.retry + 1}` : '';
   const gm = await gmToken(request);
   await runningSystem(request, gm, {
     format: 1, name: `Capfall${again}`, core: { health: { model: 'pool' } },
-    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'con', label: 'Con', stop: 20 }] }],
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'con', label: 'Con' }] }],
     choices: [{ id: 'feats', one: 'Feat', many: 'Feats', picks: 'any', options: [
-      { id: 'tough', label: 'Tough', features: [{ id: 'tough_f', label: 'Tough', modifiers: [{ target: 'con', amount: '2' }] }] },
-      { id: 'ring', label: 'Ring', features: [{ id: 'ring_f', label: 'Ring', modifiers: [{ target: 'con', amount: '2' }] }] },
+      { id: 'tough', label: 'Tough', features: [{ id: 'tough_f', label: 'Tough', modifiers: [{ target: 'con', amount: '2', cap: 20 }] }] },
+      { id: 'ring', label: 'Ring', features: [{ id: 'ring_f', label: 'Ring', modifiers: [{ target: 'con', amount: '2', cap: 20 }] }] },
       { id: 'amulet', label: 'Amulet', features: [{ id: 'amulet_f', label: 'Amulet', modifiers: [{ target: 'con', amount: '19', how: 'least' }] }] },
     ] }],
   });

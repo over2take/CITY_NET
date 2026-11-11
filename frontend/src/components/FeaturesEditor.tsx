@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
-  featureList, levelOf, kindsOf, withNewFeature, withFeature, withoutFeature, modifierTargets, tokenMaxTarget, withHow, refillRests, rollChoices, choiceLists, pickedOf, unlocksByLevel, increaseGroups, increaseWords, LIMITS, NEW_INCREASE,
+  featureList, levelOf, kindsOf, withNewFeature, withFeature, withoutFeature, modifierTargets, tokenMaxTarget, withHow, withCap, refillRests, rollChoices, choiceLists, pickedOf, unlocksByLevel, increaseGroups, increaseWords, LIMITS, NEW_INCREASE,
   type ChoiceList, type ChoiceOption, type Feature, type FeatureKind, type FeaturePatch,
 } from '../sheets/choices';
 import { HINTS } from '../sheets/builderHelp';
@@ -14,7 +14,8 @@ import { useFormulaBox } from '../hooks/useFormulaBox';
 // names a feature and tags what it does; the open one shows its name, words, level and every kind
 // of thing it can do, several at once: modifiers on a stat, formula or health field, uses a rest
 // refills, rolls it gives, changes it lets a roll take, a list it opens, and (7d6a) an INCREASE, points
-// the player spreads on stats as it unlocks. A modifier ADDs, or (7e1) sets AT LEAST that much. What it reads and writes is
+// the player spreads on stats as it unlocks. A modifier ADDs, stopping where it says (STOPS AT), or (7e1) sets AT LEAST
+// that much. What it reads and writes is
 // sheets/choices.ts; every change goes through the builder's `edit`.
 
 interface Props {
@@ -58,6 +59,7 @@ function ModifierRow({ definition, api, i, m, targets, onChange, onRemove }: {
   // The token's maximum is only added to (7e1).
   const onToken = m.target === tokenMaxTarget(definition);
   const least = m.how === 'least';
+  const stopId = React.useId();
   const amount = useFormulaBox({
     definition, api, kind: m.how === 'least' ? 'least' : 'amount', value: m.amount, onChange: (text) => onChange({ ...m, amount: text }),
     label: `Modifier ${i + 1}: by`, placeholder: '1 · @mage_level', inputStyle: input,
@@ -66,7 +68,11 @@ function ModifierRow({ definition, api, i, m, targets, onChange, onRemove }: {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <span style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) auto minmax(0, 3fr) auto', gap: 6, alignItems: 'center' }}>
         <select aria-label={`Modifier ${i + 1}: changes`} value={m.target} style={input}
-          onChange={(e) => onChange(withHow({ ...m, target: e.target.value }, least && e.target.value !== tokenMaxTarget(definition)))}>
+          onChange={(e) => {
+            const next = { ...m, target: e.target.value };
+            // The token's maximum takes neither AT LEAST nor STOPS AT.
+            onChange(e.target.value === tokenMaxTarget(definition) ? withCap(withHow(next, false), null) : next);
+          }}>
           {!targets.some((g) => g.items.some((t) => t.id === m.target)) && <option value={m.target}>{m.target || 'PICK ONE'}</option>}
           {targets.map((g) => <optgroup key={g.group} label={g.group}>{g.items.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</optgroup>)}
         </select>
@@ -78,6 +84,14 @@ function ModifierRow({ definition, api, i, m, targets, onChange, onRemove }: {
         {amount.field}
         <button type="button" className="utility-btn" style={{ ...xBtn, color: 'var(--danger)', borderColor: 'var(--danger)' }} aria-label={`Remove modifier ${i + 1}`} onClick={onRemove}>×</button>
       </span>
+      {!least && !onToken && (
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11 }}>
+          <label htmlFor={stopId} style={{ fontSize: 9, letterSpacing: 1, opacity: 0.75 }}>STOPS AT</label>
+          <input id={stopId} type="number" value={m.cap ?? ''} placeholder="none" style={{ ...input, width: 64 }}
+            onChange={(e) => { const n = Math.trunc(Number(e.target.value)); onChange(withCap(m, e.target.value.trim() && Number.isFinite(n) ? n : null)); }} />
+          <span style={{ opacity: 0.6 }}>{m.cap === undefined ? 'NO LIMIT' : `NEVER TAKES IT PAST ${m.cap}`}</span>
+        </span>
+      )}
       {amount.help}
     </div>
   );
