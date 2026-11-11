@@ -226,4 +226,15 @@ const itemAction = (definition, data, action, { gm = false } = {}) => {
   return { ok: true, data: withState(sheet, item.id, { ...state, attuned: true, anyway: full }) };
 };
 
-module.exports = { LIMITS, NEEDS, WORN_KEY, SLOTS_KEY, slotsOf, itemsOf, checkItems, carriedNames, stateOf, slotCount, slotUsed, workingItems, workingFeatures, itemsOwned, itemsShown, itemAction };
+/** What an item needs and its words, as GIVE.EXE and the gift's notice say it: "NEEDS ATTUNED · A heavy iron band." */
+const itemWords = (definition, item) => {
+  const slot = slotsOf(definition).find((s) => s.id === item.needs);
+  const needs = slot ? `NEEDS ${String(slot.label || slot.id).toUpperCase()}` : item.needs === 'carried' ? 'WORKS CARRIED' : 'WORKS WORN';
+  return typeof item.description === 'string' && item.description.trim() ? `${needs} · ${item.description.trim()}` : needs;
+};
+
+/** The system's items as GIVE.EXE lists them (7e3b): free, each with what it needs and its words. */
+const itemsGivable = (definition) => itemsOf(definition).filter((i) => typeof i.label === 'string' && i.label.trim())
+  .map((i) => ({ id: i.id, name: i.label.trim(), price: 0, holds: itemWords(definition, i) }));
+
+module.exports = { LIMITS, NEEDS, WORN_KEY, SLOTS_KEY, slotsOf, itemsOf, checkItems, carriedNames, stateOf, slotCount, slotUsed, workingItems, workingFeatures, itemsOwned, itemsShown, itemAction, itemWords, itemsGivable };

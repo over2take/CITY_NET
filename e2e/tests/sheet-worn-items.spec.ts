@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { signInAsPlayer, signInAsGm, gmToken, asGm, runningSystem, approvedPlayer, sheetTab } from './helpers';
+import { signInAsPlayer, signInAsGm, gmToken, asGm, runningSystem, approvedPlayer, sheetTab, openGameSystem } from './helpers';
 
 // Items at the table (7e3b; approved mockup docs/mockups/items.html, 2026-11-10, and the user's calls): a gear line named
 // like an item gets WEAR and ATTUNE. Worn, the ring does nothing until attuned; attuned, CON goes up and the slot fills;
@@ -93,5 +93,59 @@ test('WEAR and ATTUNE on GEAR: the ring counts once attuned, a full slot is the 
 
   // As the server keeps it.
   expect((await sheetOf())._worn).toEqual({ ring: { worn: true }, cloak: { attuned: true, anyway: true } });
+  await context.close();
+});
+
+test('GIVE.EXE hands out a system\'s item from ITEMS: a stowed line of its name, worn at once; TERMINATE_SESSION closes it (7e3b)', async ({ browser, page, request }, info) => {
+  test.setTimeout(120_000);
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Lootfall${again}`, core: { health: { model: 'pool' } },
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'con', label: 'Con' }] }],
+    items: {
+      slots: [{ id: 'attuned', label: 'ATTUNED', count: 3 }],
+      list: [{ id: 'ring', label: 'Ring of Might', description: 'A heavy iron band.', needs: 'attuned', features: [{ id: 'mighty', label: 'Mighty', modifiers: [{ target: 'con', amount: '2' }] }] }],
+    },
+  });
+  const player = { username: `e2e_looted${again}`, password: 'e2e-player-password' };
+  await approvedPlayer(request, gm, player);
+  const sheetOf = async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data;
+
+  const context = await browser.newContext({ baseURL: info.project.use.baseURL });
+  const mine = await context.newPage();
+  await signInAsPlayer(mine, player);
+  await mine.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
+  await mine.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+  await sheetTab(mine, 'CHARACTER');
+  await mine.getByLabel('Name', { exact: true }).fill('Wren');
+  await expect.poll(async () => (await sheetOf()).name, { timeout: 15_000 }).toBe('Wren');
+
+  // The GM: the ring under ITEMS, with what it needs and its words.
+  await signInAsGm(page);
+  await openGameSystem(page);
+  await page.getByRole('button', { name: 'GIVE_ITEM', exact: true }).click();
+  const give = page.locator('.win95-window', { has: page.getByText('GIVE.EXE', { exact: true }) });
+  await expect(give.getByRole('table', { name: 'Items' }).getByText('NEEDS ATTUNED · A heavy iron band.')).toBeVisible({ timeout: 15_000 });
+  await give.getByRole('button', { name: 'Give Ring of Might' }).click();
+  await expect(give.getByTestId('give-card').getByText('ITEMS', { exact: true })).toBeVisible();
+  const who = give.getByRole('table', { name: 'Who gets it' });
+  await expect(who.getByText('an inventory line')).toBeVisible({ timeout: 15_000 });
+  await who.getByRole('checkbox', { name: 'Wren' }).check();
+  await give.getByRole('button', { name: 'GIVE 1 × RING OF MIGHT TO 1' }).click();
+  await expect.poll(async () => JSON.parse((await sheetOf()).inventory ?? '[]').map((i: { name: string; carry: string }) => [i.name, i.carry]), { timeout: 15_000 }).toEqual([['Ring of Might', 'stowed']]);
+
+  // The player is told, and it is that item: WEAR it there and then.
+  await expect(mine.getByText('THE GM GAVE YOU RING OF MIGHT ×1: NEEDS ATTUNED · A heavy iron band.')).toBeVisible({ timeout: 15_000 });
+  await sheetTab(mine, 'GEAR');
+  const ring = mine.getByTestId('gear-item-ring');
+  await ring.getByRole('button', { name: 'WEAR Ring of Might' }).click();
+  await expect(ring.getByRole('note', { name: 'Ring of Might: what it is doing' })).toHaveText('WORN, NOT ATTUNED: DOES NOTHING YET', { timeout: 15_000 });
+
+  // TERMINATE_SESSION closes GIVE.EXE with everything else.
+  await expect(give).toBeVisible();
+  await page.getByRole('button', { name: 'TERMINATE_SESSION', exact: true }).click();
+  // Closed at once, while the session is still ending, not only once the GM's rights go with it.
+  await expect.poll(() => page.evaluate(() => document.body.innerText.includes('TERMINATING_SESSION') && !document.body.innerText.includes('GIVE.EXE')), { timeout: 5_000 }).toBe(true);
   await context.close();
 });

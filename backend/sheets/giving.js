@@ -11,6 +11,9 @@
 // A kit (7c4c) is given as an item is, from the catalogue KITS: every one the system has, a kit going to a
 // player that way or one the GM alone gives, with its items landing as they do on finishing a new
 // character (kitGiving.js). There is no way for a kit not to fit: they are inventory lines.
+//
+// A system's item (7e3b) is given from the catalogue ITEMS: a stowed line of its name in the inventory, as a kit's
+// items land, which is what makes it that item (items.js), ready to WEAR and ATTUNE.
 
 const { mutateSheet } = require('./mutate');
 const { applyDerived } = require('./templates');
@@ -20,10 +23,13 @@ const { INVENTORY_FIELD, readInventory } = require('../shops/placement');
 const customSystems = require('../systemBuilder/runtime');
 const { kitToGive, kitWords } = require('../systemBuilder/creation');
 const { kitPatch } = require('./kitGiving');
+const { itemsGivable } = require('../systemBuilder/items');
 
 const LIMITS = { qty: 99, note: 200, players: 100, npcs: 100 };
 /** The catalogue GIVE.EXE lists a system's kits under: no shelf is called this. */
 const KITS_CATALOGUE = 'kits';
+/** The catalogue GIVE.EXE lists a system's items under (7e3b): no shelf is called this either. */
+const ITEMS_CATALOGUE = 'items';
 
 const isId = (v) => typeof v === 'string' && v.length > 0 && v.length <= 200;
 
@@ -76,6 +82,16 @@ const giftOf = (system, catalogue, id, qty) => {
       lands: () => ({ shape: 'kit', items: items.reduce((n, i) => n + i.qty, 0) }),
     };
   }
+  if (catalogue === ITEMS_CATALOGUE) {
+    const thing = itemsGivable(customSystems.definitionOf(system) ?? {}).find((i) => i.id === id);
+    if (!thing) return null;
+    return {
+      item: { catalogue, id: thing.id, name: thing.name, price: 0 },
+      holds: thing.holds,
+      place: (data) => ({ ok: true, patch: kitPatch(system, [{ name: thing.name, qty }], data) }),
+      lands: landing,
+    };
+  }
   const found = itemOf(system, catalogue, id);
   if (!found) return null;
   return {
@@ -125,4 +141,4 @@ const giveItem = async (db, io, { system, catalogue, id, qty = 1, players = [], 
   return { item, qty, note: note.trim(), preview, recipients };
 };
 
-module.exports = { LIMITS, KITS_CATALOGUE, requestProblem, landing, giveItem };
+module.exports = { LIMITS, KITS_CATALOGUE, ITEMS_CATALOGUE, requestProblem, landing, giveItem };
