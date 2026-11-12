@@ -103,6 +103,20 @@ describe('the route', () => {
     expect((await post({ format: 1, name: 'H', samples: [5], derived: [{ id: 'x', formula: '@str + 1' }] })).body.values).toEqual({ x: 1 });
   });
 
+  it('reads a ranked stat\'s sample as its step, and its worth into the formulas (7f1b); with a worth that won\'t read, no ranks', async () => {
+    const ranked = {
+      format: 1, name: 'H', samples: { level: 3, athletics: 2 },
+      stats: [{ id: 'g', label: 'G', stats: [{ id: 'level', label: 'Level' }, { id: 'athletics', label: 'Athletics', rank: 'p' }] }],
+      ranks: [{ id: 'p', label: 'P', list: [{ name: 'A', worth: '0' }, { name: 'B', worth: '2 + @level' }, { name: 'C', worth: '4 + @level' }] }],
+      derived: [{ id: 'climb', formula: '@athletics + 1' }],
+    };
+    expect((await post(ranked)).body).toEqual({ values: { athletics: 7, climb: 8 }, problems: [] });
+    // No sample: the lowest.
+    expect((await post({ ...ranked, samples: { level: 3 } })).body.values).toEqual({ athletics: 0, climb: 1 });
+    const broken = { ...ranked, ranks: [{ ...ranked.ranks[0], list: [{ name: 'A', worth: '@ +' }] }] };
+    expect((await post(broken)).body).toEqual({ values: { climb: 3 }, problems: [] });
+  });
+
   it('refuses what isn\'t a definition at all', async () => {
     const res = await post('nope');
     expect(res.status).toBe(400);

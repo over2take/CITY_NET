@@ -340,7 +340,16 @@ describe('the "?"', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'TABLES' }));
     for (const name of ['UP TO', 'GIVES']) expect(screen.getByRole('columnheader', { name }), name).toBeTruthy();
     look();
-    allSeen('rules', 10);
+    // RANKS (7f1b): a list from a preset, its NAME and WORTH; then a stat holding it, HOLDS and AT START.
+    await userEvent.click(screen.getByRole('tab', { name: 'RANKS' }));
+    await userEvent.click(screen.getByRole('button', { name: '+ PROFICIENCY' }));
+    for (const name of ['NAME', 'WORTH']) expect(screen.getByRole('columnheader', { name }), name).toBeTruthy();
+    look();
+    await userEvent.click(screen.getByRole('tab', { name: 'STATS' }));
+    fireEvent.change(within(stat('shoot')).getByLabelText('Shoot holds'), { target: { value: 'proficiency' } });
+    expect(screen.getAllByRole('columnheader', { name: 'HOLDS' })).toHaveLength(2);
+    look();
+    allSeen('rules', 15);
   });
 });
 
