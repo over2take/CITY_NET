@@ -255,6 +255,9 @@ describe('DiceTrayWindow', () => {
     expect(within(history).getByText('cody:').tagName).toBe('STRONG');
     expect(history.textContent).toContain('SHORT REST · cody: rolled 1d4 + @might = 4 (1d4: 4)');
     expect(history.textContent).not.toContain('cody::');
+    // The final total stands out (2026-11-11), the line otherwise as written.
+    expect(within(history).getAllByTestId('roll-total').map((b) => [b.tagName, b.textContent])).toEqual([['STRONG', '8']]);
+    expect(history.textContent).toContain('cody: rolled 2d6 [(3+5) = 8]');
   });
 
   it('renders the Canvas for 3D dice', () => {

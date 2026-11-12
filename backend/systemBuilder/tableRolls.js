@@ -79,6 +79,22 @@ const signed = (n) => (n < 0 ? `- ${-n}` : `+ ${n}`);
 const faceText = (f, sides) => (sides === FATE ? (f.value > 0 ? '+' : f.value < 0 ? '-' : '0') : String(f.value));
 
 /**
+ * A roll's sum as the log says it (the user's form, 2026-11-11): one die that is its own value, then what is
+ * added, `3 + 13 = 16` (`20` alone); several, each said in a group, then their value and what is added,
+ * `(4, 2) | 6 + 13 = 19` (`(4, 2) = 6` with nothing added); a die not kept `5 dropped`, or, counting
+ * successes, one that isn't `2 miss`; one taken away `-3`.
+ */
+const sumWords = (faces, result, added) => {
+  const total = `${result.total}`;
+  if (faces.length === 1 && faces[0].text === String(result.dice)) return added ? `${result.dice}${added} = ${total}` : total;
+  const notCounted = result.read === 'count' ? 'miss' : 'dropped';
+  const group = faces.length
+    ? `(${faces.map((f) => (f.kept ? f.text : `${f.text.replace(/^(-?)\((.*)\)/, '$1$2')} ${notCounted}`)).join(', ')})`
+    : 'no dice';
+  return added ? `${group} | ${result.dice}${added} = ${total}` : `${group} = ${total}`;
+};
+
+/**
  * The log's words for a roll made: its dice (kept ones bare, the rest in brackets, a die taken away
  * with a minus), what is added, the total, and what it came to: met or not, a band, a natural,
  * matches, a glitch, named dice's effects, the changes picked. `hide` (6c4h) is what players are
@@ -90,10 +106,11 @@ const describe = (result, symbols = [], hide = {}) => {
   // A named kind's name follows each face only where the roll mixes kinds (✶ Good ✕ Bad); with one
   // kind it is already said ("rolled 3×dF"), so the faces stand alone.
   const mixed = result.groups.filter((g) => g.faces.length).length > 1;
-  const dice = result.groups.flatMap((g) => g.faces.map((f) => {
+  const faces = result.groups.flatMap((g) => g.faces.map((f) => {
     const t = g.die ? ownFaceText(g, f, marks) : faceText(f, g.sides);
-    return `${f.minus ? '-' : ''}${f.kept ? t : `(${t})`}${g.name && mixed ? ` ${g.name}` : ''}`;
-  })).join(' ');
+    return { text: `${f.minus ? '-' : ''}${f.kept ? t : `(${t})`}${g.name && mixed ? ` ${g.name}` : ''}`, kept: f.kept };
+  }));
+  const dice = faces.map((f) => f.text).join(' ');
   // The dice's own value is said only when something is added to it; the total always. A
   // condition's term is named after its amount.
   const terms = (result.terms ?? []).map((t) => ` ${signed(t.amount)} (${t.label})`).join('');
@@ -103,7 +120,7 @@ const describe = (result, symbols = [], hide = {}) => {
   const tally = result.symbols ? leftWords(result.symbols, symbols) : null;
   const working = result.read === 'symbols'
     ? `${dice || 'no dice'} = ${tally}${added ? ` · ${result.dice}${added} = ${result.total}` : ''}`
-    : `${dice || 'no dice'}${added ? ` = ${result.dice}${added}` : ''} = ${result.total}${tally ? ` · ${tally}` : ''}`;
+    : `${sumWords(faces, result, added)}${tally ? ` · ${tally}` : ''}`;
   const verdict = result.success ? 'SUCCESS' : 'FAILURE';
   const kept = new Set(hide.effects ?? []);
   const said = [
