@@ -14,7 +14,7 @@
 // section or condition waiting on a rule that is off is hidden from every answer at once.
 
 const { compileSystem } = require('./derived');
-const { overlayOf, choicesOf, workedOf, worksOutPicks, choicesShown, WORKED_KEY } = require('./choices');
+const { overlayOf, choicesOf, workedOf, worksOutPicks, choicesShown, itemsRenderedOf, WORKED_KEY } = require('./choices');
 const { poolsOf, recoveryShown, restingShown } = require('./recovery');
 const { creationShown } = require('./creation');
 const { levelsShown } = require('./levels');
@@ -175,6 +175,8 @@ const renderOf = (id, definition, on = new Set()) => ({
   creation: creationShown(definition),
   // The XP table (7d2a), for the meter on the sheet, or null where characters don't earn XP.
   levels: levelsShown(definition),
+  // Its items and slots (7e3b), for the GEAR tab's WEAR and ATTUNE, or null where it has none.
+  items: itemsRenderedOf(definition),
 });
 
 /**

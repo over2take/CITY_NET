@@ -302,7 +302,7 @@ describe('rolled from the dice menu, exactly (6c4a)', () => {
     expect(rollMenuDice({ definition: HEARTH, dieId: 'bad', count: 1, rng: faces([2, 4]), who: 'K' }).historyText)
       .toBe('K rolled 1×Bad [✕ = 1 MISS]');
     const fate = rollMenuDice({ definition: HEARTH, dieId: 'fate', count: 3, rng: faces([1, 6], [3, 6], [5, 6]), who: 'K' });
-    expect([fate.historyText, fate.total]).toEqual(['K rolled 3×dF [+1 0 -1 = 0]', 0]);
+    expect([fate.historyText, fate.total]).toEqual(['K rolled 3×dF [(+1, 0, -1) = 0]', 0]);
     expect(rollMenuDice({ definition: HEARTH, dieId: 'nope', count: 1, rng: faces([1, 6]), who: 'K' })).toBeNull();
   });
 });

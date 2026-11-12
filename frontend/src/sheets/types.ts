@@ -305,6 +305,8 @@ export interface SheetTemplate {
   creation?: import('./newCharacterFlow').CreationShown;
   /** The XP table (7d2a): there while characters earn XP toward levels. */
   levels?: import('./xpMeter').LevelsShown;
+  /** A custom system's items and slots (backend choices.js itemsRenderedOf, 7e3b): WEAR and ATTUNE on the GEAR tab. */
+  items?: import('./gearItems').ItemsShown;
   /** The layout an NPC's sheet is drawn with, when the system gives NPCs one of their own
    *  (a custom system's stat block). Absent = NPCs use this template. */
   npcLayout?: SheetTemplate;

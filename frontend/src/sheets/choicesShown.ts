@@ -332,6 +332,9 @@ export const sourceOf = (s: { feature: string; amount: number; got?: number; lea
   return { name: s.feature, value: s.amount, kind: 'stat' };
 };
 
+/** Whether a sheet's bonuses are the server's (choiceEffects): a custom system with lists to pick from, or items (7e3b). */
+export const effectsWorked = (template: SheetTemplate): boolean => !!template.choices?.length || !!template.items;
+
 export const choiceEffects = (data: Obj | null | undefined, template: SheetTemplate): SheetEffects => {
   const worked = workedOn(data);
   const fields = new Map(template.sections.flatMap((s) => s.fields).map((f) => [f.id, f]));

@@ -65,7 +65,7 @@ test('a player rolls a custom system\'s rolls from their sheet, picking first wh
   await rolls.nth(1).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect.poll(() => broadcasts.length, { timeout: 15_000 }).toBe(1);
-  expect(broadcasts[0].historyString).toMatch(/^Rook rolled Trait check \(Wits\) \[\d \d = \d+ \+ 2 = \d+\] — (MISS|COST|HIT)$/);
+  expect(broadcasts[0].historyString).toMatch(/^Rook rolled Trait check \(Wits\) \[\(\d, \d\) \| \d+ \+ 2 = \d+\] — (MISS|COST|HIT)$/);
   expect(broadcasts[0].total).toBe(broadcasts[0].results['6'].reduce((a, b) => a + b, 0) + 2);
 
   // The dice tray opens in front of the sheet with each roll; Escape puts it away, as a player would.
@@ -83,7 +83,7 @@ test('a player rolls a custom system\'s rolls from their sheet, picking first wh
   await expect.poll(() => broadcasts.length, { timeout: 15_000 }).toBe(2);
   // Two d20, the higher kept, + Grit 3.
   // The lower in brackets, on whichever side it fell.
-  expect(broadcasts[1].historyString).toMatch(/^Rook rolled Grit save \(Grit\) \(Advantage\) \[(\d+ \(\d+\)|\(\d+\) \d+) = \d+ \+ 3 = \d+\]$/);
+  expect(broadcasts[1].historyString).toMatch(/^Rook rolled Grit save \(Grit\) \(Advantage\) \[\((\d+, \d+ dropped|\d+ dropped, \d+)\) \| \d+ \+ 3 = \d+\]$/);
   expect(broadcasts[1].results['20']).toHaveLength(2);
   expect(broadcasts[1].total).toBe(Math.max(...broadcasts[1].results['20']) + 3);
   await page.keyboard.press('Escape');
@@ -94,7 +94,7 @@ test('a player rolls a custom system\'s rolls from their sheet, picking first wh
   await ask.getByRole('switch', { name: 'PUSH · ADDS 2 STRESS · 1 OF 4' }).click();
   await ask.getByRole('button', { name: 'ROLL GRIT SAVE' }).click();
   await expect.poll(() => broadcasts.length, { timeout: 15_000 }).toBe(3);
-  expect(broadcasts[2].historyString).toMatch(/^Rook rolled Grit save \(Grit\) \(Push: \+2 STRESS\) \[\d+ = \d+ \+ 5 = \d+\]$/);
+  expect(broadcasts[2].historyString).toMatch(/^Rook rolled Grit save \(Grit\) \(Push: \+2 STRESS\) \[\d+ \+ 5 = \d+\]$/);
   await expect(page.getByLabel('Stress', { exact: true })).toHaveValue('3');
   await page.keyboard.press('Escape');
 

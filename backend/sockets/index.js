@@ -25,6 +25,7 @@ const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
 const { withUpload, lockedWhileCreating, kitsGivable } = require('../systemBuilder/creation');
+const { itemsGivable } = require('../systemBuilder/items');
 const { lockedByLevels } = require('../systemBuilder/levelUp');
 const { XP_KEY, earnsXp, HEALTH_BASE_KEY } = require('../systemBuilder/levels');
 const { withUploadedHealth } = require('../systemBuilder/healthLevels');
@@ -2475,7 +2476,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (!customSystems.partIn(system, 'give_items')) return socket.emit('givableItems', { ok: false, reason: 'give_off' });
         // Beside the shelves, a custom system's kits (7c4c): every one, as the GM can give anything.
         const kits = kitsGivable(customSystems.definitionOf(system) ?? {});
-        socket.emit('givableItems', { ok: true, system, catalogues: [...givable(system), ...(kits.length ? [{ catalogue: giving.KITS_CATALOGUE, items: kits }] : [])] });
+        // And its items (7e3b), to hand out as loot.
+        const items = itemsGivable(customSystems.definitionOf(system) ?? {});
+        socket.emit('givableItems', { ok: true, system, catalogues: [
+          ...givable(system),
+          ...(kits.length ? [{ catalogue: giving.KITS_CATALOGUE, items: kits }] : []),
+          ...(items.length ? [{ catalogue: giving.ITEMS_CATALOGUE, items }] : []),
+        ] });
       });
     });
 

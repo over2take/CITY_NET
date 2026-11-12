@@ -83,6 +83,9 @@ describe('searching', () => {
   it('names each chip as the game calls the catalogue', () => {
     expect(chipLabel('weapons', HEARTH)).toBe('BLADES');
     expect(chipLabel('gear', 'cities_without_number')).toBe('OPERATOR GEAR');
+    // A custom system's kits and items (7e3b), by what they are.
+    expect(chipLabel('kits', HEARTH)).toBe('KITS');
+    expect(chipLabel('items', HEARTH)).toBe('ITEMS');
   });
 
   it('says what each is worth, as the shop prints it', () => {

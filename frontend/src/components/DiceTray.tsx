@@ -15,6 +15,7 @@ import { labelParts, labelKey, paintLabel } from '../utils/dieLabels';
 import { useTrayMotion } from '../hooks/useTrayMotion';
 import { showOf, sayOf, emptyField, putShow, putNoise, decodedAt, COLS, WIDTH, HEIGHT, SETTLE_MS, HOLD_MS, type BoardRoll } from '../utils/trayBoard';
 import { makeWaiting } from '../utils/trayWaiting';
+import { totalIn } from '../sheets/rollTotal';
 
 // ─── CharacterBoard ──────────────────────────────────────────────────────────
 
@@ -263,6 +264,13 @@ interface DiceTrayWindowProps {
   openingRoll?: unknown;
 }
 
+/** A roll line with its final total in bold, to catch the eye (sheets/rollTotal.ts). */
+function BoldTotal({ line }: { line: string }) {
+  const split = totalIn(line);
+  if (!split) return <>{line}</>;
+  return <>{split.before}<strong data-testid="roll-total" style={{ fontWeight: 800 }}>{split.total}</strong>{split.after}</>;
+}
+
 export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bell, onToggleBell, openHistory = false, openingRoll = null }: DiceTrayWindowProps) {
   const theme = useContext(ThemeContext);
   const [motion, setMotion] = useTrayMotion(authToken);
@@ -437,7 +445,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
               return (
                 <React.Fragment key={i}>
                   <div style={{ marginBottom: '8px', color: themedRollColor(h.color, theme), textShadow: '1px 1px 2px #000, 0 0 8px #000, 0 0 4px #000', wordBreak: 'break-word' }}>
-                    {match ? <><strong style={{ fontWeight: 800 }}>{match[1]}:</strong> rolled {match[2]}</> : h.historyString}
+                    {match ? <><strong style={{ fontWeight: 800 }}>{match[1]}:</strong> rolled <BoldTotal line={match[2]} /></> : <BoldTotal line={h.historyString} />}
                   </div>
                   {i < history.length - 1 && <div style={{ borderBottom: '1px solid var(--green)', opacity: 0.4, margin: '12px 0' }} />}
                 </React.Fragment>

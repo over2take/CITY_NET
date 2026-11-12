@@ -130,9 +130,9 @@ test('the GM builds a system, publishes it twice, switches the game to it, and a
   // The player is told whether it worked; the GM what it was against too, and that players weren't.
   await expect.poll(() => playerSees.length, { timeout: 15_000 }).toBe(1);
   await expect.poll(() => gmSees.length, { timeout: 15_000 }).toBe(1);
-  expect(playerSees[0].historyString).toMatch(/^Wren rolled Grit save \(Grit\) \[\d+ = \d+\] — (SUCCESS|FAILURE)$/);
+  expect(playerSees[0].historyString).toMatch(/^Wren rolled Grit save \(Grit\) \[\d+\] — (SUCCESS|FAILURE)$/);
   expect(playerSees[0].board?.outcome ?? '').not.toMatch(/vs/i);
-  expect(gmSees[0].historyString).toMatch(/^Wren rolled Grit save \(Grit\) \[\d+ = \d+\] — vs 13: (SUCCESS|FAILURE) · HIDDEN FROM PLAYERS$/);
+  expect(gmSees[0].historyString).toMatch(/^Wren rolled Grit save \(Grit\) \[\d+\] — vs 13: (SUCCESS|FAILURE) · HIDDEN FROM PLAYERS$/);
   // The same verdict for both.
   expect(gmSees[0].historyString).toContain(/(SUCCESS|FAILURE)$/.exec(playerSees[0].historyString)![1]);
   await context.close();

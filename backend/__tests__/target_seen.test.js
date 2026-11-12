@@ -66,33 +66,33 @@ describe('a roll as players and the GM see it', () => {
   it('an old system with no setting: players see the target and the verdict, as always', () => {
     const made = roll(OLD);
     expect(made.players).toBeNull();
-    expect(made.historyText).toBe('Kestrel rolled Save (Save) [20 = 20] — vs 15: SUCCESS · CRITICAL · LUCKY · BRIGHT');
+    expect(made.historyText).toBe('Kestrel rolled Save (Save) [20] — vs 15: SUCCESS · CRITICAL · LUCKY · BRIGHT');
     expect(made.board).toEqual({ label: 'SAVE', outcome: 'vs 15: SUCCESS · CRITICAL · LUCKY · BRIGHT' });
   });
 
   it('VERDICT ONLY: players see SUCCESS but never the number; the GM sees all, and that it was kept', () => {
     const made = roll({ ...OLD, target_seen: 'verdict' });
-    expect(made.players.historyText).toBe('Kestrel rolled Save (Save) [20 = 20] — SUCCESS · CRITICAL · LUCKY · BRIGHT');
+    expect(made.players.historyText).toBe('Kestrel rolled Save (Save) [20] — SUCCESS · CRITICAL · LUCKY · BRIGHT');
     expect(made.players.board).toEqual({ label: 'SAVE', outcome: 'SUCCESS · CRITICAL · LUCKY · BRIGHT' });
-    expect(made.historyText).toBe(`Kestrel rolled Save (Save) [20 = 20] — vs 15: SUCCESS · CRITICAL · LUCKY · BRIGHT${HIDDEN}`);
+    expect(made.historyText).toBe(`Kestrel rolled Save (Save) [20] — vs 15: SUCCESS · CRITICAL · LUCKY · BRIGHT${HIDDEN}`);
     expect(made.board).toEqual({ label: 'SAVE', outcome: 'vs 15: SUCCESS · CRITICAL · LUCKY · BRIGHT' });
   });
 
   it('GM ONLY: players see the total, what the dice show and any-roll effects; not the target, the verdict, or a success\'s effect', () => {
     const made = roll({ ...OLD, target_seen: 'gm' });
-    expect(made.players.historyText).toBe('Kestrel rolled Save (Save) [20 = 20] — CRITICAL · BRIGHT');
+    expect(made.players.historyText).toBe('Kestrel rolled Save (Save) [20] — CRITICAL · BRIGHT');
     expect(made.players.board).toEqual({ label: 'SAVE', outcome: 'CRITICAL · BRIGHT' });
-    expect(made.historyText).toBe(`Kestrel rolled Save (Save) [20 = 20] — vs 15: SUCCESS · CRITICAL · LUCKY · BRIGHT${HIDDEN}`);
+    expect(made.historyText).toBe(`Kestrel rolled Save (Save) [20] — vs 15: SUCCESS · CRITICAL · LUCKY · BRIGHT${HIDDEN}`);
     // A failure with nothing else to say leaves players the bare total, on the board too.
     const missed = roll({ ...OLD, target_seen: 'gm' }, faces(3));
-    expect(missed.players.historyText).toBe('Kestrel rolled Save (Save) [3 = 3]');
+    expect(missed.players.historyText).toBe('Kestrel rolled Save (Save) [3]');
     expect(missed.players.board).toEqual({ label: 'SAVE' });
-    expect(missed.historyText).toBe(`Kestrel rolled Save (Save) [3 = 3] — vs 15: FAILURE${HIDDEN}`);
+    expect(missed.historyText).toBe(`Kestrel rolled Save (Save) [3] — vs 15: FAILURE${HIDDEN}`);
   });
 
   it('a roll\'s own setting over the system\'s, either way', () => {
     expect(roll({ ...OLD, target_seen: 'gm', rolls: [{ ...SAVE, seen: 'shown' }] }).players).toBeNull();
-    expect(roll({ ...OLD, rolls: [{ ...SAVE, seen: 'gm' }] }).players.historyText).toBe('Kestrel rolled Save (Save) [20 = 20] — CRITICAL · BRIGHT');
+    expect(roll({ ...OLD, rolls: [{ ...SAVE, seen: 'gm' }] }).players.historyText).toBe('Kestrel rolled Save (Save) [20] — CRITICAL · BRIGHT');
   });
 
   it('keeps nothing from players when a roll has no target, whatever the setting', () => {

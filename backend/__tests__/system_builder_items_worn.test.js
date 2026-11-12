@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { createRequire } from 'module';
 import { makeTestDb, run, get } from './helpers/testDb.js';
 import { drain, until } from './helpers/until.js';
+import jwt from 'jsonwebtoken';
 
 /**
  * Items at the table, the server's half (7e3a; approved mockup docs/mockups/items.html, 2026-11-10, and the user's calls):
@@ -11,8 +12,8 @@ import { drain, until } from './helpers/until.js';
  */
 
 const require_ = createRequire(import.meta.url);
-const { itemAction, carriedNames, slotUsed, slotCount, workingItems, itemsShown, WORN_KEY, SLOTS_KEY } = require_('../systemBuilder/items');
-const { effectiveData, overlayOf, workedOf, usesOf } = require_('../systemBuilder/choices');
+const { itemAction, carriedNames, slotUsed, slotCount, workingItems, itemsShown, itemWords, itemsGivable, WORN_KEY, SLOTS_KEY } = require_('../systemBuilder/items');
+const { effectiveData, overlayOf, workedOf, usesOf, itemsRenderedOf, choicesShown } = require_('../systemBuilder/choices');
 const { pickAction } = require_('../systemBuilder/picking');
 const { compileSystem } = require_('../systemBuilder/derived');
 const runtime = require_('../systemBuilder/runtime');
@@ -170,6 +171,37 @@ describe('what a working item does', () => {
   });
 });
 
+describe('the render copy (7e3b)', () => {
+  it('each slot by name and count, each item\'s words, what it needs and its features in words; null without', () => {
+    const shown = itemsRenderedOf({ ...WORN, items: { ...WORN.items, list: [...WORN.items.list, { id: 'pin', description: '  ', features: [{ label: 'no id' }, { id: 'f' }] }] } });
+    expect(shown.slots).toEqual([{ id: 'attuned', label: 'ATTUNED', count: 1 }]);
+    expect(shown.list.map((i) => [i.id, i.label, i.needs])).toEqual([
+      ['ring', 'Ring of Constitution', 'attuned'], ['cloak', 'Cloak', 'attuned'], ['boots', 'Boots', 'worn'], ['lucky_coin', 'Lucky Coin', 'carried'], ['pin', 'pin', 'worn'],
+    ]);
+    // Read as a pick's features are, by the same hand: what it changes by name, its uses and when they come back.
+    expect(shown.list[0].features).toEqual([{ id: 'hardy', label: 'Hardy', modifies: ['Con', 'HP MAX'] }]);
+    expect(shown.list[2].features).toEqual([{ id: 'quiet', label: 'Quiet', uses: { refill: 'Long rest' } }]);
+    // Never a level, as only a levelled list's are.
+    expect(shown.list[0].features[0]).not.toHaveProperty('at');
+    expect(shown.list[4]).toEqual({ id: 'pin', label: 'pin', needs: 'worn', features: [{ id: 'f', label: 'f' }] });
+    expect(itemsRenderedOf({ ...WORN, items: { slots: [{ id: 'bond', label: 'BONDED' }, { id: 'tied', count: 2 }] } })).toEqual({ slots: [{ id: 'bond', label: 'BONDED', count: 0 }, { id: 'tied', label: 'tied', count: 2 }], list: [] });
+    expect(itemsRenderedOf({ ...WORN, items: { list: [{ id: 'x', label: 'X', description: 'Shiny.' }] } })).toEqual({ slots: [], list: [{ id: 'x', label: 'X', description: 'Shiny.', needs: 'worn', features: [] }] });
+    expect(itemsRenderedOf({ ...WORN, items: undefined })).toBeNull();
+    expect(itemsRenderedOf({ ...WORN, items: {} })).toBeNull();
+    // On the copy the sheet loads.
+    expect(runtime.renderOf('sys_x', WORN).items).toEqual(itemsRenderedOf(WORN));
+    expect(runtime.renderOf('sys_x', { ...WORN, items: undefined }).items).toBeNull();
+  });
+
+  it('a pick\'s features read as they did, the level where its list unlocks by level', () => {
+    const def = { ...WORN, choices: [{ id: 'class', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter', features: [{ id: 'tough', label: 'Tough', at: 3, text: 'Hard.', modifiers: [{ target: 'con', amount: '1' }] }, { id: 'grit' }] }] },
+      { id: 'feat', one: 'Feat', many: 'Feats', options: [{ id: 'alert', features: [{ id: 'quick', label: 'Quick', at: 2 }] }] }] };
+    const [cls, feat] = choicesShown(def);
+    expect(cls.options[0].features).toEqual([{ id: 'tough', label: 'Tough', text: 'Hard.', at: 3, modifies: ['Con'] }, { id: 'grit', label: 'grit', at: 1 }]);
+    expect(feat.options[0].features).toEqual([{ id: 'quick', label: 'Quick' }]);
+  });
+});
+
 describe('through the socket', () => {
   it('worn and attuned, the ring\'s HP MAX bonus moves the token; refused in words', async () => {
     const db = await makeTestDb();
@@ -198,5 +230,83 @@ describe('through the socket', () => {
     const stored = JSON.parse((await get(db, 'SELECT data FROM character_sheets WHERE username = ?', ['kes'])).data);
     expect(stored[WORN_KEY]).toEqual({ ring: { worn: true, attuned: true } });
     expect(stored._worked.slots).toEqual([{ id: 'attuned', count: 1, used: 1 }]);
+  });
+
+  it('GIVE.EXE (7e3b): the system\'s items listed for the GM as ITEMS, given as a stowed line of the name, worn after', async () => {
+    const db = await makeTestDb();
+    const ID = 'sys_wornwornworn5678';
+    const told = [];
+    const def = JSON.stringify(WORN);
+    await run(db, 'INSERT INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 1)', [ID, 'Worn', def, def]);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    await run(db, 'INSERT INTO global_settings (key, value) VALUES (\'game_system\', ?)', [ID]);
+    await run(db, 'INSERT INTO character_sheets (username, system, data, is_npc) VALUES (\'kes\', ?, ?, 0)', [ID, JSON.stringify({ name: 'Kes', inventory: gear(['Rope']) })]);
+    let connection;
+    socketsFactory({ on: (e, cb) => { if (e === 'connection') connection = cb; }, emit: () => {}, to: () => ({ emit: (event, data) => told.push({ event, data }) }) },
+      db, { elevatedUsers: new Set(), emitUpdate: vi.fn(), recordAction: vi.fn() });
+    const join = async (who, identity) => {
+      const handlers = {};
+      const heard = [];
+      connection({ id: `give-${who}`, on: (e, fn) => { handlers[e] = fn; }, emit: (event, data) => heard.push({ event, data }), broadcast: { emit: () => {} }, use: () => {}, join: () => {}, disconnect: () => {} });
+      handlers.identify(identity);
+      await drain(db);
+      return { handlers, heard };
+    };
+    const GM_TOKEN = jwt.sign({ id: 1, username: 'gm', role: 'admin', isTemporary: false }, 'test-secret');
+    const gm = await join('gm', { userName: 'gm', isAdmin: true, token: GM_TOKEN });
+    const kes = await join('kes', 'kes');
+    const answer = (who, event) => until(() => who.heard.some((e) => e.event === event), { label: event }).then(() => who.heard.filter((e) => e.event === event).pop().data);
+    const sheet = async () => JSON.parse((await get(db, 'SELECT data FROM character_sheets WHERE username = ?', ['kes'])).data);
+
+    gm.handlers.requestGivable();
+    const listed = (await answer(gm, 'givableItems')).catalogues.find((c) => c.catalogue === 'items');
+    expect(listed.items).toEqual([
+      { id: 'ring', name: 'Ring of Constitution', price: 0, holds: 'NEEDS ATTUNED' },
+      { id: 'cloak', name: 'Cloak', price: 0, holds: 'NEEDS ATTUNED' },
+      { id: 'boots', name: 'Boots', price: 0, holds: 'WORKS WORN' },
+      { id: 'lucky_coin', name: 'Lucky Coin', price: 0, holds: 'WORKS CARRIED' },
+    ]);
+    kes.handlers.requestGivable();
+    await drain(db);
+    expect(kes.heard.some((e) => e.event === 'givableItems')).toBe(false);
+
+    gm.handlers.giveItem({ catalogue: 'items', id: 'ring', qty: 1, players: true, preview: true });
+    const preview = await answer(gm, 'itemGiven');
+    expect(preview.item).toEqual({ catalogue: 'items', id: 'ring', name: 'Ring of Constitution', price: 0 });
+    expect(preview.recipients.find((r) => r.username === 'kes')).toMatchObject({ given: false, lands: { shape: 'inventory', stacked: false } });
+    expect(JSON.parse((await sheet()).inventory).map((l) => l.name)).toEqual(['Rope']);
+    gm.heard.length = 0;
+    gm.handlers.giveItem({ catalogue: 'items', id: 'ring', qty: 1, players: ['kes'], note: 'Loot' });
+    const given = await answer(gm, 'itemGiven');
+    expect(given.recipients.find((r) => r.username === 'kes')).toMatchObject({ given: true });
+    expect(given.given[0]).toMatchObject({ catalogue: 'items', item: 'Ring of Constitution', qty: 1 });
+    const lines = JSON.parse((await sheet()).inventory);
+    expect(lines.map((l) => [l.name, l.qty, l.carry])).toEqual([['Rope', 1, 'stowed'], ['Ring of Constitution', 1, 'stowed']]);
+    // It is that item now: the player wears it.
+    kes.handlers.itemAction({ kind: 'wear', item: 'ring' });
+    await until(async () => (await sheet())[WORN_KEY]?.ring?.worn === true, { label: 'worn' });
+    // Two more join the line, as buying them would; the notice says what it needs.
+    gm.heard.length = 0;
+    gm.handlers.giveItem({ catalogue: 'items', id: 'ring', qty: 2, players: ['kes'] });
+    await answer(gm, 'itemGiven');
+    expect(JSON.parse((await sheet()).inventory).map((l) => [l.name, l.qty])).toEqual([['Rope', 1], ['Ring of Constitution', 3]]);
+    const notices = told.filter((e) => e.event === 'itemReceived').map((e) => e.data);
+    expect(notices).toContainEqual({ item: 'Ring of Constitution', catalogue: 'items', qty: 1, note: 'Loot', holds: 'NEEDS ATTUNED' });
+    expect(notices).toContainEqual({ item: 'Ring of Constitution', catalogue: 'items', qty: 2, note: '', holds: 'NEEDS ATTUNED' });
+    // One the system doesn't have is refused.
+    gm.heard.length = 0;
+    gm.handlers.giveItem({ catalogue: 'items', id: 'nope', qty: 1, players: ['kes'] });
+    expect(await answer(gm, 'itemGiven')).toEqual({ ok: false, reason: 'Not something this game can give.' });
+  });
+});
+
+describe('what GIVE.EXE says of an item (7e3b)', () => {
+  it('what it needs, by the slot\'s name, then its words; only items with a name', () => {
+    expect(itemWords(WORN, { needs: 'attuned', description: '  A plain band. ' })).toBe('NEEDS ATTUNED · A plain band.');
+    expect(itemWords(WORN, { needs: 'worn', description: ' ' })).toBe('WORKS WORN');
+    expect(itemWords(WORN, {})).toBe('WORKS WORN');
+    expect(itemWords(WORN, { needs: 'carried' })).toBe('WORKS CARRIED');
+    expect(itemWords({ items: { slots: [{ id: 'bond' }] } }, { needs: 'bond' })).toBe('NEEDS BOND');
+    expect(itemsGivable({ items: { list: [{ id: 'a', label: ' Axe ' }, { id: 'b', label: '  ' }, { id: 'c' }] } })).toEqual([{ id: 'a', name: 'Axe', price: 0, holds: 'WORKS WORN' }]);
   });
 });

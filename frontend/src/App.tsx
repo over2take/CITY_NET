@@ -1631,10 +1631,44 @@ function App() {
   };
   const healthShowing = !!selectedLocation && isTokenShape(selectedLocation.shape) && tokenFolder === 'health';
 
-  const handleLogout = () => {
-    // 1. Immediately close all UI elements for a clean fade-out
+  /**
+   * Every window App opens, closed: on TERMINATE_SESSION, and when the GM's panel signs out. One list, so a
+   * new window is closed by adding it here once (GIVE.EXE and a dozen others had been left open).
+   */
+  const closeAllWindows = () => {
     setIsChatOpen(false);
     setIsDiceTrayOpen(false);
+    setTrayOpener(null);
+    setIsCustomDieBuilderOpen(false);
+    setShowAdminPanel(false);
+    setShowPendingPanel(false);
+    setShowBattleMapManager(false);
+    setShowDirectorPanel(false);
+    setIsBankOpen(false);
+    setIsAdminPayOpen(false);
+    setIsAdminXpOpen(false);
+    setAdminBankPlayer(null);
+    setIsGiveOpen(false);
+    setGiveFor([]);
+    setIsCatalogueOpen(false);
+    setIsSheetOpen(false);
+    setOpenNpcSheet(null);
+    setOpenPlayerSheetUser(null);
+    setIsNewCharacterOpen(false);
+    setIsLevelUpOpen(false);
+    setIsVehiclesOpen(false);
+    setIsEnemyVehiclesOpen(false);
+    setIsRadioFeedOpen(false);
+    setIsRadioPlayerOpen(false);
+    setIsInitiativeOpen(false);
+    setIsNpcLibraryOpen(false);
+    setShopLocation(null);
+    setBuilder(null);
+  };
+
+  const handleLogout = () => {
+    // 1. Immediately close all UI elements for a clean fade-out
+    closeAllWindows();
     setActiveSidebarMenu('none');
     setSelectedLocation(null);
     setTargetObject(null);
@@ -1646,21 +1680,14 @@ function App() {
     setRoadSelectionBounds(null);
     setRoadTrail([]);
     setCameraTarget(null);
-    setShowAdminPanel(false);
-    setIsBankOpen(false);
-    setIsAdminPayOpen(false);
-    setAdminBankPlayer(null);
-    
+
     // Reset Rhombus state but keep color for next login preference
     setRhombusState((p: any) => ({ ...p, active: false }));
 
     if (socketRef.current && userName) {
         socketRef.current.emit('requestRhombusPurge', { owner: userName });
     }
-    
-    setIsSheetOpen(false);
-    setOpenNpcSheet(null);
-    setOpenPlayerSheetUser(null);
+
     setNotification("TERMINATING_SESSION...");
 
     // 2. Wait for animation to finish before unmounting map
@@ -1983,7 +2010,7 @@ function App() {
                 token={token}
                 userName={userName}
                 controlsRef={controlsRef}
-                onLogout={() => { setToken(''); setIsAdmin(false); setShowAdminPanel(false); setIsSheetOpen(false); setIsVehiclesOpen(false); setOpenNpcSheet(null); setOpenPlayerSheetUser(null); setIsBankOpen(false); }}
+                onLogout={() => { setToken(''); setIsAdmin(false); closeAllWindows(); }}
                 tempCityMapScale={tempCityMapScale}
                 setTempCityMapScale={setTempCityMapScale}
                 globalSettings={globalSettings}
