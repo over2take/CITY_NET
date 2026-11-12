@@ -148,3 +148,62 @@ describe('on the rail, in HELP and the "?"s', () => {
     for (const k of ['items.slots', 'items.count', 'items.items', 'items.name', 'items.words', 'items.needs'] as const) expect(HINTS[k], k).toBeTruthy();
   });
 });
+
+describe('INSTALLS (7e4b)', () => {
+  const WIRED = {
+    ...(WORN as unknown as object),
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'con', label: 'Con' }, { id: 'strain', label: 'Strain' }] }],
+    items: { ...(WORN as unknown as { items: object }).items, installs: [{ id: 'cyberware', label: 'CYBERWARE', against: 'strain', limit: '@con' }] },
+  } as unknown as Definition;
+  type Wired = { items?: { installs?: object[]; list?: { id: string; needs?: string; cost?: number }[] } };
+  const cyber = () => within(screen.getByTestId('install-cyberware'));
+
+  it('each with its name, what it costs against, which way and its limit; + INSTALL; × removes it', async () => {
+    const last = open(WIRED) as unknown as () => Wired;
+    expect(screen.getByText('INSTALLS · 1 OF 10')).toBeTruthy();
+    expect((cyber().getByLabelText('NAME') as HTMLInputElement).value).toBe('CYBERWARE');
+    const against = cyber().getByLabelText('COSTS AGAINST') as HTMLSelectElement;
+    expect(against.value).toBe('strain');
+    // The token's maximum is never offered: its bonuses live on the token.
+    expect([...against.options].map((o) => o.value)).not.toContain('hp_max');
+    fireEvent.change(against, { target: { value: 'con' } });
+    expect(last().items!.installs).toEqual([{ id: 'cyberware', label: 'CYBERWARE', against: 'con', limit: '@con' }]);
+    expect(cyber().getByText('NEVER PAST')).toBeTruthy();
+    await userEvent.click(cyber().getByRole('button', { name: 'TAKES FROM IT' }));
+    expect(last().items!.installs![0]).toMatchObject({ way: 'takes' });
+    expect(cyber().getByText('NEVER BELOW')).toBeTruthy();
+    expect(cyber().getByRole('button', { name: 'TAKES FROM IT' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.change(cyber().getByLabelText('CYBERWARE limit'), { target: { value: '0' } });
+    expect(last().items!.installs![0]).toMatchObject({ limit: '0' });
+    fireEvent.change(cyber().getByLabelText('NAME'), { target: { value: 'BIOWARE' } });
+    expect(last().items!.installs![0]).toMatchObject({ label: 'BIOWARE' });
+    await userEvent.click(screen.getByRole('button', { name: '+ INSTALL' }));
+    expect(screen.getByText('INSTALLS · 2 OF 10')).toBeTruthy();
+    expect((within(screen.getByTestId('install-new_install')).getByLabelText('COSTS AGAINST') as HTMLSelectElement).value).toBe('');
+    await userEvent.click(screen.getByRole('button', { name: 'Remove the BIOWARE install' }));
+    expect(last().items!.installs!.map((s) => (s as { id: string }).id)).toEqual(['new_install']);
+  });
+
+  it('an item INSTALLED AS one gets a COST, naming what it counts on; worn again, none', async () => {
+    const last = open(WIRED) as unknown as () => Wired;
+    await userEvent.click(screen.getByRole('button', { name: /RING/ }));
+    expect(ring().queryByLabelText('COST')).toBeNull();
+    fireEvent.change(ring().getByLabelText('ITS FEATURES NEED'), { target: { value: 'cyberware' } });
+    expect(last().items!.list![0]).toMatchObject({ needs: 'cyberware', cost: 1 });
+    expect(ring().getByText('STRAIN · FRACTIONS ARE FINE: 0.25')).toBeTruthy();
+    fireEvent.change(ring().getByLabelText('COST'), { target: { value: '0.25' } });
+    expect(last().items!.list![0].cost).toBe(0.25);
+    // Emptied, it keeps what it had until a number is typed.
+    fireEvent.change(ring().getByLabelText('COST'), { target: { value: '' } });
+    expect(last().items!.list![0].cost).toBe(0.25);
+    fireEvent.change(ring().getByLabelText('ITS FEATURES NEED'), { target: { value: 'worn' } });
+    expect(last().items!.list![0]).not.toHaveProperty('cost');
+    expect(ring().queryByLabelText('COST')).toBeNull();
+  });
+
+  it('none: said what one is; every hint written', () => {
+    open();
+    expect(screen.getByText(/^None: no item can need installing/)).toBeTruthy();
+    for (const k of ['items.installs', 'items.against', 'items.way', 'items.limit', 'items.cost']) expect(HINTS[k], k).toBeTruthy();
+  });
+});

@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   itemSlots, itemList, itemFeatures, withNewSlot, withSlot, withoutSlot, withNewItem, withItem, withoutItem, needsChoices, needsWords, LIMITS,
-  type Item,
+  itemInstalls, withNewInstall, withInstall, withoutInstall, installOf,
+  type Item, type ItemInstall,
 } from '../sheets/items';
-import { kindsOf } from '../sheets/choices';
+import { kindsOf, modifierTargets, tokenMaxTarget } from '../sheets/choices';
+import { useFormulaBox } from '../hooks/useFormulaBox';
 import { HINTS } from '../sheets/builderHelp';
 import { ColumnHead, FieldName } from './HelpHint';
 import { ItemFeaturesEditor } from './FeaturesEditor';
@@ -14,6 +16,9 @@ import { ItemFeaturesEditor } from './FeaturesEditor';
 // features need (carried, worn, or worn and in a slot) and the features themselves, the CHOICES form without a level, a
 // list or an increase. A shop sells an item by its name, as it sells anything. Wearing and attuning at the table are
 // 7e3's. What it reads and writes is sheets/items.ts; every change goes through the builder's `edit`.
+//
+// INSTALLS (7e4b; approved mockup docs/mockups/installed.html, 2026-11-11): what an item may be put in as, each costing
+// against a stat or formula, ADDS TO or TAKES FROM, up to or down to its limit; an item needing one has a COST.
 
 interface Props {
   definition: Definition;
@@ -77,6 +82,15 @@ function ItemCard({ definition, edit, item, api, open, onOpen }: Props & { item:
               {!needsChoices(definition).some((n) => n.id === (item.needs || 'worn')) && <option value={item.needs}>{needsWords(definition, item)}</option>}
               {needsChoices(definition).map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
             </select>
+            {/* What installing it costs (7e4b), only for an item needing an install. */}
+            {installOf(definition, item) && <>
+              <FieldName beside htmlFor={id('cost')} hint={HINTS['items.cost']} style={small}>COST</FieldName>
+              <span style={row}>
+                <input id={id('cost')} type="number" min={0} max={LIMITS.cost} step="any" value={item.cost ?? ''} style={{ ...input, width: 80 }}
+                  onChange={(e) => { const n = Number(e.target.value); if (e.target.value.trim() && Number.isFinite(n)) edit(withItem(definition, item.id, { cost: n })); }} />
+                <span style={{ ...why, fontSize: 11 }}>{costWords(definition, installOf(definition, item)!)}</span>
+              </span>
+            </>}
           </div>
           <ItemFeaturesEditor definition={definition} edit={edit} item={item} api={api} />
           <div style={{ ...row, justifyContent: 'flex-end' }}>
@@ -88,7 +102,57 @@ function ItemCard({ definition, edit, item, api, open, onOpen }: Props & { item:
   );
 }
 
+/** What an install's cost counts on, in words: "STRAIN · FRACTIONS ARE FINE: 0.25". */
+const costWords = (definition: Definition, install: ItemInstall) => {
+  const target = modifierTargets(definition).flatMap((g) => g.items).find((t) => t.id === install.against);
+  return `${target ? target.label : 'WHAT ITS INSTALL COSTS AGAINST'} · FRACTIONS ARE FINE: 0.25`;
+};
+
+/** One install: its name, what it costs against, which way, its limit (a formula box), and × in red. */
+function InstallRow({ definition, edit, api, s }: Props & { s: ItemInstall }) {
+  const name = s.label || s.id;
+  // The token's maximum takes its bonuses on the token: an install never costs against it (the server refuses it too).
+  const onToken = tokenMaxTarget(definition);
+  const targets = modifierTargets(definition).map((g) => ({ ...g, items: g.items.filter((t) => t.id !== onToken) })).filter((g) => g.items.length);
+  const takes = s.way === 'takes';
+  const limit = useFormulaBox({
+    definition, api, kind: 'formula', value: s.limit, onChange: (text) => edit(withInstall(definition, s.id, { limit: text })),
+    label: `${name} limit`, placeholder: takes ? '0' : '@might', inputStyle: { ...input, width: '100%' },
+  });
+  const choice = (on: boolean): React.CSSProperties => ({ ...btn, padding: '3px 8px', border: '1px solid var(--dark-green)', cursor: 'pointer',
+    background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)' });
+  return (
+    <div role="group" aria-label={`${name} install`} data-testid={`install-${s.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 4, borderLeft: '2px solid var(--dark-green)', paddingLeft: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '170px minmax(0, 1fr)', gap: '6px 12px', alignItems: 'center' }}>
+        <FieldName beside htmlFor={`install-${s.id}-name`} style={small}>NAME</FieldName>
+        <span style={row}>
+          <input id={`install-${s.id}-name`} type="text" maxLength={LIMITS.label} value={s.label} style={{ ...input, width: 180 }}
+            aria-invalid={!s.label.trim() ? true : undefined} onChange={(e) => edit(withInstall(definition, s.id, { label: e.target.value }))} />
+          <span style={{ flex: 1 }} />
+          <button type="button" className="utility-btn" style={{ ...btn, padding: '2px 7px', color: 'var(--danger)', borderColor: 'var(--danger)' }} aria-label={`Remove the ${name} install`}
+            onClick={() => edit(withoutInstall(definition, s.id))}>×</button>
+        </span>
+        <FieldName beside htmlFor={`install-${s.id}-against`} hint={HINTS['items.against']} style={small}>COSTS AGAINST</FieldName>
+        <select id={`install-${s.id}-against`} value={s.against} style={{ ...input, justifySelf: 'start' }} aria-invalid={!s.against ? true : undefined}
+          onChange={(e) => edit(withInstall(definition, s.id, { against: e.target.value }))}>
+          {!targets.some((g) => g.items.some((t) => t.id === s.against)) && <option value={s.against}>{s.against || 'PICK ONE'}</option>}
+          {targets.map((g) => <optgroup key={g.group} label={g.group}>{g.items.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}</optgroup>)}
+        </select>
+        <FieldName beside hint={HINTS['items.way']} style={small}>EACH ONE</FieldName>
+        <span role="group" aria-label={`${name}: each one`} style={{ display: 'inline-flex', justifySelf: 'start' }}>
+          <button type="button" aria-pressed={!takes} style={choice(!takes)} onClick={() => edit(withInstall(definition, s.id, { way: 'adds' }))}>ADDS TO IT</button>
+          <button type="button" aria-pressed={takes} style={choice(takes)} onClick={() => edit(withInstall(definition, s.id, { way: 'takes' }))}>TAKES FROM IT</button>
+        </span>
+        <FieldName beside hint={HINTS['items.limit']} style={small}>{takes ? 'NEVER BELOW' : 'NEVER PAST'}</FieldName>
+        {limit.field}
+      </div>
+      {limit.help}
+    </div>
+  );
+}
+
 export function ItemsPage({ definition, edit, api }: Props) {
+  const installs = itemInstalls(definition);
   const slots = itemSlots(definition);
   const items = itemList(definition);
   const [open, setOpen] = useState<string | null>(null);
@@ -137,6 +201,18 @@ export function ItemsPage({ definition, edit, api }: Props) {
             </table>
           )
           : <p style={{ ...why, fontSize: 11 }}>None: every item counts carried or worn, and the word never shows at the table. D&amp;D&apos;s ATTUNED, three each, is a slot.</p>}
+      </section>
+
+      <section aria-label="Installs" style={panel}>
+        <div style={row}>
+          <FieldName hint={HINTS['items.installs']} style={small}>INSTALLS · {installs.length} OF {LIMITS.installs}</FieldName>
+          <span style={{ flex: 1 }} />
+          <button type="button" className="utility-btn" style={btn} disabled={installs.length >= LIMITS.installs}
+            onClick={() => { const made = withNewInstall(definition); if (made) edit(made.definition); }}>+ INSTALL</button>
+        </div>
+        {installs.length
+          ? installs.map((s) => <InstallRow key={s.id} definition={definition} edit={edit} api={api} s={s} />)
+          : <p style={{ ...why, fontSize: 11 }}>None: no item can need installing, and the word never shows at the table. Cyberware against System Strain, or bioware against Essence, is an install.</p>}
       </section>
 
       <section aria-label="Items" style={panel}>

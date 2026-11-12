@@ -138,9 +138,13 @@ test('every control in the builder takes a click, on every page', async ({ page 
       // A slot, and an item open with a feature giving uses and a modifier, so every box of the page is there (7e2b).
       await page.getByRole('button', { name: '+ SLOT' }).click();
       await expect(page.getByTestId('slot-new_slot')).toBeVisible();
+      // An install too, and the item needing it, so its COST box is there (7e4b).
+      await page.getByRole('button', { name: '+ INSTALL' }).click();
+      await expect(page.getByTestId('install-new_install')).toBeVisible();
       await page.getByRole('button', { name: '+ ITEM' }).click();
       const item = page.getByRole('region', { name: 'NEW ITEM item' });
-      await item.getByRole('combobox', { name: 'ITS FEATURES NEED' }).selectOption('new_slot');
+      await item.getByRole('combobox', { name: 'ITS FEATURES NEED' }).selectOption('new_install');
+      await expect(item.getByRole('spinbutton', { name: 'COST' })).toBeVisible();
       await item.getByRole('button', { name: '+ FEATURE' }).click();
       const feature = item.getByRole('group', { name: 'Feature NEW FEATURE' });
       await feature.getByRole('switch', { name: /HAS USES/ }).click();
