@@ -6,6 +6,7 @@
 
 const crypto = require('crypto');
 const { compileSystem } = require('./derived');
+const { rankedOf } = require('./ranks');
 const { restOn, restLine } = require('./resting');
 const { restsOf } = require('./rests');
 const { conditionsOf } = require('./conditions');
@@ -20,7 +21,7 @@ const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
  */
 const workedOut = (definition, sheet) => {
   const data = { ...sheet };
-  const compiled = compileSystem({ lookups: definition.lookups, derived: definition.derived ?? [] });
+  const compiled = compileSystem({ lookups: definition.lookups, derived: definition.derived ?? [], ranked: rankedOf(definition) });
   if (compiled.ok) compiled.system.apply(data);
   return data;
 };

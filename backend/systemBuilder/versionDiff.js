@@ -26,6 +26,7 @@
 
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { compileSystem } = require('./derived');
+const { rankedOf } = require('./ranks');
 const { overlayOf } = require('./choices');
 const { derivedLabel } = require('./stats');
 const { conditionsOf } = require('./conditions');
@@ -157,7 +158,7 @@ const versionChanges = (before, after) => {
 
 /** Every worked-out value a version gives `data`, or null when its formulas can't run. */
 const valuesUnder = (definition, data) => {
-  const compiled = compileSystem({ lookups: (definition || {}).lookups, derived: list((definition || {}).derived) });
+  const compiled = compileSystem({ lookups: (definition || {}).lookups, derived: list((definition || {}).derived), ranked: rankedOf(definition || {}) });
   // With what the sheet's picks do under that version (7a1b): a feature changed changes values.
   return compiled.ok ? compiled.system.evaluate(data || {}, overlayOf(definition || {}, data)) : null;
 };

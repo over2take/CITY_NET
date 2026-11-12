@@ -38,6 +38,7 @@
 // are upgraded on read rather than refused.
 
 const { compileSystem } = require('./derived');
+const { rankedOf, checkRanks } = require('./ranks');
 const { checkSheet } = require('./sheet');
 const { checkNpc } = require('./npc');
 const { checkCore, healthLayout } = require('./core');
@@ -75,7 +76,7 @@ const LIMITS = {
   word: 40,
 };
 
-const SECTIONS = new Set(['levels', 'format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules', 'graph', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'items', 'resting', 'creation']);
+const SECTIONS = new Set(['ranks', 'levels', 'format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules', 'graph', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'items', 'resting', 'creation']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -162,8 +163,8 @@ const checkDefinition = (definition) => {
   checkCurrencies(definition.currencies, problems);
   checkBank(definition.bank, problems);
 
-  if (definition.lookups !== undefined || definition.derived !== undefined) {
-    const compiled = compileSystem({ lookups: definition.lookups, derived: definition.derived ?? [] });
+  if (definition.lookups !== undefined || definition.derived !== undefined || definition.ranks !== undefined) {
+    const compiled = compileSystem({ lookups: definition.lookups, derived: definition.derived ?? [], ranked: rankedOf(definition) });
     if (!compiled.ok) problems.push(...compiled.problems);
   }
   const derivedIds = new Set(Array.isArray(definition.derived)
@@ -178,6 +179,11 @@ const checkDefinition = (definition) => {
   ]);
   checkStats(definition.stats, taken, problems);
   checkSamples(definition.samples, statIdsOf(definition), problems);
+  // Ranks (7f1a): the lists, and the stats held as them.
+  checkRanks(definition, problems, {
+    isTable: (name) => isPlainObject(definition.lookups) && Object.prototype.hasOwnProperty.call(definition.lookups, name),
+    taken: new Set([...statIdsOf(definition), ...derivedIds]),
+  });
   checkSheet(definition.sheet, derivedIds, problems);
   checkCore(definition.core, derivedIds, problems);
   checkNpc(definition, derivedIds, problems);

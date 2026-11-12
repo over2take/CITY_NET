@@ -123,6 +123,7 @@ const { healthLayout } = require('./core');
 const { partOn } = require('./parts');
 const { currenciesOf } = require('./currencies');
 const { checkItems, itemsOf, slotsOf, installsOf, workingFeatures, itemsOwned, itemsShown } = require('./items');
+const { stepFieldsOf } = require('./ranks');
 
 /** Where a sheet keeps its picks: starting with _, so no stat, formula or field can be called it. */
 const PICKS_KEY = '_choices';
@@ -786,10 +787,13 @@ const overlayOf = (definition, data) => {
   };
   const isTable = (name) => own(tables, name);
   const targets = targetsOf(definition);
-  const fields = fieldTargetsOf(definition);
+  // A stat held as a rank (7f1a): a bonus or INCREASE on it moves its step, which its worth is read from.
+  const steps = stepFieldsOf(definition);
+  const fields = new Set([...fieldTargetsOf(definition), ...steps.values()]);
   const bonuses = {};
   const increases = isPlainObject(sheet[INCREASES_KEY]) ? sheet[INCREASES_KEY] : {};
-  const added = (target, amount, feature, least = false, cap = null, item = null) => {
+  const added = (stat, amount, feature, least = false, cap = null, item = null) => {
+    const target = steps.get(stat) || stat;
     const b = own(bonuses, target) ? bonuses[target] : (bonuses[target] = { adds: [], least: [] });
     // An item's bonus is named by the item (7e3): Ring of Constitution +2.
     b[least ? 'least' : 'adds'].push({ feature: item ? item.label || item.id : feature.label || feature.id, amount, ...(cap === null ? {} : { cap }) });

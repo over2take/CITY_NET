@@ -14,6 +14,7 @@
 // section or condition waiting on a rule that is off is hidden from every answer at once.
 
 const { compileSystem } = require('./derived');
+const { rankedOf } = require('./ranks');
 const { overlayOf, choicesOf, workedOf, worksOutPicks, choicesShown, itemsRenderedOf, WORKED_KEY } = require('./choices');
 const { poolsOf, recoveryShown, restingShown } = require('./recovery');
 const { creationShown } = require('./creation');
@@ -47,7 +48,7 @@ const metaOf = (definition) => {
   // The NPC layout's fields too: the server keeps one set of rules per system, and an NPC's
   // HP lives on its token just as a player's does (npc.js holds the two layouts to agreeing).
   const both = [...fields, ...fieldsOf(npcSheetOf(definition))];
-  const compiled = compileSystem({ lookups: definition.lookups, derived: definition.derived ?? [] });
+  const compiled = compileSystem({ lookups: definition.lookups, derived: definition.derived ?? [], ranked: rankedOf(definition) });
   const linkedFields = {};
   const maxPairs = {};
   for (const f of both) {

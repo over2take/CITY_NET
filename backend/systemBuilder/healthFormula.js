@@ -4,6 +4,7 @@
 // health is AS IT IS, or the system or its formula can't be worked out.
 
 const { compileSystem, tablesOf, lookupIn } = require('./derived');
+const { rankedOf } = require('./ranks');
 const { parse, evaluate } = require('./expression');
 const { ruleValue } = require('./rules');
 const { overlayOf } = require('./choices');
@@ -16,7 +17,7 @@ const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 /** What `source` comes to for this sheet now, read as a derived value is: unrounded, or null when it can't be worked out. */
 const formulaValueOf = (definition, data, source) => {
   // A system with no formulas of its own has none to work out first.
-  const compiled = compileSystem({ lookups: definition.lookups, derived: Array.isArray(definition.derived) ? definition.derived : [] });
+  const compiled = compileSystem({ lookups: definition.lookups, derived: Array.isArray(definition.derived) ? definition.derived : [], ranked: rankedOf(definition) });
   if (!compiled.ok) return null;
   const tables = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
   let tree;

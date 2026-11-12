@@ -104,6 +104,9 @@ const partsOf = (entry) => (entry.kind === 'condition'
  * the sheet's own (a stat with its features' modifiers, a pick's level), and `add`, an amount added
  * to a derived value once it is worked out, before anything reading it is. From 7e1, `bonus` in its place where given:
  * { adds, least } counted as bonuses.js says, what each really gave written into `applied` when the overlay has it.
+ *
+ * `ranked` (7f1a, ranks.js rankedOf): each stat held as a rank, worked out as one of these is: the worth of the rank its
+ * step field is at (a step past either end reading as the end), so a formula reading the stat reads its worth.
  */
 const compileSystem = (definition) => {
   const problems = [];
@@ -153,6 +156,24 @@ const compileSystem = (definition) => {
     }
     if (!ok) continue;
     compiled.push({ id, kind: entry.kind === 'condition' ? 'condition' : 'formula', trees, fields: refs.fields });
+  }
+
+  // Ranked stats (7f1a): each rank's worth compiled on its own, the step choosing which is read.
+  for (const r of (Array.isArray(def.ranked) ? def.ranked : [])) {
+    const where = `stat ${r.id}`;
+    if (seen.has(r.id)) { problems.push({ where, message: 'A formula has this id' }); continue; }
+    seen.add(r.id);
+    const trees = {};
+    // The step is a sheet field (ranks.js keeps any formula from its id); the worths' own @names order this entry.
+    const fields = new Set();
+    let ok = true;
+    r.worths.forEach((w, i) => {
+      try {
+        trees[`w${i}`] = parse(w, isTable);
+        references(trees[`w${i}`]).fields.forEach((f) => fields.add(f));
+      } catch (err) { problems.push({ where: `${where}, rank ${i + 1}`, message: err.message }); ok = false; }
+    });
+    if (ok) compiled.push({ id: r.id, kind: 'rank', step: r.step, count: r.worths.length, trees, fields });
   }
 
   // Order: a value is worked out after every derived value it reads. Anything else @named is a
@@ -205,7 +226,9 @@ const compileSystem = (definition) => {
       const c = byId.get(id);
       values[id] = c.kind === 'condition'
         ? (evaluate(c.trees.when, env) !== 0 ? evaluate(c.trees.then, env) : evaluate(c.trees.else, env))
-        : evaluate(c.trees.formula, env);
+        : c.kind === 'rank'
+          ? evaluate(c.trees[`w${Math.min(c.count - 1, Math.max(0, Math.round(env.field(c.step))))}`], env)
+          : evaluate(c.trees.formula, env);
       if (bonus) {
         if (own(bonus, id)) {
           const done = applyBonuses(values[id], bonus[id]);
