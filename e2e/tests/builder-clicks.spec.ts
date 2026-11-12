@@ -218,8 +218,13 @@ test('every control in the builder takes a click, on every page', async ({ page 
     }
     if (p === 'STATS & RULES') {
       // Each of its tabs, not only the first.
-      for (const tab of ['FORMULAS', 'TABLES', 'DICE', 'ROLLS']) {
+      for (const tab of ['FORMULAS', 'TABLES', 'RANKS', 'DICE', 'ROLLS']) {
         await page.getByRole('tab', { name: tab, exact: true }).click();
+        // RANKS (7f1b): a list from a preset, so its ranks' rows are there.
+        if (tab === 'RANKS') {
+          await page.getByRole('group', { name: 'New rank list' }).getByRole('button', { name: '+ PROFICIENCY' }).click();
+          await expect(page.getByTestId('ranks-proficiency')).toBeVisible();
+        }
         missed[`${p} · ${tab}`] = await faults(page);
         if (tab === 'DICE') {
           // Dice made from a preset, and a symbol's drawing pad and icons open (6c2b2).
@@ -242,6 +247,10 @@ test('every control in the builder takes a click, on every page', async ({ page 
         missed[`${p} · ROLLS · ${preset}`] = await faults(page);
       }
       await page.getByRole('tab', { name: 'STATS', exact: true }).click();
+      // A stat holding the rank list, so HOLDS, AT START and the sample's ranks are there (7f1b).
+      await page.getByRole('combobox', { name: / holds$/ }).first().selectOption('proficiency');
+      await expect(page.getByRole('combobox', { name: / at start, up to$/ }).first()).toBeVisible();
+      missed[`${p} · STATS · A RANKED STAT`] = await faults(page);
       // And as a map (5a3a): the map's own controls, then back to FORMS, as the next journeys expect.
       const view = page.getByRole('group', { name: 'View' });
       await view.getByRole('button', { name: 'GRAPH' }).click();

@@ -14,6 +14,7 @@ const { buildCustomTemplate } = require('../sheets/pdfTemplate');
 const runtime = require('../systemBuilder/runtime');
 const { checkDefinition, NEW_SYSTEM_SEEN } = require('../systemBuilder/definition');
 const { previewDerived } = require('../systemBuilder/derived');
+const { rankedOf } = require('../systemBuilder/ranks');
 const { previewFormulas, SAMPLE_LEVEL } = require('../systemBuilder/formulaPreview');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { conditionsOf } = require('../systemBuilder/conditions');
@@ -286,7 +287,10 @@ module.exports = (db, io = null) => {
     const checked = checkDefinition(definition);
     if (checked.fatal) return res.status(400).json({ error: checked.fatal });
     const samples = definition.samples && typeof definition.samples === 'object' && !Array.isArray(definition.samples) ? definition.samples : {};
-    res.json(previewDerived({ lookups: definition.lookups, derived: definition.derived }, samples));
+    // A ranked stat's sample is its step (7f1b).
+    const ranked = rankedOf(definition);
+    const data = { ...samples, ...Object.fromEntries(ranked.map((r) => [r.step, samples[r.id] ?? 0])) };
+    res.json(previewDerived({ lookups: definition.lookups, derived: definition.derived, ranked }, data));
   });
 
   /**

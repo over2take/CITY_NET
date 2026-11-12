@@ -276,9 +276,11 @@ const problemId = (p) => {
  * one, so one unfinished formula doesn't blank the rest. Returns { values, problems }, the problems
  * all of compileSystem's. The running game never uses this: it runs only a published, whole system.
  */
-const previewDerived = ({ lookups, derived }, data) => {
+const previewDerived = ({ lookups, derived, ranked = [] }, data) => {
   const all = Array.isArray(derived) ? derived : [];
-  const first = compileSystem({ lookups, derived: all });
+  // Ranked stats (7f1b) are worked out too, while every rank's worth reads.
+  const ranks = compileSystem({ lookups, derived: [], ranked }).ok ? ranked : [];
+  const first = compileSystem({ lookups, derived: all, ranked: ranks });
   if (first.ok) return { values: first.system.evaluate(data), problems: [] };
   let kept = all;
   let compiled = first;
@@ -297,7 +299,7 @@ const previewDerived = ({ lookups, derived }, data) => {
     const next = kept.filter((d) => d && typeof d.id === 'string' && !out.has(d.id));
     if (next.length === kept.length) break;
     kept = next;
-    compiled = compileSystem({ lookups, derived: kept });
+    compiled = compileSystem({ lookups, derived: kept, ranked: ranks });
   }
   return { values: compiled.ok ? compiled.system.evaluate(data) : {}, problems: first.problems };
 };
