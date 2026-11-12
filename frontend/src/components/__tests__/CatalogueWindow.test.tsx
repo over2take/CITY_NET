@@ -236,6 +236,38 @@ describe('saving only what was previewed', () => {
     }
   });
 
+  it('a custom system\'s items (7e3c): DOWNLOAD ITEMS, and the preview naming item lines and near misses', async () => {
+    const HEARTH = 'sys_cccccccccccccccc';
+    registerCustomTemplate({ id: HEARTH, name: 'Hearth', parts: {}, derived: [], sheet: { sections: [] }, words: {},
+      items: { slots: [{ id: 'attuned', label: 'ATTUNED', count: 3 }], list: [{ id: 'ring', label: 'Ring of Might', description: 'Heavy.', needs: 'attuned', features: [] }] } });
+    try {
+      show(HEARTH);
+      await userEvent.click(button('DOWNLOAD ITEMS'));
+      await vi.waitFor(() => expect(downloads).toHaveLength(1));
+      expect(downloads[0].name).toBe(`${HEARTH}-storefronts-items.csv`);
+      expect(downloads[0].text).toContain('[gear]');
+      expect(downloads[0].text).toMatch(/^Ring of Might\s*,\s*,\s*,\s*Heavy\.$/m);
+
+      type('[gear]\nname, price\nRing of Might, 500\nRing of Migt, 5');
+      await userEvent.click(button('PREVIEW'));
+      reply('cataloguePreview', { problems: [], format: 'csv', summary: [{ catalogue: 'gear', count: 2, overrides: [] }],
+        sections: { gear: [{ name: 'Ring of Might', price: 500, line: 3 }, { name: 'Ring of Migt', price: 5, line: 4 }] } });
+      expect(screen.getByTestId('catalogue-items').textContent).toBe('ITEMS: RING OF MIGHT · bought, each is that item, to WEAR and ATTUNE');
+      expect(screen.getByText('LINE 4 [gear] Ring of Migt: nearly the item Ring of Might. Name it exactly to sell that item')).toBeInTheDocument();
+    } finally {
+      clearCustomTemplates();
+    }
+  });
+
+  it('no DOWNLOAD ITEMS, nor item lines, on a game without items', async () => {
+    show();
+    expect(screen.queryByRole('button', { name: 'DOWNLOAD ITEMS' })).toBeNull();
+    type(ZIP);
+    await userEvent.click(button('PREVIEW'));
+    reply('cataloguePreview', { ...cleanPreview, sections: { weapons: [{ name: 'Zip Gun', price: 15, line: 3 }] } });
+    expect(screen.queryByTestId('catalogue-items')).toBeNull();
+  });
+
   it('says so when the save fails, and that nothing changed', async () => {
     show();
     type(ZIP);

@@ -101,7 +101,7 @@ export function ItemsPage({ definition, edit, api }: Props) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 980 }}>
       <p style={{ ...why, maxWidth: '72ch' }}>
-        Things a character carries, wears or attunes to that do something: a bonus, uses a rest refills, a roll. A shop sells one by its name, as it sells anything.
+        Things a character carries, wears or attunes to that do something: a bonus, uses a rest refills, a roll. A shop sells one by its name, as it sells anything: once this system is running, CATALOGUES.EXE&apos;s DOWNLOAD ITEMS starts a catalogue of them, prices to fill in. The GM can also hand one out from GIVE.EXE&apos;s ITEMS.
       </p>
       <p style={{ ...why, maxWidth: '72ch' }}>
         SLOTS limit how many items can work at once, like D&amp;D&apos;s attunement: each character has so many (three), and an item that needs a slot only works while it&apos;s worn and holds one. Name the slot whatever your game calls it. With none, every item simply counts when it&apos;s carried or worn.
