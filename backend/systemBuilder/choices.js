@@ -496,6 +496,8 @@ const checkChoices = (definition, problems) => {
   checkItems(definition, problems, {
     id, text, keys, named, labelMost: LIMITS.label, descriptionMost: LIMITS.description,
     checkFeature: (f, where) => checkFeature(f, where, false, null, true),
+    // An install's limit, and what it costs against (7e4).
+    formula, targets, onToken: tokenMaxFieldOf(definition),
   });
 };
 
@@ -932,7 +934,7 @@ const workedOf = (definition, data, overlay = overlayOf(definition, data)) => {
     })(),
     unmet: choicesOf(definition).flatMap((c) => optionsOf(c).filter((o) => !taken.has(o.id) && !meets(definition, data, o)).map((o) => o.id)),
     // 7e3: each carried item's state and each slot's count, for the sheet's gear.
-    ...(itemsOf(definition).length ? itemsShown(definition, data) : {}),
+    ...(itemsOf(definition).length ? itemsShown(definition, data, (text) => valueOn(definition, data, text)) : {}),
   };
 };
 

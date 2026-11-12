@@ -22,7 +22,7 @@
 // The GM's START OVER (7c5) takes back what FINISH gave the same way round: items in the write, money
 // after it, stopping at 0 as it may be spent. Clearing the name, it renames their token too.
 //
-// `itemAction` with { kind: 'wear' | 'takeOff' | 'attune' | 'end', item } or the GM's { kind: 'slots', slot, count } (7e3):
+// `itemAction` with { kind: 'wear' | 'takeOff' | 'attune' | 'end' | 'install' | 'uninstall', item } or the GM's { kind: 'slots', slot, count } (7e3):
 // wearing and attuning an item on the sheet, checked by systemBuilder/items.js; a worn item's bonus on the token's maximum
 // moves the token, as a pick's does.
 //
@@ -38,6 +38,7 @@ const { maySpend, restingOf, OPEN_SETTING } = require('../systemBuilder/recovery
 const { creationAction, statRollLine } = require('../systemBuilder/creation');
 const { levelAction, healthRollLine } = require('../systemBuilder/levelUp');
 const { itemAction } = require('../systemBuilder/items');
+const { valueOn } = require('../systemBuilder/choices');
 const { kitPatch, kitTakenBack } = require('../sheets/kitGiving');
 const identity = require('../sheets/identity');
 const { takeRest } = require('../sheets/rests');
@@ -210,7 +211,8 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
     withCaller(payload, 'choicesRefused', ({ gm, username, system, definition, refuse }) => {
       let error = null;
       mutateSheetForUser(db, { username, system }, (data) => {
-        const done = itemAction(definition, data, payload, { gm });
+        // An install's limit read on the sheet as it is now (7e4).
+        const done = itemAction(definition, data, payload, { gm, readValue: (text) => valueOn(definition, data, text) });
         if (!done.ok) { error = done.error; return undefined; }
         sheetTemplates.applyDerived(system, done.data);
         return done.data;
