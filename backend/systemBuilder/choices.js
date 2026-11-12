@@ -122,7 +122,7 @@ const { restIdsOf } = require('./rests');
 const { healthLayout } = require('./core');
 const { partOn } = require('./parts');
 const { currenciesOf } = require('./currencies');
-const { checkItems, itemsOf, slotsOf, workingFeatures, itemsOwned, itemsShown } = require('./items');
+const { checkItems, itemsOf, slotsOf, installsOf, workingFeatures, itemsOwned, itemsShown } = require('./items');
 
 /** Where a sheet keeps its picks: starting with _, so no stat, formula or field can be called it. */
 const PICKS_KEY = '_choices';
@@ -1031,19 +1031,24 @@ const choicesShown = (definition) => {
 
 /**
  * A system's items as the sheet draws them (7e3b): its slots, each by name and how many a character has, and each item's
- * words, what it needs, and its features read as a pick's are. Null for a system without items or slots.
+ * words, what it needs, and its features read as a pick's are; its installs (7e4c) by name. Null for a system without any.
  */
 const itemsRenderedOf = (definition) => {
   const slots = slotsOf(definition);
+  const installs = installsOf(definition);
   const items = itemsOf(definition);
-  if (!slots.length && !items.length) return null;
+  if (!slots.length && !items.length && !installs.length) return null;
   const featuresShown = featuresShownBy(definition);
+  const names = namesOf(definition);
   return {
     slots: slots.map((s) => ({ id: s.id, label: s.label || s.id, count: Number.isInteger(s.count) ? s.count : 0 })),
+    // Each install (7e4c): its name, what it costs against by name, and which way; never the limit's formula.
+    ...(installs.length ? { installs: installs.map((s) => ({ id: s.id, label: s.label || s.id, against: String(names.get(s.against) || s.against || ''), way: s.way === 'takes' ? 'takes' : 'adds' })) } : {}),
     list: items.map((i) => ({
       id: i.id, label: i.label || i.id,
       ...(typeof i.description === 'string' && i.description.trim() ? { description: i.description } : {}),
       needs: i.needs || 'worn',
+      ...(typeof i.cost === 'number' && Number.isFinite(i.cost) && installs.some((s) => s.id === i.needs) ? { cost: i.cost } : {}),
       features: featuresShown(i.features),
     })),
   };

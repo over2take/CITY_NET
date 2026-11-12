@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { itemsWorkedOn, itemLines, slotVerb, gearRow, slotCounters, slotCountAsked, itemUses, type ItemsShown, type ItemWorked } from '../gearItems';
+import { itemsWorkedOn, itemLines, slotVerb, gearRow, slotCounters, slotCountAsked, itemUses, fits, installCounters, installedNames, amount, type ItemsShown, type ItemWorked } from '../gearItems';
 import { blankItem, type InventoryItem } from '../inventory';
 
 /**
@@ -34,8 +34,8 @@ describe('which line is an item', () => {
 describe('what the last save worked out', () => {
   it('the items and slots, those well formed; nothing without', () => {
     const data = { _worked: { items: [{ id: 'ring', needs: 'attuned', worn: true }, { needs: 'x' }, 'no'], slots: [{ id: 'attuned', count: 3, used: 1 }, { id: 'x', count: '3', used: 1 }, { id: 'y', count: 3 }] } };
-    expect(itemsWorkedOn(data)).toEqual({ items: [{ id: 'ring', needs: 'attuned', worn: true }], slots: [{ id: 'attuned', count: 3, used: 1 }] });
-    for (const d of [null, undefined, {}, { _worked: [] }, { _worked: { items: 'x', slots: {} } }]) expect(itemsWorkedOn(d as never)).toEqual({ items: [], slots: [] });
+    expect(itemsWorkedOn(data)).toEqual({ items: [{ id: 'ring', needs: 'attuned', worn: true }], slots: [{ id: 'attuned', count: 3, used: 1 }], installs: [] });
+    for (const d of [null, undefined, {}, { _worked: [] }, { _worked: { items: 'x', slots: {}, installs: {} } }]) expect(itemsWorkedOn(d as never)).toEqual({ items: [], slots: [], installs: [] });
   });
 });
 
@@ -142,5 +142,90 @@ describe('an item\'s uses', () => {
     const boots = ITEMS.list[1];
     expect(itemUses(boots, { quiet: { max: 2, spent: 5 }, soft: { max: 1, spent: 0 } })).toEqual([{ feature: boots.features[0], max: 2, spent: 2 }]);
     expect(itemUses(boots, {})).toEqual([]);
+  });
+});
+
+describe('installed items (7e4c)', () => {
+  const WIRED: ItemsShown = {
+    slots: [],
+    installs: [{ id: 'cyber', label: 'Cyberware', against: 'Strain', way: 'adds' }, { id: 'bio', label: 'Bioware', against: 'Essence', way: 'takes' }],
+    list: [
+      { id: 'jack', label: 'Cranial Jack', needs: 'cyber', cost: 1, features: [] },
+      { id: 'tweak', label: 'Muscle Tweak', needs: 'bio', cost: 0.25, features: [] },
+    ],
+  };
+  const jack = WIRED.list[0];
+  const room = (value: number | null, limit: number | null) => ({ items: [{ id: 'jack', needs: 'cyber' }] as ItemWorked[], slots: [], installs: [{ id: 'cyber', used: 0, value, limit }] });
+  const row = (worked: Parameters<typeof gearRow>[1], opts = {}) => gearRow(jack, worked, [], { installs: WIRED.installs, ...opts });
+
+  it("the installs a save worked out, those well formed; a value or limit it couldn't read is null", () => {
+    const data = { _worked: { installs: [{ id: 'cyber', used: 2.5, value: 3.5, limit: 4 }, { id: 'bio', used: 0, value: 'x', limit: null }, { used: 1 }, { id: 'z' }] } };
+    expect(itemsWorkedOn(data).installs).toEqual([{ id: 'cyber', used: 2.5, value: 3.5, limit: 4 }, { id: 'bio', used: 0, value: null, limit: null }]);
+    expect(itemsWorkedOn({}).installs).toEqual([]);
+  });
+
+  it('room: adding, the value plus its cost within the limit; taking, the value less it; unknowable, none', () => {
+    const [cyber, bio] = WIRED.installs!;
+    expect(fits(cyber, { id: 'cyber', used: 0, value: 3, limit: 4 }, 1)).toBe(true);
+    expect(fits(cyber, { id: 'cyber', used: 0, value: 3.1, limit: 4 }, 1)).toBe(false);
+    expect(fits(bio, { id: 'bio', used: 0, value: 0.25, limit: 0 }, 0.25)).toBe(true);
+    expect(fits(bio, { id: 'bio', used: 0, value: 0.2, limit: 0 }, 0.25)).toBe(false);
+    expect(fits(cyber, { id: 'cyber', used: 0, value: null, limit: 4 }, 1)).toBe(false);
+    expect(fits(cyber, { id: 'cyber', used: 0, value: 1, limit: null }, 1)).toBe(false);
+    expect(fits(cyber, undefined, 1)).toBe(false);
+    // A hair of rounding is room enough.
+    expect(fits(cyber, { id: 'cyber', used: 0, value: 0.1 + 0.2, limit: 0.3 }, 0)).toBe(true);
+    expect(fits(bio, { id: 'bio', used: 0, value: 0.3, limit: 0.1 + 0.2 }, 0)).toBe(true);
+  });
+
+  it('with room: INSTALL, what it costs, carried and doing nothing yet', () => {
+    expect(row(room(1, 4))).toEqual({
+      tag: 'CYBERWARE · COSTS 1 STRAIN',
+      buttons: [{ label: 'INSTALL', action: { kind: 'install', item: 'jack' } }],
+      say: { text: 'CARRIED, DOES NOTHING TILL INSTALLED', warn: false },
+    });
+  });
+
+  it("past the limit: a player's INSTALL disabled and why; the GM's INSTALL ANYWAY", () => {
+    expect(row(room(3.5, 4))).toEqual({
+      tag: 'CYBERWARE · COSTS 1 STRAIN',
+      buttons: [{ label: 'INSTALL', action: null, title: "Past CYBERWARE's limit: only your GM can install it" }],
+      say: { text: "PAST CYBERWARE'S LIMIT · ONLY YOUR GM CAN", warn: true },
+    });
+    expect(row(room(3.5, 4), { gm: true })).toEqual({
+      tag: 'CYBERWARE · COSTS 1 STRAIN',
+      buttons: [{ label: 'INSTALL ANYWAY', action: { kind: 'install', item: 'jack' }, hot: true, title: "Past CYBERWARE's limit: yours to allow" }],
+      say: { text: "PAST CYBERWARE'S LIMIT", warn: true },
+    });
+  });
+
+  it('installed: INSTALLED · REMOVE, and WORKING; read-only, nothing to press; stashed and not installed, nothing', () => {
+    const on = { ...room(2, 4), items: [{ id: 'jack', needs: 'cyber', installed: true, working: true }] as ItemWorked[] };
+    expect(row(on)).toEqual({ tag: 'CYBERWARE · COSTS 1 STRAIN', buttons: [{ label: 'INSTALLED · REMOVE', action: { kind: 'uninstall', item: 'jack' }, on: true }], say: { text: 'WORKING', warn: false } });
+    expect(row({ ...on, items: [{ id: 'jack', needs: 'cyber', installed: true }] }).say).toBeNull();
+    expect(row(on, { readOnly: true }).buttons[0].action).toBeNull();
+    expect(row(room(1, 4), { readOnly: true }).buttons[0].action).toBeNull();
+    expect(row({ items: [], slots: [], installs: [] })).toEqual({ tag: 'CYBERWARE · COSTS 1 STRAIN', buttons: [], say: { text: 'STASHED: NOT INSTALLED', warn: false } });
+    // A cost the copy didn't send reads as 0; a fraction as written.
+    expect(gearRow({ ...jack, cost: undefined }, room(1, 4), [], { installs: WIRED.installs }).tag).toBe('CYBERWARE · COSTS 0 STRAIN');
+    expect(gearRow(WIRED.list[1], { items: [{ id: 'tweak', needs: 'bio' }], slots: [], installs: [{ id: 'bio', used: 0, value: 6, limit: 0 }] }, [], { installs: WIRED.installs }).tag).toBe('BIOWARE · COSTS 0.25 ESSENCE');
+  });
+
+  it('the counters: adding, VALUE OF LIMIT, full at it; taking, NEVER BELOW; unknowable, ?', () => {
+    const worked = { installs: [{ id: 'cyber', used: 2.75, value: 2.75, limit: 3 }, { id: 'bio', used: 0.25, value: 5.75, limit: 0 }] };
+    expect(installCounters(WIRED, worked)).toEqual([
+      { id: 'cyber', label: 'CYBERWARE', text: 'CYBERWARE · STRAIN 2.75 OF 3', full: false },
+      { id: 'bio', label: 'BIOWARE', text: 'BIOWARE · ESSENCE 5.75, NEVER BELOW 0', full: false },
+    ]);
+    expect(installCounters(WIRED, { installs: [{ id: 'cyber', used: 3, value: 3, limit: 3 }, { id: 'bio', used: 6, value: 0, limit: 0 }] }).map((c) => c.full)).toEqual([true, true]);
+    expect(installCounters(WIRED, { installs: [{ id: 'cyber', used: 0, value: null, limit: null }] })[0]).toMatchObject({ text: 'CYBERWARE · STRAIN ? OF ?', full: false });
+    expect(installCounters(WIRED, {})[1]).toMatchObject({ text: 'BIOWARE · ESSENCE ?, NEVER BELOW ?', full: false });
+    expect(installCounters({ slots: [], list: [] }, worked)).toEqual([]);
+    expect(amount(0.1 + 0.2)).toBe('0.3');
+  });
+
+  it('the names of those installed, lowercased, for the locked line and the sell list', () => {
+    expect(installedNames(WIRED, { items: [{ id: 'jack', needs: 'cyber', installed: true }, { id: 'tweak', needs: 'bio' }] })).toEqual(new Set(['cranial jack']));
+    expect(installedNames(undefined, { items: [{ id: 'jack', needs: 'cyber', installed: true }] })).toEqual(new Set());
   });
 });

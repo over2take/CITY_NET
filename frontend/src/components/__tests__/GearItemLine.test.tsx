@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
 import { InventorySection } from '../InventorySection';
 import type { SheetSection } from '../../sheets/types';
 import type { ItemsShown } from '../../sheets/gearItems';
@@ -116,5 +116,65 @@ describe('the GEAR tab with items', () => {
     show({}, { noItems: true });
     expect(screen.queryByTestId(/^gear-item-/)).toBeNull();
     expect(screen.queryByRole('group', { name: /slots$/ })).toBeNull();
+  });
+});
+
+describe('the GEAR tab with installs (7e4c)', () => {
+  const WIRED: ItemsShown = {
+    slots: [],
+    installs: [{ id: 'cyber', label: 'CYBERWARE', against: 'Strain', way: 'adds' }],
+    list: [
+      { id: 'jack', label: 'Cranial Jack', needs: 'cyber', cost: 1, features: [] },
+      { id: 'plate', label: 'Dermal Plating', needs: 'cyber', cost: 1.5, features: [] },
+    ],
+  };
+  const lines = (...names: [string, string][]) => JSON.stringify(names.map(([name, carry]) => ({ name, qty: 1, enc: '', bundled: false, carry, location: '' })));
+  const draw = (worked: Record<string, unknown>, { gm = false } = {}) => {
+    const onItem = vi.fn();
+    const onFieldChange = vi.fn();
+    const data = { inventory: lines(['Cranial Jack', 'stash'], ['Dermal Plating', 'stowed']), _worked: worked };
+    render(<InventorySection section={SECTION} data={data as never} readOnly={false} onFieldChange={onFieldChange} itemsShown={WIRED} gm={gm} onItem={onItem} />);
+    return { onItem, onFieldChange };
+  };
+  const INSTALLED = { items: [{ id: 'jack', needs: 'cyber', installed: true, working: true }, { id: 'plate', needs: 'cyber' }], slots: [], installs: [{ id: 'cyber', used: 1, value: 1, limit: 2 }] };
+
+  it('the cost against its limit over the gear; an installed line locked; REMOVE and INSTALL asked of the server', () => {
+    const { onItem, onFieldChange } = draw(INSTALLED);
+    expect(screen.getByRole('group', { name: 'CYBERWARE installs' }).textContent).toBe('CYBERWARE · STRAIN 1 OF 2');
+    expect(screen.getByRole('group', { name: 'CYBERWARE installs' }).getAttribute('style')).toContain('var(--green)');
+    const jack = within(screen.getByTestId('gear-item-jack'));
+    expect(jack.getByText('CYBERWARE · COSTS 1 STRAIN')).toBeTruthy();
+    expect(jack.getByRole('note', { name: 'Cranial Jack: what it is doing' }).textContent).toBe('WORKING');
+    // Line 1 is the jack: kept as it is, stash and all, until removed.
+    expect((screen.getByLabelText('Item 1 name') as HTMLInputElement).readOnly).toBe(true);
+    expect((screen.getByLabelText('Item 1 carried') as HTMLSelectElement).disabled).toBe(true);
+    const x = screen.getByRole('button', { name: 'Remove item 1' }) as HTMLButtonElement;
+    expect(x.disabled).toBe(true);
+    expect(x.getAttribute('title')).toBe('Installed: REMOVE it first');
+    fireEvent.click(x);
+    expect(onFieldChange).not.toHaveBeenCalled();
+    // Line 2, not installed, is the player's as ever.
+    expect((screen.getByLabelText('Item 2 name') as HTMLInputElement).readOnly).toBe(false);
+    expect((screen.getByRole('button', { name: 'Remove item 2' }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(jack.getByRole('button', { name: 'INSTALLED · REMOVE Cranial Jack' }));
+    expect(onItem).toHaveBeenLastCalledWith({ kind: 'uninstall', item: 'jack' });
+    // 1 + 1.5 is past 2: a player's INSTALL can't be pressed, and says why.
+    const plate = within(screen.getByTestId('gear-item-plate'));
+    const install = plate.getByRole('button', { name: 'INSTALL Dermal Plating' }) as HTMLButtonElement;
+    expect(install.disabled).toBe(true);
+    expect(plate.getByRole('note', { name: 'Dermal Plating: what it is doing' }).textContent).toBe("PAST CYBERWARE'S LIMIT · ONLY YOUR GM CAN");
+  });
+
+  it("the GM's INSTALL ANYWAY past it; with room, INSTALL for anyone; full, amber", () => {
+    const { onItem } = draw(INSTALLED, { gm: true });
+    fireEvent.click(within(screen.getByTestId('gear-item-plate')).getByRole('button', { name: 'INSTALL ANYWAY Dermal Plating' }));
+    expect(onItem).toHaveBeenLastCalledWith({ kind: 'install', item: 'plate' });
+    cleanup();
+    const roomy = draw({ ...INSTALLED, installs: [{ id: 'cyber', used: 1, value: 1, limit: 4 }] });
+    fireEvent.click(within(screen.getByTestId('gear-item-plate')).getByRole('button', { name: 'INSTALL Dermal Plating' }));
+    expect(roomy.onItem).toHaveBeenLastCalledWith({ kind: 'install', item: 'plate' });
+    cleanup();
+    draw({ ...INSTALLED, installs: [{ id: 'cyber', used: 2, value: 2, limit: 2 }] });
+    expect(screen.getByRole('group', { name: 'CYBERWARE installs' }).getAttribute('style')).toContain('var(--warning)');
   });
 });
