@@ -48,7 +48,7 @@ const appVersion = () => {
 const hashOf = (text) => crypto.createHash('sha256').update(String(text)).digest('hex');
 
 /** The sections a file carries beside its definition, for builders from before them. */
-const BESIDE = ['graph', 'rolls', 'symbols', 'dice', 'choices', 'items'];
+const BESIDE = ['graph', 'rolls', 'symbols', 'dice', 'choices', 'items', 'ranks'];
 
 /** A file name from a system's name: lowercase, dashes, never empty. */
 const fileNameFor = (name) => {
