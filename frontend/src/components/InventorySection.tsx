@@ -4,7 +4,7 @@ import {
   INVENTORY_FIELD, CARRY_STATES, readInventory, writeInventory, blankItem, itemEnc,
   type InventoryItem,
 } from '../sheets/inventory';
-import { itemLines, itemsWorkedOn, gearRow, slotCounters, itemUses, type ItemsShown, type ItemAction } from '../sheets/gearItems';
+import { itemLines, itemsWorkedOn, gearRow, slotCounters, installCounters, itemUses, type ItemsShown, type ItemAction } from '../sheets/gearItems';
 import { workedOn, type ChoicesAction } from '../sheets/choicesShown';
 import { GearItemLine, GearSlots } from './GearItemLine';
 
@@ -80,6 +80,9 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
   const worked = itemsWorkedOn(data as Record<string, unknown>);
   const uses = lineItems.size ? workedOn(data as Record<string, unknown>).uses : {};
   const counters = slotCounters(itemsShown, worked);
+  const installs = installCounters(itemsShown, worked);
+  /** Whether a line is an item installed (7e4c): kept as it is, named and in place, until REMOVE. */
+  const locked = (i: number) => lineItems.has(i) && !!worked.items.find((w) => w.id === lineItems.get(i)!.id)?.installed;
   // Encumbrance is Cities Without Number's. A system with no carrying rule gets the table
   // without the column, rather than a rule invented for it.
   const showEnc = section.inventoryEnc === true;
@@ -104,7 +107,7 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-      <GearSlots counters={counters} gm={gm && !readOnly} onItem={onItem} />
+      <GearSlots counters={counters} installs={installs} gm={gm && !readOnly} onItem={onItem} />
       {/* Scrollable: an inventory grows, and the tab strip below should not move every
           time somebody picks up a rope. */}
       <div className="crt-scroll" style={{ maxHeight: '220px', overflowY: 'auto', paddingRight: '4px' }}>
@@ -125,7 +128,8 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
               <input
                 aria-label={`Item ${i + 1} name`}
                 value={item.name}
-                readOnly={readOnly}
+                readOnly={readOnly || locked(i)}
+                title={locked(i) ? 'Installed: REMOVE it first' : undefined}
                 onChange={(e) => patch(i, { name: e.target.value })}
                 style={input}
               />
@@ -163,7 +167,8 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
               <select
                 aria-label={`Item ${i + 1} carried`}
                 value={item.carry}
-                disabled={readOnly}
+                disabled={readOnly || locked(i)}
+                title={locked(i) ? 'Installed: REMOVE it first' : undefined}
                 onChange={(e) => patch(i, { carry: e.target.value as InventoryItem['carry'] })}
                 style={input}
               >
@@ -200,17 +205,19 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
                 <button
                   type="button"
                   aria-label={`Remove item ${i + 1}`}
+                  disabled={locked(i)}
+                  title={locked(i) ? 'Installed: REMOVE it first' : undefined}
                   onClick={() => write(items.filter((_, n) => n !== i))}
                   style={{
                     background: 'none', border: 'none', color: 'var(--danger)',
-                    cursor: 'pointer', padding: 0, fontSize: '0.8rem', lineHeight: 1,
+                    cursor: locked(i) ? 'not-allowed' : 'pointer', opacity: locked(i) ? 0.35 : 1, padding: 0, fontSize: '0.8rem', lineHeight: 1,
                   }}
                 >×</button>
               )}
               {lineItems.has(i) && (() => {
                 const it = lineItems.get(i)!;
                 return (
-                  <GearItemLine item={it} row={gearRow(it, worked, itemsShown?.slots ?? [], { gm, readOnly: readOnly || !onItem })}
+                  <GearItemLine item={it} row={gearRow(it, worked, itemsShown?.slots ?? [], { gm, readOnly: readOnly || !onItem, installs: itemsShown?.installs ?? [] })}
                     uses={itemUses(it, uses)} canUse={!readOnly && !!onChoices} onItem={onItem} onChoices={onChoices} />
                 );
               })()}

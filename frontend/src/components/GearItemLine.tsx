@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import type { ItemShown, ItemAction, GearRow, SlotCounter } from '../sheets/gearItems';
+import type { ItemShown, ItemAction, GearRow, SlotCounter, InstallCounter } from '../sheets/gearItems';
 import { slotCountAsked } from '../sheets/gearItems';
 import { spentAfterClick, type ChoicesAction } from '../sheets/choicesShown';
 
@@ -72,9 +72,9 @@ function OwnCount({ counter, onItem }: { counter: SlotCounter; onItem: (action: 
   );
 }
 
-/** The slots over the gear: ATTUNED 2 OF 3, amber when full; the GM may set this character's own count. */
-export function GearSlots({ counters, gm, onItem }: { counters: SlotCounter[]; gm: boolean; onItem?: (action: ItemAction) => void }) {
-  if (!counters.length) return null;
+/** The slots over the gear: ATTUNED 2 OF 3, amber when full; the GM may set this character's own count. And the installs' costs (7e4c). */
+export function GearSlots({ counters, installs = [], gm, onItem }: { counters: SlotCounter[]; installs?: InstallCounter[]; gm: boolean; onItem?: (action: ItemAction) => void }) {
+  if (!counters.length && !installs.length) return null;
   return (
     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
       {counters.map((c) => (
@@ -82,6 +82,10 @@ export function GearSlots({ counters, gm, onItem }: { counters: SlotCounter[]; g
           {c.label} {c.used} OF {gm && onItem ? <OwnCount key={c.count} counter={c} onItem={onItem} /> : c.count}
           {c.own && <span style={{ opacity: 0.7 }}>· THEIR OWN (SYSTEM {c.standard})</span>}
         </span>
+      ))}
+      {/* Each install's cost against its limit (7e4c): CYBERWARE · STRAIN 2.75 OF 3, amber at it. */}
+      {installs.map((c) => (
+        <span key={c.id} role="group" aria-label={`${c.label} installs`} style={{ ...tag(c.full ? 'var(--warning)' : 'var(--green)'), display: 'inline-flex', gap: '4px', alignItems: 'center' }}>{c.text}</span>
       ))}
     </div>
   );
