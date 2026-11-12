@@ -14,7 +14,7 @@
 // section or condition waiting on a rule that is off is hidden from every answer at once.
 
 const { compileSystem } = require('./derived');
-const { rankedOf } = require('./ranks');
+const { rankedOf, withRankFields } = require('./ranks');
 const { overlayOf, choicesOf, workedOf, worksOutPicks, choicesShown, itemsRenderedOf, WORKED_KEY } = require('./choices');
 const { poolsOf, recoveryShown, restingShown } = require('./recovery');
 const { creationShown } = require('./creation');
@@ -151,10 +151,11 @@ const renderOf = (id, definition, on = new Set()) => ({
   // The unit its ruler reads distances in (core.js distanceOf): feet unless it chose another.
   distance: distanceOf(definition),
   derived: (Array.isArray(definition.derived) ? definition.derived : []).map((d) => d.id),
-  sheet: effectiveSheet(definition),
+  // A ranked stat drawn as its rank picker (7f1c1).
+  sheet: withRankFields(definition, effectiveSheet(definition)),
   npc: {
     // Null when NPCs use the character sheet.
-    sheet: definition.npc && definition.npc.sheet ? npcSheetOf(definition) : null,
+    sheet: definition.npc && definition.npc.sheet ? withRankFields(definition, npcSheetOf(definition)) : null,
     tiers: tiersWhenOn(definition).map((t) => ({ id: t.id, label: t.label })),
   },
   house_rules: houseRuleList(definition, on),

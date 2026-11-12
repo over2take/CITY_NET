@@ -31,6 +31,7 @@
 // Pure, needing no pdf-lib, so the browser's tests can hold the PDF form and this to each other.
 
 const { effectiveSheet } = require('./sheet');
+const { withRankFields } = require('./ranks');
 const { PICKS_KEY, ROLLED_KEY, INCREASES_KEY, LIMITS: CHOICE_LIMITS, choicesOf, pickedOf, capOf, meets, needsText, heldOf, openingsOf, openCountOf, tokenMaxFieldOf } = require('./choices');
 const { normaliseInventory } = require('../sheets/inventoryImport');
 const { XP_KEY, LIMITS: XP_LIMITS, earnsXp, healthOf, HEALTH_BASE_KEY, HEALTH_BASE_MOST, healthBaseFrom } = require('./levels');
@@ -63,7 +64,8 @@ const rangesOf = (definition) => new Map(list(definition && definition.stats)
 const sheetFields = (definition) => {
   const derived = new Set(list(definition && definition.derived).filter(isPlainObject).map((d) => d.id));
   const ranges = rangesOf(definition);
-  const sheet = effectiveSheet(definition);
+  // A ranked stat asked for as its rank, by name or step (7f1c1).
+  const sheet = withRankFields(definition, effectiveSheet(definition));
   const ask = [];
   const left = [];
   let inventory = false;
