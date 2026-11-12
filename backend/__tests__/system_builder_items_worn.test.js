@@ -225,6 +225,8 @@ describe('through the socket', () => {
     await until(() => heard.some((e) => e.event === 'choicesRefused'), { label: 'refused' });
     expect(heard.find((e) => e.event === 'choicesRefused').data.error).toBe('Wear Ring of Constitution first');
     handlers.itemAction({ kind: 'wear', item: 'ring' });
+    // Worn first, stored: ATTUNE reads the sheet as it is then.
+    await until(async () => JSON.parse((await get(db, 'SELECT data FROM character_sheets WHERE username = ?', ['kes'])).data)[WORN_KEY]?.ring?.worn === true, { label: 'worn' });
     handlers.itemAction({ kind: 'attune', item: 'ring' });
     await until(async () => (await token()) === 15, { label: 'the token moved' });
     const stored = JSON.parse((await get(db, 'SELECT data FROM character_sheets WHERE username = ?', ['kes'])).data);

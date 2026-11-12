@@ -10,6 +10,7 @@
 //                                // worn and in that slot
 //         features: [{ id: 'hardy', label: 'Hardy', modifiers: [{ target: 'con', amount: '2', cap: 20 }] }] },
 //     ],
+//     installs: [{ id: 'cyberware', label: 'CYBERWARE', against: 'strain', way: 'adds', limit: '@might' }],  // 7e4
 //   }
 //
 // An item's features are a class's, checked the same (choices.js checkFeature), but for what only a pick has: a level,
@@ -25,15 +26,25 @@
 // the GM's own number for them under SLOTS_KEY. An item WORKS (its features count, as an unlocked feature's do) while
 // carried, and as it needs: worn, or worn and attuned. A slot is used by each carried item attuned to it.
 //
+// Installed (7e4; approved mockup docs/mockups/installed.html, 2026-11-11, the user's calls): an INSTALL is made like a
+// slot, a name and what each one costs against: a stat or formula, its cost ADDING TO it up to a limit (Strain up to
+// Might) or TAKING FROM it down to one (Essence down to 0). An item needing it has a COST, fractions allowed. The player
+// or the GM INSTALLs it while a line of its name is in the gear; past the limit only the GM can (INSTALL ANYWAY). It stays
+// in the gear, marked installed (shops won't buy it), and works while installed and its line is there, its cost counted
+// as one of its modifiers, overlaid and never written in, so REMOVE gives it back at once. One line installs as one.
+//
 // Pure: checks, reads and the changes asked for.
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
 
-const LIMITS = { items: 200, slots: 10, count: 20, features: 20 };
-const ITEMS_KEYS = new Set(['slots', 'list']);
+const LIMITS = { items: 200, slots: 10, count: 20, features: 20, installs: 10, cost: 1000 };
+const ITEMS_KEYS = new Set(['slots', 'installs', 'list']);
 const SLOT_KEYS = new Set(['id', 'label', 'count']);
-const ITEM_KEYS = new Set(['id', 'label', 'description', 'needs', 'features']);
+const INSTALL_KEYS = new Set(['id', 'label', 'against', 'way', 'limit']);
+const ITEM_KEYS = new Set(['id', 'label', 'description', 'needs', 'cost', 'features']);
+/** How an install's cost counts against what it costs (7e4): adding to it up to its limit, or taking from it down to it. */
+const WAYS = ['adds', 'takes'];
 /** What an item's features need, other than a slot. */
 const NEEDS = ['carried', 'worn'];
 
@@ -45,6 +56,11 @@ const SLOTS_KEY = '_slots';
 /** The system's slots, those well formed enough to read. */
 const slotsOf = (definition) => list(isPlainObject(definition && definition.items) ? definition.items.slots : undefined)
   .filter((s) => isPlainObject(s) && typeof s.id === 'string');
+/** The system's installs (7e4), those well formed enough to read. */
+const installsOf = (definition) => list(isPlainObject(definition && definition.items) ? definition.items.installs : undefined)
+  .filter((s) => isPlainObject(s) && typeof s.id === 'string');
+/** The install an item needs, or null for one worn or carried. */
+const installOf = (definition, item) => installsOf(definition).find((s) => s.id === item.needs) || null;
 /** The system's items, those well formed enough to read. */
 const itemsOf = (definition) => list(isPlainObject(definition && definition.items) ? definition.items.list : undefined)
   .filter((i) => isPlainObject(i) && typeof i.id === 'string');
@@ -54,7 +70,7 @@ const itemsOf = (definition) => list(isPlainObject(definition && definition.item
  * `text` and `keys` read as they do there, `named` the one set of option and feature names, and `checkFeature` an item's
  * feature checked as a pick's is, with what only a pick has refused.
  */
-const checkItems = (definition, problems, { id, text, keys, named, checkFeature, labelMost, descriptionMost }) => {
+const checkItems = (definition, problems, { id, text, keys, named, checkFeature, labelMost, descriptionMost, formula, targets = new Set(), onToken = null }) => {
   const items = definition.items;
   if (items === undefined) return;
   if (!isPlainObject(items)) { problems.push({ where: 'items', message: 'Must say its slots and its items' }); return; }
@@ -75,6 +91,26 @@ const checkItems = (definition, problems, { id, text, keys, named, checkFeature,
       });
     }
   }
+  // Installs (7e4), sharing the slots' names: an item needs one or the other by the same word.
+  const installIds = new Set();
+  if (items.installs !== undefined) {
+    if (!Array.isArray(items.installs)) problems.push({ where: 'items, installs', message: 'Must be a list of installs' });
+    else {
+      if (items.installs.length > LIMITS.installs) problems.push({ where: 'items, installs', message: `At most ${LIMITS.installs} installs` });
+      items.installs.slice(0, LIMITS.installs).forEach((s, i) => {
+        const where = isPlainObject(s) && typeof s.id === 'string' ? `install ${s.id}` : `install ${i + 1}`;
+        if (!isPlainObject(s)) { problems.push({ where, message: 'Must be an install' }); return; }
+        keys(s, INSTALL_KEYS, where, 'an install');
+        if (id(s.id, where, slotIds, 'A slot or another install')) installIds.add(s.id);
+        if (NEEDS.includes(s.id)) problems.push({ where, message: `${s.id} is what an item needs without an install: call it something else` });
+        text(s.label, `${where}, label`, labelMost, { required: true });
+        if (typeof s.against !== 'string' || !targets.has(s.against)) problems.push({ where: `${where}, against`, message: 'A stat or formula of this system' });
+        else if (s.against === onToken) problems.push({ where: `${where}, against`, message: 'Not the token\'s maximum: its bonuses live on the token' });
+        if (s.way !== undefined && !WAYS.includes(s.way)) problems.push({ where: `${where}, way`, message: 'adds or takes' });
+        if (formula) formula(s.limit, `${where}, limit`);
+      });
+    }
+  }
   if (items.list === undefined) return;
   if (!Array.isArray(items.list)) { problems.push({ where: 'items, list', message: 'Must be a list of items' }); return; }
   if (items.list.length > LIMITS.items) problems.push({ where: 'items, list', message: `At most ${LIMITS.items} items` });
@@ -86,8 +122,12 @@ const checkItems = (definition, problems, { id, text, keys, named, checkFeature,
     text(item.label, `${where}, label`, labelMost, { required: true });
     text(item.description, `${where}, description`, descriptionMost);
     if (item.needs !== undefined && !NEEDS.includes(item.needs) && !slotIds.has(item.needs)) {
-      problems.push({ where: `${where}, needs`, message: 'carried, worn, or one of this system\'s slots' });
+      problems.push({ where: `${where}, needs`, message: 'carried, worn, or one of this system\'s slots or installs' });
     }
+    // A cost (7e4): what installing it costs, only for an item needing an install, and then required.
+    if (installIds.has(item.needs)) {
+      if (typeof item.cost !== 'number' || !Number.isFinite(item.cost) || item.cost < 0 || item.cost > LIMITS.cost) problems.push({ where: `${where}, cost`, message: `What installing it costs: 0 to ${LIMITS.cost}, fractions allowed` });
+    } else if (item.cost !== undefined) problems.push({ where: `${where}, cost`, message: 'Only an item needing an install has a cost' });
     if (item.features === undefined) return;
     if (!Array.isArray(item.features)) { problems.push({ where: `${where}, features`, message: 'Must be a list of features' }); return; }
     if (item.features.length > LIMITS.features) problems.push({ where: `${where}, features`, message: `At most ${LIMITS.features} features` });
@@ -106,6 +146,12 @@ const carriedNames = (data) => {
   return new Set(list(rows).filter((r) => isPlainObject(r) && (r.carry === 'readied' || r.carry === 'stowed') && typeof r.name === 'string')
     .map((r) => r.name.trim().toLowerCase()).filter(Boolean));
 };
+/** The names of every line of a sheet's gear, wherever it is, lowercased: an installed item's line works anywhere (7e4). */
+const gearNames = (data) => {
+  let rows = isPlainObject(data) ? data.inventory : undefined;
+  if (typeof rows === 'string') { try { rows = JSON.parse(rows); } catch { rows = []; } }
+  return new Set(list(rows).filter((r) => isPlainObject(r) && typeof r.name === 'string').map((r) => r.name.trim().toLowerCase()).filter(Boolean));
+};
 /** Whether an item is carried: a carried line has its name. */
 const carriedIn = (names, item) => typeof item.label === 'string' && names.has(item.label.trim().toLowerCase());
 
@@ -113,7 +159,7 @@ const carriedIn = (names, item) => typeof item.label === 'string' && names.has(i
 const stateOf = (data, id) => {
   const all = isPlainObject(data) && isPlainObject(data[WORN_KEY]) ? data[WORN_KEY] : {};
   const s = isPlainObject(all[id]) ? all[id] : {};
-  return { worn: s.worn === true, attuned: s.attuned === true, anyway: s.anyway === true };
+  return { worn: s.worn === true, attuned: s.attuned === true, anyway: s.anyway === true, installed: s.installed === true };
 };
 
 /** How many of a slot this character has: the GM's own number for them, or the slot's. */
@@ -127,7 +173,9 @@ const slotUsed = (definition, data, slotId, names = carriedNames(data)) => items
   .filter((i) => i.needs === slotId && carriedIn(names, i) && stateOf(data, i.id).attuned).length;
 
 /** Whether an item works: carried, and as it needs, worn or worn and attuned. */
-const works = (item, names, data) => {
+const works = (item, names, data, gear = null, installed = false) => {
+  // Installed (7e4): while it is, and a line of its name is in the gear, wherever.
+  if (installed) return stateOf(data, item.id).installed && carriedIn(gear || gearNames(data), item);
   if (!carriedIn(names, item)) return false;
   if (item.needs === 'carried') return true;
   const s = stateOf(data, item.id);
@@ -137,12 +185,21 @@ const works = (item, names, data) => {
 /** The items working on a sheet, in the system's order. */
 const workingItems = (definition, data) => {
   const names = carriedNames(data);
-  return itemsOf(definition).filter((i) => works(i, names, data));
+  const gear = gearNames(data);
+  return itemsOf(definition).filter((i) => works(i, names, data, gear, !!installOf(definition, i)));
+};
+
+/** An installed item's cost as one of its features' modifiers (7e4): on what it costs against, named by the item. */
+const costFeature = (definition, item) => {
+  const install = installOf(definition, item);
+  if (!install || typeof install.against !== 'string' || typeof item.cost !== 'number' || !Number.isFinite(item.cost) || item.cost === 0) return null;
+  return { id: `${item.id}__cost`, label: item.label || item.id, modifiers: [{ target: install.against, amount: String(install.way === 'takes' ? -item.cost : item.cost) }] };
 };
 
 /** The features of the items working: [{ feature, item }], counted as unlocked features are (choices.js). */
 const workingFeatures = (definition, data) => workingItems(definition, data)
-  .flatMap((item) => list(item.features).filter((f) => isPlainObject(f) && typeof f.id === 'string').map((feature) => ({ feature, item })));
+  .flatMap((item) => [...list(item.features).filter((f) => isPlainObject(f) && typeof f.id === 'string'), ...(costFeature(definition, item) ? [costFeature(definition, item)] : [])]
+    .map((feature) => ({ feature, item })));
 
 /** What has() reads of the items: has:<id> for each item working and each of its features. */
 const itemsOwned = (definition, data) => {
@@ -155,21 +212,41 @@ const itemsOwned = (definition, data) => {
 };
 
 /** What the sheet shows of the items (7e3): each carried one's state and whether it works, and each slot's count and use. */
-const itemsShown = (definition, data) => {
+const itemsShown = (definition, data, readValue = () => null) => {
   const names = carriedNames(data);
+  const gear = gearNames(data);
+  const installs = installsOf(definition);
   return {
-    items: itemsOf(definition).filter((i) => carriedIn(names, i)).map((i) => {
+    // A carried item, or one installed with its line anywhere in the gear.
+    items: itemsOf(definition).filter((i) => carriedIn(names, i) || (installOf(definition, i) && carriedIn(gear, i))).map((i) => {
       const s = stateOf(data, i.id);
-      return { id: i.id, needs: i.needs || 'worn', ...(s.worn ? { worn: true } : {}), ...(s.attuned ? { attuned: true } : {}), ...(works(i, names, data) ? { working: true } : {}) };
+      const installed = !!installOf(definition, i);
+      return { id: i.id, needs: i.needs || 'worn', ...(s.worn && !installed ? { worn: true } : {}), ...(s.attuned && !installed ? { attuned: true } : {}),
+        ...(s.installed && installed ? { installed: true } : {}), ...(works(i, names, data, gear, installed) ? { working: true } : {}) };
     }),
     slots: slotsOf(definition).map((s) => ({ id: s.id, count: slotCount(definition, data, s), used: slotUsed(definition, data, s.id, names) })),
+    // Each install (7e4): what its costs come to, the value it costs against as it reads now, and its limit.
+    ...(installs.length ? { installs: installs.map((s) => ({ id: s.id, used: installedCost(definition, data, s.id, gear), value: readValue(`@${s.against}`), limit: readValue(s.limit) })) } : {}),
   };
+};
+
+/** What the items installed of an install cost, all told (7e4). */
+const installedCost = (definition, data, installId, gear = gearNames(data)) => itemsOf(definition)
+  .filter((i) => i.needs === installId && stateOf(data, i.id).installed && carriedIn(gear, i))
+  .reduce((n, i) => n + (typeof i.cost === 'number' && Number.isFinite(i.cost) ? i.cost : 0), 0);
+
+/** The names of the lines installed (7e4), lowercased: a shop won't buy one. */
+const installedNames = (definition, data) => {
+  const gear = gearNames(data);
+  return new Set(itemsOf(definition).filter((i) => installOf(definition, i) && stateOf(data, i.id).installed && carriedIn(gear, i))
+    .map((i) => i.label.trim().toLowerCase()));
 };
 
 /** The sheet with one item's state, nothing kept for one with none, nothing for a sheet with none. */
 const withState = (data, id, state) => {
   const all = { ...(isPlainObject(data[WORN_KEY]) ? data[WORN_KEY] : {}) };
-  const kept = { ...(state.worn ? { worn: true } : {}), ...(state.attuned ? { attuned: true } : {}), ...(state.attuned && state.anyway ? { anyway: true } : {}) };
+  const kept = { ...(state.worn ? { worn: true } : {}), ...(state.attuned ? { attuned: true } : {}), ...(state.installed ? { installed: true } : {}),
+    ...((state.attuned || state.installed) && state.anyway ? { anyway: true } : {}) };
   if (Object.keys(kept).length) all[id] = kept; else delete all[id];
   const { [WORN_KEY]: gone, ...rest } = data;
   return Object.keys(all).length ? { ...rest, [WORN_KEY]: all } : rest;
@@ -180,7 +257,7 @@ const withState = (data, id, state) => {
  * { kind: 'slots', slot, count } the GM's own number of a slot for this character (null: the system's). An item is named
  * by its id. ATTUNE with no slot free is the GM's alone (ATTUNE ANYWAY). Gives { ok: true, data } or { ok: false, error }.
  */
-const itemAction = (definition, data, action, { gm = false } = {}) => {
+const itemAction = (definition, data, action, { gm = false, readValue = () => null } = {}) => {
   const sheet = isPlainObject(data) ? data : {};
   const kind = isPlainObject(action) ? action.kind : null;
   const fail = (error) => ({ ok: false, error });
@@ -195,12 +272,32 @@ const itemAction = (definition, data, action, { gm = false } = {}) => {
     const { [SLOTS_KEY]: gone, ...rest } = sheet;
     return { ok: true, data: Object.keys(own).length ? { ...rest, [SLOTS_KEY]: own } : rest };
   }
-  if (!['wear', 'takeOff', 'attune', 'end'].includes(kind)) return fail('Nothing to do');
+  if (!['wear', 'takeOff', 'attune', 'end', 'install', 'uninstall'].includes(kind)) return fail('Nothing to do');
   const item = itemsOf(definition).find((i) => i.id === action.item);
   if (!item) return fail('No such item');
   const name = item.label || item.id;
   const state = stateOf(sheet, item.id);
   const names = carriedNames(sheet);
+  const install = installOf(definition, item);
+  // Installed (7e4): INSTALL with room, or the GM's anyway; REMOVE, the cost back at once.
+  if (kind === 'install' || kind === 'uninstall') {
+    if (!install) return fail(`${name} isn't installed: it is ${item.needs === 'carried' ? 'carried' : 'worn'}`);
+    if (kind === 'uninstall') {
+      if (!state.installed) return fail(`${name} isn't installed`);
+      return { ok: true, data: withState(sheet, item.id, { ...state, installed: false, anyway: false }) };
+    }
+    if (state.installed) return fail(`${name} is installed already`);
+    if (!carriedIn(gearNames(sheet), item)) return fail(`${name} isn't in their gear`);
+    const cost = typeof item.cost === 'number' && Number.isFinite(item.cost) ? item.cost : 0;
+    const now = readValue(`@${install.against}`);
+    const limit = readValue(install.limit);
+    // Past the limit, or unknowable: the GM's to allow. A hair's rounding is no reason to refuse.
+    const after = now === null ? null : install.way === 'takes' ? now - cost : now + cost;
+    const over = after === null || limit === null || (install.way === 'takes' ? after < limit - 1e-9 : after > limit + 1e-9);
+    if (over && !gm) return fail(`${name} would take ${String(install.label || install.id).toUpperCase()} past its limit: only your GM can install it`);
+    return { ok: true, data: withState(sheet, item.id, { ...state, installed: true, anyway: over }) };
+  }
+  if (install) return fail(`${name} is installed, not worn`);
   if (kind === 'wear') {
     if (!carriedIn(names, item)) return fail(`${name} isn't in their gear, readied or stowed`);
     if (item.needs === 'carried') return fail(`${name} works while carried: nothing to wear`);
@@ -237,4 +334,4 @@ const itemWords = (definition, item) => {
 const itemsGivable = (definition) => itemsOf(definition).filter((i) => typeof i.label === 'string' && i.label.trim())
   .map((i) => ({ id: i.id, name: i.label.trim(), price: 0, holds: itemWords(definition, i) }));
 
-module.exports = { LIMITS, NEEDS, WORN_KEY, SLOTS_KEY, slotsOf, itemsOf, checkItems, carriedNames, stateOf, slotCount, slotUsed, workingItems, workingFeatures, itemsOwned, itemsShown, itemAction, itemWords, itemsGivable };
+module.exports = { LIMITS, NEEDS, WAYS, WORN_KEY, SLOTS_KEY, slotsOf, installsOf, installOf, itemsOf, checkItems, carriedNames, gearNames, stateOf, slotCount, slotUsed, workingItems, workingFeatures, itemsOwned, itemsShown, installedCost, installedNames, itemAction, itemWords, itemsGivable };

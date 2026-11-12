@@ -69,7 +69,7 @@ describe('the items, checked even with no lists', () => {
 
   it('an item: an id of its own among options and features, a name, what it needs', () => {
     const item = (i) => said(withItems({ slots: WORN.items.slots, list: [i] }));
-    expect(item({ id: 'ring', label: 'Ring', needs: 'pocket' })).toEqual(['item ring, needs: carried, worn, or one of this system\'s slots']);
+    expect(item({ id: 'ring', label: 'Ring', needs: 'pocket' })).toEqual(['item ring, needs: carried, worn, or one of this system\'s slots or installs']);
     expect(item({ id: 'ring', label: 'Ring', needs: 'attuned' })).toEqual([]);
     expect(item({ id: 'ring' })).toEqual(['item ring, label: Required']);
     expect(item({ id: 'ring', label: 'Ring', description: 'x'.repeat(2001) })[0]).toMatch(/^item ring, description: Longer than/);

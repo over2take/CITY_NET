@@ -16,6 +16,8 @@ const buyback = require('./buyback');
 
 const sheetSlots = require('./sheetSlots');
 const { knowsSheet } = require('./availability');
+const customSystems = require('../systemBuilder/runtime');
+const { installedNames } = require('../systemBuilder/items');
 
 /**
  * Every field one weapon or vehicle row owns, for the system this sheet belongs to.
@@ -90,6 +92,7 @@ const takeFrom = (line, wanted, state) => {
  *   'empty'     - nothing in the basket
  *   'not_sold'  - this shop does not deal in that catalogue
  *   'not_owned' - they do not have that many of it
+ *   'installed' - a custom system's item installed in them (7e4): its line is kept until it is removed
  *
  * An unpriced item - homebrew, a renamed row, a quest item - is sellable for nothing
  * rather than refused. That is a deliberate call: the player gets it off their sheet and
@@ -108,6 +111,9 @@ const planSale = ({ data, items, catalogues, locationPct, globalPct, system }) =
 
   const pct = buyback.buybackPct(locationPct, globalPct);
   const lines = owned.ownedItems(data, system);
+  // A custom system's items installed (7e4): their lines stay, and no shop buys them.
+  const definition = customSystems.definitionOf(system);
+  const installed = definition ? installedNames(definition, data) : new Set();
   const byKey = new Map(lines.map((l) => [l.key, l]));
 
   const state = {
@@ -145,6 +151,7 @@ const planSale = ({ data, items, catalogues, locationPct, globalPct, system }) =
     if (!line || line.qty - already < want) {
       return { ok: false, reason: 'not_owned', itemId: id || key };
     }
+    if (installed.has(String(line.label || '').trim().toLowerCase())) return { ok: false, reason: 'installed', itemId: id || key };
     takenSoFar.set(key, already + want);
 
     // Priced from the book table on this side, never from anything the client sent.
