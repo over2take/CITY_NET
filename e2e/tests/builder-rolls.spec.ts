@@ -51,13 +51,13 @@ test('a roll made from a preset, rolled by a group, kept, and test rolled on the
   await test_.getByRole('switch', { name: 'FORWARD +1' }).click();
   await test_.getByRole('button', { name: 'TEST ROLL ▸' }).click();
   await expect(test_.getByTestId('test-outcome')).toHaveText(/^(MISS|SUCCESS AT A COST|FULL SUCCESS)$/);
-  await expect(test_.getByTestId('test-working')).toHaveText(/^\[\d \d = \d+ \+ 4 = \d+\] — /);
+  await expect(test_.getByTestId('test-working')).toHaveText(/^\[\(\d, \d\) \| \d+ \+ 4 = \d+\] — /);
   await expect(test_.getByTestId('test-dice').locator('span')).toHaveCount(2);
 
   // Under HURT (6b3c), as a character with it on their token rolls: one less, named in the working.
   await test_.getByRole('switch', { name: 'HURT · ALL ROLLS −1' }).click();
   await test_.getByRole('button', { name: 'TEST ROLL ▸' }).click();
-  await expect(test_.getByTestId('test-working')).toHaveText(/^\[\d \d = \d+ \+ 4 - 1 \(HURT\) = \d+\] — /);
+  await expect(test_.getByTestId('test-working')).toHaveText(/^\[\(\d, \d\) \| \d+ \+ 4 - 1 \(HURT\) = \d+\] — /);
   if (process.env.GRAPH_SHOTS) await page.screenshot({ path: path.join(SHOTS, 'builder-rolls-tab.png') });
 
   // Kept: after a reload, the roll is there as it was left.
@@ -100,8 +100,8 @@ test('a roll\'s dice, reading, adding and bands edited, and TEST ROLL rolling it
   const test_ = page.getByTestId('test-roll');
   await test_.getByRole('button', { name: 'TEST ROLL ▸' }).click();
   await expect(test_.getByTestId('test-outcome')).toHaveText(/^(MISS|STRONG HIT)$/);
-  // Three dice, or four when a six explodes (once); those not counted in brackets.
-  await expect(test_.getByTestId('test-working')).toHaveText(/^\[[\d() ]+ = \d+ \+ 2 = \d+\] — (MISS|STRONG HIT)( · PERFECT)?$/);
+  // Three dice, or four when a six explodes (once), in a group; those not counted said dropped.
+  await expect(test_.getByTestId('test-working')).toHaveText(/^\[\((\d( dropped)?, ){2,3}\d( dropped)?\) \| \d+ \+ 2 = \d+\] — (MISS|STRONG HIT)( · PERFECT)?$/);
   expect([3, 4]).toContain(await test_.getByTestId('test-dice').locator('span').count());
   if (process.env.GRAPH_SHOTS) await page.screenshot({ path: path.join(SHOTS, 'builder-rolls-editing.png'), fullPage: true });
 });
