@@ -58,3 +58,50 @@ test('ITEMS: an ATTUNED slot and a Ring of Constitution needing it, +2 Con stopp
   await openIt();
   await expect(page.getByRole('button', { name: /RING OF CONSTITUTION/ })).toContainText('WORN AND ATTUNED');
 });
+
+// INSTALLS (7e4b; approved mockup docs/mockups/installed.html, 2026-11-11): CYBERWARE costing against Strain, never past
+// Might, and a Cranial Jack installed as it at 0.25, made by clicks, saved as made, there after a reload.
+test('INSTALLS: CYBERWARE against Strain never past Might, and a Cranial Jack costing 0.25, saved and kept (7e4b)', async ({ page, request }, info) => {
+  const name = `Wirefall ${info.retry + 1}`;
+  const token = await gmToken(request);
+  const { id } = await asGm(request, token, 'post', '/api/systems', { definition: { format: 1, name, core: { health: { model: 'pool' } },
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'might', label: 'Might' }, { id: 'strain', label: 'Strain' }] }] } });
+  const openIt = async () => {
+    await signInAsGm(page);
+    await openBuilder(page);
+    const card = page.getByTestId(/^system-/).filter({ hasText: name.toUpperCase() });
+    if (!(await card.getByRole('button', { name: 'OPEN', exact: true }).isVisible())) await card.getByRole('button').first().click();
+    await card.getByRole('button', { name: 'OPEN', exact: true }).click();
+    await builderPage(page, 'ITEMS');
+  };
+  await openIt();
+
+  await page.getByRole('button', { name: '+ INSTALL' }).click();
+  const install = page.getByTestId('install-new_install');
+  await install.getByRole('textbox', { name: 'NAME' }).fill('CYBERWARE');
+  await install.getByRole('combobox', { name: 'COSTS AGAINST' }).selectOption({ label: 'STRAIN' });
+  await install.getByRole('textbox', { name: 'CYBERWARE limit' }).fill('@might');
+  // The limit read in words, from the formula box.
+  await expect(install.getByRole('status')).toContainText(/MIGHT/i, { timeout: 15_000 });
+
+  await page.getByRole('button', { name: '+ ITEM' }).click();
+  await page.getByRole('region', { name: 'NEW ITEM item' }).getByRole('textbox', { name: 'NAME' }).fill('Cranial Jack');
+  const jack = page.getByRole('region', { name: 'Cranial Jack item' });
+  await jack.getByRole('combobox', { name: 'ITS FEATURES NEED' }).selectOption({ label: 'INSTALLED AS CYBERWARE' });
+  await expect(jack.getByText('STRAIN · FRACTIONS ARE FINE: 0.25')).toBeVisible();
+  await jack.getByRole('spinbutton', { name: 'COST' }).fill('0.25');
+
+  await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
+  const saved = await asGm(request, token, 'get', `/api/systems/${id}`);
+  expect(saved.problems).toEqual([]);
+  expect(saved.draft.items).toEqual({
+    installs: [{ id: 'new_install', label: 'CYBERWARE', against: 'strain', limit: '@might' }],
+    list: [{ id: 'new_item', label: 'Cranial Jack', needs: 'new_install', cost: 0.25 }],
+  });
+
+  // Kept: a reload finds it, saying what it needs.
+  await page.reload();
+  await openIt();
+  await expect(page.getByRole('button', { name: /CRANIAL JACK/ })).toContainText('INSTALLED AS CYBERWARE');
+  await expect(page.getByTestId('install-new_install').getByRole('combobox', { name: 'COSTS AGAINST' })).toHaveValue('strain');
+});
