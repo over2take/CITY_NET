@@ -381,11 +381,14 @@ function FieldInput({ field, data, readOnly: sheetReadOnly, onFieldChange, onFie
     // A template that names its own blank state keeps it; anything else gets the
     // placeholder, so a select is never silently pre-set to its first real choice.
     const hasBlank = options.some(o => o.value === '');
-    return (
+    // A ranked stat's rank (7f1c1): no step yet is its lowest, and its worth stands beside it.
+    const worth = field.worthField ? data[field.worthField] : undefined;
+    const select = (
       <select
         aria-label={field.label}
         className="sheet-input"
-        style={{ ...inputStyle, ...style }}
+        // Beside its worth, the picker takes what room is left (7f1c1).
+        style={field.worthField ? { ...inputStyle, ...style, flex: 1, minWidth: 0, width: 'auto' } : { ...inputStyle, ...style }}
         value={String(value)}
         disabled={readOnly}
         onChange={(e) => {
@@ -399,11 +402,18 @@ function FieldInput({ field, data, readOnly: sheetReadOnly, onFieldChange, onFie
           else for (const [id, val] of Object.entries(batch)) onFieldChange(id, val);
         }}
       >
-        {!hasBlank && <option value="">—</option>}
+        {!hasBlank && !field.worthField && <option value="">—</option>}
         {options.map(o => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
+    );
+    if (!field.worthField) return select;
+    return (
+      <span style={{ ...style, display: 'flex', gap: 6, alignItems: 'center', minWidth: 0 }}>
+        {select}
+        <span data-testid={`worth-${field.worthField}`} title="What a formula reading it gets" style={{ fontSize: '0.65rem', opacity: 0.75, whiteSpace: 'nowrap', flexShrink: 0, paddingRight: 4 }}>= {String(worth ?? 0)}</span>
+      </span>
     );
   }
   if (field.type === 'textarea') {

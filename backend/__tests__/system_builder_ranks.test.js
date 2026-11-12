@@ -145,6 +145,46 @@ describe('a bonus moves the step', () => {
   });
 });
 
+describe('the rank picker on the sheet (7f1c1)', () => {
+  const { withRankFields } = require_('../systemBuilder/ranks');
+  const { effectiveSheet } = require_('../systemBuilder/sheet');
+  const { customImporter, sheetFields } = require_('../systemBuilder/sheetImport');
+  const fieldsOf = (sheet) => sheet.sections.flatMap((s) => s.fields || []);
+
+  it('a ranked stat\'s field becomes a select on its step, its ranks by step and name, its worth named; the rest as it was', () => {
+    const sheet = { sections: [{ id: 'skills', label: 'SKILLS', fields: [
+      { id: 'athletics', label: 'Athletics', type: 'number', min: 0, max: 5, unit: 'pts', placeholder: '0', maxField: 'x', visibility: 'public', hint: 'Run and jump.' },
+      { id: 'level', label: 'Level', type: 'number' },
+    ] }, { id: 'notes', layout: 'notes' }, 'odd'] };
+    const drawn = withRankFields(RANKED, sheet);
+    expect(drawn.sections[0].fields).toEqual([
+      { id: 'athletics_rank', label: 'Athletics', type: 'select', visibility: 'public', hint: 'Run and jump.', worthField: 'athletics',
+        options: [{ value: '0', label: 'UNTRAINED' }, { value: '1', label: 'TRAINED' }, { value: '2', label: 'EXPERT' }, { value: '3', label: 'MASTER' }] },
+      { id: 'level', label: 'Level', type: 'number' },
+    ]);
+    expect(drawn.sections.slice(1)).toEqual(sheet.sections.slice(1));
+    // Nothing ranked, or no sections: the sheet itself.
+    expect(withRankFields({ ...RANKED, ranks: [] }, sheet)).toBe(sheet);
+    expect(withRankFields(RANKED, { tabs: [] })).toEqual({ tabs: [] });
+    expect(withRankFields(RANKED, null)).toBeNull();
+  });
+
+  it('the copy a browser draws has the pickers, the starter and an NPC\'s own; the sheet a GM designs keeps the stat', () => {
+    const render = runtime.renderOf('sys_rankedrankedrank', { ...RANKED, npc: { sheet: { sections: [{ id: 'npc', label: 'NPC', fields: [{ id: 'stealth', label: 'Stealth', type: 'number' }] }] } } });
+    expect(fieldsOf(render.sheet).find((f) => f.id === 'athletics_rank')).toMatchObject({ type: 'select', worthField: 'athletics' });
+    expect(fieldsOf(render.sheet).some((f) => f.id === 'athletics')).toBe(false);
+    expect(fieldsOf(render.npc.sheet)).toEqual([expect.objectContaining({ id: 'stealth_rank', worthField: 'stealth' })]);
+    expect(fieldsOf(effectiveSheet(RANKED)).some((f) => f.id === 'athletics')).toBe(true);
+  });
+
+  it('the sheet import asks for the rank, and reads it by name or by step', () => {
+    expect(sheetFields(RANKED).ask.find((f) => f.id === 'athletics_rank')).toMatchObject({ label: 'Athletics', type: 'select', options: expect.arrayContaining([{ value: '2', label: 'EXPERT' }]) });
+    const read = (raw) => customImporter(RANKED).mapFields(raw);
+    expect(read({ Athletics: 'expert', Stealth: 1 }).mapped).toMatchObject({ athletics_rank: '2', stealth_rank: '1' });
+    expect(read({ athletics: 'Grandmaster' }).notAChoice).toEqual({ athletics: 'Grandmaster' });
+  });
+});
+
 describe('the system file, and a sheet saved', () => {
   it('carries the ranks beside the definition, and back unchanged', () => {
     const file = buildFile({ definition: RANKED, version: 1, origin: 'sys_rankedrankedrank' });

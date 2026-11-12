@@ -106,6 +106,22 @@ const checkRanks = (definition, problems, { isTable = () => false, taken = new S
   }
 };
 
+/**
+ * A sheet with each ranked stat's field as its rank picker (7f1c1): a select on its step field, the ranks by step (value
+ * "0" the lowest) by name, with `worthField`, the stat, whose worth the sheet shows beside it. For the sheet a browser draws
+ * and the sheet import; the sheet a GM designs keeps the stat as it is.
+ */
+const withRankFields = (definition, sheet) => {
+  const ranked = new Map(rankedStatsOf(definition).map(({ stat, ranks }) => [stat.id, ranks]));
+  if (!ranked.size || !isPlainObject(sheet) || !Array.isArray(sheet.sections)) return sheet;
+  const pick = (f, ranks) => {
+    const kept = Object.fromEntries(Object.entries(f).filter(([k]) => !['min', 'max', 'unit', 'placeholder', 'maxField'].includes(k)));
+    return { ...kept, id: stepFieldOf(f.id), type: 'select', options: ranks.list.map((k, i) => ({ value: String(i), label: k.name })), worthField: f.id };
+  };
+  return { ...sheet, sections: sheet.sections.map((s) => (!isPlainObject(s) || !Array.isArray(s.fields) ? s
+    : { ...s, fields: s.fields.map((f) => (isPlainObject(f) && ranked.has(f.id) ? pick(f, ranked.get(f.id)) : f)) })) };
+};
+
 /** A ranked stat's rank name at a step, or null; a step past either end reads as the end. */
 const rankNameAt = (ranks, step) => {
   const names = list(ranks && ranks.list).map((k) => k.name);
@@ -114,4 +130,4 @@ const rankNameAt = (ranks, step) => {
   return names[Math.min(names.length - 1, Math.max(0, n))];
 };
 
-module.exports = { LIMITS, STEP_SUFFIX, stepFieldOf, rankListsOf, rankedStatsOf, rankedOf, stepFieldsOf, checkRanks, rankNameAt };
+module.exports = { LIMITS, STEP_SUFFIX, stepFieldOf, rankListsOf, rankedStatsOf, rankedOf, stepFieldsOf, checkRanks, rankNameAt, withRankFields };

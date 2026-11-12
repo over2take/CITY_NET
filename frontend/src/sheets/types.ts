@@ -42,6 +42,8 @@ export interface SheetField {
   id: string;
   label: string;
   type: SheetFieldType;
+  /** A custom system's ranked stat (7f1c1): this select is its rank, and the stat named here holds its worth, shown beside it. */
+  worthField?: string;
   /** 'public' fields appear on the quick-sheet card other players see.
    *  Default is private. The server enforces this - the client flag only
    *  drives edit-time hints. */

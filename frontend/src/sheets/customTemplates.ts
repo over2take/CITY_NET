@@ -24,6 +24,8 @@ export interface CustomRenderField {
   source?: SheetLinkSource;
   /** Who changes it: the owner (the default) or only the GM. */
   edit?: 'player' | 'gm';
+  /** A ranked stat's picker (7f1c1): the stat whose worth is shown beside it. */
+  worthField?: string;
 }
 
 export interface CustomRenderSheet {
@@ -114,6 +116,7 @@ const layoutTemplate = (id: string, name: string, sheet: CustomRenderSheet | und
       ...(f.placeholder ? { placeholder: f.placeholder } : {}),
       ...(f.unit ? { unit: f.unit } : {}),
       ...(f.options ? { options: f.options } : {}),
+      ...(f.worthField ? { worthField: f.worthField } : {}),
       ...(f.source ? { source: f.source, ...(f.source === 'token_ac' ? { sourceWritable: true } : {}) } : {}),
       ...(derived.has(f.id) ? { derived: true as const } : {}),
       ...(f.edit === 'gm' ? { gmOnly: true as const } : {}),
