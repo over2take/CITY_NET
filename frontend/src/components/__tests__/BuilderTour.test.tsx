@@ -84,3 +84,16 @@ describe('the box', () => {
     expect(props.onSkip).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('a place off the screen', () => {
+  it('is scrolled into view before the arrow is pointed at it', () => {
+    const place = document.createElement('button');
+    place.setAttribute('data-tour-place', TOUR[1].at as string);
+    const scrolled = vi.fn();
+    place.scrollIntoView = scrolled;
+    document.body.appendChild(place);
+    render(<BuilderTour step={1} railWidth={220} root={() => document.body} onBack={vi.fn()} onNext={vi.fn()} onSkip={vi.fn()} />);
+    expect(scrolled).toHaveBeenCalledWith({ block: 'nearest' });
+    place.remove();
+  });
+});

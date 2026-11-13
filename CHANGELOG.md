@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **The builder's tour points at what it explains, on a smaller window too.** With the pages Phase 7 added, the builder's rail is taller than a laptop screen, and the tour's TRY IT step pointed at a button scrolled out of sight. The tour now scrolls the rail to the button it explains.
 - TERMINATE_SESSION closes every window. GIVE.EXE, the shop catalogues, XP, LEVEL_UP, the new character, vehicles, the radio, initiative, the NPC library, the System Builder and a shop had stayed open, GIVE.EXE coming back on the GM's next sign-in.
 - The copy of the database taken before a startup migration is tried again while other startup work is still running, instead of being skipped. A slow machine could start the bank move with no copy made.
 - **Linked HP opens the character's health, for the GM too.** On a player's own sheet, HP and HP

@@ -45,6 +45,9 @@ export function BuilderTour({ step, railWidth, root, onBack, onNext, onSkip }: P
   // Beside the button the step points at, measured once it is drawn.
   useLayoutEffect(() => {
     const lit = s.at ? root()?.querySelector(`[data-tour-place="${s.at}"]`) : null;
+    // The rail scrolls once it is taller than the window: the place is brought into view first, so the arrow never
+    // points at something off the screen (TRY IT was, at 820 high, once Phase 7 added three pages).
+    lit?.scrollIntoView?.({ block: 'nearest' });
     setPlace(tourPlace(lit ? lit.getBoundingClientRect() : null, { width: window.innerWidth, height: window.innerHeight }, railWidth));
   }, [s.at, railWidth, root]);
   // The keyboard follows the tour: NEXT (or DONE) has focus at every step.
