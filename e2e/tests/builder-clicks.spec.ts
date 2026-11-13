@@ -170,6 +170,14 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await health.getByRole('combobox', { name: 'How health is gained' }).selectOption('beat');
       await expect(health.getByRole('textbox', { name: 'Dice in the pool' })).toBeVisible();
       missed['LEVELS, roll to beat'] = await faults(page);
+      // SPEND XP on, with a stat to raise and an option to buy, a cost's help open (7f2b).
+      await page.getByRole('button', { name: 'SPEND XP' }).click();
+      const spend = page.getByRole('region', { name: 'Spend XP' });
+      await spend.getByRole('button', { name: '+ RAISE A STAT' }).click();
+      await spend.getByRole('button', { name: '+ AN OPTION' }).click();
+      await spend.getByRole('button', { name: 'Help writing RAISE A STAT 1: costs' }).click();
+      await expect(spend.getByRole('group', { name: 'Help writing RAISE A STAT 1: costs' })).toBeVisible();
+      missed['LEVELS, spend XP'] = await faults(page);
     }
     if (p === 'NEW CHARACTER') {
       // THE STATS open, so how they are asked and the groups are there (7c3a), and a fixed array's numbers (7c3b).

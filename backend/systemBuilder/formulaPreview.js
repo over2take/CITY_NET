@@ -15,6 +15,9 @@
 // @this_mod, @tie, @tie_mod, tableRolls.js): the sample rolls the first stat the roll is ROLLED BY.
 // And a rest's refill amounts (rests.js), which name the character's own numbers and may hold dice:
 // what dice decide is said as a range, the least to the most they can come to.
+//
+// And SPEND XP's cost of raising a stat (7f2b, spendXp.js), which reads the stat as it is (@old) and as it will be
+// (@new) too: the sample raises a stat from SAMPLE_OLD. An option's cost is read as a formula is.
 
 const { parse, evaluate, references } = require('./expression');
 const { ruleValue } = require('./rules');
@@ -27,13 +30,18 @@ const { effectiveSheet, fieldsOf } = require('./sheet');
 
 /** What every level name reads for the sample character. */
 const SAMPLE_LEVEL = 3;
+/** What a raised stat is before it is raised, in a cost's sample (7f2b). */
+const SAMPLE_OLD = 2;
 /**
  * What a formula box holds: a modifier's amount, an option's requirement, a feature's uses; a roll's
  * ADD and AGAINST; a rest's refill amount; a formula of STATS & RULES (formula box 3).
  */
-const KINDS = new Set(['amount', 'requires', 'uses', 'add', 'against', 'refill', 'formula']);
+const KINDS = new Set(['amount', 'requires', 'uses', 'add', 'against', 'refill', 'formula', 'cost']);
 /** What a roll's own names are called in words. */
 const ROLL_OWN = new Map([['this', 'rolled stat'], ['this_mod', 'rolled stat\'s modifier'], ['tie', 'tied stat'], ['tie_mod', 'tied stat\'s modifier']]);
+/** What a cost of raising a stat calls its own names (7f2b), and what the sample reads for them. */
+const COST_OWN = new Map([['old', 'Rating now'], ['new', 'New rating']]);
+const COST_SAMPLE = { old: SAMPLE_OLD, new: SAMPLE_OLD + 1 };
 /** The most formulas one request reads. */
 const MOST = 20;
 
@@ -121,7 +129,8 @@ const previewFormula = (definition, text, kind, sample = sampleOf(definition), r
   let tree;
   try { tree = parse(text, isTable); } catch (e) { return { ok: false, problem: e.message }; }
   const rolled = kind === 'add' || kind === 'against';
-  const names = new Map([...namesOf(definition), ...(rolled ? ROLL_OWN : [])]);
+  const costs = kind === 'cost';
+  const names = new Map([...namesOf(definition), ...(rolled ? ROLL_OWN : []), ...(costs ? COST_OWN : [])]);
   const fields = [...references(tree).fields];
   const unknown = fields.find((n) => !names.has(n));
   if (unknown) return unknownName(unknown, names.keys());
@@ -140,7 +149,8 @@ const previewFormula = (definition, text, kind, sample = sampleOf(definition), r
   // A roll's box reads the first stat it is ROLLED BY as @this, as the table would.
   const found = rolled && Array.isArray(definition.rolls) ? definition.rolls.find((r) => isPlainObject(r) && r.id === roll) : null;
   const stat = found ? fieldsRolledBy(definition, found)[0] : undefined;
-  const field = rolled ? fieldsFor(definition, sample, stat) : (name) => num(sample[name]);
+  const field = rolled ? fieldsFor(definition, sample, stat)
+    : costs ? (name) => (own(COST_SAMPLE, name) ? COST_SAMPLE[name] : num(sample[name])) : (name) => num(sample[name]);
   const value = evaluate(tree, {
     field,
     rule: (name) => ruleValue(name, sample),
@@ -164,4 +174,4 @@ const previewFormulas = (definition, formulas) => {
   ));
 };
 
-module.exports = { previewFormula, previewFormulas, SAMPLE_LEVEL, MOST, distance, nearest };
+module.exports = { previewFormula, previewFormulas, SAMPLE_LEVEL, SAMPLE_OLD, MOST, distance, nearest };

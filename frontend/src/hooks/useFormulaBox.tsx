@@ -44,9 +44,9 @@ const askBox: React.CSSProperties = { background: 'var(--black)', color: 'var(--
 
 /** What a shape starts at: 1 to add, 13 for a stat or a target, 5 for a level. */
 const startOf = (s: Shape, kind: FormulaKind) => (s.id === 'at_least' || (kind === 'against' && s.id === 'number') ? 13
-  : s.id === 'level_at_least' ? 5 : s.id === 'per_level' || s.id === 'per_class_level' ? 2 : 1);
+  : s.id === 'level_at_least' || s.id === 'per_new' ? 5 : s.id === 'per_level' || s.id === 'per_class_level' ? 2 : 1);
 /** What a shape's ask row starts with. */
-const LEAD: Partial<Record<FormulaKind, string>> = { requires: 'NEEDS', amount: 'ADD', least: 'AT LEAST', add: 'ADD', against: 'AGAINST' };
+const LEAD: Partial<Record<FormulaKind, string>> = { requires: 'NEEDS', amount: 'ADD', least: 'AT LEAST', add: 'ADD', against: 'AGAINST', cost: 'COSTS', price: 'COSTS' };
 
 /**
  * The box, as two parts the caller places: `field`, the text and its FORMULA button, where the
@@ -148,6 +148,7 @@ export function useFormulaBox({ definition, api, kind, roll, value, onChange, la
                 </select>
               </>}
               {shape.id === 'per_level' && 'FOR EACH LEVEL'}
+              {shape.id === 'per_new' && 'FOR EACH POINT OF THE NEW RATING'}
               {shape.id === 'per_class_level' && <>
                 FOR EACH
                 <select aria-label="Which level" value={shape.name} style={askBox} onChange={(e) => write({ ...shape, name: e.target.value })}>

@@ -7,6 +7,8 @@
 // Formula box 2 adds a roll's ADD and AGAINST, which read the stat being rolled too (@this,
 // @this_mod, @tie, @tie_mod), and a rest's refill amounts, which may hold dice: the sample line says
 // what dice decide as a range, the least to the most.
+//
+// And SPEND XP's cost of raising a stat (7f2b), which reads the stat as it is (@old) and as it will be (@new) too.
 
 import type { Definition } from './systemsApi';
 import { allStats, formulaList, tableList, isCondition, partOf, CONDITION_PARTS, FUNCTIONS, type Formula } from './statsRules';
@@ -16,11 +18,11 @@ import { choiceLists, featureList } from './choices';
  * What a box holds: a modifier's amount, an option's requirement, a feature's uses; a roll's ADD and
  * AGAINST; a rest's amount; a formula of STATS & RULES (formula box 3).
  */
-/** `least` (7e1b): a modifier's amount set AT LEAST, read as an amount is, said as "at least". */
-export type FormulaKind = 'amount' | 'least' | 'requires' | 'uses' | 'add' | 'against' | 'refill' | 'formula';
+/** `least` (7e1b): a modifier's amount set AT LEAST, read as an amount is, said as "at least". `cost` (7f2b): what raising a stat costs; `price`, what an option costs. */
+export type FormulaKind = 'amount' | 'least' | 'requires' | 'uses' | 'add' | 'against' | 'refill' | 'formula' | 'cost' | 'price';
 
-/** The kind the server reads a box as: an AT LEAST is an amount. */
-export const serverKind = (kind: FormulaKind): FormulaKind => (kind === 'least' ? 'amount' : kind);
+/** The kind the server reads a box as: an AT LEAST is an amount, and an option's price (7f2b) a formula. */
+export const serverKind = (kind: FormulaKind): FormulaKind => (kind === 'least' ? 'amount' : kind === 'price' ? 'formula' : kind);
 
 /** One name a formula reads, as the server worked it out for the sample. */
 export interface FormulaReads { id: string; label: string; value: number }
@@ -69,9 +71,10 @@ export const wordsOf = (kind: FormulaKind, text: string, reads: FormulaReads[] =
     if ((m = t.match(/^has\(\s*([a-z][a-z0-9_]*)\s*\)$/))) return `needs ${word(`has:${m[1]}`, reads)}`;
     return `needs ${t.replace(/\bhas\(\s*([a-z][a-z0-9_]*)\s*\)/g, (_, id: string) => word(`has:${id}`, reads)).replace(/@([a-z][a-z0-9_]*)/g, (_, id: string) => word(id, reads))}`;
   }
-  // A formula of STATS & RULES is a value, not something added: no sign.
-  const plain = kind === 'uses' || kind === 'formula';
-  const unit = kind === 'uses' ? (n: string) => `${n} use${n === '1' ? '' : 's'}` : kind === 'formula' ? (n: string) => n : (n: string) => signed(Number(n));
+  // A formula of STATS & RULES is a value, not something added: no sign. Nor is a cost or a price (7f2b).
+  const costs = kind === 'cost' || kind === 'price';
+  const plain = kind === 'uses' || kind === 'formula' || costs;
+  const unit = kind === 'uses' ? (n: string) => `${n} use${n === '1' ? '' : 's'}` : kind === 'formula' || costs ? (n: string) => n : (n: string) => signed(Number(n));
   if ((m = t.match(/^(-?\d+)$/))) return `${unit(m[1])}, always`;
   // N * @name, or @name * N.
   const per = t.match(/^(\d+)\s*\*\s*@([a-z][a-z0-9_]*)$/) ?? t.match(/^@([a-z][a-z0-9_]*)\s*\*\s*(\d+)$/);
@@ -79,7 +82,7 @@ export const wordsOf = (kind: FormulaKind, text: string, reads: FormulaReads[] =
     const [n, id] = /^\d+$/.test(per[1]) ? [per[1], per[2]] : [per[2], per[1]];
     return `${plain ? n : signed(Number(n))} for each ${word(id, reads).toLowerCase()}`;
   }
-  if ((m = t.match(/^@([a-z][a-z0-9_]*)$/))) return `${kind === 'uses' ? 'as many as your' : kind === 'formula' ? 'your' : '+ your'} ${word(m[1], reads)}`;
+  if ((m = t.match(/^@([a-z][a-z0-9_]*)$/))) return `${kind === 'uses' ? 'as many as your' : kind === 'formula' ? 'your' : costs ? 'the' : '+ your'} ${word(m[1], reads)}`;
   if ((m = t.match(/^floor\(\s*@([a-z][a-z0-9_]*)\s*\/\s*2\s*\)$/))) return `${plain ? 'half' : '+ half'} your ${word(m[1], reads).toLowerCase()}, rounded down`;
   return named();
 };
@@ -97,6 +100,7 @@ export const sampleLine = (kind: FormulaKind, read: FormulaRead & { ok: true }):
     : kind === 'against' ? `target ${v}`
     : kind === 'refill' ? (read.most !== undefined ? `${v} to ${round(read.most)}` : String(v))
     : kind === 'least' ? `at least ${v}`
+    : kind === 'cost' || kind === 'price' ? `costs ${v}`
     : signed(v);
   const sample = read.rolling ? `sample, rolling ${read.rolling}${names ? ',' : ''}` : 'sample';
   return names || read.rolling ? `${sample}${names ? ` ${names}` : ''}: ${said}` : said;
@@ -144,13 +148,17 @@ export const ROLL_TOKENS = [
   { token: '@tie', label: 'ITS TIED STAT' }, { token: '@tie_mod', label: 'THE TIED STAT\'S MODIFIER' },
 ];
 
+/** What a cost of raising a stat reads of the stat raised (7f2b). */
+export const COST_TOKENS = [{ token: '@old', label: 'THE RATING NOW' }, { token: '@new', label: 'THE NEW RATING' }];
+
 /**
- * What INSERT offers a box: the stat being rolled (a roll's), its levels, stats, formulas (never for
+ * What INSERT offers a box: the stat being rolled (a roll's), a raised stat's ratings (a cost's), its levels, stats, formulas (never for
  * an amount, which reads the sheet as typed and levels), tables and the workings. A rest's amount
  * reads no tables. Empty groups left out.
  */
 export const insertGroups = (def: Definition, kind: FormulaKind): InsertGroup[] => [
   { title: 'THIS ROLL', items: kind === 'add' || kind === 'against' ? ROLL_TOKENS : [] },
+  { title: 'THE STAT RAISED', items: kind === 'cost' ? COST_TOKENS : [] },
   { title: 'LEVELS', items: levelTokens(def) },
   { title: 'STATS', items: allStats(def).map((s) => ({ token: `@${s.id}`, label: (s.label || s.id).toUpperCase() })) },
   { title: 'FORMULAS', items: kind === 'amount' || kind === 'least' ? [] : formulaList(def).map((f) => ({ token: `@${f.id}`, label: (f.label || f.id).toUpperCase() })) },
@@ -194,6 +202,14 @@ export const shapesOf = (def: Definition, kind: FormulaKind): Shape[] => {
       { id: 'dice_and_stat', label: 'DICE AND A STAT', asks: 'dice-and-stat', needs: stats },
     ];
   }
+  // A cost of raising a stat (7f2b): a number, or so much for each point of the new rating.
+  if (kind === 'cost') {
+    return [
+      { id: 'number', label: 'A NUMBER', asks: 'number' },
+      { id: 'per_new', label: 'NEW RATING TIMES', asks: 'number' },
+    ];
+  }
+  if (kind === 'price') return [{ id: 'number', label: 'A NUMBER', asks: 'number' }];
   if (kind === 'requires') {
     return [
       { id: 'at_least', label: 'AT LEAST', asks: 'number-and-stat', needs: stats },
@@ -221,6 +237,7 @@ export const writeShape = (shape: string, n: number, name = '@level', sides = 8)
     case 'dice_and_stat': return `${Math.max(1, k)}d${sides} + ${name}`;
     case 'number': return String(k);
     case 'per_level': return `${k} * @level`;
+    case 'per_new': return `@new * ${k}`;
     case 'per_class_level': return `${k} * ${name}`;
     case 'half_level': return 'floor(@level / 2)';
     case 'at_least': return `${name} >= ${k}`;
