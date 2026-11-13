@@ -41,9 +41,10 @@ const list = (v) => (Array.isArray(v) ? v : []);
 /**
  * The sections that change nothing on any character, said in one line. Phase 6's (rolls, their
  * symbols and dice, who sees a roll's target) joined in 6c4h: a change to them said nothing before.
- * Choices (7a1a) are here too: what a change to them does to each character shows in their values (7a1b).
+ * Choices (7a1a) are here too: what a change to them does to each character shows in their values (7a1b). SPEND XP's price
+ * list (7f2a1) changes only what is bought next.
  */
-const OTHER = ['name', 'description', 'author', 'license', 'words', 'buildings', 'bank', 'lookups', 'npc', 'rests', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'creation', 'levels'];
+const OTHER = ['name', 'description', 'author', 'license', 'words', 'buildings', 'bank', 'lookups', 'npc', 'rests', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'creation', 'levels', 'spend'];
 
 const fieldMap = (definition) => new Map(fieldsOf(effectiveSheet(definition))
   .filter((f) => isPlainObject(f) && typeof f.id === 'string')
