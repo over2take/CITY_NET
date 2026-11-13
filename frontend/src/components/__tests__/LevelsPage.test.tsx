@@ -31,7 +31,10 @@ describe('the "?" beside each setting', () => {
     const perLevel = ['levels.healthDie', 'levels.healthGain', 'levels.healthAdds', 'levels.beatWay', 'levels.beatPool', 'levels.beatGain'];
     // SPEND XP's (7f2b), with a stat to raise and an option to buy.
     const spending = ['levels.buys', 'levels.buyIn', 'levels.buyCost', 'levels.buyMost', 'levels.buyFrom', 'levels.optionCost', 'levels.wait'];
-    for (const [key, text] of Object.entries(HINTS).filter(([k]) => k.startsWith('levels.') && !perLevel.includes(k) && !spending.includes(k))) {
+    // IMPROVE BY USE's (7f3a2).
+    const improving = Object.keys(HINTS).filter((k) => k.startsWith('levels.improve'));
+    expect(improving).toHaveLength(7);
+    for (const [key, text] of Object.entries(HINTS).filter(([k]) => k.startsWith('levels.') && !perLevel.includes(k) && !spending.includes(k) && !improving.includes(k))) {
       expect(screen.getByRole('note', { name: text }), key).toBeTruthy();
     }
     cleanup();
@@ -42,6 +45,9 @@ describe('the "?" beside each setting', () => {
     cleanup();
     open({ core: { advancement: ['spend'] }, spend: { buys: [{ id: 'a', what: 'stat', cost: '1' }, { id: 'b', what: 'option', cost: '1' }] } });
     for (const key of spending) expect(screen.getByRole('note', { name: HINTS[key] }), key).toBeTruthy();
+    cleanup();
+    open({ core: { advancement: ['use'] } });
+    for (const key of improving) expect(screen.getByRole('note', { name: HINTS[key] }), key).toBeTruthy();
   });
 });
 
@@ -61,11 +67,22 @@ describe('how they advance', () => {
     expect(held.current.core).toEqual({ advancement: ['levels'] });
   });
 
-  it('says what SETUP picked that comes later', () => {
-    open({ core: { advancement: ['levels', 'spend', 'use'] } });
-    expect(screen.getByText('SETUP also picks IMPROVE BY USE. That comes later, as its own piece.')).toBeTruthy();
-    cleanup();
-    open({ core: { advancement: ['levels', 'spend'] } });
+  it('IMPROVE BY USE (7f3a2): its own button, what it says alone and beside SPEND XP, and its section', async () => {
+    open({ core: { advancement: [] } });
+    await press('IMPROVE BY USE');
+    expect(held.current.core).toEqual({ advancement: ['use'] });
+    expect(screen.getByRole('button', { name: 'IMPROVE BY USE' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('No levels here: characters go up by what they use.')).toBeTruthy();
+    expect(screen.getByText('A stat used is marked, and at a rest it rolls to improve, below.')).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Improve by use' })).toBeTruthy();
+    // THE WORD is XP's: not for IMPROVE BY USE alone.
+    expect(screen.queryByText('THE WORD')).toBeNull();
+    await press('SPEND XP');
+    expect(screen.getByText('No levels here: characters go up by what they buy, and by what they use.')).toBeTruthy();
+    await press('IMPROVE BY USE');
+    expect(screen.queryByRole('region', { name: 'Improve by use' })).toBeNull();
+    expect(screen.getByText('No levels here: characters go up by what they buy.')).toBeTruthy();
+    // Nothing said to come later any more.
     expect(screen.queryByText(/^SETUP also picks/)).toBeNull();
   });
 
@@ -375,5 +392,50 @@ describe('SPEND XP (7f2b)', () => {
     expect((section().getByRole('combobox', { name: 'RAISE A STAT 1: in' }) as HTMLSelectElement).value).toBe('gone');
     expect((section().getByRole('combobox', { name: 'AN OPTION 2: from' }) as HTMLSelectElement).value).toBe('classes');
     expect([...(section().getByRole('combobox', { name: 'AN OPTION 3: from' }) as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['PICK A LIST', 'FEATS', 'PERKS']);
+  });
+});
+
+describe('IMPROVE BY USE (7f3a2)', () => {
+  const USE = {
+    core: { advancement: ['use'] },
+    stats: [{ id: 'skills', label: 'Skills', stats: [{ id: 'lore', label: 'Lore' }] }, { id: 'ranked', label: 'Ranked', stats: [{ id: 'climb', label: 'Climb', rank: 'dots' }] }],
+    ranks: [{ id: 'dots', label: 'DOTS', list: [{ name: 'NONE', worth: '0' }] }],
+  };
+  const section = () => within(screen.getByRole('region', { name: 'Improve by use' }));
+
+  it('Call of Cthulhu\'s to start, said in a line; each setting written as changed', async () => {
+    open(USE);
+    expect(section().getByText('At END OF SESSION, each marked stat rolls d100; over @this, it gains 1d10. The marks clear.')).toBeTruthy();
+    const stats = section().getByRole('combobox', { name: 'Which stats improve' }) as HTMLSelectElement;
+    expect([...stats.options].map((o) => o.textContent)).toEqual(['EVERY STAT', 'SKILLS']);
+    await userEvent.selectOptions(stats, 'skills');
+    await userEvent.selectOptions(section().getByRole('combobox', { name: 'Marked by' }), 'hand');
+    const at = section().getByRole('combobox', { name: 'At which rest' }) as HTMLSelectElement;
+    expect([...at.options].map((o) => o.textContent)).toEqual(['SHORT REST', 'LONG REST', 'END OF SCENE', 'END OF SESSION']);
+    await userEvent.selectOptions(at, 'long_rest');
+    fireEvent.change(section().getByRole('textbox', { name: 'Improvement roll' }), { target: { value: '1d20' } });
+    fireEvent.change(section().getByRole('textbox', { name: 'Improves if over' }), { target: { value: '10' } });
+    fireEvent.change(section().getByRole('textbox', { name: 'Gain' }), { target: { value: '1' } });
+    const most = section().getByRole('textbox', { name: 'Improves up to' });
+    await userEvent.type(most, '20{Enter}');
+    expect(held.current.improve).toEqual({ stats: 'skills', marked: 'hand', at: 'long_rest', roll: '1d20', over: '10', gain: '1', most: 20 });
+    expect(section().getByText('At LONG REST, each marked stat rolls 1d20; over 10, it gains 1, up to 20. The marks clear.')).toBeTruthy();
+    await userEvent.selectOptions(stats, '');
+    expect(held.current.improve).not.toHaveProperty('stats');
+  });
+
+  it('says what can\'t work yet; a group or rest gone still shown, to be put right; the boxes\' help offers @this', async () => {
+    open({ ...USE, improve: { stats: 'ranked', at: 'gone', gain: '' } });
+    expect(section().getAllByRole('note').map((n) => n.textContent).filter((t) => t !== '?')).toEqual([
+      'No group of stats that can improve is called ranked: a stat held as a rank doesn\'t',
+      'No rest is called gone. Pick one, or turn it on on RESTS',
+      'THEN ADD: write dice or a formula',
+    ]);
+    expect((section().getByRole('combobox', { name: 'Which stats improve' }) as HTMLSelectElement).value).toBe('ranked');
+    expect((section().getByRole('combobox', { name: 'At which rest' }) as HTMLSelectElement).value).toBe('gone');
+    await userEvent.click(section().getByRole('button', { name: 'Help writing Improvement roll' }));
+    const help = within(section().getByRole('group', { name: 'Help writing Improvement roll' }));
+    expect(help.getByText('THE STAT RAISED')).toBeTruthy();
+    expect(help.getByRole('button', { name: 'DICE' })).toBeTruthy();
   });
 });

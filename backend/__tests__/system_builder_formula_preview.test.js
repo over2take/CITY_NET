@@ -198,3 +198,17 @@ describe('a cost of raising a stat (7f2b, SPEND XP)', () => {
     ]);
   });
 });
+
+describe('IMPROVE BY USE\'s boxes (7f3a2)', () => {
+  const USED = { ...DEF, core: { ...DEF.core, advancement: ['use'] }, improve: { stats: 'abilities' } };
+  it('dice and formulas as a rest\'s amount, reading @this as the sample\'s first stat that improves', () => {
+    expect(previewFormula(USED, 'd100', 'improve')).toEqual({ ok: true, value: 1, most: 100, reads: [] });
+    expect(previewFormula(USED, '@this', 'improve')).toEqual({ ok: true, value: 16, reads: [{ id: 'this', label: 'Strength', value: 16 }] });
+    expect(previewFormula(USED, '1d10 + @con', 'improve')).toMatchObject({ ok: true, value: 15, most: 24 });
+    expect(previewFormula(USED, '@thsi', 'improve')).toMatchObject({ ok: false, name: 'thsi', suggest: 'this' });
+    // With nothing to improve, @this reads 0; a rest's amount never has it.
+    expect(previewFormula({ ...DEF, stats: [] }, '@this', 'improve')).toMatchObject({ ok: true, value: 0, reads: [{ id: 'this', label: 'the stat', value: 0 }] });
+    expect(previewFormula(USED, '@this', 'refill')).toMatchObject({ ok: false, name: 'this' });
+    expect(previewFormulas(USED, [{ text: '@this + 1', kind: 'improve' }])[0]).toMatchObject({ ok: true, value: 17 });
+  });
+});

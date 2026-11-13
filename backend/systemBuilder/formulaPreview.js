@@ -18,6 +18,9 @@
 //
 // And SPEND XP's cost of raising a stat (7f2b, spendXp.js), which reads the stat as it is (@old) and as it will be
 // (@new) too: the sample raises a stat from SAMPLE_OLD. An option's cost is read as a formula is.
+//
+// And IMPROVE BY USE's roll, its target and its gain (7f3a2, improveByUse.js), read as a rest's amount is, dice and all,
+// naming the sheet's own names and @this, the stat improved: the sample's first stat that improves.
 
 const { parse, evaluate, references } = require('./expression');
 const { ruleValue } = require('./rules');
@@ -27,6 +30,7 @@ const { fieldsRolledBy, fieldsFor } = require('./tableRolls');
 const { reachOf } = require('./rests');
 const { prepare } = require('./tierRolls');
 const { effectiveSheet, fieldsOf } = require('./sheet');
+const { improvingStats } = require('./improveByUse');
 
 /** What every level name reads for the sample character. */
 const SAMPLE_LEVEL = 3;
@@ -36,7 +40,7 @@ const SAMPLE_OLD = 2;
  * What a formula box holds: a modifier's amount, an option's requirement, a feature's uses; a roll's
  * ADD and AGAINST; a rest's refill amount; a formula of STATS & RULES (formula box 3).
  */
-const KINDS = new Set(['amount', 'requires', 'uses', 'add', 'against', 'refill', 'formula', 'cost']);
+const KINDS = new Set(['amount', 'requires', 'uses', 'add', 'against', 'refill', 'formula', 'cost', 'improve']);
 /** What a roll's own names are called in words. */
 const ROLL_OWN = new Map([['this', 'rolled stat'], ['this_mod', 'rolled stat\'s modifier'], ['tie', 'tied stat'], ['tie_mod', 'tied stat\'s modifier']]);
 /** What a cost of raising a stat calls its own names (7f2b), and what the sample reads for them. */
@@ -94,8 +98,7 @@ const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
  * A rest's refill amount: a number, a formula or dice, naming the character's own numbers and no
  * tables. With dice, `value` is the least it comes to and `most` the most.
  */
-const previewRefill = (definition, text, sample) => {
-  const reach = reachOf(definition);
+const previewRefill = (definition, text, sample, reach = reachOf(definition), own = new Map()) => {
   const written = [...new Set([...text.matchAll(/@([a-zA-Z_][a-zA-Z0-9_]*)/g)].map((m) => m[1]))];
   const unknown = written.find((n) => !reach.names.has(n));
   if (unknown) return unknownName(unknown, reach.names);
@@ -106,7 +109,7 @@ const previewRefill = (definition, text, sample) => {
     field: (n) => { const m = /^tier_die_(\d+)$/.exec(n); return m ? counts[Number(m[1])] * face(prepared.dice[Number(m[1])].sides) : num(sample[n]); },
     rule: () => 0, table: () => 0,
   });
-  const labels = new Map([...fieldsOf(effectiveSheet(definition)).filter((f) => f && typeof f.id === 'string').map((f) => [f.id, f.label || f.id]), ...namesOf(definition)]);
+  const labels = new Map([...fieldsOf(effectiveSheet(definition)).filter((f) => f && typeof f.id === 'string').map((f) => [f.id, f.label || f.id]), ...namesOf(definition), ...own]);
   const least = at(() => 1);
   const most = at((sides) => sides);
   return {
@@ -124,6 +127,13 @@ const previewRefill = (definition, text, sample) => {
 const previewFormula = (definition, text, kind, sample = sampleOf(definition), roll = null) => {
   if (typeof text !== 'string' || !text.trim()) return { ok: false, problem: 'Empty' };
   if (kind === 'refill') return previewRefill(definition, text, sample);
+  // IMPROVE BY USE's boxes (7f3a2): the sheet's names and @this, the first stat that improves, as the sample has it.
+  if (kind === 'improve') {
+    const stat = improvingStats(definition)[0];
+    const names = new Set([...namesOf(definition).keys(), 'this']);
+    return previewRefill(definition, text, { ...sample, this: stat ? num(sample[stat.id]) : 0 }, { names },
+      new Map([['this', stat ? stat.label || stat.id : 'the stat']]));
+  }
   const tables = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
   const isTable = (name) => own(tables, name);
   let tree;

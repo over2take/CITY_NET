@@ -180,6 +180,12 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await spend.getByRole('button', { name: 'Help writing RAISE A STAT 1: costs' }).click();
       await expect(spend.getByRole('group', { name: 'Help writing RAISE A STAT 1: costs' })).toBeVisible();
       missed['LEVELS, spend XP'] = await faults(page);
+      // IMPROVE BY USE on, its roll's help open (7f3a2).
+      await page.getByRole('button', { name: 'IMPROVE BY USE' }).click();
+      const improve = page.getByRole('region', { name: 'Improve by use' });
+      await improve.getByRole('button', { name: 'Help writing Improvement roll' }).click();
+      await expect(improve.getByRole('group', { name: 'Help writing Improvement roll' })).toBeVisible();
+      missed['LEVELS, improve by use'] = await faults(page);
     }
     if (p === 'NEW CHARACTER') {
       // THE STATS open, so how they are asked and the groups are there (7c3a), and a fixed array's numbers (7c3b).

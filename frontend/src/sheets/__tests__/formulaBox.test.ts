@@ -232,3 +232,15 @@ describe('a cost of raising a stat (7f2b, SPEND XP)', () => {
     expect(serverKind('cost')).toBe('cost');
   });
 });
+
+describe('IMPROVE BY USE\'s boxes (7f3a2)', () => {
+  it('dice as a rest\'s amount, said with names; INSERT offers @this and no tables; its SHAPES a rest amount\'s', () => {
+    expect(wordsOf('improve', '1d10 + @this', [{ id: 'this', label: 'Lore', value: 40 }])).toBe('1d10 + Lore');
+    expect(sampleLine('improve', { ok: true, value: 1, most: 100, reads: [] })).toBe('1 to 100');
+    const groups = insertGroups(DEF, 'improve');
+    expect(groups.find((g) => g.title === 'THE STAT RAISED')?.items).toEqual([{ token: '@this', label: 'THE STAT IMPROVED' }]);
+    expect(groups.some((g) => g.title === 'TABLES')).toBe(false);
+    expect(shapesOf(DEF, 'improve').map((s) => s.label)).toEqual(['A NUMBER', 'DICE', 'DICE AND A STAT']);
+    expect(serverKind('improve')).toBe('improve');
+  });
+});
