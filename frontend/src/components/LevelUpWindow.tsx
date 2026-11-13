@@ -7,7 +7,7 @@ import type { SheetTemplate } from '../sheets/types';
 import { characterLevel, levelUpOffer, type LevelTarget, type LevelUpIncreases, type LevelUpPick } from '../sheets/xpMeter';
 import {
   LEVEL_UP_STEP_NAMES, canRaise, chosenTarget, healthGain, healthRolledFor, increasesSpent, insteadAsked, insteadTaken, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted,
-  pointsLeft, statNow, unlockedBy, withPickToggled, withRaised, withoutSpread,
+  pointsLeft, raisedTo, unlockedBy, withPickToggled, withRaised, withoutSpread,
 } from '../sheets/levelUpFlow';
 
 // LEVEL_UP.EXE (7d3a; approved mockup docs/mockups/level-up.html, 2026-11-07): the same kind of window as
@@ -310,7 +310,7 @@ export function LevelUpFlow({ sheet, template, refused, name: fallbackName, emit
                   return (
                     <div key={s.id} style={statBox}>
                       <span style={{ fontSize: '0.6rem', letterSpacing: '1px', opacity: 0.8 }}>{s.label.toUpperCase()}</span>
-                      <b aria-label={`${s.label} with the points`} style={{ fontSize: '0.9rem', color: on ? 'var(--cyan)' : 'var(--green)' }}>{statNow(data, s.id) + on}</b>
+                      <b aria-label={`${s.label} with the points`} style={{ fontSize: '0.9rem', color: on ? 'var(--cyan)' : 'var(--green)' }}>{raisedTo(data, s, on)}</b>
                       <span style={{ display: 'flex', gap: '4px' }}>
                         <button type="button" style={mini} aria-label={`Less ${s.label}`} disabled={!on} onClick={() => raise(u.id, s.id, -1)}>−</button>
                         <button type="button" style={mini} aria-label={`More ${s.label}`} disabled={!canRaise(data, u, spread, s.id)} onClick={() => raise(u.id, s.id, 1)}>+</button>

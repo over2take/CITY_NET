@@ -123,7 +123,7 @@ const { healthLayout } = require('./core');
 const { partOn } = require('./parts');
 const { currenciesOf } = require('./currencies');
 const { checkItems, itemsOf, slotsOf, installsOf, workingFeatures, itemsOwned, itemsShown } = require('./items');
-const { stepFieldsOf } = require('./ranks');
+const { stepFieldsOf, rankedStatsOf } = require('./ranks');
 
 /** Where a sheet keeps its picks: starting with _, so no stat, formula or field can be called it. */
 const PICKS_KEY = '_choices';
@@ -975,8 +975,10 @@ const giftsShown = (definition, option) => {
 };
 
 /** An increase as the sheet and LEVEL_UP.EXE draw it (7d6b). */
-const increaseShown = (inc, names) => ({
-  points: inc.points, most: inc.most, stats: inc.stats.map((id) => ({ id, label: String(names.get(id) || id) })), ...(inc.cap === null ? {} : { cap: inc.cap }),
+const increaseShown = (inc, names, ranks = new Map()) => ({
+  points: inc.points, most: inc.most,
+  // A stat held as a rank (7f1c2) with its ranks by name: raised a step a point, up to the top.
+  stats: inc.stats.map((id) => ({ id, label: String(names.get(id) || id), ...(ranks.has(id) ? { ranks: ranks.get(id).list.map((k) => k.name) } : {}) })), ...(inc.cap === null ? {} : { cap: inc.cap }),
   ...(inc.instead ? { instead: inc.instead } : {}),
 });
 
@@ -1004,7 +1006,7 @@ const featuresShownBy = (definition) => {
     }) } : {}),
     ...(typeof f.choice === 'string' && lists.some((l) => l.id === f.choice) ? { opens: f.choice, opensCount: openCountOf(f) } : {}),
     // An INCREASE (7d6b): its points, the most on one, the stats it may raise by name, and where they stop.
-    ...(increaseOf(definition, f) ? { increase: increaseShown(increaseOf(definition, f), names) } : {}),
+    ...(increaseOf(definition, f) ? { increase: increaseShown(increaseOf(definition, f), names, new Map(rankedStatsOf(definition).map(({ stat, ranks }) => [stat.id, ranks]))) } : {}),
   }));
 };
 

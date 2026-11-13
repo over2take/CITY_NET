@@ -792,3 +792,34 @@ describe('the sheet\'s own line', () => {
     expect(screen.queryByRole('button', { name: 'CREATING · CONTINUE' })).toBeNull();
   });
 });
+
+describe('ranks making a character (7f1c2)', () => {
+  const RANKED = { steps: ['who', 'stats', 'list:classes'], ways: { stats: { way: 'array', numbers: [14] } }, stats: [{ id: 'traits', label: 'TRAITS', stats: [
+    { id: 'grit', label: 'Grit', min: 3, max: 18 },
+    { id: 'lore', label: 'Lore', ranks: ['UNTRAINED', 'TRAINED', 'EXPERT'], atStart: 1 },
+  ] }] };
+
+  it('a ranked stat picked by name under RANKS, those past AT START off; never among the numbers placed', async () => {
+    const { socket } = await open({ name: 'Wren', _creating: { at: 'stats' } }, undefined, 'tok', RANKED);
+    const ranks = within(screen.getByRole('region', { name: 'Ranks' }));
+    const lore = ranks.getByRole('combobox', { name: 'Lore rank' }) as HTMLSelectElement;
+    expect(lore.value).toBe('0');
+    expect([...lore.options].map((o) => [o.textContent, o.disabled])).toEqual([['UNTRAINED', false], ['TRAINED', false], ['EXPERT', true]]);
+    expect(ranks.getByText('UP TO TRAINED TO START')).toBeTruthy();
+    // The array's 14 is for Grit alone.
+    expect(screen.queryByRole('combobox', { name: /^Lore$/ })).toBeNull();
+    await userEvent.selectOptions(lore, '1');
+    await vi.waitFor(() => expect(socket.emit).toHaveBeenCalledWith('updateSheetField', { fieldId: 'lore_rank', value: '1' }));
+  });
+
+  it('typed in too; and a step with no ranked stat has no RANKS', async () => {
+    await open({ name: 'Wren', _creating: { at: 'stats' } }, undefined, 'tok', { ...RANKED, ways: {} });
+    expect(screen.getByText('Type in what you have.')).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Ranks' })).toBeTruthy();
+    expect(screen.getByRole('spinbutton', { name: 'Grit' })).toBeTruthy();
+    expect(screen.queryByRole('spinbutton', { name: 'Lore' })).toBeNull();
+    cleanup();
+    await open({ name: 'Wren', _creating: { at: 'stats' } });
+    expect(screen.queryByRole('region', { name: 'Ranks' })).toBeNull();
+  });
+});

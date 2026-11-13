@@ -72,6 +72,7 @@
 const { partOn } = require('./parts');
 const { currenciesOf, formatAmount, parseAmount } = require('./currencies');
 const { PICKS_KEY, USES_KEY, ROLLED_KEY, choicesOf, pickedOf, meets, needsText, heldOf, MAIN_MONEY, moneyCurrencies, giftItemsOf, giftMoneyOf } = require('./choices');
+const { rankedStatsOf, stepFieldOf } = require('./ranks');
 const { fieldsOf } = require('./sheet');
 const { parse } = require('./expression');
 const { cryptoRng } = require('../utils/random');
@@ -201,11 +202,26 @@ const rollEach = (r, rng) => {
   return { dice, total: kept.reduce((a, b) => a + b, 0) + r.add };
 };
 
-/** The stats a step sets: all asked, or one group's, without those the GM keeps to themselves on the sheet. */
+/**
+ * The stats a step sets a number on: all asked, or one group's, without those the GM keeps to themselves on the sheet, and
+ * without those held as ranks (7f1c2), which are picked by name, never given a number.
+ */
 const statsOfStep = (definition, step) => {
   const gmOnly = new Set(fieldsOf(definition && definition.sheet).filter((f) => isPlainObject(f) && f.edit === 'gm').map((f) => f.id));
+  const ranked = new Set(rankedStatsOf(definition).map(({ stat }) => stat.id));
   const groups = step === 'stats' ? statGroupsAsked(definition) : statGroupsOf(definition).filter((g) => `stats:${g.id}` === step);
-  return groups.flatMap((g) => g.stats.filter(isPlainObject)).filter((s) => !gmOnly.has(s.id));
+  return groups.flatMap((g) => g.stats.filter(isPlainObject)).filter((s) => !gmOnly.has(s.id) && !ranked.has(s.id));
+};
+
+/**
+ * Whether a rank written now goes past where a new character may start (7f1c2): while this character is being made, a
+ * ranked stat's step above its AT START. The GM may; once made, anyone may.
+ */
+const pastStart = (definition, data, fieldId, value) => {
+  if (!definition || !creatingNow(definition, data)) return false;
+  const held = rankedStatsOf(definition).find(({ stat }) => stepFieldOf(stat.id) === fieldId);
+  // No AT START, or a step that isn't a number: neither is past anything.
+  return !!held && Math.round(Number(value)) > held.stat.atStart;
 };
 
 /**
@@ -321,7 +337,7 @@ const waysShown = (definition) => {
 };
 
 /** What the browser needs to draw the flow: the steps and the stats to set, or null while it is off. */
-const creationShown = (definition) => (creationOf(definition).on ? {
+const creationShown = (definition) => (creationOf(definition).on ? ((ranksOf) => ({
   steps: stepsAsked(definition),
   ...(Object.keys(waysShown(definition)).length ? { ways: waysShown(definition) } : {}),
   ...(moneyOf(definition).length ? {
@@ -337,9 +353,11 @@ const creationShown = (definition) => (creationOf(definition).on ? {
   stats: statGroupsAsked(definition).map((g) => ({
     id: g.id,
     label: g.label || g.id,
-    stats: g.stats.filter(isPlainObject).map((s) => ({ id: s.id, label: s.label || s.id, ...(s.min === undefined ? {} : { min: s.min }), ...(s.max === undefined ? {} : { max: s.max }) })),
+    stats: g.stats.filter(isPlainObject).map((s) => ({ id: s.id, label: s.label || s.id, ...(s.min === undefined ? {} : { min: s.min }), ...(s.max === undefined ? {} : { max: s.max }),
+      // Held as a rank (7f1c2): its ranks by name, and the highest a new character may pick.
+      ...(ranksOf.has(s.id) ? { ranks: ranksOf.get(s.id).list.map((k) => k.name), ...(Number.isInteger(s.atStart) ? { atStart: s.atStart } : {}) } : {}) })),
   })),
-} : null);
+}))(new Map(rankedStatsOf(definition).map(({ stat, ranks }) => [stat.id, ranks]))) : null);
 
 /** A sheet's place in the flow, or null. */
 const placeOf = (data) => (isPlainObject(data) && isPlainObject(data[CREATING_KEY]) ? data[CREATING_KEY] : null);
@@ -966,4 +984,4 @@ const checkCreation = (definition, problems) => {
   checkMoney(c.money, problems);
 };
 
-module.exports = { ROLLED_KEPT, LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, checkGifts, checkItems, parseItems, giftMoneyText, giftMoneyFrom, stepsAsked, creationShown, creatingNow, creationAction, withUpload, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine, kitsGivable, kitToGive, kitWords, parseMoneyRoll, moneyRollProblems, moneyOf, wholeOf, MAIN_MONEY };
+module.exports = { pastStart, ROLLED_KEPT, LIMITS, CREATING_KEY, stepIdsOf, creationOf, checkCreation, checkGifts, checkItems, parseItems, giftMoneyText, giftMoneyFrom, stepsAsked, creationShown, creatingNow, creationAction, withUpload, lockedWhileCreating, placedFrom, stepWayProblems, parseStatRoll, statRollRange, statRollLine, kitsGivable, kitToGive, kitWords, parseMoneyRoll, moneyRollProblems, moneyOf, wholeOf, MAIN_MONEY };

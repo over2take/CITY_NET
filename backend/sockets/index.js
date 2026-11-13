@@ -24,7 +24,7 @@ const { parseTokenConditions } = require('../tokens/conditions');
 const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
-const { withUpload, lockedWhileCreating, kitsGivable } = require('../systemBuilder/creation');
+const { withUpload, lockedWhileCreating, kitsGivable, pastStart } = require('../systemBuilder/creation');
 const { itemsGivable } = require('../systemBuilder/items');
 const { lockedByLevels } = require('../systemBuilder/levelUp');
 const { XP_KEY, earnsXp, HEALTH_BASE_KEY } = require('../systemBuilder/levels');
@@ -1391,6 +1391,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             // A stat set some way other than typing, while the character is being made (7c3b): a
             // number placed can't be typed over. Nothing to write, and the sheet shows it locked.
             if (!isAdminSocket(socket) && (lockedWhileCreating(customSystems.definitionOf(system), data).has(payload.fieldId) || lockedByLevels(customSystems.definitionOf(system), data).has(payload.fieldId))) return undefined;
+            // A rank past where a new character may start (7f1c2): the GM's to give.
+            if (!isAdminSocket(socket) && pastStart(customSystems.definitionOf(system), data, payload.fieldId, payload.value)) return undefined;
             data[payload.fieldId] = payload.value;
             // If the changed field is a max, clamp the paired current field.
             const curField = sheetTemplates.getMaxPairs(system)[payload.fieldId];
@@ -1513,7 +1515,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             // An upload made during the guided new character finishes it (7c2): taken as it is.
             // A batch edit leaves alone what a player may not type just now (7c3b).
             const locked = gm || payload.replace ? new Set() : new Set([...lockedWhileCreating(customSystems.definitionOf(system), existing), ...lockedByLevels(customSystems.definitionOf(system), existing)]);
-            const allowed = entries.filter(([k]) => !locked.has(k));
+            const allowed = entries.filter(([k, v]) => !locked.has(k) && (gm || payload.replace || !pastStart(customSystems.definitionOf(system), existing, k, v)));
             if (payload.replace) Object.assign(data, withUpload(customSystems.definitionOf(system), data));
             allowed.forEach(([k, v]) => { data[k] = v; });
             allowed.forEach(([k]) => sheetTemplates.applyDerived(system, data, k));
