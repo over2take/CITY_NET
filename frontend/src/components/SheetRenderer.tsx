@@ -28,6 +28,7 @@ import { LevelRecord } from './LevelRecord';
 import { XpMeterBar } from './XpMeterBar';
 import { LevelUpReady } from './LevelUpReady';
 import { RestSection } from './RestSection';
+import { SpendSection } from './SpendSection';
 import { withTempHp } from '../sheets/tempHp';
 import { choiceEffects, effectsWorked, type ChoicesAction } from '../sheets/choicesShown';
 
@@ -134,6 +135,8 @@ interface SheetRendererProps {
   onLevelUp?: () => void;
   /** WEAR and ATTUNE a custom system's items on the GEAR tab (7e3b): asks the server (an itemAction). */
   onItem?: (action: import('../sheets/gearItems').ItemAction) => void;
+  /** SPEND XP's BUY, and the GM's APPROVE, DECLINE and UNDO (7f2c1): asks the server (a spendAction). */
+  onSpend?: (action: import('../sheets/spendShown').SpendAction) => void;
 }
 
 /** Whether the viewer is the GM, for FieldInput's GM-only lock, without threading a prop
@@ -1798,7 +1801,7 @@ function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection 
   return fields.length === 0 ? null : { ...section, fields };
 }
 
-export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem }: SheetRendererProps) {
+export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onSpend }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   // The tab it opens on: the one the template names (a built system's starter opens on STATS,
   // with CHARACTER first in the row), else the first.
@@ -2030,6 +2033,8 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
                   {section.layout === 'choices' && <ChoicesSection levelsFixed={!!template.levels} lists={template.choices ?? []} data={data as Record<string, unknown>} readOnly={readOnly} gm={gm} onChoices={onChoices} refused={choicesRefused} onRecoverySpend={onRecoverySpend} recoveryOpen={recoveryOpen}
                     recoveryElsewhere={template.sections.some((s) => s.layout === 'rests')} />}
                   {section.layout === 'choices' && <LevelRecord template={template} data={data as Record<string, unknown>} gm={gm} onLevel={readOnly ? undefined : onLevel} />}
+                  {section.layout === 'spend' && <SpendSection spend={template.spend} lists={template.choices ?? []} data={data as Record<string, unknown>} word={wordFor(template.id, 'xp', 'short', 'XP').toUpperCase()}
+                    gm={gm} onSpend={readOnly ? undefined : onSpend} refused={template.sections.some((s) => s.layout === 'choices' || s.layout === 'rests') ? null : choicesRefused} />}
                   {section.layout === 'rests' && <RestSection resting={template.resting} data={data as Record<string, unknown>} readOnly={readOnly} gm={gm} onChoices={onChoices}
                     onRecoverySpend={onRecoverySpend} recoveryOpen={recoveryOpen} onRestTake={onRestTake}
                     refused={template.sections.some((s) => s.layout === 'choices') ? null : choicesRefused} />}

@@ -66,6 +66,12 @@ describe('the render copy as a template', () => {
     expect(t.header).toEqual({ nameField: 'name' });
   });
 
+  it('carries SPEND XP\'s price list where XP is spent, for its section (7f2c1)', () => {
+    const spend = { buys: [{ id: 'feats', what: 'option' as const, list: 'feats', one: 'Feat', many: 'Feats' }], wait: true };
+    expect(templateFromRender({ ...VAULT, spend }).spend).toEqual(spend);
+    expect(templateFromRender({ ...VAULT, spend: null })).not.toHaveProperty('spend');
+  });
+
   it('knows a custom system by its id', () => {
     expect(isCustomSystem(ID)).toBe(true);
     for (const id of ['cities_without_number', 'generic', 'sys_123', undefined, null]) expect(isCustomSystem(id)).toBe(false);

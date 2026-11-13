@@ -20,8 +20,8 @@ const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const LIMITS = { sections: 50, fields: 500, perSection: 100, tabs: 12, label: 60, hint: 300, options: 100 };
 // 'choices' (7a3b1) is the block where a character's picks are: like 'inventory', drawn by the sheet
 // itself rather than from fields. 'rests' (R3b) is the REST section: a button for each rest, its
-// panel, and the recovery dice.
-const LAYOUTS = ['list', 'grid', 'notes', 'inventory', 'choices', 'rests'];
+// panel, and the recovery dice. 'spend' (7f2c1) is SPEND XP: XP unspent, a BUY for each thing XP buys, and the ledger.
+const LAYOUTS = ['list', 'grid', 'notes', 'inventory', 'choices', 'rests', 'spend'];
 const TYPES = ['number', 'text', 'textarea', 'select'];
 /** Values that live elsewhere and are overlaid at read time (sheets/templates.js linkedFields). */
 const SOURCES = ['token_hp', 'token_hp_max', 'token_ac', 'bank_balance'];
@@ -46,6 +46,10 @@ const FIELD_KEYS = new Set(['id', 'label', 'type', 'visibility', 'sensitivity', 
 /** only_with, the house rule a section waits on, is houseRules.js's to check. */
 const SECTION_KEYS = new Set(['id', 'label', 'layout', 'tab', 'columns', 'fields', 'only_with']);
 const HEADER_KEYS = new Set(['nameField', 'subtitleFields', 'hpField', 'hpMaxField', 'chips']);
+
+/** Whether characters spend XP here (spendXp.js spendsXp): SPEND XP answered, the XP part on. */
+const spendsHere = (definition) => !!definition && isPlainObject(definition.core) && Array.isArray(definition.core.advancement)
+  && definition.core.advancement.includes('spend') && partOn(definition, 'xp');
 
 /** Check a sheet layout. `derivedIds` are the system's derived values, which fields may show. */
 const checkSheet = (sheet, derivedIds, problems) => {
@@ -226,6 +230,9 @@ const designedOrStarter = (definition) => {
     // there is one. Read here rather than through choices.js, which would make a circle (rests.js).
     ...(Array.isArray(definition && definition.choices) && definition.choices.some((c) => isPlainObject(c) && typeof c.id === 'string')
       ? [{ id: 'choices', label: choicesLabel(definition.choices), layout: 'choices', tab: 'CHARACTER', fields: [] }] : []),
+    // SPEND XP (7f2c1), where XP is spent: named with the system's own word. Read here rather than through spendXp.js,
+    // which reads choices.js, for the same circle.
+    ...(spendsHere(definition) ? [{ id: 'spend', label: `SPEND ${(ownWords(definition).xp || {}).short || 'XP'}`.toUpperCase(), layout: 'spend', tab: 'CHARACTER', fields: [] }] : []),
     // The REST section (R3b), when rests are finished on each sheet or there are recovery dice to
     // spend. Read here rather than through recovery.js, for the same circle.
     ...(isPlainObject(definition && definition.resting) && (definition.resting.finish === 'sheet' || isPlainObject(definition.resting.recovery))

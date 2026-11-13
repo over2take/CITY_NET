@@ -264,3 +264,18 @@ describe('over the socket', () => {
     expect((await stored())[WORKED_KEY].spend.unspent).toBe(40);
   });
 });
+
+describe('the sheet\'s SPEND XP section (7f2c1)', () => {
+  const { starterSheet, checkSheet, LAYOUTS } = require_('../systemBuilder/sheet');
+  it('on the starter sheet\'s CHARACTER tab where XP is spent, named with the system\'s word; a layout a sheet may use', () => {
+    expect(LAYOUTS).toContain('spend');
+    expect(starterSheet(SPENDER).sections.filter((s) => s.layout === 'spend')).toEqual([{ id: 'spend', label: 'SPEND XP', layout: 'spend', tab: 'CHARACTER', fields: [] }]);
+    expect(starterSheet({ ...SPENDER, words: { xp: { short: 'Karma' } } }).sections.find((s) => s.layout === 'spend').label).toBe('SPEND KARMA');
+    for (const off of [{ ...SPENDER, core: { advancement: ['levels'] } }, { ...SPENDER, parts: { xp: { on: false } } }, { ...SPENDER, core: undefined }]) {
+      expect(starterSheet(off).sections.some((s) => s.layout === 'spend')).toBe(false);
+    }
+    const problems = [];
+    checkSheet({ tabs: ['CHARACTER'], sections: [{ id: 'spend', label: 'SPEND', layout: 'spend', tab: 'CHARACTER', fields: [] }] }, new Set(), problems);
+    expect(problems).toEqual([]);
+  });
+});

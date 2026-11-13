@@ -72,6 +72,8 @@ export interface CustomRender {
   /** The guided new character (7c2): the steps to walk through, null while it is off. */
   creation?: import('./newCharacterFlow').CreationShown | null;
   levels?: import('./xpMeter').LevelsShown | null;
+  /** SPEND XP's price list by name (backend spendXp.js spendShown, 7f2c1), or null where XP isn't spent. */
+  spend?: import('./spendShown').SpendShown | null;
   /** Its items and slots (7e3b), null where it has none. */
   items?: import('./gearItems').ItemsShown | null;
 }
@@ -154,6 +156,8 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.creation ? { creation: render.creation } : {}),
     ...(render.levels ? { levels: render.levels } : {}),
     ...(render.items ? { items: render.items } : {}),
+    // SPEND XP's price list (7f2c1), for the sheet's SPEND XP section.
+    ...(render.spend ? { spend: render.spend } : {}),
     ...tiers,
     ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived, rolls), ...tiers } } : {}),
   };
