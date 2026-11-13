@@ -179,6 +179,16 @@ export const statNow = (data: Record<string, unknown> | null | undefined, stat: 
   return (Number.isFinite(typed) ? typed : 0) + (workedOn(data).from[stat] ?? []).reduce((n, s) => n + (Number.isFinite(s.amount) ? s.amount : 0), 0);
 };
 
+/** A ranked stat's step now (7f1c2): as picked, with the steps the picks add (the server's worked.from on its step field). */
+export const rankStepNow = (data: Record<string, unknown> | null | undefined, stat: string): number => statNow(data, `${stat}_rank`);
+
+/** What an increase shows a stat at with `on` points more: a rank's name at its step (the top holding), or the number. */
+export const raisedTo = (data: Record<string, unknown> | null | undefined, stat: { id: string; ranks?: string[] }, on: number): string => {
+  if (!stat.ranks?.length) return String(statNow(data, stat.id) + on);
+  const at = Math.min(stat.ranks.length - 1, Math.max(0, Math.round(rankStepNow(data, stat.id)) + on));
+  return stat.ranks[at];
+};
+
 /** How many of an increase's points are still to spend. */
 export const pointsLeft = (u: Unlocked, spread: Record<string, number> = {}): number =>
   (u.increase?.points ?? 0) - Object.values(spread).reduce((n, p) => n + p, 0);
@@ -187,7 +197,11 @@ export const pointsLeft = (u: Unlocked, spread: Record<string, number> = {}): nu
 export const canRaise = (data: Record<string, unknown> | null | undefined, u: Unlocked, spread: Record<string, number>, stat: string): boolean => {
   const inc = u.increase;
   const on = spread[stat] ?? 0;
-  return !!inc && pointsLeft(u, spread) > 0 && on < inc.most && (inc.cap === undefined || statNow(data, stat) + on + 1 <= inc.cap);
+  if (!inc || pointsLeft(u, spread) <= 0 || on >= inc.most) return false;
+  // A rank goes up a step a point, to its top rank, whatever a number stops at (7f1c2).
+  const ranks = inc.stats.find((s) => s.id === stat)?.ranks;
+  if (ranks?.length) return Math.round(rankStepNow(data, stat)) + on + 1 <= ranks.length - 1;
+  return inc.cap === undefined || statNow(data, stat) + on + 1 <= inc.cap;
 };
 
 /** The spreads with a point more (by 1) or less (by -1) on a stat; one emptied is left out. */

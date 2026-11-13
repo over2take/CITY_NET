@@ -18,7 +18,7 @@ import type { SheetEffects, FieldEffect, ModSource } from './cyberwareEffects';
 import type { SheetTemplate } from './types';
 
 /** An INCREASE as the server shows it (7d6b; backend choices.js increaseShown): its points, the most on one, its stats by name, where they stop. */
-export interface IncreaseShown { points: number; most: number; stats: { id: string; label: string }[]; cap?: number; /** OR A FEAT INSTEAD (7d6c): the list offered. */ instead?: string }
+export interface IncreaseShown { points: number; most: number; /** A stat held as a rank (7f1c2) with its ranks by name. */ stats: { id: string; label: string; ranks?: string[] }[]; cap?: number; /** OR A FEAT INSTEAD (7d6c): the list offered. */ instead?: string }
 export interface FeatureShown {
   id: string; label: string; text?: string; at?: number;
   modifies?: string[]; uses?: { refill: string | null }; rolls?: string[]; changes?: string[]; opens?: string;

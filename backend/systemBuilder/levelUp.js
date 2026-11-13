@@ -33,6 +33,7 @@ const { choicesOf, heldOf, levelsOf, targetsOf, pickedOf, picksOf: activePicks, 
 const { pickAction } = require('./picking');
 const { XP_KEY, advances, earnsXp, levelTable, levelsOf: settingsOf, healthOf, levelDie, averageOf, HEALTH_LEVELS_KEY, HEALTH_BASE_KEY, healthBaseOf } = require('./levels');
 const { spentOf } = require('./choices');
+const { rankedStatsOf, stepFieldOf, rankNameAt } = require('./ranks');
 const { creatingNow, ROLLED_KEPT } = require('./creation');
 const crypto = require('crypto');
 
@@ -78,12 +79,20 @@ const spreadProblem = (definition, sheet, feature, inc, spread) => {
   const name = feature.label || feature.id;
   let total = 0;
   const now = effectiveData(definition, sheet);
+  // A stat held as a rank (7f1c2) is raised a step a point, up to its top rank, whatever a number would stop at.
+  const ranked = new Map(rankedStatsOf(definition).map(({ stat, ranks }) => [stat.id, ranks]));
   for (const [stat, n] of Object.entries(spread)) {
     const statName = String(names.get(stat) || stat);
     if (!inc.stats.includes(stat)) return `${name} doesn't raise ${statName}`;
     if (n > inc.most) return `${name}: at most ${inc.most} on one stat`;
-    // A stat that isn't a number is never past it.
-    if (inc.cap !== null && Number(now[stat]) + n > inc.cap) return `${name}: ${statName} stops at ${inc.cap}`;
+    if (ranked.has(stat)) {
+      const ranks = ranked.get(stat);
+      const top = ranks.list.length - 1;
+      if (Math.round(Number(now[stepFieldOf(stat)]) || 0) + n > top) return `${name}: ${statName} stops at ${rankNameAt(ranks, top)}`;
+    } else if (inc.cap !== null && Number(now[stat]) + n > inc.cap) {
+      // A stat that isn't a number is never past it.
+      return `${name}: ${statName} stops at ${inc.cap}`;
+    }
     total += n;
   }
   return total === inc.points ? null : `${name}: spend all ${inc.points} ${inc.points === 1 ? 'point' : 'points'}`;

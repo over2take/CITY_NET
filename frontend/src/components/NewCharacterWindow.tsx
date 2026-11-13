@@ -16,6 +16,7 @@ import { useChoicesRefused } from '../hooks/useChoicesRefused';
 import { canImport } from '../sheets/importable';
 import {
   flowDone, flowStepName, flowSteps, gmStatsWords, isStatsStep, rolledPool, savedStep, statProblem, statsToSet, stepAnswered, stepListId, stepWay, whoFields,
+  ranksToSet, rankOpen, type CreationShown,
 } from '../sheets/newCharacterFlow';
 import { themeRoot } from '../utils/themeRoot';
 
@@ -104,6 +105,29 @@ export function NewCharacterWindow({ pos, setPos, socket, userName, authToken, o
       upload={authToken ? (file) => uploadSheetPortrait(authToken, file) : undefined}
       onImport={(fields, opts) => { socket?.emit('importSheetFields', { fields, replace: opts?.replace, cyberware: opts?.cyberware, picks: opts?.picks }); }}
       onLeave={onLeave} onDone={onDone} />
+  );
+}
+
+/** The stats held as ranks (7f1c2): each picked by name, those above AT START off for a player; the lowest until picked. */
+function RankPicks({ groups, data, gm, onPick }: { groups: CreationShown['stats']; data: Record<string, unknown> | null | undefined; gm: boolean; onPick: (id: string, step: string) => void }) {
+  return (
+    <section aria-label="Ranks" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <span style={small}>RANKS</span>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '6px' }}>
+        {groups.flatMap((g) => g.stats).map((s) => {
+          const step = String(data?.[`${s.id}_rank`] ?? '0');
+          return (
+            <label key={s.id} style={{ border: '1px solid var(--green)', padding: '4px', display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'center', textAlign: 'center' }}>
+              <span style={small}>{s.label}</span>
+              <select aria-label={`${s.label} rank`} style={{ ...box, textAlign: 'center', colorScheme: 'dark' }} value={step} onChange={(e) => onPick(s.id, e.target.value)}>
+                {(s.ranks ?? []).map((name, i) => <option key={i} value={String(i)} disabled={!rankOpen(s, i, gm)}>{name}</option>)}
+              </select>
+              {!gm && s.atStart !== undefined && s.ranks && <span style={small}>UP TO {s.ranks[s.atStart]} TO START</span>}
+            </label>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -242,6 +266,9 @@ export function FlowWindow({ pos, setPos, sheet, template, onField, act, choose,
       );
     }
     const statWay = isStatsStep(open) ? stepWay(template, open) : null;
+    // The stats held as ranks (7f1c2), picked by name in any stats step, up to AT START for a player.
+    const rankGroups = isStatsStep(open) ? ranksToSet(template, open) : [];
+    const rankPicks = rankGroups.length ? <RankPicks groups={rankGroups} data={data} gm={gm} onPick={(id, step) => onField(`${id}_rank`, step)} /> : null;
     // Filling it in, the GM types stats whatever the way: what the way would give is said above the boxes.
     const setBy = gm ? null : statWay;
     if (setBy?.way === 'buy') {
@@ -249,6 +276,7 @@ export function FlowWindow({ pos, setPos, sheet, template, onField, act, choose,
         <div style={page}>
           <BuyNumbers way={setBy} groups={statsToSet(template, open)} data={data} named={open === 'stats'}
             onBuy={(stat, value) => act({ kind: 'buy', step: open, stat, value })} />
+          {rankPicks}
           {refused && <p role="alert" style={{ ...why, color: 'var(--warning)', opacity: 1 }}>{refused}</p>}
         </div>
       );
@@ -263,6 +291,7 @@ export function FlowWindow({ pos, setPos, sheet, template, onField, act, choose,
           {!pool && <button type="button" style={confirm} onClick={() => act({ kind: 'roll', step: open })}>ROLL THEM</button>}
           <PlaceNumbers groups={statsToSet(template, open)} numbers={pool ?? []} data={data} named={open === 'stats'} fixed={!pool || setBy.placed !== 'arrange'}
             onPlace={(stat, value) => act({ kind: 'place', step: open, stat, value })} />
+          {rankPicks}
           {refused && <p role="alert" style={{ ...why, color: 'var(--warning)', opacity: 1 }}>{refused}</p>}
         </div>
       );
@@ -272,6 +301,7 @@ export function FlowWindow({ pos, setPos, sheet, template, onField, act, choose,
         <div style={page}>
           <PlaceNumbers groups={statsToSet(template, open)} numbers={setBy.numbers} data={data} named={open === 'stats'}
             onPlace={(stat, value) => act({ kind: 'place', step: open, stat, value })} />
+          {rankPicks}
           {refused && <p role="alert" style={{ ...why, color: 'var(--warning)', opacity: 1 }}>{refused}</p>}
         </div>
       );
@@ -301,6 +331,7 @@ export function FlowWindow({ pos, setPos, sheet, template, onField, act, choose,
               </div>
             </section>
           ))}
+          {rankPicks}
         </div>
       );
     }

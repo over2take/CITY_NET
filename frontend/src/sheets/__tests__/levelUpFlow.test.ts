@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canRaise, increasesSpent, insteadAsked, insteadTaken, pointsLeft, statNow, withRaised, withoutSpread } from '../levelUpFlow';
+import { canRaise, increasesSpent, insteadAsked, insteadTaken, pointsLeft, statNow, withRaised, withoutSpread, rankStepNow, raisedTo } from '../levelUpFlow';
 import { LEVEL_UP_STEP_NAMES, gmLevelingLine, healthGain, healthRolledFor, chosenTarget, levelUpSteps, levelUpTitle, newClasses, picksAsked, picksMade, picksWanted, unlockedBy, withPickToggled, type Unlocked } from '../levelUpFlow';
 import { WORKED_KEY } from '../choicesShown';
 import { levelUpOffer, type LevelUpOffer } from '../xpMeter';
@@ -462,5 +462,32 @@ describe('the GM counts picks they don\'t meet (7d7a)', () => {
     expect(picksMade([asked], one)).toBe(true);
     expect(picksMade([asked], one, true)).toBe(false);
     expect(picksMade([asked], [...one, { list: 'paths', option: 'a', from: 'path' }], true)).toBe(true);
+  });
+});
+
+describe('a ranked stat raised by an increase (7f1c2)', () => {
+  const RANKS = ['UNTRAINED', 'TRAINED', 'EXPERT', 'MASTER'];
+  const SPARK = { id: 'spark', label: 'Spark', from: 'Mage', increase: { points: 3, most: 3, stats: [{ id: 'lore', label: 'Lore', ranks: RANKS }, { id: 'might', label: 'Might' }], cap: 20 } } as Unlocked;
+  // TRAINED picked, a step more from a feature: EXPERT now.
+  const data = { lore_rank: '1', lore: 9, might: 19, [WORKED_KEY]: { picks: [], from: { lore_rank: [{ feature: 'Skilled', amount: 1 }] } } };
+
+  it('its step now, with what the picks add; what a point more shows it at, by name, the top holding', () => {
+    expect(rankStepNow(data, 'lore')).toBe(2);
+    expect(raisedTo(data, SPARK.increase!.stats[0], 0)).toBe('EXPERT');
+    expect(raisedTo(data, SPARK.increase!.stats[0], 1)).toBe('MASTER');
+    expect(raisedTo(data, SPARK.increase!.stats[0], 5)).toBe('MASTER');
+    expect(raisedTo({}, SPARK.increase!.stats[0], 0)).toBe('UNTRAINED');
+    // A number still reads as a number.
+    expect(raisedTo(data, SPARK.increase!.stats[1], 1)).toBe('20');
+    // An empty list of ranks is a number still.
+    expect(raisedTo(data, { ...SPARK.increase!.stats[1], ranks: [] }, 1)).toBe('20');
+  });
+
+  it('a point more while a step is left, whatever a number stops at; a number still stops at its cap', () => {
+    expect(canRaise(data, SPARK, {}, 'lore')).toBe(true);
+    expect(canRaise(data, SPARK, { lore: 1 }, 'lore')).toBe(false);
+    expect(canRaise({ lore_rank: '0' }, SPARK, { lore: 2 }, 'lore')).toBe(true);
+    expect(canRaise(data, SPARK, {}, 'might')).toBe(true);
+    expect(canRaise(data, SPARK, { might: 1 }, 'might')).toBe(false);
   });
 });

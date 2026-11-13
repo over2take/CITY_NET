@@ -13,7 +13,8 @@ import { currenciesFor, formatAmount } from './currencies';
 
 type Obj = Record<string, unknown>;
 
-export interface CreationStat { id: string; label: string; min?: number; max?: number }
+/** A stat to set making a character; one held as a rank (7f1c2) with its ranks by name and the highest a new character may pick. */
+export interface CreationStat { id: string; label: string; min?: number; max?: number; ranks?: string[]; atStart?: number }
 /** A point buy (7c3d): no costs, 1 for 1 above the lowest. */
 export interface BuyWay { way: 'buy'; points: number; lowest: number; highest: number; costs?: Record<string, number> }
 /** A kit as a player sees it (7c4b): never the GM's own, nor a formula. */
@@ -130,11 +131,20 @@ export const whoFields = (template: SheetTemplate): SheetField[] => {
  * The stats a step sets: THE STATS every group asked, a group's step only that group, without any the
  * GM keeps to themselves on the sheet.
  */
-export const statsToSet = (template: SheetTemplate, step = 'stats'): CreationShown['stats'] => {
+export const statsToSet = (template: SheetTemplate, step = 'stats'): CreationShown['stats'] => statsOfStep(template, step, false);
+
+/** The stats of a step held as ranks (7f1c2): picked by name, never given a number by the step's way. */
+export const ranksToSet = (template: SheetTemplate, step = 'stats'): CreationShown['stats'] => statsOfStep(template, step, true);
+
+/** Where a rank may be picked making a character: those up to AT START, or any for the GM. */
+export const rankOpen = (stat: CreationStat, step: number, gm: boolean): boolean => gm || stat.atStart === undefined || step <= stat.atStart;
+
+/** A step's stats, without those the GM keeps to themselves, either those held as ranks or those set by a number. */
+const statsOfStep = (template: SheetTemplate, step: string, ranked: boolean): CreationShown['stats'] => {
   const gmOnly = new Set(fieldsOf(template).filter((f) => f.gmOnly).map((f) => f.id));
   return (template.creation?.stats ?? [])
     .filter((g) => step === 'stats' || step === `stats:${g.id}`)
-    .map((g) => ({ ...g, stats: g.stats.filter((s) => !gmOnly.has(s.id)) }))
+    .map((g) => ({ ...g, stats: g.stats.filter((s) => !gmOnly.has(s.id) && !!s.ranks?.length === ranked) }))
     .filter((g) => g.stats.length);
 };
 
