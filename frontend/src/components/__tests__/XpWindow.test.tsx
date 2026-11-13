@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AdminXpWindow, xpAvailable } from '../XpWindow';
 import { clearCustomTemplates, registerCustomTemplate, type CustomRender } from '../../sheets/customTemplates';
@@ -273,6 +273,29 @@ describe('a custom system (7d2a)', () => {
     for (const gone of ['AWARD_SELECTED', 'SPLIT', 'EACH']) expect(screen.queryByRole('button', { name: new RegExp(gone) }), gone).toBeNull();
     expect(screen.queryByLabelText('POINTS_EACH')).toBeNull();
     expect(screen.queryByLabelText(/^Replace what the selected/)).toBeNull();
+  });
+
+  it('spending XP (7f2c2): offered with no levels at all, given to spend, with no level buttons', async () => {
+    const spend = { buys: [], wait: false };
+    registerCustomTemplate({ id: ID, name: 'H', words: { xp: { short: 'Karma' } }, parts: {}, derived: [], sheet: { sections: [] }, levels: null, spend } as unknown as CustomRender);
+    expect(xpAvailable(ID)).toBe(true);
+    const { emit } = show({ system: ID });
+    expect(screen.getByText('KARMA.EXE')).toBeInTheDocument();
+    expect(screen.getByText('Each selected character gets this many, to spend. Negative takes points back.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Replace what the selected characters have with another number. What they bought stays.')).toBeInTheDocument();
+    for (const gone of ['LEVEL_UP', 'LEVEL_DOWN']) expect(screen.queryByRole('button', { name: gone }), gone).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'SPLIT' }));
+    expect(screen.getByText('Shared between those selected, in whole points, to spend. Negative takes points back.')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('POINTS_TO_SPLIT'), '20');
+    await userEvent.click(screen.getByRole('button', { name: 'AWARD_ALL' }));
+    expect(awards(emit)[0]).toEqual({ token: 't', usernames: ['ghost', 'nyx'], amount: 20, split: true });
+    cleanup();
+    // With levels too: both said, and the level buttons there.
+    registerCustomTemplate({ id: ID, name: 'H', words: {}, parts: {}, derived: [], sheet: { sections: [] }, levels: { table: { 2: 300 } }, spend } as unknown as CustomRender);
+    show({ system: ID });
+    expect(screen.getByText('Each selected character gets this many, to spend. Negative takes points back, but never a level.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Replace what the selected characters have with another number. Their level stays. What they bought stays.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'LEVEL_UP' })).toBeInTheDocument();
   });
 
   it('Cities Without Number stays as it was: EACH only, no setting it', () => {
