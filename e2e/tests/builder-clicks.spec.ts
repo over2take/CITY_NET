@@ -85,6 +85,8 @@ const misaligned = (page: Page) => page.evaluate(() => {
 const faults = async (page: Page) => [...await unreachable(page), ...await misaligned(page)];
 
 test('every control in the builder takes a click, on every page', async ({ page }) => {
+  // Every page, and grows with each: ~25 s on a desktop, past the 2 min default on CI by 7f2b's SPEND XP.
+  test.setTimeout(300_000);
   await signInAsGm(page);
   await openBuilder(page);
   const missed: Record<string, string[]> = {};
