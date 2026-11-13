@@ -20,6 +20,7 @@ const { effectiveSheet, fieldsOf } = require('./sheet');
 const { ownWords } = require('./terms');
 const { rollAmount } = require('./tierRolls');
 const { givenBack, restingOf, RECOVERY_KEY, ALL_POOL } = require('./recovery');
+const { improveAt, MARKS_KEY } = require('./improveByUse');
 
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -213,6 +214,18 @@ const restOn = ({ definition, restId, sheet = {}, token = null, conditions = [],
     const name = restingOf(definition).recovery.name;
     for (const c of back.changes) note(`recovery:${c.pool.id}`, `${name}${c.pool.id === ALL_POOL ? '' : ` ${c.pool.label}`} d${c.pool.die}`, c.from, c.to);
     setField(RECOVERY_KEY, back.spent);
+  }
+  // IMPROVE BY USE (7f3a1): at its rest, each marked stat rolls to improve, and the marks clear; a preview says each waits.
+  const improved = improveAt(definition, data, ends, rng);
+  if (improved) {
+    for (const c of improved.changes) {
+      const key = `improve:${c.what}`;
+      if (c.to === null) pending.set(key, c.pending);
+      note(key, c.label, c.from, c.to);
+    }
+    for (const [id, value] of Object.entries(improved.patch)) if (id !== MARKS_KEY) setField(id, value);
+    if (improved.patch[MARKS_KEY]) setField(MARKS_KEY, improved.patch[MARKS_KEY]);
+    rolls.push(...improved.rolls);
   }
   const wearsOff = new Set(conditionsOf(definition).filter((c) => c.ends === 'rest' && c.at.some((a) => ends.has(a))).map((c) => c.id));
   const kept = list(conditions).filter((c) => !wearsOff.has(c.id));
