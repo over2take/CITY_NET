@@ -19,6 +19,7 @@ const { overlayOf, choicesOf, workedOf, worksOutPicks, choicesShown, itemsRender
 const { poolsOf, recoveryShown, restingShown } = require('./recovery');
 const { creationShown } = require('./creation');
 const { levelsShown } = require('./levels');
+const { spendShown } = require('./spendXp');
 /** Where a save writes what PER LEVEL's max health comes to (7d5a; healthLevels.js healthByLevel). */
 const HEALTH_SHOWN_KEY = '_health';
 const { fieldsRolledBy } = require('./tableRolls');
@@ -177,6 +178,8 @@ const renderOf = (id, definition, on = new Set()) => ({
   creation: creationShown(definition),
   // The XP table (7d2a), for the meter on the sheet, or null where characters don't earn XP.
   levels: levelsShown(definition),
+  // SPEND XP's price list (7f2a1), what each buys by name, or null where XP isn't spent.
+  spend: definition.core && Array.isArray(definition.core.advancement) && definition.core.advancement.includes('spend') ? spendShown(definition) : null,
   // Its items and slots (7e3b), for the GEAR tab's WEAR and ATTUNE, or null where it has none.
   items: itemsRenderedOf(definition),
 });

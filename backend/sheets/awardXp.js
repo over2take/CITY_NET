@@ -10,7 +10,7 @@
 // testing without a socket, a database or an admin token in the way.
 
 const { mutateSheetForUser } = require('./mutate');
-const { XP_KEY, LIMITS: XP_LIMITS, earnsXp, advances } = require('../systemBuilder/levels');
+const { XP_KEY, LIMITS: XP_LIMITS, keepsXp, advances } = require('../systemBuilder/levels');
 const { levelAction } = require('../systemBuilder/levelUp');
 
 /**
@@ -27,9 +27,9 @@ const XP_FIELD = {
 
 /**
  * The field this system keeps experience in, or null where the idea does not apply. A custom system
- * (7d2a) keeps it under XP_KEY while its `definition` says characters earn it.
+ * (7d2a) keeps it under XP_KEY while its `definition` says characters earn it, toward levels or to spend (7f2a1).
  */
-const xpFieldFor = (system, definition) => XP_FIELD[String(system || '')] || (earnsXp(definition) ? XP_KEY : null);
+const xpFieldFor = (system, definition) => XP_FIELD[String(system || '')] || (keepsXp(definition) ? XP_KEY : null);
 
 /** Whether a GM can award experience at all on this system. */
 const supportsXp = (system, definition) => xpFieldFor(system, definition) !== null;

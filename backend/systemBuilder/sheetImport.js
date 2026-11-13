@@ -34,7 +34,7 @@ const { effectiveSheet } = require('./sheet');
 const { withRankFields } = require('./ranks');
 const { PICKS_KEY, ROLLED_KEY, INCREASES_KEY, LIMITS: CHOICE_LIMITS, choicesOf, pickedOf, capOf, meets, needsText, heldOf, openingsOf, openCountOf, tokenMaxFieldOf } = require('./choices');
 const { normaliseInventory } = require('../sheets/inventoryImport');
-const { XP_KEY, LIMITS: XP_LIMITS, earnsXp, healthOf, HEALTH_BASE_KEY, HEALTH_BASE_MOST, healthBaseFrom } = require('./levels');
+const { XP_KEY, LIMITS: XP_LIMITS, keepsXp, healthOf, HEALTH_BASE_KEY, HEALTH_BASE_MOST, healthBaseFrom } = require('./levels');
 const { partOn } = require('./parts');
 const { wordFor } = require('./terms');
 
@@ -93,8 +93,8 @@ const sheetFields = (definition) => {
   return { ask, left };
 };
 
-/** The XP line (7d2c), where characters earn XP: { id: '_xp', label, type, xp, min, hint, section }, or none. */
-const xpLines = (definition) => (earnsXp(definition) ? [{
+/** The XP line (7d2c), where characters earn XP, toward levels or to spend (7f2a1): { id: '_xp', label, type, xp, min, hint, section }, or none. */
+const xpLines = (definition) => (keepsXp(definition) ? [{
   id: XP_KEY, label: wordFor(definition, 'xp', 'short'), type: 'number', xp: true, min: 0, tab: null,
   section: wordFor(definition, 'level', 'plural'), hint: 'What they have so far. Left empty, it stays as it is',
 }] : []);

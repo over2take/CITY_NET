@@ -27,7 +27,7 @@ const customSystems = require('../systemBuilder/runtime');
 const { withUpload, lockedWhileCreating, kitsGivable, pastStart } = require('../systemBuilder/creation');
 const { itemsGivable } = require('../systemBuilder/items');
 const { lockedByLevels } = require('../systemBuilder/levelUp');
-const { XP_KEY, earnsXp, HEALTH_BASE_KEY } = require('../systemBuilder/levels');
+const { XP_KEY, keepsXp, HEALTH_BASE_KEY } = require('../systemBuilder/levels');
 const { withUploadedHealth } = require('../systemBuilder/healthLevels');
 const { xpFrom, withImportedPicks } = require('../systemBuilder/sheetImport');
 const { inventoryAdded } = require('../sheets/inventoryImport');
@@ -1480,8 +1480,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         // edit: uploading a sheet does not set your own XP.
         const gm = isAdminSocket(socket);
         const definition = customSystems.definitionOf(system);
-        // Their own XP only in a whole upload, where characters earn it, and only a whole amount (7d2c).
-        const uploadsXp = (k, v) => k === XP_KEY && payload.replace === true && earnsXp(definition) && xpFrom(v) !== null;
+        // Their own XP only in a whole upload, where characters earn it (7d2c) or spend it (7f2a1), and only a whole amount.
+        const uploadsXp = (k, v) => k === XP_KEY && payload.replace === true && keepsXp(definition) && xpFrom(v) !== null;
         const entries = Object.entries(payload.fields)
           .filter(([k, v]) => !linked[k] && (gm || sheetTemplates.playerMayEdit(system, k) || uploadsXp(k, v))
             && (typeof v === 'string' || typeof v === 'number'))

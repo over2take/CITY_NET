@@ -101,6 +101,13 @@ const levelTable = (definition) => {
 const earnsXp = (definition) => !!definition && isPlainObject(definition.core) && Array.isArray(definition.core.advancement)
   && definition.core.advancement.includes('levels') && partOn(definition, 'xp');
 
+/**
+ * Whether this system's characters are given XP (7f2a1): toward levels, or to spend (SPEND XP), with the XP part on. AWARD XP,
+ * the GM's SET TO and an upload's XP go where it is.
+ */
+const keepsXp = (definition) => !!definition && isPlainObject(definition.core) && Array.isArray(definition.core.advancement)
+  && (definition.core.advancement.includes('levels') || definition.core.advancement.includes('spend')) && partOn(definition, 'xp');
+
 /** Whether this system's characters go up at all here: by XP, or the GM saying so (milestone). */
 const advances = (definition) => earnsXp(definition)
   || (!!definition && isPlainObject(definition.core) && Array.isArray(definition.core.advancement) && definition.core.advancement.includes('milestone'));
@@ -224,4 +231,4 @@ const checkLevels = (definition, problems) => {
   }
 };
 
-module.exports = { LIMITS, DEFAULTS, XP_KEY, levelsOf, levelTable, earnsXp, advances, levelsShown, checkLevels, healthOf, HEALTH_HOWS, GAINS, HEALTH_LEVELS_KEY, HEALTH_BASE_KEY, HEALTH_BASE_MOST, healthBaseOf, healthBaseFrom, levelDie, averageOf };
+module.exports = { LIMITS, DEFAULTS, XP_KEY, levelsOf, levelTable, earnsXp, keepsXp, advances, levelsShown, checkLevels, healthOf, HEALTH_HOWS, GAINS, HEALTH_LEVELS_KEY, HEALTH_BASE_KEY, HEALTH_BASE_MOST, healthBaseOf, healthBaseFrom, levelDie, averageOf };
