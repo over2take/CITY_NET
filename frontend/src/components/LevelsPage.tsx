@@ -14,12 +14,14 @@ import type { systemsApi } from '../sheets/systemsApi';
 import { FieldName } from './HelpHint';
 import { WholeBox } from './WholeBox';
 import { SpendXpSection } from './SpendXpSection';
+import { ImproveByUseSection } from './ImproveByUseSection';
 
 // The builder's LEVELS page (7d1; approved mockup docs/mockups/level-up.html, 2026-11-07): how a system's
 // characters advance, the highest level, and the XP table, filled from what level 2 costs and a multiplier per
 // range of levels, with any level typed over. What it reads and writes is sheets/levels.ts, and every change
 // goes through the builder's `edit`. The meter (7d2), the window (7d3), health and increases come with their pieces.
-// SPEND XP (7f2b): its own button beside them, and what XP buys in a section of its own (SpendXpSection).
+// SPEND XP (7f2b): its own button beside them, and what XP buys in a section of its own (SpendXpSection). IMPROVE BY USE
+// (7f3a2) the same (ImproveByUseSection).
 
 interface Props {
   definition: Definition;
@@ -76,7 +78,7 @@ export function LevelsPage({ definition, edit, onGoTo, api }: Props) {
   const table = levelTable(definition);
   const word = xpWord(definition);
   const spend = advancesBy(definition, 'spend');
-  const later = advancesBy(definition, 'use');
+  const use = advancesBy(definition, 'use');
   return (
     <div data-testid="levels-page" style={{ display: 'grid', gridTemplateColumns: 'minmax(260px, 400px) minmax(0, 1fr)', gap: 16, alignItems: 'start', maxWidth: 1000 }}>
       <section aria-label="How they advance" style={panel}>
@@ -86,6 +88,7 @@ export function LevelsPage({ definition, edit, onGoTo, api }: Props) {
             <button type="button" aria-pressed={xp} style={seg(xp)} onClick={() => edit(withAdvancement(definition, 'levels'))}>XP LEVELS</button>
             <button type="button" aria-pressed={milestone} style={seg(milestone)} onClick={() => edit(withAdvancement(definition, 'milestone'))}>MILESTONE</button>
             <button type="button" aria-pressed={spend} style={seg(spend)} onClick={() => edit(withAdvancement(definition, 'spend'))}>SPEND {word}</button>
+            <button type="button" aria-pressed={use} style={seg(use)} onClick={() => edit(withAdvancement(definition, 'use'))}>IMPROVE BY USE</button>
           </span>
           <FieldName beside hint={HINTS['levels.top']} style={small}>HIGHEST LEVEL</FieldName>
           <WholeBox value={topAsTyped(definition)} label="Highest level" onChange={(top) => edit(withTop(definition, top))} />
@@ -100,9 +103,9 @@ export function LevelsPage({ definition, edit, onGoTo, api }: Props) {
         {xp && milestone && <p style={why}>Both: the GM awards {word} and can also level up whoever they tick.</p>}
         {xp && !milestone && <p style={why}>The GM awards {word}, and the sheet counts toward the next level. What a level doesn&apos;t need carries into the next.</p>}
         {!xp && milestone && <p style={why}>{spend ? `No ${word} counts toward a level.` : `No ${word} is kept.`} The GM levels up whoever they tick.</p>}
-        {!xp && !milestone && <p style={why}>{spend ? 'No levels here: characters go up by what they buy.' : 'Off: characters don\'t go up here. Levels stay what the GM or the player types.'}</p>}
+        {!xp && !milestone && <p style={why}>{spend && use ? 'No levels here: characters go up by what they buy, and by what they use.' : spend ? 'No levels here: characters go up by what they buy.' : use ? 'No levels here: characters go up by what they use.' : 'Off: characters don\'t go up here. Levels stay what the GM or the player types.'}</p>}
         {spend && <p style={why}>The GM awards {word}, and characters spend it on what it buys, below.{xp ? ` Levels count all ${word} ever awarded, so spending never loses one.` : ''}</p>}
-        {later && <p role="note" style={{ ...why, fontSize: 11 }}>SETUP also picks IMPROVE BY USE. That comes later, as its own piece.</p>}
+        {use && <p style={why}>A stat used is marked, and at a rest it rolls to improve, below.</p>}
         {levelHomeNote(definition) && <p role="note" style={note}>{levelHomeNote(definition)}</p>}
       </section>
       <section aria-label="Max health" style={panel}>
@@ -232,6 +235,7 @@ export function LevelsPage({ definition, edit, onGoTo, api }: Props) {
         </section>
       )}
       {spend && <SpendXpSection definition={definition} edit={edit} api={api} word={word} />}
+      {use && <ImproveByUseSection definition={definition} edit={edit} api={api} />}
     </div>
   );
 }

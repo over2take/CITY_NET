@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import { HINTS } from '../sheets/builderHelp';
 import { BUY_NAMES, groupChoices, listChoices, spendNotes, spendSet, withBuy, withBuyAdded, withBuyOff, withWait, type Buy } from '../sheets/spendXp';
 import { useFormulaBox } from '../hooks/useFormulaBox';
 import { FieldName, HelpHint } from './HelpHint';
 import { ToggleSwitch } from './ToggleSwitch';
+import { OptionalWhole } from './OptionalWhole';
 
 // SPEND XP on the builder's LEVELS page (7f2b; approved mockup docs/mockups/ranks-and-xp.html, 2026-11-12): WHAT XP BUYS,
 // each a card, RAISE A STAT IN a group COSTS a formula UP TO a most, or AN OPTION FROM a list COSTS a formula; and
@@ -29,21 +30,6 @@ const card: React.CSSProperties = { border: '1px solid var(--dark-green)', paddi
 const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '90px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' };
 const tag: React.CSSProperties = { fontFamily: 'monospace', fontSize: 11, letterSpacing: 2, color: 'var(--cyan)' };
 const note: React.CSSProperties = { ...why, fontSize: 11, color: 'var(--warning)', opacity: 1 };
-
-/** UP TO: a whole number, or blank for no end; written when it's left, so typing 12 doesn't pass through 1. */
-function UpTo({ value, label, onChange }: { value: number | undefined; label: string; onChange: (next: number | null) => void }) {
-  const [text, setText] = useState(value === undefined ? '' : String(value));
-  const commit = () => {
-    const t = text.trim();
-    if (!t) onChange(null);
-    else if (/^-?\d+$/.test(t)) onChange(Number(t));
-    else setText(value === undefined ? '' : String(value));
-  };
-  return (
-    <input type="text" inputMode="numeric" aria-label={label} value={text} placeholder="NO END" onChange={(e) => setText(e.target.value)} onBlur={commit}
-      onKeyDown={(e) => { if (e.key === 'Enter') commit(); }} style={{ ...field, width: 90 }} />
-  );
-}
 
 /** One thing XP buys, as a card. */
 function BuyCard({ definition, edit, api, buy, i }: { definition: Definition; edit: Props['edit']; api: Props['api']; buy: Buy; i: number }) {
@@ -79,7 +65,7 @@ function BuyCard({ definition, edit, api, buy, i }: { definition: Definition; ed
         {cost.field}
         {buy.what === 'stat' && <>
           <FieldName beside hint={HINTS['levels.buyMost']} style={small}>UP TO</FieldName>
-          <UpTo key={`${buy.id}-${buy.most ?? ''}`} value={buy.most} label={`${name}: up to`} onChange={(most) => edit(withBuy(definition, i, { most }))} />
+          <OptionalWhole key={`${buy.id}-${buy.most ?? ''}`} value={buy.most} label={`${name}: up to`} onChange={(most) => edit(withBuy(definition, i, { most }))} style={{ ...field, width: 90 }} />
         </>}
       </div>
       {cost.help}

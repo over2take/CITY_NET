@@ -8,7 +8,8 @@
 // @this_mod, @tie, @tie_mod), and a rest's refill amounts, which may hold dice: the sample line says
 // what dice decide as a range, the least to the most.
 //
-// And SPEND XP's cost of raising a stat (7f2b), which reads the stat as it is (@old) and as it will be (@new) too.
+// And SPEND XP's cost of raising a stat (7f2b), which reads the stat as it is (@old) and as it will be (@new) too; and
+// IMPROVE BY USE's roll, target and gain (7f3a2), dice as a rest's amount, reading @this, the stat improved.
 
 import type { Definition } from './systemsApi';
 import { allStats, formulaList, tableList, isCondition, partOf, CONDITION_PARTS, FUNCTIONS, type Formula } from './statsRules';
@@ -18,8 +19,8 @@ import { choiceLists, featureList } from './choices';
  * What a box holds: a modifier's amount, an option's requirement, a feature's uses; a roll's ADD and
  * AGAINST; a rest's amount; a formula of STATS & RULES (formula box 3).
  */
-/** `least` (7e1b): a modifier's amount set AT LEAST, read as an amount is, said as "at least". `cost` (7f2b): what raising a stat costs; `price`, what an option costs. */
-export type FormulaKind = 'amount' | 'least' | 'requires' | 'uses' | 'add' | 'against' | 'refill' | 'formula' | 'cost' | 'price';
+/** `least` (7e1b): a modifier's amount set AT LEAST, read as an amount is, said as "at least". `cost` (7f2b): what raising a stat costs; `price`, what an option costs. `improve` (7f3a2): IMPROVE BY USE's boxes. */
+export type FormulaKind = 'amount' | 'least' | 'requires' | 'uses' | 'add' | 'against' | 'refill' | 'formula' | 'cost' | 'price' | 'improve';
 
 /** The kind the server reads a box as: an AT LEAST is an amount, and an option's price (7f2b) a formula. */
 export const serverKind = (kind: FormulaKind): FormulaKind => (kind === 'least' ? 'amount' : kind === 'price' ? 'formula' : kind);
@@ -59,7 +60,7 @@ export const wordsOf = (kind: FormulaKind, text: string, reads: FormulaReads[] =
   // AT LEAST (7e1b): as a value is said, unsigned: at least 19, at least your Con.
   if (kind === 'least') return /^-?\d+$/.test(t) ? `at least ${t}` : `at least ${wordsOf('formula', t, reads)}`;
   // A rest's amount, dice and all, said with names in place of the @ids: 1d8 + CON modifier.
-  if (kind === 'refill') return t.replace(/@([a-z][a-z0-9_]*)/g, (_, id: string) => word(id, reads)).replace(/\s+/g, ' ');
+  if (kind === 'refill' || kind === 'improve') return t.replace(/@([a-z][a-z0-9_]*)/g, (_, id: string) => word(id, reads)).replace(/\s+/g, ' ');
   if (kind === 'against') {
     if ((m = t.match(/^(-?\d+)$/))) return `against ${m[1]}`;
     if ((m = t.match(/^@([a-z][a-z0-9_]*)$/))) return `against your ${word(m[1], reads)}`;
@@ -98,7 +99,7 @@ export const sampleLine = (kind: FormulaKind, read: FormulaRead & { ok: true }):
   const v = round(read.value);
   const said = kind === 'uses' ? `${v} use${v === 1 ? '' : 's'}`
     : kind === 'against' ? `target ${v}`
-    : kind === 'refill' ? (read.most !== undefined ? `${v} to ${round(read.most)}` : String(v))
+    : kind === 'refill' || kind === 'improve' ? (read.most !== undefined ? `${v} to ${round(read.most)}` : String(v))
     : kind === 'least' ? `at least ${v}`
     : kind === 'cost' || kind === 'price' ? `costs ${v}`
     : signed(v);
@@ -158,11 +159,11 @@ export const COST_TOKENS = [{ token: '@old', label: 'THE RATING NOW' }, { token:
  */
 export const insertGroups = (def: Definition, kind: FormulaKind): InsertGroup[] => [
   { title: 'THIS ROLL', items: kind === 'add' || kind === 'against' ? ROLL_TOKENS : [] },
-  { title: 'THE STAT RAISED', items: kind === 'cost' ? COST_TOKENS : [] },
+  { title: 'THE STAT RAISED', items: kind === 'cost' ? COST_TOKENS : kind === 'improve' ? [{ token: '@this', label: 'THE STAT IMPROVED' }] : [] },
   { title: 'LEVELS', items: levelTokens(def) },
   { title: 'STATS', items: allStats(def).map((s) => ({ token: `@${s.id}`, label: (s.label || s.id).toUpperCase() })) },
   { title: 'FORMULAS', items: kind === 'amount' || kind === 'least' ? [] : formulaList(def).map((f) => ({ token: `@${f.id}`, label: (f.label || f.id).toUpperCase() })) },
-  { title: 'TABLES', items: kind === 'refill' ? [] : tableList(def).map((t) => ({ token: `${t.id}()`, label: 'A TABLE' })) },
+  { title: 'TABLES', items: kind === 'refill' || kind === 'improve' ? [] : tableList(def).map((t) => ({ token: `${t.id}()`, label: 'A TABLE' })) },
   { title: 'CHOICES', items: hasTokens(def) },
   { title: 'WORKINGS', items: FUNCTIONS.filter((fn) => fn !== 'has').map((fn) => ({ token: `${fn}()`, label: WORKINGS[fn] ?? '' })) },
 ].filter((g) => g.items.length);
@@ -195,7 +196,7 @@ export const shapesOf = (def: Definition, kind: FormulaKind): Shape[] => {
       ] : []),
     ];
   }
-  if (kind === 'refill') {
+  if (kind === 'refill' || kind === 'improve') {
     return [
       { id: 'number', label: 'A NUMBER', asks: 'number' },
       { id: 'dice', label: 'DICE', asks: 'dice' },
