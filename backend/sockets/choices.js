@@ -26,6 +26,10 @@
 // wearing and attuning an item on the sheet, checked by systemBuilder/items.js; a worn item's bonus on the token's maximum
 // moves the token, as a pick's does.
 //
+// `spendAction` with { kind: 'buy', buy, target } or the GM's { kind: 'undo' | 'approve' | 'decline', entry } (7f2a2): XP
+// spent from the system's price list, kept in the sheet's ledger, checked by systemBuilder/spendXp.js; a stat bought can move
+// the token's maximum, as a pick's does.
+//
 // `recoverySpend` with { pool, count } (R2a) spends recovery dice with a roll (sheets/recover.js).
 // In a system leaving spending to the GM, a player spends or ticks them off only while the GM has
 // spending open (recovery.js maySpend); the GM always may.
@@ -38,6 +42,7 @@ const { maySpend, restingOf, OPEN_SETTING } = require('../systemBuilder/recovery
 const { creationAction, statRollLine } = require('../systemBuilder/creation');
 const { levelAction, healthRollLine } = require('../systemBuilder/levelUp');
 const { itemAction } = require('../systemBuilder/items');
+const { spendAction } = require('../systemBuilder/spendXp');
 const { valueOn } = require('../systemBuilder/choices');
 const { kitPatch, kitTakenBack } = require('../sheets/kitGiving');
 const identity = require('../sheets/identity');
@@ -226,6 +231,28 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
         });
       });
     }, 'This game has no items');
+  });
+
+  // Spending XP (7f2a2): the player's own purchases, or the GM's for the player they name, and the GM settling them.
+  socket.on('spendAction', (payload) => {
+    if (!payload || typeof payload !== 'object') return;
+    withCaller(payload, 'choicesRefused', ({ gm, username, system, definition, refuse }) => {
+      let error = null;
+      mutateSheetForUser(db, { username, system }, (data) => {
+        const done = spendAction(definition, data, payload, { gm });
+        if (!done.ok) { error = done.error; return undefined; }
+        sheetTemplates.applyDerived(system, done.data);
+        return done.data;
+      }, (err2, stored) => {
+        if (error) return refuse(error);
+        if (err2) return refuse('That character has no sheet yet');
+        if (!stored) return undefined;
+        return syncTokenMax(db, system, username, (moved) => {
+          if (moved) io.emit('dataUpdated', { isRhombusOnly: true });
+          io.emit('sheetUpdated', { username, system });
+        });
+      });
+    }, 'XP isn\'t spent in this game');
   });
 
   socket.on('restTake', (payload) => {

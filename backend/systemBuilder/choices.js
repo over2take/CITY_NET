@@ -598,17 +598,19 @@ const heldOf = (definition, data) => {
       const id = isPlainObject(p) ? p.option : p;
       if (typeof id !== 'string' || !options.has(id) || taken.has(id)) continue;
       const from = isPlainObject(p) && typeof p.from === 'string' ? p.from : null;
+      // Bought with XP (7f2a2, spendXp.js): it always counts, past what the list allows and however it is picked.
+      const bought = isPlainObject(p) && Number.isInteger(p.bought) ? p.bought : null;
       // A list's own picks past what it allows were never kept.
-      if (!from && mode !== 'features' && own >= capOf(c)) continue;
+      if (!from && bought === null && mode !== 'features' && own >= capOf(c)) continue;
       taken.add(id);
       const level = c.levelled !== true ? null
         : isPlainObject(p) && Number.isInteger(p.level) && p.level >= 1 ? Math.min(p.level, LIMITS.level) : 1;
-      const counts = from ? (mode === 'own' ? false : null) : mode !== 'features';
-      if (counts) own += 1;
+      const counts = bought !== null ? true : from ? (mode === 'own' ? false : null) : mode !== 'features';
+      if (counts && bought === null) own += 1;
       // Locked by a roll, or by the GM (picking.js): a player can't change it.
       const locked = isPlainObject(p) && p.locked === true;
       const roll = locked && Number.isInteger(p.roll) ? p.roll : null;
-      held.push({ list: c, option: options.get(id), level, from, active: counts, ...(locked ? { locked } : {}), ...(roll === null ? {} : { roll }) });
+      held.push({ list: c, option: options.get(id), level, from, active: counts, ...(locked ? { locked } : {}), ...(roll === null ? {} : { roll }), ...(bought === null ? {} : { bought }) });
     }
   }
   // What everyone has: the options whose requirement is met on the sheet as typed and the levels so
@@ -920,7 +922,8 @@ const workedOf = (definition, data, overlay = overlayOf(definition, data)) => {
   return {
     ...(kits.length ? { kitsUnmet: kits.filter((k) => !meets(definition, data, k)).map((k) => k.id) } : {}),
     picks: held.map((p) => ({ list: p.list.id, option: p.option.id, ...(p.level === null ? {} : { level: p.level }),
-      ...(p.from ? { from: p.from } : {}), ...(p.active ? {} : { waiting: true }), ...(p.locked ? { locked: true } : {}), ...(p.roll === undefined ? {} : { roll: p.roll }) })),
+      ...(p.from ? { from: p.from } : {}), ...(p.active ? {} : { waiting: true }), ...(p.locked ? { locked: true } : {}), ...(p.roll === undefined ? {} : { roll: p.roll }),
+      ...(p.bought === undefined ? {} : { bought: p.bought }) })),
     // 7a5a: each unlocked feature opening a list picked through features, and how many it gives and has.
     opens: openingsOf(definition, picks, data).map((o) => ({ feature: o.feature.id, list: o.list.id, count: o.count, used: o.used, ...(o.instead ? { instead: true } : {}) })),
     levels: levelsOf(definition, picks),
