@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { signInAsGm, openGameSystem, gmToken } from './helpers';
 
 // The first-time tour walked in a real browser (Phase 7's end, 2026-11-13): every step down the rail, ITEMS, NEW CHARACTER
-// and LEVELS among them. At each, the rail item it explains is the one lit, the arrow points at it (level with it, to its
+// and LEVELS among them, on a small laptop's window. At each, the rail item it explains is the one lit, the arrow points at it (level with it, to its
 // right), and the tour is wholly on the screen, low on the rail too. DONE ends it, remembered.
 
 const STEPS: { title: string; lit: string[] }[] = [
@@ -26,6 +26,8 @@ test('the tour walked down the rail: each step lights its place, the arrow at it
   // Shown only while it hasn't been seen; another journey in this run may have ended it.
   await request.put('/api/systems/tour', { ...auth, data: { seen: false } });
 
+  // A small laptop's window: the rail scrolls, and the box sits at the bottom for the lower steps.
+  await page.setViewportSize({ width: 1280, height: 720 });
   await signInAsGm(page);
   await openGameSystem(page);
   await page.getByRole('button', { name: 'SYSTEM BUILDER', exact: true }).click();

@@ -97,3 +97,13 @@ describe('a place off the screen', () => {
     place.remove();
   });
 });
+
+describe('a box taller than taken', () => {
+  it('kept wholly on the screen by its own height, its arrow still at the button', () => {
+    // 236 tall, as LEVELS's words wrapped on CI: never past the bottom.
+    const low = tourPlace({ top: 760 }, SCREEN, 220, 236);
+    expect(low.top).toBe(800 - 236 - 16);
+    expect(low).toMatchObject({ arrow: 236 - 24 });
+    expect(tourPlace({ top: 760 }, SCREEN, 220)).toMatchObject({ top: 800 - 220 - 16 });
+  });
+});
