@@ -19,7 +19,7 @@ const { overlayOf, choicesOf, workedOf, worksOutPicks, choicesShown, itemsRender
 const { poolsOf, recoveryShown, restingShown } = require('./recovery');
 const { creationShown } = require('./creation');
 const { levelsShown } = require('./levels');
-const { spendShown } = require('./spendXp');
+const { spendShown, spendsXp, spendWorked } = require('./spendXp');
 /** Where a save writes what PER LEVEL's max health comes to (7d5a; healthLevels.js healthByLevel). */
 const HEALTH_SHOWN_KEY = '_health';
 const { fieldsRolledBy } = require('./tableRolls');
@@ -83,6 +83,8 @@ const metaOf = (definition) => {
           const pools = poolsOf(definition, data);
           if (pools.length) data[WORKED_KEY].recovery = { ...recoveryShown(definition), pools: pools.map(({ id, label, die, total, spent }) => ({ id, label, die, total, spent })) };
         } else delete data[WORKED_KEY];
+        // SPEND XP (7f2a2): XP unspent, and each price on the list for this character now.
+        if (spendsXp(definition)) data[WORKED_KEY] = { ...(data[WORKED_KEY] || {}), spend: spendWorked(definition, data) };
         // MAX HEALTH: PER LEVEL (7d5a): what it comes to, each level, for the sheet and LEVEL_UP.EXE. Loaded here, as it
         // reads the levels this module's own load leads to.
         const byLevel = require('./healthLevels').healthByLevel(definition, data);
@@ -179,7 +181,7 @@ const renderOf = (id, definition, on = new Set()) => ({
   // The XP table (7d2a), for the meter on the sheet, or null where characters don't earn XP.
   levels: levelsShown(definition),
   // SPEND XP's price list (7f2a1), what each buys by name, or null where XP isn't spent.
-  spend: definition.core && Array.isArray(definition.core.advancement) && definition.core.advancement.includes('spend') ? spendShown(definition) : null,
+  spend: spendsXp(definition) ? spendShown(definition) : null,
   // Its items and slots (7e3b), for the GEAR tab's WEAR and ATTUNE, or null where it has none.
   items: itemsRenderedOf(definition),
 });

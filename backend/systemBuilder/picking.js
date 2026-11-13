@@ -45,7 +45,8 @@ const fail = (error) => ({ ok: false, error });
 
 /** The list's picks, stored back as they are read: every one kept (those waiting too), in order. */
 const storedPicks = (held, c) => held.filter((p) => p.list === c)
-  .map((p) => ({ option: p.option.id, ...(p.level === null ? {} : { level: p.level }), ...(p.from ? { from: p.from } : {}), ...(p.locked ? { locked: true } : {}), ...(p.roll === undefined ? {} : { roll: p.roll }) }));
+  .map((p) => ({ option: p.option.id, ...(p.level === null ? {} : { level: p.level }), ...(p.from ? { from: p.from } : {}), ...(p.locked ? { locked: true } : {}), ...(p.roll === undefined ? {} : { roll: p.roll }),
+    ...(p.bought === undefined ? {} : { bought: p.bought }) }));
 
 const withPicks = (data, listId, stored) => ({ ...data, [PICKS_KEY]: { ...(isPlainObject(data[PICKS_KEY]) ? data[PICKS_KEY] : {}), [listId]: stored } });
 
@@ -75,7 +76,8 @@ const noRoom = (definition, held, c, from, data = null) => {
     return null;
   }
   if (mode === 'features') return `The ${many} are picked under the features that open them`;
-  if (held.filter((p) => p.list === c && !p.from && p.active).length >= capOf(c)) return `No more ${many} can be picked`;
+  // One bought with XP (7f2a2) takes no room.
+  if (held.filter((p) => p.list === c && !p.from && p.bought === undefined && p.active).length >= capOf(c)) return `No more ${many} can be picked`;
   return null;
 };
 

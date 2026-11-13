@@ -101,7 +101,7 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 | Levels | MAX HEALTH: PER LEVEL, GAINED BY ROLL TO BEAT, A DIE PER LEVEL (7d5d) | `levels` | `builder-levels`, `sheet-health-levels` | Proven at the table |
 | Levels | The XP part switched off | `parts`, `levels` | none yet | **BACKEND AND COMPONENT TESTS** only |
 | Levels | SPEND XP: RAISE A STAT IN a group, COSTS, UP TO; AN OPTION FROM a list, COSTS (7f2a1) | `spend.buys` | none yet | **SERVER TESTS** until the builder (7f2b) and the sheet (7f2c) |
-| Levels | SPEND XP: PURCHASES WAIT FOR THE GM (7f2a1) | `spend.wait` | none yet | **SERVER TESTS** until the sheet (7f2c) |
+| Levels | SPEND XP: PURCHASES WAIT FOR THE GM (7f2a1), with APPROVE and DECLINE (7f2a2) | `spend.wait` | none yet | **SERVER TESTS** until the sheet (7f2c) |
 | New character, uploads | A line per list on the form and template, read by name: one not met, one not found, one replacing a lock, one under a feature, one not named cleared, the inventory added to | `sheet_import`, `sheet_form` | `sheet-import-picks` | Proven at the table (7c6) through a pasted file; the PDF's round trip **BACKEND TESTS** only |
 | New character, the GM's side | FILL IT IN FOR THEM, every limit off; CLEAR THE ROLL | `_creating` | `sheet-new-character-gm` | Proven at the table (7c5b) for stats; CLEAR THE ROLL on money and an option's money **BACKEND AND COMPONENT TESTS** only |
 | Choices | What an option gives: GIVES, money per currency as A NUMBER or A ROLL | `choices[].options[].gives` | `builder-choices`, `sheet-new-character` | Proven at the table (7c4e2): items, A NUMBER and A ROLL, with KITS and MONEY off, nested picks included |
