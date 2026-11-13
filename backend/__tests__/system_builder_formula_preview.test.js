@@ -15,7 +15,7 @@ import { makeTestDb } from './helpers/testDb.js';
 
 process.env.JWT_SECRET = 'test-secret';
 const require_ = createRequire(import.meta.url);
-const { previewFormula, previewFormulas, SAMPLE_LEVEL, MOST, nearest } = require_('../systemBuilder/formulaPreview');
+const { previewFormula, previewFormulas, SAMPLE_LEVEL, SAMPLE_OLD, MOST, nearest } = require_('../systemBuilder/formulaPreview');
 const { elevatedUsers } = require_('../middleware/auth');
 const systemsRoute = require_('../routes/systems.js');
 
@@ -178,5 +178,23 @@ describe('a formula of STATS & RULES (formula box 3)', () => {
     ] });
     expect(previewFormula(DEF, '@strr + 1', 'formula')).toEqual({ ok: false, problem: '@strr isn\'t one of this system\'s names', name: 'strr', suggest: 'str' });
     expect(previewFormulas(DEF, [{ text: '@con_mod', kind: 'formula' }])[0].ok).toBe(true);
+  });
+});
+
+describe('a cost of raising a stat (7f2b, SPEND XP)', () => {
+  it('reads the stat as it is and as it will be, the sample raising one from SAMPLE_OLD', () => {
+    expect(SAMPLE_OLD).toBe(2);
+    expect(previewFormula(DEF, '@new * 5 + @old + @str', 'cost')).toEqual({ ok: true, value: 33, reads: [
+      { id: 'new', label: 'New rating', value: 3 }, { id: 'old', label: 'Rating now', value: 2 }, { id: 'str', label: 'Strength', value: 16 },
+    ] });
+    expect(previewFormula(DEF, '@nwe * 5', 'cost')).toEqual({ ok: false, problem: '@nwe isn\'t one of this system\'s names', name: 'nwe', suggest: 'new' });
+    expect(previewFormulas(DEF, [{ text: '@old', kind: 'cost' }])[0]).toMatchObject({ ok: true, value: 2 });
+  });
+
+  it('a cost\'s own names only in a cost: never in an option\'s, read as a formula', () => {
+    expect(previewFormulas(DEF, [{ text: '@new * 5', kind: 'formula' }, { text: '20 - @str', kind: 'formula' }])).toEqual([
+      expect.objectContaining({ ok: false, name: 'new' }),
+      { ok: true, value: 4, reads: [{ id: 'str', label: 'Strength', value: 16 }] },
+    ]);
   });
 });

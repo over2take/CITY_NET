@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { wordsOf, sampleLine, insertGroups, levelTokens, hasTokens, shapesOf, writeShape, formulaTexts, isMistake } from '../formulaBox';
+import { wordsOf, sampleLine, insertGroups, levelTokens, hasTokens, shapesOf, writeShape, formulaTexts, isMistake, serverKind } from '../formulaBox';
 import type { Definition } from '../systemsApi';
 
 /**
@@ -199,5 +199,36 @@ describe('a formula of STATS & RULES (formula box 3)', () => {
 
   it('tells a mistake from an answer, and from no answer yet', () => {
     expect([isMistake({ ok: false, problem: 'x' }), isMistake({ ok: true, value: 1, reads: [] }), isMistake(null)]).toEqual([true, false, false]);
+  });
+});
+
+describe('a cost of raising a stat (7f2b, SPEND XP)', () => {
+  const NEW = [{ id: 'new', label: 'New rating', value: 3 }];
+  it('said as a value, never signed', () => {
+    expect(wordsOf('cost', '@new * 5', NEW)).toBe('5 for each new rating');
+    expect(wordsOf('cost', '10')).toBe('10, always');
+    expect(wordsOf('cost', '@new', NEW)).toBe('the New rating');
+    expect(sampleLine('cost', { ok: true, value: 15, reads: NEW })).toBe('sample New rating 3: costs 15');
+  });
+
+  it('INSERT offers the stat raised, formulas too; its SHAPES a number or so much for each point of the new rating', () => {
+    const groups = insertGroups(DEF, 'cost');
+    expect(groups.find((g) => g.title === 'THE STAT RAISED')?.items).toEqual([{ token: '@old', label: 'THE RATING NOW' }, { token: '@new', label: 'THE NEW RATING' }]);
+    expect(groups.some((g) => g.title === 'FORMULAS')).toBe(true);
+    expect(insertGroups(DEF, 'formula').some((g) => g.title === 'THE STAT RAISED')).toBe(false);
+    expect(shapesOf(DEF, 'cost').map((s) => s.label)).toEqual(['A NUMBER', 'NEW RATING TIMES']);
+    expect(writeShape('per_new', 5)).toBe('@new * 5');
+  });
+
+  it('an option\'s price: a value said as a cost, with no stat raised to read', () => {
+    expect(wordsOf('price', '10')).toBe('10, always');
+    expect(wordsOf('price', '2 * @str', [{ id: 'str', label: 'Strength', value: 16 }])).toBe('2 for each strength');
+    expect(wordsOf('price', '@str', [{ id: 'str', label: 'Strength', value: 16 }])).toBe('the Strength');
+    expect(sampleLine('price', { ok: true, value: 10, reads: [] })).toBe('costs 10');
+    expect(insertGroups(DEF, 'price').some((g) => g.title === 'THE STAT RAISED')).toBe(false);
+    expect(shapesOf(DEF, 'price').map((s) => s.label)).toEqual(['A NUMBER']);
+    // The server reads it as a formula.
+    expect(serverKind('price')).toBe('formula');
+    expect(serverKind('cost')).toBe('cost');
   });
 });
