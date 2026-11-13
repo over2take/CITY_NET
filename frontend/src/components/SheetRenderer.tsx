@@ -29,6 +29,8 @@ import { XpMeterBar } from './XpMeterBar';
 import { LevelUpReady } from './LevelUpReady';
 import { RestSection } from './RestSection';
 import { SpendSection } from './SpendSection';
+import { ImproveMark } from './ImproveMark';
+import { markStates } from '../sheets/improveShown';
 import { withTempHp } from '../sheets/tempHp';
 import { choiceEffects, effectsWorked, type ChoicesAction } from '../sheets/choicesShown';
 
@@ -137,6 +139,8 @@ interface SheetRendererProps {
   onItem?: (action: import('../sheets/gearItems').ItemAction) => void;
   /** SPEND XP's BUY, and the GM's APPROVE, DECLINE and UNDO (7f2c1): asks the server (a spendAction). */
   onSpend?: (action: import('../sheets/spendShown').SpendAction) => void;
+  /** IMPROVE BY USE's mark ticked or cleared (7f3b): asks the server (an improveAction). */
+  onImprove?: (action: import('../sheets/improveShown').ImproveAction) => void;
 }
 
 /** Whether the viewer is the GM, for FieldInput's GM-only lock, without threading a prop
@@ -1131,11 +1135,13 @@ function FullWidthField({ field, data, readOnly, onFieldChange, onFieldsChange, 
   );
 }
 
-function GridSection({ section, allFields, data, readOnly, onFieldChange, onRoll, effects }: {
+function GridSection({ section, allFields, data, readOnly, onFieldChange, onRoll, effects, marks }: {
   section: SheetSection; allFields: SheetField[]; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onRoll?: (fieldId: string) => void;
   effects: SheetEffects;
+  /** IMPROVE BY USE (7f3b): each stat that improves, whether it is marked, and who may tick it. */
+  marks?: { improve: import('../sheets/improveShown').ImproveShown; states: Map<string, boolean>; onImprove?: (action: import('../sheets/improveShown').ImproveAction) => void };
 }) {
   // maxField pairs render inside their base field's cell as CUR / MAX. The maximum is
   // looked up across the whole sheet, not just this block: CWN's Damage Soak is spent in
@@ -1163,6 +1169,7 @@ function GridSection({ section, allFields, data, readOnly, onFieldChange, onRoll
           <div key={field.id} title={field.hint} style={{ border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--black) 35%, transparent)', textAlign: 'center', display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '4px 2px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
               {field.label}
+              {marks?.states.has(field.id) && <ImproveMark improve={marks.improve} stat={field.id} label={field.label} marked={marks.states.get(field.id) === true} onImprove={marks.onImprove} />}
               {/* A pair's bonus is named on its maximum below, not as a second number by the name. */}
               {!maxField && effects.fields[field.id]?.delta ? <ChromeBadge effect={effects.fields[field.id]} /> : null}
             </div>
@@ -1801,7 +1808,7 @@ function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection 
   return fields.length === 0 ? null : { ...section, fields };
 }
 
-export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onSpend }: SheetRendererProps) {
+export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onSpend, onImprove }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   // The tab it opens on: the one the template names (a built system's starter opens on STATS,
   // with CHARACTER first in the row), else the first.
@@ -2020,7 +2027,8 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
               </div>
               {open && (
                 <div style={{ padding: '4px 0 6px' }}>
-                  {section.layout === 'grid' && <GridSection section={section} allFields={allFields} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} effects={effects} />}
+                  {section.layout === 'grid' && <GridSection section={section} allFields={allFields} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} effects={effects}
+                    marks={template.improve ? { improve: template.improve, states: markStates(template.improve, data as Record<string, unknown>), onImprove: readOnly ? undefined : onImprove } : undefined} />}
                   {section.layout === 'skills' && <SkillsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} effects={effects} />}
                   {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} />}
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}

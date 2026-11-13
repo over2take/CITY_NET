@@ -13,6 +13,7 @@ import type { SheetFieldValue, RollPick } from '../sheets/types';
 import type { ChoicesAction } from '../sheets/choicesShown';
 import type { ItemAction } from '../sheets/gearItems';
 import type { SpendAction } from '../sheets/spendShown';
+import type { ImproveAction } from '../sheets/improveShown';
 import { useChoicesRefused } from '../hooks/useChoicesRefused';
 import { useRecoveryOpen } from '../hooks/useRecoveryOpen';
 import { npcInitiativePortrait } from '../modules/initiative/npcPortrait';
@@ -330,6 +331,8 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
             onItem: (action: ItemAction) => socket.emit('itemAction', { ...action, username: playerUsername }),
             // SPEND XP (7f2c1): a purchase made, approved, declined or undone, for the player named.
             onSpend: (action: SpendAction) => socket.emit('spendAction', { ...action, username: playerUsername }),
+            // IMPROVE BY USE (7f3b): a mark ticked or cleared for the player named.
+            onImprove: (action: ImproveAction) => socket.emit('improveAction', { ...action, username: playerUsername }),
             onRecoverySpend: (pool: string, count: number) => socket.emit('recoverySpend', { pool, count, username: playerUsername }), recoveryOpen,
             onRestTake: (rest: string) => socket.emit('restTake', { rest, username: playerUsername }),
           } : {})}

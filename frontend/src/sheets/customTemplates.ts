@@ -74,6 +74,8 @@ export interface CustomRender {
   levels?: import('./xpMeter').LevelsShown | null;
   /** SPEND XP's price list by name (backend spendXp.js spendShown, 7f2c1), or null where XP isn't spent. */
   spend?: import('./spendShown').SpendShown | null;
+  /** IMPROVE BY USE (backend improveByUse.js improveShown, 7f3b), or null where stats don't improve by use. */
+  improve?: import('./improveShown').ImproveShown | null;
   /** Its items and slots (7e3b), null where it has none. */
   items?: import('./gearItems').ItemsShown | null;
 }
@@ -158,6 +160,8 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.items ? { items: render.items } : {}),
     // SPEND XP's price list (7f2c1), for the sheet's SPEND XP section.
     ...(render.spend ? { spend: render.spend } : {}),
+    // IMPROVE BY USE (7f3b), for the marks beside its stats.
+    ...(render.improve ? { improve: render.improve } : {}),
     ...tiers,
     ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived, rolls), ...tiers } } : {}),
   };

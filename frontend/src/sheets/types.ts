@@ -309,6 +309,8 @@ export interface SheetTemplate {
   levels?: import('./xpMeter').LevelsShown;
   /** SPEND XP's price list, by name (backend spendXp.js spendShown, 7f2c1): there while characters spend XP. */
   spend?: import('./spendShown').SpendShown | null;
+  /** IMPROVE BY USE (backend improveByUse.js improveShown, 7f3b): the stats with a mark, what marks them, their rest. */
+  improve?: import('./improveShown').ImproveShown | null;
   /** A custom system's items and slots (backend choices.js itemsRenderedOf, 7e3b): WEAR and ATTUNE on the GEAR tab. */
   items?: import('./gearItems').ItemsShown;
   /** The layout an NPC's sheet is drawn with, when the system gives NPCs one of their own
