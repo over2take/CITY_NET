@@ -30,6 +30,9 @@
 // spent from the system's price list, kept in the sheet's ledger, checked by systemBuilder/spendXp.js; a stat bought can move
 // the token's maximum, as a pick's does.
 //
+// `improveAction` with { kind: 'mark', stat, on } (7f3a1): IMPROVE BY USE's mark on a stat ticked or cleared by hand, the
+// player's own or the GM's for the player they name.
+//
 // `recoverySpend` with { pool, count } (R2a) spends recovery dice with a roll (sheets/recover.js).
 // In a system leaving spending to the GM, a player spends or ticks them off only while the GM has
 // spending open (recovery.js maySpend); the GM always may.
@@ -43,6 +46,7 @@ const { creationAction, statRollLine } = require('../systemBuilder/creation');
 const { levelAction, healthRollLine } = require('../systemBuilder/levelUp');
 const { itemAction } = require('../systemBuilder/items');
 const { spendAction } = require('../systemBuilder/spendXp');
+const { improveAction } = require('../systemBuilder/improveByUse');
 const { valueOn } = require('../systemBuilder/choices');
 const { kitPatch, kitTakenBack } = require('../sheets/kitGiving');
 const identity = require('../sheets/identity');
@@ -253,6 +257,24 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
         });
       });
     }, 'XP isn\'t spent in this game');
+  });
+
+  // IMPROVE BY USE's mark ticked or cleared by hand (7f3a1).
+  socket.on('improveAction', (payload) => {
+    if (!payload || typeof payload !== 'object') return;
+    withCaller(payload, 'choicesRefused', ({ username, system, definition, refuse }) => {
+      let error = null;
+      mutateSheetForUser(db, { username, system }, (data) => {
+        const done = improveAction(definition, data, payload);
+        if (!done.ok) { error = done.error; return undefined; }
+        return done.data;
+      }, (err2, stored) => {
+        if (error) return refuse(error);
+        if (err2) return refuse('That character has no sheet yet');
+        if (stored) io.emit('sheetUpdated', { username, system });
+        return undefined;
+      });
+    }, 'Stats don\'t improve by use in this game');
   });
 
   socket.on('restTake', (payload) => {

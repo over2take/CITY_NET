@@ -25,6 +25,7 @@ const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
 const { withUpload, lockedWhileCreating, kitsGivable, pastStart } = require('../systemBuilder/creation');
+const { markedByRoll } = require('../systemBuilder/improveByUse');
 const { itemsGivable } = require('../systemBuilder/items');
 const { lockedByLevels } = require('../systemBuilder/levelUp');
 const { XP_KEY, keepsXp, HEALTH_BASE_KEY } = require('../systemBuilder/levels');
@@ -1658,6 +1659,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               conditions: customSystems.conditionsIn(system).filter((c) => on.has(c.id)),
             });
             if (!made.ok) return;
+            // IMPROVE BY USE (7f3a1): a player's stat rolled as MARKED BY says is marked, on the sheet as it is now.
+            if (updated.username) {
+              mutateSheet(db, row.id, (d) => markedByRoll(custom, d, payload.fieldId, made.result.success) || undefined, (e4, marked) => {
+                if (!e4 && marked) io.emit('sheetUpdated', updated);
+              });
+            }
             // What the changes picked cost (6b3a): the stat changed on the sheet as it is now, as
             // CP:R's Luck is spent, and every window showing it told.
             if (made.spends.length) {

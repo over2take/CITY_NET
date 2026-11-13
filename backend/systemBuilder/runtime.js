@@ -20,6 +20,7 @@ const { poolsOf, recoveryShown, restingShown } = require('./recovery');
 const { creationShown } = require('./creation');
 const { levelsShown } = require('./levels');
 const { spendShown, spendsXp, spendWorked } = require('./spendXp');
+const { improvesBy, improveShown } = require('./improveByUse');
 /** Where a save writes what PER LEVEL's max health comes to (7d5a; healthLevels.js healthByLevel). */
 const HEALTH_SHOWN_KEY = '_health';
 const { fieldsRolledBy } = require('./tableRolls');
@@ -182,6 +183,8 @@ const renderOf = (id, definition, on = new Set()) => ({
   levels: levelsShown(definition),
   // SPEND XP's price list (7f2a1), what each buys by name, or null where XP isn't spent.
   spend: spendsXp(definition) ? spendShown(definition) : null,
+  // IMPROVE BY USE (7f3a1): the stats that improve, what marks them, and the rest they are rolled at; or null.
+  improve: improvesBy(definition) ? improveShown(definition) : null,
   // Its items and slots (7e3b), for the GEAR tab's WEAR and ATTUNE, or null where it has none.
   items: itemsRenderedOf(definition),
 });
