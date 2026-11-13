@@ -1093,7 +1093,7 @@ export function AdminPanel({
                   Improvement Points and Shadowrun spends Karma - rather than offering a
                   button whose only outcome is a window saying no. */}
               {xpAvailable(globalSettings['game_system']) && (
-                <button onClick={() => setIsAdminXpOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '5px' }}>{isCustomSystem(globalSettings['game_system']) && !getTemplate(globalSettings['game_system']).levels?.table ? 'LEVEL_UP_PLAYERS' : 'AWARD_EXPERIENCE'}</button>
+                <button onClick={() => setIsAdminXpOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '5px' }}>{isCustomSystem(globalSettings['game_system']) && !getTemplate(globalSettings['game_system']).levels?.table && !getTemplate(globalSettings['game_system']).spend ? 'LEVEL_UP_PLAYERS' : 'AWARD_EXPERIENCE'}</button>
               )}
               {/* Beside PAY_PLAYERS, the other way the GM hands things out (4g4). Free: shops and the
                   bank needn't be on, only GIVE ITEM itself. */}

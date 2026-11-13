@@ -16,7 +16,8 @@ import { wordFor } from '../sheets/words';
 // So there is no DIVIDE button here, and the label says EACH.
 //
 // A custom system (7d2a; approved mockup docs/mockups/level-up.html) earns XP however its game does, so it
-// has EACH by default and SPLIT beside it, and SET XP TO to put a mistake right.
+// has EACH by default and SPLIT beside it, and SET XP TO to put a mistake right. One that spends XP (7f2c2) is given it
+// here too, levels or none: with none, there are no level buttons.
 
 export interface XpAwardResult {
   ok: boolean;
@@ -52,7 +53,7 @@ const SYSTEMS_WITH_XP = ['cities_without_number'];
  * the gate.
  */
 export const xpAvailable = (system: string | undefined | null): boolean =>
-  SYSTEMS_WITH_XP.includes(String(system ?? '')) || (isCustomSystem(String(system ?? '')) && !!getTemplate(String(system)).levels);
+  SYSTEMS_WITH_XP.includes(String(system ?? '')) || (isCustomSystem(String(system ?? '')) && (!!getTemplate(String(system)).levels || !!getTemplate(String(system)).spend));
 
 export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers, system }: Props) {
   const [amount, setAmount] = useState('');
@@ -64,8 +65,15 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
 
   const supported = xpAvailable(system);
   const custom = isCustomSystem(String(system ?? ''));
+  const template = getTemplate(String(system));
+  // XP spent (7f2c2): given here whether or not it earns levels.
+  const spends = !!template.spend;
   // A milestone game (7d2b) keeps no XP: here it only gives levels.
-  const earns = !custom || !!getTemplate(String(system)).levels?.table;
+  const earns = !custom || !!template.levels?.table || spends;
+  // A game that only spends XP has no levels to give or take.
+  const levelled = !custom || !!template.levels;
+  const back = levelled ? 'Negative takes points back, but never a level.' : 'Negative takes points back.';
+  const toSpend = spends ? ', to spend' : '';
   const word = custom ? wordFor(system, 'xp', 'short', 'XP').toUpperCase() : 'XP';
 
   const players = (activeUsers || [])
@@ -141,7 +149,7 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
                 opposite and muscle memory is a real thing. */}
             <div style={{ fontSize: '11px', opacity: 0.6, marginBottom: '12px' }}>
               {custom
-                ? (split ? 'Shared between those selected, in whole points. Negative takes points back, but never a level.' : 'Each selected character gets this many. Negative takes points back, but never a level.')
+                ? (split ? `Shared between those selected, in whole points${toSpend}. ${back}` : `Each selected character gets this many${toSpend}. ${back}`)
                 : 'Each selected character gets this many, and levels up if the total earns it. Negative takes points back, but never a level.'}
             </div>
             {custom && (
@@ -180,7 +188,7 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
             {custom && earns && (
               <div style={{ marginTop: '10px', borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>
                 <label htmlFor="xp-set" style={{ display: 'block', fontSize: '11px', opacity: 0.6, marginBottom: '5px' }}>
-                  Replace what the selected characters have with another number. Their level stays.
+                  Replace what the selected characters have with another number.{levelled ? ' Their level stays.' : ''}{spends ? ' What they bought stays.' : ''}
                 </label>
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <input id="xp-set" type="number" min="0" step="1" value={setTo} onChange={(e) => setSetTo(e.target.value)}
@@ -190,7 +198,7 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
               </div>
             )}
 
-            <div style={{ marginTop: '10px', borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>
+            {levelled && <div style={{ marginTop: '10px', borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>
               <div style={{ fontSize: '11px', opacity: 0.6, marginBottom: '5px' }}>
                 {custom
                   ? 'LEVEL_UP gives the selected characters a level to take: LEVEL UP READY shows on their sheet. LEVEL_DOWN takes one back.'
@@ -208,7 +216,7 @@ export function AdminXpWindow({ pos, setPos, onClose, socket, token, activeUsers
                   onClick={() => changeLevel(1)}
                 >LEVEL_UP</button>
               </div>
-            </div>
+            </div>}
 
             {outcome && (
               <div style={{ marginTop: '10px', fontSize: '11px', borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>
