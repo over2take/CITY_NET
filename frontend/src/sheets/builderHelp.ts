@@ -18,7 +18,10 @@ export const TOUR: TourStep[] = [
   { at: 'features', title: 'PARTS', text: 'Which parts of CITY_NET this game uses: the bank, shops, vehicles, GIVE ITEM, SHEET IMPORT... Off only hides; turn one back on and everything it held comes back.' },
   { at: 'rules', title: 'STATS & RULES', text: 'The numbers players fill in, the formulas worked out from them (Defense = 10 + @agility), lookup tables, and the game\'s own dice and rolls. Each formula shows its value on a sample character as you type; GRAPH at the top shows it all as a map of wires instead. Optional rules for the table, like MAGIC, are made on HOUSE RULES, further down.' },
   { at: 'choices', title: 'CHOICES', text: 'What characters pick from, in your game\'s words: classes, backgrounds, feats. Each option gives features, like a bonus, uses that a rest refills, or a roll, unlocked by level. Taking a class more than once is multiclassing.' },
+  { at: 'items', title: 'ITEMS', text: 'Things a character carries, wears, attunes to or has installed, each with the features it gives. A slot like ATTUNED limits how many work at once; an INSTALL like CYBERWARE costs against a stat, up to a limit. A shop sells an item by its name.' },
   { at: 'sheet', title: 'CHARACTER SHEET', text: 'How a sheet is laid out. It arranges itself from your stats at first; CUSTOMIZE to move tabs, sections and fields, and to say who sees and changes each one.' },
+  { at: 'new_character', title: 'NEW CHARACTER', text: 'Turn it on and a player with a blank sheet is walked through making a character: who they are, the stats (typed, a fixed array, rolled, or bought with points), each list, a kit and starting money. You order the steps and switch any off.' },
+  { at: 'levels', title: 'LEVELS', text: 'How characters go up: XP LEVELS from a table you set, MILESTONE when you say, SPEND XP from a price list, IMPROVE BY USE where a stat used rolls to grow, or a mix. Max health per level is set here too.' },
   { at: 'try', title: 'TRY IT', text: 'A test character, to see your rules work: change a stat, take some damage, call a rest, make an NPC. Nothing here is saved to any player.' },
   { at: 'publish', title: 'SAVE AND PUBLISH', text: 'Your work saves itself as a draft while you build. PUBLISH makes it the version the game runs; from the second version on, it shows what will change for anyone playing first.' },
 ];
@@ -45,6 +48,7 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
     'STATS are the numbers players fill in, in groups (abilities, skills...), each with a lowest and highest. FORMULAS work values out from them; TABLES turn a number into another, in bands.',
     'DICE are the game\'s own dice: faces with numbers, signs or symbols that cancel and count. ROLLS are its rolls, in five steps: the dice, how they are read, what is added and compared, special results, and the choices asked before rolling. Each roll gets a die button on the sheet beside what it is rolled by, and TEST ROLL tries it on the sample.',
     'Every formula shows its value on the SAMPLE character as you type, and its mistakes under it. See FORMULAS for what a formula can say.',
+    'RANKS are named steps a stat can hold instead of a number (UNTRAINED, TRAINED, EXPERT), each worth a number or a formula. Make them on the RANKS tab from four presets or your own, then a stat HOLDS A RANK on its row, with the highest a new character may start at. Formulas read the stat as its rank\'s worth; the sheet shows a picker of the names.',
     'A formula can be worked out another way while a house rule is on: WITH A RULE, then USE INSTEAD. See HOUSE RULES.',
     'FORMS / GRAPH at the top switches between the boxes and a map of the same system: every stat, formula, table and roll a node, every name a formula reads a wire. Anything changed on one is changed on the other. See THE MAP for what you can do on it.',
   ] },
@@ -53,6 +57,8 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
     'Each option in a list has a name, words for the table, and can have a requirement, a formula like @int >= 13: one that isn\'t met is shown greyed with the reason, and the GM can pick it anyway.',
     'In a levelled list, formulas read each option\'s level as @soldier_level (0 when not taken), the list\'s total as @classes_level, and @level as every levelled list together, unless your system has a stat called level of its own.',
     'Features, what each pick gives (a bonus, uses that a rest refills, a roll, another list to pick from), are made on each option.',
+    'A feature can also give an INCREASE, points the player spreads on stats as they go up a level, with a pick from a list allowed instead; and a bonus can be AT LEAST an amount rather than added, or STOP AT a most. An option can GIVE items and money when it is taken, and in a levelled list a class has a HIT DIE for health per level.',
+    'A list with a table die can be rolled on: each option gets the numbers that land on it, and players ROLL FOR IT, or pick, as you say.',
     'A list can be picked ON ITS OWN, only THROUGH FEATURES that open it (a specialty at level 3: OPENS A LIST on the feature, with HOW MANY), BOTH (feats at the start and from levels), or EVERYONE HAS IT (what every character has, unlocking by their level). A pick under a feature counts while the feature is unlocked; lower the level and it waits, kept, until it unlocks again.',
     'A long list is quicker from a file: IMPORT on a list reads a table of options and features (from a spreadsheet, or typed), shows what it would add and change and any line with a mistake, and puts it into the draft. DOWNLOAD EXAMPLE gives a file in the right shape for your system; DOWNLOAD THIS LIST gives the list as it is, to keep or to edit and import back.',
   ] },
@@ -60,6 +66,7 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
     'Things a character carries, wears or attunes to that do something: each with a name, words, and the features it gives, made as a feature on CHOICES is (a bonus, uses a rest refills, a roll, a change to a roll), never at a level, opening a list or giving an increase.',
     'ITS FEATURES NEED says when they count: CARRIED, WORN, or WORN and in a SLOT. A slot is something each character has so many of, like D&D\'s ATTUNED, three each. Make none and the word never shows.',
     'A shop sells an item by its name, as it sells anything: a catalogue line with the item\'s name is that item.',
+    'An INSTALL, like CYBERWARE, is something a character has put in: each item needing it costs against a stat (STRAIN), added to it or taken from it, up to a limit that can be a formula. Past the limit only the GM can install it. An installed item can\'t be sold, and REMOVE gives its cost back.',
   ] },
   { page: 'sheet', title: 'CHARACTER SHEET', body: [
     'The layout players see. Until you CUSTOMIZE it, it arranges itself from your stats, formulas and health model.',
@@ -68,10 +75,16 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
   { page: 'new_character', title: 'NEW CHARACTER', body: [
     'Turn on GUIDED NEW CHARACTER and a player opening a blank sheet is walked through steps instead. Off, they get the blank sheet, as always.',
     'The steps are yours to order and switch off: who they are, the stats, one for each list on CHOICES picked on its own, kits and money. A list made later joins by itself.',
+    'Each stats step is set its own way: typed in, a fixed array the player places, rolled (in order, or to place), or a point buy with a range and costs. A stat held as a rank is picked by name, up to its AT START.',
+    'KITS are items to start with, each for everyone or for those who picked an option; MONEY is a number or a roll for each currency; and what an option GIVES comes as it is picked. The GM can FILL IT IN for a player, or START OVER; an uploaded sheet finishes it at once.',
   ] },
   { page: 'levels', title: 'LEVELS', body: [
-    'How characters go up. XP LEVELS: the GM awards XP and the sheet counts toward the next level. MILESTONE: the GM says when. Neither, and levels stay what is typed.',
+    'How characters go up. XP LEVELS: the GM awards XP and the sheet counts toward the next level. MILESTONE: the GM says when. SPEND XP and IMPROVE BY USE, below. Any mix of them, or none, and levels stay what is typed.',
     'The table fills itself from what level 2 costs and a multiplier for each range of levels. Type over any level for a table that isn\'t an even curve. XP past a level carries into the next.',
+    'Going up opens LEVEL_UP.EXE on the player\'s sheet: which class goes up, what the new level unlocks, its picks, its health and its INCREASEs. What each level gained is kept on the sheet, where the GM can put one right.',
+    'MAX HEALTH is set here: the token\'s own number, a formula, or per level from each class\'s HIT DIE (or one for all), gained as you pick: the average, rolled, the player\'s choice, rerolled keeping the higher, or rolled to beat the maximum.',
+    'SPEND XP is a price list: RAISE A STAT at a cost reading @old and @new, up to a most (a rank a step at a time); AN OPTION from a list at a cost. Each purchase is kept on the sheet, the GM can UNDO any, and PURCHASES WAIT FOR THE GM holds a player\'s for approval. Spending never lowers the XP levels count.',
+    'IMPROVE BY USE marks a stat when it is rolled (with a success, any roll, or by hand); at the rest you pick, each marked stat rolls to improve and the marks clear. To start it is Call of Cthulhu\'s: d100 over the stat, then +1d10.',
   ] },
   { page: 'npcs', title: 'NPCS', body: [
     'NPC tiers are difficulties GENERATE_SHEET rolls an NPC from, at a level: HP, defense and any number, each a number, a formula or dice.',
@@ -151,7 +164,7 @@ const REFERENCE: HelpTopic[] = [
 /** Every topic on the HELP page, in order. */
 export const TOPICS: HelpTopic[] = [
   { id: 'start', group: 'START', title: 'GETTING STARTED', tour: true, body: [
-    'Build a system down the rail: SETUP, then WORDS, PARTS, STATS & RULES, CHOICES, and the CHARACTER SHEET once you want your own layout. TRY IT to check it works, fix anything in PROBLEMS, then PUBLISH.',
+    'Build a system down the rail: SETUP, then WORDS, PARTS, STATS & RULES, CHOICES, ITEMS, LEVELS, and the CHARACTER SHEET once you want your own layout. TRY IT to check it works, fix anything in PROBLEMS, then PUBLISH.',
     'Or start from one of the EXAMPLES and change it.',
   ] },
   ...PAGE_TOPICS.map(({ page, title, body }) => ({ id: page, group: 'PAGES' as const, title, body, page })),

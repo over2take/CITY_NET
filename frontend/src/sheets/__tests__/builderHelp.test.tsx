@@ -23,13 +23,13 @@ afterEach(() => cleanup());
 
 describe('the tour', () => {
   it('welcomes, then walks the rail top to bottom, SETUP to PUBLISH', () => {
-    expect(TOUR.map((s) => s.at)).toEqual([null, 'setup', 'words', 'features', 'rules', 'choices', 'sheet', 'try', 'publish']);
+    expect(TOUR.map((s) => s.at)).toEqual([null, 'setup', 'words', 'features', 'rules', 'choices', 'items', 'sheet', 'new_character', 'levels', 'try', 'publish']);
     const pages = new Set(BUILDER_PAGES.map((p) => p.id as string));
     for (const s of TOUR) {
       if (s.at && s.at !== 'publish') expect(pages.has(s.at), s.at).toBe(true);
       expect(s.text.length, s.title).toBeGreaterThan(40);
     }
-    expect(TOUR).toHaveLength(9);
+    expect(TOUR).toHaveLength(12);
   });
 
   it('names each page as the rail does (PARTS since 7a2a)', () => {
@@ -40,7 +40,7 @@ describe('the tour', () => {
     expect(TOUR.find((s) => s.at === 'features')!.title).toBe('PARTS');
   });
 
-  it('nine steps since CHOICES (2026-10-28; eight before), the STATS & RULES one pointing to HOUSE RULES (4j, decision 9) and the map', () => {
+  it('twelve steps since Phase 7 (ITEMS, NEW CHARACTER, LEVELS; nine since CHOICES, 2026-10-28), the STATS & RULES one pointing to HOUSE RULES (4j, decision 9) and the map', () => {
     expect(TOUR.find((s) => s.at === 'rules')!.text).toContain('HOUSE RULES');
     expect(TOUR.some((s) => (s.at as string) === 'house_rules')).toBe(false);
     expect(topicById('rules').body.join(' ')).toContain('WITH A RULE');

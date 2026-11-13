@@ -965,7 +965,7 @@ describe('the tour (4i)', () => {
   // Approved mockup builder-help (2026-10-13): eight steps the first time (nine since CHOICES, 2026-10-28), each lighting its place on
   // the rail; BACK, NEXT, SKIP THE TOUR; remembered on the server once finished or skipped.
   const dialog = () => screen.queryByRole('dialog', { name: 'The builder tour' });
-  const step = () => within(dialog()!).getByText(/^STEP \d OF 9$/).textContent;
+  const step = () => within(dialog()!).getByText(/^STEP \d+ OF 12$/).textContent;
   const litNames = () => [...sidebar().querySelectorAll('[data-lit]')].map((b) => b.getAttribute('aria-label'));
   const press = (name: string) => userEvent.click(within(dialog()!).getByRole('button', { name }));
 
@@ -973,15 +973,15 @@ describe('the tour (4i)', () => {
     tour.seen = false;
     open({ startPage: 'setup' });
     await screen.findByRole('dialog', { name: 'The builder tour' });
-    expect(step()).toBe('STEP 1 OF 9');
+    expect(step()).toBe('STEP 1 OF 12');
     expect(within(dialog()!).getByRole('heading').textContent).toBe('WELCOME TO THE SYSTEM BUILDER');
     expect(litNames()).toEqual([]);
     expect(within(dialog()!).queryByRole('button', { name: 'BACK' })).toBeNull();
     expect(document.activeElement).toBe(within(dialog()!).getByRole('button', { name: 'NEXT' }));
-    const expected = [['SETUP'], ['WORDS'], ['PARTS'], ['STATS & RULES'], ['CHOICES'], ['CHARACTER SHEET'], ['TRY IT'], ['SAVE', 'PUBLISH']];
+    const expected = [['SETUP'], ['WORDS'], ['PARTS'], ['STATS & RULES'], ['CHOICES'], ['ITEMS'], ['CHARACTER SHEET'], ['NEW CHARACTER'], ['LEVELS'], ['TRY IT'], ['SAVE', 'PUBLISH']];
     for (const [i, names] of expected.entries()) {
       await press('NEXT');
-      expect(step()).toBe(`STEP ${i + 2} OF 9`);
+      expect(step()).toBe(`STEP ${i + 2} OF 12`);
       expect(litNames()).toEqual(names);
       expect(sidebar().getAttribute('data-expanded')).toBe('true');
       expect(sidebar().style.width).toBe('220px');
@@ -1003,7 +1003,7 @@ describe('the tour (4i)', () => {
     await press('NEXT');
     await press('NEXT');
     await press('BACK');
-    expect(step()).toBe('STEP 2 OF 9');
+    expect(step()).toBe('STEP 2 OF 12');
     expect(litNames()).toEqual(['SETUP']);
     await press('SKIP THE TOUR');
     expect(dialog()).toBeNull();
@@ -1034,7 +1034,7 @@ describe('the tour (4i)', () => {
     open({ systemId: null });
     await userEvent.click(within(sidebar()).getByLabelText('HELP'));
     await userEvent.click(screen.getByRole('button', { name: 'START THE TOUR' }));
-    expect(step()).toBe('STEP 1 OF 9');
+    expect(step()).toBe('STEP 1 OF 12');
     await press('NEXT');
     // Pointing at a page that can't be opened yet is still pointing at it.
     expect(litNames()).toEqual(['SETUP']);
