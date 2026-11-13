@@ -12,6 +12,7 @@ import { getTemplate, getMaxPairs, hiddenTabsFor, npcTemplateOf, type CharacterS
 import type { SheetFieldValue, RollPick } from '../sheets/types';
 import type { ChoicesAction } from '../sheets/choicesShown';
 import type { ItemAction } from '../sheets/gearItems';
+import type { SpendAction } from '../sheets/spendShown';
 import { useChoicesRefused } from '../hooks/useChoicesRefused';
 import { useRecoveryOpen } from '../hooks/useRecoveryOpen';
 import { npcInitiativePortrait } from '../modules/initiative/npcPortrait';
@@ -327,6 +328,8 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
             onLevel: (action: Record<string, unknown>) => socket.emit('levelAction', { ...action, username: playerUsername }),
             // WEAR and ATTUNE (7e3b): the GM's ATTUNE ANYWAY and own count, for the player named.
             onItem: (action: ItemAction) => socket.emit('itemAction', { ...action, username: playerUsername }),
+            // SPEND XP (7f2c1): a purchase made, approved, declined or undone, for the player named.
+            onSpend: (action: SpendAction) => socket.emit('spendAction', { ...action, username: playerUsername }),
             onRecoverySpend: (pool: string, count: number) => socket.emit('recoverySpend', { pool, count, username: playerUsername }), recoveryOpen,
             onRestTake: (rest: string) => socket.emit('restTake', { rest, username: playerUsername }),
           } : {})}

@@ -154,7 +154,7 @@ export interface SheetField {
  *  row (one-click: rolls the row's damage dice and spends its Effort cost).
  *  'ability_list' is a dynamic add/remove list stored as JSON in a single
  *  field; each item has name, cost, attr (dropdown), die, and effect. */
-export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list' | 'cyberware' | 'encumbrance' | 'weapon_stash' | 'inventory' | 'choices' | 'rests';
+export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list' | 'cyberware' | 'encumbrance' | 'weapon_stash' | 'inventory' | 'choices' | 'rests' | 'spend';
 
 /** Configuration for the 'ability_list' section layout. */
 export interface AbilityListConfig {
@@ -307,6 +307,8 @@ export interface SheetTemplate {
   creation?: import('./newCharacterFlow').CreationShown;
   /** The XP table (7d2a): there while characters earn XP toward levels. */
   levels?: import('./xpMeter').LevelsShown;
+  /** SPEND XP's price list, by name (backend spendXp.js spendShown, 7f2c1): there while characters spend XP. */
+  spend?: import('./spendShown').SpendShown | null;
   /** A custom system's items and slots (backend choices.js itemsRenderedOf, 7e3b): WEAR and ATTUNE on the GEAR tab. */
   items?: import('./gearItems').ItemsShown;
   /** The layout an NPC's sheet is drawn with, when the system gives NPCs one of their own
