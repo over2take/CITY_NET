@@ -10,6 +10,8 @@ import { useFormulaBox } from '../hooks/useFormulaBox';
 import { HINTS } from '../sheets/builderHelp';
 import { ColumnHead, FieldName } from './HelpHint';
 import { ItemFeaturesEditor } from './FeaturesEditor';
+import { ItemTypesSection, ItemValues } from './ItemTypesSection';
+import { ownTypes, typeOf } from '../sheets/itemTypes';
 
 // The builder's ITEMS page (7e2b; approved mockup docs/mockups/items.html, 2026-11-10): SLOTS, what an item may need
 // besides being worn, each character having so many (ATTUNED, 3); and the ITEMS, each with its name, words, what its
@@ -19,6 +21,9 @@ import { ItemFeaturesEditor } from './FeaturesEditor';
 //
 // INSTALLS (7e4b; approved mockup docs/mockups/installed.html, 2026-11-11): what an item may be put in as, each costing
 // against a stat or formula, ADDS TO or TAKES FROM, up to or down to its limit; an item needing one has a COST.
+//
+// ITEM TYPES (8a2; approved mockup docs/mockups/item-types.html, 2026-11-14), above the items: ItemTypesSection.tsx; an
+// item has a TYPE and fills its columns.
 
 interface Props {
   definition: Definition;
@@ -64,6 +69,7 @@ function ItemCard({ definition, edit, item, api, open, onOpen }: Props & { item:
         style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', background: 'none', border: 0, padding: '3px 0', textAlign: 'left', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12,
           color: item.label.trim() ? 'var(--green)' : 'var(--danger)' }}>
         <span>{open ? '▾' : '▸'} {name.toUpperCase()}</span>
+        {ownTypes(definition) && <span style={tag}>{(() => { const t = typeOf(definition, item.type); return (t.one?.trim() || t.label.trim() || t.id).toUpperCase(); })()}</span>}
         <span style={tag}>{needsWords(definition, item)}</span>
         {kinds.length > 0 && <span style={{ ...small, letterSpacing: 1 }}>{features.length} {features.length === 1 ? 'FEATURE' : 'FEATURES'}</span>}
       </button>
@@ -91,6 +97,7 @@ function ItemCard({ definition, edit, item, api, open, onOpen }: Props & { item:
                 <span style={{ ...why, fontSize: 11 }}>{costWords(definition, installOf(definition, item)!)}</span>
               </span>
             </>}
+            <ItemValues definition={definition} edit={edit} api={api} item={item} />
           </div>
           <ItemFeaturesEditor definition={definition} edit={edit} item={item} api={api} />
           <div style={{ ...row, justifyContent: 'flex-end' }}>
@@ -214,6 +221,8 @@ export function ItemsPage({ definition, edit, api }: Props) {
           ? installs.map((s) => <InstallRow key={s.id} definition={definition} edit={edit} api={api} s={s} />)
           : <p style={{ ...why, fontSize: 11 }}>None: no item can need installing, and the word never shows at the table. Cyberware against System Strain, or bioware against Essence, is an install.</p>}
       </section>
+
+      <ItemTypesSection definition={definition} edit={edit} />
 
       <section aria-label="Items" style={panel}>
         <div style={row}>

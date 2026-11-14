@@ -11,6 +11,7 @@
 import type { Definition } from './systemsApi';
 import { idFor } from './setup';
 import { keptFeature, takenIds, type Feature, type FeaturePatch } from './choices';
+import { withoutReloadFrom } from './itemTypes';
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -19,7 +20,7 @@ const text = (v: unknown) => (typeof v === 'string' ? v : '');
 /** A slot: what an item may need besides being worn, and how many each character has. */
 export interface ItemSlot { id: string; label: string; count: number }
 /** An item: its name, words, what its features need (`worn` when it says nothing), and its features. */
-export interface Item { id: string; label: string; description?: string; needs?: string; cost?: number; features?: Feature[] }
+export interface Item { id: string; label: string; description?: string; needs?: string; cost?: number; features?: Feature[]; type?: string; values?: Record<string, unknown> }
 /** An install (7e4): what each costs against, ADDING TO it (`adds`, as when it says nothing) or TAKING FROM it, and its limit, a formula. */
 export interface ItemInstall { id: string; label: string; against: string; way?: 'adds' | 'takes'; limit: string }
 
@@ -109,9 +110,9 @@ export const withItem = (def: Definition, id: string, patch: { label?: string; d
   }));
 };
 
-/** An item removed, with its features. */
+/** An item removed, with its features; a COUNT reloaded from it (8a2) no longer is. */
 export const withoutItem = (def: Definition, id: string): Definition =>
-  withItems(def, itemSlots(def), itemList(def).filter((i) => i.id !== id));
+  withoutReloadFrom(withItems(def, itemSlots(def), itemList(def).filter((i) => i.id !== id)), id);
 
 /** What an item's features need, as the page offers it: CARRIED, WORN, WORN AND each slot's name, INSTALLED AS each install's. */
 export const needsChoices = (def: Definition): { id: string; label: string }[] => [

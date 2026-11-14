@@ -9,6 +9,7 @@ import { idFor, setupOf, healthLayout } from './setup';
 import { partIsOn } from './wordsFeatures';
 import { conditionList, withCondition } from './conditions';
 import { withoutRestInResting } from './recovery';
+import { withoutRefillBy } from './itemTypes';
 
 export const LIMITS = { rests: 12, name: 30, refills: 20, amount: 200 } as const;
 export const SECTION = 'section:';
@@ -117,7 +118,8 @@ export const withNewRest = (def: Definition): { definition: Definition; id: stri
 export const withoutRest = (def: Definition, id: string): Definition => {
   if (standardOf(id)) return def;
   const { [id]: _gone, ...rest } = storedOf(def);
-  let next = withoutRestInResting(withStored(def, rest), id);
+  // A COUNT it refilled (8a2) is refilled by nothing.
+  let next = withoutRefillBy(withoutRestInResting(withStored(def, rest), id), id);
   for (const r of restList(next)) {
     if (r.counts_as.includes(id)) next = withRest(next, r.id, { counts_as: r.counts_as.filter((c) => c !== id) });
   }

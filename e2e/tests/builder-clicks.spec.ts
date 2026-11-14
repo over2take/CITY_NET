@@ -152,6 +152,15 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await feature.getByRole('switch', { name: /HAS USES/ }).click();
       await feature.getByRole('button', { name: '+ MODIFIER' }).click();
       await expect(feature.getByRole('spinbutton', { name: 'Modifier 1: stops at' })).toBeVisible();
+      // ITEM TYPES (8a2): WEAPONS from its preset with a PICK ONE column too, so every kind's parts are there, and the
+      // item a WEAPON, so a field of each kind is.
+      await page.getByRole('region', { name: 'Item types' }).getByRole('group', { name: 'Add an item type' }).getByRole('button', { name: 'WEAPON', exact: true }).click();
+      const weapons = page.getByRole('region', { name: 'WEAPONS type' });
+      await weapons.getByRole('button', { name: '+ COLUMN' }).click();
+      await weapons.getByRole('combobox', { name: 'NEW COLUMN kind' }).selectOption('pick');
+      await expect(weapons.getByRole('textbox', { name: 'NEW COLUMN words' })).toBeVisible();
+      await item.getByRole('combobox', { name: 'TYPE' }).selectOption('weapons');
+      await expect(item.getByRole('textbox', { name: 'NEW ITEM DAMAGE' })).toBeVisible();
     }
     if (p === 'STATS & RULES') {
       // A group with a stat, so its table and column heads are there.
