@@ -65,7 +65,7 @@ describe('WORDS', () => {
   it('greys a term whose part is off, saying where to turn it on', () => {
     open({ format: 1, name: 'Hearth', parts: { vehicles: { on: false } }, words: { vehicle: { singular: 'MOUNT' } } });
     const vehicle = row('vehicle');
-    expect(vehicle.textContent).toContain('VEHICLES is off in FEATURES');
+    expect(vehicle.textContent).toContain('VEHICLES is off in PARTS');
     expect((within(vehicle).getByLabelText('VEHICLE one') as HTMLInputElement).disabled).toBe(true);
     expect((within(vehicle).getByLabelText('Back to the app\'s words for VEHICLE') as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByLabelText('HP one') as HTMLInputElement).disabled).toBe(false);

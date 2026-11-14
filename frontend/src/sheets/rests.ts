@@ -8,6 +8,7 @@ import type { CustomRenderSheet } from './customTemplates';
 import { idFor, setupOf, healthLayout } from './setup';
 import { partIsOn } from './wordsFeatures';
 import { conditionList, withCondition } from './conditions';
+import { withoutRestInResting } from './recovery';
 
 export const LIMITS = { rests: 12, name: 30, refills: 20, amount: 200 } as const;
 export const SECTION = 'section:';
@@ -109,13 +110,14 @@ export const withNewRest = (def: Definition): { definition: Definition; id: stri
 
 /**
  * The definition without one of the system's own rests; a standard one is only turned off. Nothing
- * is left pointing at it: other rests stop counting as it, and conditions stop ending at it (one
- * that ended at no other rest goes back to ending when removed).
+ * is left pointing at it: other rests stop counting as it, conditions stop ending at it (one
+ * that ended at no other rest goes back to ending when removed), and the recovery dice are neither
+ * spent at it nor given back by it (R1b).
  */
 export const withoutRest = (def: Definition, id: string): Definition => {
   if (standardOf(id)) return def;
   const { [id]: _gone, ...rest } = storedOf(def);
-  let next = withStored(def, rest);
+  let next = withoutRestInResting(withStored(def, rest), id);
   for (const r of restList(next)) {
     if (r.counts_as.includes(id)) next = withRest(next, r.id, { counts_as: r.counts_as.filter((c) => c !== id) });
   }

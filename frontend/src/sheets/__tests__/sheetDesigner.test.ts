@@ -29,7 +29,16 @@ const H: Definition = {
   derived: [{ id: 'save', label: 'Save', formula: '16 - @str' }],
 };
 const STARTER: CustomRenderSheet = starterSheet(H);
-const custom = (def: Definition = H) => withCustomized(def, starterSheet(def));
+/**
+ * The starter as it was before its CHARACTER tab (2026-10-31), the fixed sheet the tab and section
+ * steps below are worked on: what they do doesn't hang on how the starter is laid out.
+ */
+const threeTabs = (sheet: CustomRenderSheet): CustomRenderSheet => ({
+  ...sheet,
+  tabs: (sheet.tabs ?? []).filter((t) => t !== 'CHARACTER'),
+  sections: sheet.sections.map((s) => (s.tab === 'CHARACTER' ? { ...s, tab: 'STATS' } : s)),
+});
+const custom = (def: Definition = H) => withCustomized(def, threeTabs(starterSheet(def)));
 const problems = (def: Definition) => checkDefinition(def).problems.map((p: { where: string; message: string }) => `${p.where}: ${p.message}`);
 const ids = (def: Definition) => fieldsOn(sheetOf(def)).map((f) => f.id);
 const sections = (def: Definition) => sheetOf(def)!.sections.map((s) => `${s.tab ?? '-'}/${s.id}`);
@@ -37,8 +46,10 @@ const sections = (def: Definition) => sheetOf(def)!.sections.map((s) => `${s.tab
 describe('automatic and customized', () => {
   it('copies the starter in, which the server accepts and draws as it was', () => {
     expect(sheetOf(H)).toBeNull();
-    const def = custom();
+    const def = withCustomized(H, starterSheet(H));
     expect(sheetOf(def)).toEqual(STARTER);
+    expect(STARTER.tabs).toEqual(['CHARACTER', 'STATS', 'GEAR', 'NOTES']);
+    expect(STARTER.opens).toBe('STATS');
     expect(problems(def)).toEqual([]);
     expect(effectiveSheet(def)).toEqual(effectiveSheet(H));
   });
@@ -318,5 +329,28 @@ describe('problems', () => {
       sections: { derived: 'A whole number from 1 to 8' },
       other: ['sheet tabs: Must be a list of tab names'],
     });
+  });
+});
+
+describe('the tab a sheet opens on (2026-10-31)', () => {
+  const opening = (def: Definition) => (def.sheet as CustomRenderSheet).opens;
+  const started = () => withCustomized(H, starterSheet(H));
+
+  it('follows its tab when renamed, and not another', () => {
+    expect(opening(withTabName(started(), 'STATS', 'NUMBERS'))).toBe('NUMBERS');
+    expect(opening(withTabName(started(), 'GEAR', 'KIT'))).toBe('STATS');
+  });
+
+  it('goes back to the first when its tab is removed, and stays when another is', () => {
+    expect((withoutTab(started(), 'STATS').sheet as CustomRenderSheet)).not.toHaveProperty('opens');
+    expect(opening(withoutTab(started(), 'GEAR'))).toBe('STATS');
+    let one = started();
+    for (const t of ['CHARACTER', 'GEAR', 'NOTES']) one = withoutTab(one, t);
+    expect(opening(one)).toBe('STATS');
+    // The last tab gone, the sheet is one page, opening on nothing.
+    const page = withoutTab(one, 'STATS');
+    expect(page.sheet as CustomRenderSheet).not.toHaveProperty('tabs');
+    expect(page.sheet as CustomRenderSheet).not.toHaveProperty('opens');
+    expect(problems(page)).toEqual([]);
   });
 });

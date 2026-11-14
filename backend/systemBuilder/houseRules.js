@@ -5,7 +5,7 @@
 //     { id: 'magic', name: 'MAGIC', description: 'Characters can learn spells.', starts: false },
 //   ],
 //
-// A rule is made once, and things go under it where they live: a FEATURES part
+// A rule is made once, and things go under it where they live: a PARTS part
 // (parts.shops.only_with), a sheet section, the character sheet's or the NPC stat block's
 // (sheet.sections[].only_with), a condition (conditions.hexed.only_with), and a formula's one
 // alternative, worked out instead while its rule is on (derived[].alternative: { rule, formula }).
@@ -18,6 +18,7 @@
 // Pure: checks only. definition.js runs them; the game's choice is applied elsewhere.
 
 const { compileSystem } = require('./derived');
+const { rankedOf } = require('./ranks');
 const { STANDARD } = require('./conditions');
 
 const NAME = /^[a-z][a-z0-9_]{0,39}$/;
@@ -96,12 +97,12 @@ const checkAlternatives = (definition, ids, problems) => {
   });
   if (!withAlternative.size) return;
 
-  const base = compileSystem({ lookups: definition.lookups, derived });
+  const base = compileSystem({ lookups: definition.lookups, derived, ranked: rankedOf(definition) });
   const known = new Set((base.ok ? [] : base.problems).map((p) => `${p.where}|${p.message}`));
   const reported = new Set();
   const used = [...new Set(derived.filter((d) => isPlainObject(d) && isPlainObject(d.alternative) && ids.has(d.alternative.rule)).map((d) => d.alternative.rule))];
   for (const on of [...used.map((r) => new Set([r])), new Set(used)]) {
-    const tried = compileSystem({ lookups: definition.lookups, derived: derivedWith(derived, on) });
+    const tried = compileSystem({ lookups: definition.lookups, derived: derivedWith(derived, on), ranked: rankedOf(definition) });
     if (tried.ok) continue;
     for (const p of tried.problems) {
       // A mistake in an alternative's own formula is said where the alternative is.

@@ -1,4 +1,6 @@
 import React, { useState, useCallback } from 'react';
+import { useChoicesRefused } from '../hooks/useChoicesRefused';
+import { useRecoveryOpen } from '../hooks/useRecoveryOpen';
 import ReactDOM from 'react-dom';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
@@ -7,6 +9,7 @@ import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
 import { VehicleBadgeButton } from './VehicleBadgeButton';
 import type { SheetLinkSource } from '../sheets';
 import { canImport } from '../sheets/importable';
+import { flowState, withCreationLocks } from '../sheets/newCharacterFlow';
 import { themeRoot } from '../utils/themeRoot';
 
 // The player's own character sheet (in-game floating window). Identity is
@@ -31,13 +34,20 @@ interface CharacterSheetWindowProps {
   onOpenVehicles?: () => void;
   /** Active theme name - handed to the standalone tab so it matches. */
   currentTheme?: string;
+  /** Opens NEW_CHARACTER.EXE where they left it (7c2), from the line a sheet being made shows. */
+  onContinueCreating?: () => void;
+  /** Opens LEVEL_UP.EXE (7d3a), from LEVEL UP READY. */
+  onOpenLevelUp?: () => void;
 }
 
-export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, onOpenVehicles, currentTheme }: CharacterSheetWindowProps) {
+export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, onOpenVehicles, currentTheme, onContinueCreating, onOpenLevelUp }: CharacterSheetWindowProps) {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   const { sheet, template, handleFieldChange, handleFieldsChange, allowFumbleShield, xpRate, encumbranceEnforced, hiddenTabs, actions } =
     usePlayerSheet(socket, userName, { onRolled });
+  // Why the server last said no to a pick, a level or a use (7a3b1), under the CHOICES block.
+  const refused = useChoicesRefused(socket);
+  const recoveryOpen = useRecoveryOpen(socket);
 
   const handlePortraitUpload = useCallback(
     (file: File) => uploadSheetPortrait(adminToken || playerToken, file),
@@ -105,9 +115,15 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
       }}
       contentStyle={{ flex: 1, minHeight: 0, maxHeight: 'none', display: 'flex', flexDirection: 'column', padding: '4px 10px 0' }}
     >
+      {onContinueCreating && flowState(template, sheet?.data) !== 'none' && (
+        <button type="button" onClick={onContinueCreating}
+          style={{ background: 'none', border: '1px solid var(--warning)', color: 'var(--warning)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', padding: '3px 8px', margin: '4px 0', flexShrink: 0 }}>
+          CREATING · CONTINUE
+        </button>
+      )}
       {sheet && template ? (
         <SheetRenderer
-          template={template}
+          template={withCreationLocks(template, sheet.data)}
           data={sheet.data}
           portraitUrl={sheet.portrait_url}
           onFieldChange={handleFieldChange}
@@ -121,11 +137,21 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           onStabilize={actions.onStabilize}
           onCastSpell={actions.onCastSpell}
           onRollAbility={actions.onRollAbility}
+          onLevelUp={onOpenLevelUp}
           onResistDrain={actions.onResistDrain}
           allowFumbleShield={allowFumbleShield}
           xpRate={xpRate}
           encumbranceEnforced={encumbranceEnforced}
           hiddenTabs={hiddenTabs}
+          onChoices={(action) => socket?.emit('choicesAction', action)}
+          choicesRefused={refused}
+          onLevel={(action) => socket?.emit('levelAction', action)}
+          onItem={(action) => socket?.emit('itemAction', action)}
+          onSpend={(action) => socket?.emit('spendAction', action)}
+          onImprove={(action) => socket?.emit('improveAction', action)}
+          onRecoverySpend={(pool, count) => socket?.emit('recoverySpend', { pool, count })}
+          onRestTake={(rest) => socket?.emit('restTake', { rest })}
+          recoveryOpen={recoveryOpen}
         />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>ACCESSING RECORD...</div>
@@ -140,7 +166,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
         onClose={() => setIsImportOpen(false)}
         onApply={(fields, opts) => {
           socket?.emit('importSheetFields', {
-            fields, replace: opts?.replace, cyberware: opts?.cyberware,
+            fields, replace: opts?.replace, cyberware: opts?.cyberware, picks: opts?.picks,
           });
         }}
       />,

@@ -1,8 +1,9 @@
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { render, screen, fireEvent, act, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { AdminXpWindow } from '../XpWindow';
+import { AdminXpWindow, xpAvailable } from '../XpWindow';
+import { clearCustomTemplates, registerCustomTemplate, type CustomRender } from '../../sheets/customTemplates';
 
 /**
  * Awarding experience from the admin panel.
@@ -184,5 +185,124 @@ describe('what came back', () => {
     const { handlers } = show();
     handlers.xpAwardResult({ ok: false, reason: 'Amount must not be zero.' });
     expect(await screen.findByText('Amount must not be zero.')).toBeInTheDocument();
+  });
+});
+
+describe('a custom system (7d2a)', () => {
+  const ID = 'sys_00000000000000cc';
+  const custom = () => {
+    registerCustomTemplate({ id: ID, name: 'H', words: { xp: { short: 'Karma' } }, parts: {}, derived: [], sheet: { sections: [] }, levels: { table: { 2: 300 } } } as unknown as CustomRender);
+    return show({ system: ID });
+  };
+  const sets = (emit: ReturnType<typeof vi.fn>) => emit.mock.calls.filter((c) => c[0] === 'adminSetXp').map((c) => c[1]);
+  afterEach(() => clearCustomTemplates());
+
+  it('is offered while its characters earn XP, and not otherwise', () => {
+    registerCustomTemplate({ id: ID, name: 'H', words: {}, parts: {}, derived: [], sheet: { sections: [] }, levels: null } as unknown as CustomRender);
+    expect(xpAvailable(ID)).toBe(false);
+    registerCustomTemplate({ id: ID, name: 'H', words: {}, parts: {}, derived: [], sheet: { sections: [] }, levels: { table: { 2: 300 } } } as unknown as CustomRender);
+    expect(xpAvailable(ID)).toBe(true);
+  });
+
+  it('is named with the game\'s word', () => {
+    custom();
+    expect(screen.getByText('KARMA.EXE')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'SET_KARMA_TO' })).toBeInTheDocument();
+  });
+
+  it('gives each by default, and SPLIT says so and sends it', async () => {
+    const { emit } = custom();
+    expect(screen.getByRole('button', { name: 'EACH' })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.type(screen.getByLabelText('POINTS_EACH'), '100');
+    await userEvent.click(screen.getByRole('button', { name: 'AWARD_ALL' }));
+    expect(awards(emit)[0]).toEqual({ token: 't', usernames: ['ghost', 'nyx'], amount: 100 });
+    await userEvent.click(screen.getByRole('button', { name: 'SPLIT' }));
+    expect(screen.getByText(/^Shared between those selected/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'AWARD_ALL' }));
+    expect(awards(emit)[1]).toEqual({ token: 't', usernames: ['ghost', 'nyx'], amount: 100, split: true });
+  });
+
+  it('SET XP TO goes to those selected, once it reads and someone is', async () => {
+    const { emit } = custom();
+    const button = screen.getByRole('button', { name: 'SET_KARMA_TO' });
+    expect(button).toBeDisabled();
+    await userEvent.type(screen.getByLabelText(/^Replace what the selected/), '500');
+    expect(button).toBeDisabled();
+    await userEvent.click(screen.getByLabelText('ghost'));
+    await userEvent.click(button);
+    expect(sets(emit)).toEqual([{ token: 't', usernames: ['ghost'], value: 500 }]);
+  });
+
+  it('SET XP TO takes 0, and not a negative', async () => {
+    custom();
+    await userEvent.click(screen.getByLabelText('ghost'));
+    const box = screen.getByLabelText(/^Replace what the selected/);
+    fireEvent.change(box, { target: { value: '-5' } });
+    expect(screen.getByRole('button', { name: 'SET_KARMA_TO' })).toBeDisabled();
+    fireEvent.change(box, { target: { value: '0' } });
+    expect(screen.getByRole('button', { name: 'SET_KARMA_TO' })).not.toBeDisabled();
+  });
+
+  it('says what came of it in the game\'s word, and what wouldn\'t divide', () => {
+    const { handlers } = custom();
+    act(() => handlers.xpAwardResult({ ok: true, amount: 33, left: 1, results: [{ username: 'ghost', ok: true, xp: 33 }] }));
+    expect(screen.getByText('ghost: 33 KARMA')).toBeInTheDocument();
+    expect(screen.getByText("1 LEFT OVER: IT WOULDN'T DIVIDE")).toBeInTheDocument();
+  });
+
+  it('its level buttons give a level to take, or take one back, for those ticked (7d2b)', async () => {
+    const { emit, handlers } = custom();
+    await userEvent.click(screen.getByRole('checkbox', { name: 'ghost' }));
+    await userEvent.click(screen.getByRole('button', { name: 'LEVEL_UP' }));
+    expect(emit).toHaveBeenCalledWith('adminAdjustLevel', { token: 't', usernames: ['ghost'], delta: 1 });
+    await userEvent.click(screen.getByRole('button', { name: 'LEVEL_DOWN' }));
+    expect(emit).toHaveBeenCalledWith('adminAdjustLevel', { token: 't', usernames: ['ghost'], delta: -1 });
+    expect(screen.getByText(/LEVEL UP READY shows on their sheet/)).toBeInTheDocument();
+    act(() => handlers.xpAwardResult({ ok: true, levelChange: 1, results: [{ username: 'ghost', ok: true, level: 3, owed: 2 }] }));
+    expect(screen.getByText(/level 3 · 2 to take/)).toBeInTheDocument();
+    act(() => handlers.xpAwardResult({ ok: true, levelChange: -1, results: [{ username: 'ghost', ok: true, level: 3, owed: 0 }] }));
+    expect(screen.getByText(/level 3/).textContent).not.toContain('to take');
+  });
+
+  it('with milestone only there is no XP to give: only the level buttons', () => {
+    registerCustomTemplate({ id: ID, name: 'H', words: {}, parts: {}, derived: [], sheet: { sections: [] }, levels: { top: 5 } } as unknown as CustomRender);
+    show({ system: ID });
+    expect(screen.getByText('LEVELS.EXE')).toBeInTheDocument();
+    expect(xpAvailable(ID)).toBe(true);
+    expect(screen.getByRole('button', { name: 'LEVEL_UP' })).toBeInTheDocument();
+    for (const gone of ['AWARD_SELECTED', 'SPLIT', 'EACH']) expect(screen.queryByRole('button', { name: new RegExp(gone) }), gone).toBeNull();
+    expect(screen.queryByLabelText('POINTS_EACH')).toBeNull();
+    expect(screen.queryByLabelText(/^Replace what the selected/)).toBeNull();
+  });
+
+  it('spending XP (7f2c2): offered with no levels at all, given to spend, with no level buttons', async () => {
+    const spend = { buys: [], wait: false };
+    registerCustomTemplate({ id: ID, name: 'H', words: { xp: { short: 'Karma' } }, parts: {}, derived: [], sheet: { sections: [] }, levels: null, spend } as unknown as CustomRender);
+    expect(xpAvailable(ID)).toBe(true);
+    const { emit } = show({ system: ID });
+    expect(screen.getByText('KARMA.EXE')).toBeInTheDocument();
+    expect(screen.getByText('Each selected character gets this many, to spend. Negative takes points back.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Replace what the selected characters have with another number. What they bought stays.')).toBeInTheDocument();
+    for (const gone of ['LEVEL_UP', 'LEVEL_DOWN']) expect(screen.queryByRole('button', { name: gone }), gone).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'SPLIT' }));
+    expect(screen.getByText('Shared between those selected, in whole points, to spend. Negative takes points back.')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('POINTS_TO_SPLIT'), '20');
+    await userEvent.click(screen.getByRole('button', { name: 'AWARD_ALL' }));
+    expect(awards(emit)[0]).toEqual({ token: 't', usernames: ['ghost', 'nyx'], amount: 20, split: true });
+    cleanup();
+    // With levels too: both said, and the level buttons there.
+    registerCustomTemplate({ id: ID, name: 'H', words: {}, parts: {}, derived: [], sheet: { sections: [] }, levels: { table: { 2: 300 } }, spend } as unknown as CustomRender);
+    show({ system: ID });
+    expect(screen.getByText('Each selected character gets this many, to spend. Negative takes points back, but never a level.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Replace what the selected characters have with another number. Their level stays. What they bought stays.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'LEVEL_UP' })).toBeInTheDocument();
+  });
+
+  it('Cities Without Number stays as it was: EACH only, no setting it', () => {
+    show();
+    expect(screen.getByText('XP.EXE')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'SPLIT' })).toBeNull();
+    expect(screen.queryByLabelText(/^Replace what the selected/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'LEVEL_UP' })).toBeInTheDocument();
   });
 });

@@ -22,7 +22,8 @@
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 const LIMITS = { groups: 20, stats: 100, label: 40 };
 const GROUP_KEYS = new Set(['id', 'label', 'stats']);
-const STAT_KEYS = new Set(['id', 'label', 'min', 'max', 'tie']);
+// A stat may be held as a rank (7f1a, ranks.js): `rank`, its list, and `atStart`, the highest step at the start.
+const STAT_KEYS = new Set(['id', 'label', 'min', 'max', 'tie', 'rank', 'atStart']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 

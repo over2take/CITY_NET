@@ -199,7 +199,7 @@ describe('TEST ROLL', () => {
     expect(testRoll).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'Hearth' }), 'skill', 'lore', ['forward'], []);
     expect(within(test).getByTestId('test-dice').textContent).toBe('45');
     // 4 + 5 = 9, LORE 3 and FORWARD 1.
-    expect(within(test).getByTestId('test-working').textContent).toBe('[4 5 = 9 + 4 = 13] — FULL SUCCESS');
+    expect(within(test).getByTestId('test-working').textContent).toBe('[(4, 5) | 9 + 4 = 13] — FULL SUCCESS');
   });
 
   it('shows what a change would cost at the table, and the server\'s refusal when there is one', async () => {
@@ -241,7 +241,7 @@ describe('TEST ROLL', () => {
     await userEvent.click(within(test).getByRole('button', { name: 'TEST ROLL ▸' }));
     expect(testRoll).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'Hearth' }), 'skill', 'fight', [], ['hurt']);
     // 4 + 5 = 9, FIGHT 2, HURT -1: 10, a full success all the same.
-    await waitFor(() => expect(within(test).getByTestId('test-working').textContent).toBe('[4 5 = 9 + 2 - 1 (HURT) = 10] — FULL SUCCESS'));
+    await waitFor(() => expect(within(test).getByTestId('test-working').textContent).toBe('[(4, 5) | 9 + 2 - 1 (HURT) = 10] — FULL SUCCESS'));
     // Off again, nothing is sent.
     await userEvent.click(within(under).getByRole('switch', { name: 'HURT · ALL ROLLS −1' }));
     await userEvent.click(within(test).getByRole('button', { name: 'TEST ROLL ▸' }));

@@ -122,4 +122,4 @@ const rollTier = (tier, level, fields, limits, rng = cryptoRng) => {
   return { level: levelOf(level), hp, defense, values };
 };
 
-module.exports = { rollBox, rollAmount, rollTier, boxProblem, levelOf, LIMITS };
+module.exports = { rollBox, rollAmount, rollTier, boxProblem, levelOf, prepare, LIMITS };

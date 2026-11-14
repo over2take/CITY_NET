@@ -48,11 +48,13 @@ import { useWords, asLabel, type WordLookup } from '../sheets/words';
 import { useParts, partOn, type PartLookup } from '../sheets/parts';
 import { currenciesFor, isUploadedIcon, BUILT_IN_ICONS, type Currency } from '../sheets/currencies';
 import { useCustomTemplate, refreshCustomTemplate, isCustomSystem } from '../sheets/customTemplates';
+import { getTemplate } from '../sheets';
 import { useHouseRules, changedRules } from '../sheets/houseRules';
 import { systemsApi } from '../sheets/systemsApi';
 import type { HouseRuleState } from '../sheets/types';
 import { TableConditionsPanel } from './TableConditionsPanel';
 import { GameRestsPanel } from './GameRestsPanel';
+import { GameFolder } from './GameFolder';
 import { npcsOnMap } from '../sheets/restCalls';
 import { shortfallRule } from '../sheets/moneyText';
 import { SYSTEMS_CHANGED_EVENT } from '../sheets/systemsLibrary';
@@ -64,11 +66,12 @@ function BattleAdminPanel({
   token, isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly,
   tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, locations, refreshLocations,
   handleSaveDefault, handleLoadDefault, setIsAdminPayOpen, setIsAdminXpOpen, setIsCatalogueOpen, setIsGiveOpen, secureModeEnabled, onLogout,
-  globalSettings, fetchGlobalSettings, onOpenNpcLibrary, onOpenSystems, activeUsers, isPrimaryAdmin,
+  globalSettings, fetchGlobalSettings, onOpenNpcLibrary, onOpenSystems, activeUsers, isPrimaryAdmin, socket,
 }: any) {
   const [tab, setTab] = useState<'battle_map' | 'game'>('battle_map');
   // A custom system with the bank off has no pay or currency (3b2b).
   const bankOn = useParts(globalSettings?.game_system)('bank');
+  const bankWord = asLabel(useWords(globalSettings?.game_system)('bank', 'singular', 'BANK'));
 
   const resolvedBattleMapScale = (() => {
     if (tempBattleMapScale !== null) return tempBattleMapScale;
@@ -148,17 +151,26 @@ function BattleAdminPanel({
       </>}
 
       {tab === 'game' && <>
-        <TTRPGSystemPanel token={token} mainAdmin={isPrimaryAdmin} onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers}
-          npcs={npcsOnMap(locations || [], 'battle_map', activeBattleMapData)} />
+        <TTRPGSystemPanel token={token} mainAdmin={isPrimaryAdmin} onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} />
+        {/* A custom game's rests (4f5), in play rather than setup, so out of TTRPG_SYSTEM (R2b). */}
+        {isCustomSystem(globalSettings?.game_system) && (
+          <GameFolder id="rests" name="RESTS">
+            <GameRestsPanel token={token} system={globalSettings.game_system} npcs={npcsOnMap(locations || [], 'battle_map', activeBattleMapData)} socket={socket} />
+          </GameFolder>
+        )}
         {/* Money, which a custom system with the bank off does not have (3b2b). */}
-        {bankOn && <>
-          <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} system={globalSettings?.game_system} />
-          <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
-        </>}
+        {bankOn && (
+          <GameFolder id="bank" name={bankWord}>
+            <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} system={globalSettings?.game_system} />
+            <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%' }}>PAY_PLAYERS</button>
+            <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
+          </GameFolder>
+        )}
+        {/* A line under the folders, before what the GM hands out. */}
+        <div aria-hidden style={{ margin: '10px 0 5px', borderTop: '1px solid var(--green)' }} />
         {giveAvailable(globalSettings?.game_system) && setIsGiveOpen && (
           <button onClick={() => setIsGiveOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '5px' }}>GIVE_ITEM</button>
         )}
-        <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
       </>}
     </div>
   );
@@ -214,7 +226,7 @@ export function AdminPanel({
         handleSaveDefault={handleSaveDefault} handleLoadDefault={handleLoadDefault}
         setIsAdminPayOpen={setIsAdminPayOpen} setIsAdminXpOpen={setIsAdminXpOpen} setIsCatalogueOpen={setIsCatalogueOpen} setIsGiveOpen={setIsGiveOpen} secureModeEnabled={secureModeEnabled} onLogout={onLogout}
         globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings}
-        onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} isPrimaryAdmin={isPrimaryAdmin}
+        onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} isPrimaryAdmin={isPrimaryAdmin} socket={socketRef.current}
       />
     );
   }
@@ -1056,13 +1068,24 @@ export function AdminPanel({
 
           {adminTab === 'game' && (
             <>
-              <TTRPGSystemPanel token={token} mainAdmin={isPrimaryAdmin} onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers}
-                npcs={npcsOnMap(locations || [], view, activeBattleMapData)} />
-              {/* Money, which a custom system with the bank off does not have (3b2b). */}
-              {bankOn && <>
-                <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} system={gameSystem} />
-                <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '10px' }}>PAY_PLAYERS</button>
-              </>}
+              <TTRPGSystemPanel token={token} mainAdmin={isPrimaryAdmin} onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} />
+              {/* A custom game's rests (4f5), in play rather than setup, so out of TTRPG_SYSTEM (R2b). */}
+              {isCustomSystem(gameSystem) && (
+                <GameFolder id="rests" name="RESTS">
+                  <GameRestsPanel token={token} system={gameSystem} npcs={npcsOnMap(locations || [], view, activeBattleMapData)} socket={socketRef.current} />
+                </GameFolder>
+              )}
+              {/* Money, which a custom system with the bank off does not have (3b2b): a folder, the
+                  bank's sounds in it, that the GM can shut to save room (the user, 2026-10-30). */}
+              {bankOn && (
+                <GameFolder id="bank" name={asLabel(word('bank', 'singular', 'BANK'))}>
+                  <CurrencyIconPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} system={gameSystem} />
+                  <button onClick={() => setIsAdminPayOpen(true)} className="utility-btn" style={{ width: '100%' }}>PAY_PLAYERS</button>
+                  <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
+                </GameFolder>
+              )}
+              {/* A line under the folders: what the GM hands out and what it is worth below (the user, 2026-10-30). */}
+              <div aria-hidden style={{ margin: '10px 0 5px', borderTop: '1px solid var(--green)' }} />
               {/* Beside PAY_PLAYERS because it is the same gesture at the end of a
                   session, and deliberately named for what it does: that one splits a pot,
                   this one gives each character the same number.
@@ -1070,7 +1093,7 @@ export function AdminPanel({
                   Improvement Points and Shadowrun spends Karma - rather than offering a
                   button whose only outcome is a window saying no. */}
               {xpAvailable(globalSettings['game_system']) && (
-                <button onClick={() => setIsAdminXpOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '5px' }}>AWARD_EXPERIENCE</button>
+                <button onClick={() => setIsAdminXpOpen(true)} className="utility-btn" style={{ width: '100%', marginTop: '5px' }}>{isCustomSystem(globalSettings['game_system']) && !getTemplate(globalSettings['game_system']).levels?.table && !getTemplate(globalSettings['game_system']).spend ? 'LEVEL_UP_PLAYERS' : 'AWARD_EXPERIENCE'}</button>
               )}
               {/* Beside PAY_PLAYERS, the other way the GM hands things out (4g4). Free: shops and the
                   bank needn't be on, only GIVE ITEM itself. */}
@@ -1097,7 +1120,6 @@ export function AdminPanel({
                   style={{ width: '100%', marginTop: '8px' }}
                 >{asLabel(word('shop', 'singular', 'SHOP'))}_CATALOGUES</button>
               )}
-              <BankSoundsPanel token={token} globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings} />
               <div style={{marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px'}}>
                 <button className="utility-btn danger-btn" style={{width: '100%'}} onClick={() => setPurgeConfirm({ label: 'CLEAR ALL CHAT HISTORY?', onConfirm: async () => { await fetch('/api/chat/purge', { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } }); } })}>PURGE_CHAT_HISTORY</button>
                 <button className="utility-btn danger-btn" style={{marginTop: '5px', width: '100%'}} onClick={() => setPurgeConfirm({ label: 'CLEAR ALL DICE ROLL HISTORY?', onConfirm: () => { socketRef.current.emit('purgeDiceHistory', { token }); setAdminAlert("DICE ROLL HISTORY CLEARED"); } })}>PURGE_ROLL_HISTORY</button>
@@ -2357,10 +2379,8 @@ const SR6_HOUSE_RULES: HouseRuleDef[] = [
   },
 ];
 
-function TTRPGSystemPanel({ token, mainAdmin, onOpenNpcLibrary, onOpenSystems, activeUsers, npcs }: {
+function TTRPGSystemPanel({ token, mainAdmin, onOpenNpcLibrary, onOpenSystems, activeUsers }: {
   token: string; onOpenNpcLibrary?: () => void; activeUsers?: any[];
-  /** The NPC tokens on the map being viewed, for a custom game's rests (4f5). */
-  npcs?: { id: number; name: string }[];
   /** The main admin: changes a built-in game's own conditions (the server's route is theirs alone). */
   mainAdmin?: boolean;
   /** Opens the system builder on MY SYSTEMS; the main admin's alone, so absent for a granted editor. */
@@ -2408,7 +2428,7 @@ function TTRPGSystemPanel({ token, mainAdmin, onOpenNpcLibrary, onOpenSystems, a
 
   return (
     <div style={{ marginTop: '10px', borderTop: '1px solid var(--green)', paddingTop: '10px' }}>
-      <button className="utility-btn" style={{ width: '100%' }} onClick={() => setOpen(!open)}>
+      <button className="utility-btn" style={{ width: '100%', borderStyle: 'solid' }} onClick={() => setOpen(!open)}>
         {open ? '▾' : '▸'} TTRPG_SYSTEM
       </button>
       {open && (
@@ -2432,8 +2452,7 @@ function TTRPGSystemPanel({ token, mainAdmin, onOpenNpcLibrary, onOpenSystems, a
           ]} />
           {/* A built-in game's own conditions (4e2c2); a custom system's are edited in the builder. */}
           {mainAdmin && !isCustomSystem(system) && <TableConditionsPanel token={token} system={system} />}
-          {/* A custom game's rests (4f5); a built-in game's are its own buttons below. */}
-          {isCustomSystem(system) && <GameRestsPanel token={token} system={system} npcs={npcs ?? []} />}
+
           {system === 'shadowrun_6e' && (() => {
             const onlinePlayers = (activeUsers || []).filter((u: any) => !u.isAdmin && !u.isNPC).map((u: any) => u.userName);
             return (

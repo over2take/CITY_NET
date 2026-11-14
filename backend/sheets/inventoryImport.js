@@ -52,4 +52,31 @@ const normaliseInventory = (mapped) => {
   else delete mapped.inventory;
 };
 
-module.exports = { parseInventoryLine, normaliseInventory };
+/** An inventory however it is held, as a list of rows. */
+const rowsOf = (value) => {
+  let v = value;
+  if (typeof v === 'string') {
+    try { v = JSON.parse(v); } catch { return []; }
+  }
+  return Array.isArray(v) ? v.filter((r) => r && typeof r === 'object') : [];
+};
+
+/**
+ * What an upload's inventory comes to on a custom system's sheet (7c6; the user's call of 2026-11-07): an upload
+ * is king of everything but this, which it adds to, as they can fix it on the sheet and a lost item can't be
+ * got back. One of the same name stacks onto a line that is carried; a stashed line is left alone, as buying
+ * leaves it (shops/placement.js).
+ */
+const inventoryAdded = (held, incoming) => {
+  const lines = rowsOf(held).map((r) => ({ ...r }));
+  for (const item of rowsOf(incoming)) {
+    const name = String(item.name ?? '').trim().toLowerCase();
+    const same = lines.find((l) => String(l.name ?? '').trim().toLowerCase() === name && l.carry !== 'stash');
+    const qty = Math.max(1, Math.floor(Number(item.qty)) || 1);
+    if (same) same.qty = Math.max(1, Math.floor(Number(same.qty)) || 1) + qty;
+    else lines.push({ ...item });
+  }
+  return JSON.stringify(lines);
+};
+
+module.exports = { parseInventoryLine, normaliseInventory, inventoryAdded };

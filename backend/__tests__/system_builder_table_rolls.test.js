@@ -104,18 +104,18 @@ describe('a field rolled', () => {
     expect(r.ok).toBe(true);
     expect(r.roll).toBe('skill');
     expect(r.total).toBe(12);
-    expect(r.historyText).toBe('Kestrel rolled Skill check (Fight) [4 5 = 9 + 3 = 12] — FULL');
+    expect(r.historyText).toBe('Kestrel rolled Skill check (Fight) [(4, 5) | 9 + 3 = 12] — FULL');
     expect([r.results, r.diceSides]).toEqual([{ 6: [4, 5] }, {}]);
   });
 
   it('rolls another of its rolls when asked, and none it doesn\'t have', () => {
-    expect(roll({ fieldId: 'fight', rollId: 'brawl' }).historyText).toBe('Kestrel rolled Brawl (Fight) [4 = 4 + 2 = 6]');
+    expect(roll({ fieldId: 'fight', rollId: 'brawl' }).historyText).toBe('Kestrel rolled Brawl (Fight) [4 + 2 = 6]');
     expect(roll({ fieldId: 'fight', rollId: 'check' })).toEqual({ ok: false, error: 'That field has no such roll' });
     expect(roll({ fieldId: 'name' }).ok).toBe(false);
   });
 
   it('takes changes picked, and ones it hasn\'t ignored', () => {
-    expect(roll({ fieldId: 'lore', chosen: ['forward'] }).historyText).toBe('Kestrel rolled Skill check (Lore) (Forward) [4 5 = 9 + 4 = 13] — FULL');
+    expect(roll({ fieldId: 'lore', chosen: ['forward'] }).historyText).toBe('Kestrel rolled Skill check (Lore) (Forward) [(4, 5) | 9 + 4 = 13] — FULL');
     expect(roll({ fieldId: 'lore', chosen: ['nonsense', 7] }).ok).toBe(true);
   });
 
@@ -144,9 +144,9 @@ describe('a field rolled', () => {
 
   it('names a target met or missed, a natural, an NPC rolled for, and kept and dropped dice', () => {
     const save = rollField({ definition: HEARTH, data: SHEET, fieldId: 'save', rng: d(20, 17), who: 'Kestrel', forName: 'Rex' });
-    expect(save.historyText).toBe('Kestrel rolled Save (Physical save) for Rex [17 = 17] — vs 15: SUCCESS');
+    expect(save.historyText).toBe('Kestrel rolled Save (Physical save) for Rex [17] — vs 15: SUCCESS');
     const adv = rollField({ definition: HEARTH, data: SHEET, fieldId: 'str', chosen: ['advantage'], rng: d(20, 20, 3), who: 'Kestrel' });
-    expect(adv.historyText).toBe('Kestrel rolled Ability check (Strength) (Advantage) [20 (3) = 20 + 1 = 21] — NATURAL 20');
+    expect(adv.historyText).toBe('Kestrel rolled Ability check (Strength) (Advantage) [(20, 3 dropped) | 20 + 1 = 21] — NATURAL 20');
   });
 
   it('sends named dice and Fate dice to the tray under their own names, with their sizes', () => {
@@ -154,25 +154,25 @@ describe('a field rolled', () => {
     const r = rollField({ definition: vamp, data: { ...SHEET, str: 3, hunger: 1 }, fieldId: 'str', rng: d(10, 7, 2, 10), who: 'K' });
     expect([r.results, r.diceSides]).toEqual([{ 10: [7, 2], Hunger: [10] }, { Hunger: 10 }]);
     // 7 and the Hunger 10 are successes; nothing is added, so the dice's count is the total.
-    expect(r.historyText).toBe('K rolled Pool (Strength) [7 (2) 10 Hunger = 2]');
+    expect(r.historyText).toBe('K rolled Pool (Strength) [(7, 2 miss, 10 Hunger) = 2]');
     const fate = { ...HEARTH, rolls: [{ id: 'f', label: 'Fate', dice: [{ count: '4', sides: FATE }], by: ['str'] }] };
     const f = rollField({ definition: fate, data: SHEET, fieldId: 'str', rng: () => 0.9, who: 'K' });
     expect([f.results, f.diceSides]).toEqual([{ dF: [1, 1, 1, 1] }, { dF: 6 }]);
-    expect(f.historyText).toBe('K rolled Fate (Strength) [+ + + + = 4]');
+    expect(f.historyText).toBe('K rolled Fate (Strength) [(+, +, +, +) = 4]');
   });
 
   it('adds a condition\'s modifier on all rolls as its own named term, judged with it (6b3b)', () => {
     const on = (...ids) => conditionsOf(HEARTH).filter((c) => ids.includes(c.id));
     const hurt = roll({ fieldId: 'fight', conditions: on('hurt', 'poisoned') });
-    expect(hurt.historyText).toBe('Kestrel rolled Skill check (Fight) [4 5 = 9 + 3 - 1 (HURT) = 11] — FULL');
+    expect(hurt.historyText).toBe('Kestrel rolled Skill check (Fight) [(4, 5) | 9 + 3 - 1 (HURT) = 11] — FULL');
     expect(hurt.total).toBe(11);
     // Lands it a band lower: 4 + 2, + Lore 3 and Wits' 0, - 1 is 8, a Cost.
     const low = rollField({ definition: HEARTH, data: SHEET, fieldId: 'lore', rng: d(6, 4, 2), who: 'K', conditions: on('hurt') });
-    expect(low.historyText).toBe('K rolled Skill check (Lore) [4 2 = 6 + 3 - 1 (HURT) = 8] — COST');
+    expect(low.historyText).toBe('K rolled Skill check (Lore) [(4, 2) | 6 + 3 - 1 (HURT) = 8] — COST');
     // With nothing else added, the dice's own value is still said.
     expect(rollField({ definition: HEARTH, data: SHEET, fieldId: 'save', rng: d(20, 15), who: 'K', conditions: on('hurt') }).historyText)
-      .toBe('K rolled Save (Physical save) [15 = 15 - 1 (HURT) = 14] — vs 15: FAILURE');
-    expect(roll({ fieldId: 'fight', conditions: on('poisoned') }).historyText).toBe('Kestrel rolled Skill check (Fight) [4 5 = 9 + 3 = 12] — FULL');
+      .toBe('K rolled Save (Physical save) [15 - 1 (HURT) = 14] — vs 15: FAILURE');
+    expect(roll({ fieldId: 'fight', conditions: on('poisoned') }).historyText).toBe('Kestrel rolled Skill check (Fight) [(4, 5) | 9 + 3 = 12] — FULL');
   });
 
   it('reads only modifiers on all rolls, each named by the condition\'s short name, or its name', () => {
@@ -207,12 +207,27 @@ describe('the log line on its own', () => {
   it('says what came of a roll in the table\'s order', () => {
     const said = describeRoll({ groups: [{ sides: 6, faces: [{ value: 6, kept: true }, { value: 3, kept: false }] }], dice: 6, add: -1, total: 5,
       target: 6, success: false, band: 'Partial', natural: { label: 'Six' }, matches: [{ label: 'Pair', sets: 1 }], glitch: 'Glitch', effects: ['Messy'], changes: ['Push'] });
-    expect(said).toEqual({ working: '6 (3) = 6 - 1 = 5', tags: ' — vs 6: FAILURE · PARTIAL · SIX · PAIR · GLITCH · MESSY', changes: ' (Push)',
+    expect(said).toEqual({ working: '(6, 3 dropped) | 6 - 1 = 5', tags: ' — vs 6: FAILURE · PARTIAL · SIX · PAIR · GLITCH · MESSY', changes: ' (Push)',
       board: { outcome: 'vs 6: FAILURE · PARTIAL · SIX · PAIR · GLITCH · MESSY' } });
     const termed = { groups: [{ sides: 6, faces: [{ value: 6, kept: true }] }], dice: 6, add: 0, terms: [{ label: 'HURT', amount: -1 }, { label: 'BLESS', amount: 2 }], total: 7,
       target: null, success: null, band: null, natural: null, matches: [], glitch: null, effects: [], changes: [] };
-    expect(describeRoll(termed).working).toBe('6 = 6 - 1 (HURT) + 2 (BLESS) = 7');
+    expect(describeRoll(termed).working).toBe('6 - 1 (HURT) + 2 (BLESS) = 7');
     expect(describeRoll(termed).board).toBeNull();
+  });
+
+  it('the sum as the user put it: one die bare, several in a group before a |, what wasn\'t counted said (2026-11-11)', () => {
+    const plain = { target: null, success: null, band: null, natural: null, matches: [], glitch: null, effects: [], changes: [], terms: [] };
+    const say = (faces, more) => describeRoll({ ...plain, groups: [{ sides: 6, faces }], ...more }).working;
+    expect(say([{ value: 3, kept: true }], { dice: 3, add: 13, total: 16 })).toBe('3 + 13 = 16');
+    expect(say([{ value: 3, kept: true }], { dice: 3, add: 0, total: 3 })).toBe('3');
+    expect(say([{ value: 4, kept: true }, { value: 2, kept: true }], { dice: 6, add: 13, total: 19 })).toBe('(4, 2) | 6 + 13 = 19');
+    expect(say([{ value: 4, kept: true }, { value: 2, kept: true }], { dice: 6, add: 0, total: 6 })).toBe('(4, 2) = 6');
+    // Counting successes: one die is still said, as its count isn't what it shows; one that isn't a success, a miss.
+    expect(say([{ value: 5, kept: true }], { read: 'count', dice: 1, add: 0, total: 1 })).toBe('(5) = 1');
+    expect(say([{ value: 5, kept: true }, { value: 2, kept: false }], { read: 'count', dice: 1, add: 0, total: 1 })).toBe('(5, 2 miss) = 1');
+    // A die taken away keeps its minus.
+    expect(say([{ value: 3, kept: true, minus: true }], { dice: -3, add: 0, total: -3 })).toBe('-3');
+    expect(say([], { dice: 0, add: 2, total: 2 })).toBe('no dice | 0 + 2 = 2');
   });
 });
 
@@ -262,7 +277,7 @@ describe('rolling at the table, through the socket', () => {
     kes.handlers.requestSheetRoll({ fieldId: 'fight' });
     const roll = await untilValue(() => rolled(kes)[0], Boolean, { label: 'a roll' });
     // The roller is named as their own sheet names them, as for every roll.
-    expect(roll.data.historyString).toMatch(/^Kestrel rolled Skill check \(Fight\) \[\d \d = \d+ \+ 3 = \d+\] — (MISS|COST|FULL)$/);
+    expect(roll.data.historyString).toMatch(/^Kestrel rolled Skill check \(Fight\) \[\(\d, \d\) \| \d+ \+ 3 = \d+\] — (MISS|COST|FULL)$/);
     expect(roll.data.total).toBe(roll.data.results['6'].reduce((a, b) => a + b, 0) + 3);
     expect((await get(db, 'SELECT total, historyString FROM dice_rolls')).historyString).toBe(roll.data.historyString);
     // The tray's board is told what it came to, as the log ends (6c4d1).
@@ -307,7 +322,7 @@ describe('rolling at the table, through the socket', () => {
     const kes = await connect('kes');
     kes.handlers.requestSheetRoll({ fieldId: 'fight', rollId: 'brawl' });
     const roll = await untilValue(() => rolled(kes)[0], Boolean, { label: 'a roll' });
-    expect(roll.data.historyString).toMatch(/^Kestrel rolled Brawl \(Fight\) \[\d = \d \+ 2 - 1 \(HURT\) = \d+\]$/);
+    expect(roll.data.historyString).toMatch(/^Kestrel rolled Brawl \(Fight\) \[\d \+ 2 - 1 \(HURT\) = \d+\]$/);
     expect(roll.data.total).toBe(roll.data.results['6'][0] + 1);
     expect(roll.data.modifiers).toEqual([2, -1]);
 
@@ -327,7 +342,7 @@ describe('rolling at the table, through the socket', () => {
     const kes = await connect('kes');
     kes.handlers.requestSheetRoll({ fieldId: 'fight', rollId: 'brawl' });
     const roll = await untilValue(() => rolled(kes)[0], Boolean, { label: 'a roll' });
-    expect(roll.data.historyString).toMatch(/^Kestrel rolled Brawl \(Fight\) \[\d = \d \+ 2 = \d+\]$/);
+    expect(roll.data.historyString).toMatch(/^Kestrel rolled Brawl \(Fight\) \[\d \+ 2 = \d+\]$/);
   });
 });
 
@@ -466,7 +481,7 @@ describe('a system\'s own dice at the table (6c1b)', () => {
 
   it('a number with its sign on a die with any below 0, summed as any roll is', () => {
     const r = rollField({ definition: DICED, data: SHEET, fieldId: 'lore', rng: faces([1, 3], [2, 3], [3, 3]), who: 'K' });
-    expect(r.historyText).toBe('K rolled Fated (Lore) [+1 0 -1 = 0 + 3 = 3]');
+    expect(r.historyText).toBe('K rolled Fated (Lore) [(+1, 0, -1) | 0 + 3 = 3]');
     expect(r.results).toEqual({ dF: ['+1', '0', '-1'] });
   });
 });

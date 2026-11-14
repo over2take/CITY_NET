@@ -1,0 +1,357 @@
+// A character's picks on their sheet, as logic (7a3b1; approved mockup docs/mockups/builder-choices.html,
+// 2026-10-27). The lists come in the render copy, in words (backend choices.js choicesShown); the
+// character's own picks, levels and uses come in their sheet, worked out by the server on every save
+// (choices.js workedOf, under WORKED_KEY). Nothing here works a number out: the server does, and the
+// sheet only draws what it says. Pure, so the CHOICES block (components/ChoicesSection.tsx) only draws.
+//
+// What the picks do to the numbers shows on the fields themselves (7a3b2, choiceEffects): the badge the
+// sheet already draws for CWN chrome, the value with its bonuses and where each came from (14 → 16,
+// Hardy +2), from what the server says each modifier came from.
+//
+// Lists inside lists (7a5a2; approved mockup docs/mockups/nested-choices.html, 2026-10-28): a list
+// picked THROUGH FEATURES isn't a block of its own; its picks hang under the feature that opened them
+// (underPick), with room for more while the server says so (worked.opens). A pick whose feature locked
+// again is kept and shown waiting. A list EVERYONE HAS has nothing to pick: its options are held, at
+// the character's level.
+
+import type { SheetEffects, FieldEffect, ModSource } from './cyberwareEffects';
+import type { SheetTemplate } from './types';
+
+/** An INCREASE as the server shows it (7d6b; backend choices.js increaseShown): its points, the most on one, its stats by name, where they stop. */
+export interface IncreaseShown { points: number; most: number; /** A stat held as a rank (7f1c2) with its ranks by name. */ stats: { id: string; label: string; ranks?: string[] }[]; cap?: number; /** OR A FEAT INSTEAD (7d6c): the list offered. */ instead?: string }
+export interface FeatureShown {
+  id: string; label: string; text?: string; at?: number;
+  modifies?: string[]; uses?: { refill: string | null }; rolls?: string[]; changes?: string[]; opens?: string;
+  /** How many picks it opens (7a5a): 1 when it says nothing. */
+  opensCount?: number;
+  increase?: IncreaseShown;
+}
+/** An option as the sheet draws it; on a list with a table, the roll that gives it (7a5b2). */
+export interface OptionShown { id: string; label: string; description?: string; needs?: string; roll?: string; gives?: GiftsShown; features: FeatureShown[] }
+/** What holding an option gives a new character (7c4e), as the server says it: money only with the bank on. */
+export interface GiftsShown { items?: { name: string; qty: number }[]; money?: GiftMoneyShown[] }
+export interface GiftMoneyShown { id: string; name: string; how: 'number' | 'roll'; amount?: number; each?: string }
+/** How a list is picked (backend choices.js PICKED). */
+export type Picked = 'own' | 'features' | 'both' | 'everyone';
+/** How players pick from a list with a table (backend choices.js PLAYERS). */
+export type Players = 'hand' | 'either' | 'roll';
+/** A list as the sheet draws it; with a table to roll on, its dice, and how players pick (7a5b2). */
+export interface ChoiceListShown { id: string; one: string; many: string; picks: number | 'any'; again: boolean; levelled: boolean; picked?: Picked; table?: string; players?: Players; options: OptionShown[] }
+
+/** What the server worked out of a character's picks on their last save (backend choices.js workedOf). */
+export interface Worked {
+  /** Every pick kept: `from` the feature it was picked under, `waiting` when that no longer counts. */
+  picks: { list: string; option: string; level?: number; from?: string; waiting?: true; locked?: true; roll?: number }[];
+  /** Each unlocked feature opening a list picked through features, and how many it gives and has; `instead` a list an increase offers (7d6c). */
+  opens: { feature: string; list: string; count: number; used: number; instead?: true }[];
+  levels: Record<string, number>;
+  /** 7e1: what a bonus really gave (`got`) where a cap (`stop`) cut it, and AT LEAST (`least`). */
+  from: Record<string, { feature: string; amount: number; got?: number; least?: true; stop?: number }[]>;
+  uses: Record<string, { max: number; spent: number }>;
+  unmet: string[];
+  /** The recovery dice (R2b), in the sheet's words, with the character's pools; null without. */
+  recovery: RecoveryWorked | null;
+  /** Each unlocked INCREASE with nothing spent and no pick taken in its place (7d7b), by feature id. */
+  increasesOpen: string[];
+}
+
+/** One pool of recovery dice: a class's die and how many, or a formula's count of the largest die. */
+export interface RecoveryPool { id: string; label: string; die: number; total: number; spent: number }
+/** The recovery dice as a save writes them (backend recovery.js recoveryShown, runtime.js). */
+export interface RecoveryWorked { name: string; heals: string; spentAt: string[] | 'any'; spend: 'any' | 'gm'; pools: RecoveryPool[] }
+
+/** Where a save writes it (backend choices.js WORKED_KEY). */
+export const WORKED_KEY = '_worked';
+
+/** An action on the picks, as the socket takes it (backend systemBuilder/picking.js). */
+export type ChoicesAction =
+  | { kind: 'pick'; list: string; option: string; from?: string }
+  | { kind: 'drop'; list: string; option: string }
+  | { kind: 'clear'; list: string; option?: string; from?: string }
+  | { kind: 'level'; list: string; option: string; level: number }
+  | { kind: 'use'; feature: string; spent: number }
+  | { kind: 'recovery'; pool: string; spent: number }
+  | { kind: 'roll'; list: string; from?: string; again?: string };
+
+/** Where a sheet keeps what ROLL FOR IT last rolled on each list (backend choices.js ROLLED_KEY). */
+export const ROLLED_KEY = '_rolled';
+
+/** What ROLL FOR IT last rolled on a list (under the feature `from`), as the sheet keeps it, or null. */
+export const rolledOf = (data: unknown, list: string, from?: string): { option: string | null; roll: number } | null => {
+  const all = isObject(data) && isObject(data[ROLLED_KEY]) ? data[ROLLED_KEY] as Record<string, unknown> : {};
+  const r = all[from ? `${list}@${from}` : list];
+  return isObject(r) && Number.isInteger(r.roll) ? { option: typeof r.option === 'string' ? r.option : null, roll: r.roll as number } : null;
+};
+
+/**
+ * What a list's table offers just now (7a5b2; the user's flow of 2026-11-06): whether there is a button and
+ * what it says (ROLL AGAIN for the GM over a roll waiting), whether a player has used theirs, the option a
+ * roll waiting landed on (marked TAKE IT, as only one they don't meet yet waits), whether a player is held to
+ * rolling, and what to say of it. A roll that could be picked is a locked pick by now, not a roll waiting.
+ */
+export const rollOffer = (list: ChoiceListShown, rolled: { option: string | null; roll: number } | null, gm: boolean) => {
+  const players = list.table ? list.players ?? 'either' : 'hand';
+  const byRoll = !gm && players === 'roll';
+  const hit = rolled && rolled.option ? list.options.find((o) => o.id === rolled.option) ?? null : null;
+  return {
+    roll: !!list.table && (gm || players !== 'hand'),
+    label: gm && rolled ? 'ROLL AGAIN' : 'ROLL FOR IT',
+    spent: !gm && !!rolled,
+    marked: hit ? hit.id : null,
+    byRoll,
+    said: rolled ? `ROLLED ${rolled.roll} → ${hit ? hit.label.toUpperCase() : 'NOTHING ON THE TABLE'}` : null,
+  };
+};
+
+/** How a sheet rests (backend recovery.js restingShown): who finishes a called rest, each rest by name. */
+export interface RestingShown { finish: 'call' | 'sheet'; rests: { id: string; name: string; spends: boolean }[] }
+
+type Obj = Record<string, unknown>;
+const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/** The sheet's worked-out view of its picks, or an empty one when it has none yet. */
+export const workedOn = (data: Obj | null | undefined): Worked => {
+  const w = isObject(data) && isObject(data[WORKED_KEY]) ? data[WORKED_KEY] as Obj : {};
+  return {
+    picks: Array.isArray(w.picks) ? (w.picks as unknown[]).filter((p): p is Worked['picks'][number] => isObject(p) && typeof p.list === 'string' && typeof p.option === 'string') : [],
+    opens: Array.isArray(w.opens) ? (w.opens as unknown[]).filter((o): o is Worked['opens'][number] => isObject(o) && typeof o.feature === 'string' && typeof o.list === 'string') : [],
+    levels: isObject(w.levels) ? w.levels as Worked['levels'] : {},
+    from: isObject(w.from) ? w.from as Worked['from'] : {},
+    uses: isObject(w.uses) ? w.uses as Worked['uses'] : {},
+    unmet: Array.isArray(w.unmet) ? (w.unmet as unknown[]).filter((x): x is string => typeof x === 'string') : [],
+    recovery: recoveryOn(w.recovery),
+    increasesOpen: Array.isArray(w.increasesOpen) ? (w.increasesOpen as unknown[]).filter((x): x is string => typeof x === 'string') : [],
+  };
+};
+
+const whole = (v: unknown, least: number) => (Number.isInteger(v) && (v as number) >= least ? v as number : null);
+
+/** The recovery dice a save wrote, those pools well formed enough to draw; null when there are none. */
+const recoveryOn = (v: unknown): RecoveryWorked | null => {
+  if (!isObject(v) || !Array.isArray(v.pools)) return null;
+  const pools = (v.pools as unknown[]).filter(isObject).flatMap((p) => {
+    const die = whole(p.die, 2);
+    const total = whole(p.total, 0);
+    if (typeof p.id !== 'string' || die === null || total === null) return [];
+    return [{ id: p.id, label: typeof p.label === 'string' ? p.label : p.id, die, total, spent: Math.min(total, whole(p.spent, 0) ?? 0) }];
+  });
+  if (!pools.length) return null;
+  return {
+    name: typeof v.name === 'string' && v.name.trim() ? v.name : 'Recovery dice',
+    heals: typeof v.heals === 'string' ? v.heals : 'its die',
+    spentAt: Array.isArray(v.spentAt) ? (v.spentAt as unknown[]).filter((x): x is string => typeof x === 'string') : 'any',
+    spend: v.spend === 'gm' ? 'gm' : 'any',
+    pools,
+  };
+};
+
+/**
+ * Whether a viewer may spend or tick recovery dice now: the GM always; a player unless the system
+ * leaves it to the GM and spending is closed (backend recovery.js maySpend).
+ */
+export const maySpendRecovery = (r: RecoveryWorked, gm: boolean, open: boolean) => gm || r.spend !== 'gm' || open;
+
+/** Where the dice are spent, as the sheet says it: "SPENT AT A SHORT REST OR CAMP", "SPENT ANY TIME". */
+export const spentAtText = (r: RecoveryWorked) => (r.spentAt === 'any' || !r.spentAt.length ? 'SPENT ANY TIME'
+  : `SPENT AT A ${r.spentAt.map((n) => n.toUpperCase()).join(' OR ')}`);
+
+/**
+ * Where a sheet keeps a rest the GM called on it (backend recovery.js REST_CALL_KEY). Once finished
+ * it stays, marked done, for the GM's list (R4): only one not done waits on the sheet.
+ */
+export const REST_CALL_KEY = '_rest_call';
+
+/**
+ * The REST section as logic (R3b; approved mockup rest-on-sheet, and the user's calls of 2026-10-30
+ * and -31): the rest buttons the viewer gets (players where rests are finished on each sheet, the
+ * GM always), a rest the GM called on this sheet, waiting to be finished, and where the recovery
+ * dice show: always when spent any time, else only in the panel of a rest they are spent at.
+ */
+export const restSection = (resting: RestingShown | undefined, data: Obj | null | undefined, gm: boolean) => {
+  const rests = resting?.rests ?? [];
+  const c = isObject(data) && isObject(data[REST_CALL_KEY]) ? data[REST_CALL_KEY] as Obj : null;
+  const call = c && c.done !== true ? rests.find((r) => r.id === c.rest) ?? null : null;
+  const recovery = workedOn(data).recovery;
+  return {
+    /** The rests this viewer may take from here. */
+    buttons: gm || resting?.finish === 'sheet' ? rests : [],
+    call,
+    recovery,
+    /**
+     * The dice shown outside any panel: spent any time, or where rests are at the GM's call, which
+     * has no panels on the sheet ("any time, trust the table").
+     */
+    diceAlways: !!recovery && (recovery.spentAt === 'any' || resting?.finish !== 'sheet'),
+  };
+};
+
+/** How many a spend rolls, kept to what is left (and at least 1 while any are). */
+export const spendCount = (wanted: number, left: number) => Math.max(left > 0 ? 1 : 0, Math.min(left, Math.trunc(wanted) || 0));
+
+/** The level a feature unlocks at: 1 when it says none. */
+const atOf = (f: FeatureShown) => (Number.isInteger(f.at) && (f.at as number) >= 1 ? f.at as number : 1);
+
+/** One pick as the block draws it: its option, its level, the features it has and the next to come. */
+export interface PickShown { option: OptionShown; level: number | null; unlocked: FeatureShown[]; next: FeatureShown | null; from?: string; locked?: boolean; roll?: number }
+
+/** One list as the block draws it. */
+export interface ListShown {
+  list: ChoiceListShown;
+  picks: PickShown[];
+  /** Whether another can be picked: as many as it picks, or more when it allows more (again) or any. */
+  room: boolean;
+  /** The options not picked yet, each with what it needs when it isn't met. */
+  open: { option: OptionShown; unmet: string | null }[];
+  /** A levelled list's levels added up, and the line saying how: SOLDIER 3 + MAGE 1. */
+  level: number | null;
+  breakdown: string;
+}
+
+/** How a list is picked: on its own when it says nothing. */
+export const pickedOf = (list: ChoiceListShown): Picked => list.picked ?? 'own';
+
+/**
+ * One pick as the block draws it. Its features unlock by its level: a levelled list's own, the
+ * character's level for a list everyone has, or the level of the pick that opened it (7a5d; the server
+ * sends both); a pick with no level has them all.
+ */
+const pickShown = (list: ChoiceListShown, p: Worked['picks'][number]): PickShown | null => {
+  const option = list.options.find((o) => o.id === p.option);
+  if (!option) return null;
+  const gate = list.levelled ? (Number.isInteger(p.level) ? p.level as number : 1) : Number.isInteger(p.level) ? p.level as number : null;
+  const sorted = [...option.features].sort((a, b) => atOf(a) - atOf(b));
+  return {
+    option,
+    level: list.levelled ? gate : null,
+    unlocked: sorted.filter((f) => gate === null || atOf(f) <= gate),
+    next: gate === null ? null : sorted.find((f) => atOf(f) > gate) ?? null,
+    ...(p.from ? { from: p.from } : {}), ...(p.locked ? { locked: true } : {}), ...(p.roll === undefined ? {} : { roll: p.roll }),
+  };
+};
+
+export const listShown = (list: ChoiceListShown, worked: Worked): ListShown => {
+  // A list's own picks: those under a feature hang there instead, and waiting ones are said apart.
+  const picks = worked.picks.filter((p) => p.list === list.id && !p.from && !p.waiting)
+    .map((p) => pickShown(list, p)).filter((p): p is PickShown => !!p);
+  const taken = new Set(worked.picks.filter((p) => p.list === list.id).map((p) => p.option));
+  const unmet = new Set(worked.unmet);
+  const mode = pickedOf(list);
+  return {
+    list,
+    picks,
+    room: mode !== 'features' && mode !== 'everyone' && (list.again || list.picks === 'any' || picks.length < list.picks),
+    open: list.options.filter((o) => !taken.has(o.id)).map((option) => ({ option, unmet: unmet.has(option.id) ? option.needs ?? 'a requirement' : null })),
+    level: list.levelled ? picks.reduce((n, p) => n + (p.level ?? 0), 0) : null,
+    breakdown: picks.map((p) => `${p.option.label.toUpperCase()} ${p.level ?? ''}`.trim()).join(' + '),
+  };
+};
+
+/** The lists drawn as blocks of their own: every one but those picked only under features. */
+export const listsOnTheirOwn = (lists: ChoiceListShown[]): ChoiceListShown[] => lists.filter((l) => pickedOf(l) !== 'features');
+
+/** What hangs under a feature that opens a list (7a5a2): its picks, those waiting, and the room for more. */
+export interface UnderFeature {
+  list: ChoiceListShown;
+  picks: PickShown[];
+  waiting: OptionShown[];
+  /** Picks still to make there, when the feature is unlocked; 0 otherwise. */
+  room: number;
+  open: { option: OptionShown; unmet: string | null }[];
+}
+
+/** The lists picked under a feature: the one it opens, and the one its increase offers instead (7d6c). */
+export const listsUnder = (feature: FeatureShown): string[] => [feature.opens, feature.increase?.instead].filter((id): id is string => !!id);
+
+/**
+ * Under `feature`, for a list picked through features or both: the one it opens, or another named (7d6c: the one its
+ * increase offers instead). Null otherwise.
+ */
+export const underFeature = (feature: FeatureShown, lists: ChoiceListShown[], worked: Worked, listId = feature.opens): UnderFeature | null => {
+  const list = lists.find((l) => l.id === listId);
+  if (!list || (pickedOf(list) !== 'features' && pickedOf(list) !== 'both')) return null;
+  const mine = worked.picks.filter((p) => p.list === list.id && p.from === feature.id);
+  const opening = worked.opens.find((o) => o.feature === feature.id && o.list === list.id);
+  const taken = new Set(worked.picks.filter((p) => p.list === list.id).map((p) => p.option));
+  const unmet = new Set(worked.unmet);
+  return {
+    list,
+    picks: mine.filter((p) => !p.waiting).map((p) => pickShown(list, p)).filter((p): p is PickShown => !!p),
+    waiting: mine.filter((p) => p.waiting).map((p) => list.options.find((o) => o.id === p.option)).filter((o): o is OptionShown => !!o),
+    room: opening ? Math.max(0, opening.count - opening.used) : 0,
+    open: list.options.filter((o) => !taken.has(o.id)).map((option) => ({ option, unmet: unmet.has(option.id) ? option.needs ?? 'a requirement' : null })),
+  };
+};
+
+/**
+ * Picks kept but shown nowhere else: waiting with nothing above them to wait under (the pick that
+ * opened them taken away), or a list's own picks while it is picked only through features. The GM
+ * can take them away; they count again if what they wait for comes back.
+ */
+export const keptAside = (lists: ChoiceListShown[], worked: Worked): { list: ChoiceListShown; option: OptionShown }[] => {
+  const shownFeatures = new Set(worked.picks.filter((p) => !p.waiting).flatMap((p) => {
+    const list = lists.find((l) => l.id === p.list);
+    return list?.options.find((o) => o.id === p.option)?.features.map((f) => f.id) ?? [];
+  }));
+  return worked.picks.filter((p) => p.waiting && !(p.from && shownFeatures.has(p.from))).flatMap((p) => {
+    const list = lists.find((l) => l.id === p.list);
+    const option = list?.options.find((o) => o.id === p.option);
+    return list && option ? [{ list, option }] : [];
+  });
+};
+
+/** A use pip clicked: one spent up to it, or, clicked again on one already spent, back to before it. */
+/** What a pick offer is called: Pick a Class, Pick an Archetype (by the first letter; Pick a Unit stays a guess). */
+export const pickLabel = (one: string): string => `Pick ${/^[aeiou]/i.test(one.trim()) ? 'an' : 'a'} ${one}`;
+
+export const spentAfterClick = (pip: number, spent: number): number => (pip < spent ? pip : pip + 1);
+
+/** What a feature does, in a few words: MODIFIES DEFENSE, ROLL SPARK, ADVANTAGE ON MIND SAVE, OPENS SPECIALTY. */
+export const featureDoes = (f: FeatureShown, lists: ChoiceListShown[]): string[] => [
+  ...(f.modifies?.length ? [`+ ${f.modifies.join(', ').toUpperCase()}`] : []),
+  ...(f.increase ? [`RAISES STATS: ${f.increase.points} ${f.increase.points === 1 ? 'POINT' : 'POINTS'}${f.increase.instead ? `, OR A ${(lists.find((l) => l.id === f.increase!.instead)?.one ?? f.increase.instead).toUpperCase()}` : ''}`] : []),
+  ...(f.rolls ?? []).map((r) => `ROLL ${r.toUpperCase()}`),
+  ...(f.changes ?? []).map((c) => c.toUpperCase()),
+  ...(f.opens ? [`PICK ${(lists.find((l) => l.id === f.opens)?.one ?? f.opens).toUpperCase()}`] : []),
+];
+
+/**
+ * What the picks do to each field, for the sheet's badge (SheetRenderer's ChromeBadge): a stat as
+ * typed and with its bonuses, a formula as the server saved it (bonuses already in) and without them,
+ * each bonus named by its feature. The token's maximum reads like a formula: the server puts its
+ * bonuses on the token (7a5a3), and with no token there is nothing to show. Fields the sheet doesn't
+ * show are left out.
+ */
+/**
+ * One bonus as the badge names it (7e1): an AT LEAST as "Amulet → 19", or "(already higher)" where it did nothing; one
+ * a cap cut as "Ring (+2, stops at 20) +1".
+ */
+export const sourceOf = (s: { feature: string; amount: number; got?: number; least?: true; stop?: number }): ModSource => {
+  if (s.least) return s.got === 0 ? { name: `${s.feature} (already higher)`, value: 0, kind: 'stat' } : { name: s.feature, value: s.amount, kind: 'statFloor' };
+  // The server says what it gave only where that differs (backend choices.js lineShown).
+  if (s.got !== undefined) return { name: `${s.feature} (${s.amount >= 0 ? '+' : ''}${s.amount}${s.stop !== undefined ? `, stops at ${s.stop}` : ''})`, value: s.got, kind: 'stat' };
+  return { name: s.feature, value: s.amount, kind: 'stat' };
+};
+
+/** Whether a sheet's bonuses are the server's (choiceEffects): a custom system with lists to pick from, or items (7e3b). */
+export const effectsWorked = (template: SheetTemplate): boolean => !!template.choices?.length || !!template.items;
+
+export const choiceEffects = (data: Obj | null | undefined, template: SheetTemplate): SheetEffects => {
+  const worked = workedOn(data);
+  const fields = new Map(template.sections.flatMap((s) => s.fields).map((f) => [f.id, f]));
+  const num = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+  const out: Record<string, FieldEffect> = {};
+  for (const [id, from] of Object.entries(worked.from)) {
+    const field = fields.get(id);
+    if (!field || !Array.isArray(from) || !from.length) continue;
+    const onToken = field.source === 'token_hp_max';
+    if (onToken && (!isObject(data) || data[id] === null || data[id] === undefined)) continue;
+    // What each really gave (7e1): a cut bonus less, an AT LEAST what it lifted.
+    const gave = (s: (typeof from)[number]) => (s.got === undefined ? num(s.amount) : num(s.got));
+    const delta = from.reduce((n, s) => n + gave(s), 0);
+    const stored = num(isObject(data) ? data[id] : 0);
+    // A formula is saved with its bonuses in, the token's maximum holds them; a stat keeps what the player typed.
+    const base = field.derived || onToken ? stored - delta : stored;
+    out[id] = { id, base, value: base + delta, delta, sources: from.map(sourceOf) };
+  }
+  return { fields: out, unmatched: [] };
+};

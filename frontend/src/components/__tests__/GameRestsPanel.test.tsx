@@ -1,10 +1,11 @@
 import React from 'react';
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, screen, cleanup, within, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, within, waitFor, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { GameRestsPanel } from '../GameRestsPanel';
 import { AdminPanel } from '../AdminPanel';
+import type { CalledRest, CalledPlayer } from '../../sheets/restCalls';
 
 /**
  * The GAME tab's RESTS panel under a custom game (4f5). Approved mockup builder-rests, stage 3
@@ -22,18 +23,51 @@ let asked: { url: string; body: any }[];
 let refuseCall: string | null;
 let rests: typeof RESTS;
 let running: string;
+/** The game's recovery dice as the rests list says them (R2b), and the settings rows. */
+let recovery: { name: string; spend: 'any' | 'gm' } | null;
+let settings: { key: string; value: string }[];
+let refuseSettings: string | null;
+let finish: 'call' | 'sheet';
+/** The latest rest called on the sheets, as the list answers it (R4), and a refusal to finish it. */
+let called: CalledRest | null;
+let refuseFinish: string | null;
+const CALLED = (): CalledRest => ({
+  id: 'c1', rest: 'short_rest', name: 'Short rest', at: '2026-10-31T10:00:00.000Z', npcs: 2, waiting: 2, players: [
+    { username: 'ash', name: 'Ash', state: 'finished', by: 'player', changes: [{ what: 'health', label: 'HP', from: 9, to: 11 }], spent: 1 },
+    { username: 'rook', name: 'Rook', state: 'resting', changes: [], spent: 1 },
+    { username: 'vex', name: 'Vex', state: 'waiting', changes: [], spent: 0 },
+  ],
+});
 
 beforeEach(() => {
+  called = null;
+  refuseFinish = null;
   asked = [];
   refuseCall = null;
   rests = RESTS;
   running = HEARTH;
+  recovery = null;
+  settings = [];
+  refuseSettings = null;
+  finish = 'call';
   vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     asked.push({ url, body });
     const answer = (status: number, json: unknown) => ({ ok: status < 300, status, json: async () => json }) as Response;
-    if (url === '/api/sheets/rests') return answer(200, { system: running, rests: running === HEARTH ? rests : [] });
+    if (url === '/api/sheets/rests') return answer(200, { system: running, rests: running === HEARTH ? rests : [], recovery, finish, call: called });
+    if (url === '/api/sheets/rest/finish') {
+      if (refuseFinish) return answer(409, { error: refuseFinish });
+      const left = called!.players.filter((x) => x.state !== 'finished' && (body.players === true || body.players.includes(x.username)));
+      const players = called!.players.map((x): CalledPlayer => (left.includes(x) ? { ...x, state: 'finished', by: 'gm' } : x));
+      called = { ...called!, players, waiting: players.filter((x) => x.state !== 'finished').length };
+      return answer(200, { finished: left.length, call: called });
+    }
+    if (url === '/api/settings') {
+      if (body && refuseSettings) return answer(401, { error: refuseSettings });
+      if (body) settings = [...settings.filter((s) => s.key !== body.key), body];
+      return answer(200, body ? { message: 'Settings updated' } : settings);
+    }
     if (url === '/api/sheets/rest') {
       if (!body.preview && refuseCall) return answer(400, { error: refuseCall });
       const players = body.players === true ? ['ash', 'vex'] : body.players || [];
@@ -43,7 +77,7 @@ beforeEach(() => {
           p === 'vex' && body.rest === 'long_rest' ? ['Exhausted'] : [])),
         ...body.npcs.map((id: number) => person('npc', id, id === 7 ? 'GANGER' : 'DOG')),
       ];
-      return answer(200, { rest: RESTS.find((r) => r.id === body.rest), preview: !!body.preview, characters: body.preview ? characters : characters.map((c) => ({ ...c, line: `${body.rest} · ${c.name}` })) });
+      return answer(200, { rest: RESTS.find((r) => r.id === body.rest), preview: !!body.preview, characters: body.preview ? characters : characters.map((c) => (finish === 'sheet' && c.kind === 'player' ? { ...c, called: true } : { ...c, line: `${body.rest} · ${c.name}` })) });
     }
     if (url.includes('/api/sheets/system')) return answer(200, { system: running, systems: [{ id: HEARTH, name: 'Hearth', custom: true, version: 1 }, { id: 'cities_without_number', name: 'Cities Without Number' }] });
     return answer(200, []);
@@ -60,6 +94,11 @@ const open = async (npcs = NPCS) => {
 };
 const previews = () => asked.filter((a) => a.url === '/api/sheets/rest' && a.body.preview);
 const calls = () => asked.filter((a) => a.url === '/api/sheets/rest' && !a.body.preview);
+/** CALL, then CALL again in the step that asks first (R3b). */
+const callIt = async (rest = 'Short rest') => {
+  await userEvent.click(screen.getByRole('button', { name: `CALL ${rest.toUpperCase()}` }));
+  await userEvent.click(within(screen.getByRole('group', { name: `Call a ${rest}?` })).getByRole('button', { name: 'CALL' }));
+};
 const gets = () => within(screen.getByRole('list', { name: 'What each one gets' })).queryAllByRole('listitem')
   .map((li) => ({ name: li.querySelector('b')!.textContent, text: li.textContent }));
 
@@ -100,7 +139,7 @@ describe('the rests panel', () => {
   it('calls the rest for who is chosen, says so, and previews again', async () => {
     await open();
     await waitFor(() => expect(gets()).toHaveLength(2));
-    await userEvent.click(screen.getByRole('button', { name: 'CALL SHORT REST' }));
+    await callIt();
     expect(await screen.findByRole('status')).toHaveTextContent('SHORT REST CALLED · 2 CHARACTERS');
     expect(calls().map((c) => c.body)).toEqual([{ rest: 'short_rest', players: true, npcs: [] }]);
     await waitFor(() => expect(previews()).toHaveLength(2));
@@ -108,16 +147,16 @@ describe('the rests panel', () => {
     await userEvent.click(screen.getByRole('radio', { name: /CHOOSE/ }));
     await userEvent.click(within(screen.getByRole('group', { name: 'Characters' })).getByRole('checkbox', { name: 'ASH' }));
     await userEvent.click(within(screen.getByRole('group', { name: 'Characters' })).getByRole('checkbox', { name: 'GANGER' }));
-    await userEvent.click(screen.getByRole('button', { name: 'CALL SHORT REST' }));
+    await callIt();
     await waitFor(() => expect(calls()).toHaveLength(2));
     expect(calls()[1].body).toEqual({ rest: 'short_rest', players: ['vex'], npcs: [7] });
     expect(await screen.findByText('SHORT REST CALLED · 2 CHARACTERS')).toBeTruthy();
     await userEvent.click(within(screen.getByRole('group', { name: 'Characters' })).getByRole('checkbox', { name: 'GANGER' }));
-    await userEvent.click(screen.getByRole('button', { name: 'CALL SHORT REST' }));
+    await callIt();
     expect(await screen.findByText('SHORT REST CALLED · 1 CHARACTER')).toBeTruthy();
 
     await userEvent.click(screen.getByRole('radio', { name: /PLAYERS AND THE NPCS ON THIS MAP/ }));
-    await userEvent.click(screen.getByRole('button', { name: 'CALL SHORT REST' }));
+    await callIt();
     await waitFor(() => expect(calls()).toHaveLength(4));
     expect(calls()[3].body).toEqual({ rest: 'short_rest', players: true, npcs: [7, 9] });
     expect(await screen.findByRole('status')).toHaveTextContent('SHORT REST CALLED · 4 CHARACTERS');
@@ -132,9 +171,33 @@ describe('the rests panel', () => {
     expect((screen.getByRole('button', { name: 'CALL SHORT REST' }) as HTMLButtonElement).disabled).toBe(true);
     await userEvent.click(within(screen.getByRole('group', { name: 'Characters' })).getByRole('checkbox', { name: 'VEX' }));
     refuseCall = 'Not one of this game\'s rests';
-    await userEvent.click(screen.getByRole('button', { name: 'CALL SHORT REST' }));
+    await callIt();
     expect(await screen.findByRole('alert')).toHaveTextContent('Not one of this game\'s rests');
     expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('CALL asks first, saying what will happen; CANCEL calls nothing (R3b)', async () => {
+    await open();
+    await waitFor(() => expect(gets()).toHaveLength(2));
+    await userEvent.click(screen.getByRole('button', { name: 'CALL SHORT REST' }));
+    const asking = within(screen.getByRole('group', { name: 'Call a Short rest?' }));
+    expect(asking.getByText('CALL A SHORT REST FOR 2 CHARACTERS?')).toBeTruthy();
+    expect(asking.getByText('It applies now, dice rolled for each.')).toBeTruthy();
+    await userEvent.click(asking.getByRole('button', { name: 'CANCEL' }));
+    expect(calls()).toEqual([]);
+    expect(screen.getByRole('button', { name: 'CALL SHORT REST' })).toBeTruthy();
+  });
+
+  it('on each sheet: CALL opens it on the players\' sheets, NPCs at once, and says so (R3b)', async () => {
+    finish = 'sheet';
+    await open();
+    await waitFor(() => expect(gets()).toHaveLength(2));
+    expect(screen.getByText(/Each player finishes it on their own sheet, spending any dice first; NPCs rest at once\./)).toBeTruthy();
+    await userEvent.click(screen.getByRole('radio', { name: /PLAYERS AND THE NPCS ON THIS MAP/ }));
+    await userEvent.click(screen.getByRole('button', { name: 'CALL SHORT REST' }));
+    expect(screen.getByText('It opens on 2 players\' sheets for them to finish. 2 NPCs rest at once.')).toBeTruthy();
+    await userEvent.click(within(screen.getByRole('group', { name: 'Call a Short rest?' })).getByRole('button', { name: 'CALL' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('SHORT REST CALLED · OPEN ON 2 SHEETS · 2 NPCS RESTED');
   });
 
   it('shows nothing for an answer that isn\'t a list of rests', async () => {
@@ -150,6 +213,136 @@ describe('the rests panel', () => {
     render(<GameRestsPanel token="admintoken" system={HEARTH} npcs={NPCS} />);
     await waitFor(() => expect(asked.some((a) => a.url === '/api/sheets/rests')).toBe(true));
     expect(screen.queryByRole('region', { name: 'Rests' })).toBeNull();
+  });
+});
+
+describe('OPEN SPENDING for recovery dice the GM has the say over (R2b)', () => {
+  const group = () => within(screen.getByRole('group', { name: 'Spending recovery dice' }));
+  const switchOf = () => group().getByRole('switch', { name: 'Spending recovery dice' });
+
+  it('is there only when the game leaves spending to the GM', async () => {
+    recovery = { name: 'Hit Dice', spend: 'any' };
+    await open();
+    expect(screen.queryByRole('group', { name: 'Spending recovery dice' })).toBeNull();
+    cleanup();
+    recovery = null;
+    await open();
+    expect(screen.queryByRole('group', { name: 'Spending recovery dice' })).toBeNull();
+  });
+
+  it('opens and closes spending for players, saying what each means', async () => {
+    recovery = { name: 'Hit Dice', spend: 'gm' };
+    await open();
+    expect(group().getByText('HIT DICE')).toBeTruthy();
+    expect(switchOf().getAttribute('aria-checked')).toBe('false');
+    expect(group().getByText(/Players wait to spend them\. Open it for a rest/)).toBeTruthy();
+    await userEvent.click(switchOf());
+    await waitFor(() => expect(switchOf().getAttribute('aria-checked')).toBe('true'));
+    expect(asked.filter((a) => a.url === '/api/settings' && a.body)).toEqual([{ url: '/api/settings', body: { key: 'recovery_open', value: '1' } }]);
+    expect(group().getByText(/Players can spend and tick them off from their sheets now/)).toBeTruthy();
+    await userEvent.click(switchOf());
+    await waitFor(() => expect(switchOf().getAttribute('aria-checked')).toBe('false'));
+    expect(settings).toEqual([{ key: 'recovery_open', value: '0' }]);
+  });
+
+  it('starts as the setting stands, and says so when the server refuses', async () => {
+    recovery = { name: '', spend: 'gm' };
+    settings = [{ key: 'recovery_open', value: '1' }];
+    await open();
+    await waitFor(() => expect(switchOf().getAttribute('aria-checked')).toBe('true'));
+    expect(group().getByText('RECOVERY DICE')).toBeTruthy();
+    refuseSettings = 'Sign in again';
+    await userEvent.click(switchOf());
+    expect((await screen.findByRole('alert')).textContent).toBe('Sign in again');
+    expect(switchOf().getAttribute('aria-checked')).toBe('true');
+  });
+});
+
+describe('a rest called on the sheets: who has finished (R4)', () => {
+  const list = () => within(screen.getByRole('region', { name: 'Called rest' }));
+  const line = (name: string) => within(list().getByRole('listitem', { name })).getByText((_, el) => el?.tagName === 'SPAN' && el.parentElement?.tagName === 'SPAN').textContent;
+  const finishes = () => asked.filter((a) => a.url === '/api/sheets/rest/finish').map((a) => a.body);
+  beforeEach(() => {
+    finish = 'sheet';
+    called = CALLED();
+    recovery = { name: 'Hit Dice', spend: 'any' };
+  });
+
+  it('shows the latest call: how many are left, what each has done, and the NPCs rested at once', async () => {
+    await open();
+    expect(await screen.findByText('SHORT REST CALLED')).toBeTruthy();
+    expect(list().getByText('WAITING ON 2 OF 3')).toBeTruthy();
+    expect(line('Ash')).toBe('finished · HP 9 → 11 · 1 die spent');
+    expect(line('Rook')).toBe('resting · 1 die spent');
+    expect(line('Vex')).toBe('not finished yet');
+    expect(list().queryByRole('button', { name: 'FINISH FOR ASH' })).toBeNull();
+    expect(list().getByRole('button', { name: 'FINISH FOR ROOK' })).toBeTruthy();
+    expect(list().getByText('NPCs: finished at once (2)')).toBeTruthy();
+  });
+
+  it('FINISH FOR one asks first; CANCEL asks nothing; FINISH finishes them as the GM', async () => {
+    await open();
+    await userEvent.click(await screen.findByRole('button', { name: 'FINISH FOR VEX' }));
+    const asking = within(screen.getByRole('group', { name: 'Finish Vex\'s rest?' }));
+    expect(asking.getByText('FINISH VEX\'S SHORT REST?')).toBeTruthy();
+    expect(list().queryByRole('button', { name: 'FINISH FOR EVERYONE' })).toBeNull();
+    await userEvent.click(asking.getByRole('button', { name: 'CANCEL' }));
+    expect(screen.queryByRole('group', { name: 'Finish Vex\'s rest?' })).toBeNull();
+    expect(finishes()).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: 'FINISH FOR VEX' }));
+    await userEvent.click(within(screen.getByRole('group', { name: 'Finish Vex\'s rest?' })).getByRole('button', { name: 'FINISH' }));
+    await waitFor(() => expect(line('Vex')).toBe('finished by the GM · no dice spent'));
+    expect(finishes()).toEqual([{ players: ['vex'] }]);
+    expect(list().getByText('WAITING ON 1 OF 3')).toBeTruthy();
+    expect(list().queryByRole('button', { name: 'FINISH FOR VEX' })).toBeNull();
+  });
+
+  it('FINISH FOR EVERYONE asks how many first, then finishes everyone left', async () => {
+    await open();
+    await userEvent.click(await screen.findByRole('button', { name: 'FINISH FOR EVERYONE' }));
+    const asking = within(screen.getByRole('group', { name: 'Finish it for everyone?' }));
+    expect(asking.getByText('FINISH THE SHORT REST FOR 2 STILL RESTING?')).toBeTruthy();
+    await userEvent.click(asking.getByRole('button', { name: 'FINISH' }));
+    await waitFor(() => expect(list().getByText('EVERYONE FINISHED')).toBeTruthy());
+    expect(finishes()).toEqual([{ players: true }]);
+    expect(list().queryAllByRole('button')).toEqual([]);
+  });
+
+  it('says why the server said no', async () => {
+    refuseFinish = 'No rest is waiting to be finished';
+    await open();
+    await userEvent.click(await screen.findByRole('button', { name: 'FINISH FOR EVERYONE' }));
+    await userEvent.click(within(screen.getByRole('group', { name: 'Finish it for everyone?' })).getByRole('button', { name: 'FINISH' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('No rest is waiting to be finished');
+    expect(list().getByText('WAITING ON 2 OF 3')).toBeTruthy();
+  });
+
+  it('is read again when a sheet changes, and after a call; the listener goes with the panel', async () => {
+    const heard: Record<string, () => void> = {};
+    const socket = { on: vi.fn((e: string, fn: () => void) => { heard[e] = fn; }), off: vi.fn() };
+    const { unmount } = render(<GameRestsPanel token="admintoken" system={HEARTH} npcs={[]} socket={socket} />);
+    expect(await screen.findByText('WAITING ON 2 OF 3')).toBeTruthy();
+    called = { ...called!, waiting: 1, players: called!.players.map((x): CalledPlayer => (x.username === 'rook' ? { ...x, state: 'finished', by: 'player' } : x)) };
+    await act(async () => { heard.sheetUpdated(); });
+    expect(await screen.findByText('WAITING ON 1 OF 3')).toBeTruthy();
+    expect(line('Rook')).toBe('finished · 1 die spent');
+    called = { ...CALLED(), id: 'c2', name: 'Long rest', npcs: 0 };
+    await callIt();
+    expect(await screen.findByText('LONG REST CALLED')).toBeTruthy();
+    expect(screen.queryByText(/NPCs: finished at once/)).toBeNull();
+    unmount();
+    expect(socket.off).toHaveBeenCalledWith('sheetUpdated', heard.sheetUpdated);
+  });
+
+  it('isn\'t shown where rests are at the GM\'s call, nor with no call kept', async () => {
+    finish = 'call';
+    await open();
+    expect(screen.queryByRole('region', { name: 'Called rest' })).toBeNull();
+    cleanup();
+    finish = 'sheet';
+    called = null;
+    await open();
+    expect(screen.queryByRole('region', { name: 'Called rest' })).toBeNull();
   });
 });
 
@@ -179,6 +372,21 @@ describe('the GAME tab', () => {
     await gameTab(HEARTH);
     expect(await screen.findByRole('region', { name: 'Rests' })).toBeTruthy();
     await waitFor(() => expect(previews().at(-1)?.body.npcs).toEqual([7]));
+  });
+
+  it('in a RESTS folder of the GAME tab\'s own, out of TTRPG_SYSTEM: there with it shut (R2b)', async () => {
+    window.localStorage.clear();
+    running = HEARTH;
+    render(<AdminPanel {...props(HEARTH)} />);
+    await userEvent.click(screen.getByText('GAME'));
+    expect(screen.getByText(/TTRPG_SYSTEM$/).textContent).toMatch(/^▸/);
+    const folder = screen.getByRole('button', { name: '▾ RESTS' });
+    expect(folder.getAttribute('aria-expanded')).toBe('true');
+    expect(await screen.findByRole('region', { name: 'Rests' })).toBeTruthy();
+    await userEvent.click(folder);
+    expect(screen.queryByRole('region', { name: 'Rests' })).toBeNull();
+    expect(screen.getByRole('button', { name: '▸ RESTS' }).getAttribute('aria-expanded')).toBe('false');
+    window.localStorage.clear();
   });
 
   it('has none under a built-in game, whose rests are its own buttons', async () => {

@@ -118,7 +118,7 @@ const randomSystem = (seed, { parts = true } = {}) => {
   }
   if (Object.keys(words).length) def.words = words;
 
-  // FEATURES: some parts off; building types and catalogues renamed or off.
+  // PARTS: some parts off; building types and catalogues renamed or off.
   if (parts) {
     const off = r.some(PARTS, 0.2);
     if (off.length) def.parts = Object.fromEntries(off.map((p) => [p, { on: false }]));

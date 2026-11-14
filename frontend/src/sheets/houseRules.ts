@@ -1,6 +1,6 @@
 // The builder's HOUSE RULES as logic (4j3a; approved mockup docs/mockups/optional-rules.html,
 // 2026-10-14): a system's own house rules, made once, and what waits on each. A rule is a name, what
-// it means and whether it starts on; things go under one where they live (a FEATURES part, a sheet or
+// it means and whether it starts on; things go under one where they live (a part on PARTS, a sheet or
 // NPC stat block section, a condition: only_with; a formula's alternative). Deleting a rule leaves
 // what was under it always there. Mirrors backend/systemBuilder/houseRules.js, which checks what is
 // written and runs it; the tests hold the two together. Named "house rules", never "rules": a
@@ -21,7 +21,7 @@ export interface HouseRule { id: string; name: string; description?: string; sta
 export type HouseRulePatch = Partial<Pick<HouseRule, 'name' | 'description' | 'starts'>>;
 
 /** Something under a house rule, as the HOUSE RULES page lists it, with the page GO TO opens. */
-export interface Waiting { kind: 'FEATURES PART' | 'SHEET SECTION' | 'NPC SECTION' | 'CONDITION' | 'FORMULA'; id: string; label: string; page: BuilderPage }
+export interface Waiting { kind: 'PART' | 'SHEET SECTION' | 'NPC SECTION' | 'CONDITION' | 'FORMULA'; id: string; label: string; page: BuilderPage }
 
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -180,7 +180,7 @@ export const waitingOn = (def: Definition, id: string): Waiting[] => {
   const conditions = isObject(def.conditions) ? def.conditions : {};
   return [
     ...PART_ROWS.filter((row) => isObject(parts[row.id]) && (parts[row.id] as Obj).only_with === id)
-      .map((row): Waiting => ({ kind: 'FEATURES PART', id: row.id, label: row.label, page: 'features' })),
+      .map((row): Waiting => ({ kind: 'PART', id: row.id, label: row.label, page: 'features' })),
     ...sectionsWaiting(def.sheet, id, 'SHEET SECTION', 'sheet'),
     ...sectionsWaiting(isObject(def.npc) ? def.npc.sheet : undefined, id, 'NPC SECTION', 'npcs'),
     ...conditionList(def).filter((c) => isObject(conditions[c.id]) && (conditions[c.id] as Obj).only_with === id)

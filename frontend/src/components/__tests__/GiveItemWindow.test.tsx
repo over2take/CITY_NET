@@ -272,3 +272,45 @@ describe('GIVEN', () => {
     expect(await screen.findByText('Nothing given yet.')).toBeTruthy();
   });
 });
+
+describe('kits (7c4c)', () => {
+  const KITTED = { ok: true, system: CWN, catalogues: [...CATALOGUES, { catalogue: 'kits', items: [{ id: 'traveler', name: 'Traveler', price: 0, holds: 'Rope, 3x Rations' }] }] };
+  const row = () => within(screen.getByRole('button', { name: 'Give Traveler' }).closest('tr') as HTMLElement);
+
+  it('are listed beside the items, by what is in them rather than what they are worth', async () => {
+    openKits();
+    await screen.findByRole('button', { name: 'Give Traveler' });
+    expect(row().getByText('Rope, 3x Rations')).toBeTruthy();
+    expect(row().getByText('KITS')).toBeTruthy();
+    expect(row().queryByText('N/A')).toBeNull();
+    expect(screen.getByRole('tab', { name: 'KITS' })).toBeTruthy();
+  });
+
+  it('narrow to the KITS tab', async () => {
+    openKits();
+    await userEvent.click(await screen.findByRole('tab', { name: 'KITS' }));
+    expect(screen.getByRole('button', { name: 'Give Traveler' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Give Heavy Pistol' })).toBeNull();
+  });
+
+  it('picked, the card says what is in it, and it is asked for from the catalogue KITS', async () => {
+    const { sent } = openKits();
+    await userEvent.click(await screen.findByRole('button', { name: 'Give Traveler' }));
+    const card = within(screen.getByTestId('give-card'));
+    expect(card.getByText('Rope, 3x Rations')).toBeTruthy();
+    expect(card.queryByText(/^WORTH/)).toBeNull();
+    await waitFor(() => expect(sent.some((s) => s.event === 'giveItem' && s.payload.catalogue === 'kits' && s.payload.id === 'traveler')).toBe(true));
+  });
+
+  it('anything else still says what it is worth', async () => {
+    openKits();
+    await userEvent.click(await screen.findByRole('button', { name: 'Give Heavy Pistol' }));
+    expect(within(screen.getByTestId('give-card')).getByText(/^WORTH/)).toBeTruthy();
+  });
+
+  function openKits() {
+    const server = fakeServer({ givable: KITTED });
+    render(<GiveItemWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()} socket={server.socket} system={CWN} npcs={[]} online={[]} />);
+    return server;
+  }
+});

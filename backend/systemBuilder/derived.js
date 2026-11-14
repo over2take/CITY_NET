@@ -25,6 +25,7 @@
 // Checking is separate from running, and reports every problem at once rather than the first,
 // because the builder will show them as a list beside the graph.
 
+const { applyBonuses } = require('./bonuses');
 const { parse, evaluate, references, NAME, BUILTINS } = require('./expression');
 const { ruleValue, hasRule } = require('./rules');
 
@@ -98,6 +99,14 @@ const partsOf = (entry) => (entry.kind === 'condition'
  * Returns `{ ok: false, problems: [{ where, message }] }`, or `{ ok: true, system }` where
  * `system.evaluate(data)` gives every derived value and `system.apply(data)` writes them the
  * way the hand-written recompute functions do.
+ *
+ * Both take an optional `overlay` (7a1b, choices.js overlayOf): `sheet`, values read in place of
+ * the sheet's own (a stat with its features' modifiers, a pick's level), and `add`, an amount added
+ * to a derived value once it is worked out, before anything reading it is. From 7e1, `bonus` in its place where given:
+ * { adds, least } counted as bonuses.js says, what each really gave written into `applied` when the overlay has it.
+ *
+ * `ranked` (7f1a, ranks.js rankedOf): each stat held as a rank, worked out as one of these is: the worth of the rank its
+ * step field is at (a step past either end reading as the end), so a formula reading the stat reads its worth.
  */
 const compileSystem = (definition) => {
   const problems = [];
@@ -149,6 +158,24 @@ const compileSystem = (definition) => {
     compiled.push({ id, kind: entry.kind === 'condition' ? 'condition' : 'formula', trees, fields: refs.fields });
   }
 
+  // Ranked stats (7f1a): each rank's worth compiled on its own, the step choosing which is read.
+  for (const r of (Array.isArray(def.ranked) ? def.ranked : [])) {
+    const where = `stat ${r.id}`;
+    if (seen.has(r.id)) { problems.push({ where, message: 'A formula has this id' }); continue; }
+    seen.add(r.id);
+    const trees = {};
+    // The step is a sheet field (ranks.js keeps any formula from its id); the worths' own @names order this entry.
+    const fields = new Set();
+    let ok = true;
+    r.worths.forEach((w, i) => {
+      try {
+        trees[`w${i}`] = parse(w, isTable);
+        references(trees[`w${i}`]).fields.forEach((f) => fields.add(f));
+      } catch (err) { problems.push({ where: `${where}, rank ${i + 1}`, message: err.message }); ok = false; }
+    });
+    if (ok) compiled.push({ id: r.id, kind: 'rank', step: r.step, count: r.worths.length, trees, fields });
+  }
+
   // Order: a value is worked out after every derived value it reads. Anything else @named is a
   // plain sheet field. A loop is reported with its path, since "A needs B needs A" is the
   // mistake a GM can actually fix.
@@ -179,12 +206,16 @@ const compileSystem = (definition) => {
 
   if (problems.length) return { ok: false, problems };
 
-  const evaluateAll = (data) => {
+  const evaluateAll = (data, overlay = {}) => {
     const sheet = data || {};
+    const over = overlay.sheet || {};
+    const add = overlay.add || {};
+    const bonus = overlay.bonus || null;
+    const own = (o, name) => Object.prototype.hasOwnProperty.call(o, name);
     const values = {};
     const ruleCache = new Map();
     const env = {
-      field: (name) => (Object.prototype.hasOwnProperty.call(values, name) ? values[name] : num(sheet[name])),
+      field: (name) => (own(values, name) ? values[name] : own(over, name) ? num(over[name]) : num(sheet[name])),
       rule: (name) => {
         if (!ruleCache.has(name)) ruleCache.set(name, ruleValue(name, sheet));
         return ruleCache.get(name);
@@ -195,7 +226,16 @@ const compileSystem = (definition) => {
       const c = byId.get(id);
       values[id] = c.kind === 'condition'
         ? (evaluate(c.trees.when, env) !== 0 ? evaluate(c.trees.then, env) : evaluate(c.trees.else, env))
-        : evaluate(c.trees.formula, env);
+        : c.kind === 'rank'
+          ? evaluate(c.trees[`w${Math.min(c.count - 1, Math.max(0, Math.round(env.field(c.step))))}`], env)
+          : evaluate(c.trees.formula, env);
+      if (bonus) {
+        if (own(bonus, id)) {
+          const done = applyBonuses(values[id], bonus[id]);
+          values[id] = done.value;
+          if (overlay.applied) overlay.applied[id] = done.lines;
+        }
+      } else if (own(add, id)) values[id] += num(add[id]);
     }
     return values;
   };
@@ -205,8 +245,8 @@ const compileSystem = (definition) => {
    * the ids that changed - the contract of the recompute functions in sheets/templates.js, so
    * one can stand in for the other.
    */
-  const apply = (data) => {
-    const values = evaluateAll(data);
+  const apply = (data, overlay) => {
+    const values = evaluateAll(data, overlay);
     const changed = [];
     for (const c of compiled) {
       const value = values[c.id];
@@ -236,9 +276,11 @@ const problemId = (p) => {
  * one, so one unfinished formula doesn't blank the rest. Returns { values, problems }, the problems
  * all of compileSystem's. The running game never uses this: it runs only a published, whole system.
  */
-const previewDerived = ({ lookups, derived }, data) => {
+const previewDerived = ({ lookups, derived, ranked = [] }, data) => {
   const all = Array.isArray(derived) ? derived : [];
-  const first = compileSystem({ lookups, derived: all });
+  // Ranked stats (7f1b) are worked out too, while every rank's worth reads.
+  const ranks = compileSystem({ lookups, derived: [], ranked }).ok ? ranked : [];
+  const first = compileSystem({ lookups, derived: all, ranked: ranks });
   if (first.ok) return { values: first.system.evaluate(data), problems: [] };
   let kept = all;
   let compiled = first;
@@ -257,9 +299,12 @@ const previewDerived = ({ lookups, derived }, data) => {
     const next = kept.filter((d) => d && typeof d.id === 'string' && !out.has(d.id));
     if (next.length === kept.length) break;
     kept = next;
-    compiled = compileSystem({ lookups, derived: kept });
+    compiled = compileSystem({ lookups, derived: kept, ranked: ranks });
   }
   return { values: compiled.ok ? compiled.system.evaluate(data) : {}, problems: first.problems };
 };
 
-module.exports = { compileSystem, previewDerived, lookupIn, LIMITS };
+/** A system's lookup tables as a formula reads them: the ones well formed enough to read. */
+const tablesOf = (lookups) => checkLookups(lookups, []);
+
+module.exports = { compileSystem, previewDerived, lookupIn, tablesOf, LIMITS };

@@ -35,13 +35,64 @@ const unreachable = (page: Page) => page.evaluate(() => {
     });
 });
 
+/**
+ * Every name and column head out of line with what it names (the alignment pass, R1b): a name beside
+ * its field more than 4px above or below the middle of the field's first line, and a column head
+ * whose words start more than 4px from its column's. Each page placed its own names by hand, and they
+ * drifted up to 50px (FieldName's `beside` now does it); and #root's centred text put a table's
+ * cells off their heads. A name is the uppercase words in the first of two columns of a grid.
+ */
+const misaligned = (page: Page) => page.evaluate(() => {
+  const root = document.querySelector('[data-testid="builder-screen"]')!;
+  const seen = (el: Element) => { const r = el.getBoundingClientRect(); return r.width > 1 && r.height > 1; };
+  const text = (el: Element) => (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  const middle = (r: DOMRect) => r.top + r.height / 2;
+  const CONTROL = 'input:not([type=hidden]), select, textarea, button:not([role=note]), [role=switch], [role=group]';
+  const found: string[] = [];
+  for (const grid of root.querySelectorAll('*')) {
+    const cs = getComputedStyle(grid);
+    if (cs.display !== 'grid' || !seen(grid) || cs.gridTemplateColumns.split(' ').length !== 2) continue;
+    const kids = [...grid.children].filter(seen);
+    for (let i = 0; i + 1 < kids.length; i += 2) {
+      const [name, field] = [kids[i], kids[i + 1]];
+      const words = text(name);
+      if (!/[A-Z]/.test(words) || words.length > 30 || words !== words.toUpperCase() || name.querySelector('input, select, textarea, button:not([role=note])')) continue;
+      // The field's first line: the first button of a group that may wrap, a text box's first line.
+      let first = field.matches(CONTROL) ? field : field.querySelector(CONTROL);
+      if (first?.matches('[role=group]')) first = first.querySelector('input:not([type=hidden]), select, button:not([role=note]), [role=switch]') ?? first;
+      if (!first || !seen(first)) continue;
+      const box = first.getBoundingClientRect();
+      const line = first.matches('textarea') ? box.top + 12 : middle(box);
+      const dy = Math.round(middle((name.querySelector('label, span') || name).getBoundingClientRect()) - line);
+      if (Math.abs(dy) > 4) found.push(`name "${words}" ${Math.abs(dy)}px ${dy < 0 ? 'above' : 'below'} its field`);
+    }
+  }
+  for (const th of root.querySelectorAll('thead th')) {
+    if (!seen(th) || !text(th)) continue;
+    const heads = th.parentElement!.children;
+    const row = [...(th.closest('table')!.tBodies[0]?.rows ?? [])].find((r) => r.cells.length === heads.length);
+    const cell = row?.cells[[...heads].indexOf(th)];
+    const ctl = cell?.querySelector('input:not([type=hidden]), select, textarea, button') || cell?.firstElementChild;
+    if (!ctl || !seen(ctl)) continue;
+    const range = document.createRange();
+    range.selectNodeContents(th);
+    const dx = Math.round(range.getBoundingClientRect().left - ctl.getBoundingClientRect().left);
+    if (Math.abs(dx) > 4) found.push(`column "${text(th)}" ${Math.abs(dx)}px ${dx < 0 ? 'left' : 'right'} of its column`);
+  }
+  return [...new Set(found)];
+});
+/** What a person would find wrong with the page as it stands: a control a click misses, or one out of line. */
+const faults = async (page: Page) => [...await unreachable(page), ...await misaligned(page)];
+
 test('every control in the builder takes a click, on every page', async ({ page }) => {
+  // Every page, and grows with each: ~25 s on a desktop, past the 2 min default on CI by 7f2b's SPEND XP.
+  test.setTimeout(300_000);
   await signInAsGm(page);
   await openBuilder(page);
   const missed: Record<string, string[]> = {};
   for (const [label, name] of [['YOUR SYSTEMS', /^YOUR SYSTEMS/], ['+ NEW', /NEW$/], ['INSTALL A FILE', /^INSTALL A FILE$/]] as const) {
     await page.getByRole('tab', { name }).click();
-    missed[`MY SYSTEMS · ${label}`] = await unreachable(page);
+    missed[`MY SYSTEMS · ${label}`] = await faults(page);
   }
   await page.getByRole('tab', { name: /NEW$/ }).click();
   await page.locator('#systems-new-name').fill(`Clicks ${test.info().retry}`);
@@ -50,23 +101,156 @@ test('every control in the builder takes a click, on every page', async ({ page 
   // ROLLS is swept: + MODIFIER gives the open condition ALL ROLLS -1.
   await builderPage(page, 'CONDITIONS');
   await page.getByRole('button', { name: '+ MODIFIER' }).click();
-  for (const p of ['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
+  for (const p of ['SETUP', 'WORDS', 'PARTS', 'STATS & RULES', 'CHOICES', 'ITEMS', 'CHARACTER SHEET', 'NEW CHARACTER', 'LEVELS', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
     await builderPage(page, p);
-    missed[p] = await unreachable(page);
+    if (p === 'CHOICES') {
+      // A list picking several, with an option, so every box on the page is there (7a2b1); a second
+      // list first, for its feature to open (HOW MANY, 7a5a2).
+      await page.getByRole('button', { name: '+ LIST' }).click();
+      await page.getByRole('button', { name: '+ LIST' }).click();
+      await page.getByRole('group', { name: 'A character picks' }).getByRole('button', { name: 'SEVERAL' }).click();
+      // Levelled, so the option has its HIT DIE, OTHER open for its sides (R1b).
+      await page.getByRole('switch', { name: /LEVELLED/ }).click();
+      await page.getByRole('button', { name: '+ OPTION' }).click();
+      await expect(page.getByRole('region', { name: 'NEW OPTION option' })).toBeVisible();
+      // What it gives, with a roll for the money, so every box of that is there (7c4e).
+      await page.getByRole('region', { name: 'NEW OPTION option' }).getByRole('button', { name: 'A ROLL' }).first().click();
+      await expect(page.getByRole('region', { name: 'NEW OPTION option' }).getByRole('textbox', { name: /roll$/ }).first()).toBeVisible();
+      await page.getByRole('group', { name: 'Hit die' }).getByRole('button', { name: 'OTHER' }).click();
+      await expect(page.getByRole('spinbutton', { name: 'Sides' })).toBeVisible();
+      // A table to roll on, so PLAYERS PICK and each option's roll are there (7a5b).
+      await page.getByRole('combobox', { name: 'Table die' }).selectOption('d6');
+      await expect(page.getByRole('group', { name: 'Players pick' })).toBeVisible();
+      // A feature open, with uses and a modifier, so every box of the features editor is there (7a2b2).
+      await page.getByRole('button', { name: '+ FEATURE' }).click();
+      const feature = page.getByRole('group', { name: 'Feature NEW FEATURE' });
+      await feature.getByRole('switch', { name: /HAS USES/ }).click();
+      await feature.getByRole('button', { name: '+ MODIFIER' }).click();
+      await feature.getByRole('combobox', { name: 'OPENS A LIST' }).selectOption({ label: 'NEW CHOICE' });
+      await expect(feature.getByRole('spinbutton', { name: 'HOW MANY' })).toBeVisible();
+      // RAISES STATS on, so an INCREASE's boxes are there (7d6a): STATS & RULES made a stat before.
+      await feature.getByRole('switch', { name: 'RAISES STATS' }).click();
+      // The INCREASE's own: a modifier's is named by it (Modifier 1: stops at, 7e1b).
+      await expect(feature.getByRole('spinbutton', { name: 'STOPS AT', exact: true })).toBeVisible();
+      // The modifier's formula box with its help open, so SHAPE and INSERT are there (formula box 1).
+      await feature.getByRole('button', { name: 'Help writing Modifier 1: by' }).click();
+      await expect(feature.getByRole('group', { name: 'Help writing Modifier 1: by' })).toBeVisible();
+    }
+    if (p === 'ITEMS') {
+      // A slot, and an item open with a feature giving uses and a modifier, so every box of the page is there (7e2b).
+      await page.getByRole('button', { name: '+ SLOT' }).click();
+      await expect(page.getByTestId('slot-new_slot')).toBeVisible();
+      // An install too, and the item needing it, so its COST box is there (7e4b).
+      await page.getByRole('button', { name: '+ INSTALL' }).click();
+      await expect(page.getByTestId('install-new_install')).toBeVisible();
+      await page.getByRole('button', { name: '+ ITEM' }).click();
+      const item = page.getByRole('region', { name: 'NEW ITEM item' });
+      await item.getByRole('combobox', { name: 'ITS FEATURES NEED' }).selectOption('new_install');
+      await expect(item.getByRole('spinbutton', { name: 'COST' })).toBeVisible();
+      await item.getByRole('button', { name: '+ FEATURE' }).click();
+      const feature = item.getByRole('group', { name: 'Feature NEW FEATURE' });
+      await feature.getByRole('switch', { name: /HAS USES/ }).click();
+      await feature.getByRole('button', { name: '+ MODIFIER' }).click();
+      await expect(feature.getByRole('spinbutton', { name: 'Modifier 1: stops at' })).toBeVisible();
+    }
+    if (p === 'STATS & RULES') {
+      // A group with a stat, so its table and column heads are there.
+      await page.getByRole('button', { name: '+ GROUP' }).click();
+      await page.getByRole('button', { name: '+ STAT' }).click();
+      await expect(page.getByRole('columnheader', { name: 'LOWEST' })).toBeVisible();
+    }
+    if (p === 'LEVELS') {
+      // XP LEVELS on, with a second range and a level typed over, so all of it is there.
+      await page.getByRole('button', { name: 'XP LEVELS' }).click();
+      await page.getByRole('button', { name: '+ ANOTHER RANGE' }).click();
+      await page.getByRole('textbox', { name: 'Level 3 total' }).fill('5000');
+      await expect(page.getByRole('button', { name: 'FILL IT AGAIN' })).toBeVisible();
+      missed['LEVELS, the table'] = await faults(page);
+      // MAX HEALTH PER LEVEL, gained by ROLL TO BEAT, so the pool's rows are there (7d5d).
+      const health = page.getByRole('region', { name: 'Max health' });
+      await health.getByRole('button', { name: 'PER LEVEL' }).click();
+      await health.getByRole('combobox', { name: 'How health is gained' }).selectOption('beat');
+      await expect(health.getByRole('textbox', { name: 'Dice in the pool' })).toBeVisible();
+      missed['LEVELS, roll to beat'] = await faults(page);
+      // SPEND XP on, with a stat to raise and an option to buy, a cost's help open (7f2b).
+      await page.getByRole('button', { name: 'SPEND XP' }).click();
+      const spend = page.getByRole('region', { name: 'Spend XP' });
+      await spend.getByRole('button', { name: '+ RAISE A STAT' }).click();
+      await spend.getByRole('button', { name: '+ AN OPTION' }).click();
+      await spend.getByRole('button', { name: 'Help writing RAISE A STAT 1: costs' }).click();
+      await expect(spend.getByRole('group', { name: 'Help writing RAISE A STAT 1: costs' })).toBeVisible();
+      missed['LEVELS, spend XP'] = await faults(page);
+      // IMPROVE BY USE on, its roll's help open (7f3a2).
+      await page.getByRole('button', { name: 'IMPROVE BY USE' }).click();
+      const improve = page.getByRole('region', { name: 'Improve by use' });
+      await improve.getByRole('button', { name: 'Help writing Improvement roll' }).click();
+      await expect(improve.getByRole('group', { name: 'Help writing Improvement roll' })).toBeVisible();
+      missed['LEVELS, improve by use'] = await faults(page);
+    }
+    if (p === 'NEW CHARACTER') {
+      // THE STATS open, so how they are asked and the groups are there (7c3a), and a fixed array's numbers (7c3b).
+      await page.getByRole('button', { name: 'THE STATS', exact: true }).click();
+      await expect(page.getByRole('list', { name: 'Groups asked' })).toBeVisible();
+      await page.getByRole('group', { name: 'How they are set' }).getByRole('button', { name: 'A FIXED ARRAY' }).click();
+      await expect(page.getByRole('textbox', { name: 'The numbers' })).toBeVisible();
+      // And a roll's, for the sweep to read: what it is, and how it is placed (7c3c). Checked here, as
+      // the way can only show one at a time.
+      missed['NEW CHARACTER array'] = await faults(page);
+      await page.getByRole('group', { name: 'How they are set' }).getByRole('button', { name: 'ROLL' }).click();
+      await expect(page.getByRole('textbox', { name: 'Each is' })).toBeVisible();
+      missed['NEW CHARACTER roll'] = await faults(page);
+      // A kit going ONLY IF, so every box of one is there (7c4a).
+      missed['NEW CHARACTER roll, before the kits'] = await faults(page);
+      await page.getByRole('button', { name: 'KITS', exact: true }).click();
+      await page.getByRole('button', { name: '+ KIT' }).click();
+      await page.getByRole('combobox', { name: 'NEW KIT goes to' }).selectOption('needs');
+      await expect(page.getByRole('textbox', { name: 'ONLY IF' })).toBeVisible();
+      missed['NEW CHARACTER kits'] = await faults(page);
+      // MONEY set to a roll, so every box of it is there (7c4d).
+      await page.getByRole('button', { name: 'MONEY', exact: true }).click();
+      await page.getByRole('button', { name: 'A ROLL' }).first().click();
+      missed['NEW CHARACTER money'] = await faults(page);
+      await page.getByRole('button', { name: 'THE STATS', exact: true }).click();
+      // And a point buy's points, range and costs (7c3d).
+      await page.getByRole('group', { name: 'How they are set' }).getByRole('button', { name: 'POINT BUY' }).click();
+      await expect(page.getByRole('textbox', { name: 'Cost of 15' })).toBeVisible();
+    }
+    if (p === 'RESTS') {
+      // Recovery dice on, counted by a formula and given back by an amount, so every box is there (R1b).
+      const resting = page.getByRole('region', { name: 'Resting' });
+      await resting.getByRole('switch', { name: 'Recovery dice' }).click();
+      await resting.getByRole('group', { name: 'Each has' }).getByRole('button', { name: 'A FORMULA' }).click();
+      await resting.getByRole('group', { name: 'LONG REST gives back' }).getByRole('button', { name: 'BY AN AMOUNT' }).click();
+      await expect(resting.getByRole('textbox', { name: 'LONG REST gives back by' })).toBeVisible();
+    }
+    missed[p] = await faults(page);
+    if (p === 'CHOICES') {
+      // IMPORT open over the list, a file previewed with a mistake, so its warning and links are there (choices import 2).
+      await page.getByRole('button', { name: 'IMPORT', exact: true }).click();
+      await page.getByRole('textbox', { name: 'Text to import' }).fill('[options]\nname\nRanger\n[features]\noption, feature, uses, refill\nRanger, Ward, 1, Dawn');
+      await page.getByRole('button', { name: 'PREVIEW', exact: true }).click();
+      await expect(page.getByRole('status', { name: 'Preview' }).getByRole('alert')).toBeVisible();
+      missed[`${p} · IMPORT`] = await faults(page);
+    }
     if (p === 'STATS & RULES') {
       // Each of its tabs, not only the first.
-      for (const tab of ['FORMULAS', 'TABLES', 'DICE', 'ROLLS']) {
+      for (const tab of ['FORMULAS', 'TABLES', 'RANKS', 'DICE', 'ROLLS']) {
         await page.getByRole('tab', { name: tab, exact: true }).click();
-        missed[`${p} · ${tab}`] = await unreachable(page);
+        // RANKS (7f1b): a list from a preset, so its ranks' rows are there.
+        if (tab === 'RANKS') {
+          await page.getByRole('group', { name: 'New rank list' }).getByRole('button', { name: '+ PROFICIENCY' }).click();
+          await expect(page.getByTestId('ranks-proficiency')).toBeVisible();
+        }
+        missed[`${p} · ${tab}`] = await faults(page);
         if (tab === 'DICE') {
           // Dice made from a preset, and a symbol's drawing pad and icons open (6c2b2).
           await page.getByRole('group', { name: 'New dice from a preset' }).getByRole('button', { name: 'GOOD / GREAT / BAD' }).click();
           const hit = page.getByRole('group', { name: 'Symbol Hit' });
           await hit.getByRole('group', { name: 'Hit: look' }).getByRole('button', { name: 'DRAW' }).click();
           await expect(hit.getByRole('group', { name: 'Drawing of Hit' })).toBeVisible();
-          missed[`${p} · DICE · A DIE AND THE PAD`] = await unreachable(page);
+          missed[`${p} · DICE · A DIE AND THE PAD`] = await faults(page);
           await hit.getByRole('group', { name: 'Hit: look' }).getByRole('button', { name: 'ICON' }).click();
-          missed[`${p} · DICE · ICONS`] = await unreachable(page);
+          missed[`${p} · DICE · ICONS`] = await faults(page);
         }
       }
       // ROLLS shows one roll at a time: three made from presets, so all five steps and TEST ROLL
@@ -76,28 +260,41 @@ test('every control in the builder takes a click, on every page', async ({ page 
         if (preset !== 'BLADES ACTION') await page.getByRole('navigation', { name: 'Rolls' }).getByRole('button', { name: '+ ROLL' }).click();
         await page.getByRole('group', { name: 'New roll from a preset' }).getByRole('button', { name: preset }).click();
         await expect(page.getByTestId('test-roll').getByRole('group', { name: 'Conditions on the sample' })).toBeVisible();
-        missed[`${p} · ROLLS · ${preset}`] = await unreachable(page);
+        missed[`${p} · ROLLS · ${preset}`] = await faults(page);
       }
       await page.getByRole('tab', { name: 'STATS', exact: true }).click();
+      // A stat holding the rank list, so HOLDS, AT START and the sample's ranks are there (7f1b).
+      await page.getByRole('combobox', { name: / holds$/ }).first().selectOption('proficiency');
+      await expect(page.getByRole('combobox', { name: / at start, up to$/ }).first()).toBeVisible();
+      missed[`${p} · STATS · A RANKED STAT`] = await faults(page);
       // And as a map (5a3a): the map's own controls, then back to FORMS, as the next journeys expect.
       const view = page.getByRole('group', { name: 'View' });
       await view.getByRole('button', { name: 'GRAPH' }).click();
       await expect(page.getByTestId('graph-view')).toBeVisible();
-      missed[`${p} · GRAPH`] = await unreachable(page);
+      missed[`${p} · GRAPH`] = await faults(page);
       // A roll's panel on the map (6b4a): the ROLLS tab's five steps and TEST ROLL, in the side panel.
       await page.getByTestId('graph-node-roll:blades_action').click();
       await expect(page.getByTestId('graph-panel').getByTestId('test-roll')).toBeVisible();
-      missed[`${p} · GRAPH · ROLL PANEL`] = await unreachable(page);
+      missed[`${p} · GRAPH · ROLL PANEL`] = await faults(page);
       await page.keyboard.press('Escape');
       await view.getByRole('button', { name: 'FORMS' }).click();
     }
     if (p === 'NPCS') {
       // Its second tab, the tiers.
       await page.getByRole('tab', { name: 'TIERS', exact: true }).click();
-      missed[`${p} · TIERS`] = await unreachable(page);
+      missed[`${p} · TIERS`] = await faults(page);
       await page.getByRole('tab', { name: 'STAT BLOCK', exact: true }).click();
     }
   }
+  // A list of choices on the map (7a5c), now CHOICES has made one with levels: its node and panel.
+  await builderPage(page, 'STATS & RULES');
+  const mapView = page.getByRole('group', { name: 'View' });
+  await mapView.getByRole('button', { name: 'GRAPH' }).click();
+  await page.getByTestId('graph-node-choices:new_list_2').click();
+  await expect(page.getByTestId('graph-panel').getByRole('button', { name: 'GO TO CHOICES' })).toBeVisible();
+  missed['STATS & RULES · GRAPH · CHOICES PANEL'] = await faults(page);
+  await page.keyboard.press('Escape');
+  await mapView.getByRole('button', { name: 'FORMS' }).click();
   // HELP's WHO SEES THE TARGET (6c4h), opened as a GM would from the ROLLS tab: its settings,
   // ROLL AGAIN and the two trays.
   await builderPage(page, 'STATS & RULES');
@@ -106,7 +303,7 @@ test('every control in the builder takes a click, on every page', async ({ page 
   await expect(page.getByRole('heading', { level: 1, name: 'HELP', exact: true })).toBeVisible();
   await expect(page.getByRole('article', { name: 'WHO SEES THE TARGET' })).toBeVisible();
   await expect(page.getByTestId('target-seen-example')).toBeVisible();
-  missed['HELP · WHO SEES THE TARGET'] = await unreachable(page);
+  missed['HELP · WHO SEES THE TARGET'] = await faults(page);
   expect(Object.fromEntries(Object.entries(missed).filter(([, v]) => v.length))).toEqual({});
 });
 

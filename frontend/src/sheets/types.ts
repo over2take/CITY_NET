@@ -42,6 +42,8 @@ export interface SheetField {
   id: string;
   label: string;
   type: SheetFieldType;
+  /** A custom system's ranked stat (7f1c1): this select is its rank, and the stat named here holds its worth, shown beside it. */
+  worthField?: string;
   /** 'public' fields appear on the quick-sheet card other players see.
    *  Default is private. The server enforces this - the client flag only
    *  drives edit-time hints. */
@@ -152,7 +154,7 @@ export interface SheetField {
  *  row (one-click: rolls the row's damage dice and spends its Effort cost).
  *  'ability_list' is a dynamic add/remove list stored as JSON in a single
  *  field; each item has name, cost, attr (dropdown), die, and effect. */
-export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list' | 'cyberware' | 'encumbrance' | 'weapon_stash' | 'inventory';
+export type SectionLayout = 'grid' | 'list' | 'skills' | 'notes' | 'weapons' | 'spells' | 'ability_list' | 'cyberware' | 'encumbrance' | 'weapon_stash' | 'inventory' | 'choices' | 'rests' | 'spend';
 
 /** Configuration for the 'ability_list' section layout. */
 export interface AbilityListConfig {
@@ -296,6 +298,21 @@ export interface SheetTemplate {
   /** A custom system's house rules, each with whether the table has it on (sheets/houseRules.ts
    *  houseRulesIn reads them). Absent on the built-in systems, whose house rules are their own. */
   houseRules?: HouseRuleState[];
+  /** A custom system's lists to pick from, in words (backend choices.js choicesShown, 7a3b1): what
+   *  its CHOICES block draws, with the character's own picks from the sheet's worked-out view. */
+  choices?: import('./choicesShown').ChoiceListShown[];
+  /** A custom system's rests for the sheet's REST section (backend recovery.js restingShown, R3b). */
+  resting?: import('./choicesShown').RestingShown;
+  /** The guided new character (7c2), for a custom system with it on. */
+  creation?: import('./newCharacterFlow').CreationShown;
+  /** The XP table (7d2a): there while characters earn XP toward levels. */
+  levels?: import('./xpMeter').LevelsShown;
+  /** SPEND XP's price list, by name (backend spendXp.js spendShown, 7f2c1): there while characters spend XP. */
+  spend?: import('./spendShown').SpendShown | null;
+  /** IMPROVE BY USE (backend improveByUse.js improveShown, 7f3b): the stats with a mark, what marks them, their rest. */
+  improve?: import('./improveShown').ImproveShown | null;
+  /** A custom system's items and slots (backend choices.js itemsRenderedOf, 7e3b): WEAR and ATTUNE on the GEAR tab. */
+  items?: import('./gearItems').ItemsShown;
   /** The layout an NPC's sheet is drawn with, when the system gives NPCs one of their own
    *  (a custom system's stat block). Absent = NPCs use this template. */
   npcLayout?: SheetTemplate;
@@ -307,6 +324,8 @@ export interface SheetTemplate {
   tokenDefense?: TokenDefense;
   /** Bottom tab bar, in order. Sections map to tabs via section.tab. */
   tabs?: string[];
+  /** The tab the sheet opens on, when it isn't the first. */
+  opens?: string;
   sections: SheetSection[];
 }
 

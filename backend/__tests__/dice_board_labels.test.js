@@ -238,6 +238,8 @@ describe('the rolls around dying, and spells', () => {
       const t = await join();
       t.handlers.requestStabilize({ targetUsername: 'DOWNED' });
       await t.heard('stabilizeResult');
+      // The result is said first and its consequences (FRAIL, 1 HP) written after: let them land before the next case resets them.
+      await drain(db);
       expect(t.rolls()[0].board, outcome).toEqual({ label: 'STABILIZE', outcome });
     }
   });

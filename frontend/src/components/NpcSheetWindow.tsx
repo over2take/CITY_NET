@@ -3,9 +3,19 @@ import { ALL_HEADSHOTS } from '../headshots';
 import ReactDOM from 'react-dom';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
+import { GmCreatingLine } from './GmCreatingLine';
+import { GmLevelingLine } from './GmLevelingLine';
+import { FillInForThemWindow } from './FillInForThemWindow';
+import { FillLevelUpWindow } from './FillLevelUpWindow';
 import { ImportSheetDialog } from './ImportSheetDialog';
 import { getTemplate, getMaxPairs, hiddenTabsFor, npcTemplateOf, type CharacterSheet, type SheetTemplate } from '../sheets';
 import type { SheetFieldValue, RollPick } from '../sheets/types';
+import type { ChoicesAction } from '../sheets/choicesShown';
+import type { ItemAction } from '../sheets/gearItems';
+import type { SpendAction } from '../sheets/spendShown';
+import type { ImproveAction } from '../sheets/improveShown';
+import { useChoicesRefused } from '../hooks/useChoicesRefused';
+import { useRecoveryOpen } from '../hooks/useRecoveryOpen';
 import { npcInitiativePortrait } from '../modules/initiative/npcPortrait';
 import { canImport, canImportNpc } from '../sheets/importable';
 import { themeRoot } from '../utils/themeRoot';
@@ -16,6 +26,8 @@ import { themeRoot } from '../utils/themeRoot';
 // player mode: GET/PUT /api/sheets/user/:username (set playerUsername)
 
 interface NpcSheetWindowProps {
+  /** A linked field (HP, cash) opens the window that owns it: the character's health, a player's bank. */
+  onOpenLink?: (source: import('../sheets/types').SheetLinkSource) => void;
   token: string;
   /** NPC mode: sheet id in the NPC library. Ignored when playerUsername is set. */
   npcId: number;
@@ -39,7 +51,7 @@ interface NpcSheetWindowProps {
   locationId?: number;
 }
 
-export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headshots = ALL_HEADSHOTS, pos, setPos, onClose, socket, onRollInitiative, locationId }: NpcSheetWindowProps) {
+export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headshots = ALL_HEADSHOTS, pos, setPos, onClose, socket, onRollInitiative, locationId, onOpenLink }: NpcSheetWindowProps) {
   const apiPath = playerUsername
     ? `/api/sheets/user/${encodeURIComponent(playerUsername)}`
     : `/api/sheets/npcs/${npcId}`;
@@ -51,7 +63,15 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
   }, [playerUsername]);
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Why the server said no to a pick the GM asked for on a player's sheet (7a3b2).
+  const choicesRefused = useChoicesRefused(playerUsername ? socket : null);
+  const recoveryOpen = useRecoveryOpen(playerUsername ? socket : null);
   const [isImportOpen, setIsImportOpen] = useState(false);
+  const [fillingIn, setFillingIn] = useState(false);
+  const [fillInPos, setFillInPos] = useState({ x: pos.x + 40, y: pos.y + 40 });
+  // FILL IT IN FOR THEM for a level up (7d7a).
+  const [levelingIn, setLevelingIn] = useState(false);
+  const [levelInPos, setLevelInPos] = useState({ x: pos.x + 40, y: pos.y + 40 });
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   const [reloadKey, setReloadKey] = useState(0);
   const [ruleSettings, setRuleSettings] = useState<{ key: string; value: string }[]>([]);
@@ -116,11 +136,11 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
     pendingSaves.current.clear();
   }, []);
 
-  const saveFields = useCallback(async (fields: Record<string, SheetFieldValue>) => {
+  const saveFields = useCallback(async (fields: Record<string, SheetFieldValue>, upload?: { picks?: unknown }) => {
     await fetch(apiPath, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields }),
+      body: JSON.stringify({ fields, ...(upload ? { upload: true, picks: upload.picks } : {}) }),
     });
   }, [apiPath, token]);
 
@@ -276,12 +296,22 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
           >{'>'}</button>
         </div>
       )}
+      {playerUsername && socket && sheet && (
+        <GmCreatingLine template={template} data={sheet.data} system={sheet.system} refused={choicesRefused}
+          onAct={(kind) => socket.emit('creationAction', { kind, username: playerUsername })}
+          onFillIn={() => { socket.emit('creationAction', { kind: 'open', username: playerUsername }); setFillingIn(true); }} />
+      )}
+      {playerUsername && socket && sheet && (
+        <GmLevelingLine template={template} data={sheet.data} onClear={() => socket.emit('levelAction', { kind: 'clearHealth', username: playerUsername })}
+          onFillIn={() => setLevelingIn(true)} />
+      )}
       {sheet && template ? (
         <SheetRenderer
           template={template}
           data={sheet.data}
           portraitUrl={sheet.portrait_url}
           onFieldChange={handleFieldChange}
+          onOpenLink={onOpenLink}
           // GM-only in both modes: the GM sets the values a system keeps for the GM.
           gm
           {...(!playerUsername && socket && locationId !== undefined ? {
@@ -292,6 +322,20 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
           portraitShadow={shadowFilter}
           onTogglePortraitShadow={handleTogglePortraitShadow}
           hiddenTabs={hiddenTabsFor(sheet.system, ruleSettings)}
+          // A player's picks (7a3b2): the GM picks, drops and changes them for the player named.
+          {...(playerUsername && socket ? {
+            onChoices: (action: ChoicesAction) => socket.emit('choicesAction', { ...action, username: playerUsername }), choicesRefused,
+            // What each level gained (7d7b2), put right for the player named.
+            onLevel: (action: Record<string, unknown>) => socket.emit('levelAction', { ...action, username: playerUsername }),
+            // WEAR and ATTUNE (7e3b): the GM's ATTUNE ANYWAY and own count, for the player named.
+            onItem: (action: ItemAction) => socket.emit('itemAction', { ...action, username: playerUsername }),
+            // SPEND XP (7f2c1): a purchase made, approved, declined or undone, for the player named.
+            onSpend: (action: SpendAction) => socket.emit('spendAction', { ...action, username: playerUsername }),
+            // IMPROVE BY USE (7f3b): a mark ticked or cleared for the player named.
+            onImprove: (action: ImproveAction) => socket.emit('improveAction', { ...action, username: playerUsername }),
+            onRecoverySpend: (pool: string, count: number) => socket.emit('recoverySpend', { pool, count, username: playerUsername }), recoveryOpen,
+            onRestTake: (rest: string) => socket.emit('restTake', { rest, username: playerUsername }),
+          } : {})}
         />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>
@@ -299,6 +343,12 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
         </div>
       )}
     </DraggableWindow>
+    {fillingIn && playerUsername && socket && (
+      <FillInForThemWindow key={playerUsername} token={token} socket={socket} username={playerUsername} pos={fillInPos} setPos={setFillInPos} onClose={() => setFillingIn(false)} />
+    )}
+    {levelingIn && playerUsername && socket && (
+      <FillLevelUpWindow key={playerUsername} token={token} socket={socket} username={playerUsername} pos={levelInPos} setPos={setLevelInPos} onClose={() => setLevelingIn(false)} />
+    )}
     {isImportOpen && ReactDOM.createPortal(
       <ImportSheetDialog
         gameSystem={sheet?.system}
@@ -306,8 +356,8 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
         pos={importPos}
         setPos={setImportPos}
         onClose={() => setIsImportOpen(false)}
-        onApply={async (fields) => {
-          await saveFields(fields);
+        onApply={async (fields, opts) => {
+          await saveFields(fields, playerUsername ? { picks: opts?.picks } : undefined);
           setReloadKey(k => k + 1);
         }}
       />,

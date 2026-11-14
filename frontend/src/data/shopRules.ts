@@ -89,7 +89,9 @@ export type RefusalReason =
   // A custom system with the bank turned off has no money to trade in (3b2).
   | 'no_bank'
   // A custom system that turned its shops off (3b3).
-  | 'no_shops';
+  | 'no_shops'
+  // An item installed in the body, its gear line kept (7e4).
+  | 'installed';
 
 /**
  * What to tell the player when the server says no.
@@ -125,5 +127,6 @@ export const refusalText = (word: WordLookup = todaysWords): Record<RefusalReaso
     qty: `A quantity in the cart is more than the ${shop} will sell at once. Nothing was charged.`,
     no_bank: `This game has no ${credits} to trade in. Nothing was bought or sold.`,
     no_shops: `This game has no ${shops}. Nothing was bought or sold.`,
+    installed: 'Something on the sell list is installed. Remove it first. Nothing was sold.',
   };
 };

@@ -4,6 +4,7 @@ const { checkRests, restsOf, restIdsOf, reachOf, STANDARD, LIMITS } = require('.
 const { checkDefinition } = require('../systemBuilder/definition');
 const { conditionsOf } = require('../systemBuilder/conditions');
 const { rollAmount, boxProblem } = require('../systemBuilder/tierRolls');
+const citysys = require('../systemBuilder/citysys');
 
 /**
  * A system's rests (4f1). Approved mockup builder-rests (2026-10-09): four standard rests, renamed or
@@ -231,6 +232,25 @@ describe('what a rest can reach', () => {
     expect([...reach.sections]).toEqual([['body', ['luck']], ['magic', ['slots', 'focus']]]);
     for (const name of ['level', 'hp', 'armor', 'con_mod', 'spell_dc', 'ward', 'notes']) expect(reach.names.has(name), name).toBe(true);
     expect(reach.names.has('gold')).toBe(false);
+  });
+
+  it('names the levels too, in a system with a levelled list (rest levels)', () => {
+    const classes = { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter' }] };
+    const levelled = { name: 'Forge', stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'con', label: 'Con' }] }], choices: [classes] };
+    for (const name of ['level', 'classes_level', 'fighter_level']) expect(reachOf(levelled).names.has(name), name).toBe(true);
+    const problems = (amount) => checkDefinition({ ...levelled, rests: { short_rest: { refills: [{ what: 'health', how: 'by', amount }] } } }).problems.map((p) => `${p.where}: ${p.message}`);
+    for (const amount of ['@level', '@fighter_level d10 + @con', 'floor(@classes_level / 2)']) expect(problems(amount), amount).toEqual([]);
+    // Without a levelled list there is no level to read.
+    expect(reachOf({ ...levelled, choices: [] }).names.has('level')).toBe(false);
+  });
+
+  it('travels in a system file: exported and installed with an amount reading a level, and no problems', () => {
+    const classes = { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter' }] };
+    const def = { name: 'Forge', stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'con', label: 'Con' }] }], choices: [classes],
+      rests: { short_rest: { refills: [{ what: 'health', how: 'by', amount: '@fighter_level d10 + @con' }] } } };
+    const read = citysys.readFile(JSON.stringify(citysys.buildFile({ definition: def, version: 1, origin: 'forge' })));
+    expect(read.problems).toEqual([]);
+    expect(read.file.definition.rests.short_rest.refills[0].amount).toBe('@fighter_level d10 + @con');
   });
 });
 

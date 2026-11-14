@@ -270,6 +270,17 @@ export const isTokenShape = (shape: unknown) => TOKEN_SHAPES.includes(shape as s
  * where HEALTH offers to make the record. The GM's is the selected token, and with none
  * selected there is nothing to open.
  */
+/**
+ * The token a sheet's linked health opens, for the GM's view of a sheet (2026-10-31): a player's
+ * own token on the map being viewed, or an NPC's by its token id; or a notice when it has none here.
+ */
+export function linkedHealthTarget(locations: any[], who: { username?: string | null; locationId?: number | null }): { token: any } | { notice: string } {
+  const token = who.locationId != null
+    ? locations.find((l) => l.id === who.locationId)
+    : locations.find((l) => l.shape === 'rhombus' && l.owner === who.username);
+  return token && isTokenShape(token.shape) ? { token } : { notice: `${(who.username || 'THIS NPC').toUpperCase()} HAS NO TOKEN ON THIS MAP` };
+}
+
 export function hitPointsTarget(c: {
   isGm: boolean;
   selected: any;

@@ -7,6 +7,7 @@
 import type { Definition } from './systemsApi';
 import { statGroups, formulaList, tableList } from './statsRules';
 import { houseRuleList } from './houseRules';
+import { listsOnMap } from './choices';
 import { graphOf, withPositions, heightOf, takenBoxes, clearOf, GRID, SIZE, type Graph, type Point, type Positions } from './graphModel';
 
 export interface Note { id: string; on?: string; text: string }
@@ -41,6 +42,7 @@ export const pinChoices = (def: Definition): { id: string; label: string }[] => 
   ...formulaList(def).map((f) => ({ id: f.id, label: (f.label || f.id).toUpperCase() })),
   ...tableList(def).map((t) => ({ id: `table:${t.id}`, label: `TABLE ${(t.label || t.id).toUpperCase()}` })),
   ...houseRuleList(def).map((r) => ({ id: `rule:${r.id}`, label: `HOUSE RULE ${(r.name || r.id).toUpperCase()}` })),
+  ...listsOnMap(def).map((c) => ({ id: `choices:${c.id}`, label: `CHOICES ${(c.many || c.id).toUpperCase()}` })),
 ];
 
 /** A new note at `at`, pinned to `on` if given: the system after, and the note's node; null at the most notes there can be. */

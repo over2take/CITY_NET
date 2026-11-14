@@ -7,9 +7,12 @@ import {
   type Formula, type StatGroup, type Table, type ConditionPart,
 } from '../sheets/statsRules';
 import { houseRuleList } from '../sheets/houseRules';
+import { rankLists, rankListOf, withStatRank, withStatAtStart, type RankedStat } from '../sheets/ranks';
 import type { Tried } from '../hooks/usePreviewValues';
 import type { FormulaBox } from '../hooks/useFormulaInsert';
 import { OnlyWith } from './OnlyWith';
+import { FormulaWords } from './FormulaWords';
+import { isMistake, type FormulaRead } from '../sheets/formulaBox';
 import { HINTS } from '../sheets/builderHelp';
 import { ColumnHead, FieldName } from './HelpHint';
 import { small, why, btn, field, th, td, box, head } from './statsRulesStyles';
@@ -29,6 +32,8 @@ interface Edits { definition: Definition; edit: (next: Definition) => void }
 export function GroupSection({ definition, edit, group: g }: Edits & { group: StatGroup }) {
   const groups = statGroups(definition);
   const abilities = groups[0]?.stats ?? [];
+  // HOLDS (7f1b), once the system has rank lists: a number, or a rank from one.
+  const lists = rankLists(definition);
   return (
     <section aria-label={`${g.label || g.id} stats`} style={box}>
       <div style={head}>
@@ -43,19 +48,48 @@ export function GroupSection({ definition, edit, group: g }: Edits & { group: St
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
           <thead><tr>
             <ColumnHead style={th}>NAME</ColumnHead><ColumnHead style={th} hint={HINTS['rules.id']}>ID</ColumnHead>
+            {lists.length > 0 && <ColumnHead style={th} hint={HINTS['rules.holds']}>HOLDS</ColumnHead>}
             <ColumnHead style={th} hint={HINTS['rules.lowest']}>LOWEST</ColumnHead><ColumnHead style={th} hint={HINTS['rules.highest']}>HIGHEST</ColumnHead>
             <ColumnHead style={th} hint={HINTS['rules.tiedTo']}>TIED TO</ColumnHead><ColumnHead style={th} hint={HINTS['rules.sample']}>SAMPLE</ColumnHead><ColumnHead style={th} />
           </tr></thead>
           <tbody>
-            {g.stats.map((s) => (
+            {g.stats.map((s) => {
+              const ranked = rankListOf(definition, s as RankedStat);
+              return (
               <tr key={s.id} data-testid={`stat-${s.id}`}>
                 <td style={td}><input type="text" aria-label={`${s.label || s.id} name`} maxLength={40} value={s.label} style={{ ...field, width: '100%' }}
                   onChange={(e) => edit(withStat(definition, s.id, { label: e.target.value }))} /></td>
                 <td style={{ ...td, fontSize: 11, opacity: 0.6 }}>@{s.id}</td>
+                {lists.length > 0 && (
+                  <td style={td}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <select aria-label={`${s.label} holds`} value={ranked?.id ?? ''} style={field}
+                        onChange={(e) => edit(withStatRank(definition, s.id, e.target.value || null))}>
+                        <option value="">A NUMBER</option>
+                        {lists.map((l) => <option key={l.id} value={l.id}>{(l.label || l.id).toUpperCase()}</option>)}
+                      </select>
+                      {ranked && (
+                        <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                          <FieldName htmlFor={`stat-${s.id}-at-start`} hint={HINTS['rules.atStart']} style={{ fontSize: 10, letterSpacing: 1, opacity: 0.85 }}>AT START, UP TO</FieldName>
+                          <select id={`stat-${s.id}-at-start`} aria-label={`${s.label} at start, up to`} value={(s as RankedStat).atStart ?? ''} style={field}
+                            onChange={(e) => edit(withStatAtStart(definition, s.id, e.target.value === '' ? null : Number(e.target.value)))}>
+                            <option value="">ANY</option>
+                            {ranked.list.map((k, i) => <option key={i} value={i}>{k.name || `RANK ${i + 1}`}</option>)}
+                          </select>
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                )}
+                {ranked ? <>
+                  <td style={{ ...td, opacity: 0.5 }} title="Its ranks are its range">—</td>
+                  <td style={{ ...td, opacity: 0.5 }} title="Its ranks are its range">—</td>
+                </> : <>
                 <td style={td}><input type="number" aria-label={`${s.label} lowest`} value={s.min ?? ''} placeholder="none" style={{ ...field, width: 70 }}
                   onChange={(e) => edit(withStat(definition, s.id, { min: wholeOrNone(e.target.value) }))} /></td>
                 <td style={td}><input type="number" aria-label={`${s.label} highest`} value={s.max ?? ''} placeholder="none" style={{ ...field, width: 70 }}
                   onChange={(e) => edit(withStat(definition, s.id, { max: wholeOrNone(e.target.value) }))} /></td>
+                </>}
                 <td style={td}>
                   <select aria-label={`${s.label} tied to`} value={s.tie ?? ''} style={field}
                     onChange={(e) => edit(withStat(definition, s.id, { tie: e.target.value || null }))}>
@@ -63,13 +97,20 @@ export function GroupSection({ definition, edit, group: g }: Edits & { group: St
                     {groups.flatMap((x) => x.stats).filter((o) => o.id !== s.id).map((o) => <option key={o.id} value={o.id}>{o.label || o.id}</option>)}
                   </select>
                 </td>
-                <td style={td}><input type="number" aria-label={`${s.label} sample`} value={sampleOf(definition, s.id) ?? ''} placeholder="0"
+                <td style={td}>{ranked
+                  // A ranked stat's sample is its step (7f1b).
+                  ? <select aria-label={`${s.label} sample`} value={sampleOf(definition, s.id) ?? 0} style={{ ...field, borderColor: 'var(--cyan)', color: 'var(--cyan)' }}
+                      onChange={(e) => edit(withSample(definition, s.id, Number(e.target.value)))}>
+                      {ranked.list.map((k, i) => <option key={i} value={i}>{k.name || `RANK ${i + 1}`}</option>)}
+                    </select>
+                  : <input type="number" aria-label={`${s.label} sample`} value={sampleOf(definition, s.id) ?? ''} placeholder="0"
                   style={{ ...field, width: 70, borderColor: 'var(--cyan)', color: 'var(--cyan)' }}
-                  onChange={(e) => edit(withSample(definition, s.id, e.target.value.trim() === '' ? null : Number(e.target.value)))} /></td>
+                  onChange={(e) => edit(withSample(definition, s.id, e.target.value.trim() === '' ? null : Number(e.target.value)))} />}</td>
                 <td style={td}><button type="button" className="utility-btn" style={btn} aria-label={`Remove ${s.label || s.id}`}
                   onClick={() => edit(withoutStat(definition, s.id))}>×</button></td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -182,11 +223,11 @@ export function FormulaName({ definition, edit, f }: Edits & { f: Formula }) {
 /** Where INSERT puts a name in one box: the box's input, and where its cursor is. */
 export type InsertBinding = { inputRef?: (el: HTMLInputElement | null) => void; onCursor?: (at: number) => void };
 
-/** One box of formula text, its cursor told to INSERT. */
-function TextBox({ label, value, bad, onText, inputRef, onCursor }: InsertBinding & { label: string; value: string; bad: boolean; onText: (text: string) => void }) {
+/** One box of formula text, its cursor told to INSERT, described by its words line. */
+function TextBox({ label, value, bad, onText, inputRef, onCursor, describedBy }: InsertBinding & { label: string; value: string; bad: boolean; onText: (text: string) => void; describedBy?: string }) {
   return (
     <input ref={inputRef} type="text" aria-label={label} maxLength={1000} value={value}
-      aria-invalid={bad ? true : undefined}
+      aria-invalid={bad ? true : undefined} aria-describedby={describedBy}
       style={{ ...field, width: '100%', borderColor: bad ? 'var(--danger)' : 'var(--green)' }}
       onChange={(e) => { onText(e.target.value); onCursor?.(e.target.selectionStart ?? e.target.value.length); }}
       onSelect={(e) => onCursor?.((e.target as HTMLInputElement).selectionStart ?? 0)}
@@ -199,12 +240,16 @@ const PART_WORD: Record<ConditionPart, string> = { when: 'IF', then: 'THEN', els
 /**
  * A formula's text, or a condition's IF, THEN and ELSE (5b6a: IF something isn't 0, THEN one
  * number, ELSE another); its mistake under it, and a formula's alternative under a house rule.
- * `bind` lets INSERT put a name where the cursor is, in whichever box.
+ * `bind` lets INSERT put a name where the cursor is, in whichever box. `reads` (formula box 3)
+ * is what the server made of each box: a formula said in words under it, and a name the system
+ * hasn't got in red with its fix, under each box it is in. The VALUE beside it says the sample's.
  */
-export function FormulaBody({ definition, edit, f, problem, tried, bind }: Edits & {
+export function FormulaBody({ definition, edit, f, problem, tried, bind, reads }: Edits & {
   f: Formula; problem?: string; tried: Record<string, Tried>; bind?: (box: FormulaBox) => InsertBinding;
+  reads?: (box: FormulaBox) => FormulaRead | null;
 }) {
   const name = f.label || f.id;
+  const wordsId = (box: FormulaBox) => `formula-words-${f.id}-${box}`;
   return (
     <>
       {isCondition(f)
@@ -213,14 +258,26 @@ export function FormulaBody({ definition, edit, f, problem, tried, bind }: Edits
             {CONDITION_PARTS.map((part) => (
               <React.Fragment key={part}>
                 <span style={{ ...small, color: 'var(--cyan)', opacity: 1 }}>{PART_WORD[part]}</span>
-                <TextBox label={`${name} ${PART_WORD[part].toLowerCase()}`} value={partOf(f, part)} bad={!!problem}
+                <TextBox label={`${name} ${PART_WORD[part].toLowerCase()}`} value={partOf(f, part)} bad={!!problem || isMistake(reads?.(part))}
+                  describedBy={isMistake(reads?.(part)) ? wordsId(part) : undefined}
                   onText={(text) => edit(withCondition(definition, f.id, { [part]: text }))} {...bind?.(part)} />
+                {/* A condition's parts get a line only for a mistake: their words would say little. */}
+                {isMistake(reads?.(part)) && <>
+                  <span />
+                  <FormulaWords id={wordsId(part)} kind="formula" text={partOf(f, part)} read={reads?.(part)} live={false}
+                    onFix={(text) => edit(withCondition(definition, f.id, { [part]: text }))} />
+                </>}
               </React.Fragment>
             ))}
           </div>
         )
-        : <TextBox label={`${name} formula`} value={f.formula ?? ''} bad={!!problem}
-            onText={(text) => edit(withFormula(definition, f.id, { formula: text }))} {...bind?.('formula')} />}
+        : <>
+            <TextBox label={`${name} formula`} value={f.formula ?? ''} bad={!!problem || isMistake(reads?.('formula'))}
+              describedBy={reads ? wordsId('formula') : undefined}
+              onText={(text) => edit(withFormula(definition, f.id, { formula: text }))} {...bind?.('formula')} />
+            {reads && <FormulaWords id={wordsId('formula')} kind="formula" text={f.formula ?? ''} read={reads('formula')} sample={false} live={false}
+              onFix={(text) => edit(withFormula(definition, f.id, { formula: text }))} />}
+          </>}
       {problem && <div role="alert" style={{ ...why, color: 'var(--danger)', opacity: 1, fontSize: 11 }}>{problem}</div>}
       {!isCondition(f) && <Alternative f={f} definition={definition} edit={edit} tried={tried} />}
     </>

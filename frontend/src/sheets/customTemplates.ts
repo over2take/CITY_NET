@@ -24,10 +24,14 @@ export interface CustomRenderField {
   source?: SheetLinkSource;
   /** Who changes it: the owner (the default) or only the GM. */
   edit?: 'player' | 'gm';
+  /** A ranked stat's picker (7f1c1): the stat whose worth is shown beside it. */
+  worthField?: string;
 }
 
 export interface CustomRenderSheet {
   tabs?: string[];
+  /** The tab it opens on, when not the first (the starter lists CHARACTER first, opening on STATS). */
+  opens?: string;
   header?: { nameField?: string; subtitleFields?: string[]; hpField?: string; hpMaxField?: string; chips?: { field: string; label: string }[] };
   sections: { id: string; label: string; layout: SectionLayout; tab?: string; columns?: number; only_with?: string; fields: CustomRenderField[] }[];
 }
@@ -61,6 +65,19 @@ export interface CustomRender {
   house_rules?: import('./types').HouseRuleState[];
   /** Its own rolls (6b2a): each one's name, the fields with a die button for it, and its changes. */
   rolls?: (CustomFieldRoll & { fields: string[] })[];
+  /** Its lists to pick from, in words, never a formula (7a3b1). */
+  choices?: import('./choicesShown').ChoiceListShown[];
+  /** How a sheet rests (R3a): who finishes a called rest, and each rest by name. */
+  resting?: import('./choicesShown').RestingShown;
+  /** The guided new character (7c2): the steps to walk through, null while it is off. */
+  creation?: import('./newCharacterFlow').CreationShown | null;
+  levels?: import('./xpMeter').LevelsShown | null;
+  /** SPEND XP's price list by name (backend spendXp.js spendShown, 7f2c1), or null where XP isn't spent. */
+  spend?: import('./spendShown').SpendShown | null;
+  /** IMPROVE BY USE (backend improveByUse.js improveShown, 7f3b), or null where stats don't improve by use. */
+  improve?: import('./improveShown').ImproveShown | null;
+  /** Its items and slots (7e3b), null where it has none. */
+  items?: import('./gearItems').ItemsShown | null;
 }
 
 /** Fired on window when a custom template has been loaded, so the app can redraw. */
@@ -103,6 +120,7 @@ const layoutTemplate = (id: string, name: string, sheet: CustomRenderSheet | und
       ...(f.placeholder ? { placeholder: f.placeholder } : {}),
       ...(f.unit ? { unit: f.unit } : {}),
       ...(f.options ? { options: f.options } : {}),
+      ...(f.worthField ? { worthField: f.worthField } : {}),
       ...(f.source ? { source: f.source, ...(f.source === 'token_ac' ? { sourceWritable: true } : {}) } : {}),
       ...(derived.has(f.id) ? { derived: true as const } : {}),
       ...(f.edit === 'gm' ? { gmOnly: true as const } : {}),
@@ -114,6 +132,7 @@ const layoutTemplate = (id: string, name: string, sheet: CustomRenderSheet | und
     id,
     name,
     tabs: sheet?.tabs,
+    ...(sheet?.opens ? { opens: sheet.opens } : {}),
     ...(header && header.nameField ? { header: { ...header, nameField: header.nameField } } : { header: { nameField: 'name' } }),
     sections,
   };
@@ -134,6 +153,15 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.bank ? { bank: render.bank } : {}),
     ...(render.distance ? { distance: render.distance } : {}),
     ...(render.house_rules?.length ? { houseRules: render.house_rules } : {}),
+    ...(render.choices?.length ? { choices: render.choices } : {}),
+    ...(render.resting ? { resting: render.resting } : {}),
+    ...(render.creation ? { creation: render.creation } : {}),
+    ...(render.levels ? { levels: render.levels } : {}),
+    ...(render.items ? { items: render.items } : {}),
+    // SPEND XP's price list (7f2c1), for the sheet's SPEND XP section.
+    ...(render.spend ? { spend: render.spend } : {}),
+    // IMPROVE BY USE (7f3b), for the marks beside its stats.
+    ...(render.improve ? { improve: render.improve } : {}),
     ...tiers,
     ...(npcSheet ? { npcLayout: { ...layoutTemplate(render.id, render.name, npcSheet, derived, rolls), ...tiers } } : {}),
   };

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { restCalls, npcsOnMap, chosenOf, requestFor, changeText, keyOf, type Rested } from '../restCalls';
+import { restCalls, npcsOnMap, chosenOf, requestFor, changeText, keyOf, waitingText, calledLine, type Rested, type CalledPlayer, type CalledRest } from '../restCalls';
 
 /**
  * Calling a rest from the GAME tab, as logic and requests (4f5). Approved mockup builder-rests, stage 3
@@ -64,6 +64,26 @@ describe('a change', () => {
   });
 });
 
+describe('a rest called on the sheets (R4)', () => {
+  const p = (state: CalledPlayer['state'], more: Partial<CalledPlayer> = {}): CalledPlayer => ({ username: 'rook', name: 'Rook', state, changes: [], spent: 0, ...more });
+  const call = (players: CalledPlayer[], waiting: number): CalledRest => ({ id: 'c', rest: 'short_rest', name: 'Short rest', at: 'x', npcs: 0, players, waiting });
+
+  it('says how many are left, or that everyone finished', () => {
+    expect(waitingText(call([p('waiting'), p('finished'), p('resting')], 2))).toBe('WAITING ON 2 OF 3');
+    expect(waitingText(call([p('finished')], 0))).toBe('EVERYONE FINISHED');
+  });
+
+  it('gives each player a line: finished (by whom, what changed, the dice), resting, or not yet', () => {
+    const hp = { what: 'health', label: 'HP', from: 9, to: 11 };
+    expect(calledLine(p('finished', { by: 'player', changes: [hp], spent: 1 }), true)).toBe('finished · HP 9 → 11 · 1 die spent');
+    expect(calledLine(p('finished', { by: 'gm' }), true)).toBe('finished by the GM · no dice spent');
+    expect(calledLine(p('finished', { by: 'gm' }), false)).toBe('finished by the GM');
+    expect(calledLine(p('finished', { changes: [hp, { ...hp, label: 'Slots', from: 0, to: 2 }], spent: 3 }), true)).toBe('finished · HP 9 → 11 · SLOTS 0 → 2 · 3 dice spent');
+    expect(calledLine(p('resting', { spent: 2 }), true)).toBe('resting · 2 dice spent');
+    expect(calledLine(p('waiting'), true)).toBe('not finished yet');
+  });
+});
+
 describe('the requests', () => {
   const answering = (status: number, body: unknown) => vi.fn(async () => ({ ok: status < 300, status, json: async () => body }) as Response);
 
@@ -73,7 +93,11 @@ describe('the requests', () => {
     await api.list();
     await api.preview('long_rest', true, [7]);
     await api.call('long_rest', ['vex'], []);
-    expect(fetcher.mock.calls).toEqual([
+    await api.finish(['rook']);
+    await api.finish(true);
+    const post = (body: unknown) => ({ method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer admintoken' }, body: JSON.stringify(body) });
+    expect(fetcher.mock.calls.slice(3)).toEqual([['/api/sheets/rest/finish', post({ players: ['rook'] })], ['/api/sheets/rest/finish', post({ players: true })]]);
+    expect(fetcher.mock.calls.slice(0, 3)).toEqual([
       ['/api/sheets/rests', { headers: { Authorization: 'Bearer admintoken' } }],
       ['/api/sheets/rest', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer admintoken' }, body: JSON.stringify({ rest: 'long_rest', players: true, npcs: [7], preview: true }) }],
       ['/api/sheets/rest', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer admintoken' }, body: JSON.stringify({ rest: 'long_rest', players: ['vex'], npcs: [] }) }],

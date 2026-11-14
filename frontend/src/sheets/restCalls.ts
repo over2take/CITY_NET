@@ -18,8 +18,46 @@ export interface Rested {
   gone: string[];
   /** The dice-log line, once called. */
   line?: string;
+  /** Opened on their sheet for them to finish, nothing changed yet (rests on each sheet, R3b). */
+  called?: true;
 }
 export interface RestAnswer { rest: { id: string; name: string }; preview: boolean; characters: Rested[] }
+
+/** One player in a rest called on the sheets (R4): finished (by them or the GM), resting, or waiting. */
+export interface CalledPlayer {
+  username: string;
+  name: string;
+  state: 'finished' | 'resting' | 'waiting';
+  by?: 'player' | 'gm';
+  /** What finishing it changed. */
+  changes: RestChange[];
+  /** Recovery dice spent since it was called. */
+  spent: number;
+}
+/** The latest rest called on the players' sheets, as the server sees it (backend recovery.js restCallsShown). */
+export interface CalledRest { id: string; rest: string; name: string; at: string; npcs: number; players: CalledPlayer[]; waiting: number }
+
+/**
+ * What CALL's confirm says will happen (R3b): at the GM's call it applies now; on each sheet it opens
+ * on the players' sheets for them to finish, and the NPCs rest at once.
+ */
+export const confirmText = (finish: 'call' | 'sheet', players: number, npcs: number): string => {
+  if (finish !== 'sheet') return 'It applies now, dice rolled for each.';
+  const s = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  return [
+    players ? `It opens on ${s(players, 'player\'s sheet', 'players\' sheets')} for them to finish.` : '',
+    npcs ? `${s(npcs, 'NPC rests', 'NPCs rest')} at once.` : '',
+  ].filter(Boolean).join(' ');
+};
+
+/** What the panel says once a rest is called: those it reached, and those it opened on a sheet. */
+export const calledText = (rest: string, characters: Rested[]): string => {
+  const opened = characters.filter((c) => c.called).length;
+  const rested = characters.length - opened;
+  const n = (k: number, what: string) => `${k} ${what}${k === 1 ? '' : 'S'}`;
+  if (!opened) return `${rest.toUpperCase()} CALLED · ${n(rested, 'CHARACTER')}`;
+  return `${rest.toUpperCase()} CALLED · OPEN ON ${n(opened, 'SHEET')}${rested ? ` · ${n(rested, 'NPC')} RESTED` : ''}`;
+};
 
 /** Who rests: every player character; them and the NPCs on the map being viewed; or the ones ticked. */
 export type Who = 'players' | 'map' | 'choose';
@@ -30,6 +68,13 @@ export const WHO_LABELS: Record<Who, string> = {
 };
 
 const UNREACHABLE = 'Could not reach the server.';
+
+/** The game-wide setting the GM opens spending recovery dice with (backend recovery.js OPEN_SETTING). */
+export const OPEN_SETTING = 'recovery_open';
+
+/** Whether rows from /api/settings have spending recovery dice open. */
+export const isOpen = (rows: unknown): boolean => Array.isArray(rows)
+  && rows.some((r) => !!r && typeof r === 'object' && (r as { key?: unknown }).key === OPEN_SETTING && (r as { value?: unknown }).value === '1');
 
 export const restCalls = (token: string, fetcher: typeof fetch = fetch) => {
   const ask = async <T>(url: string, body?: unknown): Promise<Answer<T>> => {
@@ -46,8 +91,17 @@ export const restCalls = (token: string, fetcher: typeof fetch = fetch) => {
     return { ok: false, status: res.status, error: json && typeof json.error === 'string' ? json.error : UNREACHABLE };
   };
   return {
-    /** The running game's rests that are on; none for a built-in game. */
-    list: () => ask<{ system: string; rests: { id: string; name: string }[] }>('/api/sheets/rests'),
+    /** The running game's rests that are on, none for a built-in game; and its recovery dice's name and who says when they're spent (R2b). */
+    list: () => ask<{ system: string; rests: { id: string; name: string }[]; recovery?: { name: string; spend: 'any' | 'gm' } | null; finish?: 'call' | 'sheet'; call?: CalledRest | null }>('/api/sheets/rests'),
+    /** Finish the latest called rest for those named still resting, or everyone left (R4). */
+    finish: (players: true | string[]) => ask<{ finished: number; call: CalledRest | null }>('/api/sheets/rest/finish', { players }),
+    /** Whether the GM has spending recovery dice open (R2b): the recovery_open setting. */
+    spendingOpen: async () => {
+      const r = await ask<unknown>('/api/settings');
+      return r.ok ? { ok: true as const, value: isOpen(r.value) } : r;
+    },
+    /** Opens or closes spending recovery dice for players. */
+    setSpending: (open: boolean) => ask<unknown>('/api/settings', { key: OPEN_SETTING, value: open ? '1' : '0' }),
     /** What a rest would do: nothing rolled or written. */
     preview: (rest: string, players: true | string[] | false, npcs: number[]) => ask<RestAnswer>('/api/sheets/rest', { rest, players, npcs, preview: true }),
     /** Call it: rolled, written, and one dice-log line each. */
@@ -94,3 +148,18 @@ export const requestFor = (who: Who, chosen: Rested[], mapNpcs: number[]): { pla
 export const changeText = (c: RestChange) => (c.to === null
   ? `${c.label.toUpperCase()} ${c.from} + ${(c.pending ?? []).join(' + ')}`
   : `${c.label.toUpperCase()} ${c.from} → ${c.to}`);
+
+/** How many are left of a called rest (R4): "WAITING ON 1 OF 3", or "EVERYONE FINISHED". */
+export const waitingText = (c: CalledRest) => (c.waiting ? `WAITING ON ${c.waiting} OF ${c.players.length}` : 'EVERYONE FINISHED');
+
+/**
+ * One player's line in a called rest (R4; approved mockup rest-on-sheet, pane 4): "finished · HP 9 →
+ * 11 · 1 die spent", "finished by the GM · no dice spent", "resting · 1 die spent", or "not finished
+ * yet". Dice are named only in a game that has recovery dice.
+ */
+export const calledLine = (p: CalledPlayer, dice: boolean): string => {
+  const spent = p.spent ? `${p.spent} ${p.spent === 1 ? 'die' : 'dice'} spent` : dice ? 'no dice spent' : '';
+  if (p.state === 'finished') return [p.by === 'gm' ? 'finished by the GM' : 'finished', ...p.changes.map(changeText), spent].filter(Boolean).join(' · ');
+  if (p.state === 'resting') return `resting · ${spent}`;
+  return 'not finished yet';
+};

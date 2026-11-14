@@ -376,6 +376,63 @@ describe('deleting', () => {
     await request(app).delete(`/api/systems/${id}`).set(gm);
     expect((await preview(file)).body.restores).toEqual({ id, name: 'Vault Knights', replacesChanges: true });
   });
+
+  describe('starting fresh instead (2026-11-06)', () => {
+    const count = async (id) => (await get(db, 'SELECT COUNT(*) AS n FROM character_sheets WHERE system = ?', [id])).n;
+    const played = async () => {
+      const id = (await install(fileOf(VAULT), 'new')).body.id;
+      await run(db, 'INSERT INTO character_sheets (username, system, data, is_npc) VALUES (?, ?, ?, 0)', ['GHOST', id, '{"name":"Sir Ghost"}']);
+      await request(app).delete(`/api/systems/${id}`).set(gm);
+      return id;
+    };
+
+    it('installs a new system, with nothing played in the old one, which stays deleted but kept', async () => {
+      const old = await played();
+      const res = await install(fileOf(VAULT), 'fresh');
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ name: 'Vault Knights', published: true });
+      expect(res.body.id).not.toBe(old);
+      expect(res.body.restored).toBeUndefined();
+      expect(templates.isValidSystem(res.body.id)).toBe(true);
+      expect((await request(app).get('/api/systems').set(gm)).body.map((s) => [s.id, s.characterCount])).toEqual([[res.body.id, 0]]);
+      expect(await count(res.body.id)).toBe(0);
+      expect(await count(old)).toBe(1);
+      expect((await get(db, 'SELECT deleted_at FROM custom_systems WHERE id = ?', [old])).deleted_at).not.toBeNull();
+    });
+
+    it('is still that file\'s system: the next version offers an update, and it takes it', async () => {
+      await played();
+      const { id } = (await install(fileOf(VAULT), 'fresh')).body;
+      const seen = (await preview(fileOf({ ...VAULT, description: 'v2' }, 'org_vault', 4))).body;
+      expect(seen.restores).toBeNull();
+      expect(seen.installed.map((s) => s.id)).toEqual([id]);
+      expect((await install(fileOf({ ...VAULT, description: 'v2' }, 'org_vault', 4), 'update')).body.id).toBe(id);
+    });
+
+    it('deleted in turn, it is the fresh one that comes back, not the one before it', async () => {
+      const old = await played();
+      const { id } = (await install(fileOf(VAULT), 'fresh')).body;
+      await request(app).delete(`/api/systems/${id}`).set(gm);
+      // Both last changed in the same second: the newer row still wins.
+      await run(db, 'UPDATE custom_systems SET updated_at = ?', ['2026-11-06 12:00:00']);
+      expect((await preview(fileOf(VAULT))).body.restores.id).toBe(id);
+      expect((await install(fileOf(VAULT), 'new')).body).toMatchObject({ id, restored: true });
+      expect((await get(db, 'SELECT deleted_at FROM custom_systems WHERE id = ?', [old])).deleted_at).not.toBeNull();
+    });
+
+    it('with nothing deleted it is a plain install, and with one here it is refused', async () => {
+      const first = await install(fileOf(VAULT), 'fresh');
+      expect(first.body).toMatchObject({ name: 'Vault Knights', published: true });
+      const again = await install(fileOf(VAULT), 'fresh');
+      expect([again.status, again.body.error]).toEqual([409, 'Already installed. Update it or keep both.']);
+    });
+
+    it('takes another name when its own is in use', async () => {
+      await played();
+      await create();
+      expect((await install(fileOf(VAULT), 'fresh')).body.name).toBe('Vault Knights copy');
+    });
+  });
 });
 
 describe('who may', () => {

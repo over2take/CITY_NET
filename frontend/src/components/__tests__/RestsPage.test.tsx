@@ -258,16 +258,203 @@ describe('on the sample', () => {
   });
 });
 
+describe('recovery dice and how rests are finished (R1b)', () => {
+  /** Hearth with classes that have dice, so recovery dice can roll. */
+  const R = { ...H, choices: [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter', die: 10 }, { id: 'wizard', label: 'Wizard', die: 6 }] }] } as unknown as Definition;
+  const resting = () => within(screen.getByRole('region', { name: 'Resting' }));
+  const recoveryOf = (def: Definition) => (def.resting as { recovery?: Record<string, unknown> } | undefined)?.recovery;
+  const turnOn = async () => { await userEvent.click(resting().getByRole('switch', { name: 'Recovery dice' })); };
+
+  it('are off until turned on, then start at a short rest with all back at a long rest, the dice named', async () => {
+    const page = open(R);
+    expect(resting().getByText(/like D&D's hit dice or 13th Age's recoveries/)).toBeTruthy();
+    expect(resting().getByRole('switch', { name: 'Recovery dice' }).getAttribute('aria-checked')).toBe('false');
+    await turnOn();
+    expect(recoveryOf(page.last())).toEqual({ name: 'Recovery dice', spent_at: ['short_rest'], back: [{ rest: 'long_rest', how: 'all' }] });
+    publishes(page.last());
+    expect(resting().getByText('FIGHTER D10 · WIZARD D6')).toBeTruthy();
+    expect(resting().getByText(/RECOVERY DICE · RECOVERY DICE/)).toBeTruthy();
+    fireEvent.change(resting().getByLabelText('NAME'), { target: { value: 'Hit Dice' } });
+    expect(recoveryOf(page.last())!.name).toBe('Hit Dice');
+    expect(resting().getByText(/RECOVERY DICE · HIT DICE/)).toBeTruthy();
+    await userEvent.click(resting().getByRole('switch', { name: 'Recovery dice' }));
+    expect(page.last().resting).toBeUndefined();
+  });
+
+  it('say when no option has a die to roll', async () => {
+    open(H);
+    await turnOn();
+    expect(resting().getByRole('alert').textContent).toMatch(/No option has a die to roll: give a levelled list's options a HIT DIE on CHOICES/);
+  });
+
+  it('count one per level or by a formula, and heal the die once or for each level, plus a formula', async () => {
+    const page = open(R, null);
+    await turnOn();
+    const each = within(resting().getByRole('group', { name: 'Each has' }));
+    expect(resting().queryByLabelText('How many each has')).toBeNull();
+    await userEvent.click(each.getByRole('button', { name: 'A FORMULA' }));
+    expect(recoveryOf(page.last())!.count).toBe('1');
+    fireEvent.change(resting().getByLabelText('How many each has'), { target: { value: '8' } });
+    expect(recoveryOf(page.last())!.count).toBe('8');
+    // Pressed again, the formula stays.
+    await userEvent.click(each.getByRole('button', { name: 'A FORMULA' }));
+    expect(recoveryOf(page.last())!.count).toBe('8');
+    await userEvent.click(each.getByRole('button', { name: 'ONE PER LEVEL' }));
+    expect(recoveryOf(page.last())).not.toHaveProperty('count');
+
+    const heals = within(resting().getByRole('group', { name: 'One heals' }));
+    await userEvent.click(heals.getByRole('button', { name: 'ITS DIE FOR EACH LEVEL' }));
+    expect(recoveryOf(page.last())!.per_level).toBe(true);
+    fireEvent.change(resting().getByLabelText('Added to each'), { target: { value: '@con_mod' } });
+    expect(recoveryOf(page.last())!.plus).toBe('@con_mod');
+    publishes(page.last());
+    await userEvent.click(heals.getByRole('button', { name: 'ITS DIE' }));
+    fireEvent.change(resting().getByLabelText('Added to each'), { target: { value: '' } });
+    expect(recoveryOf(page.last())).toEqual({ name: 'Recovery dice', spent_at: ['short_rest'], back: [{ rest: 'long_rest', how: 'all' }] });
+  });
+
+  it('are spent at the rests ticked, or any time, and say so when none is', async () => {
+    const page = open(R, null);
+    await turnOn();
+    const spent = within(resting().getByRole('group', { name: 'Spent at' }));
+    expect(spent.getAllByRole('checkbox').map((b) => b.textContent)).toEqual(['SHORT REST', 'LONG REST', 'END OF SCENE', 'END OF SESSION', 'ANY TIME']);
+    await userEvent.click(spent.getByRole('checkbox', { name: 'LONG REST' }));
+    expect(recoveryOf(page.last())!.spent_at).toEqual(['short_rest', 'long_rest']);
+    await userEvent.click(spent.getByRole('checkbox', { name: 'ANY TIME' }));
+    expect(recoveryOf(page.last())!.spent_at).toBe('any');
+    expect(spent.getByRole('checkbox', { name: 'LONG REST' }).getAttribute('aria-checked')).toBe('false');
+    publishes(page.last());
+    await userEvent.click(spent.getByRole('checkbox', { name: 'ANY TIME' }));
+    expect(recoveryOf(page.last())!.spent_at).toEqual([]);
+    expect(resting().getByRole('alert').textContent).toBe('Tick the rests they are spent at, or ANY TIME.');
+    await userEvent.click(spent.getByRole('checkbox', { name: 'END OF SCENE' }));
+    expect(recoveryOf(page.last())!.spent_at).toEqual(['end_of_scene']);
+    expect(resting().queryByRole('alert')).toBeNull();
+  });
+
+  it('are given back by each rest: nothing, all, half, or by an amount', async () => {
+    const page = open(R, null);
+    await turnOn();
+    const long = within(resting().getByRole('group', { name: 'LONG REST gives back' }));
+    expect(long.getByRole('button', { name: 'ALL' }).getAttribute('aria-pressed')).toBe('true');
+    expect(within(resting().getByRole('group', { name: 'SHORT REST gives back' })).getByRole('button', { name: 'NOTHING' }).getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(long.getByRole('button', { name: 'HALF, AT LEAST 1' }));
+    expect(recoveryOf(page.last())!.back).toEqual([{ rest: 'long_rest', how: 'half' }]);
+    await userEvent.click(long.getByRole('button', { name: 'BY AN AMOUNT' }));
+    expect(recoveryOf(page.last())!.back).toEqual([{ rest: 'long_rest', how: 'by', amount: '1' }]);
+    fireEvent.change(resting().getByLabelText('LONG REST gives back by'), { target: { value: '@level' } });
+    expect(recoveryOf(page.last())!.back).toEqual([{ rest: 'long_rest', how: 'by', amount: '@level' }]);
+    publishes(page.last());
+    await userEvent.click(within(resting().getByRole('group', { name: 'END OF SESSION gives back' })).getByRole('button', { name: 'ALL' }));
+    await userEvent.click(long.getByRole('button', { name: 'NOTHING' }));
+    expect(recoveryOf(page.last())!.back).toEqual([{ rest: 'end_of_session', how: 'all' }]);
+    expect(resting().queryByLabelText('LONG REST gives back by')).toBeNull();
+  });
+
+  it('are spent any time, or only while the GM opens it, said in words (R2a)', async () => {
+    const page = open(R, null);
+    await turnOn();
+    const spending = within(resting().getByRole('group', { name: 'Spending' }));
+    expect(spending.getByRole('button', { name: 'ANY TIME' }).getAttribute('aria-pressed')).toBe('true');
+    expect(resting().getByText(/whenever they like: SPENT AT is for the table to keep/)).toBeTruthy();
+    await userEvent.click(spending.getByRole('button', { name: 'WHEN THE GM OPENS IT' }));
+    expect(recoveryOf(page.last())!.spend).toBe('gm');
+    publishes(page.last());
+    expect(resting().getByText(/only while the GM has spending open in the GAME tab/)).toBeTruthy();
+    await userEvent.click(spending.getByRole('button', { name: 'ANY TIME' }));
+    expect(recoveryOf(page.last())).not.toHaveProperty('spend');
+  });
+
+  it('still show a rest turned off that they name, to take it away', async () => {
+    const page = open({ ...R, rests: { ...H.rests, long_rest: { ...(H.rests as Record<string, object>).long_rest, on: false } } } as Definition, null);
+    await turnOn();
+    // Turned on with the long rest off: nothing given back, so the long rest isn't shown.
+    expect(recoveryOf(page.last())!.back).toBeUndefined();
+    expect(resting().queryByRole('group', { name: 'LONG REST gives back' })).toBeNull();
+    expect(resting().queryByRole('checkbox', { name: 'LONG REST (OFF)' })).toBeNull();
+    cleanup();
+    const named = open({ ...R, rests: { long_rest: { on: false } }, resting: { recovery: { name: 'Hit Dice', spent_at: ['long_rest'] } } } as unknown as Definition, null);
+    expect(resting().getByRole('checkbox', { name: 'LONG REST (OFF)' }).getAttribute('aria-checked')).toBe('true');
+    expect(resting().getByText('LONG REST (OFF)', { selector: 'span' })).toBeTruthy();
+    await userEvent.click(resting().getByRole('checkbox', { name: 'LONG REST (OFF)' }));
+    expect(recoveryOf(named.last())!.spent_at).toEqual([]);
+    cleanup();
+    // One that only gives them back.
+    const back = open({ ...R, rests: { long_rest: { on: false } }, resting: { recovery: { name: 'Hit Dice', spent_at: 'any', back: [{ rest: 'long_rest', how: 'all' }] } } } as unknown as Definition, null);
+    await userEvent.click(within(resting().getByRole('group', { name: 'LONG REST gives back' })).getByRole('button', { name: 'NOTHING' }));
+    expect(recoveryOf(back.last())).toEqual({ name: 'Hit Dice', spent_at: 'any' });
+  });
+
+  it('a called rest is finished at the GM\'s call or on each sheet, said in words, with what comes next', async () => {
+    const page = open(R, null);
+    const finish = within(resting().getByRole('group', { name: 'Rests are finished' }));
+    expect(finish.getByRole('button', { name: 'AT THE GM\'S CALL' }).getAttribute('aria-pressed')).toBe('true');
+    expect(resting().getByText('A called rest applies to everyone at once.')).toBeTruthy();
+    expect(resting().queryByText(/COMING NEXT/)).toBeNull();
+    await userEvent.click(finish.getByRole('button', { name: 'ON EACH SHEET' }));
+    expect(page.last().resting).toEqual({ finish: 'sheet' });
+    publishes(page.last());
+    expect(resting().getByText(/opens a REST panel on every player's sheet, and applies to each when they press FINISH. NPCs finish at once./)).toBeTruthy();
+    // The REST section is on the sheets (R3b): nothing more is coming.
+    expect(resting().queryByText(/COMING NEXT/)).toBeNull();
+    await userEvent.click(finish.getByRole('button', { name: 'AT THE GM\'S CALL' }));
+    expect(page.last().resting).toBeUndefined();
+  });
+
+  it('set once FOR EVERY REST, and each rest says what it does with the dice, with a way to the settings', async () => {
+    const page = open(R, null);
+    expect(resting().getByText('FOR EVERY REST')).toBeTruthy();
+    const longRest = () => detail('Long rest rest');
+    expect(longRest().getByText('None in this system: turn them on below, under FOR EVERY REST.')).toBeTruthy();
+    await turnOn();
+    expect(longRest().getByText('Recovery dice: not spent at this rest · gives back all')).toBeTruthy();
+    await userEvent.click(list().getByRole('button', { name: 'SHORT REST' }));
+    expect(detail('Short rest rest').getByText('Recovery dice: spent at this rest · gives back nothing')).toBeTruthy();
+    expect(recoveryOf(page.last())).toBeTruthy();
+    const scrolled = vi.fn();
+    document.getElementById('rests-for-every-rest')!.scrollIntoView = scrolled;
+    await userEvent.click(detail('Short rest rest').getByRole('button', { name: 'SETTINGS ↓' }));
+    expect(scrolled).toHaveBeenCalled();
+  });
+
+  it('WHAT PLAYERS GET says what the settings give players and the GM, changing with them (R3a)', async () => {
+    open(R, null);
+    const box = () => within(resting().getByRole('region', { name: 'What players get' }));
+    expect(box().getByText('No REST buttons: a rest happens when you call it from the GAME tab\'s RESTS.')).toBeTruthy();
+    expect(box().getByText('You call rests from the GAME tab\'s RESTS: they apply at once to everyone you choose.')).toBeTruthy();
+    await userEvent.click(within(resting().getByRole('group', { name: 'Rests are finished' })).getByRole('button', { name: 'ON EACH SHEET' }));
+    expect(box().getByText(/^A REST button for each rest on their sheet \(SHORT REST, LONG REST, END OF SCENE and END OF SESSION\)/)).toBeTruthy();
+    await turnOn();
+    expect(box().getByText(/^Recovery dice on their sheet, spent with a roll or ticked off for real dice whenever they like \(SPENT AT SHORT REST is for the table to keep\)\.$/)).toBeTruthy();
+    expect(box().getByText('In the panel of SHORT REST, Recovery dice to spend before FINISH.')).toBeTruthy();
+    await userEvent.click(within(resting().getByRole('group', { name: 'Spending' })).getByRole('button', { name: 'WHEN THE GM OPENS IT' }));
+    expect(box().getByText(/only while you have OPEN SPENDING on\.$/)).toBeTruthy();
+    // A rest turned off has no button.
+    await userEvent.click(list().getByRole('switch', { name: 'End of scene on' }));
+    expect(box().getByText(/^A REST button for each rest on their sheet \(SHORT REST, LONG REST and END OF SESSION\)/)).toBeTruthy();
+  });
+
+  it('deleting a rest of its own takes it out of the recovery dice', async () => {
+    const own = { ...R, rests: { ...H.rests, camp: { name: 'Camp' } }, resting: { recovery: { name: 'Hit Dice', spent_at: ['short_rest', 'camp'], back: [{ rest: 'camp', how: 'all' }] } } } as unknown as Definition;
+    const page = open(own, null);
+    await userEvent.click(list().getByRole('button', { name: 'CAMP' }));
+    await userEvent.click(detail('Camp rest').getByRole('button', { name: 'DELETE' }));
+    await userEvent.click(detail('Camp rest').getByRole('button', { name: 'DELETE' }));
+    expect(recoveryOf(page.last())).toEqual({ name: 'Hit Dice', spent_at: ['short_rest'] });
+    publishes(page.last());
+  });
+});
+
 describe('the "?"', () => {
-  it('sits beside a rest\'s refills and what it does to the sample', async () => {
+  it('sits beside a rest\'s refills, what it does to the sample, and each part of the recovery dice', async () => {
   const allShown = (page: string, count: number) => {
     const keys = Object.keys(HINTS).filter((k) => k.startsWith(`${page}.`)) as (keyof typeof HINTS)[];
     expect(keys).toHaveLength(count);
     for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
   };
-    open();
+    open({ ...H, resting: { recovery: { name: 'Hit Dice', spent_at: 'any' } } } as unknown as Definition);
     await screen.findByTestId('rest-sample');
-    allShown('rests', 2);
+    allShown('rests', 11);
   });
 
   it('has nothing to say about the sample without the server to try it', () => {

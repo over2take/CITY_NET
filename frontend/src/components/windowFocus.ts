@@ -32,6 +32,30 @@ const subscribe = (fn: () => void) => {
 /** Whether the window stacked at `z` is the focused one. */
 export const useIsFocused = (z: number) => useSyncExternalStore(subscribe, () => top === z);
 
+// Whether the system builder is open (the user, 2026-10-30): it takes over the screen, so the map's
+// windows are hidden while it is, never closed, and come back as they were when it shuts. A hidden
+// window answers no Esc. Set by BuilderScreen while it is mounted.
+let builderOpen = false;
+const builderListeners = new Set<() => void>();
+
+/** The builder opened or shut. */
+export const setBuilderOpen = (open: boolean) => {
+  if (builderOpen === open) return;
+  builderOpen = open;
+  builderListeners.forEach((l) => l());
+};
+
+/** Whether the builder is open now, outside React. */
+export const isBuilderOpen = () => builderOpen;
+
+const subscribeBuilder = (fn: () => void) => {
+  builderListeners.add(fn);
+  return () => { builderListeners.delete(fn); };
+};
+
+/** Whether the builder is open, kept up to date. */
+export const useBuilderOpen = () => useSyncExternalStore(subscribeBuilder, () => builderOpen);
+
 /**
  * Where each kind of window was last left, per browser.
  *

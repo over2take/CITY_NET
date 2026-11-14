@@ -14,6 +14,8 @@ import { onAllRolls } from '../sheets/conditions';
 import { FieldName, HelpHint } from './HelpHint';
 import { HINTS } from '../sheets/builderHelp';
 import { SEEN_LEVELS, systemSeen, rollSeen, seenLabel, seenLine, withSystemSeen, withRollSeen, previewOf, type Seen } from '../sheets/targetSeen';
+import { ToggleSwitch } from './ToggleSwitch';
+import { useFormulaBox } from '../hooks/useFormulaBox';
 
 // STATS & RULES' ROLLS tab (Phase 6, 6b1a; approved mockup docs/mockups/builder-rolls.html,
 // 2026-10-19, on the builder design's Dice page): the system's rolls on the left; the one picked in
@@ -77,15 +79,6 @@ function WholeBox({ label, value, onWhole, onBlank, placeholder, width = 64 }: {
 }
 
 /** A small on/off switch, as TRY ON THE MAP's. */
-function Switch({ label, on, onFlip, disabled }: { label: string; on: boolean; onFlip: () => void; disabled?: boolean }) {
-  return (
-    <button type="button" role="switch" aria-checked={on} disabled={disabled} onClick={onFlip}
-      style={{ background: 'none', border: 0, padding: 0, color: 'var(--cyan)', fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.4 : 1, display: 'inline-flex', gap: 5, alignItems: 'center', textAlign: 'left' }}>
-      <span aria-hidden style={{ width: 20, height: 10, borderRadius: 5, border: '1px solid var(--cyan)', background: on ? 'var(--cyan)' : 'none', boxSizing: 'border-box', flexShrink: 0 }} />
-      {label}
-    </button>
-  );
-}
 const CRITICAL: [string, string][] = [['', 'NOT A CRITICAL'], ['success', 'CRITICAL SUCCESS'], ['failure', 'CRITICAL FAILURE']];
 const xBtn: React.CSSProperties = { ...btn, padding: '1px 7px' };
 const sideLabel = (s: Sides) => (s === 'F' ? 'dF (FATE)' : `d${s}`);
@@ -178,26 +171,34 @@ function ReadStep({ definition, edit, roll }: { definition: Definition; edit: (n
   );
 }
 
-/** Step 3: what is added, a target met at or over it (or under), and the bands the total is read on. */
-function CompareStep({ definition, edit, roll }: { definition: Definition; edit: (next: Definition) => void; roll: Roll }) {
+/**
+ * Step 3: what is added, a target met at or over it (or under), and the bands the total is read on.
+ * ADD and AGAINST are formula boxes (formula box 2): said in words, worked out for the sample
+ * rolling the roll's first ROLLED BY stat, a mistake in red with its fix.
+ */
+function CompareStep({ definition, edit, roll, api }: { definition: Definition; edit: (next: Definition) => void; roll: Roll; api?: ReturnType<typeof systemsApi> }) {
   const bands = roll.bands ?? [];
+  const add = useFormulaBox({
+    definition, api, kind: 'add', roll: roll.id, value: roll.add ?? '', onChange: (text) => edit(withRollAdd(definition, roll.id, text)),
+    label: 'Add', placeholder: 'NOTHING · @this + @tie_mod', inputStyle: field,
+  });
+  const against = useFormulaBox({
+    definition, api, kind: 'against', roll: roll.id, value: roll.against ?? '', onChange: (text) => edit(withRollAgainst(definition, roll.id, text)),
+    label: 'Against', placeholder: 'NOTHING · @this, 13', inputStyle: field,
+  });
   return (
     <>
       <div style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: 6, alignItems: 'center' }}>
-        <FieldName hint={HINTS['rolls.add']}>ADD</FieldName>
-        <input type="text" aria-label="Add" maxLength={1000} value={roll.add ?? ''} placeholder="NOTHING · @this + @tie_mod" style={{ ...field, width: '100%' }}
-          onChange={(e) => edit(withRollAdd(definition, roll.id, e.target.value))} />
+        <FieldName beside hint={HINTS['rolls.add']}>ADD</FieldName>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>{add.field}{add.help}</div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: 6, alignItems: 'center' }}>
-        <FieldName hint={HINTS['rolls.against']}>AGAINST</FieldName>
-        <input type="text" aria-label="Against" maxLength={1000} value={roll.against ?? ''} placeholder="NOTHING · @this, 13" style={{ ...field, width: '100%' }}
-          onChange={(e) => edit(withRollAgainst(definition, roll.id, e.target.value))} />
+        <FieldName beside hint={HINTS['rolls.against']}>AGAINST</FieldName>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>{against.field}{against.help}</div>
         <span />
-        <button type="button" role="switch" aria-checked={!!roll.under} disabled={roll.against === undefined} onClick={() => edit(withRollAgainst(definition, roll.id, roll.against ?? '', !roll.under))}
-          style={{ justifySelf: 'start', background: 'none', border: 0, padding: 0, color: 'var(--cyan)', fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, cursor: 'pointer', opacity: roll.against === undefined ? 0.4 : 1 }}>
-          {roll.under ? '◉' : '○'} ROLL UNDER: AT OR UNDER SUCCEEDS
-        </button>
-        <FieldName hint={HINTS['rolls.rollSeen']}>PLAYERS SEE</FieldName>
+        <ToggleSwitch label="ROLL UNDER: AT OR UNDER SUCCEEDS" on={!!roll.under} disabled={roll.against === undefined}
+          onChange={(under) => edit(withRollAgainst(definition, roll.id, roll.against ?? '', under))} />
+        <FieldName beside hint={HINTS['rolls.rollSeen']}>PLAYERS SEE</FieldName>
         {/* Off until there is a target: with nothing to beat there is nothing to keep (6c4h). */}
         <div role="group" aria-label="This roll: players see" style={{ display: 'flex', flexWrap: 'wrap', gap: 5, opacity: roll.against === undefined ? 0.4 : 1 }}>
           {[{ id: null, label: `AS THE SYSTEM (${seenLabel(systemSeen(definition))})` }, ...SEEN_LEVELS].map((c) => {
@@ -259,7 +260,7 @@ function SpecialStep({ definition, edit, roll }: { definition: Definition; edit:
   return (
     <>
       <Part title="EXPLODING" hint={HINTS['rolls.explode']}>
-        <Switch label="A DIE ON ITS FACE ROLLS ANOTHER, ADDED" on={!!x} onFlip={() => edit(withRollExplode(definition, id, x ? null : {}))} />
+        <ToggleSwitch label="A DIE ON ITS FACE ROLLS ANOTHER, ADDED" on={!!x} onChange={() => edit(withRollExplode(definition, id, x ? null : {}))} />
         {x && (
           <>
             <div style={row}>
@@ -268,8 +269,8 @@ function SpecialStep({ definition, edit, roll }: { definition: Definition; edit:
               <span style={{ opacity: 0.7 }}>(BLANK: THE HIGHEST FACE)</span>
             </div>
             <div style={row}>
-              <Switch label="ONLY ONCE" on={!!x.once} onFlip={() => edit(withRollExplode(definition, id, { once: !x.once }))} />
-              <Switch label="FIRST DIE ONLY" on={!!x.first} onFlip={() => edit(withRollExplode(definition, id, { first: !x.first }))} />
+              <ToggleSwitch label="ONLY ONCE" on={!!x.once} onChange={() => edit(withRollExplode(definition, id, { once: !x.once }))} />
+              <ToggleSwitch label="FIRST DIE ONLY" on={!!x.first} onChange={() => edit(withRollExplode(definition, id, { first: !x.first }))} />
             </div>
             {(roll.read ?? 'sum') === 'sum' && (
               <div style={row}>
@@ -318,7 +319,7 @@ function SpecialStep({ definition, edit, roll }: { definition: Definition; edit:
       {roll.read === 'count' && (
         <Part title="CANCELLING" hint={HINTS['rolls.cancel']}>
           <div style={row}>
-            <Switch label="EACH DIE SHOWING" on={!!roll.cancel} onFlip={() => edit(withRollCancel(definition, id, roll.cancel ? null : 1))} />
+            <ToggleSwitch label="EACH DIE SHOWING" on={!!roll.cancel} onChange={() => edit(withRollCancel(definition, id, roll.cancel ? null : 1))} />
             {roll.cancel && <WholeBox label="Cancels on" value={roll.cancel.face} width={52} onWhole={(v) => edit(withRollCancel(definition, id, v))} />}
             <span>TAKES A SUCCESS AWAY</span>
           </div>
@@ -326,7 +327,7 @@ function SpecialStep({ definition, edit, roll }: { definition: Definition; edit:
       )}
 
       <Part title="GLITCH" hint={HINTS['rolls.glitch']}>
-        <Switch label="TOO MANY OF ONE FACE IS A GLITCH (SR6)" on={!!roll.glitch} onFlip={() => edit(withRollGlitch(definition, id, roll.glitch ? null : {}))} />
+        <ToggleSwitch label="TOO MANY OF ONE FACE IS A GLITCH (SR6)" on={!!roll.glitch} onChange={() => edit(withRollGlitch(definition, id, roll.glitch ? null : {}))} />
         {roll.glitch && (
           <>
             <div style={row}>
@@ -365,7 +366,7 @@ function SpecialStep({ definition, edit, roll }: { definition: Definition; edit:
       </Part>
 
       <Part title="NO DICE TO ROLL" hint={HINTS['rolls.zero']}>
-        <Switch label="ROLL SOME ANYWAY AND KEEP ONE (BLADES), NEVER A CRITICAL" on={!!roll.zero} onFlip={() => edit(withRollZero(definition, id, roll.zero ? null : {}))} />
+        <ToggleSwitch label="ROLL SOME ANYWAY AND KEEP ONE (BLADES), NEVER A CRITICAL" on={!!roll.zero} onChange={() => edit(withRollZero(definition, id, roll.zero ? null : {}))} />
         {roll.zero && (
           <div style={row}>
             <span>ROLL</span>
@@ -402,7 +403,7 @@ function ChangesStep({ definition, edit, roll }: { definition: Definition; edit:
             <button type="button" className="utility-btn" style={xBtn} aria-label={`Remove change ${i + 1}`} onClick={() => edit(withRollChange(definition, id, { remove: i }))}>×</button>
           </div>
           <div style={row}>
-            <Switch label="+ DICE" on={!!c.extra} onFlip={() => set(i, { extra: c.extra ? null : { dice: 1 } })} />
+            <ToggleSwitch label="+ DICE" on={!!c.extra} onChange={() => set(i, { extra: c.extra ? null : { dice: 1 } })} />
             {c.extra && (
               <>
                 <WholeBox label={`Change ${i + 1}: extra dice`} value={c.extra.dice} width={52} onWhole={(n) => set(i, { extra: { ...c.extra!, dice: n } })} />
@@ -415,13 +416,13 @@ function ChangesStep({ definition, edit, roll }: { definition: Definition; edit:
             )}
           </div>
           <div style={row}>
-            <Switch label="+ TO THE TOTAL" on={c.add !== undefined} onFlip={() => set(i, { add: c.add !== undefined ? null : '1' })} />
+            <ToggleSwitch label="+ TO THE TOTAL" on={c.add !== undefined} onChange={() => set(i, { add: c.add !== undefined ? null : '1' })} />
             {c.add !== undefined && (
               <input type="text" aria-label={`Change ${i + 1}: adds`} maxLength={1000} value={c.add} style={{ ...field, flex: 1, minWidth: 100 }} onChange={(e) => set(i, { add: e.target.value })} />
             )}
           </div>
           <div style={row}>
-            <Switch label="COSTS" on={!!c.cost} disabled={!stats.length && !c.cost} onFlip={() => set(i, { cost: c.cost ? null : { from: stats[0].id, amount: 1 } })} />
+            <ToggleSwitch label="COSTS" on={!!c.cost} disabled={!stats.length && !c.cost} onChange={() => set(i, { cost: c.cost ? null : { from: stats[0].id, amount: 1 } })} />
             <HelpHint text={HINTS['rolls.cost']} />
             {c.cost && (
               <>
@@ -445,7 +446,7 @@ function ChangesStep({ definition, edit, roll }: { definition: Definition; edit:
 }
 
 /** The roll picked: its name, its preset, its five steps, ROLLED BY and REMOVE. */
-export function RollEditor({ definition, edit, roll, onRemoved }: Props & { roll: Roll; onRemoved: () => void }) {
+export function RollEditor({ definition, edit, roll, onRemoved, api }: Props & { roll: Roll; onRemoved: () => void }) {
   const [replacing, setReplacing] = useState<string | null>(null);
   const choices = rollables(definition);
   const by = new Set(roll.by ?? []);
@@ -472,7 +473,7 @@ export function RollEditor({ definition, edit, roll, onRemoved }: Props & { roll
       </div>
       <Step n={1} hint={HINTS['rolls.dice']} title="DICE"><DiceStep definition={definition} edit={edit} roll={roll} /></Step>
       <Step n={2} hint={HINTS['rolls.read']} title="READ THE DICE"><ReadStep definition={definition} edit={edit} roll={roll} /></Step>
-      <Step n={3} hint={HINTS['rolls.compare']} title="ADD AND COMPARE"><CompareStep definition={definition} edit={edit} roll={roll} /></Step>
+      <Step n={3} hint={HINTS['rolls.compare']} title="ADD AND COMPARE"><CompareStep definition={definition} edit={edit} roll={roll} api={api} /></Step>
       <Step n={4} hint={HINTS['rolls.special']} title="SPECIAL RESULTS"><SpecialStep definition={definition} edit={edit} roll={roll} /></Step>
       <Step n={5} hint={HINTS['rolls.changes']} title="CHANGE A ROLL" note="ASKED BEFORE ROLLING"><ChangesStep definition={definition} edit={edit} roll={roll} /></Step>
       <section aria-label="Rolled by" style={{ border: '1px solid var(--dark-green)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
@@ -500,15 +501,6 @@ export function RollEditor({ definition, edit, roll, onRemoved }: Props & { roll
     </div>
   );
 }
-
-/** One of TEST ROLL's switches: a change picked, or a condition the sample is under. */
-const TestSwitch = ({ label, on, color, onFlip }: { label: string; on: boolean; color: string; onFlip: () => void }) => (
-  <button type="button" role="switch" aria-checked={on} onClick={onFlip}
-    style={{ background: 'none', border: 0, padding: 0, color, fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, cursor: 'pointer', display: 'inline-flex', gap: 5, alignItems: 'center' }}>
-    <span aria-hidden style={{ width: 20, height: 10, borderRadius: 5, border: `1px solid ${color}`, background: on ? color : 'none', boxSizing: 'border-box' }} />
-    {label}
-  </button>
-);
 
 const signedWord = (n: number) => (n < 0 ? `−${-n}` : `+${n}`);
 
@@ -550,7 +542,7 @@ export function TestRoll({ definition, api, roll }: { definition: Definition; ap
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {(roll.changes ?? []).map((c) => {
             const on = chosen.includes(c.id);
-            return <TestSwitch key={c.id} label={c.label.toUpperCase()} on={on} color="var(--cyan)" onFlip={() => setChosen(on ? chosen.filter((x) => x !== c.id) : [...chosen, c.id])} />;
+            return <ToggleSwitch key={c.id} label={c.label.toUpperCase()} on={on} onChange={() => setChosen(on ? chosen.filter((x) => x !== c.id) : [...chosen, c.id])} />;
           })}
         </div>
       )}
@@ -558,7 +550,7 @@ export function TestRoll({ definition, api, roll }: { definition: Definition; ap
         <div role="group" aria-label="Conditions on the sample" style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {conditions.map((c) => {
             const on = under.includes(c.id);
-            return <TestSwitch key={c.id} label={`${c.short} · ALL ROLLS ${signedWord(c.amount)}`} on={on} color="var(--warning)" onFlip={() => setUnder(on ? under.filter((x) => x !== c.id) : [...under, c.id])} />;
+            return <ToggleSwitch key={c.id} label={`${c.short} · ALL ROLLS ${signedWord(c.amount)}`} on={on} color="var(--warning)" onChange={() => setUnder(on ? under.filter((x) => x !== c.id) : [...under, c.id])} />;
           })}
         </div>
       )}
@@ -648,7 +640,7 @@ export function RollsTab({ definition, edit, api, onHelp }: Props) {
             {roll && <div><button type="button" className="utility-btn" style={btn} onClick={() => setAdding(false)}>CANCEL</button></div>}
           </div>
         ) : (
-          <RollEditor key={`edit:${roll.id}`} definition={definition} edit={edit} roll={roll} onRemoved={() => setPicked(null)} />
+          <RollEditor key={`edit:${roll.id}`} definition={definition} edit={edit} roll={roll} api={api} onRemoved={() => setPicked(null)} />
         )}
         {roll && !adding ? <TestRoll key={`test:${roll.id}`} definition={definition} api={api} roll={roll} /> : <span />}
       </div>

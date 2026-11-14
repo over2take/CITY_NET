@@ -370,6 +370,29 @@ const rangedAcOf = (row) => {
   return row.melee_ac ?? 10;
 };
 
+// The token's temporary hit points, beside the HP a sheet links to, so the sheet can show them
+// added to it (2026-10-31). Read on the way out with the linked values, never stored.
+const HP_TEMP_KEY = '_hp_temp';
+
+/**
+ * A sheet's token-linked fields filled in from its token's row (null with no token), and the
+ * token's temporary HP when it has some and the sheet shows its HP. The three reads of a sheet
+ * share it, so they can't drift apart.
+ */
+const fillTokenFields = (linked, row, data) => {
+  Object.entries(linked).forEach(([fieldId, source]) => {
+    if (source === 'token_hp') data[fieldId] = row ? row.hp_current : null;
+    if (source === 'token_hp_max') data[fieldId] = row ? row.hp_max : null;
+    // Unset token AC falls back to 10, matching the attack engine's
+    // default - the sheet shows the AC attacks actually resolve against.
+    if (source === 'token_ac') data[fieldId] = row ? (row.melee_ac ?? 10) : null;
+    if (source === 'token_ac_ranged') data[fieldId] = row ? rangedAcOf(row) : null;
+  });
+  if (row && row.hp_temp > 0 && Object.values(linked).includes('token_hp')) data[HP_TEMP_KEY] = row.hp_temp;
+  else delete data[HP_TEMP_KEY];
+  return data;
+};
+
 /**
  * Which token AC columns a sheet patch should write, and to what.
  *
@@ -411,7 +434,13 @@ const getLinkedFields = (system) => metaFor(system).linkedFields || {};
  * system marks as the GM's to set (XP, awarded items). The built-in sheets mark nothing, so
  * this is always true for them. The GM's own edits do not ask.
  */
-const playerMayEdit = (system, fieldId) => !(metaFor(system).gmFields || []).includes(fieldId);
+// A custom system's picks (systemBuilder/choices.js PICKS_KEY, held equal by a test; not required
+// here, which would make a circle through the engine) are never a player's to write as a field:
+// picking checks what may be picked (systemBuilder/picking.js, 7a3a). Nor is anything else kept
+// beside the fields under a name starting with _ (spent uses, what a save worked out): no field can
+// be called that.
+const PICKS_KEY = '_choices';
+const playerMayEdit = (system, fieldId) => !String(fieldId).startsWith('_') && !(metaFor(system).gmFields || []).includes(fieldId);
 
 // Returns a map of maxFieldId → currentFieldId for the system.
 const getMaxPairs = (system) => metaFor(system).maxPairs || {};
@@ -438,7 +467,7 @@ const applyDerived = (system, data, changedFieldId) => {
 };
 
 module.exports = {
-  TEMPLATES, DEFAULT_SYSTEM, isValidSystem, isBuiltIn, metaFor, setCustomMeta, filterPublicData, getLinkedFields, getMaxPairs, playerMayEdit,
+  TEMPLATES, DEFAULT_SYSTEM, isValidSystem, isBuiltIn, metaFor, setCustomMeta, filterPublicData, getLinkedFields, getMaxPairs, playerMayEdit, PICKS_KEY,
   applyDerived, cwnEffectiveAc, cwnImplantAc, cwnMoveBonus, CWN_BASE_MOVE,
-  TOKEN_SOURCES, rangedAcOf, acColumns,
+  TOKEN_SOURCES, rangedAcOf, acColumns, HP_TEMP_KEY, fillTokenFields,
 };

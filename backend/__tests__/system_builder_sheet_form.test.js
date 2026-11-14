@@ -18,7 +18,7 @@ const require_ = createRequire(import.meta.url);
 const runtime = require_('../systemBuilder/runtime');
 const { buildCustomTemplate, printable, hintOf, leftLine } = require_('../sheets/pdfTemplate');
 const { extractPdfFields } = require_('../sheets/importers');
-const { sheetFields, customImporter, INVENTORY_ROWS } = require_('../systemBuilder/sheetImport');
+const { sheetFields, customImporter, jsonTemplate, xpLines, xpFrom, INVENTORY_ROWS } = require_('../systemBuilder/sheetImport');
 const sheetsRouteFactory = require_('../routes/sheets.js');
 const systemsRoute = require_('../routes/systems.js');
 
@@ -179,5 +179,194 @@ describe('through the routes', () => {
     expect((await PDFDocument.load(res.body)).getForm().getFields().map((f) => f.getName())).toEqual(['oath']);
     expect((await request(app).post('/api/systems/form.pdf').set('Authorization', `Bearer ${PLAYER}`).send({ definition: draft })).status).toBe(403);
     expect((await request(app).post('/api/systems/form.pdf').set('Authorization', `Bearer ${GM}`).send({ definition: 'nope' })).status).toBe(400);
+  });
+});
+
+describe('picks on the form (7c6)', () => {
+  const PICKS = { ...HEARTH, ...{
+    format: 1, name: 'Picks',
+    stats: [{ id: 'traits', label: 'TRAITS', stats: [{ id: 'wits', label: 'Wits', min: 1, max: 20 }] }],
+    choices: [
+      { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [
+        { id: 'soldier', label: 'Soldier' }, { id: 'mage', label: 'Mage', requires: '@wits >= 13' },
+      ] },
+      { id: 'feats', one: 'Feat', many: 'Feats', picks: 2, options: [
+        { id: 'tough', label: 'Tough' }, { id: 'quick', label: 'Quick' }, { id: 'keen', label: 'Keen' },
+      ] },
+      { id: 'skills', one: 'Skill', many: 'Skills', again: true, levelled: true, options: [
+        { id: 'cook', label: 'Cook' }, { id: 'rank2', label: 'Rank 2' }, { id: 'sail', label: 'Sail' },
+      ] },
+      { id: 'specs', one: 'Specialty', many: 'Specialties', picked: 'features', options: [{ id: 'duelist', label: 'Duelist' }] },
+      { id: 'commons', one: 'Common', many: 'Commons', picked: 'everyone', options: [{ id: 'breath', label: 'Breath' }] },
+      { id: 'empty', one: 'Nothing', many: 'Nothings', options: [] },
+    ],
+  }, stats: HEARTH.stats, name: 'Hearth Fire' };
+
+  it('has a dropdown for a list picked once, a level box, and a box for names', async () => {
+    const form = await formOf(await buildCustomTemplate(PICKS));
+    expect(form.getField('pick_classes')).toBeInstanceOf(PDFDropdown);
+    expect(form.getDropdown('pick_classes').getOptions()).toEqual(['Soldier', 'Mage']);
+    expect(form.getField('pick_classes_level')).toBeInstanceOf(PDFTextField);
+    expect(form.getField('pick_feats')).toBeInstanceOf(PDFTextField);
+    const names = form.getFields().map((f) => f.getName());
+    expect(names).toContain('pick_skills');
+    for (const not of ['pick_specs', 'pick_commons', 'pick_empty']) expect(names).not.toContain(not);
+    // After the sheet's own.
+    expect(names.indexOf('pick_classes')).toBeGreaterThan(names.indexOf('inventory_12_qty'));
+  });
+
+  it('comes back through the importer, picks and all, filled in', async () => {
+    const doc = await PDFDocument.load(await buildCustomTemplate(PICKS));
+    const form = doc.getForm();
+    form.getTextField('name').setText('Vex Marrow');
+    form.getDropdown('pick_classes').select('Mage');
+    form.getTextField('pick_classes_level').setText('3');
+    form.getTextField('pick_feats').setText('Tough, Keen');
+    form.getTextField('pick_skills').setText('Cook 2, Sail');
+    const raw = await extractPdfFields(Buffer.from(await doc.save()));
+    const { mapped, picks, picksSaid, picksNotFound } = customImporter(PICKS).mapFields(raw);
+    expect(mapped.name).toBe('Vex Marrow');
+    expect(picks).toEqual({
+      classes: [{ option: 'mage', level: 3 }],
+      feats: [{ option: 'tough' }, { option: 'keen' }],
+      skills: [{ option: 'cook', level: 2 }, { option: 'sail', level: 1 }],
+    });
+    expect(picksSaid.map((p) => p.option)).toEqual(['Mage', 'Tough', 'Keen', 'Cook', 'Sail']);
+    expect(picksNotFound).toBeUndefined();
+  });
+
+  it('left blank, a form names no picks', async () => {
+    const raw = await extractPdfFields(await buildCustomTemplate(PICKS));
+    const read = customImporter(PICKS).mapFields(raw);
+    expect(read.picks).toBeUndefined();
+    expect(read.picksNotFound).toBeUndefined();
+    expect(Object.keys(read.unmapped)).toEqual([]);
+  });
+
+  it('prints how to write the names under their box', () => {
+    expect(hintOf({ type: 'text', hint: 'Names, commas between: A, B' })).toBe('Names, commas between: A, B');
+  });
+});
+
+describe('XP on the form (7d2c)', () => {
+  const MARKS = { ...HEARTH, core: { advancement: ['levels'] }, levels: { top: 5 }, words: { xp: { singular: 'MARK', plural: 'MARKS', short: 'MK' } },
+    choices: [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'soldier', label: 'Soldier' }] }] };
+
+  it('a box under the game\'s word, after the sheet\'s own and before the picks, only where they earn it', async () => {
+    const names = (await formOf(await buildCustomTemplate(MARKS))).getFields().map((f) => f.getName());
+    expect(names.indexOf('_xp')).toBe(names.indexOf('inventory_12_qty') + 1);
+    expect(names.indexOf('pick_classes')).toBe(names.indexOf('_xp') + 1);
+    expect(xpLines(MARKS)).toEqual([expect.objectContaining({ id: '_xp', label: 'MK', type: 'number', min: 0, section: 'LEVELS' })]);
+    for (const none of [HEARTH, { ...MARKS, core: { advancement: ['milestone'] } }, { ...MARKS, parts: { xp: { on: false } } }]) {
+      expect(xpLines(none)).toEqual([]);
+      expect((await formOf(await buildCustomTemplate(none))).getFields().map((f) => f.getName())).not.toContain('_xp');
+    }
+    expect(xpLines({ ...MARKS, words: {} })[0].label).toBe('XP');
+  });
+
+  it('says what goes in it, and the JSON template asks for it too', () => {
+    expect(hintOf(xpLines(MARKS)[0])).toBe('What they have so far. Left empty, it stays as it is');
+    const template = jsonTemplate(MARKS);
+    const keys = Object.keys(template.fields);
+    expect(template.fields._xp).toBeNull();
+    expect(template.help._xp).toBe('MK. What they have so far. Left empty, it stays as it is');
+    expect(keys.indexOf('_xp')).toBe(keys.indexOf('pick_classes') - 1);
+    expect(keys.indexOf('_xp')).toBeGreaterThan(keys.indexOf('grit'));
+    expect(jsonTemplate(HEARTH).fields._xp).toBeUndefined();
+  });
+
+  it('comes back through the importer, filled in, and left blank brings nothing', async () => {
+    const doc = await PDFDocument.load(await buildCustomTemplate(MARKS));
+    doc.getForm().getTextField('_xp').setText('6,500');
+    expect(customImporter(MARKS).mapFields(await extractPdfFields(Buffer.from(await doc.save()))).mapped._xp).toBe(6500);
+    const blank = customImporter(MARKS).mapFields(await extractPdfFields(await buildCustomTemplate(MARKS)));
+    expect(blank.mapped._xp).toBeUndefined();
+    expect(blank.unmapped).toEqual({});
+  });
+
+  it('read by its word, its other forms, XP or its id; what isn\'t a whole amount is said, not taken', () => {
+    const read = (raw) => customImporter(MARKS).mapFields(raw);
+    for (const key of ['MK', 'Marks', 'mark', 'XP', '_xp']) expect(read({ [key]: 250 }).mapped._xp, key).toBe(250);
+    for (const bad of [-1, 1.5, 'lots', true, 1e13]) {
+      const r = read({ MK: bad });
+      expect(r.mapped._xp, String(bad)).toBeUndefined();
+      expect(r.unmapped, String(bad)).toEqual({ MK: bad });
+    }
+    expect(read({ MK: ' 1 200 ' }).mapped._xp).toBe(1200);
+    expect(customImporter(MARKS).parseText('Might 12\nMK 300').MK ?? customImporter(MARKS).parseText('Might 12\nMK 300')._xp).toBe('300');
+    // Where nothing earns it, XP is just a name the sheet doesn't have.
+    expect(customImporter(HEARTH).mapFields({ XP: 5 }).unmapped).toEqual({ XP: 5 });
+  });
+
+  it('a stat of the sheet\'s own called XP stays the stat', () => {
+    const own = { ...MARKS, stats: [{ id: 'a', label: 'A', stats: [{ id: 'xp', label: 'XP' }] }],
+      sheet: { sections: [{ id: 's', label: 'S', layout: 'grid', fields: [{ id: 'xp', label: 'XP', type: 'number' }] }] } };
+    expect(customImporter(own).mapFields({ XP: 7 }).mapped).toEqual({ xp: 7 });
+  });
+
+  it('a whole amount, in range', () => {
+    expect([0, 12, '7', '6,500', 1e12].map(xpFrom)).toEqual([0, 12, 7, 6500, 1e12]);
+    expect([-1, 2.5, '', ' ', 'x', null, undefined, {}, [5], true, 1e12 + 1].map(xpFrom)).toEqual(Array(11).fill(null));
+  });
+});
+
+describe('the GM uploading picks to a player\'s sheet (7c6)', () => {
+  const ID = 'sys_aaaaaaaaaaaaaaaa';
+  const LISTED = { format: 1, name: 'Listed', stats: [{ id: 'attrs', label: 'ATTRIBUTES', stats: [{ id: 'might', label: 'Might' }] }], choices: [
+    { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'soldier', label: 'Soldier', features: [{ id: 'guard', label: 'Guard', modifiers: [{ target: 'might', amount: '1' }] }] }, { id: 'mage', label: 'Mage' }] },
+  ] };
+  let db;
+  let app;
+  const put = (body) => request(app).put('/api/sheets/user/vex').set('Authorization', `Bearer ${GM}`).send(body);
+  const stored = async () => JSON.parse((await new Promise((resolve, reject) => db.get('SELECT data FROM character_sheets WHERE username = ?', ['vex'], (e, row) => (e ? reject(e) : resolve(row))))).data);
+
+  beforeEach(async () => {
+    db = await makeTestDb();
+    const text = JSON.stringify(LISTED);
+    await run(db, 'INSERT INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 3)', [ID, LISTED.name, text, text]);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    await run(db, `INSERT OR REPLACE INTO global_settings (key, value) VALUES ('game_system', ?)`, [ID]);
+    await run(db, 'INSERT INTO character_sheets (username, system, data, is_npc) VALUES (?, ?, ?, 0)', ['vex', ID, JSON.stringify({ name: 'Vex', _choices: { classes: [{ option: 'mage', level: 1, locked: true, roll: 4 }] } })]);
+    app = express();
+    app.use(express.json());
+    app.use('/api/sheets', sheetsRouteFactory(db, { emit: () => {} }));
+  });
+
+  it('writes them, replacing a locked pick, and works out what they do', async () => {
+    const res = await put({ fields: { might: 5 }, upload: true, picks: { classes: [{ option: 'soldier', level: 2 }] } });
+    expect(res.status).toBe(200);
+    const data = await stored();
+    expect(data.might).toBe(5);
+    expect(data._choices.classes).toEqual([{ option: 'soldier', level: 2 }]);
+    expect(data._worked.picks).toEqual([{ list: 'classes', option: 'soldier', level: 2 }]);
+  });
+
+  it('an edit with no picks leaves them as they were', async () => {
+    await put({ fields: { might: 5 } });
+    expect((await stored())._choices.classes).toEqual([{ option: 'mage', level: 1, locked: true, roll: 4 }]);
+  });
+
+  it('an upload naming no picks clears them; an edit naming picks doesn\'t touch them', async () => {
+    await put({ fields: {}, picks: { classes: [{ option: 'soldier' }] } });
+    expect((await stored())._choices.classes).toEqual([{ option: 'mage', level: 1, locked: true, roll: 4 }]);
+    await put({ fields: {}, upload: true });
+    expect((await stored())._choices.classes).toEqual([]);
+  });
+
+  it('an upload adds to the inventory, where an edit replaces it', async () => {
+    const bag = (v) => run(db, 'UPDATE character_sheets SET data = ? WHERE username = ?', [JSON.stringify({ name: 'Vex', inventory: v }), 'vex']);
+    const had = JSON.stringify([{ name: 'Rope', qty: 1, carry: 'stowed' }]);
+    const came = JSON.stringify([{ name: 'Rope', qty: 2 }]);
+    await bag(had);
+    await put({ fields: { inventory: came }, upload: true });
+    expect(JSON.parse((await stored()).inventory)).toEqual([{ name: 'Rope', qty: 3, carry: 'stowed' }]);
+    await bag(had);
+    await put({ fields: { inventory: came } });
+    expect(JSON.parse((await stored()).inventory)).toEqual([{ name: 'Rope', qty: 2 }]);
+  });
+
+  it('checks what was sent', async () => {
+    await put({ fields: {}, upload: true, picks: { classes: [{ option: 'wizard' }] } });
+    expect((await stored())._choices.classes).toEqual([]);
   });
 });

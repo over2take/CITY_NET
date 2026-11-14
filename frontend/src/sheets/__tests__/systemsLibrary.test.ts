@@ -141,16 +141,27 @@ describe('the install preview', () => {
     expect(installPlan(preview({ problems: [PROBLEM] })).notices[0].text).toMatch(/^It has 1 problem, so/);
   });
 
-  it('one deleted here: brings it back, warning when that replaces changes made here', () => {
+  it('one deleted here: BRING IT BACK first, or START FRESH, asking first; warning when bringing it back replaces changes made here', () => {
     const back = preview({ restores: { id: HERE.id, name: 'Vault Knights', replacesChanges: false } });
     expect(installPlan(back)).toEqual({
-      notices: [{ tone: 'good', text: 'Vault Knights was deleted here. Installing brings it back under its old id, with every character, bank and token played in it.' }],
-      actions: [{ label: 'BRING IT BACK', mode: 'new', installsAs: 'Vault Knights', primary: true }],
+      notices: [{ tone: 'good', text: 'Vault Knights was deleted here. Bringing it back keeps its old id and every character, bank and token played in it. Starting fresh installs a new one with none of them.' }],
+      actions: [
+        { label: 'BRING IT BACK', mode: 'new', installsAs: 'Vault Knights', primary: true },
+        { label: 'START FRESH', mode: 'fresh', installsAs: 'Vault Knights', confirm: 'The characters, banks and tokens played in the deleted Vault Knights stay hidden, and installing this file won\'t bring them back again.' },
+      ],
     });
     const lost = installPlan(preview({ restores: { id: HERE.id, name: 'Vault Knights', replacesChanges: true } }));
-    expect(lost.notices[1]).toEqual({ tone: 'warn', text: 'The deleted copy held changes made here that this file doesn\'t have. They are replaced.' });
-    // Brought back, even with problems: the label says what happens.
-    expect(installPlan(preview({ problems: [PROBLEM], restores: { id: HERE.id, name: 'Vault Knights', replacesChanges: false } })).actions[0].label).toBe('BRING IT BACK');
+    expect(lost.notices[1]).toEqual({ tone: 'warn', text: 'The deleted copy held changes made here that this file doesn\'t have. Bringing it back replaces them.' });
+    // Brought back, even with problems: the label says what happens. A fresh start says it's a draft.
+    const broken = installPlan(preview({ problems: [PROBLEM], restores: { id: HERE.id, name: 'Vault Knights', replacesChanges: false } }));
+    expect(broken.actions.map((a) => a.label)).toEqual(['BRING IT BACK', 'START FRESH, AS A DRAFT']);
+  });
+
+  it('START FRESH is only for one deleted here, and goes in under the name it would have', () => {
+    expect(installPlan(preview()).actions.map((a) => a.label)).toEqual(['INSTALL']);
+    expect(installPlan(installedHere()).actions.map((a) => a.mode)).toEqual(['update', 'keep_both']);
+    const named = installPlan(preview({ restores: { id: HERE.id, name: 'Vault Knights', replacesChanges: false }, installsAs: { new: 'Vault Knights copy', update: null, keep_both: 'Vault Knights copy' } }));
+    expect(named.actions.map((a) => a.installsAs)).toEqual(['Vault Knights copy', 'Vault Knights copy']);
   });
 
   it('installed and unchanged: UPDATE first, or KEEP BOTH as a copy', () => {
@@ -202,6 +213,8 @@ describe('the line after each action', () => {
     expect(installedMessage(result({ restored: true, images: 2 }), 'new', 4)).toBe('Vault Knights is back, with its characters. Its 2 images came with it.');
     expect(installedMessage(result({ name: 'Vault Knights copy', images: 2 }), 'keep_both', 4)).toBe('Installed a second copy, Vault Knights copy, beside the first. Its 2 images came with it.');
     expect(installedMessage(result({ images: 0 }), 'new', 4)).toBe('Installed Vault Knights v4. It\'s in the list and the game-system picker.');
+    expect(installedMessage(result(), 'fresh', 4)).toBe('Started Vault Knights fresh, with no characters.');
+    expect(installedMessage(result({ published: false, problems: [PROBLEM], images: 1 }), 'fresh', 4)).toBe('Started Vault Knights fresh as a draft with 1 problem to fix. Its 1 image came with it.');
   });
 
   it('after the others', () => {

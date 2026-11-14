@@ -13,11 +13,14 @@
 // pending ("9 + 1d8 + @con_mod") until a later refill settles it.
 
 const { restsOf, reachOf, amountNames, SECTION } = require('./rests');
+const { usesOf, USES_KEY, effectiveData } = require('./choices');
 const { conditionsOf } = require('./conditions');
 const { applyHealthAction } = require('./health');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { ownWords } = require('./terms');
 const { rollAmount } = require('./tierRolls');
+const { givenBack, restingOf, RECOVERY_KEY, ALL_POOL } = require('./recovery');
+const { improveAt, MARKS_KEY } = require('./improveByUse');
 
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -100,9 +103,12 @@ const restOn = ({ definition, restId, sheet = {}, token = null, conditions = [],
   const pending = new Map(); // what -> the dice still to roll, in a preview
   const rolls = [];
 
-  /** The numbers an amount may read: the sheet's, with fields linked to the token read from it. */
+  /**
+   * The numbers an amount may read: the sheet as rolls read it (stats with their features'
+   * modifiers, and the levels), with fields linked to the token read from it.
+   */
   const values = () => {
-    const v = { ...data };
+    const v = effectiveData(definition, data);
     for (const [id, f] of fields) {
       if (f.source === 'token_hp' && t) v[id] = t.current;
       if (f.source === 'token_hp_max' && t) v[id] = t.max;
@@ -192,6 +198,35 @@ const restOn = ({ definition, restId, sheet = {}, token = null, conditions = [],
   }
 
   const ends = new Set(order);
+  // A feature's uses refilled by this rest, or one it counts as (7a3a): none spent again.
+  const refilled = usesOf(definition, data).filter((u) => u.refill && ends.has(u.refill) && u.spent > 0);
+  if (refilled.length) {
+    const spent = { ...(isPlainObject(data[USES_KEY]) ? data[USES_KEY] : {}) };
+    for (const u of refilled) {
+      spent[u.feature.id] = 0;
+      note(`uses:${u.feature.id}`, `${u.feature.label || u.feature.id} uses`, u.max - u.spent, u.max);
+    }
+    setField(USES_KEY, spent);
+  }
+  // Recovery dice it gives back, or one it counts as gives back (R2a): each pool as left after.
+  const back = givenBack(definition, data, ends);
+  if (back) {
+    const name = restingOf(definition).recovery.name;
+    for (const c of back.changes) note(`recovery:${c.pool.id}`, `${name}${c.pool.id === ALL_POOL ? '' : ` ${c.pool.label}`} d${c.pool.die}`, c.from, c.to);
+    setField(RECOVERY_KEY, back.spent);
+  }
+  // IMPROVE BY USE (7f3a1): at its rest, each marked stat rolls to improve, and the marks clear; a preview says each waits.
+  const improved = improveAt(definition, data, ends, rng);
+  if (improved) {
+    for (const c of improved.changes) {
+      const key = `improve:${c.what}`;
+      if (c.to === null) pending.set(key, c.pending);
+      note(key, c.label, c.from, c.to);
+    }
+    for (const [id, value] of Object.entries(improved.patch)) if (id !== MARKS_KEY) setField(id, value);
+    if (improved.patch[MARKS_KEY]) setField(MARKS_KEY, improved.patch[MARKS_KEY]);
+    rolls.push(...improved.rolls);
+  }
   const wearsOff = new Set(conditionsOf(definition).filter((c) => c.ends === 'rest' && c.at.some((a) => ends.has(a))).map((c) => c.id));
   const kept = list(conditions).filter((c) => !wearsOff.has(c.id));
   const gone = list(conditions).filter((c) => wearsOff.has(c.id)).map((c) => c.id);

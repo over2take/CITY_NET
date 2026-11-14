@@ -13,6 +13,7 @@ vi.mock('../DraggableWindow', () => ({
 }));
 
 import { BuilderScreen } from '../BuilderScreen';
+import { isBuilderOpen } from '../windowFocus';
 import { AdminPanel } from '../AdminPanel';
 import { SYSTEMS_CHANGED_EVENT } from '../../sheets/systemsLibrary';
 import type { SystemCopies } from '../../sheets/systemsApi';
@@ -144,6 +145,14 @@ const sidebar = () => screen.getByRole('navigation', { name: 'Builder' });
 const ready = () => waitFor(() => expect(screen.getByTestId('save-status')).toBeTruthy());
 
 describe('the builder', () => {
+  it('hides the map\'s windows while it is open, and lets them back once it shuts', async () => {
+    open();
+    await ready();
+    expect(isBuilderOpen()).toBe(true);
+    cleanup();
+    expect(isBuilderOpen()).toBe(false);
+  });
+
   it('takes over the window, naming the system, on the page it was opened at', async () => {
     open({ startPage: 'setup' });
     await ready();
@@ -293,7 +302,7 @@ describe('the builder', () => {
     await waitFor(() => expect(drafts.at(-1)).toEqual({ format: 1, name: 'Hearth', sheet: starterSheet({ format: 1, name: 'Hearth' }) }));
   });
 
-  it('FEATURES turns parts on and off, saved like any other change', async () => {
+  it('PARTS turns parts on and off, saved like any other change', async () => {
     open({ startPage: 'features' });
     await ready();
     await userEvent.click(await screen.findByRole('switch', { name: 'VEHICLES' }));
@@ -314,7 +323,7 @@ describe('the builder', () => {
     open({ startPage: 'problems' });
     await ready();
     const pages = within(sidebar()).getAllByRole('button').filter((b) => b.title && !['PUBLISH', 'MY SYSTEMS', 'HELP'].includes(b.textContent!));
-    expect(pages.map((b) => b.textContent)).toEqual(['SETUP', 'WORDS', 'FEATURES', 'STATS & RULES', 'CHARACTER SHEET', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT', 'PROBLEMS']);
+    expect(pages.map((b) => b.textContent)).toEqual(['SETUP', 'WORDS', 'PARTS', 'STATS & RULES', 'CHOICES', 'ITEMS', 'CHARACTER SHEET', 'NEW CHARACTER', 'LEVELS', 'NPCS', 'CONDITIONS', 'RESTS', 'HOUSE RULES', 'TRY IT', 'PROBLEMS']);
     expect(pages[1].title).toBe('What the game calls things: HP, credits, skills.');
     await userEvent.click(pages[1]);
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('WORDS');
@@ -566,7 +575,7 @@ describe('looking at a built-in example (4d1b)', () => {
     expect((within(banner()).getByLabelText('Name for the copy') as HTMLInputElement).disabled).toBe(false);
   });
 
-  it('opens things out on FEATURES, but switches nothing', async () => {
+  it('opens things out on PARTS, but switches nothing', async () => {
     look('features');
     const opener = await within(await screen.findByTestId('part-bank')).findByRole('button', { name: /SETTINGS/, expanded: false });
     await userEvent.click(opener);
@@ -953,10 +962,10 @@ describe('HELP (4i)', () => {
 });
 
 describe('the tour (4i)', () => {
-  // Approved mockup builder-help (2026-10-13): eight steps the first time, each lighting its place on
+  // Approved mockup builder-help (2026-10-13): eight steps the first time (nine since CHOICES, 2026-10-28), each lighting its place on
   // the rail; BACK, NEXT, SKIP THE TOUR; remembered on the server once finished or skipped.
   const dialog = () => screen.queryByRole('dialog', { name: 'The builder tour' });
-  const step = () => within(dialog()!).getByText(/^STEP \d OF 8$/).textContent;
+  const step = () => within(dialog()!).getByText(/^STEP \d+ OF 12$/).textContent;
   const litNames = () => [...sidebar().querySelectorAll('[data-lit]')].map((b) => b.getAttribute('aria-label'));
   const press = (name: string) => userEvent.click(within(dialog()!).getByRole('button', { name }));
 
@@ -964,15 +973,15 @@ describe('the tour (4i)', () => {
     tour.seen = false;
     open({ startPage: 'setup' });
     await screen.findByRole('dialog', { name: 'The builder tour' });
-    expect(step()).toBe('STEP 1 OF 8');
+    expect(step()).toBe('STEP 1 OF 12');
     expect(within(dialog()!).getByRole('heading').textContent).toBe('WELCOME TO THE SYSTEM BUILDER');
     expect(litNames()).toEqual([]);
     expect(within(dialog()!).queryByRole('button', { name: 'BACK' })).toBeNull();
     expect(document.activeElement).toBe(within(dialog()!).getByRole('button', { name: 'NEXT' }));
-    const expected = [['SETUP'], ['WORDS'], ['FEATURES'], ['STATS & RULES'], ['CHARACTER SHEET'], ['TRY IT'], ['SAVE', 'PUBLISH']];
+    const expected = [['SETUP'], ['WORDS'], ['PARTS'], ['STATS & RULES'], ['CHOICES'], ['ITEMS'], ['CHARACTER SHEET'], ['NEW CHARACTER'], ['LEVELS'], ['TRY IT'], ['SAVE', 'PUBLISH']];
     for (const [i, names] of expected.entries()) {
       await press('NEXT');
-      expect(step()).toBe(`STEP ${i + 2} OF 8`);
+      expect(step()).toBe(`STEP ${i + 2} OF 12`);
       expect(litNames()).toEqual(names);
       expect(sidebar().getAttribute('data-expanded')).toBe('true');
       expect(sidebar().style.width).toBe('220px');
@@ -994,7 +1003,7 @@ describe('the tour (4i)', () => {
     await press('NEXT');
     await press('NEXT');
     await press('BACK');
-    expect(step()).toBe('STEP 2 OF 8');
+    expect(step()).toBe('STEP 2 OF 12');
     expect(litNames()).toEqual(['SETUP']);
     await press('SKIP THE TOUR');
     expect(dialog()).toBeNull();
@@ -1025,7 +1034,7 @@ describe('the tour (4i)', () => {
     open({ systemId: null });
     await userEvent.click(within(sidebar()).getByLabelText('HELP'));
     await userEvent.click(screen.getByRole('button', { name: 'START THE TOUR' }));
-    expect(step()).toBe('STEP 1 OF 8');
+    expect(step()).toBe('STEP 1 OF 12');
     await press('NEXT');
     // Pointing at a page that can't be opened yet is still pointing at it.
     expect(litNames()).toEqual(['SETUP']);

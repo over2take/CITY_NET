@@ -515,3 +515,53 @@ describe('LINE UP (5c3)', () => {
     expect(last()).toEqual(HEARTH);
   });
 });
+
+describe('a list of choices on the map (7a5c)', () => {
+  const CHOSEN: Definition = {
+  format: 1, name: 'Hearth',
+  stats: [{ id: 'abilities', label: 'Abilities', stats: [{ id: 'wit', label: 'Wits' }] }],
+  derived: [{ id: 'ward', label: 'Ward', formula: '10 + @mage_level' }, { id: 'defense', label: 'Defense', formula: '10' }],
+  choices: [
+    { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'mage', label: 'Mage', features: [{ id: 'guard', label: 'Guard', modifiers: [{ target: 'defense', amount: '1' }, { target: 'wit', amount: '1' }] }] }] },
+    { id: 'feats', one: 'Feat', many: 'Feats', options: [{ id: 'keen', label: 'Keen', features: [{ id: 'eye', label: 'Eye', modifiers: [{ target: 'defense', amount: '2' }] }] }] },
+  ],
+} as unknown as Definition;
+  const drawn = (extra: Partial<React.ComponentProps<typeof GraphView>> = {}) => render(<div style={{ width: 1200, height: 800 }}><GraphView definition={CHOSEN} edit={() => {}} {...extra} /></div>);
+
+  it('draws its levels by name, its bonuses, and every node as tall as the model plans', () => {
+    drawn();
+    const classes = screen.getByTestId('graph-node-choices:classes');
+    expect(classes.textContent).toContain('LEVELS');
+    expect(within(classes).getByText('TOTAL')).toBeTruthy();
+    expect(within(classes).getByText('@mage_level')).toBeTruthy();
+    expect(classes.textContent).toContain('BONUSES · 2');
+    const feats = screen.getByTestId('graph-node-choices:feats');
+    expect(feats.textContent).toContain('CHOICES');
+    expect(feats.textContent).not.toContain('LEVELS');
+    for (const n of graphOf(CHOSEN).nodes) expect(screen.getByTestId(`graph-node-${n.id}`).style.height, n.id).toBe(`${n.height}px`);
+  });
+
+  it('a list with levels and no bonuses has no BONUSES row', () => {
+    const plain = { format: 1, name: 'Plain', choices: [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'mage', label: 'Mage' }] }] } as unknown as Definition;
+    drawn({ definition: plain });
+    expect(screen.getByTestId('graph-node-choices:classes').textContent).not.toContain('BONUSES');
+  });
+
+  it('a bonus is a row on the formula it changes', () => {
+    drawn();
+    const defense = screen.getByTestId('graph-node-defense');
+    expect(within(defense).getByText('GUARD +1')).toBeTruthy();
+    expect(within(defense).getAllByText(/^BONUS · /).map((e) => e.textContent)).toEqual(['BONUS · CLASSES', 'BONUS · FEATS']);
+  });
+
+  it("GO TO opens its list, and doesn't open its panel; without somewhere to go, there is none", async () => {
+    const onGoTo = vi.fn();
+    drawn({ onGoTo });
+    await userEvent.click(within(screen.getByTestId('graph-node-choices:feats')).getByRole('button', { name: 'GO TO' }));
+    expect(onGoTo).toHaveBeenCalledWith('choices', 'feats');
+    expect(screen.queryByTestId('graph-panel')).toBeNull();
+    cleanup();
+    drawn();
+    expect(within(screen.getByTestId('graph-node-choices:feats')).queryByRole('button', { name: 'GO TO' })).toBeNull();
+  });
+});

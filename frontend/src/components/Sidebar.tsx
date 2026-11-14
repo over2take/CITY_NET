@@ -12,6 +12,7 @@ import { InitiativeNavPanel } from '../modules/initiative/components/InitiativeN
 import { isUserDefinedName, getStructLabel } from '../utils/locationHelpers';
 import { CurrencyIcon } from './BankWindows';
 import { THEMES } from '../theme/themes';
+import { MapSlowHelp } from './MapSlowHelp';
 import type { ThemeName } from '../theme/themes';
 import { getTemplate } from '../sheets';
 import { useWords, asLabel } from '../sheets/words';
@@ -194,6 +195,8 @@ interface CharacterControlsMenuProps {
   setMeasureMode: (v: boolean) => void;
   isSheetOpen: boolean;
   setIsSheetOpen: (v: boolean) => void;
+  /** A blank sheet in a game with a guided new character, never opened (7c2): CHARACTER_SHEET blinks. */
+  newCharacterWaiting?: boolean;
   isVehiclesOpen?: boolean;
   setIsVehiclesOpen?: (v: boolean) => void;
   isEnemyVehiclesOpen?: boolean;
@@ -201,7 +204,7 @@ interface CharacterControlsMenuProps {
   gameSystem?: string;
 }
 
-export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, writeToken, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData, measureMode, setMeasureMode, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, isEnemyVehiclesOpen, setIsEnemyVehiclesOpen, gameSystem }: CharacterControlsMenuProps) {
+export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedLocation, setSelectedLocation, refreshLocations, token, writeToken, userName, locations, socketRef, syncRhombusToDB, view, activeBattleMapData, measureMode, setMeasureMode, isSheetOpen, setIsSheetOpen, newCharacterWaiting, isVehiclesOpen, setIsVehiclesOpen, isEnemyVehiclesOpen, setIsEnemyVehiclesOpen, gameSystem }: CharacterControlsMenuProps) {
   const userRhombus = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName && (
     view === 'battle_map' && activeBattleMapData
       ? (l.battle_map_id == activeBattleMapData.locationId && l.floor_index == activeBattleMapData.currentFloorIndex)
@@ -337,7 +340,7 @@ export function CharacterControlsMenu({ rhombusState, setRhombusState, selectedL
 
         {/* 4 — Character sheet: source of truth for name and description */}
         <button
-          className={`upload-btn ${isSheetOpen ? 'active' : ''}`}
+          className={`upload-btn ${isSheetOpen ? 'active' : ''} ${newCharacterWaiting ? 'unread-flash' : ''}`}
           onClick={() => setIsSheetOpen(!isSheetOpen)}
           style={{ width: '100%', fontSize: '0.65rem' }}
         >
@@ -489,6 +492,8 @@ export function SystemInfoMenu({ userName, token, currentTheme, onThemeChange }:
             <span style={{ color: 'var(--green)' }}>{THEMES[currentTheme || 'classic']?.name || 'Classic'}</span>
           )}
         </div>
+        {/* A slow map's likely cause and its fix, and the warning's setting (2026-10-31). */}
+        <MapSlowHelp />
         <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '15px', fontSize: '0.7rem' }}>
           <span style={{ opacity: 0.6 }}>LICENSE:</span><br />
           <span style={{ color: 'var(--green)' }}>AGPL-3.0 — open source</span><br />
@@ -1212,6 +1217,8 @@ interface SidebarProps {
   setIsBankOpen: (v: boolean) => void;
   isSheetOpen: boolean;
   setIsSheetOpen: (v: boolean) => void;
+  /** A blank sheet in a game with a guided new character, never opened (7c2): CHARACTER_SHEET blinks. */
+  newCharacterWaiting?: boolean;
   isVehiclesOpen?: boolean;
   setIsVehiclesOpen?: (v: boolean) => void;
   isEnemyVehiclesOpen?: boolean;
@@ -1240,7 +1247,7 @@ interface SidebarProps {
   onDeleteCustomDie?: (id: number | string) => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, writeToken, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, hasUnseenRoll = false, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, isVehiclesOpen, setIsVehiclesOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, onEndCombat, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, writeToken, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, hasUnseenRoll = false, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, newCharacterWaiting, isVehiclesOpen, setIsVehiclesOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, onEndCombat, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
   /** The rail label under the pointer, positioned from the button it belongs to. */
   const [railTip, setRailTip] = useState<{ label: string; x: number; y: number } | null>(null);
   // A custom system's own words for the rail's labels; today's text otherwise.
@@ -1343,7 +1350,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
               <path d="M16.5 17h.01" />
             </svg>
           </button>
-          <button className={`rail-btn ${activeMenu === 'character_controls' ? 'active' : ''}`} onClick={() => setActiveMenu(activeMenu === 'character_controls' ? 'none' : 'character_controls')} aria-label={characterControls} data-tip={characterControls}>
+          <button className={`rail-btn ${activeMenu === 'character_controls' ? 'active' : ''} ${newCharacterWaiting && activeMenu !== 'character_controls' ? 'unread-flash' : ''}`} onClick={() => setActiveMenu(activeMenu === 'character_controls' ? 'none' : 'character_controls')} aria-label={characterControls} data-tip={characterControls}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill={rhombusState?.color || 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="m5.219 11.34l5.96-7.925a1.02 1.02 0 0 1 1.642 0l5.96 7.925c.292.388.292.932 0 1.32l-5.96 7.925a1.02 1.02 0 0 1-1.642 0L5.22 12.66a1.1 1.1 0 0 1 0-1.32" />
             </svg>
@@ -1499,7 +1506,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'system_info' && <SystemInfoMenu userName={userName} token={token} currentTheme={currentTheme} onThemeChange={onThemeChange} />}
           {activeMenu === 'quick_access' && <QuickAccessMenu locations={locations} onSelect={onSelect} onZoom={onZoom} selectedLocation={selectedLocation} isOpen={true} setIsOpen={() => setActiveMenu('none')} view={view} activeUsers={activeUsers} />}
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
-          {activeMenu === 'character_controls' && <CharacterControlsMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} writeToken={writeToken} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} isVehiclesOpen={isVehiclesOpen} setIsVehiclesOpen={setIsVehiclesOpen} gameSystem={gameSystem} />}
+          {activeMenu === 'character_controls' && <CharacterControlsMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} writeToken={writeToken} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} newCharacterWaiting={newCharacterWaiting} isVehiclesOpen={isVehiclesOpen} setIsVehiclesOpen={setIsVehiclesOpen} gameSystem={gameSystem} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
           {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} writeToken={writeToken} locations={locations} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} customDice={customDice} onOpenCustomDieBuilder={onOpenCustomDieBuilder} onDeleteCustomDie={onDeleteCustomDie} hasUnseenRoll={hasUnseenRoll} />}
           {activeMenu === 'initiative_tracker' && initiativeOn && (

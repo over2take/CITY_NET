@@ -26,6 +26,8 @@
 
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { compileSystem } = require('./derived');
+const { rankedOf } = require('./ranks');
+const { overlayOf } = require('./choices');
 const { derivedLabel } = require('./stats');
 const { conditionsOf } = require('./conditions');
 const { currenciesOf } = require('./currencies');
@@ -39,8 +41,10 @@ const list = (v) => (Array.isArray(v) ? v : []);
 /**
  * The sections that change nothing on any character, said in one line. Phase 6's (rolls, their
  * symbols and dice, who sees a roll's target) joined in 6c4h: a change to them said nothing before.
+ * Choices (7a1a) are here too: what a change to them does to each character shows in their values (7a1b). SPEND XP's price
+ * list (7f2a1) changes only what is bought next, and IMPROVE BY USE (7f3a1) only what a rest rolls next.
  */
-const OTHER = ['name', 'description', 'author', 'license', 'words', 'buildings', 'bank', 'lookups', 'npc', 'rests', 'rolls', 'symbols', 'dice', 'target_seen'];
+const OTHER = ['name', 'description', 'author', 'license', 'words', 'buildings', 'bank', 'lookups', 'npc', 'rests', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'creation', 'levels', 'spend', 'improve'];
 
 const fieldMap = (definition) => new Map(fieldsOf(effectiveSheet(definition))
   .filter((f) => isPlainObject(f) && typeof f.id === 'string')
@@ -155,8 +159,9 @@ const versionChanges = (before, after) => {
 
 /** Every worked-out value a version gives `data`, or null when its formulas can't run. */
 const valuesUnder = (definition, data) => {
-  const compiled = compileSystem({ lookups: (definition || {}).lookups, derived: list((definition || {}).derived) });
-  return compiled.ok ? compiled.system.evaluate(data || {}) : null;
+  const compiled = compileSystem({ lookups: (definition || {}).lookups, derived: list((definition || {}).derived), ranked: rankedOf(definition || {}) });
+  // With what the sheet's picks do under that version (7a1b): a feature changed changes values.
+  return compiled.ok ? compiled.system.evaluate(data || {}, overlayOf(definition || {}, data)) : null;
 };
 
 /** The worked-out values that differ between the two versions, for `data`: old → new (null: none). */

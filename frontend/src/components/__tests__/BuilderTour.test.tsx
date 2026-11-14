@@ -44,7 +44,7 @@ describe('the box', () => {
   it('says the step, its title and words, read out with the dialog', () => {
     draw(2);
     const dialog = screen.getByRole('dialog', { name: 'The builder tour' });
-    expect(screen.getByText('STEP 3 OF 8')).toBeTruthy();
+    expect(screen.getByText('STEP 3 OF 12')).toBeTruthy();
     expect(screen.getByRole('heading').textContent).toBe(TOUR[2].title);
     expect(document.getElementById(dialog.getAttribute('aria-describedby')!)!.textContent).toBe(TOUR[2].text);
   });
@@ -82,5 +82,28 @@ describe('the box', () => {
     expect(reached).toBe(false);
     fireEvent.keyDown(screen.getByRole('button', { name: 'NEXT' }), { key: 'Enter' });
     expect(props.onSkip).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a place off the screen', () => {
+  it('is scrolled into view before the arrow is pointed at it', () => {
+    const place = document.createElement('button');
+    place.setAttribute('data-tour-place', TOUR[1].at as string);
+    const scrolled = vi.fn();
+    place.scrollIntoView = scrolled;
+    document.body.appendChild(place);
+    render(<BuilderTour step={1} railWidth={220} root={() => document.body} onBack={vi.fn()} onNext={vi.fn()} onSkip={vi.fn()} />);
+    expect(scrolled).toHaveBeenCalledWith({ block: 'nearest' });
+    place.remove();
+  });
+});
+
+describe('a box taller than taken', () => {
+  it('kept wholly on the screen by its own height, its arrow still at the button', () => {
+    // 236 tall, as LEVELS's words wrapped on CI: never past the bottom.
+    const low = tourPlace({ top: 760 }, SCREEN, 220, 236);
+    expect(low.top).toBe(800 - 236 - 16);
+    expect(low).toMatchObject({ arrow: 236 - 24 });
+    expect(tourPlace({ top: 760 }, SCREEN, 220)).toMatchObject({ top: 800 - 220 - 16 });
   });
 });

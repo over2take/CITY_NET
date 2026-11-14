@@ -9,6 +9,8 @@ import { mapGroupsOf, groupOf, withFormulaInGroup, withMapGroupLabel, withoutMap
 import { notesOf, pinChoices, withNoteText, withNotePinned, withoutNote, NOTE_MAX } from '../sheets/graphNotes';
 import type { Tried } from '../hooks/usePreviewValues';
 import { useFormulaInsert } from '../hooks/useFormulaInsert';
+import { useFormulaReads } from '../hooks/useFormulaReads';
+import { formulaTexts } from '../sheets/formulaBox';
 import { GroupSection, TableSection, FormulaName, FormulaBody, InsertChips } from './statsRulesFields';
 import { small, why, btn, field } from './statsRulesStyles';
 import { RollEditor, TestRoll } from './RollsTab';
@@ -28,14 +30,14 @@ interface Props {
   preview: Tried | null;
   tried: Record<string, Tried>;
   onClose: () => void;
-  onGoTo?: (page: BuilderPage) => void;
+  onGoTo?: (page: BuilderPage, list?: string) => void;
   /** The house rules TRY ON THE MAP has on (5b6c), which the values here are worked out with. */
   trying?: Set<string>;
   /** For a roll's TEST ROLL (6b4a). */
   api?: ReturnType<typeof systemsApi>;
 }
 
-const KIND: Record<GraphNode['kind'], string> = { list: 'STATS', table: 'TABLE', formula: 'FORMULA', condition: 'CONDITION', rule: 'HOUSE RULE', note: 'NOTE', roll: 'ROLL' };
+const KIND: Record<GraphNode['kind'], string> = { list: 'STATS', table: 'TABLE', formula: 'FORMULA', condition: 'CONDITION', rule: 'HOUSE RULE', note: 'NOTE', levels: 'CHOICES', roll: 'ROLL' };
 
 /**
  * ON THE WAY IN (5b3): the diamonds on a formula's wires, each number changeable, which rewrites
@@ -184,15 +186,18 @@ export function GroupPanel({ definition, edit, group, onClose, graph, positions 
 }
 
 /** A formula as FORMULAS shows it, laid out down the panel: name, text, = value, alternative. */
-function FormulaForm({ definition, edit, id, preview, tried, insert, trying }: Omit<Props, 'node' | 'onClose' | 'onGoTo'> & { id: string; insert: ReturnType<typeof useFormulaInsert> }) {
+function FormulaForm({ definition, edit, id, preview, tried, insert, trying, api }: Omit<Props, 'node' | 'onClose' | 'onGoTo'> & { id: string; insert: ReturnType<typeof useFormulaInsert> }) {
   const f = formulaList(definition).find((x) => x.id === id);
+  // Formula box 3: this formula read by the server, for its words and a name the system hasn't got.
+  const reads = useFormulaReads(definition, api, f ? formulaTexts([f]) : []);
   if (!f) return null;
   const value = preview?.values[f.id];
   const rule = f.alternative && trying?.has(f.alternative.rule) ? houseRuleList(definition).find((r) => r.id === f.alternative!.rule) : undefined;
   return (
     <div data-testid={`panel-formula-${f.id}`} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <FormulaName definition={definition} edit={edit} f={f} />
-      <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried} bind={(box) => insert.bind(f.id, box)} />
+      <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried} bind={(box) => insert.bind(f.id, box)}
+        reads={(box) => reads[`${f.id}:${box}`] ?? null} />
       <OnTheWayIn definition={definition} edit={edit} id={f.id} />
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'flex-end', gap: 8 }}>
         <span style={small}>ON THE SAMPLE{rule ? `, WITH ${(rule.name || rule.id).toUpperCase()} (TRYING)` : ''}</span>
@@ -218,7 +223,7 @@ export function GraphPanel({ definition, edit, node, preview, tried, onClose, on
         {formulaIds.length > 0 && (
           <>
             <span style={small}>MODIFIERS · FROM {node.via?.label}</span>
-            {formulaIds.map((id) => <FormulaForm key={id} definition={definition} edit={edit} id={id} preview={preview} tried={tried} insert={insert} trying={trying} />)}
+            {formulaIds.map((id) => <FormulaForm key={id} definition={definition} edit={edit} id={id} preview={preview} tried={tried} insert={insert} trying={trying} api={api} />)}
           </>
         )}
       </>
@@ -226,7 +231,7 @@ export function GraphPanel({ definition, edit, node, preview, tried, onClose, on
   } else if (node.kind === 'formula' || node.kind === 'condition') {
     body = (
       <>
-        <FormulaForm definition={definition} edit={edit} id={node.id} preview={preview} tried={tried} insert={insert} trying={trying} />
+        <FormulaForm definition={definition} edit={edit} id={node.id} preview={preview} tried={tried} insert={insert} trying={trying} api={api} />
         <MapGroupField definition={definition} edit={edit} id={node.id} />
         <div><button type="button" className="utility-btn" style={btn} onClick={() => edit(withoutFormula(definition, node.id))}>REMOVE {node.kind === 'condition' ? 'CONDITION' : 'FORMULA'}</button></div>
       </>
@@ -239,8 +244,18 @@ export function GraphPanel({ definition, edit, node, preview, tried, onClose, on
     const roll = rollList(definition).find((r) => `roll:${r.id}` === node.id);
     body = roll && (
       <>
-        <RollEditor definition={definition} edit={edit} roll={roll} onRemoved={onClose} />
+        <RollEditor definition={definition} edit={edit} roll={roll} api={api} onRemoved={onClose} />
         <TestRoll key={roll.id} definition={definition} api={api} roll={roll} />
+      </>
+    );
+  } else if (node.kind === 'levels') {
+    // A list of choices (7a5c): read from CHOICES, changed there.
+    body = (
+      <>
+        <p style={{ ...why, margin: 0 }}>What characters pick from this list, as the rest of the system reads it. It is made and changed on CHOICES.</p>
+        {(node.rows ?? []).map((r) => <span key={r.stat} style={{ fontSize: 12 }}>· {r.label}: @{r.stat}</span>)}
+        {!!node.bonuses && <p style={{ ...why, margin: 0 }}>The dashed wires are its features&apos; bonuses: {node.bonuses}.</p>}
+        {onGoTo && <div><button type="button" className="utility-btn" style={btn} onClick={() => onGoTo('choices', node.list)}>GO TO CHOICES</button></div>}
       </>
     );
   } else if (node.kind === 'rule') {

@@ -6,6 +6,7 @@ const moneyRules = require('../bank/moneyRules');
 const { cryptoRng } = require('../utils/random');
 const { withThrow, boardOf } = require('../utils/diceThrow');
 const { registerInitiativeHandlers } = require('./initiative');
+const { registerChoicesHandlers } = require('./choices');
 const sheetTemplates = require('../sheets/templates');
 const { mutateSheet, mutateSheetForUser, patchSheet } = require('../sheets/mutate');
 const cyberware = require('../sheets/cyberware');
@@ -23,9 +24,18 @@ const { parseTokenConditions } = require('../tokens/conditions');
 const attackSr6 = require('../sheets/attackSr6');
 const npcTiers = require('../sheets/npcTiers');
 const customSystems = require('../systemBuilder/runtime');
+const { withUpload, lockedWhileCreating, kitsGivable, pastStart } = require('../systemBuilder/creation');
+const { markedByRoll } = require('../systemBuilder/improveByUse');
+const { itemsGivable } = require('../systemBuilder/items');
+const { lockedByLevels } = require('../systemBuilder/levelUp');
+const { XP_KEY, keepsXp, HEALTH_BASE_KEY } = require('../systemBuilder/levels');
+const { withUploadedHealth } = require('../systemBuilder/healthLevels');
+const { xpFrom, withImportedPicks } = require('../systemBuilder/sheetImport');
+const { inventoryAdded } = require('../sheets/inventoryImport');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { healthView } = require('../systemBuilder/healthView');
+const { syncTokenMax } = require('../systemBuilder/tokenMax');
 const headshots = require('../sheets/headshots');
 const identity = require('../sheets/identity');
 const vehicleState = require('../sheets/vehicleState');
@@ -334,6 +344,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
       console.log(`User identified: ${info.userName} (Admin: ${info.isAdmin})`);
       userSockets.set(socket.id, info);
+      // Until now anything asked of this socket as a person was dropped: this says ask again.
+      socket.emit('identified');
       broadcastActiveUsers();
 
       // Warm the display-name cache (sheet handle/name) for roll broadcasts
@@ -959,14 +971,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const wantsToken = Object.values(linked).some(s => sheetTemplates.TOKEN_SOURCES.has(s));
       const wantsCash = Object.values(linked).includes('bank_balance');
       const afterToken = (tokenRow) => {
-        Object.entries(linked).forEach(([fieldId, source]) => {
-          if (source === 'token_hp') out[fieldId] = tokenRow ? tokenRow.hp_current : null;
-          if (source === 'token_hp_max') out[fieldId] = tokenRow ? tokenRow.hp_max : null;
-          // Unset token AC falls back to 10, matching the attack engine's
-          // default - the sheet shows the AC attacks actually resolve against.
-          if (source === 'token_ac') out[fieldId] = tokenRow ? (tokenRow.melee_ac ?? 10) : null;
-          if (source === 'token_ac_ranged') out[fieldId] = tokenRow ? sheetTemplates.rangedAcOf(tokenRow) : null;
-        });
+        sheetTemplates.fillTokenFields(linked, tokenRow, out);
         if (!wantsCash) return done(out);
         // The account in this sheet's own system: a sheet shows the money of its game.
         bank.get(db, username, system, (err, account) => {
@@ -978,7 +983,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       };
       if (!wantsToken) return afterToken(null);
       db.get(
-        `SELECT hp_current, hp_max, melee_ac, ranged_ac FROM locations WHERE shape = 'rhombus' AND owner = ?
+        `SELECT hp_current, hp_max, hp_temp, melee_ac, ranged_ac FROM locations WHERE shape = 'rhombus' AND owner = ?
          ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`,
         [username],
         (err, tokenRow) => afterToken(err ? null : tokenRow)
@@ -1262,7 +1267,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       });
     });
 
-    socket.on('requestMySheet', () => {
+    // { peek: true } only reads (7d2b): what blinks on the rail mustn't make a sheet for someone with none, the GM
+    // among them, or a long rest would count them as a character.
+    socket.on('requestMySheet', (opts) => {
+      const peek = opts?.peek === true;
       const info = userSockets.get(socket.id);
       if (!info || !info.userName) return;
       getGameSystem((err, system) => {
@@ -1309,7 +1317,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 });
                 });
               });
-            } else {
+            } else if (!peek) {
               // Auto-create a blank sheet on first open, carrying the portrait
               // over from the player's most recent sheet on another system
               db.get(
@@ -1338,6 +1346,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         );
       });
     });
+
+    // Picking on a custom system's sheet (7a3a): who may do what is systemBuilder/picking.js's.
+    registerChoicesHandlers(socket, { io, db, userSockets, isAdminSocket, getGameSystem, getShopSystem, withMoney, sendBankUpdate });
 
     socket.on('updateSheetField', (payload) => {
       const info = userSockets.get(socket.id);
@@ -1378,6 +1389,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           db,
           { username: info.userName, system },
           (data) => {
+            // A stat set some way other than typing, while the character is being made (7c3b): a
+            // number placed can't be typed over. Nothing to write, and the sheet shows it locked.
+            if (!isAdminSocket(socket) && (lockedWhileCreating(customSystems.definitionOf(system), data).has(payload.fieldId) || lockedByLevels(customSystems.definitionOf(system), data).has(payload.fieldId))) return undefined;
+            // A rank past where a new character may start (7f1c2): the GM's to give.
+            if (!isAdminSocket(socket) && pastStart(customSystems.definitionOf(system), data, payload.fieldId, payload.value)) return undefined;
             data[payload.fieldId] = payload.value;
             // If the changed field is a max, clamp the paired current field.
             const curField = sheetTemplates.getMaxPairs(system)[payload.fieldId];
@@ -1436,7 +1452,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     }
                   );
                 } else {
-                  io.emit('sheetUpdated', { username: info.userName, system });
+                  // A custom system's feature may read what changed (a stat, a level) and move
+                  // the token's maximum with it (systemBuilder/tokenMax.js, 7a5a3).
+                  syncTokenMax(db, system, info.userName, (moved) => {
+                    if (moved) emitUpdate({ isRhombusOnly: true });
+                    io.emit('sheetUpdated', { username: info.userName, system });
+                  });
                 }
           }
         );
@@ -1459,10 +1480,17 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         // The GM's values are left out of a player's import or batch edit, as from a single
         // edit: uploading a sheet does not set your own XP.
         const gm = isAdminSocket(socket);
+        const definition = customSystems.definitionOf(system);
+        // Their own XP only in a whole upload, where characters earn it (7d2c) or spend it (7f2a1), and only a whole amount.
+        const uploadsXp = (k, v) => k === XP_KEY && payload.replace === true && keepsXp(definition) && xpFrom(v) !== null;
         const entries = Object.entries(payload.fields)
-          .filter(([k, v]) => !linked[k] && (gm || sheetTemplates.playerMayEdit(system, k))
-            && (typeof v === 'string' || typeof v === 'number'));
-        if (entries.length === 0 && !cyber) return;
+          .filter(([k, v]) => !linked[k] && (gm || sheetTemplates.playerMayEdit(system, k) || uploadsXp(k, v))
+            && (typeof v === 'string' || typeof v === 'number'))
+          // XP kept as a number, however it was written.
+          .map(([k, v]) => [k, k === XP_KEY && xpFrom(v) !== null ? xpFrom(v) : v]);
+        // A custom system's upload can name its picks too (7c6), checked again as they are written.
+        const picks = definition && payload.picks && typeof payload.picks === 'object' ? payload.picks : null;
+        if (entries.length === 0 && !cyber && !picks) return;
         // Through the queue: an import replaces the whole sheet, so a concurrent edit
         // does not merely lose a field, it disappears entirely. The occupancy carried
         // across a replace has to be read at write time too, or a player seated during
@@ -1485,9 +1513,26 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     || !sheetTemplates.playerMayEdit(system, k)),
                 )
               : existing;
-            entries.forEach(([k, v]) => { data[k] = v; });
-            entries.forEach(([k]) => sheetTemplates.applyDerived(system, data, k));
+            // An upload made during the guided new character finishes it (7c2): taken as it is.
+            // A batch edit leaves alone what a player may not type just now (7c3b).
+            const locked = gm || payload.replace ? new Set() : new Set([...lockedWhileCreating(customSystems.definitionOf(system), existing), ...lockedByLevels(customSystems.definitionOf(system), existing)]);
+            const allowed = entries.filter(([k, v]) => !locked.has(k) && (gm || payload.replace || !pastStart(customSystems.definitionOf(system), existing, k, v)));
+            if (payload.replace) Object.assign(data, withUpload(customSystems.definitionOf(system), data));
+            allowed.forEach(([k, v]) => { data[k] = v; });
+            allowed.forEach(([k]) => sheetTemplates.applyDerived(system, data, k));
             if (cyber) data[cyberware.FIELD] = cyber;
+            // A custom system's upload is the whole character (7c6), but for the inventory, which it adds to.
+            if (definition && payload.replace) {
+              if (existing.inventory !== undefined) data.inventory = inventoryAdded(existing.inventory, data.inventory);
+              const whole = withImportedPicks(definition, data, picks, { whole: true });
+              delete data._rolled;
+              Object.assign(data, whole);
+              // Its maximum the base for the levels it has, where health is per level (7d7c), once its picks say the level.
+              const health = withUploadedHealth(definition, data, payload.fields[HEALTH_BASE_KEY]);
+              Object.keys(data).forEach((k) => { if (!(k in health)) delete data[k]; });
+              Object.assign(data, health);
+              sheetTemplates.applyDerived(system, data);
+            }
             // A PDF or a pasted block offers one line of cyberware, since a paper form
             // cannot hold rows. Read it into rows here rather than keeping a field the
             // template no longer has — and never over rows that already arrived, which
@@ -1519,10 +1564,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   });
                 }
                 const effAc = system === 'cities_without_number' ? sheetTemplates.cwnEffectiveAc(data) : null;
-                const finish = () => {
+                const finish = () => syncTokenMax(db, system, info.userName, (moved) => {
+                  if (moved) emitUpdate({ isRhombusOnly: true });
                   io.emit('sheetUpdated', { username: info.userName, system });
                   socket.emit('sheetImportApplied', { count: entries.length });
-                };
+                });
                 // Editing a vehicle changes what every badge showing it should say —
                 // including the badges of passengers, whose sheets were not touched.
                 if (vehicleSystems.hasVehicles(system) && entries.some(([k]) => k.startsWith('vehicle'))) {
@@ -1613,6 +1659,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               conditions: customSystems.conditionsIn(system).filter((c) => on.has(c.id)),
             });
             if (!made.ok) return;
+            // IMPROVE BY USE (7f3a1): a player's stat rolled as MARKED BY says is marked, on the sheet as it is now.
+            if (updated.username) {
+              mutateSheet(db, row.id, (d) => markedByRoll(custom, d, payload.fieldId, made.result.success) || undefined, (e4, marked) => {
+                if (!e4 && marked) io.emit('sheetUpdated', updated);
+              });
+            }
             // What the changes picked cost (6b3a): the stat changed on the sheet as it is now, as
             // CP:R's Luck is spent, and every window showing it told.
             if (made.spends.length) {
@@ -2431,7 +2483,15 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (err) return socket.emit('givableItems', { ok: false, reason: 'no_system' });
         // A custom system can turn GIVE ITEM off (4g3, the give_items part): nothing to give then.
         if (!customSystems.partIn(system, 'give_items')) return socket.emit('givableItems', { ok: false, reason: 'give_off' });
-        socket.emit('givableItems', { ok: true, system, catalogues: givable(system) });
+        // Beside the shelves, a custom system's kits (7c4c): every one, as the GM can give anything.
+        const kits = kitsGivable(customSystems.definitionOf(system) ?? {});
+        // And its items (7e3b), to hand out as loot.
+        const items = itemsGivable(customSystems.definitionOf(system) ?? {});
+        socket.emit('givableItems', { ok: true, system, catalogues: [
+          ...givable(system),
+          ...(kits.length ? [{ catalogue: giving.KITS_CATALOGUE, items: kits }] : []),
+          ...(items.length ? [{ catalogue: giving.ITEMS_CATALOGUE, items }] : []),
+        ] });
       });
     });
 
@@ -2515,16 +2575,32 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           // Which column the table advances on, so the award can carry the level with it.
           db.get(`SELECT value FROM global_settings WHERE key = 'cwn_slow_advancement'`, (rErr, rRow) => {
           const rate = (!rErr && rRow && rRow.value === '1') ? 'slow' : 'fast';
-          awardXpModule.awardXp(db, { system, usernames: data.usernames, amount: data.amount, rate }, (reason, results) => {
+          awardXpModule.awardXp(db, { system, definition: customSystems.definitionOf(system), usernames: data.usernames, amount: data.amount, rate, split: data.split === true }, (reason, results, given) => {
             if (reason) return socket.emit('xpAwardResult', { ok: false, reason });
             // Told to the GM who asked, so a name that did nothing is visible rather than
             // looking like the button missed.
-            socket.emit('xpAwardResult', { ok: true, amount: Number(data.amount), results });
+            socket.emit('xpAwardResult', { ok: true, amount: given.each, left: given.left, results });
             // And to each player, whose sheet is showing an EXP bar that just moved.
             results.filter((r) => r.ok).forEach((r) => {
               io.emit('sheetUpdated', { username: r.username, system });
             });
           });
+          });
+        });
+      });
+    });
+
+    /** A custom system's SET XP TO (7d2a): another number in place of what they have. */
+    socket.on('adminSetXp', (data) => {
+      if (!data || !data.token || !Array.isArray(data.usernames)) return;
+      jwt.verify(data.token, SECRET, (err, decoded) => {
+        if (err || !isMainAdmin(decoded)) return;
+        getGameSystem((sysErr, system) => {
+          if (sysErr) return;
+          awardXpModule.setXp(db, { system, definition: customSystems.definitionOf(system), usernames: data.usernames, value: data.value }, (reason, results) => {
+            if (reason) return socket.emit('xpAwardResult', { ok: false, reason });
+            socket.emit('xpAwardResult', { ok: true, results });
+            results.filter((r) => r.ok).forEach((r) => io.emit('sheetUpdated', { username: r.username, system }));
           });
         });
       });
@@ -2544,11 +2620,15 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (!isMainAdmin(decoded)) return;
         getGameSystem((sysErr, system) => {
           if (sysErr) return;
-          awardXpModule.adjustLevel(db, { system, usernames: data.usernames, delta: data.delta }, (reason, results) => {
+          awardXpModule.adjustLevel(db, { system, definition: customSystems.definitionOf(system), applyDerived: sheetTemplates.applyDerived, usernames: data.usernames, delta: data.delta }, (reason, results) => {
             if (reason) return socket.emit('xpAwardResult', { ok: false, reason });
             socket.emit('xpAwardResult', { ok: true, levelChange: Number(data.delta), results });
             results.filter((r) => r.ok).forEach((r) => {
-              io.emit('sheetUpdated', { username: r.username, system });
+              // A level can move the token's maximum, by a class's feature.
+              syncTokenMax(db, system, r.username, (moved) => {
+                if (moved) io.emit('dataUpdated', { isRhombusOnly: true });
+                io.emit('sheetUpdated', { username: r.username, system });
+              });
             });
           });
         });

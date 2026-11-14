@@ -14,6 +14,8 @@ const { buildCustomTemplate } = require('../sheets/pdfTemplate');
 const runtime = require('../systemBuilder/runtime');
 const { checkDefinition, NEW_SYSTEM_SEEN } = require('../systemBuilder/definition');
 const { previewDerived } = require('../systemBuilder/derived');
+const { rankedOf } = require('../systemBuilder/ranks');
+const { previewFormulas, SAMPLE_LEVEL } = require('../systemBuilder/formulaPreview');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { conditionsOf } = require('../systemBuilder/conditions');
 const { diceOf } = require('../systemBuilder/diceFaces');
@@ -23,10 +25,12 @@ const { npcSheetOf, LIMITS: NPC_LIMITS } = require('../systemBuilder/npc');
 const { rollTier } = require('../systemBuilder/tierRolls');
 const { tryHealth } = require('../systemBuilder/tryHealth');
 const { tryRest } = require('../systemBuilder/tryRest');
+const { readChoicesFile } = require('../systemBuilder/choicesImport');
 const { exampleList, exampleDefinition, exampleKind, KINDS } = require('../systemBuilder/examples');
 const { checkTableConditions, saveTableConditions } = require('../systemBuilder/tableConditions');
 const { isBuiltIn } = require('../sheets/templates');
 const { houseRuleKey } = require('../systemBuilder/houseRules');
+const { syncAllTokenMax } = require('../systemBuilder/tokenMax');
 
 /** The global_settings key that says the builder's first-time tour has been seen. */
 const TOUR_SEEN = 'builder_tour_seen';
@@ -216,10 +220,12 @@ module.exports = (db, io = null) => {
   router.post('/:id/publish', gm, (req, res) => {
     store.publishSystem(db, req.params.id, (err, done) => {
       if (err) return answer(res, err);
-      runtime.refresh(db, req.params.id, () => {
+      runtime.refresh(db, req.params.id, () => syncAllTokenMax(db, req.params.id, (moved) => {
+        // A new version may change what a feature adds to the token's maximum (7a5a3, tokenMax.js).
+        if (io && moved) io.emit('dataUpdated', { isRhombusOnly: true });
         if (io) io.emit('customSystemChanged', { id: req.params.id });
         answer(res, null, done);
-      });
+      }));
     });
   });
 
@@ -281,7 +287,22 @@ module.exports = (db, io = null) => {
     const checked = checkDefinition(definition);
     if (checked.fatal) return res.status(400).json({ error: checked.fatal });
     const samples = definition.samples && typeof definition.samples === 'object' && !Array.isArray(definition.samples) ? definition.samples : {};
-    res.json(previewDerived({ lookups: definition.lookups, derived: definition.derived }, samples));
+    // A ranked stat's sample is its step (7f1b).
+    const ranked = rankedOf(definition);
+    const data = { ...samples, ...Object.fromEntries(ranked.map((r) => [r.step, samples[r.id] ?? 0])) };
+    res.json(previewDerived({ lookups: definition.lookups, derived: definition.derived, ranked }, data));
+  });
+
+  /**
+   * The builder's formula box (formula box 1): up to 20 formulas, `{ text, kind }` each (a
+   * modifier's amount, a requirement, a feature's uses), each read against a draft as the game
+   * reads it: its mistake, or its value for the sample character with each name it reads.
+   */
+  router.post('/preview-formulas', gm, (req, res) => {
+    const { definition, formulas } = req.body || {};
+    const checked = checkDefinition(definition);
+    if (checked.fatal) return res.status(400).json({ error: checked.fatal });
+    res.json({ results: previewFormulas(definition, formulas), sampleLevel: SAMPLE_LEVEL });
   });
 
   /**
@@ -389,6 +410,21 @@ module.exports = (db, io = null) => {
     const checked = checkDefinition(definition);
     if (checked.fatal) return res.status(400).json({ error: checked.fatal });
     res.json({ sheet: effectiveSheet(definition), starter: starterSheet(definition) });
+  });
+
+  /**
+   * The CHOICES page's IMPORT, its PREVIEW (choices import 1; approved mockup
+   * docs/mockups/choices-import.html): a file of options and features read against one of a draft's
+   * lists, with what it would add and change, each line skipped and why, and the list as it would
+   * be, which the builder puts into the draft. Changes nothing.
+   */
+  router.post('/import-choices', gm, (req, res) => {
+    const { definition, list, text } = req.body || {};
+    const checked = checkDefinition(definition);
+    if (checked.fatal) return res.status(400).json({ error: checked.fatal });
+    const { ok, error, ...read } = readChoicesFile(definition, list, text);
+    if (!ok) return res.status(400).json({ error });
+    res.json(read);
   });
 
   /**

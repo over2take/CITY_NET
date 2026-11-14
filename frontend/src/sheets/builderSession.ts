@@ -139,7 +139,7 @@ export const publishedMessage = (version: number, running: boolean): string =>
 
 // ─── The sidebar ────────────────────────────────────────────────────────────
 
-export type BuilderPage = 'setup' | 'words' | 'features' | 'rules' | 'sheet' | 'npcs' | 'conditions' | 'rests' | 'house_rules' | 'try' | 'problems';
+export type BuilderPage = 'setup' | 'words' | 'features' | 'rules' | 'choices' | 'items' | 'sheet' | 'new_character' | 'levels' | 'npcs' | 'conditions' | 'rests' | 'house_rules' | 'try' | 'problems';
 
 /**
  * The builder's pages, in the sidebar's order, each with the line that says what it is for
@@ -149,9 +149,13 @@ export type BuilderPage = 'setup' | 'words' | 'features' | 'rules' | 'sheet' | '
 export const BUILDER_PAGES: { id: BuilderPage; label: string; what: string }[] = [
   { id: 'setup', label: 'SETUP', what: 'The questions a new system starts with.' },
   { id: 'words', label: 'WORDS', what: 'What the game calls things: HP, credits, skills.' },
-  { id: 'features', label: 'FEATURES', what: 'Which parts of the app this game uses.' },
-  { id: 'rules', label: 'STATS & RULES', what: 'Stats, formulas and tables.' },
+  { id: 'features', label: 'PARTS', what: 'Which parts of the app this game uses.' },
+  { id: 'rules', label: 'STATS & RULES', what: 'Stats, formulas, tables, ranks, dice and rolls.' },
+  { id: 'choices', label: 'CHOICES', what: 'What characters pick, like classes and feats, and what each gives.' },
+  { id: 'items', label: 'ITEMS', what: 'Things a character carries, wears, attunes to or has installed that do something, and the slots and installs they need.' },
   { id: 'sheet', label: 'CHARACTER SHEET', what: 'How a character sheet is laid out.' },
+  { id: 'new_character', label: 'NEW CHARACTER', what: 'The steps a player is walked through to make a character.' },
+  { id: 'levels', label: 'LEVELS', what: 'How characters go up: XP, levels, max health, spending XP and improving by use.' },
   { id: 'npcs', label: 'NPCS', what: 'NPC tiers and their sheets.' },
   { id: 'conditions', label: 'CONDITIONS', what: 'What can happen to a character besides losing health.' },
   { id: 'rests', label: 'RESTS', what: 'What refills, and what wears off, when the group rests or a scene ends.' },

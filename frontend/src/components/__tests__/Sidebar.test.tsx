@@ -501,3 +501,18 @@ describe('the icon rail labels every button', () => {
     expect(railButtons.filter(tag => tag.includes('title='))).toEqual([]);
   });
 });
+
+describe('the guided new character (7c2)', () => {
+  it('CHARACTER_SHEET blinks only while a new character waits', () => {
+    const props = {
+      rhombusState: { color: '#0f0' }, setRhombusState: vi.fn(), setSelectedLocation: vi.fn(), refreshLocations: vi.fn(), token: '', writeToken: '',
+      userName: 'WREN', locations: [], socketRef: { current: null }, syncRhombusToDB: vi.fn(), view: 'city', measureMode: false, setMeasureMode: vi.fn(),
+      isSheetOpen: false, setIsSheetOpen: vi.fn(), gameSystem: 'generic',
+    } as unknown as React.ComponentProps<typeof CharacterControlsMenu>;
+    const { rerender } = render(<CharacterControlsMenu {...props} />);
+    const sheet = () => screen.getByRole('button', { name: 'CHARACTER_SHEET' });
+    expect(sheet().classList.contains('unread-flash')).toBe(false);
+    rerender(<CharacterControlsMenu {...props} newCharacterWaiting />);
+    expect(sheet().classList.contains('unread-flash')).toBe(true);
+  });
+});

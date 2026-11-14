@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('../DraggableWindow', () => ({
@@ -208,6 +208,58 @@ describe('DiceTrayWindow', () => {
     expect(screen.getByTestId('dice-history')).toBeInTheDocument();
   });
 
+  it('a roll that opened the tray is thrown as it opens, and not added to the record twice (2026-10-31)', () => {
+    vi.useFakeTimers();
+    try {
+    const socketRef = makeSocketRef();
+    const opening = { total: 11, results: { 6: [6, 2, 3] }, color: '#0f0', historyString: 'RECOVERY DICE · cody: spent 3 Fighter d6, 6 + 2 + 3 = 11' };
+    render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} openHistory openingRoll={opening} />);
+    // Thrown: the board says it is rolling, as for any roll that arrives.
+    expect(screen.getByTestId('dice-board').getAttribute('aria-label')).toBe('Rolling');
+    const histHandler = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'diceRollHistory')[1];
+    act(() => { histHandler([opening]); });
+    act(() => { vi.advanceTimersByTime(10_000); });
+    expect(within(screen.getByTestId('dice-history')).getAllByText(/RECOVERY DICE · cody: spent 3 Fighter d6/)).toHaveLength(1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('the roll that opened it lands even when React starts the tray twice (strict mode)', () => {
+    vi.useFakeTimers();
+    try {
+      const opening = { total: 6, results: { 6: [6] }, color: '#0f0', historyString: 'RECOVERY DICE · cody: spent 1 Fighter d6, 6 = 6' };
+      render(<React.StrictMode><DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={makeSocketRef()} openingRoll={opening} /></React.StrictMode>);
+      expect(screen.getByTestId('dice-board').getAttribute('aria-label')).toBe('Rolling');
+      act(() => { vi.advanceTimersByTime(10_000); });
+      expect(screen.getByTestId('dice-board').getAttribute('aria-label')).not.toBe('Rolling');
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('a quiet opening roll is not thrown', () => {
+    const socketRef = makeSocketRef();
+    render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} openHistory
+      openingRoll={{ total: 0, results: {}, color: '#0f0', historyString: 'LONG REST · cody: nothing changed', quiet: true }} />);
+    expect(screen.getByTestId('dice-board').getAttribute('aria-label')).toBe('Ready');
+  });
+
+  it('bolds who rolled, but leaves a rest\'s line with its own colon as written', () => {
+    const socketRef = makeSocketRef();
+    render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} openHistory />);
+    const histHandler = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'diceRollHistory')[1];
+    act(() => {
+      histHandler([
+        { total: 8, results: { 6: [3, 5] }, color: '#0f0', historyString: 'cody rolled 2d6 [(3+5) = 8]' },
+        { total: 4, results: { 4: [4] }, color: '#0f0', historyString: 'SHORT REST · cody: rolled 1d4 + @might = 4 (1d4: 4)' },
+      ]);
+    });
+    const history = screen.getByTestId('dice-history');
+    expect(within(history).getByText('cody:').tagName).toBe('STRONG');
+    expect(history.textContent).toContain('SHORT REST · cody: rolled 1d4 + @might = 4 (1d4: 4)');
+    expect(history.textContent).not.toContain('cody::');
+    // The final total stands out (2026-11-11), the line otherwise as written.
+    expect(within(history).getAllByTestId('roll-total').map((b) => [b.tagName, b.textContent])).toEqual([['STRONG', '8']]);
+    expect(history.textContent).toContain('cody: rolled 2d6 [(3+5) = 8]');
+  });
+
   it('renders the Canvas for 3D dice', () => {
     const socketRef = makeSocketRef();
     render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} />);
@@ -273,6 +325,28 @@ describe('DiceTrayWindow', () => {
       const lines = screen.getAllByText(/rolled/).map((e) => e.textContent);
       expect(lines.filter((l) => /rook/.test(l!))).toHaveLength(1);
       expect(lines.findIndex((l) => /rook/.test(l!))).toBeLessThan(lines.findIndex((l) => /kes/.test(l!)));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('puts a quiet line (a rest that rolled no dice) in the record at once, leaving a throw under way to land (quiet rests)', async () => {
+    const user = userEvent.setup();
+    const socketRef = makeSocketRef();
+    render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} />);
+    await user.click(screen.getByTitle('TOGGLE_HISTORY'));
+    const broadcast = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: any[]) => call[0] === 'diceRollBroadcast')[1];
+    vi.useFakeTimers();
+    try {
+      const rook = { total: 15, results: { 20: [15] }, color: '#0f0', historyString: 'rook rolled', group: 'a', throw: { seed: 11, dice: [{ key: '20', sides: 20, landed: [14] }] } };
+      const rest = { total: 0, results: {}, color: '#0f0', historyString: 'END OF SESSION · Ash: nothing changes', quiet: true, board: { label: 'END OF SESSION' } };
+      act(() => { broadcast(rook); });
+      act(() => { broadcast(rest); });
+      expect(screen.getByText(/END OF SESSION · Ash/)).toBeInTheDocument();
+      // Rook's throw wasn't cut short: told only when its dice stop.
+      expect(screen.queryByText(/rook rolled/)).not.toBeInTheDocument();
+      act(() => { vi.advanceTimersByTime(revealAfter(throwDice(diceOfRoll(rook), 11, trayCamera()))); });
+      expect(screen.getByText(/rook rolled/)).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

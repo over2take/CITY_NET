@@ -6,8 +6,11 @@ import {
 import { notesOn } from '../sheets/graphNotes';
 import { RollsTab } from './RollsTab';
 import { DiceTab } from './DiceTab';
+import { RanksTab } from './RanksTab';
 import { groupOf } from '../sheets/graphGroups';
 import { useFormulaInsert } from '../hooks/useFormulaInsert';
+import { useFormulaReads } from '../hooks/useFormulaReads';
+import { formulaTexts } from '../sheets/formulaBox';
 import { usePreviewValues } from '../hooks/usePreviewValues';
 import { HINTS } from '../sheets/builderHelp';
 import { ColumnHead } from './HelpHint';
@@ -35,7 +38,7 @@ interface Props {
   onHelp?: (topic: string) => void;
 }
 
-type Tab = 'stats' | 'formulas' | 'tables' | 'dice' | 'rolls';
+type Tab = 'stats' | 'formulas' | 'tables' | 'ranks' | 'dice' | 'rolls';
 
 export { PREVIEW_DELAY_MS } from '../hooks/usePreviewValues';
 
@@ -104,6 +107,8 @@ function FormulasTab({ definition, edit, api, onEditInGraph }: Props) {
   const formulas = formulaList(definition);
   const { preview, tried } = usePreviewValues(definition, api);
   const insert = useFormulaInsert(definition, edit);
+  // Formula box 3: every formula read at once, for its words and a name the system hasn't got.
+  const reads = useFormulaReads(definition, api, formulaTexts(formulas));
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 230px', gap: 16, alignItems: 'start' }}>
@@ -127,7 +132,8 @@ function FormulasTab({ definition, edit, api, onEditInGraph }: Props) {
                     <tr data-testid={`formula-${f.id}`}>
                       <td style={td}><FormulaName definition={definition} edit={edit} f={f} /></td>
                       <td style={td}>
-                        <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried} bind={(box) => insert.bind(f.id, box)} />
+                        <FormulaBody definition={definition} edit={edit} f={f} problem={preview?.problems[f.id]} tried={tried} bind={(box) => insert.bind(f.id, box)}
+                          reads={(box) => reads[`${f.id}:${box}`] ?? null} />
                       </td>
                       <td data-testid={`value-${f.id}`} style={{ ...td, textAlign: 'right', color: 'var(--cyan)', fontSize: 13 }}>
                         {value !== undefined ? value : '·'}
@@ -165,7 +171,8 @@ function FormulasTab({ definition, edit, api, onEditInGraph }: Props) {
 
 export function StatsRulesPage({ definition, edit, api, onEditInGraph, onHelp }: Props) {
   const [tab, setTab] = useState<Tab>('stats');
-  const tabs: [Tab, string][] = [['stats', 'STATS'], ['formulas', 'FORMULAS'], ['tables', 'TABLES'], ['dice', 'DICE'], ['rolls', 'ROLLS']];
+  // RANKS beside TABLES (7f1b): lists of named ranks a stat may hold.
+  const tabs: [Tab, string][] = [['stats', 'STATS'], ['formulas', 'FORMULAS'], ['tables', 'TABLES'], ['ranks', 'RANKS'], ['dice', 'DICE'], ['rolls', 'ROLLS']];
   return (
     <div style={{ maxWidth: 1000 }}>
       <div role="tablist" aria-label="Stats and rules" style={{ display: 'flex', borderBottom: '1px solid var(--dark-green)', marginBottom: 14 }}>
@@ -176,6 +183,7 @@ export function StatsRulesPage({ definition, edit, api, onEditInGraph, onHelp }:
       {tab === 'stats' && <StatsTab definition={definition} edit={edit} onEditInGraph={onEditInGraph} />}
       {tab === 'formulas' && <FormulasTab definition={definition} edit={edit} api={api} onEditInGraph={onEditInGraph} />}
       {tab === 'tables' && <TablesTab definition={definition} edit={edit} onEditInGraph={onEditInGraph} />}
+      {tab === 'ranks' && <RanksTab definition={definition} edit={edit} />}
       {tab === 'dice' && <DiceTab definition={definition} edit={edit} api={api} />}
       {tab === 'rolls' && <RollsTab definition={definition} edit={edit} api={api} onHelp={onHelp} />}
     </div>

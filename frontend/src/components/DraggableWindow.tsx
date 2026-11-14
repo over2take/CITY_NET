@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import notifyOnIcon from '../assets/Notification-on.svg';
 import notifyOffIcon from '../assets/Notification-off.svg';
-import { setStacked, unstack, useIsFocused, focusedZ, windowKey, rememberedPos, rememberPos } from './windowFocus';
+import { setStacked, unstack, useIsFocused, focusedZ, windowKey, rememberedPos, rememberPos, useBuilderOpen, isBuilderOpen } from './windowFocus';
 
 let zCounter = 2000;
 
@@ -37,12 +37,14 @@ interface DraggableWindowProps {
   notificationsEnabled?: boolean;
   onToggleNotifications?: () => void;
   titleControls?: React.ReactNode;
+  /** Changes when this window should come to the front of its own accord, over one opening with it. */
+  raiseOn?: number;
 }
 
 export function DraggableWindow({
   title, centerTitle, children, pos, setPos, onClose,
   windowStyle = {}, contentStyle = {},
-  notificationsEnabled, onToggleNotifications, titleControls,
+  notificationsEnabled, onToggleNotifications, titleControls, raiseOn,
 }: DraggableWindowProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
@@ -55,13 +57,19 @@ export function DraggableWindow({
   useEffect(() => { setStacked(stackId.current, zIndex); }, [zIndex]);
   useEffect(() => () => unstack(stackId.current), []);
   const focused = useIsFocused(zIndex);
+  // Hidden, never closed, while the system builder takes over the screen (windowFocus.ts).
+  const hidden = useBuilderOpen();
   const bringToFront = () => { if (focusedZ() !== zIndex) setZIndex(++zCounter); };
+  // After this render, and whatever is in front now: a window opening with it has only just taken a number.
+  useEffect(() => {
+    if (raiseOn) queueMicrotask(() => setZIndex(++zCounter));
+  }, [raiseOn]);
 
   const onCloseRef = React.useRef(onClose);
   onCloseRef.current = onClose;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape' || e.defaultPrevented || focusedZ() !== zIndex) return;
+      if (e.key !== 'Escape' || e.defaultPrevented || focusedZ() !== zIndex || isBuilderOpen()) return;
       // Esc in a field belongs to the field - cancelling what is being typed.
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
@@ -93,6 +101,8 @@ export function DraggableWindow({
     };
   };
   const setClampedPos = (p: { x: number; y: number }) => {
+    // A hidden window has no size to keep on screen: it is kept where it was.
+    if (isBuilderOpen()) return;
     const c = clamp(p);
     if (c.x !== pos.x || c.y !== pos.y) setPos(c);
   };
@@ -131,7 +141,7 @@ export function DraggableWindow({
       ref={windowRef}
       className={focused ? 'win95-window' : 'win95-window inactive'}
       onMouseDownCapture={bringToFront}
-      style={{ left: `${pos.x}px`, top: `${pos.y}px`, zIndex, ...windowStyle }}
+      style={{ left: `${pos.x}px`, top: `${pos.y}px`, zIndex, ...windowStyle, ...(hidden ? { display: 'none' } : {}) }}
     >
       <div className="win95-title-bar" onMouseDown={(e) => { bringToFront(); handleMouseDown(e); }} style={{ position: 'relative' }}>
         <div className="win95-title-text" style={{ fontWeight: 'bold' }}>{title}</div>

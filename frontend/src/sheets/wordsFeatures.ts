@@ -1,4 +1,4 @@
-// The builder's WORDS and FEATURES pages as logic (4b1a): a system's own words for the app's terms,
+// The builder's WORDS and PARTS pages as logic (4b1a; PARTS was FEATURES until 7a2a): a system's own words for the app's terms,
 // which parts of the app it uses, its building and catalogue names, its currencies and its bank
 // settings, read from its definition and written back. Pure, so the pages only draw it. Approved
 // mockup docs/mockups/builder-words-features.html (2026-10-06).
@@ -87,7 +87,7 @@ export const readsAs = (def: Definition, row: TermRow): string => {
   return [`1 ${w('singular')}`, `3 ${w('plural')}`, ...(row.app.short ? [w('short')] : [])].join(' · ');
 };
 
-// ─── FEATURES: the parts ────────────────────────────────────────────────────
+// ─── PARTS: the parts ───────────────────────────────────────────────────────
 
 export interface PartRow { id: string; label: string; what: string; unused?: true }
 
@@ -146,7 +146,7 @@ export const withPartOnlyWith = (def: Definition, part: string, rule: string | n
 /** Is a term's part off, so its words have nothing to show? */
 export const termPartOff = (def: Definition, row: TermRow): boolean => !!row.part && !partIsOn(def, row.part);
 
-// ─── FEATURES: buildings and catalogues ─────────────────────────────────────
+// ─── PARTS: buildings and catalogues ────────────────────────────────────────
 
 export type BuildingKind = 'types' | 'catalogues';
 export interface BuildingSetting { name?: string; on?: boolean; currency?: string }
@@ -192,7 +192,7 @@ export const withBuilding = (def: Definition, kind: BuildingKind, id: string, pa
   return withSection(def, 'buildings', buildings);
 };
 
-// ─── FEATURES: currencies ───────────────────────────────────────────────────
+// ─── PARTS: currencies ──────────────────────────────────────────────────────
 
 /** A currency as the definition stores it (currencies.js). */
 export interface StoredCurrency {
@@ -344,7 +344,7 @@ export const withCoins = (def: Definition, index: number, change: { add: true } 
   return withCurrencies(def, currencyList(def).map((x, i) => (i === index ? { ...x, denominations: coins } : x)));
 };
 
-// ─── FEATURES: the bank's celebrations ──────────────────────────────────────
+// ─── PARTS: the bank's celebrations ─────────────────────────────────────────
 
 /** The bank's settings (bank.js): celebrations off unless on; a whale threshold only while they are. */
 export const bankSettings = (def: Definition): { celebrations: boolean; whale: number | null } => {

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { signInAsGm, signInAsPlayer, openBuilder, openGameSystem, builderPage, clickRail, gmToken, asGm, approvedPlayer } from './helpers';
+import { signInAsGm, signInAsPlayer, openBuilder, openGameSystem, builderPage, clickRail, gmToken, asGm, approvedPlayer, sheetTab } from './helpers';
 
 // The builder journey, the GM's half (4l2a; plan row 4l browser-journey): a system built through
 // the builder's own screens from + NEW (its words, a part off, a stat and a formula worked out on
@@ -8,6 +8,9 @@ import { signInAsGm, signInAsPlayer, openBuilder, openGameSystem, builderPage, c
 // Phase 6 adds a roll (6b, 6c4h): a save from a preset, with a target, rolled by the stat, whose
 // players see only the verdict while the system keeps targets from them; a player rolls it from
 // their sheet once the game runs it, and is told less than the GM.
+// Phase 7 adds a levelled list and XP levels (7a, 7d): a CLASSES list made on CHOICES, SOLDIER's feature TOUGH giving
+// +2 Grit, and XP LEVELS on with level 2 at 100. The player picks SOLDIER, so the save reads Grit 5; the GM awards 100
+// XP, LEVEL UP READY blinks, and the player goes up to Soldier 2 in LEVEL_UP.EXE.
 
 /** What the server tells this page about each roll. */
 const rollsSeenBy = (page: Page) => {
@@ -21,8 +24,8 @@ const rollsSeenBy = (page: Page) => {
 
 test('the GM builds a system, publishes it twice, switches the game to it, and a player rolls its save', async ({ page, browser, request }, info) => {
   // A long journey: 16 s on a desktop, past the usual minute on CI once the player's half came in
-  // (2026-10-27, both tries). Three minutes, so a slow runner isn't a failure.
-  test.setTimeout(180_000);
+  // (2026-10-27, both tries). Five minutes since Phase 7's half, so a slow runner isn't a failure.
+  test.setTimeout(300_000);
   // A retry runs on the same database as the try before it, so it makes a system of its own name.
   const NAME = info.retry ? `Hearthfall ${info.retry + 1}` : 'Hearthfall';
   const again = info.retry ? `_${info.retry + 1}` : '';
@@ -43,8 +46,8 @@ test('the GM builds a system, publishes it twice, switches the game to it, and a
   await page.getByLabel('HP many').fill('Wounds');
   await expect(page.getByTestId('term-hp')).toContainText('1 WOUND · 3 WOUNDS');
 
-  // FEATURES: no vehicles in this game.
-  await builderPage(page, 'FEATURES');
+  // PARTS: no vehicles in this game.
+  await builderPage(page, 'PARTS');
   const vehicles = page.getByRole('switch', { name: 'VEHICLES' });
   await vehicles.click();
   await expect(vehicles).toHaveAttribute('aria-checked', 'false');
@@ -81,9 +84,32 @@ test('the GM builds a system, publishes it twice, switches the game to it, and a
   await test_.getByRole('button', { name: 'TEST ROLL ▸' }).click();
   await expect(test_.getByTestId('test-outcome')).toHaveText(/^(SUCCESS|FAILURE)$/);
 
+  // CHOICES: a levelled CLASSES list, SOLDIER's feature TOUGH giving +2 Grit from level 1.
+  await builderPage(page, 'CHOICES');
+  await page.getByRole('button', { name: '+ LIST' }).click();
+  await page.getByRole('region', { name: 'NEW CHOICES list' }).getByRole('textbox', { name: 'One' }).fill('Class');
+  await page.getByRole('textbox', { name: 'Many' }).fill('Classes');
+  const classes = page.getByRole('region', { name: 'Classes list' });
+  await classes.getByRole('switch', { name: /LEVELLED/ }).click();
+  await classes.getByRole('button', { name: '+ OPTION' }).click();
+  await page.getByRole('region', { name: 'NEW OPTION option' }).getByRole('textbox', { name: 'NAME' }).fill('Soldier');
+  const soldier = page.getByRole('region', { name: 'Soldier option' });
+  await soldier.getByRole('button', { name: '+ FEATURE' }).click();
+  await soldier.getByRole('group', { name: 'Feature NEW FEATURE' }).getByRole('textbox', { name: 'NAME' }).fill('Tough');
+  const tough = soldier.getByRole('group', { name: 'Feature Tough' });
+  await tough.getByRole('button', { name: '+ MODIFIER' }).click();
+  await tough.getByRole('textbox', { name: 'Modifier 1: by' }).fill('2');
+  await expect(soldier.getByRole('button', { name: /TOUGH/ })).toContainText('MODIFIER');
+
+  // LEVELS: XP LEVELS, level 2 at 100.
+  await builderPage(page, 'LEVELS');
+  await page.getByRole('button', { name: 'XP LEVELS' }).click();
+  await page.getByRole('region', { name: 'The XP table' }).getByRole('textbox', { name: 'Level 2 costs' }).fill('100');
+  await expect(page.getByRole('region', { name: 'The XP table' }).getByRole('textbox', { name: 'Level 2 total' })).toHaveValue('100');
+
   // PUBLISH: the first version goes straight through.
   await clickRail(page, 'PUBLISH');
-  await expect(page.getByRole('status')).toContainText('Published v1.');
+  await expect(page.getByRole('status').filter({ hasText: 'Published v1.' })).toBeVisible();
   await expect(page.getByTestId('builder-system')).toContainText('PUBLISHED v1');
 
   // A change, then PUBLISH again: the version preview first, then v2.
@@ -119,19 +145,45 @@ test('the GM builds a system, publishes it twice, switches the game to it, and a
   await signInAsPlayer(playerPage, player);
   await playerPage.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
   await playerPage.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+  await sheetTab(playerPage, 'CHARACTER');
   await playerPage.getByLabel('Name', { exact: true }).fill('Wren');
+  await sheetTab(playerPage, 'STATS');
   await playerPage.getByLabel('Grit', { exact: true }).fill('3');
   // Saved first, so the server reads Grit from the stored sheet: waited for there, not for a time.
   await expect.poll(async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data.new_stat).toBe(3);
+  // SOLDIER picked on CHARACTER: Tough's +2 makes Grit 5 for the save.
+  await sheetTab(playerPage, 'CHARACTER');
+  await playerPage.getByRole('group', { name: 'Pick a Class' }).getByRole('button', { name: 'SOLDIER' }).click();
+  await expect.poll(async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data._choices?.new_list?.[0]?.option).toBe('new_option');
+  await sheetTab(playerPage, 'STATS');
   await playerPage.getByRole('button', { name: 'Roll Grit save' }).click();
 
   // The player is told whether it worked; the GM what it was against too, and that players weren't.
   await expect.poll(() => playerSees.length, { timeout: 15_000 }).toBe(1);
   await expect.poll(() => gmSees.length, { timeout: 15_000 }).toBe(1);
-  expect(playerSees[0].historyString).toMatch(/^Wren rolled Grit save \(Grit\) \[\d+ = \d+\] — (SUCCESS|FAILURE)$/);
+  expect(playerSees[0].historyString).toMatch(/^Wren rolled Grit save \(Grit\) \[\d+\] — (SUCCESS|FAILURE)$/);
   expect(playerSees[0].board?.outcome ?? '').not.toMatch(/vs/i);
-  expect(gmSees[0].historyString).toMatch(/^Wren rolled Grit save \(Grit\) \[\d+ = \d+\] — vs 13: (SUCCESS|FAILURE) · HIDDEN FROM PLAYERS$/);
+  expect(gmSees[0].historyString).toMatch(/^Wren rolled Grit save \(Grit\) \[\d+\] — vs 11: (SUCCESS|FAILURE) · HIDDEN FROM PLAYERS$/);
   // The same verdict for both.
   expect(gmSees[0].historyString).toContain(/(SUCCESS|FAILURE)$/.exec(playerSees[0].historyString)![1]);
+
+  // The save's dice tray, open over the sheet: closed once it is there, so Escape never closes the sheet instead.
+  const tray = playerPage.getByText('DICE_TRAY.EXE', { exact: true });
+  await expect(tray).toBeVisible();
+  await playerPage.keyboard.press('Escape');
+  await expect(tray).toBeHidden();
+
+  // The GM awards 100 XP: LEVEL UP READY on the player's sheet, and they go up to Soldier 2.
+  await page.getByRole('button', { name: 'AWARD_EXPERIENCE' }).click();
+  await page.getByLabel('POINTS_EACH').fill('100');
+  await page.getByRole('checkbox', { name: player.username }).check();
+  await page.getByRole('button', { name: 'AWARD_SELECTED' }).click();
+  const ready = playerPage.getByRole('button', { name: 'LEVEL UP READY' });
+  await expect(ready).toBeVisible({ timeout: 15_000 });
+  await ready.click();
+  await expect(playerPage.getByText(/^LEVEL_UP\.EXE .* SOLDIER 2$/)).toBeVisible();
+  while (await playerPage.getByRole('button', { name: 'NEXT', exact: true }).isVisible()) await playerPage.getByRole('button', { name: 'NEXT', exact: true }).click();
+  await playerPage.getByRole('button', { name: 'FINISH', exact: true }).click();
+  await expect.poll(async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data._choices.new_list[0].level, { timeout: 15_000 }).toBe(2);
   await context.close();
 });

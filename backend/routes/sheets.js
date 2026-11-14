@@ -9,9 +9,10 @@ const { canReadNpcSheets, redactTokenCard } = require('../sheets/npcPrivacy');
 const bankAccounts = require('../bank/accounts');
 const tokenVitals = require('../tokens/vitals');
 const customSystems = require('../systemBuilder/runtime');
+const { syncTokenMax } = require('../systemBuilder/tokenMax');
 const {
   TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived, cwnEffectiveAc,
-  TOKEN_SOURCES, rangedAcOf, acColumns,
+  TOKEN_SOURCES, acColumns, fillTokenFields,
 } = require('../sheets/templates');
 const sheetImporters = require('../sheets/importers');
 const charwn = require('../sheets/charwn');
@@ -25,7 +26,11 @@ const identity = require('../sheets/identity');
 const tokenAccess = require('../tokens/tokenAccess');
 const rests = require('../sheets/rests');
 const { restsOf } = require('../systemBuilder/rests');
-const { jsonTemplate } = require('../systemBuilder/sheetImport');
+const { recoveryShown, restingOf } = require('../systemBuilder/recovery');
+const { jsonTemplate, withImportedPicks } = require('../systemBuilder/sheetImport');
+const { HEALTH_BASE_KEY } = require('../systemBuilder/levels');
+const { withUploadedHealth } = require('../systemBuilder/healthLevels');
+const { inventoryAdded } = require('../sheets/inventoryImport');
 
 // Admin-facing character sheet routes. Player self-service (open/edit own
 // sheet, quick-sheet lookups) goes through socket events, matching how the
@@ -158,16 +163,11 @@ module.exports = (db, io) => {
           };
           if (!Object.values(linked).some(s => TOKEN_SOURCES.has(s))) return overlayCash();
           db.get(
-            `SELECT hp_current, hp_max, melee_ac, ranged_ac FROM locations WHERE shape = 'rhombus' AND owner = ?
+            `SELECT hp_current, hp_max, hp_temp, melee_ac, ranged_ac FROM locations WHERE shape = 'rhombus' AND owner = ?
              ORDER BY (battle_map_id IS NULL) DESC LIMIT 1`,
             [req.params.username],
             (e2, hpRow) => {
-              Object.entries(linked).forEach(([fieldId, source]) => {
-                if (source === 'token_hp') data[fieldId] = hpRow ? hpRow.hp_current : null;
-                if (source === 'token_hp_max') data[fieldId] = hpRow ? hpRow.hp_max : null;
-                if (source === 'token_ac') data[fieldId] = hpRow ? (hpRow.melee_ac ?? 10) : null;
-                if (source === 'token_ac_ranged') data[fieldId] = hpRow ? rangedAcOf(hpRow) : null;
-              });
+              fillTokenFields(linked, hpRow, data);
               overlayCash();
             }
           );
@@ -178,7 +178,7 @@ module.exports = (db, io) => {
 
   // Admin per-field patch of any player's active-system sheet
   router.put('/user/:username', authenticate, requireAdmin, (req, res) => {
-    const { fields } = req.body; // { fieldId: value, ... }
+    const { fields, picks, upload } = req.body; // { fieldId: value, ... }, and whether it is an upload, with its picks (7c6)
     if (!fields || typeof fields !== 'object') return res.status(400).json({ error: 'fields object required' });
     getGameSystem((err, system) => {
       if (err) return res.status(500).json({ error: err.message });
@@ -210,7 +210,15 @@ module.exports = (db, io) => {
             (current) => {
               const next = { ...current, ...patch };
               Object.keys(patch).forEach((f) => applyDerived(system, next, f));
-              return next;
+              const definition = customSystems.definitionOf(system);
+              if (!definition || !upload) return next;
+              // As a player's upload is (sockets/index.js): their picks whole, and adding to the inventory.
+              if (current.inventory !== undefined) next.inventory = inventoryAdded(current.inventory, patch.inventory);
+              const picked = withImportedPicks(definition, next, picks, { whole: true });
+              // Its maximum the base for the levels it has, where health is per level (7d7c).
+              const health = withUploadedHealth(definition, picked, fields[HEALTH_BASE_KEY]);
+              applyDerived(system, health);
+              return health;
             },
             (err3, data) => {
               if (err3) return res.status(500).json({ error: err3.message });
@@ -231,10 +239,12 @@ module.exports = (db, io) => {
                   if (changed) io.emit('dataUpdated', { isRhombusOnly: true });
                 });
               }
-              pushAc(() => {
+              // A custom system's feature may read what changed and move the token's maximum (7a5a3).
+              pushAc(() => syncTokenMax(db, system, req.params.username, (moved) => {
+                if (moved) io.emit('dataUpdated', { isRhombusOnly: true });
                 io.emit('sheetUpdated', { username: req.params.username, system });
                 res.json({ message: 'Sheet updated' });
-              });
+              }));
             }
           );
         }
@@ -414,19 +424,12 @@ module.exports = (db, io) => {
     const wantsHp = Object.values(linked).some(s => TOKEN_SOURCES.has(s));
     if (!wantsHp) return res.json({ ...row, data });
     db.get(
-      `SELECT loc.hp_current, loc.hp_max, loc.melee_ac, loc.ranged_ac FROM npc_sheet_links l
+      `SELECT loc.hp_current, loc.hp_max, loc.hp_temp, loc.melee_ac, loc.ranged_ac FROM npc_sheet_links l
        JOIN locations loc ON loc.id = l.location_id
        WHERE l.sheet_id = ? LIMIT 1`,
       [row.id],
       (err2, hpRow) => {
-        if (!err2 && hpRow) {
-          Object.entries(linked).forEach(([fieldId, source]) => {
-            if (source === 'token_hp') data[fieldId] = hpRow.hp_current;
-            if (source === 'token_hp_max') data[fieldId] = hpRow.hp_max;
-            if (source === 'token_ac') data[fieldId] = hpRow.melee_ac ?? 10;
-            if (source === 'token_ac_ranged') data[fieldId] = rangedAcOf(hpRow);
-          });
-        }
+        if (!err2 && hpRow) fillTokenFields(linked, hpRow, data);
         res.json({ ...row, data });
       }
     );
@@ -895,7 +898,33 @@ module.exports = (db, io) => {
     getGameSystem((err, system) => {
       if (err) return res.status(500).json({ error: err.message });
       const definition = customSystems.definitionOf(system);
-      res.json({ system, rests: definition ? restsOf(definition).map((r) => ({ id: r.id, name: r.name })) : [] });
+      // The recovery dice's name and who says when they're spent (R2b): the GAME tab's OPEN SPENDING.
+      const shown = definition ? recoveryShown(definition) : null;
+      // And who finishes a called rest (R3b): on each sheet, CALL opens it there; with the latest
+      // call, who has finished it (R4).
+      const answer = (call) => res.json({ system, rests: definition ? restsOf(definition).map((r) => ({ id: r.id, name: r.name })) : [], recovery: shown ? { name: shown.name, spend: shown.spend } : null,
+        finish: definition ? restingOf(definition).finish : 'call', call });
+      if (!definition) return answer(null);
+      return rests.calledShown(db, system, definition).then(answer).catch((e) => res.status(500).json({ error: e.message }));
+    });
+  });
+
+  /**
+   * Finish the latest rest called on the players' sheets for those still resting (R4): { players:
+   * true | [names] }. The GM and granted editors, as calling it is.
+   */
+  router.post('/rest/finish', authenticate, requireAdmin, (req, res) => {
+    const { players } = req.body || {};
+    if (players !== true && (!Array.isArray(players) || !players.length || rests.whoProblem(players))) {
+      return res.status(400).json({ error: `players: true, or a list of up to ${rests.LIMITS.players} player names` });
+    }
+    getGameSystem((err, system) => {
+      if (err) return res.status(500).json({ error: err.message });
+      const definition = customSystems.definitionOf(system);
+      if (!definition) return res.status(409).json({ error: 'This game\'s rests are its own buttons' });
+      return rests.finishCalled(db, io, { system, definition, players })
+        .then((done) => (done.error ? res.status(409).json({ error: done.error }) : res.json(done)))
+        .catch((e) => res.status(500).json({ error: e.message }));
     });
   });
 

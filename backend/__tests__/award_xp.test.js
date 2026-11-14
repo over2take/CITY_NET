@@ -282,3 +282,108 @@ describe('the level follows the experience', () => {
     expect(xp.levelForXp(139, 'slow')).toBe(10);
   });
 });
+
+describe('a custom system (7d2a)', () => {
+  const ID = 'sys_aaaaaaaaaaaaaaaa';
+  const EARNS = { format: 1, name: 'E', core: { advancement: ['levels'] } };
+  const give = (opts) => new Promise((resolve) => xp.awardXp(db, { system: ID, definition: EARNS, ...opts }, (reason, results, given) => resolve({ reason, results, given })));
+  const put = (opts) => new Promise((resolve) => xp.setXp(db, { system: ID, definition: EARNS, ...opts }, (reason, results) => resolve({ reason, results })));
+  const data = (username) => new Promise((resolve) => db.get('SELECT data FROM character_sheets WHERE username = ? AND system = ?', [username, ID], (e, row) => resolve(row ? JSON.parse(row.data) : null)));
+
+  beforeEach(async () => {
+    await sheet('wren', { name: 'Wren', level: 7 }, ID);
+    await sheet('rook', { name: 'Rook', _xp: 10 }, ID);
+    await sheet('kes', { name: 'Kes', _xp: 1 }, ID);
+  });
+
+  describe('whether it has XP', () => {
+    it('with XP LEVELS answered and the XP part on, kept where a player can\'t type', () => {
+      expect(xp.xpFieldFor(ID, EARNS)).toBe('_xp');
+      expect(xp.supportsXp(ID, EARNS)).toBe(true);
+    });
+
+    it('not with milestone only, the part off, or no answer', () => {
+      for (const d of [{ core: { advancement: ['milestone'] } }, { core: {} }, {}, { ...EARNS, parts: { xp: { on: false } } }, null]) {
+        expect(xp.supportsXp(ID, d), JSON.stringify(d)).toBe(false);
+      }
+    });
+
+    it('Cities Without Number as it was, and any other built-in none', () => {
+      expect(xp.xpFieldFor('cities_without_number')).toBe('xp');
+      expect(xp.supportsXp('cyberpunk_red')).toBe(false);
+    });
+  });
+
+  describe('giving it', () => {
+    it('each gets the amount, and no level moves or is written', async () => {
+      const { reason, results, given } = await give({ usernames: ['wren', 'rook'], amount: 100 });
+      expect(reason).toBeNull();
+      expect(results).toEqual(expect.arrayContaining([{ username: 'wren', ok: true, xp: 100 }, { username: 'rook', ok: true, xp: 110 }]));
+      expect(given).toEqual({ each: 100, left: 0 });
+      expect(await data('wren')).toEqual({ name: 'Wren', level: 7, _xp: 100 });
+      expect(await data('rook')).toEqual({ name: 'Rook', _xp: 110 });
+    });
+
+    it('split: whole points each, saying what won\'t divide', async () => {
+      const { results, given } = await give({ usernames: ['wren', 'rook', 'kes'], amount: 100, split: true });
+      expect(given).toEqual({ each: 33, left: 1 });
+      expect(results.map((r) => r.xp).sort((a, b) => a - b)).toEqual([33, 34, 43]);
+    });
+
+    it('split takes back the same way', async () => {
+      const { given } = await give({ usernames: ['rook', 'kes'], amount: -5, split: true });
+      expect(given).toEqual({ each: -2, left: 1 });
+      expect((await data('rook'))._xp).toBe(8);
+      expect((await data('kes'))._xp).toBe(0);
+    });
+
+    it('too little to split gives nobody anything', async () => {
+      const { reason } = await give({ usernames: ['wren', 'rook', 'kes'], amount: 2, split: true });
+      expect(reason).toBe('Too little to split between 3.');
+      expect((await data('wren'))._xp).toBeUndefined();
+    });
+
+    it('never below nothing', async () => {
+      const { results } = await give({ usernames: ['kes'], amount: -50 });
+      expect(results[0].xp).toBe(0);
+    });
+
+    it('refused where the system doesn\'t earn it', async () => {
+      const { reason } = await give({ usernames: ['wren'], amount: 5, definition: { core: { advancement: [] } } });
+      expect(reason).toBe('This system does not track experience.');
+    });
+
+    it('Cities Without Number can\'t be split: the book gives it per character', async () => {
+      await sheet('ghost', { level: 1, xp: 0 });
+      await sheet('nyx', { level: 1, xp: 0 });
+      const given = await new Promise((resolve) => xp.awardXp(db, { system: 'cities_without_number', usernames: ['ghost', 'nyx'], amount: 3, split: true }, (r, results, g) => resolve({ results, g })));
+      expect(given.g).toEqual({ each: 3, left: 0 });
+      expect(given.results.map((r) => r.xp)).toEqual([3, 3]);
+      expect(given.results[0].level).toBe(2);
+    });
+  });
+
+  describe('setting it', () => {
+    it('replaces what they have, for those named, leaving the level', async () => {
+      const { reason, results } = await put({ usernames: ['wren', 'rook'], value: 500 });
+      expect(reason).toBeNull();
+      expect(results).toEqual(expect.arrayContaining([{ username: 'wren', ok: true, xp: 500 }, { username: 'rook', ok: true, xp: 500 }]));
+      expect(await data('wren')).toEqual({ name: 'Wren', level: 7, _xp: 500 });
+      expect((await data('kes'))._xp).toBe(1);
+    });
+
+    it('takes 0, and refuses what isn\'t a whole amount', async () => {
+      expect((await put({ usernames: ['rook'], value: 0 })).results[0].xp).toBe(0);
+      for (const bad of [-1, 1.5, 'x', null, 1000000000001]) {
+        expect((await put({ usernames: ['rook'], value: bad })).reason, String(bad)).toBe('A whole amount, 0 or more.');
+      }
+    });
+
+    it('refuses nobody, and a system without it, Cities Without Number included', async () => {
+      expect((await put({ usernames: [], value: 5 })).reason).toBe('Nobody selected.');
+      expect((await put({ usernames: ['rook'], value: 5, definition: {} })).reason).toBe('This system does not track experience.');
+      const cwn = await new Promise((resolve) => xp.setXp(db, { system: 'cities_without_number', usernames: ['x'], value: 5 }, (r) => resolve(r)));
+      expect(cwn).toBe('This system does not track experience.');
+    });
+  });
+});

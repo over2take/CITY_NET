@@ -1,5 +1,5 @@
 /**
- * The WORDS and FEATURES pages as logic (4b1a). Approved mockup builder-words-features (2026-10-06):
+ * The WORDS and PARTS pages as logic (4b1a; PARTS was FEATURES until 7a2a). Approved mockup builder-words-features (2026-10-06):
  * blank is the app's own and is never stored; unused parts shown off; building names under SHOPS.
  * Held to the server's own rules (backend/systemBuilder), which check and run what is written.
  */
@@ -106,7 +106,7 @@ describe('WORDS', () => {
   });
 });
 
-describe('FEATURES: parts', () => {
+describe('PARTS: parts', () => {
   it('turns a part off, and on again leaves nothing stored', () => {
     const off = withPart(HEARTH, 'vehicles', false);
     expect(off.parts).toEqual({ vehicles: { on: false } });
@@ -118,7 +118,7 @@ describe('FEATURES: parts', () => {
   });
 });
 
-describe('FEATURES: buildings and catalogues', () => {
+describe('PARTS: buildings and catalogues', () => {
   it('renames and turns off, storing only what differs from the app', () => {
     let def = withBuilding(HEARTH, 'types', 'ripperdoc', { name: 'Temple' });
     def = withBuilding(def, 'types', 'corp', { on: false });
@@ -141,7 +141,7 @@ describe('FEATURES: buildings and catalogues', () => {
   });
 });
 
-describe('FEATURES: currencies', () => {
+describe('PARTS: currencies', () => {
   const gold = (): Definition => withNewCurrency(HEARTH, 'Gold');
 
   it('adds currencies with ids of their own, up to eight', () => {
@@ -245,7 +245,7 @@ describe('FEATURES: currencies', () => {
   });
 });
 
-describe('FEATURES: the bank\'s celebrations', () => {
+describe('PARTS: the bank\'s celebrations', () => {
   it('turns them on with a whale threshold, and off takes the threshold too', () => {
     let def = withBank(HEARTH, { celebrations: true });
     expect(def.bank).toEqual({ celebrations: true });

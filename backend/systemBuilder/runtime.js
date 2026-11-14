@@ -14,6 +14,15 @@
 // section or condition waiting on a rule that is off is hidden from every answer at once.
 
 const { compileSystem } = require('./derived');
+const { rankedOf, withRankFields } = require('./ranks');
+const { overlayOf, choicesOf, workedOf, worksOutPicks, choicesShown, itemsRenderedOf, WORKED_KEY } = require('./choices');
+const { poolsOf, recoveryShown, restingShown } = require('./recovery');
+const { creationShown } = require('./creation');
+const { levelsShown } = require('./levels');
+const { spendShown, spendsXp, spendWorked } = require('./spendXp');
+const { improvesBy, improveShown } = require('./improveByUse');
+/** Where a save writes what PER LEVEL's max health comes to (7d5a; healthLevels.js healthByLevel). */
+const HEALTH_SHOWN_KEY = '_health';
 const { fieldsRolledBy } = require('./tableRolls');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { npcSheetOf, tiersOf, LIMITS: NPC_LIMITS } = require('./npc');
@@ -41,7 +50,7 @@ const metaOf = (definition) => {
   // The NPC layout's fields too: the server keeps one set of rules per system, and an NPC's
   // HP lives on its token just as a player's does (npc.js holds the two layouts to agreeing).
   const both = [...fields, ...fieldsOf(npcSheetOf(definition))];
-  const compiled = compileSystem({ lookups: definition.lookups, derived: definition.derived ?? [] });
+  const compiled = compileSystem({ lookups: definition.lookups, derived: definition.derived ?? [], ranked: rankedOf(definition) });
   const linkedFields = {};
   const maxPairs = {};
   for (const f of both) {
@@ -62,9 +71,27 @@ const metaOf = (definition) => {
     // definition compiles (publishing refuses one with problems); should one not, nothing is
     // recomputed rather than a save failing. Saves call this inside database callbacks, where a
     // throw would stop the server, so one never leaves here: whatever a system's formulas do,
-    // the sheet keeps the values it had and the server logs why.
+    // the sheet keeps the values it had and the server logs why. The character's picks (7a1b) are
+    // read with it: their levels and modifiers, worked out each time, never written into a stat;
+    // and what the sheet shows of them (7a3a, choices.js workedOf), written beside the values.
     recompute: compiled.ok ? (data) => {
-      try { return compiled.system.apply(data); } catch (err) {
+      try {
+        const overlay = overlayOf(definition, data);
+        const changed = compiled.system.apply(data, overlay);
+        if (worksOutPicks(definition)) {
+          data[WORKED_KEY] = workedOf(definition, data, overlay);
+          // The recovery dice (R2a, R2b): in the sheet's words, with each pool's die, how many and how many spent.
+          const pools = poolsOf(definition, data);
+          if (pools.length) data[WORKED_KEY].recovery = { ...recoveryShown(definition), pools: pools.map(({ id, label, die, total, spent }) => ({ id, label, die, total, spent })) };
+        } else delete data[WORKED_KEY];
+        // SPEND XP (7f2a2): XP unspent, and each price on the list for this character now.
+        if (spendsXp(definition)) data[WORKED_KEY] = { ...(data[WORKED_KEY] || {}), spend: spendWorked(definition, data) };
+        // MAX HEALTH: PER LEVEL (7d5a): what it comes to, each level, for the sheet and LEVEL_UP.EXE. Loaded here, as it
+        // reads the levels this module's own load leads to.
+        const byLevel = require('./healthLevels').healthByLevel(definition, data);
+        if (byLevel) data[HEALTH_SHOWN_KEY] = byLevel; else delete data[HEALTH_SHOWN_KEY];
+        return changed;
+      } catch (err) {
         console.error(`[systems] ${definition.name}: derived values not worked out:`, err.message);
         return [];
       }
@@ -128,10 +155,11 @@ const renderOf = (id, definition, on = new Set()) => ({
   // The unit its ruler reads distances in (core.js distanceOf): feet unless it chose another.
   distance: distanceOf(definition),
   derived: (Array.isArray(definition.derived) ? definition.derived : []).map((d) => d.id),
-  sheet: effectiveSheet(definition),
+  // A ranked stat drawn as its rank picker (7f1c1).
+  sheet: withRankFields(definition, effectiveSheet(definition)),
   npc: {
     // Null when NPCs use the character sheet.
-    sheet: definition.npc && definition.npc.sheet ? npcSheetOf(definition) : null,
+    sheet: definition.npc && definition.npc.sheet ? withRankFields(definition, npcSheetOf(definition)) : null,
     tiers: tiersWhenOn(definition).map((t) => ({ id: t.id, label: t.label })),
   },
   house_rules: houseRuleList(definition, on),
@@ -144,6 +172,21 @@ const renderOf = (id, definition, on = new Set()) => ({
     fields: fieldsRolledBy(definition, r),
     changes: (Array.isArray(r.changes) ? r.changes : []).map((c) => ({ id: c.id, label: c.label, ...(c.cost ? { cost: costShown(definition, c.cost) } : {}) })),
   })),
+  // Its lists to pick from (7a3a): names, options and features in words, never a formula.
+  choices: choicesShown(definition),
+  // How a sheet rests (R3a): who finishes a called rest, and each rest by name, with whether the
+  // recovery dice are spent at it.
+  resting: restingShown(definition),
+  // The guided new character (7c2): the steps to walk through, or null while it is off.
+  creation: creationShown(definition),
+  // The XP table (7d2a), for the meter on the sheet, or null where characters don't earn XP.
+  levels: levelsShown(definition),
+  // SPEND XP's price list (7f2a1), what each buys by name, or null where XP isn't spent.
+  spend: spendsXp(definition) ? spendShown(definition) : null,
+  // IMPROVE BY USE (7f3a1): the stats that improve, what marks them, and the rest they are rolled at; or null.
+  improve: improvesBy(definition) ? improveShown(definition) : null,
+  // Its items and slots (7e3b), for the GEAR tab's WEAR and ATTUNE, or null where it has none.
+  items: itemsRenderedOf(definition),
 });
 
 /**
@@ -301,4 +344,4 @@ const hiddenConditionsIn = (system) => {
 /** A published system's house rules, each with whether the table has it on; empty for any other. */
 const houseRulesIn = (system) => (loaded.has(system) ? loaded.get(system).render.house_rules : []);
 
-module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, catalogueCurrencyIn, conditionsIn, hiddenConditionsIn, definitionOf, houseRulesIn, metaOf, renderOf };
+module.exports = { load, refresh, meta, render, list, tiers, health, wordIn, partIn, buildingIn, buildingNameIn, currenciesIn, catalogueCurrencyIn, conditionsIn, hiddenConditionsIn, definitionOf, houseRulesIn, metaOf, renderOf, HEALTH_SHOWN_KEY };

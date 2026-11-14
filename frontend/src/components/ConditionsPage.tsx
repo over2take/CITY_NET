@@ -10,6 +10,7 @@ import { ConditionIconPicker } from './ConditionIconPicker';
 import { OnlyWith } from './OnlyWith';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
+import { ToggleSwitch } from './ToggleSwitch';
 
 // The builder's CONDITIONS page (4e1b; approved mockup docs/mockups/builder-conditions.html,
 // 2026-10-09): what can happen to a character besides losing health. The standard set, each with
@@ -49,16 +50,6 @@ function WholeBox({ aria, value, min, max, width = 64, onChange }: { aria: strin
   );
 }
 
-/** An on/off switch, as the rail's lists use it (CONDITIONS, RESTS). */
-export function Switch({ on, label, onChange }: { on: boolean; label: string; onChange: (on: boolean) => void }) {
-  return (
-    <button type="button" role="switch" aria-checked={on} aria-label={label} onClick={() => onChange(!on)}
-      style={{ width: 28, height: 14, borderRadius: 7, border: '1px solid var(--green)', padding: 0, position: 'relative', cursor: 'pointer', flexShrink: 0,
-        background: on ? 'color-mix(in srgb, var(--green) 30%, transparent)' : 'none' }}>
-      <span aria-hidden style={{ position: 'absolute', top: 1, left: on ? 15 : 1, width: 10, height: 10, borderRadius: '50%', background: 'var(--green)' }} />
-    </button>
-  );
-}
 
 /**
  * AT A REST (4f4b; approved mockup builder-rests, 2026-10-09): the rests that end a condition, ticked
@@ -114,19 +105,19 @@ function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
             : <button type="button" className="utility-btn danger-btn" style={btn} onClick={() => setConfirm(true)}>DELETE</button>}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '110px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' }}>
-        <label style={{ ...small, textAlign: 'right' }} htmlFor={`cond-name-${c.id}`}>NAME</label>
+        <FieldName beside htmlFor={`cond-name-${c.id}`} style={small}>NAME</FieldName>
         <input id={`cond-name-${c.id}`} type="text" maxLength={LIMITS.name} value={typed('name')} placeholder={base?.name ?? 'Name'} style={input}
           aria-invalid={!base && !c.name.trim() ? true : undefined}
           onChange={(e) => set({ name: e.target.value })} />
-        <FieldName boxStyle={{ justifySelf: 'end' }} htmlFor={`cond-short-${c.id}`} hint={HINTS['conditions.chip']} style={small}>ON THE CHIP</FieldName>
+        <FieldName beside htmlFor={`cond-short-${c.id}`} hint={HINTS['conditions.chip']} style={small}>ON THE CHIP</FieldName>
         <input id={`cond-short-${c.id}`} type="text" maxLength={LIMITS.short} value={typed('short')} placeholder={c.short} style={{ ...input, width: 120 }}
           onChange={(e) => set({ short: e.target.value.toUpperCase() })} />
-        <FieldName boxStyle={{ justifySelf: 'end' }} hint={HINTS['conditions.icon']} style={small}>ICON</FieldName>
+        <FieldName beside hint={HINTS['conditions.icon']} style={small}>ICON</FieldName>
         <ConditionIconPicker value={c.icon} onPick={(icon) => set({ icon })} api={api} name={c.name || c.id} />
-        <FieldName boxStyle={{ justifySelf: 'end' }} htmlFor={`cond-desc-${c.id}`} hint={HINTS['conditions.description']} style={small}>DESCRIPTION</FieldName>
+        <FieldName beside htmlFor={`cond-desc-${c.id}`} hint={HINTS['conditions.description']} style={small}>DESCRIPTION</FieldName>
         <textarea id={`cond-desc-${c.id}`} rows={2} maxLength={LIMITS.description} value={c.description} style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }}
           onChange={(e) => set({ description: e.target.value })} />
-        <FieldName boxStyle={{ justifySelf: 'end' }} htmlFor={`cond-ends-${c.id}`} hint={HINTS['conditions.ends']} style={small}>ENDS</FieldName>
+        <FieldName beside htmlFor={`cond-ends-${c.id}`} hint={HINTS['conditions.ends']} style={small}>ENDS</FieldName>
         <div style={row}>
           <select id={`cond-ends-${c.id}`} value={c.ends} style={input} onChange={(e) => set({ ends: e.target.value as Listed['ends'] })}>
             <option value="removed">WHEN REMOVED</option>
@@ -139,9 +130,9 @@ function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
           </>}
           {c.ends === 'rest' && <EndsAt c={c} definition={definition} set={set} />}
         </div>
-        <OnlyWith definition={definition} value={typeof stored.only_with === 'string' ? stored.only_with : undefined} style={small} boxStyle={{ justifySelf: 'end' }}
+        <OnlyWith definition={definition} value={typeof stored.only_with === 'string' ? stored.only_with : undefined} style={small} beside
           selectStyle={{ ...input, justifySelf: 'start' }} onChange={(rule) => set({ only_with: rule })} />
-        <span style={{ ...small, textAlign: 'right' }}>MODIFIERS</span>
+        <FieldName beside style={small}>MODIFIERS</FieldName>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
           {c.modifiers.map((m, i) => (
             <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 70px auto', gap: 6 }}>
@@ -198,7 +189,7 @@ export function ConditionsPage({ definition, edit, api }: Props) {
               boxShadow: c.id === current?.id ? 'inset 3px 0 0 var(--green)' : 'none',
             }}>
               {c.standard
-                ? <Switch on={c.on} label={`${c.name} on`} onChange={(on) => edit(withCondition(definition, c.id, { on }))} />
+                ? <ToggleSwitch on={c.on} name={`${c.name} on`} onChange={(on) => edit(withCondition(definition, c.id, { on }))} />
                 : <span />}
               <span style={{ color: 'var(--green)', opacity: c.on ? 1 : 0.4 }}><ConditionIcon icon={c.icon} /></span>
               <button type="button" aria-current={c.id === current?.id || undefined} onClick={() => setPicked(c.id)}

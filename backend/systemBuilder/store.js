@@ -320,7 +320,7 @@ const editedSinceInstall = (row) => citysys.hashOf(row.draft) !== row.source_has
 const matchesFor = (db, origin, cb) => {
   db.all(
     `SELECT id, name, version, draft, published, source_hash, deleted_at FROM custom_systems
-     WHERE origin = ? ORDER BY updated_at DESC`,
+     WHERE origin = ? ORDER BY updated_at DESC, rowid DESC`,
     [origin],
     (err, rows) => {
       if (err) return cb(err);
@@ -385,6 +385,9 @@ const previewInstall = (db, text, cb) => {
 /**
  * Install a file.
  *   new        a system not here yet; one deleted here comes back under its old id
+ *   fresh      as new, but a deleted one stays deleted: a new id, so nothing played in the old one
+ *              follows, and the file's origin, so later versions of the file offer an update
+ *              (decided with the user, 2026-11-06)
  *   update     replace the copy already here, keeping its name. One changed here since it was
  *              installed is replaced only with `replaceChanges`, the GM having been warned that
  *              those changes go (decided with the user, 2026-10-06; until then it was refused)
@@ -395,7 +398,7 @@ const previewInstall = (db, text, cb) => {
  * definition alike. Resolves { id, name, published, restored?, problems }.
  */
 const installSystem = (db, { text, mode, replaceChanges = false } = {}, cb) => {
-  if (!['new', 'update', 'keep_both'].includes(mode)) return cb(fail(400, 'Install as new, update or keep both'));
+  if (!['new', 'fresh', 'update', 'keep_both'].includes(mode)) return cb(fail(400, 'Install as new, fresh, update or keep both'));
   const read = citysys.readFile(text);
   if (read.fatal) return cb(fail(400, read.fatal));
   const { manifest, definition } = read.file;
@@ -440,7 +443,7 @@ const installSystem = (db, { text, mode, replaceChanges = false } = {}, cb) => {
       return replace(here, named(names.update));
     }
     if (here) return cb(fail(409, 'Already installed. Update it or keep both.', { installed: found.installed.map((r) => ({ id: r.id, name: r.name })) }));
-    if (found.deleted) return replace(found.deleted, named(names.new), { restored: true });
+    if (found.deleted && mode !== 'fresh') return replace(found.deleted, named(names.new), { restored: true });
     return insert(newId(), manifest.origin, named(names.new));
   });
 };

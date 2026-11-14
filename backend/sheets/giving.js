@@ -7,14 +7,29 @@
 // Each sheet is written through its write queue (mutateSheet), the gift placed against the sheet as
 // it stands at write time, so a player typing into it then loses nothing. Only the recipient is told,
 // privately (`notify`); the table isn't, so a gift can be a secret.
+//
+// A kit (7c4c) is given as an item is, from the catalogue KITS: every one the system has, a kit going to a
+// player that way or one the GM alone gives, with its items landing as they do on finishing a new
+// character (kitGiving.js). There is no way for a kit not to fit: they are inventory lines.
+//
+// A system's item (7e3b) is given from the catalogue ITEMS: a stowed line of its name in the inventory, as a kit's
+// items land, which is what makes it that item (items.js), ready to WEAR and ATTUNE.
 
 const { mutateSheet } = require('./mutate');
 const { applyDerived } = require('./templates');
 const { gather } = require('./rests');
 const { itemOf, placeGift } = require('../shops/give');
 const { INVENTORY_FIELD, readInventory } = require('../shops/placement');
+const customSystems = require('../systemBuilder/runtime');
+const { kitToGive, kitWords } = require('../systemBuilder/creation');
+const { kitPatch } = require('./kitGiving');
+const { itemsGivable } = require('../systemBuilder/items');
 
 const LIMITS = { qty: 99, note: 200, players: 100, npcs: 100 };
+/** The catalogue GIVE.EXE lists a system's kits under: no shelf is called this. */
+const KITS_CATALOGUE = 'kits';
+/** The catalogue GIVE.EXE lists a system's items under (7e3b): no shelf is called this either. */
+const ITEMS_CATALOGUE = 'items';
 
 const isId = (v) => typeof v === 'string' && v.length > 0 && v.length <= 200;
 
@@ -51,11 +66,46 @@ const landing = (data, patch) => {
 
 const who = (c) => ({ kind: c.kind, ...(c.kind === 'player' ? { username: c.username } : { location_id: c.location_id }), name: c.name });
 
+/**
+ * What is being given, and how one lands on a sheet: `place(data)` gives { ok, patch } or { ok: false,
+ * reason }, and `lands(data, patch)` says where it went. Null when this game can't give it.
+ */
+const giftOf = (system, catalogue, id, qty) => {
+  if (catalogue === KITS_CATALOGUE) {
+    const kit = kitToGive(customSystems.definitionOf(system) ?? {}, id);
+    if (!kit) return null;
+    const items = kit.items.map((i) => ({ ...i, qty: i.qty * qty }));
+    return {
+      item: { catalogue, id: kit.id, name: kit.name, price: 0 },
+      holds: kitWords(kit),
+      place: (data) => ({ ok: true, patch: kitPatch(system, items, data) }),
+      lands: () => ({ shape: 'kit', items: items.reduce((n, i) => n + i.qty, 0) }),
+    };
+  }
+  if (catalogue === ITEMS_CATALOGUE) {
+    const thing = itemsGivable(customSystems.definitionOf(system) ?? {}).find((i) => i.id === id);
+    if (!thing) return null;
+    return {
+      item: { catalogue, id: thing.id, name: thing.name, price: 0 },
+      holds: thing.holds,
+      place: (data) => ({ ok: true, patch: kitPatch(system, [{ name: thing.name, qty }], data) }),
+      lands: landing,
+    };
+  }
+  const found = itemOf(system, catalogue, id);
+  if (!found) return null;
+  return {
+    item: { catalogue, id: found.id, name: found.name, price: found.price },
+    place: (data) => placeGift(system, catalogue, id, data, qty),
+    lands: landing,
+  };
+};
+
 /** Place it on one sheet, at write time: the placement, and the sheet it was placed on. */
-const giveTo = (db, system, c, item, qty) => new Promise((ok, no) => {
+const giveTo = (db, system, c, gift) => new Promise((ok, no) => {
   let result = null;
   mutateSheet(db, c.sheetId, (data) => {
-    result = { ...placeGift(system, item.catalogue, item.id, data, qty), before: data };
+    result = { ...gift.place(data), before: data };
     if (!result.ok) return undefined;
     const next = { ...data, ...result.patch };
     applyDerived(system, next);
@@ -69,9 +119,9 @@ const giveTo = (db, system, c, item, qty) => new Promise((ok, no) => {
  * the game can't give the item. `notify(username, payload)` tells a player privately.
  */
 const giveItem = async (db, io, { system, catalogue, id, qty = 1, players = [], npcs = [], note = '', preview = false }, notify) => {
-  const found = itemOf(system, catalogue, id);
-  if (!found) return null;
-  const item = { catalogue, id: found.id, name: found.name, price: found.price };
+  const gift = giftOf(system, catalogue, id, qty);
+  if (!gift) return null;
+  const { item } = gift;
   const people = await gather(db, system, players, npcs);
   const recipients = [];
   // A named player with no character in this game is said, not silently dropped.
@@ -81,14 +131,14 @@ const giveItem = async (db, io, { system, catalogue, id, qty = 1, players = [], 
   }
   for (const c of people) {
     if (!c.sheetId) { recipients.push({ ...who(c), given: false, reason: 'No sheet in this game.' }); continue; }
-    const result = preview ? placeGift(system, catalogue, id, c.data, qty) : await giveTo(db, system, c, item, qty);
+    const result = preview ? gift.place(c.data) : await giveTo(db, system, c, gift);
     if (!result.ok) { recipients.push({ ...who(c), given: false, reason: result.reason }); continue; }
-    recipients.push({ ...who(c), given: !preview, lands: landing(result.before || c.data, result.patch) });
+    recipients.push({ ...who(c), given: !preview, lands: gift.lands(result.before || c.data, result.patch) });
     if (preview || c.kind !== 'player') continue;
     io.emit('sheetUpdated', { username: c.username, system });
-    notify(c.username, { item: item.name, catalogue, qty, note: note.trim() });
+    notify(c.username, { item: item.name, catalogue, qty, note: note.trim(), holds: gift.holds });
   }
   return { item, qty, note: note.trim(), preview, recipients };
 };
 
-module.exports = { LIMITS, requestProblem, landing, giveItem };
+module.exports = { LIMITS, KITS_CATALOGUE, ITEMS_CATALOGUE, requestProblem, landing, giveItem };

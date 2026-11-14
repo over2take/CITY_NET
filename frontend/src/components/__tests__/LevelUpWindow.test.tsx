@@ -1,0 +1,559 @@
+import React from 'react';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { render, screen, cleanup, act, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+import { LevelUpWindow } from '../LevelUpWindow';
+import { registerCustomTemplate, clearCustomTemplates, type CustomRender } from '../../sheets/customTemplates';
+
+/**
+ * LEVEL_UP.EXE (7d3a; approved mockup docs/mockups/level-up.html, 2026-11-07): WHICH CLASS when there's a choice,
+ * WHAT IT UNLOCKS at the new level, the place kept on the sheet from the moment it opens, and FINISH going up. From
+ * 7d3b a class not held yet among them, and the picks a new level opens made in the window.
+ */
+
+const ID = 'sys_0123456789abcdef';
+
+const system = (choices: object[] = [CLASSES]) => registerCustomTemplate({
+  id: ID, name: 'Hearth', words: {}, parts: {}, derived: [], sheet: { sections: [] },
+  levels: { top: 5, table: { 2: 100, 3: 300, 4: 700, 5: 1500 } }, choices,
+} as unknown as CustomRender);
+
+const CLASSES = { id: 'classes', one: 'Class', many: 'Classes', picks: 'any', again: true, levelled: true, options: [
+  { id: 'soldier', label: 'Soldier', features: [{ id: 'extra', label: 'Extra Attack', at: 3, text: 'Attack twice.' }] },
+  { id: 'mage', label: 'Mage', features: [{ id: 'spark', label: 'Spark', at: 2 }, { id: 'school', label: 'School', at: 2, opens: 'schools', opensCount: 1 }] },
+  { id: 'rogue', label: 'Rogue', needs: 'WITS >= 13', features: [] },
+] };
+const SCHOOLS = { id: 'schools', one: 'School', many: 'Schools', picks: 1, again: false, levelled: false, picked: 'features', options: [
+  { id: 'fire', label: 'Fire', features: [] }, { id: 'frost', label: 'Frost', features: [] },
+] };
+/** One class to a character: nothing new to take up. */
+const ONE = { ...CLASSES, picks: 1, again: false };
+
+/** A socket that hands over one sheet, and hears what the window says. */
+const makeSocket = (data: Record<string, unknown>) => {
+  const handlers: Record<string, ((p: unknown) => void)[]> = {};
+  const socket = {
+    on: (e: string, fn: (p: unknown) => void) => { (handlers[e] ??= []).push(fn); },
+    off: (e: string, fn: (p: unknown) => void) => { handlers[e] = (handlers[e] ?? []).filter((x) => x !== fn); },
+    emit: vi.fn((e: string) => {
+      if (e === 'requestMySheet') queueMicrotask(() => act(() => (handlers.sheetData ?? []).forEach((fn) => fn({ username: 'WREN', system: ID, data: socket.data }))));
+    }),
+    data,
+    fire: (e: string, p: unknown) => act(() => (handlers[e] ?? []).forEach((fn) => fn(p))),
+    said: (e: string) => socket.emit.mock.calls.filter((c) => c[0] === e).map((c) => (c as unknown[])[1]),
+  };
+  return socket;
+};
+
+const holding = (picks: [string, number][], xp = 9000, more: object = {}) => ({
+  name: 'Wren', _xp: xp,
+  _worked: { picks: picks.map(([option, level]) => ({ list: 'classes', option, level })), levels: { level: picks.reduce((n, [, l]) => n + l, 0) }, unmet: ['rogue'] },
+  ...more,
+});
+
+const open = async (data: Record<string, unknown>, choices?: object[]) => {
+  system(choices);
+  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })));
+  const socket = makeSocket(data);
+  const onLeave = vi.fn();
+  const onDone = vi.fn();
+  render(<LevelUpWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={socket as never} userName="WREN" onLeave={onLeave} onDone={onDone} />);
+  await screen.findByRole('tablist', { name: 'Folders' });
+  return { socket, onLeave, onDone };
+};
+
+afterEach(() => { cleanup(); clearCustomTemplates(); vi.unstubAllGlobals(); });
+
+const folders = () => within(screen.getByRole('tablist', { name: 'Folders' })).getAllByRole('tab').map((t) => t.textContent);
+const button = (name: string) => screen.getByRole('button', { name }) as HTMLButtonElement;
+
+describe('LEVEL_UP.EXE', () => {
+  it('with several classes, WHICH CLASS first, the first chosen, and its place kept as it opens', async () => {
+    const { socket } = await open(holding([['soldier', 2], ['mage', 1]]));
+    await screen.findByText('LEVEL_UP.EXE · WREN · SOLDIER 3');
+    expect(folders()).toEqual(['WHICH CLASS', 'WHAT IT UNLOCKS']);
+    expect(screen.getByText('WHICH CLASS · STEP 1 OF 2')).toBeTruthy();
+    const which = screen.getByRole('group', { name: 'Which class goes up' });
+    expect(within(which).getByRole('button', { name: 'SOLDIER 2 → 3' }).getAttribute('aria-pressed')).toBe('true');
+    expect(socket.said('levelAction')).toEqual([{ kind: 'place', list: 'classes', option: 'soldier' }]);
+    expect(button('BACK').disabled).toBe(true);
+  });
+
+  it('another class chosen is kept, and the title follows at once', async () => {
+    const { socket } = await open(holding([['soldier', 2], ['mage', 1]]));
+    await userEvent.click(within(screen.getByRole('group', { name: 'Which class goes up' })).getByRole('button', { name: 'MAGE 1 → 2' }));
+    expect(screen.getByText('LEVEL_UP.EXE · WREN · MAGE 2')).toBeTruthy();
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'place', list: 'classes', option: 'mage' });
+  });
+
+  it('opens where it was left, asking nothing again', async () => {
+    const { socket } = await open(holding([['soldier', 2], ['mage', 1]], 9000, { _leveling: { list: 'classes', option: 'mage' } }));
+    await screen.findByText('LEVEL_UP.EXE · WREN · MAGE 2');
+    expect(within(screen.getByRole('group', { name: 'Which class goes up' })).getByRole('button', { name: 'MAGE 1 → 2' }).getAttribute('aria-pressed')).toBe('true');
+    expect(socket.said('levelAction')).toEqual([]);
+  });
+
+  it('WHAT IT UNLOCKS: the new level\'s features, and a list one opens that isn\'t picked under it, said', async () => {
+    await open(holding([['soldier', 2], ['mage', 1]], 9000, { _leveling: { list: 'classes', option: 'mage' } }));
+    await userEvent.click(await screen.findByRole('button', { name: 'NEXT' }));
+    expect(screen.getByText('WHAT IT UNLOCKS · STEP 2 OF 2')).toBeTruthy();
+    expect(screen.getByText('Mage 2 brings:')).toBeTruthy();
+    expect(screen.getByText('SPARK')).toBeTruthy();
+    expect(screen.getByText('Opens the schools: picked on its own, on your sheet.')).toBeTruthy();
+    await userEvent.click(button('BACK'));
+    expect(screen.getByText('WHICH CLASS · STEP 1 OF 2')).toBeTruthy();
+    await userEvent.click(screen.getByRole('tab', { name: 'WHAT IT UNLOCKS' }));
+    expect(screen.getByText('Mage 2 brings:')).toBeTruthy();
+  });
+
+  it('one class, and none to take up: no WHICH CLASS, and FINISH goes up and closes on the sheet', async () => {
+    const { socket, onDone } = await open(holding([['soldier', 2]]), [ONE]);
+    expect(folders()).toEqual(['WHAT IT UNLOCKS']);
+    expect(await screen.findByText('Soldier 3 brings:')).toBeTruthy();
+    expect(screen.getByText('Attack twice.')).toBeTruthy();
+    await userEvent.click(button('FINISH'));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'up', list: 'classes', option: 'soldier' });
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('with no class list, the level itself, and nothing new said so', async () => {
+    const { socket } = await open({ name: 'Wren', _xp: 100, level: 1 }, []);
+    await screen.findByText('LEVEL_UP.EXE · WREN · LEVEL 2');
+    expect(screen.getByText('Level 2. Nothing new comes with it.')).toBeTruthy();
+    expect(socket.said('levelAction')).toEqual([{ kind: 'place' }]);
+    await userEvent.click(button('FINISH'));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'up' });
+  });
+
+  it('LEAVE FOR NOW and the close button leave it, keeping the place', async () => {
+    const { onLeave, onDone, socket } = await open(holding([['soldier', 2]]), [ONE]);
+    await screen.findByText('Soldier 3 brings:');
+    await userEvent.click(button('LEAVE FOR NOW'));
+    expect(onLeave).toHaveBeenCalledTimes(1);
+    expect(onDone).not.toHaveBeenCalled();
+    expect(socket.said('levelAction').some((a) => (a as { kind: string }).kind === 'up')).toBe(false);
+  });
+
+  it('says why the server said no', async () => {
+    const { socket } = await open(holding([['soldier', 2]]), [ONE]);
+    await screen.findByText('Soldier 3 brings:');
+    socket.fire('choicesRefused', { error: 'Already the highest level' });
+    expect(screen.getByRole('alert').textContent).toBe('Already the highest level');
+  });
+
+  it('nothing to do when it isn\'t available, or with no class picked yet', async () => {
+    const { socket } = await open(holding([['soldier', 2]], 5));
+    expect(await screen.findByText('Nothing to level up right now.')).toBeTruthy();
+    expect(screen.getByText('LEVEL_UP.EXE · WREN')).toBeTruthy();
+    expect(socket.said('levelAction')).toEqual([]);
+    cleanup();
+    await open(holding([]));
+    expect(await screen.findByText('Pick a Class first, on your sheet.')).toBeTruthy();
+  });
+});
+
+describe('a class not held yet (7d3b)', () => {
+  it('offered beside those held, one they don\'t meet greyed with what it needs, and chosen at level 1', async () => {
+    const { socket } = await open(holding([['soldier', 2]]));
+    await screen.findByText('LEVEL_UP.EXE · WREN · SOLDIER 3');
+    expect(folders()).toEqual(['WHICH CLASS', 'WHAT IT UNLOCKS']);
+    const fresh = screen.getByRole('group', { name: 'Or a new class' });
+    expect(within(fresh).getByRole('button', { name: 'NEW: ROGUE 1' }).hasAttribute('disabled')).toBe(true);
+    expect(within(fresh).getByText('NEEDS WITS >= 13')).toBeTruthy();
+    await userEvent.click(within(fresh).getByRole('button', { name: 'NEW: MAGE 1' }));
+    expect(screen.getByText('LEVEL_UP.EXE · WREN · MAGE 1')).toBeTruthy();
+    expect(within(fresh).getByRole('button', { name: 'NEW: MAGE 1' }).getAttribute('aria-pressed')).toBe('true');
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'place', list: 'classes', option: 'mage' });
+  });
+
+  it('what it brings at level 1, and FINISH takes it up', async () => {
+    const { socket } = await open(holding([['soldier', 2]], 9000, { _leveling: { list: 'classes', option: 'mage' } }), [{ ...CLASSES, options: [CLASSES.options[0], { id: 'mage', label: 'Mage', features: [{ id: 'cantrip', label: 'Cantrip' }] }] }]);
+    await userEvent.click(await screen.findByRole('button', { name: 'NEXT' }));
+    expect(screen.getByText('Mage 1 brings:')).toBeTruthy();
+    expect(screen.getByText('CANTRIP')).toBeTruthy();
+    await userEvent.click(button('FINISH'));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'up', list: 'classes', option: 'mage' });
+  });
+});
+
+describe('the picks a new level opens (7d3b)', () => {
+  const MAGE_AT_1 = holding([['soldier', 1], ['mage', 1]], 9000, { _leveling: { list: 'classes', option: 'mage' } });
+  const lists = (schools = SCHOOLS) => [ONE_PLUS, schools];
+  const ONE_PLUS = { ...CLASSES, options: CLASSES.options.slice(0, 2) };
+
+  it('made right there, FINISH waiting for them, each kept with the place', async () => {
+    const { socket } = await open(MAGE_AT_1, lists());
+    await userEvent.click(await screen.findByRole('button', { name: 'NEXT' }));
+    expect(screen.getByText('Pick a School.')).toBeTruthy();
+    expect(button('FINISH').disabled).toBe(true);
+    expect(button('FINISH').title).toBe('Make the picks first');
+    const school = screen.getByRole('group', { name: 'Pick a School' });
+    await userEvent.click(within(school).getByRole('button', { name: 'FIRE' }));
+    expect(within(school).getByRole('button', { name: 'FIRE' }).getAttribute('aria-pressed')).toBe('true');
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'place', list: 'classes', option: 'mage', picks: [{ list: 'schools', option: 'fire', from: 'school' }] });
+    // One only: another waits until it's taken back.
+    await userEvent.click(within(school).getByRole('button', { name: 'FROST' }));
+    expect(within(school).getByRole('button', { name: 'FROST' }).getAttribute('aria-pressed')).toBe('false');
+    expect(button('FINISH').disabled).toBe(false);
+    await userEvent.click(button('FINISH'));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'up', list: 'classes', option: 'mage', picks: [{ list: 'schools', option: 'fire', from: 'school' }] });
+  });
+
+  it('taken back, FINISH waits again; reopened, the picks are as they were left', async () => {
+    const { socket } = await open({ ...MAGE_AT_1, _leveling: { list: 'classes', option: 'mage', picks: [{ list: 'schools', option: 'frost', from: 'school' }] } }, lists());
+    await userEvent.click(await screen.findByRole('button', { name: 'NEXT' }));
+    const school = screen.getByRole('group', { name: 'Pick a School' });
+    expect(within(school).getByRole('button', { name: 'FROST' }).getAttribute('aria-pressed')).toBe('true');
+    expect(button('FINISH').disabled).toBe(false);
+    await userEvent.click(within(school).getByRole('button', { name: 'FROST' }));
+    expect(button('FINISH').disabled).toBe(true);
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'place', list: 'classes', option: 'mage' });
+  });
+
+  it('another class chosen starts its picks afresh', async () => {
+    const { socket } = await open({ ...MAGE_AT_1, _leveling: { list: 'classes', option: 'mage', picks: [{ list: 'schools', option: 'frost', from: 'school' }] } }, lists());
+    await userEvent.click(within(await screen.findByRole('group', { name: 'Which class goes up' })).getByRole('button', { name: 'SOLDIER 1 → 2' }));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'place', list: 'classes', option: 'soldier' });
+    await userEvent.click(button('NEXT'));
+    await userEvent.click(button('FINISH'));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'up', list: 'classes', option: 'soldier' });
+  });
+
+  it('several to pick, said as how many; one they don\'t meet greyed', async () => {
+    const two = { ...SCHOOLS, picks: 'any', options: [...SCHOOLS.options, { id: 'storm', label: 'Storm', needs: 'WITS >= 15', features: [] }] };
+    const data = { ...MAGE_AT_1, _worked: { ...MAGE_AT_1._worked, unmet: ['storm'] } };
+    await open(data, [{ ...ONE_PLUS, options: [ONE_PLUS.options[0], { ...ONE_PLUS.options[1], features: [{ id: 'school', label: 'School', at: 2, opens: 'schools', opensCount: 3 }] }] }, two]);
+    await userEvent.click(await screen.findByRole('button', { name: 'NEXT' }));
+    expect(screen.getByText('Pick 2 Schools.')).toBeTruthy();
+    const school = screen.getByRole('group', { name: 'Pick a School' });
+    expect(within(school).getByRole('button', { name: 'STORM' }).hasAttribute('disabled')).toBe(true);
+    expect(within(school).getByText('NEEDS WITS >= 15')).toBeTruthy();
+    await userEvent.click(within(school).getByRole('button', { name: 'FIRE' }));
+    expect(button('FINISH').disabled).toBe(true);
+    await userEvent.click(within(school).getByRole('button', { name: 'FROST' }));
+    expect(button('FINISH').disabled).toBe(false);
+  });
+
+  it('a list picked by roll is left to the sheet, and one with nothing left says so', async () => {
+    await open(MAGE_AT_1, lists({ ...SCHOOLS, table: 'd6', players: 'roll' } as typeof SCHOOLS));
+    await userEvent.click(await screen.findByRole('button', { name: 'NEXT' }));
+    expect(screen.getByText('The Schools are rolled for: ROLL FOR IT on your sheet once you finish.')).toBeTruthy();
+    expect(button('FINISH').disabled).toBe(false);
+    cleanup();
+    await open(MAGE_AT_1, lists({ ...SCHOOLS, options: [] }));
+    await userEvent.click(await screen.findByRole('button', { name: 'NEXT' }));
+    expect(screen.getByText('Nothing left to pick from the Schools.')).toBeTruthy();
+    expect(button('FINISH').disabled).toBe(false);
+  });
+});
+
+describe('HEALTH, per level (7d5a)', () => {
+  const withHealth = (health: object) => registerCustomTemplate({
+    id: ID, name: 'Hearth', words: {}, parts: {}, derived: [], sheet: { sections: [] },
+    levels: { top: 5, table: { 2: 100, 3: 300, 4: 700, 5: 1500 }, health }, choices: [ONE],
+  } as unknown as CustomRender);
+  const openWith = async (health: object, data: Record<string, unknown>) => {
+    withHealth(health);
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })));
+    const socket = makeSocket(data);
+    render(<LevelUpWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={socket as never} userName="WREN" onLeave={vi.fn()} onDone={vi.fn()} />);
+    await screen.findByRole('tablist', { name: 'Folders' });
+  };
+
+  it('a HEALTH folder saying what the level adds, fixed, before what it unlocks', async () => {
+    await openWith({ gain: 'average', dieOn: 'class', dice: { soldier: 10 } }, holding([['soldier', 2]], 9000, { _health: { adds: 2 } }));
+    expect(folders()).toEqual(['HEALTH', 'WHAT IT UNLOCKS']);
+    expect(screen.getByText('HEALTH · d10 + 2')).toBeTruthy();
+    expect(screen.getByText('+7: 5 AVERAGE, +2 EACH LEVEL')).toBeTruthy();
+    expect(screen.getByText('Fixed in this game. Nothing to roll.')).toBeTruthy();
+    await userEvent.click(button('NEXT'));
+    expect(screen.getByText('Soldier 3 brings:')).toBeTruthy();
+  });
+
+  it('a class with no HIT DIE, and a level that would come to less than 1', async () => {
+    await openWith({ gain: 'average', dieOn: 'class', dice: {} }, holding([['soldier', 2]], 9000, { _health: { adds: -2 } }));
+    expect(screen.getByText('HEALTH · NO DIE − 2')).toBeTruthy();
+    expect(screen.getByText('+1: 0 AVERAGE, −2 EACH LEVEL, AT LEAST 1')).toBeTruthy();
+    expect(screen.getByText('Soldier has no HIT DIE, so only what each level adds.')).toBeTruthy();
+  });
+
+  it('no HEALTH folder where health isn\'t per level', async () => {
+    await open(holding([['soldier', 2]]), [ONE]);
+    expect(folders()).toEqual(['WHAT IT UNLOCKS']);
+  });
+});
+
+describe('HEALTH rolled, or the player choosing (7d5b)', () => {
+  const withGain = (gain: string) => registerCustomTemplate({
+    id: ID, name: 'Hearth', words: {}, parts: {}, derived: [], sheet: { sections: [] },
+    levels: { top: 5, table: { 2: 100, 3: 300, 4: 700, 5: 1500 }, health: { gain, dieOn: 'class', dice: { soldier: 10, mage: 6 } } }, choices: [CLASSES],
+  } as unknown as CustomRender);
+  const openWith = async (gain: string, data: Record<string, unknown>) => {
+    withGain(gain);
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })));
+    const socket = makeSocket(data);
+    render(<LevelUpWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={socket as never} userName="WREN" onLeave={vi.fn()} onDone={vi.fn()} />);
+    await screen.findByRole('tablist', { name: 'Folders' });
+    return socket;
+  };
+  const at = (health?: object) => holding([['soldier', 2], ['mage', 1]], 9000, { _health: { adds: 2 }, _leveling: { list: 'classes', option: 'soldier', ...(health ? { health } : {}) } });
+  const toHealth = () => userEvent.click(screen.getByRole('tab', { name: 'HEALTH' }));
+
+  it('ROLL: thrown from the window; NEXT and FINISH wait for it', async () => {
+    const socket = await openWith('roll', at());
+    await toHealth();
+    expect(screen.getByText("Thrown in the tray, for the table to see. Kept once it's rolled.")).toBeTruthy();
+    expect(button('NEXT').disabled).toBe(true);
+    expect(button('NEXT').title).toBe('Roll for health first');
+    await userEvent.click(within(screen.getByRole('group', { name: 'Health this level' })).getByRole('button', { name: 'ROLL D10' }));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'healthRoll', list: 'classes', option: 'soldier' });
+    expect(screen.queryByRole('button', { name: /^TAKE/ })).toBeNull();
+  });
+
+  it('rolled: what it comes to, kept; NEXT goes on; another class can\'t be picked', async () => {
+    await openWith('roll', at({ roll: 7, die: 10 }));
+    await toHealth();
+    expect(screen.getByText('+9: ROLLED 7, +2 EACH LEVEL')).toBeTruthy();
+    expect(screen.getByText('Rolled, and kept. Your GM can clear it for another go.')).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Health this level' })).toBeNull();
+    expect(button('NEXT').disabled).toBe(false);
+    await userEvent.click(screen.getByRole('tab', { name: 'WHICH CLASS' }));
+    expect(within(screen.getByRole('group', { name: 'Which class goes up' })).getByRole('button', { name: 'MAGE 1 → 2' }).hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText('Health was rolled for SOLDIER, and kept: your GM can clear it to change class.')).toBeTruthy();
+  });
+
+  it('a low roll still gains 1', async () => {
+    await openWith('roll', holding([['soldier', 2]], 9000, { _health: { adds: -3 }, _leveling: { list: 'classes', option: 'soldier', health: { roll: 1, die: 10 } } }));
+    await toHealth();
+    expect(screen.getByText('+1: ROLLED 1, −3 EACH LEVEL, AT LEAST 1')).toBeTruthy();
+  });
+
+  it('THE PLAYER CHOOSES: TAKE the average, or roll; once the average is taken they can still roll instead', async () => {
+    const socket = await openWith('choose', at());
+    await toHealth();
+    expect(screen.getByText('Take the average, or roll and keep what comes up.')).toBeTruthy();
+    expect(button('NEXT').title).toBe('Take the average or roll first');
+    await userEvent.click(screen.getByRole('button', { name: 'TAKE 5 + 2' }));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'healthAverage', list: 'classes', option: 'soldier' });
+    cleanup();
+    const again = await openWith('choose', at({ average: true }));
+    await toHealth();
+    expect(screen.getByText('+7: 5 AVERAGE, +2 EACH LEVEL')).toBeTruthy();
+    expect(button('NEXT').disabled).toBe(false);
+    await userEvent.click(screen.getByRole('button', { name: 'ROLL D10 INSTEAD' }));
+    expect(again.said('levelAction').at(-1)).toEqual({ kind: 'healthRoll', list: 'classes', option: 'soldier' });
+  });
+
+  it('FINISH waits too, the HEALTH folder being the last', async () => {
+    registerCustomTemplate({
+      id: ID, name: 'Hearth', words: {}, parts: {}, derived: [], sheet: { sections: [] },
+      levels: { top: 5, table: { 2: 100 }, health: { gain: 'roll', dieOn: 'all', die: 8, dice: {} } }, choices: [],
+    } as unknown as CustomRender);
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })));
+    render(<LevelUpWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={makeSocket({ name: 'Wren', _xp: 100, level: 1, _leveling: {} }) as never} userName="WREN" onLeave={vi.fn()} onDone={vi.fn()} />);
+    await screen.findByRole('tablist', { name: 'Folders' });
+    await userEvent.click(screen.getByRole('tab', { name: 'WHAT IT UNLOCKS' }));
+    expect(button('FINISH').disabled).toBe(true);
+    expect(button('FINISH').title).toBe('Roll for health first');
+  });
+});
+
+describe('REROLL ALL, KEEP HIGHER (7d5c)', () => {
+  const open = async (health?: object) => {
+    registerCustomTemplate({
+      id: ID, name: 'Hearth', words: {}, parts: {}, derived: [], sheet: { sections: [] },
+      levels: { top: 5, table: { 2: 100, 3: 300, 4: 700, 5: 1500 }, health: { gain: 'reroll', dieOn: 'class', dice: { soldier: 10 } } }, choices: [ONE],
+    } as unknown as CustomRender);
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })));
+    const socket = makeSocket(holding([['soldier', 2]], 9000, {
+      _health: { adds: 2, max: 19, levels: [{ level: 1, took: 10, die: 10 }, { level: 2, took: 5, die: 10 }] },
+      _leveling: { list: 'classes', option: 'soldier', ...(health ? { health } : {}) },
+    }));
+    render(<LevelUpWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={socket as never} userName="WREN" onLeave={vi.fn()} onDone={vi.fn()} />);
+    await screen.findByRole('tablist', { name: 'Folders' });
+    return socket;
+  };
+
+  it('every level\'s dice, what each adds for all, ROLL THEM ALL; NEXT waits', async () => {
+    const socket = await open();
+    expect(screen.getByText('HEALTH · EVERY LEVEL: 3 DICE + 6')).toBeTruthy();
+    expect(screen.getByText('Every level rolled again. Over 19 and it becomes your new maximum. Otherwise you gain 1.')).toBeTruthy();
+    expect(button('NEXT').title).toBe('Roll for health first');
+    await userEvent.click(screen.getByRole('button', { name: 'ROLL THEM ALL' }));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'healthRoll', list: 'classes', option: 'soldier' });
+  });
+
+  it('over: the new maximum; not over: 1; kept either way', async () => {
+    await open({ roll: 33, die: 10, gained: 14, over: 19 });
+    expect(screen.getByText('+14: ROLLED 33, OVER 19: THE NEW MAXIMUM')).toBeTruthy();
+    expect(screen.getByText('Rolled, and kept. Your GM can clear it for another go.')).toBeTruthy();
+    expect(button('NEXT').disabled).toBe(false);
+    cleanup();
+    await open({ roll: 9, die: 10, gained: 1, over: 19 });
+    expect(screen.getByText('+1: ROLLED 9, NOT OVER 19: +1')).toBeTruthy();
+  });
+});
+
+describe('ROLL TO BEAT (7d5d)', () => {
+  const open = async (beat: object, health?: object, dice: Record<string, number> = { soldier: 10 }) => {
+    registerCustomTemplate({
+      id: ID, name: 'Hearth', words: {}, parts: {}, derived: [], sheet: { sections: [] },
+      levels: { top: 5, table: { 2: 100, 3: 300, 4: 700, 5: 1500 }, health: { gain: 'beat', dieOn: 'class', dice, beat } }, choices: [ONE],
+    } as unknown as CustomRender);
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve([]) })));
+    const socket = makeSocket(holding([['soldier', 2]], 9000, {
+      _health: { adds: 2, max: 19, levels: [{ level: 1, took: 10, die: 10 }, { level: 2, took: 5, die: 10 }] },
+      _leveling: { list: 'classes', option: 'soldier', ...(health ? { health } : {}) },
+    }));
+    render(<LevelUpWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} socket={socket as never} userName="WREN" onLeave={vi.fn()} onDone={vi.fn()} />);
+    await screen.findByRole('tablist', { name: 'Folders' });
+    return socket;
+  };
+  const POOL = { way: 'pool', count: 6, die: 10, gain: 6 };
+
+  it('a pool: what is rolled, what beating it gains, ROLL TO BEAT; NEXT waits', async () => {
+    const socket = await open(POOL);
+    expect(screen.getByText('HEALTH · ROLL 6D10 TO BEAT 19')).toBeTruthy();
+    expect(screen.getByText('Beat 19 and gain a d6. Otherwise nothing.')).toBeTruthy();
+    expect(button('NEXT').disabled).toBe(true);
+    await userEvent.click(screen.getByRole('button', { name: 'ROLL TO BEAT' }));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'healthRoll', list: 'classes', option: 'soldier' });
+  });
+
+  it('a class with no HIT DIE still rolls the pool, and is never told it only gains what each level adds', async () => {
+    await open(POOL, undefined, {});
+    expect(screen.getByRole('button', { name: 'ROLL TO BEAT' })).toBeTruthy();
+    cleanup();
+    await open(POOL, { roll: 15, gained: 0, over: 19, beat: true }, {});
+    expect(screen.getByText('Rolled, and kept. Your GM can clear it for another go.')).toBeTruthy();
+    expect(screen.queryByText(/has no HIT DIE/)).toBeNull();
+  });
+
+  it('a die per level: every level\'s dice with what each adds', async () => {
+    await open({ ...POOL, way: 'level' });
+    expect(screen.getByText('HEALTH · EVERY LEVEL: 3 DICE + 6 TO BEAT 19')).toBeTruthy();
+    expect(screen.getByText("Beat 19 and gain the new level's die again, and what each level adds. Otherwise nothing.")).toBeTruthy();
+  });
+
+  it('beaten: what it gained; not beaten: nothing, and NEXT goes on either way', async () => {
+    await open(POOL, { roll: 31, die: 10, gained: 4, over: 19, beat: true });
+    expect(screen.getByText('+4: ROLLED 31, OVER 19: GAINED 4')).toBeTruthy();
+    // Said once, not again as a plain roll with what each level adds.
+    expect(screen.getAllByText(/^\+4: ROLLED/)).toHaveLength(1);
+    expect(button('NEXT').disabled).toBe(false);
+    cleanup();
+    await open(POOL, { roll: 15, die: 10, gained: 0, over: 19, beat: true });
+    expect(screen.getByText('+0: ROLLED 15, NOT OVER 19: NOTHING GAINED')).toBeTruthy();
+    expect(screen.getByText('Rolled, and kept. Your GM can clear it for another go.')).toBeTruthy();
+    expect(button('NEXT').disabled).toBe(false);
+  });
+});
+
+describe('ABILITY INCREASE (7d6b)', () => {
+  const STATS = [{ id: 'might', label: 'Might' }, { id: 'wits', label: 'Wits' }];
+  const RAISING = { ...ONE, options: [{ id: 'soldier', label: 'Soldier', features: [
+    { id: 'asi', label: 'Ability Score Improvement', at: 3, text: 'Raise your stats.', increase: { points: 2, most: 2, stats: STATS, cap: 20 } },
+  ] }] };
+  const data = (more: object = {}) => holding([['soldier', 2]], 9000, { might: 19, wits: 12, ...more });
+  const spend = () => within(screen.getByRole('group', { name: 'Spend Ability Score Improvement' }));
+
+  it('its own folder after what it unlocks; − and +, within what it allows; FINISH waits for every point', async () => {
+    const { socket, onDone } = await open(data(), [RAISING]);
+    expect(folders()).toEqual(['WHAT IT UNLOCKS', 'ABILITY INCREASE']);
+    expect(screen.getByText('2 points to spend, in ABILITY INCREASE.')).toBeTruthy();
+    await userEvent.click(button('NEXT'));
+    expect(spend().getByText('2 POINTS LEFT · AT MOST 2 ON ONE · STOPS AT 20')).toBeTruthy();
+    expect(button('FINISH').disabled).toBe(true);
+    expect(button('FINISH').title).toBe('Spend the points first');
+    expect(spend().getByLabelText('Might with the points').textContent).toBe('19');
+    expect((spend().getByRole('button', { name: 'Less Might' }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(spend().getByRole('button', { name: 'More Might' }));
+    expect(spend().getByLabelText('Might with the points').textContent).toBe('20');
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'place', list: 'classes', option: 'soldier', increases: { asi: { might: 1 } } });
+    // Might stops at 20.
+    expect((spend().getByRole('button', { name: 'More Might' }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(spend().getByRole('button', { name: 'More Wits' }));
+    expect(spend().getByText('0 POINTS LEFT · AT MOST 2 ON ONE · STOPS AT 20')).toBeTruthy();
+    expect((spend().getByRole('button', { name: 'More Wits' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(button('FINISH').disabled).toBe(false);
+    await userEvent.click(button('FINISH'));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'up', list: 'classes', option: 'soldier', increases: { asi: { might: 1, wits: 1 } } });
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it('a point taken back; what was spent is kept with the place', async () => {
+    const { socket } = await open(data({ _leveling: { list: 'classes', option: 'soldier', increases: { asi: { wits: 2 } } } }), [RAISING]);
+    await userEvent.click(within(screen.getByRole('tablist', { name: 'Folders' })).getByRole('tab', { name: /ABILITY INCREASE/ }));
+    expect(spend().getByLabelText('Wits with the points').textContent).toBe('14');
+    await userEvent.click(spend().getByRole('button', { name: 'Less Wits' }));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'place', list: 'classes', option: 'soldier', increases: { asi: { wits: 1 } } });
+    expect(spend().getByText('1 POINT LEFT · AT MOST 2 ON ONE · STOPS AT 20')).toBeTruthy();
+  });
+
+  it('one point, and no cap: said without AT MOST or STOPS AT', async () => {
+    const NUDGE = { ...ONE, options: [{ id: 'soldier', label: 'Soldier', features: [{ id: 'nudge', label: 'Nudge', at: 3, increase: { points: 1, most: 1, stats: STATS } }] }] };
+    await open(data(), [NUDGE]);
+    await userEvent.click(button('NEXT'));
+    expect(within(screen.getByRole('group', { name: 'Spend Nudge' })).getByText('1 POINT LEFT')).toBeTruthy();
+  });
+
+  it('no folder when the level unlocks none', async () => {
+    await open(holding([['soldier', 1]]), [RAISING]);
+    expect(folders()).toEqual(['WHAT IT UNLOCKS']);
+  });
+});
+
+describe('OR A FEAT INSTEAD (7d6c)', () => {
+  const STATS = [{ id: 'might', label: 'Might' }, { id: 'wits', label: 'Wits' }];
+  const FEATS = { id: 'feats', one: 'Feat', many: 'Feats', picks: 1, again: false, levelled: false, picked: 'features', options: [
+    { id: 'tough', label: 'Tough', features: [] }, { id: 'quick', label: 'Quick', needs: 'WITS >= 15', features: [] },
+  ] };
+  const RAISING = { ...ONE, options: [{ id: 'soldier', label: 'Soldier', features: [
+    { id: 'asi', label: 'Ability Score Improvement', at: 3, increase: { points: 2, most: 2, stats: STATS, instead: 'feats' } },
+  ] }] };
+  const data = () => holding([['soldier', 2]], 9000, { might: 14, wits: 12, _worked: { picks: [{ list: 'classes', option: 'soldier', level: 2 }], levels: { level: 2 }, unmet: ['quick'] } });
+  const spend = () => within(screen.getByRole('group', { name: 'Spend Ability Score Improvement' }));
+  const toIncrease = async () => {
+    expect(screen.getByText('2 points to spend, or a Feat, in ABILITY INCREASE.')).toBeTruthy();
+    await userEvent.click(button('NEXT'));
+  };
+
+  it('a Feat in place of the points: the points dropped, one picked, FINISH with it', async () => {
+    const { socket } = await open(data(), [RAISING, FEATS]);
+    await toIncrease();
+    await userEvent.click(spend().getByRole('button', { name: 'More Might' }));
+    await userEvent.click(spend().getByRole('button', { name: 'OR A FEAT INSTEAD' }));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'place', list: 'classes', option: 'soldier' });
+    expect(spend().getByText('A FEAT INSTEAD OF THE POINTS')).toBeTruthy();
+    expect(button('FINISH').disabled).toBe(true);
+    const offer = within(spend().getByRole('group', { name: 'Pick a Feat instead' }));
+    expect((offer.getByRole('button', { name: 'QUICK' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(offer.getByText('NEEDS WITS >= 15')).toBeTruthy();
+    await userEvent.click(offer.getByRole('button', { name: 'TOUGH' }));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'place', list: 'classes', option: 'soldier', picks: [{ list: 'feats', option: 'tough', from: 'asi' }] });
+    expect(offer.getByRole('button', { name: 'TOUGH' }).getAttribute('aria-pressed')).toBe('true');
+    expect(button('FINISH').disabled).toBe(false);
+    await userEvent.click(button('FINISH'));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'up', list: 'classes', option: 'soldier', picks: [{ list: 'feats', option: 'tough', from: 'asi' }] });
+  });
+
+  it('USE THE POINTS INSTEAD: the pick dropped, the stats back', async () => {
+    const { socket } = await open({ ...data(), _leveling: { list: 'classes', option: 'soldier', picks: [{ list: 'feats', option: 'tough', from: 'asi' }] } }, [RAISING, FEATS]);
+    await toIncrease();
+    // Kept with the place, it opens on the Feat.
+    expect(spend().getByText('A FEAT INSTEAD OF THE POINTS')).toBeTruthy();
+    await userEvent.click(spend().getByRole('button', { name: 'USE THE POINTS INSTEAD' }));
+    expect(socket.said('levelAction').at(-1)).toEqual({ kind: 'place', list: 'classes', option: 'soldier' });
+    expect(spend().getByText('2 POINTS LEFT · AT MOST 2 ON ONE')).toBeTruthy();
+    expect(button('FINISH').disabled).toBe(true);
+  });
+
+  it('switched to the Feat and back with nothing picked, the points are still to spend', async () => {
+    await open(data(), [RAISING, FEATS]);
+    await toIncrease();
+    await userEvent.click(spend().getByRole('button', { name: 'OR A FEAT INSTEAD' }));
+    await userEvent.click(spend().getByRole('button', { name: 'USE THE POINTS INSTEAD' }));
+    expect(spend().getByRole('button', { name: 'More Might' })).toBeTruthy();
+  });
+});

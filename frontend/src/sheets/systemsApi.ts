@@ -5,6 +5,8 @@
 
 import type { InstallMode, InstallPreview, InstallResult, LibrarySystem } from './systemsLibrary';
 import type { PublishPreview } from './versionPreview';
+import type { ImportPreview } from './choicesImport';
+import type { FormulaKind, FormulaRead } from './formulaBox';
 import type { CustomRenderSheet } from './customTemplates';
 import type { GameCondition } from './tokenConditions';
 import type { TableEntry } from './tableConditions';
@@ -162,6 +164,9 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      */
     previewValues: (definition: Definition) =>
       call<{ values: Record<string, number>; problems: Problem[] }>(fetcher, token, '/api/systems/preview-values', 'POST', { definition }),
+    /** The formula box (formula box 1): each formula read as the game reads it, for the sample character. */
+    previewFormulas: (definition: Definition, formulas: { text: string; kind: FormulaKind; roll?: string }[]) =>
+      call<{ results: FormulaRead[]; sampleLevel: number }>(fetcher, token, '/api/systems/preview-formulas', 'POST', { definition, formulas }),
     /**
      * TEST ROLL (6b1a): one of a draft's rolls made for its sample character by the table's own
      * engine, for `fieldId` or the first field it is rolled by, with the changes picked. Changes
@@ -180,6 +185,12 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      */
     previewSheet: (definition: Definition) =>
       call<{ sheet: CustomRenderSheet; starter: CustomRenderSheet }>(fetcher, token, '/api/systems/preview-sheet', 'POST', { definition }),
+    /**
+     * The CHOICES page's IMPORT, PREVIEW (choices import 2): a file read against one of a draft's
+     * lists by the server, with what it would change and the list as it would be. Changes nothing.
+     */
+    importChoices: (definition: Definition, list: string, text: string) =>
+      call<ImportPreview>(fetcher, token, '/api/systems/import-choices', 'POST', { definition, list, text }),
     /**
      * One of a draft's NPC tiers worked out and rolled for a level, without saving (NPCS, TRY IT):
      * each box's value and dice, or what is wrong with it.

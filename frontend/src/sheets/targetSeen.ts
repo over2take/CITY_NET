@@ -63,7 +63,7 @@ export const exampleRoll = (seen: Seen, d20: number) => {
   const total = d20 + 3;
   const verdict = total >= 12 ? 'SUCCESS' : 'FAILURE';
   const effect = verdict === 'SUCCESS' ? ' · SILENT' : '';
-  const work = `KES rolled STEALTH [d20 (${d20}) + 3 = ${total}]`;
+  const work = `KES rolled STEALTH [${d20} + 3 = ${total}]`;
   const top = fit(`STEALTH${String(total).padStart(BOARD - 'STEALTH'.length)}`);
   const gm = { board: [top, fit(`VS 12 ${verdict}`)], line: `${work} — vs 12: ${verdict}${effect}${seen === 'shown' ? '' : HIDDEN}` };
   const player = seen === 'shown' ? { board: gm.board, line: `${work} — vs 12: ${verdict}${effect}` }

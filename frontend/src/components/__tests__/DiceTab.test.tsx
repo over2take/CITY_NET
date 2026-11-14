@@ -52,7 +52,7 @@ const NARRATIVE = withDicePreset(HEARTH, 'narrative')!.definition;
 describe('the DICE tab', () => {
   it('sits between TABLES and ROLLS, and starts from a preset or a plain d6', async () => {
     const { last } = open();
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['STATS', 'FORMULAS', 'TABLES', 'DICE', 'ROLLS']);
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['STATS', 'FORMULAS', 'TABLES', 'RANKS', 'DICE', 'ROLLS']);
     await toDice();
     expect(screen.getByText(/No dice of its own yet/)).toBeTruthy();
     await userEvent.click(within(screen.getByRole('group', { name: 'New dice from a preset' })).getByRole('button', { name: 'GOOD / GREAT / BAD' }));

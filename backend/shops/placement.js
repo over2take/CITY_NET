@@ -167,6 +167,7 @@ const placeTimes = (place, data, qty) => {
 };
 
 module.exports = {
+  addToInventory,
   INVENTORY_FIELD, CYBERWARE_TABLE, GROUP_OF,
   normaliseItem, readInventory, writeInventory, blankItem, addToInventory,
   shapeOf, firstFreeSlot, placeUploaded, placeTimes,

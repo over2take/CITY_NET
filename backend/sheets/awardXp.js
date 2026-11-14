@@ -10,6 +10,8 @@
 // testing without a socket, a database or an admin token in the way.
 
 const { mutateSheetForUser } = require('./mutate');
+const { XP_KEY, LIMITS: XP_LIMITS, keepsXp, advances } = require('../systemBuilder/levels');
+const { levelAction } = require('../systemBuilder/levelUp');
 
 /**
  * What each system calls experience, or absent where it has no such field.
@@ -23,11 +25,20 @@ const XP_FIELD = {
   cities_without_number: 'xp',
 };
 
-/** The field this system keeps experience in, or null where the idea does not apply. */
-const xpFieldFor = (system) => XP_FIELD[String(system || '')] || null;
+/**
+ * The field this system keeps experience in, or null where the idea does not apply. A custom system
+ * (7d2a) keeps it under XP_KEY while its `definition` says characters earn it, toward levels or to spend (7f2a1).
+ */
+const xpFieldFor = (system, definition) => XP_FIELD[String(system || '')] || (keepsXp(definition) ? XP_KEY : null);
 
 /** Whether a GM can award experience at all on this system. */
-const supportsXp = (system) => xpFieldFor(system) !== null;
+const supportsXp = (system, definition) => xpFieldFor(system, definition) !== null;
+
+/**
+ * A total shared out (7d2a, the user's call of 2026-11-07, for a custom system only: the book's rule above
+ * is Cities Without Number's). Whole points each, what won't divide said as left over.
+ */
+const shareOf = (amount, count) => ({ each: Math.trunc(amount / count), left: Math.abs(amount) % count });
 
 const num = (v) => {
   const n = Number(v);
@@ -53,8 +64,8 @@ const applyAward = (current, amount) => {
  * Returns a reason rather than throwing, because every caller here is a socket handler
  * that wants to tell the GM why nothing happened.
  */
-const validate = ({ system, usernames, amount }) => {
-  if (!supportsXp(system)) return 'This system does not track experience.';
+const validate = ({ system, definition, usernames, amount }) => {
+  if (!supportsXp(system, definition)) return 'This system does not track experience.';
   if (!Array.isArray(usernames) || usernames.length === 0) return 'Nobody selected.';
   const n = Number(amount);
   if (!Number.isFinite(n)) return 'Amount must be a number.';
@@ -77,11 +88,16 @@ const validate = ({ system, usernames, amount }) => {
  * A character with no sheet is reported rather than skipped silently - on a night when the
  * GM awards the party and one name does nothing, they should be told which.
  */
-const awardXp = (db, { system, usernames, amount, rate }, cb = () => {}) => {
-  const reason = validate({ system, usernames, amount });
+const awardXp = (db, { system, definition, usernames, amount, rate, split = false }, cb = () => {}) => {
+  const reason = validate({ system, definition, usernames, amount });
   if (reason) return cb(reason, null);
 
-  const field = xpFieldFor(system);
+  const field = xpFieldFor(system, definition);
+  // Only Cities Without Number's level follows its XP: a custom system's goes up when the player says.
+  const carriesLevel = field !== XP_KEY;
+  const share = split && !carriesLevel ? shareOf(Number(amount), usernames.length) : null;
+  if (share && share.each === 0) return cb(`Too little to split between ${usernames.length}.`, null);
+  const each = share ? share.each : amount;
   const results = [];
   let remaining = usernames.length;
 
@@ -90,23 +106,46 @@ const awardXp = (db, { system, usernames, amount, rate }, cb = () => {}) => {
       db,
       { username, system },
       (data) => {
-        const { to } = applyAward(data[field], amount);
+        const { to } = applyAward(data[field], each);
         data[field] = to;
         // The level follows the total. Three points a session, four sessions running, is
         // level 4 on the fast column - not level 2 with the bar stuck on READY.
-        data.level = levelForXp(to, rate, data.level);
+        if (carriesLevel) data.level = levelForXp(to, rate, data.level);
         return data;
       },
       (err, data) => {
         if (err || !data) {
           results.push({ username, ok: false, reason: 'No sheet.' });
         } else {
-          results.push({ username, ok: true, xp: num(data[field]), level: num(data.level) });
+          results.push({ username, ok: true, xp: num(data[field]), ...(carriesLevel ? { level: num(data.level) } : {}) });
         }
         remaining -= 1;
-        if (remaining === 0) cb(null, results);
+        if (remaining === 0) cb(null, results, share ? { each, left: share.left } : { each: Number(each), left: 0 });
       },
     );
+  });
+};
+
+/**
+ * Replace what characters have with another number (7d2a, the user's call of 2026-11-07): the GM putting a
+ * mistake right. A custom system's only, and never a level: that is LEVEL DOWN's.
+ */
+const setXp = (db, { system, definition, usernames, value }, cb = () => {}) => {
+  if (xpFieldFor(system, definition) !== XP_KEY) return cb('This system does not track experience.', null);
+  if (!Array.isArray(usernames) || usernames.length === 0) return cb('Nobody selected.', null);
+  if (!Number.isInteger(value) || value < 0 || value > XP_LIMITS.xp) return cb('A whole amount, 0 or more.', null);
+  const results = [];
+  let remaining = usernames.length;
+  usernames.forEach((username) => {
+    mutateSheetForUser(db, { username, system }, (data) => {
+      data[XP_KEY] = value;
+      return data;
+    }, (err, data) => {
+      if (err || !data) results.push({ username, ok: false, reason: 'No sheet.' });
+      else results.push({ username, ok: true, xp: num(data[XP_KEY]) });
+      remaining -= 1;
+      if (remaining === 0) cb(null, results);
+    });
   });
 };
 
@@ -162,6 +201,28 @@ const applyLevel = (current, delta) => {
   return { from, to, delta: to - from };
 };
 
+/** A custom system's LEVEL_UP and LEVEL_DOWN (7d2b): a level given for the player to take, or one taken back. */
+const adjustCustom = (db, { system, definition, applyDerived, usernames, kind }, cb) => {
+  const results = [];
+  let remaining = usernames.length;
+  usernames.forEach((username) => {
+    let reason = null;
+    let done = null;
+    mutateSheetForUser(db, { username, system }, (data) => {
+      done = levelAction(definition, data, { kind }, { gm: true });
+      if (!done.ok) { reason = done.error; return undefined; }
+      if (applyDerived) applyDerived(system, done.data);
+      return done.data;
+    }, (err, data) => {
+      if (reason) results.push({ username, ok: false, reason });
+      else if (err || !data) results.push({ username, ok: false, reason: 'No sheet.' });
+      else results.push({ username, ok: true, level: done.level, owed: done.owed });
+      remaining -= 1;
+      if (remaining === 0) cb(null, results);
+    });
+  });
+};
+
 /**
  * Move a character up or down a level.
  *
@@ -170,11 +231,13 @@ const applyLevel = (current, delta) => {
  * invent an XP figure to do it, and taking XP back does not un-level anybody, because
  * the skill points and Focus picks that came with the level do not undo themselves.
  */
-const adjustLevel = (db, { system, usernames, delta }, cb = () => {}) => {
-  if (!supportsXp(system)) return cb('This system does not track levels.', null);
+const adjustLevel = (db, { system, definition, applyDerived, usernames, delta }, cb = () => {}) => {
+  const custom = !!definition && advances(definition);
+  if (!custom && !supportsXp(system)) return cb('This system does not track levels.', null);
   if (!Array.isArray(usernames) || usernames.length === 0) return cb('Nobody selected.', null);
   const step = Number(delta);
   if (!Number.isInteger(step) || step === 0) return cb('Level change must be a whole number.', null);
+  if (custom) return adjustCustom(db, { system, definition, applyDerived, usernames, kind: step > 0 ? 'give' : 'down' }, cb);
 
   const results = [];
   let remaining = usernames.length;
@@ -197,6 +260,6 @@ const adjustLevel = (db, { system, usernames, delta }, cb = () => {}) => {
 };
 
 module.exports = {
-  XP_FIELD, xpFieldFor, supportsXp, applyAward, validate, awardXp,
+  XP_FIELD, xpFieldFor, supportsXp, shareOf, applyAward, validate, awardXp, setXp,
   MIN_LEVEL, MAX_LEVEL, applyLevel, adjustLevel, THRESHOLDS, levelForXp,
 };

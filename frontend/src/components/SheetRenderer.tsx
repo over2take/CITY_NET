@@ -16,13 +16,23 @@ import type { SheetTemplate, SheetSection, SheetField, SheetData, SheetFieldValu
 import type { RollPick } from '../sheets/types';
 import { RollChooser } from './RollChooser';
 import { wordFor, asLabel } from '../sheets/words';
-import { TvPortrait } from './TvPortrait';
+import { BracketPortrait } from './BracketPortrait';
 import { xpProgress, describeXp } from '../sheets/cwnAdvancement';
 import { carriedEnc, encState, describeEnc, encumberedMove } from '../sheets/cwnEncumbrance';
 import {
   STASH_FIELD, readStash, writeStash, firstFreeRow, stashedToCarried,
   carriedToStashed, compactCarried, type StashedWeapon,
 } from '../sheets/cwnWeaponStash';
+import { ChoicesSection } from './ChoicesSection';
+import { LevelRecord } from './LevelRecord';
+import { XpMeterBar } from './XpMeterBar';
+import { LevelUpReady } from './LevelUpReady';
+import { RestSection } from './RestSection';
+import { SpendSection } from './SpendSection';
+import { ImproveMark } from './ImproveMark';
+import { markStates } from '../sheets/improveShown';
+import { withTempHp } from '../sheets/tempHp';
+import { choiceEffects, effectsWorked, type ChoicesAction } from '../sheets/choicesShown';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
   return (
@@ -111,6 +121,26 @@ interface SheetRendererProps {
   /** The viewer is the GM, who may change the fields a system keeps for the GM
    *  (SheetField.gmOnly). Everyone else sees those read-only. */
   gm?: boolean;
+  /** A custom system's CHOICES block asks the server to pick, set a level or tick a use (7a3b1). */
+  onChoices?: (action: ChoicesAction) => void;
+  /** Why the server last refused one of those, shown under the block. */
+  choicesRefused?: string | null;
+  /** WHAT EACH LEVEL GAINED (7d7b2), under the CHOICES block: asks the server to put a level right (a levelAction). */
+  onLevel?: (action: Record<string, unknown>) => void;
+  /** Spends and rolls recovery dice (R2b). */
+  onRecoverySpend?: (pool: string, count: number) => void;
+  /** Whether the GM has spending recovery dice open. */
+  recoveryOpen?: boolean;
+  /** Takes one of the game's rests on this character, from its RESTS section (R3b). */
+  onRestTake?: (rest: string) => void;
+  /** Opens LEVEL_UP.EXE (7d3a): the player's own sheet, in the game, offers it. */
+  onLevelUp?: () => void;
+  /** WEAR and ATTUNE a custom system's items on the GEAR tab (7e3b): asks the server (an itemAction). */
+  onItem?: (action: import('../sheets/gearItems').ItemAction) => void;
+  /** SPEND XP's BUY, and the GM's APPROVE, DECLINE and UNDO (7f2c1): asks the server (a spendAction). */
+  onSpend?: (action: import('../sheets/spendShown').SpendAction) => void;
+  /** IMPROVE BY USE's mark ticked or cleared (7f3b): asks the server (an improveAction). */
+  onImprove?: (action: import('../sheets/improveShown').ImproveAction) => void;
 }
 
 /** Whether the viewer is the GM, for FieldInput's GM-only lock, without threading a prop
@@ -240,12 +270,14 @@ function FieldInput({ field, data, readOnly: sheetReadOnly, onFieldChange, onFie
   }
   if (field.source) {
     // Linked field: value lives in another system (bank, token HP). Display
-    // only - clicking jumps to the window that owns it, when available.
+    // only - clicking jumps to the window that owns it, when available. The
+    // dashed border says it is kept elsewhere; a small ⇗ marks a click opening
+    // it, where a LINKED beside every number crowded a health row (2026-10-31).
     const clickable = !!onOpenLink;
     return (
       <div
         role={clickable ? 'button' : undefined}
-        title={clickable ? 'Open linked window' : 'Synced from the linked system'}
+        title={clickable ? 'Kept on the token or in the bank: click to open it' : 'Kept on the token or in the bank: changed there, not here'}
         onClick={clickable ? () => onOpenLink!(field.source!) : undefined}
         style={{
           ...inputStyle, border: '1px dashed var(--green)', cursor: clickable ? 'pointer' : 'default',
@@ -253,7 +285,7 @@ function FieldInput({ field, data, readOnly: sheetReadOnly, onFieldChange, onFie
         }}
       >
         <span>{value === '' || value === null || value === undefined ? '—' : String(value)}</span>
-        <span style={{ opacity: 0.6, fontSize: '0.6rem' }}>{clickable ? '⇗ LINKED' : 'LINKED'}</span>
+        {clickable && <span aria-hidden style={{ opacity: 0.6, fontSize: '0.7rem' }}>⇗</span>}
       </div>
     );
   }
@@ -356,11 +388,14 @@ function FieldInput({ field, data, readOnly: sheetReadOnly, onFieldChange, onFie
     // A template that names its own blank state keeps it; anything else gets the
     // placeholder, so a select is never silently pre-set to its first real choice.
     const hasBlank = options.some(o => o.value === '');
-    return (
+    // A ranked stat's rank (7f1c1): no step yet is its lowest, and its worth stands beside it.
+    const worth = field.worthField ? data[field.worthField] : undefined;
+    const select = (
       <select
         aria-label={field.label}
         className="sheet-input"
-        style={{ ...inputStyle, ...style }}
+        // Beside its worth, the picker takes what room is left (7f1c1).
+        style={field.worthField ? { ...inputStyle, ...style, flex: 1, minWidth: 0, width: 'auto' } : { ...inputStyle, ...style }}
         value={String(value)}
         disabled={readOnly}
         onChange={(e) => {
@@ -374,11 +409,18 @@ function FieldInput({ field, data, readOnly: sheetReadOnly, onFieldChange, onFie
           else for (const [id, val] of Object.entries(batch)) onFieldChange(id, val);
         }}
       >
-        {!hasBlank && <option value="">—</option>}
+        {!hasBlank && !field.worthField && <option value="">—</option>}
         {options.map(o => (
           <option key={o.value} value={o.value}>{o.label}</option>
         ))}
       </select>
+    );
+    if (!field.worthField) return select;
+    return (
+      <span style={{ ...style, display: 'flex', gap: 6, alignItems: 'center', minWidth: 0 }}>
+        {select}
+        <span data-testid={`worth-${field.worthField}`} title="What a formula reading it gets" style={{ fontSize: '0.65rem', opacity: 0.75, whiteSpace: 'nowrap', flexShrink: 0, paddingRight: 4 }}>= {String(worth ?? 0)}</span>
+      </span>
     );
   }
   if (field.type === 'textarea') {
@@ -425,80 +467,8 @@ function FieldInput({ field, data, readOnly: sheetReadOnly, onFieldChange, onFie
   );
 }
 
-// Targeting-bracket portrait frame - the visual identity of the sheet system.
-// Uploaded portraits get a CSS take on the signs' TV shader: scanlines,
-// R/B chromatic fringe, and an intermittent glitch jitter.
-const PORTRAIT_HINT = 'Best results: a square image, 400×400px or larger. JPG / PNG / WebP / GIF, max 8MB.';
-
-function BracketPortrait({ initial, portraitUrl, size = 64, onUpload, shadowFilter = false, onToggleShadow }: {
-  initial: string;
-  portraitUrl?: string | null;
-  size?: number;
-  onUpload?: (file: File) => void;
-  /** Darken the portrait to a shadow silhouette (hides reused stock art). */
-  shadowFilter?: boolean;
-  onToggleShadow?: () => void;
-}) {
-  const b = Math.max(9, Math.round(size * 0.18));
-  const corner = (pos: React.CSSProperties): React.CSSProperties => ({
-    position: 'absolute', width: `${b}px`, height: `${b}px`, ...pos,
-  });
-  const frame = (
-    <div style={{ position: 'relative', width: `${size}px`, height: `${size}px`, background: 'color-mix(in srgb, var(--black) 60%, transparent)', flex: '0 0 auto', overflow: 'hidden' }}>
-      {portraitUrl ? (
-        <TvPortrait src={portraitUrl} silhouette={shadowFilter} />
-      ) : (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--green)', fontSize: `${Math.round(size * 0.38)}px`, letterSpacing: '1px' }}>
-          {initial}
-        </div>
-      )}
-      <div style={corner({ top: 0, left: 0, borderTop: '2px solid var(--green)', borderLeft: '2px solid var(--green)' })} />
-      <div style={corner({ top: 0, right: 0, borderTop: '2px solid var(--green)', borderRight: '2px solid var(--green)' })} />
-      <div style={corner({ bottom: 0, left: 0, borderBottom: '2px solid var(--green)', borderLeft: '2px solid var(--green)' })} />
-      <div style={corner({ bottom: 0, right: 0, borderBottom: '2px solid var(--green)', borderRight: '2px solid var(--green)' })} />
-    </div>
-  );
-  if (!onUpload && !onToggleShadow) return frame;
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', flex: '0 0 auto' }}>
-      {frame}
-      <div style={{ display: 'flex', gap: '1px' }}>
-        {onUpload && (
-          <label title={PORTRAIT_HINT} style={{
-            cursor: 'pointer', background: 'rgba(0, 0, 0, 0.85)', flex: 1,
-            border: '1px solid var(--green)', borderTop: 'none',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '4px 6px', userSelect: 'none',
-          }}>
-            <input
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = ''; }}
-            />
-            <span style={{ fontSize: '9px', letterSpacing: '1px', color: 'var(--green)', fontWeight: 600, whiteSpace: 'nowrap' }}>UPLOAD · MAX 8MB</span>
-          </label>
-        )}
-        {onToggleShadow && (
-          <button
-            onClick={onToggleShadow}
-            title={shadowFilter ? 'Reveal portrait' : 'Shadow silhouette — hide reused stock art'}
-            style={{
-              cursor: 'pointer', background: shadowFilter ? 'color-mix(in srgb, var(--green) 8%, transparent)' : 'rgba(0,0,0,0.85)',
-              border: '1px solid var(--green)', borderTop: 'none', borderLeft: onUpload ? 'none' : '1px solid var(--green)',
-              padding: '4px 6px', color: 'var(--green)', fontSize: '9px',
-              letterSpacing: '1px', fontWeight: 600, whiteSpace: 'nowrap',
-            }}
-          >
-            {shadowFilter ? 'SHADOW ■' : 'SHADOW □'}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onFieldsChange, onPharmaChange, pharmaUndo, onUndoPharma, readOnly, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, xpRate, canRoll }: {
+function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onFieldsChange, onPharmaChange, pharmaUndo, onUndoPharma, readOnly, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, xpRate, canRoll }: {
+  onLevelUp?: () => void;
   template: SheetTemplate; data: SheetData; portraitUrl?: string | null;
   onPortraitUpload?: (file: File) => void;
   portraitShadow?: boolean;
@@ -693,6 +663,8 @@ function SheetHeaderBlock({ template, data, portraitUrl, onPortraitUpload, portr
             ))}
           </div>
         )}
+        <XpMeterBar template={template} data={data as Record<string, unknown>} />
+        <LevelUpReady template={template} data={data as Record<string, unknown>} onOpen={onLevelUp} />
         {h.xpBar && (() => {
           // Under the HP bar and its chips, because it answers the same kind of question:
           // how far through something am I. Display only - the number is typed on the
@@ -1163,11 +1135,13 @@ function FullWidthField({ field, data, readOnly, onFieldChange, onFieldsChange, 
   );
 }
 
-function GridSection({ section, allFields, data, readOnly, onFieldChange, onRoll, effects }: {
+function GridSection({ section, allFields, data, readOnly, onFieldChange, onRoll, effects, marks }: {
   section: SheetSection; allFields: SheetField[]; data: SheetData; readOnly: boolean;
   onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
   onRoll?: (fieldId: string) => void;
   effects: SheetEffects;
+  /** IMPROVE BY USE (7f3b): each stat that improves, whether it is marked, and who may tick it. */
+  marks?: { improve: import('../sheets/improveShown').ImproveShown; states: Map<string, boolean>; onImprove?: (action: import('../sheets/improveShown').ImproveAction) => void };
 }) {
   // maxField pairs render inside their base field's cell as CUR / MAX. The maximum is
   // looked up across the whole sheet, not just this block: CWN's Damage Soak is spent in
@@ -1195,20 +1169,12 @@ function GridSection({ section, allFields, data, readOnly, onFieldChange, onRoll
           <div key={field.id} title={field.hint} style={{ border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--black) 35%, transparent)', textAlign: 'center', display: 'flex', flexDirection: 'column' }}>
             <div style={{ fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', padding: '4px 2px 0', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 3 }}>
               {field.label}
-              {effects.fields[field.id]?.delta ? <ChromeBadge effect={effects.fields[field.id]} /> : null}
+              {marks?.states.has(field.id) && <ImproveMark improve={marks.improve} stat={field.id} label={field.label} marked={marks.states.get(field.id) === true} onImprove={marks.onImprove} />}
+              {/* A pair's bonus is named on its maximum below, not as a second number by the name. */}
+              {!maxField && effects.fields[field.id]?.delta ? <ChromeBadge effect={effects.fields[field.id]} /> : null}
             </div>
             {maxField ? (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', padding: '0 2px' }}>
-                  <FieldInput field={field} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={numInput} />
-                  <span style={{ opacity: 0.5 }}>/</span>
-                  <FieldInput field={maxField} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={numInput} />
-                </div>
-                <div style={{ display: 'flex', fontSize: '0.45rem', opacity: 0.5, letterSpacing: '1px', padding: '0 6px 2px' }}>
-                  <span style={{ flex: 1 }}>CUR</span>
-                  <span style={{ flex: 1 }}>MAX</span>
-                </div>
-              </>
+              <PairCells field={field} maxField={maxField} data={data} readOnly={readOnly} onFieldChange={onFieldChange} effects={effects} numInput={numInput} />
             ) : (
               <FieldInput field={field} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={numInput} />
             )}
@@ -1271,6 +1237,42 @@ function GridSection({ section, allFields, data, readOnly, onFieldChange, onRoll
  * So the augmented number is shown next to it instead, with what produced it in the
  * tooltip, and the BASE the row rolls at already includes it.
  */
+/**
+ * A pool's CURRENT / MAX, each centered over its name (2026-10-31): the token's temporary HP is
+ * added to the current, in the warning color, and a feature adding to the maximum (7a5a3) colors
+ * it, naming itself on hover.
+ */
+function PairCells({ field, maxField, data, readOnly, onFieldChange, effects, numInput }: {
+  field: SheetField; maxField: SheetField; data: SheetData; readOnly: boolean;
+  onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
+  effects: SheetEffects; numInput: React.CSSProperties;
+}) {
+  const { data: shown, temp } = withTempHp(field, data);
+  const bonus = effects.fields[maxField.id]?.delta ? effects.fields[maxField.id] : undefined;
+  const row: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 12px 1fr', alignItems: 'center', padding: '0 6px', textAlign: 'center' };
+  const centered = { ...numInput, justifyContent: 'center', gap: '3px' };
+  return (
+    <>
+      <div style={row}>
+        <div title={temp ? `${data[field.id]} + ${temp} temporary` : undefined}>
+          <FieldInput field={field} data={shown} readOnly={readOnly} onFieldChange={onFieldChange}
+            style={{ ...centered, ...(temp ? { color: 'var(--warning)' } : {}) }} />
+        </div>
+        <span style={{ opacity: 0.5 }}>/</span>
+        <div title={bonus ? `${bonus.base} → ${bonus.value} (${describeSources(bonus)})` : undefined}>
+          <FieldInput field={maxField} data={data} readOnly={readOnly} onFieldChange={onFieldChange}
+            style={{ ...centered, ...(bonus ? { color: 'var(--cyan)' } : {}) }} />
+        </div>
+      </div>
+      <div style={{ ...row, fontSize: '0.45rem', opacity: 0.5, letterSpacing: '1px', paddingBottom: '3px' }}>
+        <span style={temp ? { color: 'var(--warning)' } : undefined}>{temp ? `CURRENT +${temp} TEMP` : 'CURRENT'}</span>
+        <span />
+        <span>MAX</span>
+      </div>
+    </>
+  );
+}
+
 function ChromeBadge({ effect }: { effect: FieldEffect }) {
   return (
     <span
@@ -1806,13 +1808,17 @@ function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection 
   return fields.length === 0 ? null : { ...section, fields };
 }
 
-export function SheetRenderer({ template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false }: SheetRendererProps) {
+export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onSpend, onImprove }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
-  const [activeTab, setActiveTab] = useState(tabs[0]);
+  // The tab it opens on: the one the template names (a built system's starter opens on STATS,
+  // with CHARACTER first in the row), else the first.
+  const firstTab = template.opens && tabs.includes(template.opens) ? template.opens : tabs[0];
+  const [activeTab, setActiveTab] = useState(firstTab);
   // What the character's chrome is doing to their numbers. Computed once for the whole
   // sheet rather than per field: it reads the cyberware list, which every stat and skill
   // would otherwise re-read and re-scan for itself.
-  const effects = useMemo(() => sheetEffects(data, template), [data, template]);
+  // A custom system's picks show on its fields as CWN's chrome does (7a3b2), and its items' (7e3b); the built-in games as before.
+  const effects = useMemo(() => (effectsWorked(template) ? choiceEffects(data as Record<string, unknown>, template) : sheetEffects(data, template)), [data, template]);
   // How many carried weapon rows this template declares. Counted rather than imported, so
   // the stash cannot disagree with the sheet it is moving weapons into.
   const weaponRows = useMemo(
@@ -1824,7 +1830,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
   // If the active tab gets hidden (house rule toggled off), fall back to the
   // first visible one.
   useEffect(() => {
-    if (!tabs.includes(activeTab) && tabs.length > 0) setActiveTab(tabs[0]);
+    if (!tabs.includes(activeTab) && tabs.length > 0) setActiveTab(firstTab);
   }, [tabs.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
   // LUCK declared for the next roll (CP:R: declare before rolling; any spend
   // also negates a natural-1 fumble). Consumed and reset by the next roll.
@@ -1968,7 +1974,7 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
         .sheet-input::placeholder { color: var(--green); opacity: 0.3; font-style: italic; }
       `}</style>
 
-      <SheetHeaderBlock template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} onPharmaChange={applyPharma} pharmaUndo={pharmaUndo} onUndoPharma={undoPharma} readOnly={readOnly} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} xpRate={xpRate} canRoll={!!onRoll} />
+      <SheetHeaderBlock onLevelUp={readOnly ? undefined : onLevelUp} template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} onPharmaChange={applyPharma} pharmaUndo={pharmaUndo} onUndoPharma={undoPharma} readOnly={readOnly} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} xpRate={xpRate} canRoll={!!onRoll} />
 
       {/* The sheet body, and the thing that actually scrolls — not the window's own
           content box, which sits outside it. The right padding is what keeps the
@@ -2021,15 +2027,25 @@ export function SheetRenderer({ template, data, readOnly = false, onFieldChange,
               </div>
               {open && (
                 <div style={{ padding: '4px 0 6px' }}>
-                  {section.layout === 'grid' && <GridSection section={section} allFields={allFields} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} effects={effects} />}
+                  {section.layout === 'grid' && <GridSection section={section} allFields={allFields} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} effects={effects}
+                    marks={template.improve ? { improve: template.improve, states: markStates(template.improve, data as Record<string, unknown>), onImprove: readOnly ? undefined : onImprove } : undefined} />}
                   {section.layout === 'skills' && <SkillsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRoll={handleRoll} effects={effects} />}
                   {section.layout === 'weapons' && <WeaponsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} />}
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
-                  {section.layout === 'inventory' && <InventorySection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} rowActions={[consumeAction, loadAction].filter(Boolean) as RowAction[]} />}
+                  {section.layout === 'inventory' && <InventorySection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} rowActions={[consumeAction, loadAction].filter(Boolean) as RowAction[]}
+                    itemsShown={template.items} gm={gm} onItem={onItem} onChoices={onChoices} refused={choicesRefused} />}
                   {section.layout === 'weapon_stash' && <WeaponStashSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} rows={weaponRows} />}
                   {section.layout === 'encumbrance' && <EncumbranceSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} enforced={encumbranceEnforced} />}
                   {section.layout === 'cyberware' && <CyberwareSection section={section} template={template} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
+                  {section.layout === 'choices' && <ChoicesSection levelsFixed={!!template.levels} lists={template.choices ?? []} data={data as Record<string, unknown>} readOnly={readOnly} gm={gm} onChoices={onChoices} refused={choicesRefused} onRecoverySpend={onRecoverySpend} recoveryOpen={recoveryOpen}
+                    recoveryElsewhere={template.sections.some((s) => s.layout === 'rests')} />}
+                  {section.layout === 'choices' && <LevelRecord template={template} data={data as Record<string, unknown>} gm={gm} onLevel={readOnly ? undefined : onLevel} />}
+                  {section.layout === 'spend' && <SpendSection spend={template.spend} lists={template.choices ?? []} data={data as Record<string, unknown>} word={wordFor(template.id, 'xp', 'short', 'XP').toUpperCase()}
+                    gm={gm} onSpend={readOnly ? undefined : onSpend} refused={template.sections.some((s) => s.layout === 'choices' || s.layout === 'rests') ? null : choicesRefused} />}
+                  {section.layout === 'rests' && <RestSection resting={template.resting} data={data as Record<string, unknown>} readOnly={readOnly} gm={gm} onChoices={onChoices}
+                    onRecoverySpend={onRecoverySpend} recoveryOpen={recoveryOpen} onRestTake={onRestTake}
+                    refused={template.sections.some((s) => s.layout === 'choices') ? null : choicesRefused} />}
                   {(section.layout === 'list' || section.layout === 'notes') && <ListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onOpenLink={onOpenLink} />}
                 </div>
               )}

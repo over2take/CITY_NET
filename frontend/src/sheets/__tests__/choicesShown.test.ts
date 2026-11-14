@@ -1,0 +1,310 @@
+import { describe, it, expect } from 'vitest';
+import { createRequire } from 'module';
+import { describeSources } from '../cyberwareEffects';
+
+import {
+  pickLabel, workedOn, listShown, spentAfterClick, featureDoes, choiceEffects, effectsWorked, sourceOf, pickedOf, listsOnTheirOwn, underFeature, keptAside, maySpendRecovery, spentAtText, spendCount,
+  WORKED_KEY, type ChoiceListShown,
+} from '../choicesShown';
+
+/**
+ * A character's picks on their sheet, as logic (7a3b1): the server's worked-out view read safely, each
+ * list drawn from it (picks, levels, unlocked features, the next to come, room, what isn't met), held
+ * to the server's own shapes (backend choices.js choicesShown and workedOf).
+ */
+
+const req = createRequire(import.meta.url);
+const backend = req('../../../../backend/systemBuilder/choices.js');
+
+const HEARTH = {
+  format: 1, name: 'Hearth',
+  stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'int', label: 'Intellect' }] }],
+  derived: [{ id: 'defense', label: 'Defense', formula: '10' }],
+  rolls: [{ id: 'spark', label: 'Spark', dice: [{ count: '1', sides: 10 }] }],
+  choices: [
+    { id: 'classes', one: 'Class', many: 'Classes', levelled: true, again: true, options: [
+      { id: 'soldier', label: 'Soldier', description: 'Trained to fight.', features: [
+        { id: 'veteran', label: 'Veteran', at: 5 },
+        { id: 'guard', label: 'Guard Stance', modifiers: [{ target: 'defense', amount: '1' }] },
+        { id: 'rally', label: 'Rally', uses: { count: '2', refill: 'short_rest' }, text: 'Catch your breath.' },
+        { id: 'specialty', label: 'Specialty', at: 3, choice: 'paths' },
+      ] },
+      { id: 'mage', label: 'Mage', requires: '@int >= 13', features: [{ id: 'spark_f', label: 'Spark', rolls: ['spark'] }] },
+    ] },
+    { id: 'paths', one: 'Path', many: 'Paths', options: [{ id: 'duelist', label: 'Duelist' }] },
+  ],
+};
+const lists = backend.choicesShown(HEARTH) as ChoiceListShown[];
+const worked = (data: Record<string, unknown>) => workedOn({ [WORKED_KEY]: backend.workedOf(HEARTH, data) });
+
+describe('the server\'s worked-out view', () => {
+  it('read as the server writes it', () => {
+    const w = worked({ int: 10, _choices: { classes: [{ option: 'soldier', level: 3 }] }, _uses: { rally: 1 } });
+    expect(w.picks).toEqual([{ list: 'classes', option: 'soldier', level: 3 }]);
+    expect(w.uses).toEqual({ rally: { max: 2, spent: 1 } });
+    expect(w.unmet).toEqual(['mage']);
+  });
+
+  it('empty when a sheet has none yet, or something else is there', () => {
+    expect(workedOn({})).toEqual({ picks: [], opens: [], levels: {}, from: {}, uses: {}, unmet: [], recovery: null, increasesOpen: [] });
+    expect(workedOn(null).picks).toEqual([]);
+    expect(workedOn({ [WORKED_KEY]: { picks: 'soldier', opens: [{ feature: 3 }], uses: [], unmet: [1, 'mage'], increasesOpen: 'asi' } })).toEqual({ picks: [], opens: [], levels: {}, from: {}, uses: {}, unmet: ['mage'], recovery: null, increasesOpen: [] });
+    expect(workedOn({ [WORKED_KEY]: { increasesOpen: [2, 'asi'] } }).increasesOpen).toEqual(['asi']);
+  });
+});
+
+describe('the recovery dice, as a save writes them (R2b)', () => {
+  const recovery = req('../../../../backend/systemBuilder/recovery.js');
+  const FORGE = { ...HEARTH, choices: [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, again: true, options: [{ id: 'fighter', label: 'Fighter', die: 10 }, { id: 'wizard', label: 'Wizard', die: 6 }] }],
+    resting: { recovery: { name: 'Hit Dice', plus: '@int', spent_at: ['short_rest', 'long_rest'], spend: 'gm' } } };
+  /** What runtime.js writes on a save. */
+  const saved = (def: object, data: object) => ({ [WORKED_KEY]: { recovery: { ...recovery.recoveryShown(def), pools: recovery.poolsOf(def, data).map(({ id, label, die, total, spent }: Record<string, unknown>) => ({ id, label, die, total, spent })) } } });
+  const ROOK = { int: 10, _choices: { classes: [{ option: 'fighter', level: 3 }, { option: 'wizard', level: 2 }] }, _recovery: { fighter: 1 } };
+
+  it('read as the server writes it', () => {
+    expect(workedOn(saved(FORGE, ROOK)).recovery).toEqual({
+      name: 'Hit Dice', heals: 'its die + INTELLECT', spentAt: ['Short rest', 'Long rest'], spend: 'gm',
+      pools: [{ id: 'fighter', label: 'Fighter', die: 10, total: 3, spent: 1 }, { id: 'wizard', label: 'Wizard', die: 6, total: 2, spent: 0 }],
+    });
+  });
+
+  it('none without pools; a pool not well formed left out; the rest filled in', () => {
+    expect(workedOn({ [WORKED_KEY]: { recovery: { name: 'Hit Dice', pools: [] } } }).recovery).toBeNull();
+    expect(workedOn({ [WORKED_KEY]: { recovery: [{ id: 'fighter' }] } }).recovery).toBeNull();
+    expect(workedOn({ [WORKED_KEY]: { recovery: { name: 'Hit Dice', pools: 'fighter' } } }).recovery).toBeNull();
+    const odd = workedOn({ [WORKED_KEY]: { recovery: { spentAt: 'short_rest', spend: 'player', pools: [
+      { id: 'fighter', die: 10, total: 3, spent: 9 }, { id: 'bad', die: 1, total: 2 }, { id: 'neg', die: 6, total: -1 }, { die: 8, total: 1 }, { id: 'odd', die: 8, total: 2, spent: -2 },
+    ] } } }).recovery!;
+    expect(odd).toEqual({ name: 'Recovery dice', heals: 'its die', spentAt: 'any', spend: 'any',
+      pools: [{ id: 'fighter', label: 'fighter', die: 10, total: 3, spent: 3 }, { id: 'odd', label: 'odd', die: 8, total: 2, spent: 0 }] });
+  });
+
+  it('who may spend now, the same as the server', () => {
+    const r = workedOn(saved(FORGE, ROOK)).recovery!;
+    for (const spend of ['any', 'gm'] as const) {
+      for (const gm of [false, true]) {
+        for (const open of [false, true]) {
+          const def = { ...FORGE, resting: { recovery: { ...FORGE.resting.recovery, spend } } };
+          expect(maySpendRecovery({ ...r, spend }, gm, open), `${spend} ${gm} ${open}`).toBe(recovery.maySpend(def, { gm, open }));
+        }
+      }
+    }
+  });
+
+  it('where they are spent, in words; how many a spend rolls, kept to what is left', () => {
+    const r = workedOn(saved(FORGE, ROOK)).recovery!;
+    expect(spentAtText(r)).toBe('SPENT AT A SHORT REST OR LONG REST');
+    expect(spentAtText({ ...r, spentAt: 'any' })).toBe('SPENT ANY TIME');
+    expect(spentAtText({ ...r, spentAt: [] })).toBe('SPENT ANY TIME');
+    expect([spendCount(1, 3), spendCount(5, 3), spendCount(0, 3), spendCount(-2, 3), spendCount(2.7, 3), spendCount(2, 0), spendCount(Number.NaN, 2)]).toEqual([1, 3, 1, 1, 2, 0, 1]);
+  });
+});
+
+describe('a list on the sheet', () => {
+  it('each pick with its level, the features it has by level, and the next to come', () => {
+    const view = listShown(lists[0], worked({ _choices: { classes: [{ option: 'soldier', level: 3 }] } }));
+    expect(view.picks.map((p) => [p.option.id, p.level, p.unlocked.map((f) => f.id), p.next?.id])).toEqual([['soldier', 3, ['guard', 'rally', 'specialty'], 'veteran']]);
+    expect(view.level).toBe(3);
+  });
+
+  it('levels added up, and said how', () => {
+    const view = listShown(lists[0], worked({ int: 14, _choices: { classes: [{ option: 'soldier', level: 3 }, { option: 'mage', level: 1 }] } }));
+    expect([view.level, view.breakdown]).toEqual([4, 'SOLDIER 3 + MAGE 1']);
+  });
+
+  it('what is left to pick, one not met saying what it needs; room while the list allows more', () => {
+    const view = listShown(lists[0], worked({ int: 10, _choices: { classes: [{ option: 'soldier', level: 1 }] } }));
+    expect(view.open).toEqual([{ option: lists[0].options[1], unmet: 'INTELLECT >= 13' }]);
+    expect(view.room).toBe(true);
+    const paths = listShown(lists[1], worked({ _choices: { paths: ['duelist'] } }));
+    expect([paths.room, paths.open, paths.level, paths.picks[0].level]).toEqual([false, [], null, null]);
+  });
+
+  it('a pick of an option the list no longer has is left out', () => {
+    const view = listShown(lists[0], workedOn({ [WORKED_KEY]: { picks: [{ list: 'classes', option: 'gone', level: 2 }] } }));
+    expect(view.picks).toEqual([]);
+  });
+});
+
+describe('uses and what a feature does', () => {
+  it('a pip spends up to it, or takes back from it', () => {
+    expect(spentAfterClick(0, 0)).toBe(1);
+    expect(spentAfterClick(1, 0)).toBe(2);
+    expect(spentAfterClick(0, 2)).toBe(0);
+    expect(spentAfterClick(1, 2)).toBe(1);
+  });
+
+  it('in a few words', () => {
+    const soldier = lists[0].options[0].features;
+    expect(featureDoes(soldier.find((f) => f.id === 'guard')!, lists)).toEqual(['+ DEFENSE']);
+    expect(featureDoes(soldier.find((f) => f.id === 'specialty')!, lists)).toEqual(['PICK PATH']);
+    expect(featureDoes(lists[0].options[1].features[0], lists)).toEqual(['ROLL SPARK']);
+    expect(featureDoes(soldier.find((f) => f.id === 'rally')!, lists)).toEqual([]);
+    // An INCREASE (7d6b).
+    const stats = [{ id: 'might', label: 'Might' }];
+    expect(featureDoes({ id: 'asi', label: 'ASI', increase: { points: 2, most: 2, stats } }, lists)).toEqual(['RAISES STATS: 2 POINTS']);
+    expect(featureDoes({ id: 'nudge', label: 'Nudge', increase: { points: 1, most: 1, stats } }, lists)).toEqual(['RAISES STATS: 1 POINT']);
+    // OR A FEAT INSTEAD (7d6c), by what the list calls one.
+    expect(featureDoes({ id: 'asi', label: 'ASI', increase: { points: 2, most: 2, stats, instead: 'paths' } }, lists)).toEqual(['RAISES STATS: 2 POINTS, OR A PATH']);
+    expect(featureDoes({ id: 'asi', label: 'ASI', increase: { points: 2, most: 2, stats, instead: 'gone' } }, lists)).toEqual(['RAISES STATS: 2 POINTS, OR A GONE']);
+  });
+});
+
+describe('what the picks do, on the fields (7a3b2)', () => {
+  const template = {
+    id: 'sys_x', name: 'Hearth', sections: [{ id: 'stats', label: 'STATS', layout: 'grid', fields: [
+      { id: 'int', label: 'Intellect', type: 'number' }, { id: 'defense', label: 'Defense', type: 'number', derived: true },
+    ] }],
+  } as never;
+
+  it('a stat as typed and with its bonus; a formula as saved, bonus in; each named', () => {
+    const data = { int: 14, defense: 13, [WORKED_KEY]: { from: { int: [{ feature: 'Sharp', amount: 2 }], defense: [{ feature: 'Guard Stance', amount: 1 }, { feature: 'Ward', amount: 2 }] } } };
+    const { fields } = choiceEffects(data, template);
+    expect(fields.int).toEqual({ id: 'int', base: 14, value: 16, delta: 2, sources: [{ name: 'Sharp', value: 2, kind: 'stat' }] });
+    expect(fields.defense).toMatchObject({ base: 10, value: 13, delta: 3 });
+    expect(fields.defense.sources.map((s) => s.name)).toEqual(['Guard Stance', 'Ward']);
+  });
+
+  it('the token\'s maximum as the token holds it, bonus in; nothing without a token (7a5a3)', () => {
+    const linked = {
+      id: 'sys_x', name: 'Hearth', sections: [{ id: 'health', label: 'HEALTH', layout: 'grid', fields: [
+        { id: 'hp_max', label: 'HP MAX', type: 'number', source: 'token_hp_max' },
+      ] }],
+    } as never;
+    const from = { hp_max: [{ feature: 'Tough', amount: 6 }] };
+    expect(choiceEffects({ hp_max: 26, [WORKED_KEY]: { from } }, linked).fields.hp_max).toMatchObject({ base: 20, value: 26, delta: 6 });
+    expect(choiceEffects({ hp_max: null, [WORKED_KEY]: { from } }, linked).fields).toEqual({});
+    expect(choiceEffects({ [WORKED_KEY]: { from } }, linked).fields).toEqual({});
+  });
+
+  it('what a bonus really gave (7e1b): a cut one less, said with its cap; an AT LEAST what it lifted, said as a floor', () => {
+    const data = { int: 18, defense: 21, [WORKED_KEY]: { from: {
+      int: [{ feature: 'Sharp', amount: 1 }, { feature: 'Ring', amount: 2, got: 1, stop: 20 }],
+      defense: [{ feature: 'Ward', amount: 2, got: 0, stop: 21 }, { feature: 'Amulet', amount: 19, got: 0, least: true }],
+    } } };
+    const { fields } = choiceEffects(data, template);
+    expect(fields.int).toMatchObject({ base: 18, value: 20, delta: 2 });
+    expect(fields.int.sources).toEqual([{ name: 'Sharp', value: 1, kind: 'stat' }, { name: 'Ring (+2, stops at 20)', value: 1, kind: 'stat' }]);
+    expect(fields.defense).toMatchObject({ base: 21, value: 21, delta: 0 });
+    expect(fields.defense.sources.map((x) => x.name)).toEqual(['Ward (+2, stops at 21)', 'Amulet (already higher)']);
+    const lifted = choiceEffects({ int: 12, [WORKED_KEY]: { from: { int: [{ feature: 'Amulet', amount: 19, got: 7, least: true }] } } }, template).fields.int;
+    expect(lifted).toMatchObject({ base: 12, value: 19, delta: 7 });
+    expect(lifted.sources).toEqual([{ name: 'Amulet', value: 19, kind: 'statFloor' }]);
+  });
+
+  it('a bonus as the badge names it, word for word', () => {
+    expect(describeSources({ id: 'x', base: 18, value: 20, delta: 2, sources: [
+      sourceOf({ feature: 'Tough', amount: 1 }), sourceOf({ feature: 'Ring', amount: 2, got: 1, stop: 20 }), sourceOf({ feature: 'Amulet', amount: 19, got: 1, least: true }),
+      sourceOf({ feature: 'Curse', amount: -2 }), sourceOf({ feature: 'Belt', amount: 21, got: 0, least: true }), sourceOf({ feature: 'Odd', amount: 3, got: 2 }),
+    ] })).toBe('Tough +1, Ring (+2, stops at 20) +1, Amulet → 19, Curse -2, Belt (already higher) +0, Odd (+3) +2');
+  });
+
+  it('the server\'s bonuses for a system with lists, or with items and no lists (7e3b); the built-in games\' own', () => {
+    const t = template as import('../types').SheetTemplate;
+    expect(effectsWorked({ ...t, choices: lists })).toBe(true);
+    expect(effectsWorked(t)).toBe(false);
+    expect(effectsWorked({ ...t, choices: [] })).toBe(false);
+    expect(effectsWorked({ ...t, items: { slots: [], list: [] } })).toBe(true);
+  });
+
+  it('nothing for a field the sheet doesn\'t show, or a sheet with no picks', () => {
+    expect(choiceEffects({ [WORKED_KEY]: { from: { luck: [{ feature: 'Lucky', amount: 1 }] } } }, template).fields).toEqual({});
+    expect(choiceEffects({}, template)).toEqual({ fields: {}, unmatched: [] });
+  });
+});
+
+describe('lists inside lists, and a list everyone has (7a5a2)', () => {
+  const NEST = {
+    format: 1, name: 'Nest',
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'int', label: 'Intellect' }] }],
+    choices: [
+      { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [
+        { id: 'soldier', label: 'Soldier', features: [
+          { id: 'specialty', label: 'Specialty', at: 3, choice: 'specs' },
+          { id: 'feat_2', label: 'Feat', at: 2, choice: 'feats', choice_count: 2 },
+        ] },
+      ] },
+      { id: 'specs', one: 'Specialty', many: 'Specialties', picked: 'features', options: [{ id: 'duelist', label: 'Duelist' }, { id: 'vanguard', label: 'Vanguard', requires: '@int >= 13' }] },
+      { id: 'feats', one: 'Feat', many: 'Feats', picked: 'both', options: [{ id: 'tough', label: 'Tough' }, { id: 'quick', label: 'Quick' }, { id: 'keen', label: 'Keen' }] },
+      { id: 'commons', one: 'Common', many: 'Commons', picked: 'everyone', options: [
+        { id: 'breath', label: 'Second Wind', features: [{ id: 'b1', label: 'Breath' }, { id: 'b4', label: 'Improvement', at: 4 }] },
+        { id: 'strong', label: 'Strong Back', requires: '@int >= 13' },
+      ] },
+    ],
+  };
+  const nestLists = backend.choicesShown(NEST) as ChoiceListShown[];
+  const list = (id: string) => nestLists.find((l) => l.id === id)!;
+  const seen = (stored: Record<string, unknown>) => workedOn({ [WORKED_KEY]: backend.workedOf(NEST, { int: 10, _choices: stored }) });
+  const feature = (id: string) => list('classes').options[0].features.find((f) => f.id === id)!;
+
+  it('draws as blocks every list but those picked only under features', () => {
+    expect(listsOnTheirOwn(nestLists).map((l) => l.id)).toEqual(['classes', 'feats', 'commons']);
+    expect(pickedOf({ ...list('classes'), picked: undefined })).toBe('own');
+    // Nothing to pick in its own name, even with none picked.
+    expect(listShown(list('specs'), seen({})).room).toBe(false);
+  });
+
+  it('under a feature: room while it is unlocked, its picks once made, and a pick waiting when it locks', () => {
+    const at3 = underFeature(feature('specialty'), nestLists, seen({ classes: [{ option: 'soldier', level: 3 }] }))!;
+    expect([at3.room, at3.picks.length, at3.open.map((o) => [o.option.id, o.unmet])]).toEqual([1, 0, [['duelist', null], ['vanguard', 'INTELLECT >= 13']]]);
+    const picked = underFeature(feature('specialty'), nestLists, seen({ classes: [{ option: 'soldier', level: 3 }], specs: [{ option: 'duelist', from: 'specialty' }] }))!;
+    expect([picked.room, picked.picks.map((p) => p.option.id), picked.waiting]).toEqual([0, ['duelist'], []]);
+    const lowered = underFeature(feature('specialty'), nestLists, seen({ classes: [{ option: 'soldier', level: 2 }], specs: [{ option: 'duelist', from: 'specialty' }] }))!;
+    expect([lowered.room, lowered.picks, lowered.waiting.map((o) => o.id)]).toEqual([0, [], ['duelist']]);
+    // A list picked on its own has nothing under the feature naming it.
+    expect(underFeature({ id: 'x', label: 'X', opens: 'classes' }, nestLists, seen({}))).toBeNull();
+  });
+
+  it('a list picked both ways: its own picks in its block, those under features under them, room counted apart', () => {
+    const w = seen({ classes: [{ option: 'soldier', level: 2 }], feats: [{ option: 'tough' }, { option: 'quick', from: 'feat_2' }] });
+    const view = listShown(list('feats'), w);
+    expect([view.picks.map((p) => p.option.id), view.room, view.open.map((o) => o.option.id)]).toEqual([['tough'], false, ['keen']]);
+    const under = underFeature(feature('feat_2'), nestLists, w)!;
+    expect([under.picks.map((p) => p.option.id), under.room]).toEqual([['quick'], 1]);
+  });
+
+  it('keeps aside only what has nothing to wait under', () => {
+    expect(keptAside(nestLists, seen({ classes: [{ option: 'soldier', level: 2 }], specs: [{ option: 'duelist', from: 'specialty' }] }))).toEqual([]);
+    expect(keptAside(nestLists, seen({ specs: [{ option: 'duelist', from: 'specialty' }] })).map((k) => `${k.list.id}:${k.option.id}`)).toEqual(['specs:duelist']);
+  });
+
+  it('a list everyone has: what every character has, unlocked by their level, nothing to pick', () => {
+    const at3 = listShown(list('commons'), seen({ classes: [{ option: 'soldier', level: 3 }] }));
+    expect([at3.picks.map((p) => [p.option.id, p.level, p.unlocked.map((f) => f.id), p.next?.id]), at3.room]).toEqual([[['breath', null, ['b1'], 'b4']], false]);
+    expect(at3.open.map((o) => [o.option.id, o.unmet])).toEqual([['strong', 'INTELLECT >= 13']]);
+    const at4 = listShown(list('commons'), seen({ classes: [{ option: 'soldier', level: 4 }] }));
+    expect(at4.picks[0].unlocked.map((f) => f.id)).toEqual(['b1', 'b4']);
+  });
+});
+
+describe('a pick under a feature, at the level of what opened it (7a5d)', () => {
+  const FORGE = {
+    format: 1, name: 'Forge',
+    choices: [
+      { id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [
+        { id: 'fighter', label: 'Fighter', features: [{ id: 'martial_archetype', label: 'Martial Archetype', at: 3, choice: 'archetypes' }] },
+      ] },
+      { id: 'archetypes', one: 'Archetype', many: 'Archetypes', picked: 'features', options: [
+        { id: 'champion', label: 'Champion', features: [
+          { id: 'superior_critical', label: 'Superior Critical', at: 15 },
+          { id: 'improved_critical', label: 'Improved Critical', at: 3 },
+          { id: 'remarkable_athlete', label: 'Remarkable Athlete', at: 7 },
+        ] },
+      ] },
+    ],
+  };
+  const forgeLists = backend.choicesShown(FORGE) as ChoiceListShown[];
+  const opener = forgeLists[0].options[0].features[0];
+  const at = (level: number) => underFeature(opener, forgeLists, workedOn({ [WORKED_KEY]: backend.workedOf(FORGE, {
+    _choices: { classes: [{ option: 'fighter', level }], archetypes: [{ option: 'champion', from: 'martial_archetype' }] } }) }))!.picks[0];
+
+  it('is offered as Pick an Archetype', () => {
+    expect([pickLabel('Archetype'), pickLabel('Class'), pickLabel(' item')]).toEqual(['Pick an Archetype', 'Pick a Class', 'Pick an  item']);
+  });
+
+  it('has the features up to the Fighter\'s level and names the next, with no level of its own shown', () => {
+    expect([at(3).level, at(3).unlocked.map((f) => f.id), at(3).next?.id]).toEqual([null, ['improved_critical'], 'remarkable_athlete']);
+    expect([at(7).unlocked.map((f) => f.id), at(7).next?.id]).toEqual([['improved_critical', 'remarkable_athlete'], 'superior_critical']);
+    expect([at(15).unlocked.length, at(15).next]).toEqual([3, null]);
+  });
+});

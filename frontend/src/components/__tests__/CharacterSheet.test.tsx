@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { SheetRenderer } from '../SheetRenderer';
 import { CharacterSheetWindow } from '../CharacterSheetWindow';
 import { getTemplate, TEMPLATES } from '../../sheets';
+import { registerCustomTemplate, clearCustomTemplates } from '../../sheets/customTemplates';
 
 vi.mock('../DraggableWindow', () => ({
   DraggableWindow: ({ children, title, titleControls }: any) => (
@@ -115,12 +116,22 @@ describe('SheetRenderer', () => {
     expect(screen.getAllByText(/MOVE/).length).toBeGreaterThan(0);
   });
 
-  it('renders linked fields read-only with a LINKED marker (cash on GEAR tab)', async () => {
+  it('renders linked fields read-only, saying where they are kept (cash on GEAR tab)', async () => {
     render(<SheetRenderer template={template} data={{ cash: 250 }} onFieldChange={vi.fn()} />);
     await userEvent.click(screen.getByText('GEAR'));
     expect(screen.getByText('250')).toBeInTheDocument();
-    expect(screen.getByText('LINKED')).toBeInTheDocument();
+    expect(screen.getByTitle('Kept on the token or in the bank: changed there, not here')).toBeInTheDocument();
+    // Not a word beside every number (2026-10-31), and nothing to click when nothing opens.
+    expect(screen.queryByText(/LINKED/)).not.toBeInTheDocument();
+    expect(screen.queryByText('⇗')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Cash (eb)')).not.toBeInTheDocument(); // no input
+  });
+
+  it('a linked field that opens its window has a ⇗ and says so', async () => {
+    render(<SheetRenderer template={template} data={{ cash: 250 }} onFieldChange={vi.fn()} onOpenLink={vi.fn()} />);
+    await userEvent.click(screen.getByText('GEAR'));
+    expect(screen.getByRole('button', { name: /250/ }).getAttribute('title')).toBe('Kept on the token or in the bank: click to open it');
+    expect(screen.getByText('⇗')).toBeInTheDocument();
   });
 
   it('linked field click calls onOpenLink with its source', async () => {
@@ -167,6 +178,29 @@ describe('SheetRenderer', () => {
 // ─── CharacterSheetWindow ─────────────────────────────────────────────────────
 
 describe('CharacterSheetWindow', () => {
+  it('a custom system\'s CHOICES block asks the server over the socket, and says why not when refused (7a3b1)', () => {
+    vi.useFakeTimers();
+    clearCustomTemplates();
+    registerCustomTemplate({
+      id: 'sys_0123456789abcdef', name: 'Hearth', words: {}, parts: {}, derived: [],
+      sheet: { sections: [{ id: 'choices', label: 'CLASSES', layout: 'choices', fields: [] }] },
+      choices: [{ id: 'classes', one: 'Class', many: 'Classes', picks: 1, again: true, levelled: true, options: [{ id: 'scout', label: 'Scout', features: [] }] }],
+    });
+    const socket = makeSocket();
+    render(<CharacterSheetWindow pos={basePos} setPos={setPos} onClose={onClose} socket={socket} userName="GHOST" />);
+    const onSheetData = socket.on.mock.calls.find((c: any) => c[0] === 'sheetData')[1];
+    act(() => onSheetData({ id: 1, username: 'GHOST', system: 'sys_0123456789abcdef', data: { _worked: { picks: [], levels: {}, from: {}, uses: {}, unmet: [] } }, portrait_url: null, is_npc: 0 }));
+    fireEvent.click(screen.getByRole('button', { name: 'SCOUT' }));
+    expect(socket.emit).toHaveBeenCalledWith('choicesAction', { kind: 'pick', list: 'classes', option: 'scout' });
+    const onRefused = socket.on.mock.calls.find((c: any) => c[0] === 'choicesRefused')[1];
+    act(() => onRefused({ error: 'No more Classes can be picked' }));
+    expect(screen.getByRole('alert').textContent).toBe('No more Classes can be picked');
+    act(() => { vi.advanceTimersByTime(6000); });
+    expect(screen.queryByRole('alert')).toBeNull();
+    vi.useRealTimers();
+    clearCustomTemplates();
+  });
+
   it('requests the sheet on mount and shows loading state', () => {
     const socket = makeSocket();
     render(<CharacterSheetWindow pos={basePos} setPos={setPos} onClose={onClose} socket={socket} userName="GHOST" />);

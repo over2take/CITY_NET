@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { SheetField, RollPick } from '../sheets/types';
+import { ToggleSwitch } from './ToggleSwitch';
 
 // The chooser by a custom system's sheet (6b2b; approved mockup docs/mockups/builder-rolls.html,
 // 2026-10-19: "a roll with changes asks first; one without rolls straight away"). Opened by a die
@@ -57,13 +58,11 @@ export function RollChooser({ field, data, onRoll, onCancel }: Props) {
             const cost = c.cost ? costOf(c.cost, data) : null;
             const off = !!cost && !cost.can;
             return (
-              <button key={c.id} type="button" role="switch" aria-checked={on} disabled={off}
+              <ToggleSwitch key={c.id} on={on} disabled={off} color={off ? 'var(--danger)' : 'var(--cyan)'}
                 title={off ? (c.cost!.adds ? 'That would take it past its highest' : 'There is not enough to pay it') : undefined}
-                onClick={() => setChanges(on ? changes.filter((x) => x !== c.id) : [...changes, c.id])}
-                style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', color: off ? 'var(--danger)' : 'var(--cyan)', fontFamily: 'inherit', fontSize: '0.62rem', letterSpacing: 1, cursor: off ? 'default' : 'pointer', opacity: off ? 0.6 : 1, display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                <span aria-hidden style={{ width: 18, height: 9, borderRadius: 5, border: '1px solid currentColor', background: on ? 'currentColor' : 'none', flexShrink: 0 }} />
-                {c.label.toUpperCase()}{cost ? ` · ${cost.words}` : ''}
-              </button>
+                onChange={(next) => setChanges(next ? [...changes, c.id] : changes.filter((x) => x !== c.id))}
+                label={`${c.label.toUpperCase()}${cost ? ` · ${cost.words}` : ''}`}
+                style={{ fontFamily: 'inherit', fontSize: '0.62rem', opacity: off ? 0.6 : 1 }} />
             );
           })}
         </div>

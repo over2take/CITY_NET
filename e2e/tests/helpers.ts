@@ -55,6 +55,13 @@ export const approvedPlayer = async (request: APIRequestContext, token: string, 
   await asGm(request, token, 'post', `/api/player/admin/players/${player.username}/approve`);
 };
 
+/**
+ * A tab of an open character sheet. A built system's starter has STATS (the numbers, and RESTS),
+ * CHARACTER (the name and the picks: CLASSES, FEATS), GEAR and NOTES; only the open tab is drawn.
+ */
+export const sheetTab = (page: Page, tab: 'STATS' | 'CHARACTER' | 'GEAR' | 'NOTES') =>
+  page.getByRole('button', { name: tab, exact: true }).click();
+
 /** The dashboard's GAME tab, open at TTRPG_SYSTEM. */
 export const openGameSystem = async (page: Page) => {
   await page.getByRole('button', { name: 'GAME', exact: true }).click();
@@ -78,7 +85,7 @@ export const openBuilder = async (page: Page) => {
  *  it, so the pointer then moves off it to the page, as a person's would, and the rail narrows
  *  again; otherwise it covers whatever sits at the page's left edge. It narrows over 0.2 s, and
  *  data-expanded turns false as it starts, so the wait is for the narrowing to finish too: on
- *  CI's slower runner the clicks sweep measured FEATURES' switches under the rail still closing. */
+ *  CI's slower runner the clicks sweep measured FEATURES' (now PARTS') switches under the rail still closing. */
 export const clickRail = async (page: Page, name: string) => {
   const rail = page.getByRole('navigation', { name: 'Builder' });
   await rail.getByRole('button', { name, exact: true }).click();

@@ -70,15 +70,26 @@ export function ColumnHead({ hint, style, children }: { hint?: string; style?: C
 }
 
 /**
- * A setting's name with its "?" after it. The "?" stays outside the <label>: inside, its words would
- * be read as part of the field's name. `htmlFor` ties the name to its field, when it has one; `boxStyle`
- * places the pair, as in a grid of names beside their fields.
+ * A name beside its field, in a grid's first column: to the right, and level with the middle of the
+ * field's first line however tall the field grows (a list of chips, a box with its help under it).
+ * A field's first line is 21 to 26px (a row of buttons, a text box), so its middle is 12px down.
+ * Each page used to place its own by hand, and they drifted up to 50px apart.
  */
-export function FieldName({ htmlFor, hint, style, boxStyle, children }: { htmlFor?: string; hint: string; style?: CSSProperties; boxStyle?: CSSProperties; children: ReactNode }) {
+const BESIDE: CSSProperties = { justifySelf: 'end', alignSelf: 'start', minHeight: 24, textAlign: 'right' };
+
+/**
+ * A setting's name with its "?" after it. The "?" stays outside the <label>: inside, its words would
+ * be read as part of the field's name. `htmlFor` ties the name to its field, when it has one;
+ * `beside` places it in a grid of names beside their fields, and `boxStyle` anywhere else. A name
+ * with nothing to explain has no "?", and lines up with those that do.
+ */
+export function FieldName({ htmlFor, hint, style, boxStyle, beside, children }: {
+  htmlFor?: string; hint?: string; style?: CSSProperties; boxStyle?: CSSProperties; beside?: boolean; children: ReactNode;
+}) {
   return (
-    <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center', ...boxStyle }}>
+    <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center', ...(beside ? BESIDE : {}), ...boxStyle }}>
       {htmlFor ? <label htmlFor={htmlFor} style={style}>{children}</label> : <span style={style}>{children}</span>}
-      <HelpHint text={hint} />
+      {hint && <HelpHint text={hint} />}
     </span>
   );
 }

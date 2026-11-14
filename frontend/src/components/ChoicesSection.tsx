@@ -1,0 +1,316 @@
+import React, { useState } from 'react';
+import { pickLabel,
+  workedOn, listShown, spentAfterClick, featureDoes, pickedOf, listsOnTheirOwn, underFeature, listsUnder, keptAside, rolledOf, rollOffer,
+  type ChoiceListShown, type ChoicesAction, type FeatureShown, type OptionShown, type PickShown, type Worked,
+} from '../sheets/choicesShown';
+import { RecoveryDice } from './RecoveryDice';
+import { GiftsHeld, GiftsOffered } from './OptionGifts';
+
+// A character sheet's CHOICES block (7a3b1; approved mockup docs/mockups/builder-choices.html,
+// 2026-10-27): each list the system has, the character's picks in it with their levels (the list's
+// total on hover, broken down: SOLDIER 3 + MAGE 1), the features each pick has unlocked with their
+// uses to tick off, the next feature to come, and the options still to pick, one not met shown with
+// what it needs. What a player may do is the server's to say (backend systemBuilder/picking.js); this
+// only asks, and the server's answer comes back as the sheet saved again, or in words. The GM (7a3b2)
+// also takes a pick away (DROP, asked first) and picks an option not met (ADD ANYWAY).
+//
+// Lists inside lists (7a5a2; approved mockup docs/mockups/nested-choices.html): a feature that opens a
+// list picked through features has its picks right under it, and PICK A <ONE> while it has room; a pick
+// whose feature locked again shows there greyed, kept; one with nothing left to wait under shows at the
+// foot, KEPT, WAITING. A list everyone has shows what every character has, nothing to pick.
+//
+// The recovery dice head the block (R2b, RecoveryDice.tsx): what the classes' dice make. A sheet
+// with a RESTS section has them there instead (R3b); one made before it keeps them here.
+//
+// What an option gives (7c4e, OptionGifts.tsx) shows only for NEW_CHARACTER.EXE, as only finishing there gives it.
+
+interface Props {
+  lists: ChoiceListShown[];
+  data: Record<string, unknown>;
+  readOnly: boolean;
+  /** Asks the server to pick, set a level or tick a use. Absent: nothing can be changed here. */
+  onChoices?: (action: ChoicesAction) => void;
+  /** Why the server last said no, to show under the block. */
+  refused?: string | null;
+  /** The viewer is the GM: DROP, and ADD ANYWAY for an option not met. */
+  gm?: boolean;
+  /** Spends and rolls recovery dice (R2b). Absent: no SPEND. */
+  onRecoverySpend?: (pool: string, count: number) => void;
+  /** Whether the GM has spending recovery dice open. */
+  recoveryOpen?: boolean;
+  /** The sheet has a RESTS section, where the dice are instead (R3b). */
+  recoveryElsewhere?: boolean;
+  /** Only this list, for NEW_CHARACTER.EXE's step (7c2). What it opens, in other lists, still shows under it. */
+  only?: string;
+  /** A player may take their own picks back (7c2), while making the character; never on a list rolled only. */
+  takeBack?: boolean;
+  /** Levels go up with LEVEL UP here (7d2b), so a player can't just press + or -. */
+  levelsFixed?: boolean;
+  /** Making a character: what each option gives shows, with its money to roll (7c4e). */
+  gifts?: GiftsAt;
+}
+
+/** What drawing an option's gifts needs: the system, for its money's words, and asking for a roll. */
+interface GiftsAt { system: string | null | undefined; onRoll: (option: string, id: string) => void; onClear?: (option: string, id: string) => void }
+
+const small: React.CSSProperties = { fontSize: '0.55rem', letterSpacing: '1px', opacity: 0.7 };
+const btn: React.CSSProperties = {
+  background: 'none', border: '1px solid var(--green)', color: 'var(--green)', cursor: 'pointer',
+  fontFamily: 'inherit', fontSize: '0.6rem', letterSpacing: '1px', padding: '1px 7px',
+};
+const danger: React.CSSProperties = { ...btn, color: 'var(--danger)', borderColor: 'var(--danger)' };
+const tag = (color: string): React.CSSProperties => ({ fontSize: '0.5rem', letterSpacing: '1px', border: '1px solid currentColor', padding: '0 3px', color, whiteSpace: 'nowrap' });
+const card: React.CSSProperties = { border: '1px solid color-mix(in srgb, var(--green) 45%, transparent)', padding: '5px 7px', display: 'flex', flexDirection: 'column', gap: '4px' };
+
+/** The highest level a pick can have (backend choices.js LIMITS.level). */
+const MAX_LEVEL = 30;
+
+/** What every card below shares: the lists, the worked-out picks, and what may be asked. */
+interface Ctx {
+  lists: ChoiceListShown[];
+  worked: Worked;
+  can: boolean;
+  gm: boolean;
+  ask: (action: ChoicesAction) => void;
+  dropping: string | null;
+  setDropping: (key: string | null) => void;
+  /** The sheet as stored, for what ROLL FOR IT last rolled (7a5b2). */
+  data: Record<string, unknown>;
+  takeBack: boolean;
+  gifts?: GiftsAt;
+  levelsFixed: boolean;
+}
+
+function Feature({ f, ctx }: { f: FeatureShown; ctx: Ctx }) {
+  const does = featureDoes(f, ctx.lists);
+  const use = ctx.worked.uses[f.id];
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1px', fontSize: '0.68rem' }}>
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <span>{f.label}</span>
+        {does.map((d) => <span key={d} style={tag('var(--cyan)')}>{d}</span>)}
+        {f.uses && use && (
+          <span role="group" aria-label={`${f.label} uses`} style={{ display: 'inline-flex', gap: '3px', alignItems: 'center' }}>
+            {Array.from({ length: use.max }, (_, i) => {
+              const left = i >= use.spent;
+              return (
+                <button key={i} type="button" aria-label={`${f.label} use ${i + 1}`} aria-pressed={!left} disabled={!ctx.can}
+                  title={left ? 'Left: click to spend' : 'Spent: click to take back'}
+                  onClick={() => ctx.ask({ kind: 'use', feature: f.id, spent: spentAfterClick(i, use.spent) })}
+                  style={{ width: 11, height: 11, padding: 0, border: '1px solid var(--cyan)', background: left ? 'var(--cyan)' : 'none', cursor: ctx.can ? 'pointer' : 'default' }} />
+              );
+            })}
+            <span style={small}>{use.max - use.spent} OF {use.max}{f.uses.refill ? ` · ${f.uses.refill.toUpperCase()}` : ''}</span>
+          </span>
+        )}
+      </div>
+      {f.text && <span style={{ ...small, opacity: 0.65 }}>{f.text}</span>}
+    </div>
+  );
+}
+
+/**
+ * The options left to pick, one to a line so that what one needs reads as its own: each a button asking,
+ * one not met saying what it needs (ADD ANYWAY for the GM). On a list with a table (7a5b2), ROLL FOR IT
+ * under them. A roll picks what it lands on and locks it (LockedPick); one they don't meet waits here, marked
+ * TAKE IT with the others off, until they meet it or the GM steps in. Whoever can roll sees the table: the
+ * dice over the options, and each one's range, so a result can be checked.
+ */
+function Offer({ label, list, from, open, onPick, ctx }: {
+  label: string; list: ChoiceListShown; from?: string; open: { option: OptionShown; unmet: string | null }[]; onPick: (option: string) => void; ctx: Ctx;
+}) {
+  const r = rollOffer(list, rolledOf(ctx.data, list.id, from), ctx.gm);
+  // The column the option's button is in: after its range, when the table is shown.
+  const at = r.roll ? 2 : 1;
+  return (
+    <div role="group" aria-label={label} style={{ display: 'grid', gridTemplateColumns: `${r.roll ? 'max-content ' : ''}minmax(0, max-content) minmax(0, 1fr)`, gap: '5px 8px', alignItems: 'center' }}>
+      <span style={{ ...small, gridColumn: '1 / -1', textAlign: 'left' }}>{label.toUpperCase()}{r.roll ? ` (${list.table})` : ''}</span>
+      {open.map(({ option, unmet }) => {
+        const marked = r.marked === option.id;
+        const off = (!!unmet && !ctx.gm) || ((r.byRoll || r.spent) && !marked);
+        return (
+          <React.Fragment key={option.id}>
+            {r.roll && option.roll && <span title={`A roll of ${option.roll}`} style={{ ...small, gridColumn: 1, opacity: 1, textAlign: 'right', fontVariantNumeric: 'tabular-nums', ...(marked ? { color: 'var(--cyan)' } : {}) }}>{option.roll}</span>}
+            <button type="button" className={off ? 'choice-off' : undefined} style={{ ...btn, gridColumn: at, textAlign: 'left', ...(marked ? { borderColor: 'var(--cyan)', color: 'var(--cyan)' } : {}), opacity: off ? 0.6 : 1, cursor: off ? 'not-allowed' : 'pointer' }} disabled={off}
+              title={r.byRoll && !marked ? 'Picked by roll: ROLL FOR IT' : unmet && ctx.gm ? 'Not met: as the GM, you can add it anyway' : option.description}
+              onClick={() => onPick(option.id)}>{option.label.toUpperCase()}{marked ? ' · TAKE IT' : ''}</button>
+            {unmet && <span style={{ ...small, gridColumn: at + 1, color: 'var(--warning)', opacity: 1 }}>NEEDS {unmet}{ctx.gm ? ' · ADD ANYWAY' : ''}</span>}
+            {ctx.gifts && option.gives && <GiftsOffered gives={option.gives} system={ctx.gifts.system} column={at + 1} />}
+          </React.Fragment>
+        );
+      })}
+      {r.roll && (
+        <button type="button" style={{ ...btn, gridColumn: '1 / -1', justifySelf: 'start', borderColor: 'var(--warning)', color: 'var(--warning)', opacity: r.spent ? 0.4 : 1 }} disabled={r.spent}
+          title={r.spent ? 'Rolled: your GM can clear it for another go' : `Rolls ${list.table} on the table, written to the log`}
+          onClick={() => ctx.ask({ kind: 'roll', list: list.id, ...(from ? { from } : {}) })}>{r.label}</button>
+      )}
+      {r.said && <span style={{ ...small, gridColumn: '1 / -1', textAlign: 'left', color: 'var(--cyan)', opacity: 1 }}>{r.said}</span>}
+      {r.said && ctx.gm && ctx.can && (
+        <button type="button" style={{ ...btn, gridColumn: '1 / -1', justifySelf: 'start' }} onClick={() => ctx.ask({ kind: 'clear', list: list.id, ...(from ? { from } : {}) })}>CLEAR THE ROLL</button>
+      )}
+    </div>
+  );
+}
+
+/** DROP, asked first: the GM's alone. */
+function Drop({ list, option, ctx }: { list: string; option: OptionShown; ctx: Ctx }) {
+  const key = `${list}:${option.id}`;
+  const mayTakeBack = ctx.takeBack && ctx.lists.find((l) => l.id === list)?.players !== 'roll';
+  if (!ctx.can || (!ctx.gm && !mayTakeBack)) return null;
+  return ctx.dropping === key ? (
+    <div role="group" aria-label={`Take ${option.label} away`} style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ ...small, color: 'var(--danger)', opacity: 1 }}>TAKE {option.label.toUpperCase()} AWAY, AND WHAT IT GIVES?</span>
+      <button type="button" style={danger} onClick={() => { ctx.setDropping(null); ctx.ask({ kind: 'drop', list, option: option.id }); }}>YES, DROP</button>
+      <button type="button" style={btn} onClick={() => ctx.setDropping(null)}>KEEP</button>
+    </div>
+  ) : (
+    <button type="button" style={danger} aria-label={`Drop ${option.label}`} onClick={() => ctx.setDropping(key)}>DROP</button>
+  );
+}
+
+/**
+ * What hangs under a feature opening a list: its picks (each a card, and so on down), those waiting, and PICK. A list
+ * its increase offers instead (7d6c) has its own, gone once the points were spent there with nothing picked.
+ */
+function Under({ f, listId, unlocked, ctx }: { f: FeatureShown; listId: string; unlocked: boolean; ctx: Ctx }) {
+  const under = underFeature(f, ctx.lists, ctx.worked, listId);
+  const instead = listId !== f.opens;
+  if (!under || ((!unlocked || (instead && under.room === 0)) && !under.waiting.length && !under.picks.length)) return null;
+  return (
+    <div role="group" aria-label={instead ? `Instead of ${f.label}'s points` : `Under ${f.label}`}
+      style={{ marginLeft: '10px', paddingLeft: '8px', borderLeft: '2px solid var(--warning)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      {under.picks.map((p) => <Pick key={p.option.id} list={under.list} p={p} ctx={ctx} />)}
+      {under.waiting.map((o) => (
+        <div key={o.id} style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ ...small, opacity: 0.45 }}>{o.label.toUpperCase()} · WAITS FOR {f.label.toUpperCase()}{f.at ? ` AT LEVEL ${f.at}` : ''}, KEPT</span>
+          <Drop list={under.list.id} option={o} ctx={ctx} />
+        </div>
+      ))}
+      {instead && unlocked && under.room > 0 && <span style={{ ...small, color: 'var(--cyan)', opacity: 1 }}>OR A {under.list.one.toUpperCase()} IN PLACE OF THE POINTS</span>}
+      {unlocked && under.room > 0 && ctx.can && under.open.length > 0 && (
+        <Offer label={pickLabel(under.list.one)} list={under.list} from={f.id} open={under.open} ctx={ctx}
+          onPick={(option) => ctx.ask({ kind: 'pick', list: under.list.id, option, from: f.id })} />
+      )}
+      {unlocked && under.room > 0 && !ctx.can && <span style={{ ...small, color: 'var(--warning)', opacity: 1 }}>A {under.list.one.toUpperCase()} TO PICK</span>}
+    </div>
+  );
+}
+
+/**
+ * A pick locked by a roll or by the GM (backend picking.js): a player is told how to get another go, and the
+ * GM can clear it, for the player to roll or the GM to pick by hand, or roll again for them.
+ */
+function LockedPick({ list, p, ctx }: { list: ChoiceListShown; p: PickShown; ctx: Ctx }) {
+  const said = p.roll === undefined ? 'SET BY THE GM' : `ROLLED ${p.roll}, AND KEPT`;
+  const where = { list: list.id, ...(p.from ? { from: p.from } : {}) };
+  if (!ctx.gm) return <span style={{ ...small, color: 'var(--cyan)', opacity: 1 }}>{said}. YOUR GM CAN CLEAR IT FOR ANOTHER GO.</span>;
+  return (
+    <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ ...small, color: 'var(--cyan)', opacity: 1 }}>{said}</span>
+      {ctx.can && <button type="button" style={btn} aria-label={`Clear the roll for ${p.option.label}`} onClick={() => ctx.ask({ kind: 'clear', ...where, option: p.option.id })}>CLEAR THE ROLL</button>}
+      {ctx.can && list.table && <button type="button" style={btn} aria-label={`Roll again for ${p.option.label}`} onClick={() => ctx.ask({ kind: 'roll', ...where, again: p.option.id })}>ROLL AGAIN</button>}
+    </div>
+  );
+}
+
+/** One pick: its name, level and DROP, its features (each with what it opens under it), and the next to come. */
+function Pick({ list, p, ctx, fixed = false }: { list: ChoiceListShown; p: PickShown; ctx: Ctx; fixed?: boolean }) {
+  const locked = p.option.features.filter((f) => !p.unlocked.includes(f));
+  return (
+    <div role="group" aria-label={p.option.label} style={card}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+        <span title={p.option.description} style={{ fontSize: '0.72rem', letterSpacing: '1px' }}>{p.option.label.toUpperCase()}</span>
+        {p.level !== null && (
+          <span style={{ display: 'inline-flex', gap: '4px', alignItems: 'center', fontSize: '0.62rem' }}>
+            {ctx.can && (ctx.gm || !ctx.levelsFixed) && <button type="button" style={btn} aria-label={`${p.option.label} level down`} disabled={p.level <= 1}
+              onClick={() => ctx.ask({ kind: 'level', list: list.id, option: p.option.id, level: p.level! - 1 })}>−</button>}
+            <span>LV {p.level}</span>
+            {ctx.can && (ctx.gm || !ctx.levelsFixed) && <button type="button" style={btn} aria-label={`${p.option.label} level up`} disabled={p.level >= MAX_LEVEL}
+              onClick={() => ctx.ask({ kind: 'level', list: list.id, option: p.option.id, level: p.level! + 1 })}>+</button>}
+          </span>
+        )}
+        {!fixed && !p.locked && ctx.dropping !== `${list.id}:${p.option.id}` && <Drop list={list.id} option={p.option} ctx={ctx} />}
+      </div>
+      {!fixed && !p.locked && ctx.dropping === `${list.id}:${p.option.id}` && <Drop list={list.id} option={p.option} ctx={ctx} />}
+      {!fixed && p.locked && <LockedPick list={list} p={p} ctx={ctx} />}
+      {ctx.gifts && p.option.gives && <GiftsHeld option={p.option} gives={p.option.gives} data={ctx.data} system={ctx.gifts.system} onRoll={ctx.gifts.onRoll} onClear={ctx.gifts.onClear} />}
+      {p.unlocked.map((f) => (
+        <React.Fragment key={f.id}>
+          <Feature f={f} ctx={ctx} />
+          {listsUnder(f).map((id) => <Under key={id} f={f} listId={id} unlocked ctx={ctx} />)}
+        </React.Fragment>
+      ))}
+      {locked.flatMap((f) => listsUnder(f).map((id) => <Under key={`${f.id} ${id}`} f={f} listId={id} unlocked={false} ctx={ctx} />))}
+      {!p.unlocked.length && <span style={small}>Nothing unlocked yet.</span>}
+      {p.next && <span style={{ ...small, opacity: 0.5 }}>NEXT · LV {p.next.at ?? 1}: {p.next.label}</span>}
+    </div>
+  );
+}
+
+export function ChoicesSection({ lists, data, readOnly, onChoices, refused, gm = false, onRecoverySpend, recoveryOpen = false, recoveryElsewhere = false, only, takeBack = false, gifts, levelsFixed = false }: Props) {
+  const worked = workedOn(data);
+  // The pick the GM asked to take away, waiting for YES: "list:option".
+  const [dropping, setDropping] = useState<string | null>(null);
+  // The lists folded away, each on its own, so a long run of classes or feats can be put aside.
+  const [folded, setFolded] = useState<Set<string>>(new Set());
+  const fold = (id: string) => setFolded((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const can = !readOnly && !!onChoices;
+  // In the builder's previews nothing is published yet: the block says what will be here.
+  if (!lists.length) return <div style={small}>A character&apos;s picks from the system&apos;s lists show here: classes, backgrounds, feats.</div>;
+  const ctx: Ctx = { lists, worked, can, gm, ask: (action) => onChoices?.(action), dropping, setDropping, data, takeBack, gifts, levelsFixed };
+  const aside = keptAside(lists, worked).filter((a) => !only || a.list.id === only);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      {worked.recovery && !recoveryElsewhere && !only && <RecoveryDice recovery={worked.recovery} can={can} gm={gm} open={recoveryOpen} ask={ctx.ask} onSpend={onRecoverySpend} />}
+      {listsOnTheirOwn(lists).filter((l) => !only || l.id === only).map((list) => {
+        const view = listShown(list, worked);
+        const everyone = pickedOf(list) === 'everyone';
+        const shut = folded.has(list.id);
+        return (
+          <section key={list.id} aria-label={list.many} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'baseline' }}>
+              <button type="button" aria-expanded={!shut} aria-label={`${list.many}: ${shut ? 'show' : 'fold away'}`} onClick={() => fold(list.id)}
+                style={{ background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '2px', padding: 0, textAlign: 'left' }}>
+                <span aria-hidden>{shut ? '▸' : '▾'} </span><span>{list.many.toUpperCase()}</span>
+              </button>
+              {shut && !everyone && <span style={small}>{view.picks.length} PICKED</span>}
+              {everyone && <span style={small}>EVERY CHARACTER HAS THESE</span>}
+              {view.level !== null && view.picks.length > 0 && (
+                <span title={view.breakdown} aria-label={`Level ${view.level}: ${view.breakdown}`} style={{ ...small, cursor: 'help', borderBottom: '1px dotted currentColor' }}>
+                  LEVEL {view.level}
+                </span>
+              )}
+            </div>
+            {!shut && <>
+              {view.picks.map((p) => <Pick key={p.option.id} list={list} p={p} ctx={ctx} fixed={everyone} />)}
+              {everyone && view.open.filter((o) => o.unmet).map(({ option, unmet }) => (
+                <span key={option.id} style={{ ...small, opacity: 0.45 }}>{option.label.toUpperCase()} · NEEDS {unmet}</span>
+              ))}
+              {!everyone && !view.picks.length && <span style={small}>No {list.one || list.many} picked yet.</span>}
+              {can && view.room && view.open.length > 0 && (
+                <Offer label={pickLabel(list.one)} list={list} open={view.open} ctx={ctx}
+                  onPick={(option) => ctx.ask({ kind: 'pick', list: list.id, option })} />
+              )}
+            </>}
+          </section>
+        );
+      })}
+      {aside.length > 0 && (
+        <section aria-label="Kept, waiting" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <span style={{ ...small, letterSpacing: '2px' }}>KEPT, WAITING</span>
+          {aside.map(({ list, option }) => (
+            <div key={`${list.id}:${option.id}`} style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ ...small, opacity: 0.45 }}>{list.one.toUpperCase()} · {option.label.toUpperCase()}: counts again when what gave it comes back</span>
+              <Drop list={list.id} option={option} ctx={ctx} />
+            </div>
+          ))}
+        </section>
+      )}
+      {refused && <div role="alert" style={{ fontSize: '0.62rem', color: 'var(--warning)' }}>{refused}</div>}
+    </div>
+  );
+}

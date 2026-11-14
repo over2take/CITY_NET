@@ -141,9 +141,11 @@ describe('CALL A REST', () => {
 describe('the made-up character', () => {
   it('starts as the sample on the draft\'s own sheet, its formulas worked out by the server', async () => {
     open();
-    expect(await character().findByDisplayValue('Sample character')).toBeTruthy();
     await waitFor(() => expect(valueOf('Save')).toBe('11'));
     expect(valueOf('Strength')).toBe('2');
+    // Who they are, on the CHARACTER tab beside STATS (2026-10-31).
+    await userEvent.click(character().getByText('CHARACTER', { selector: 'button' }));
+    expect(await character().findByDisplayValue('Sample character')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'SAVE AS THE SAMPLE CHARACTER' })).toBeNull();
   });
 
@@ -159,6 +161,7 @@ describe('the made-up character', () => {
     const { last } = open();
     await waitFor(() => expect(valueOf('Save')).toBe('11'));
     fireEvent.change(character().getByLabelText('Strength'), { target: { value: '6' } });
+    await userEvent.click(character().getByText('CHARACTER', { selector: 'button' }));
     fireEvent.change(character().getByDisplayValue('Sample character'), { target: { value: 'Vex' } });
     await userEvent.click(screen.getByRole('button', { name: 'SAVE AS THE SAMPLE CHARACTER' }));
     expect(last().samples).toEqual({ level: 3, str: 6 });
@@ -327,7 +330,7 @@ describe('RULES (4j5b)', () => {
     derived: [{ id: 'save', label: 'Save', formula: '16 - (@level + @str)', alternative: { rule: 'gritty', formula: '10 - @str' } }],
     sheet: (() => {
       const sheet = starterSheet(H);
-      sheet.sections.push({ id: 'spells', label: 'SPELLS', layout: 'list', tab: sheet.tabs?.[0], only_with: 'magic', fields: [{ id: 'spell', label: 'Spell', type: 'text' }] });
+      sheet.sections.push({ id: 'spells', label: 'SPELLS', layout: 'list', tab: 'STATS', only_with: 'magic', fields: [{ id: 'spell', label: 'Spell', type: 'text' }] });
       return sheet;
     })(),
   } as unknown as Definition;

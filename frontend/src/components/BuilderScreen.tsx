@@ -17,12 +17,17 @@ import { SheetPage } from './SheetPage';
 import { NpcsPage } from './NpcsPage';
 import { ConditionsPage } from './ConditionsPage';
 import { RestsPage } from './RestsPage';
+import { NewCharacterPage } from './NewCharacterPage';
+import { LevelsPage } from './LevelsPage';
 import { HouseRulesPage } from './HouseRulesPage';
+import { ChoicesPage } from './ChoicesPage';
+import { ItemsPage } from './ItemsPage';
 import { CONDITION_ICONS } from '../sheets/conditionIcons';
 import { TryItPage } from './TryItPage';
 import { PublishPreviewPage } from './PublishPreviewPage';
 import { HelpPage } from './HelpPage';
 import { BuilderTour } from './BuilderTour';
+import { setBuilderOpen } from './windowFocus';
 import { TOUR, type TourPlace } from '../sheets/builderHelp';
 import type { PublishPreview } from '../sheets/versionPreview';
 
@@ -33,7 +38,7 @@ import type { PublishPreview } from '../sheets/versionPreview';
 // autosave writes the draft, SAVE saves now, PUBLISH goes live; leaving warns only when saving
 // failed). What it says is sheets/builderSession.ts.
 //
-// The pages themselves come in later pieces (SETUP 4a3, WORDS and FEATURES 4b1...); until then
+// The pages themselves come in later pieces (SETUP 4a3, WORDS and PARTS 4b1...); until then
 // each says what it will hold. PROBLEMS already lists the draft's real problems.
 
 interface Props {
@@ -96,7 +101,10 @@ const PUBLISH_PAGE = { id: 'publish' as const, label: 'PUBLISH', what: 'What the
 const HELP_PAGE = { id: 'help' as const, label: 'HELP', what: 'How the builder works, page by page, with formulas and dice explained.' };
 type Page = BuilderPage | 'systems' | 'publish' | 'help';
 
-/** Above the map and its panels, below the windows (DraggableWindow starts at 2000). */
+/**
+ * Above the map and its panels, below the windows (DraggableWindow starts at 2000), which hide
+ * while the builder is open (windowFocus.ts setBuilderOpen, below).
+ */
 const Z = 1900;
 const mono: React.CSSProperties = { fontFamily: "'Courier New', Courier, monospace" };
 const sideBtn = (active = false): React.CSSProperties => ({
@@ -136,7 +144,11 @@ const Icons: Record<BuilderPage | 'builder' | 'systems' | 'help' | 'save' | 'pub
   words: icon('M4 7V4h16v3', 'M9 20h6', 'M12 4v16'),
   features: icon('M8 5h8a7 7 0 0 1 0 14H8A7 7 0 0 1 8 5z', 'M16 9a3 3 0 1 1 0 6 3 3 0 0 1 0-6z'),
   rules: icon('M18 7V4H6l6 8-6 8h12v-3'),
+  choices: icon('M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6l1 1 2-2', 'M3 12l1 1 2-2', 'M3 18l1 1 2-2'),
+  items: icon('M6 2l-3 4v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z', 'M3 6h18', 'M16 10a4 4 0 0 1-8 0'),
   sheet: icon('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M16 13H8', 'M16 17H8', 'M10 9H8'),
+  new_character: icon('M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8z', 'M19 8v6', 'M22 11h-6'),
+  levels: icon('M3 17l6-6 4 4 8-8', 'M15 7h6v6'),
   npcs: icon('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8z', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'),
   conditions: icon(...CONDITION_ICONS.skull),
   rests: icon('M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z'),
@@ -217,7 +229,12 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
   const [rulesView, setRulesView] = useState<BuilderView>('forms');
   /** A note FORMS' EDIT IN GRAPH asked to open the map on (5b5). */
   const [graphStart, setGraphStart] = useState<string | undefined>(undefined);
+  // The list CHOICES opens on, when the map's GO TO names one (7a5c).
+  const [choicesStart, setChoicesStart] = useState<string | undefined>(undefined);
   const rootRef = useRef<HTMLDivElement>(null);
+  // The map's windows hide while the builder is open, and come back as they were (windowFocus.ts).
+  // Before paint, so switching systems (a new builder, keyed) never shows them for a frame.
+  useLayoutEffect(() => { setBuilderOpen(true); return () => setBuilderOpen(false); }, []);
   const tourRoot = useCallback(() => rootRef.current, []);
 
   const load = useCallback(async () => {
@@ -477,7 +494,10 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
           <span style={{ opacity: 0.6, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current.what}</span>
         </header>
 
-        <section aria-label={current.label} className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: graphOn ? 'hidden' : 'auto', padding: graphOn ? 0 : 24, fontSize: 13, lineHeight: 1.5 }}>
+        {/* Left-aligned: #root centres its text (index.css), and every page inheriting that put
+            words a page didn't align itself (a table's cells, a note under a field) out of line
+            with the names and column heads that are. */}
+        <section aria-label={current.label} className="cyber-scroll" style={{ flex: 1, minHeight: 0, overflowY: graphOn ? 'hidden' : 'auto', padding: graphOn ? 0 : 24, fontSize: 13, lineHeight: 1.5, textAlign: 'left' }}>
           {loadError && <p role="alert" style={{ color: 'var(--danger)' }}>{loadError}</p>}
           {(systemId ? !system : looking && !definition) && !loadError && <p style={{ opacity: 0.7 }}>LOADING…</p>}
           {page === 'systems' && (systemId === null || system) && (
@@ -546,9 +566,13 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
             {ready && page === 'rules' && !graphOn && <StatsRulesPage definition={definition!} edit={edit} api={api} onEditInGraph={(node) => pickRulesView('graph', node)} onHelp={(topic) => { setHelpTopic(topic); setPage('help'); setStatus(null); }} />}
             {graphOn && (
               <React.Suspense fallback={<p style={{ opacity: 0.7, padding: 24 }}>LOADING THE MAP…</p>}>
-                <GraphView definition={definition!} edit={edit} api={api} readOnly={looking} startWith={graphStart} problems={problems} onGoTo={(p) => { setPage(p); setStatus(null); }} />
+                <GraphView definition={definition!} edit={edit} api={api} readOnly={looking} startWith={graphStart} problems={problems} onGoTo={(p, list) => { setChoicesStart(list); setPage(p); setStatus(null); }} />
               </React.Suspense>
             )}
+            {ready && page === 'choices' && <ChoicesPage definition={definition!} edit={edit} api={api} startList={choicesStart} />}
+            {ready && page === 'items' && <ItemsPage definition={definition!} edit={edit} api={looking ? undefined : api} />}
+            {ready && page === 'new_character' && <NewCharacterPage definition={definition!} edit={edit} api={api} onGoTo={(p, list) => { setChoicesStart(list); setPage(p); setStatus(null); }} />}
+            {ready && page === 'levels' && <LevelsPage definition={definition!} edit={edit} api={api} onGoTo={(p) => { setPage(p); setStatus(null); }} />}
             {ready && page === 'sheet' && <SheetPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'npcs' && <NpcsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'conditions' && <ConditionsPage definition={definition!} edit={edit} api={looking ? undefined : api} />}

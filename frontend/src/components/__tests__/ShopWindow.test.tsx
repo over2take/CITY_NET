@@ -2090,6 +2090,24 @@ describe('a custom system\'s own words', () => {
     expect(screen.getByText('NO OPERATIVE SHEET LOADED — NOTHING TO SELL.')).toBeInTheDocument();
   });
 
+  it('never offers to buy an item installed in them (7e4c); one only carried, as ever', async () => {
+    registerCustomTemplate({
+      id: HEARTH, name: 'Hearth', parts: {}, derived: [], sheet: { sections: [] }, words: {},
+      items: { slots: [], installs: [{ id: 'cyber', label: 'CYBERWARE', against: 'Strain', way: 'adds' }],
+        list: [{ id: 'jack', label: 'Cranial Jack', needs: 'cyber', cost: 1, features: [] }, { id: 'plate', label: 'Dermal Plating', needs: 'cyber', cost: 1, features: [] }] },
+    });
+    loadUploaded({ gear: [ROPE, { id: 'cranial_jack', name: 'Cranial Jack', price: 500, fields: {} }, { id: 'dermal_plating', name: 'Dermal Plating', price: 500, fields: {} }] });
+    sheetState.sheet = { system: HEARTH, data: {
+      inventory: JSON.stringify([{ name: 'Rope', qty: 1 }, { name: 'Cranial Jack', qty: 1 }, { name: 'Dermal Plating', qty: 1 }]),
+      _worked: { items: [{ id: 'jack', needs: 'cyber', installed: true, working: true }, { id: 'plate', needs: 'cyber' }] },
+    } };
+    show('general_store', 'Vic', HEARTH);
+    await openFolder('SELL');
+    expect(screen.getByText('Rope')).toBeInTheDocument();
+    expect(screen.getByText('Dermal Plating')).toBeInTheDocument();
+    expect(screen.queryByText('Cranial Jack')).toBeNull();
+  });
+
   it('says when it would buy nothing you have', async () => {
     show('general_store', 'Vic', HEARTH);
     await openFolder('SELL');

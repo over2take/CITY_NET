@@ -2,6 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import { exampleFor, currentFor, type StoredEntry } from '../sheets/catalogueSchema';
 import { catalogueLabel, type ShopStock } from '../data/buildingTypes';
+import { downloadText } from '../utils/downloadText';
+import { customTemplate } from '../sheets/customTemplates';
+import { itemsInPreview, itemsCatalogue, type PreviewRow } from '../sheets/catalogueItems';
 
 // Where a GM adds to what the shops sell.
 //
@@ -16,6 +19,9 @@ import { catalogueLabel, type ShopStock } from '../data/buildingTypes';
 // **Save is only offered for the exact text that was previewed.** Editing the box after a
 // preview takes the SAVE button away until it is previewed again. Otherwise the thing
 // stored could be something nobody ever looked at.
+//
+// A custom system's items (7e3c): DOWNLOAD ITEMS starts a catalogue from them, prices to fill in, and the preview says
+// which lines are items (bought, each is that item, to WEAR and ATTUNE) and which are only nearly named as one.
 
 interface Props {
   pos: { x: number; y: number };
@@ -27,7 +33,7 @@ interface Props {
 
 interface Problem { line: number; catalogue?: string; name?: string; message: string }
 interface Summary { catalogue: string; count: number; overrides: string[] }
-interface Preview { problems: Problem[]; summary: Summary[]; format: string | null }
+interface Preview { problems: Problem[]; summary: Summary[]; format: string | null; sections?: Record<string, PreviewRow[]> }
 
 /**
  * Socket.io refuses a message over a megabyte by default, and says nothing useful when it
@@ -40,19 +46,6 @@ const mono = (size: number): React.CSSProperties => ({
   fontFamily: 'monospace', fontSize: size, letterSpacing: 0,
 });
 
-
-/** Hand the browser a text file to save. */
-const download = (filename: string, text: string) => {
-  const blob = new Blob([text], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-};
 
 export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props) {
   const [text, setText] = useState('');
@@ -95,7 +88,7 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
     const onCatalogues = (payload: { entries?: Partial<Record<ShopStock, StoredEntry[]>> }) => {
       if (!awaitingCurrent.current) return;
       awaitingCurrent.current = false;
-      download(`${system}-storefronts-current.csv`, currentFor(system, payload?.entries ?? {}));
+      downloadText(`${system}-storefronts-current.csv`, currentFor(system, payload?.entries ?? {}));
       setBusy(null);
     };
 
@@ -113,6 +106,10 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
   const stale = previewedText !== null && previewedText !== text;
   const rows = preview?.summary.reduce((n, s) => n + s.count, 0) ?? 0;
   const canSave = !!preview && !stale && previewedText === text && rows > 0 && !busy;
+  // The running game's items (7e3c), from its render copy: none on a built-in system.
+  const items = customTemplate(system)?.items;
+  const starter = itemsCatalogue(system, items);
+  const itemRows = preview ? itemsInPreview(system, items, preview.sections) : { matched: [], near: [] };
 
   const runPreview = () => {
     if (!text.trim() || tooBig || !socket) return;
@@ -175,7 +172,7 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
             className="utility-btn"
             style={btn}
             title="A file in the right shape for this system, with a few real rows to copy"
-            onClick={() => download(`${system}-storefronts-example.csv`, exampleFor(system))}
+            onClick={() => downloadText(`${system}-storefronts-example.csv`, exampleFor(system))}
           >DOWNLOAD EXAMPLE</button>
           <button
             type="button"
@@ -189,6 +186,15 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
               socket?.emit('requestCatalogues');
             }}
           >{busy === 'current' ? 'FETCHING…' : 'DOWNLOAD CURRENT'}</button>
+          {starter && (
+            <button
+              type="button"
+              className="utility-btn"
+              style={btn}
+              title="This system's items as a catalogue to sell them in its shops, each price left for you to fill in"
+              onClick={() => downloadText(`${system}-storefronts-items.csv`, starter)}
+            >DOWNLOAD ITEMS</button>
+          )}
           <button
             type="button"
             className="utility-btn"
@@ -277,6 +283,24 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
                   </span>
                 )}
                 {s.count > 0 && ' · replaces anything you uploaded here before'}
+              </div>
+            ))}
+
+            {/* The system's items among the lines (7e3c): bought, each is that item; one nearly named, never. */}
+            {itemRows.matched.some((m) => m.lands) && (
+              <div data-testid="catalogue-items" style={{ color: 'var(--cyan)' }}>
+                ITEMS: {itemRows.matched.filter((m) => m.lands).map((m) => m.name.toUpperCase()).join(', ')}
+                {' · bought, each is that item, to WEAR and ATTUNE'}
+              </div>
+            )}
+            {itemRows.matched.filter((m) => !m.lands).map((m, i) => (
+              <div key={`away-${i}`} style={{ color: 'var(--warning)' }}>
+                {m.line ? `LINE ${m.line}` : 'FILE'} [{m.catalogue}] {m.name}: lands in its own rows, not the gear, so it is never worn as the item
+              </div>
+            ))}
+            {itemRows.near.map((n, i) => (
+              <div key={`near-${i}`} style={{ color: 'var(--warning)' }}>
+                {n.line ? `LINE ${n.line}` : 'FILE'} [{n.catalogue}] {n.name}: nearly the item {n.item}. Name it exactly to sell that item
               </div>
             ))}
 

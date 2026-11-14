@@ -9,6 +9,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **The builder's tour points at what it explains, on a smaller window too.** With the pages Phase 7 added, the builder's rail is taller than a laptop screen, and the tour's TRY IT step pointed at a button scrolled out of sight. The tour now scrolls the rail to the button it explains, and keeps its box wholly on the screen however many lines its words wrap to.
+- TERMINATE_SESSION closes every window. GIVE.EXE, the shop catalogues, XP, LEVEL_UP, the new character, vehicles, the radio, initiative, the NPC library, the System Builder and a shop had stayed open, GIVE.EXE coming back on the GM's next sign-in.
+- The copy of the database taken before a startup migration is tried again while other startup work is still running, instead of being skipped. A slow machine could start the bank move with no copy made.
+- **Linked HP opens the character's health, for the GM too.** On a player's own sheet, HP and HP
+  MAX open their health window when clicked. On the sheet the GM opens from the dashboard, and on an
+  NPC's sheet, they did nothing; now they select that character's token on the map and open its
+  health, as clicking the token would (a player's cash opens their bank). And the LINKED word beside
+  every linked number is gone: the dashed border says it is kept on the token or in the bank, a small
+  ⇗ marks one that opens its window, and hovering says which.
+- **A roll that opens the dice tray is thrown in it.** The tray opens by itself for a roll of yours
+  made elsewhere: spending recovery dice, a rest the GM called, a roll from a sheet in its own tab.
+  But that roll arrived before the tray was there to hear it, so its dice were never thrown: it only
+  showed in the history. Now the tray throws it as it opens, and lists it once. And a rest's line in
+  the history ("SHORT REST · cody: rolled 1d4 ...") no longer shows its name with two colons.
+- **The map's windows stay on the map.** Any window open on the map (a sheet, the dice tray, a
+  shop) came over the system builder when the GM opened it, drawn on top of the builder's pages.
+  Now the builder takes over the screen: the map's windows are hidden while it is open, never
+  closed, Esc in the builder leaves them alone, and EXIT TO MAP brings each back as it was. A
+  roll that arrives meanwhile waits in the tray rather than opening over the builder, and a
+  battle map's floor name and EXIT stay off the builder too.
+- **Names, "?" and column heads line up across the builder.** A setting's name sat above or below
+  its field by up to 50px on some pages (CONDITIONS' ICON, a feature's MODIFIERS, RESTS' WEARS OFF,
+  ROLLS' AGAINST), as each page placed its own by hand. Every name now sits level with the first
+  line of its field, the same way on every page, and the longest ones no longer wrap onto two lines.
+  The builder's pages also inherited centred text from the app, so a table's words (WORDS' terms,
+  READS AS) and the notes under fields were centred while their column heads and names weren't;
+  they are left-aligned now. A check in the browser tests fails any name or head out of line.
+- **A rest can read the character's levels.** A builder system's rest amounts could only name sheet
+  fields, stats and formulas, so "heal by your level" (`@level`, `@fighter_level d10 + @con_mod`) was
+  refused, though the box's own example suggested it. Levels now work in every rest amount. An amount
+  also reads a stat the way rolls do, with what the character's features add to it. The formula box
+  on RESTS lists the levels under INSERT, and works a level out at the sample's 3.
 - **DICE_TRAY.EXE in every theme.** The tray's board, its rim and danger color, and the building
   window's spinning render were drawn in Classic's green whatever theme was picked: they sat
   outside the app's theme. They follow it now. A roll's dice and its line in the record take the
@@ -53,6 +85,210 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **IMPROVE BY USE on the character sheet (7f3b).** In a game whose stats improve by use, each stat that improves has a small mark beside its name, filled once it is marked. A roll of it marks it, as the system says (a success, any roll, or by hand only), and the player, or the GM on their sheet, can click it to tick or clear it; its tip says what marks it and when it rolls. At the rest the system picks, each marked stat rolls to improve, the result goes in the log, and the marks clear.
+- **IMPROVE BY USE on the builder's LEVELS page (7f3a2).** HOW THEY ADVANCE has an IMPROVE BY USE button, and turned on, a section to set it up: STATS THAT IMPROVE (a group, or every stat; groups of ranks aren't offered), MARKED BY (a successful roll of it, any roll of it, or by hand only), AT which rest, the ROLL, what it IMPROVES IF OVER, what it THEN ADDs, and UP TO. The roll, target and gain are formula boxes that take dice and @this, the stat being improved, each said in words under it ("1d20 · 1 to 20"). A line says what it all does ("At LONG REST, each marked stat rolls 1d20; over 10, it gains 1, up to 20. The marks clear."), and the section names anything that can't work yet. Every setting has its "?".
+- **AWARD XP in a game that only spends it (7f2c2).** The GM panel's AWARD_EXPERIENCE now opens in a system that spends XP and has no levels. The window is named with the game's own word (KARMA.EXE), says the points are given to spend, and has no LEVEL_UP or LEVEL_DOWN buttons, as there are no levels to give. SET XP TO says what the characters bought stays. Where a system both spends XP and has levels, the window keeps its level buttons.
+- **SPEND XP on the character sheet (7f2c1).** Where XP is spent, the sheet's CHARACTER tab has a SPEND XP section (named with the system's own word for XP): what is unspent, with what was awarded, spent and is waiting for the GM; a BUY beside each stat and option on the price list, at its price, or saying why it can't be bought (at its most, a requirement not met, waiting for the GM, not enough XP); and SPENT, every purchase newest first, with who made it. With PURCHASES WAIT FOR THE GM on, a player's purchase shows PENDING with its XP held. On a player's sheet the GM has APPROVE and DECLINE for a purchase waiting and UNDO for one made, which gives the XP back. SPEND XP is also a layout a section can take on the CHARACTER SHEET page.
+- **SPEND XP on the builder's LEVELS page (7f2b).** HOW THEY ADVANCE has a SPEND XP button beside XP LEVELS and MILESTONE (named with the system's own word for XP). Turned on, a WHAT XP BUYS section lists what XP can buy, each as a card: RAISE A STAT, with which group it raises (or every stat), what one step costs and how high it can go; or AN OPTION, with the list it buys from (lists with levels aren't offered) and what it costs. A stat's cost box reads the stat as it is (@old) and as it will be (@new), with a NEW RATING TIMES shape and "5 for each new rating · sample New rating 3: costs 15" under it; an option's cost says what it costs too. PURCHASES WAIT FOR THE GM is a switch. The section names anything that can't be bought yet, and every setting has its "?".
+- **Ranks when a character is made and goes up (7f1c2).** NEW CHARACTER asks a stat held as a rank by name, under RANKS on its stats step, and never gives it one of the step's numbers. A player can pick up to the stat's AT START and no further (the ranks past it are greyed, and the server refuses them too); the GM may give any. A level-up INCREASE on a ranked stat raises it a rank a point, up to its top rank, and LEVEL_UP.EXE shows the rank it goes to by name.
+- A rank on the sheet (7f1c1). A stat held as a rank is a picker of its ranks by name, with its worth beside it (= 7), starting at the lowest; formulas read the worth. An NPC's own sheet has the pickers too, and a sheet uploaded through IMPORT can give a rank by its name or its step. The SKILLS in Testfall are PROFICIENCY ranks. Keeping to AT START when making a character, and a level-up raising a rank, come next.
+- RANKS in the builder (7f1b). STATS & RULES has a RANKS tab: lists of named ranks, lowest first, from a preset (PROFICIENCY, DOTS, THE LADDER, SKILL RANKS) or empty, each rank with its name and worth (a number or a formula like 2 + @level), moved, added and removed. Once a system has one, a stat's HOLDS picks A NUMBER or a list; a ranked stat sets AT START, UP TO (the highest a new character may pick) and its sample as a rank, and FORMULAS read its worth. The sheet's rank picker comes next.
+- INSTALL on the GEAR tab (7e4c). A gear line named like an item that needs an install (CYBERWARE, say) shows what it costs, and INSTALL: the player's or the GM's. Installed, it works, its cost counts on its stat (named by it on the badge), and its line is locked until REMOVE, which gives the cost back. Each install has a counter over the gear, CYBERWARE · STRAIN 2.75 OF 3, amber at its limit; past it a player's INSTALL can't be pressed and says why, and the GM's says INSTALL ANYWAY. A shop never offers to buy an installed item.
+- INSTALLS on the builder's ITEMS page (7e4b). Beside SLOTS, a system can have installs, like CYBERWARE: each with what it costs against (any stat or formula but the token's maximum), whether each one ADDS TO it or TAKES FROM it, and how far it may go, NEVER PAST or NEVER BELOW a number or formula like @might. An item's features can need INSTALLED AS one, with a COST (fractions allowed). The GEAR tab's INSTALL and REMOVE come next.
+- A system's items in its shops (7e3c). CATALOGUES.EXE has DOWNLOAD ITEMS: a catalogue of the system's items on the gear's shelf, with their words and each price left for you to fill in (a row without a price is left out, so nothing is sold free by mistake). Its preview names the lines that are items, bought each is that item to WEAR and ATTUNE, and any line only nearly named as one, such as Ring of Migt, with the item it nearly is. The ITEMS page says where to sell and give them.
+- WEAR and ATTUNE on the GEAR tab (7e3b). A gear line named like one of the system's items shows it under the line: what slot it needs, WEAR (WORN · TAKE OFF once on), ATTUNE once worn (ATTUNED · END once attuned), and what it is doing, WORKING or why not. Each slot is counted over the gear, ATTUNED 2 OF 3, amber when full; with none free a player can't attune, and the GM's button says ATTUNE ANYWAY. On a player's sheet the GM can type that character's own count. An item's features with uses tick on its line. A system with items and no lists now shows their bonuses on the stats too. The GM's GIVE.EXE lists the system's items under ITEMS, each with what it needs and its words, and gives one as a stowed gear line of its name, ready to wear.
+- An ITEMS page in the builder (7e2b), after CHOICES. SLOTS are things each character has so many of, like D&D's ATTUNED, three each; make none and the word never shows. Each item has a name, words, what its features need (CARRIED, WORN, or WORN and in a slot), and features made as a class's are on CHOICES (bonuses, uses a rest refills, rolls, changes to a roll), never at a level, opening a list or giving an increase. A shop sells an item by its name. Wearing and attuning at the table come next.
+- The ways a bonus counts, in the builder and on the sheet (7e1b). Each modifier on CHOICES now has ADD or AT LEAST. AT LEAST sets a value that high unless it is already higher, like an Amulet of Health's CON 19, and its words line says "at least 19". An ADD can say where it STOPS AT: +2 CON, never past 20. The token's maximum is only ever added to. On the sheet, the stat's badge names what each bonus really gave: `Ring (+2, stops at 20) +0`, `Amulet → 19`, or `(already higher)`.
+- An uploaded sheet's HP MAX, where health is per level (7d7c). The importer, the blank PDF form and the JSON template now ask for it, under the game's own word for it. A whole upload keeps it as the maximum for the levels the character has, and each level gained in CITY_NET adds to it as usual. What each level kept before the upload is cleared, as the upload is the whole character. The record on the CHARACTER tab shows it as one line (L1–3 · HEALTH 31), and the GM can CLEAR it to count each level as the game does. Left empty, each level counts as before.
+- What each level gained, on the CHARACTER tab (7d7b2). Under the class picks, folded shut, a record both the player and the GM read: each level's health and how it came (the full die, a roll, the average, set by the GM), with what each level adds, and the maximum it all comes to. Each ability increase shows what it went on, or the feat taken in its place. The GM, on a player's sheet, can clear a past level's roll, set any level's die result, put a set level back, and clear an increase. The player rolls a cleared level again right there (to the dice tray) and spends a cleared increase with − and +, as in LEVEL_UP.EXE.
+- **FILL IT IN FOR THEM, for a level up.** On a player's sheet, the GM's line now always shows their level, and whether one is ready, with FILL IT IN FOR THEM. It opens the player's LEVEL_UP.EXE with every limit off: no XP needed, FINISH with nothing rolled (health takes its average), nothing picked or no points spent, and what they don't meet added anyway. The window says what FINISH will leave. Everything is done on the player's sheet, in their name.
+- **A feat taken instead, in LEVEL_UP.EXE and on the sheet.** Where an increase offers a list, ABILITY INCREASE has OR A FEAT INSTEAD: that list's options, one picked in place of the points, and USE THE POINTS INSTEAD to go back. FINISH goes with either. On the sheet, the feat is kept under the feature that offered it, and while the points aren't spent the sheet offers it there too. The feature says RAISES STATS: 2 POINTS, OR A FEAT.
+- **OR A FEAT INSTEAD.** An increase on CHOICES can offer a list instead of its points, as D&D offers a feat in place of an Ability Score Improvement. The list must be picked THROUGH FEATURES or BOTH, and the page says so when it isn't. Going up, the player then takes the points or one pick from that list, never both. A pick taken there means the points don't count, and once the points are spent the list has no room there. Taking it in LEVEL_UP.EXE comes in the next piece.
+- **ABILITY INCREASE in LEVEL_UP.EXE.** A level that unlocks an increase gets its own folder: each stat it may raise, its value now, and − and + to spread the points, within the most on one and where the stats stop. FINISH waits until every point is spent, and leaving keeps what was spread. The stat's badge then says where the points came from (14 → 16, Ability Score Improvement +2), what was typed stays as it was, and the GM's LEVEL_DOWN takes them off again. A feature on the sheet says it RAISES STATS.
+- **Ability increases on CHOICES.** A feature can now RAISE STATS: the points it gives, the most on any one stat, which stats (all of them, or one group such as ABILITIES) and where they stop (D&D's 20, or no limit). D&D's 2 points, Pathfinder 2e's +1 to four and 13th Age's +1 to three all fit. The page says the setting in words. Players spend it when they go up a level, which comes in the next piece.
+- **ROLL TO BEAT.** A fifth way to gain health per level: going up, roll against your current maximum. Beat it and the level gains more; otherwise it gains nothing. The GM picks what is rolled: A POOL (6d10 and a d6 gained to start, as Mörk Borg does, both changeable) or A DIE PER LEVEL (every level's die and the new one, with what each level adds; beaten, the new level's die again). Each way shows an example on the LEVELS page. The roll goes to the dice tray and is kept until the GM clears it.
+- **REROLL ALL, KEEP HIGHER.** A fourth way to gain health per level, as Cities Without Number does it. Going up, ROLL THEM ALL rolls every level's die again (each class level with its own), plus what each level adds for every level. If the total beats the current maximum, it becomes the new maximum; otherwise the maximum goes up by 1. It's kept like any health roll until the GM clears it, and that level's gain isn't recounted when a stat changes.
+- **Rolling for health per level.** GAINED BY on the LEVELS page can now be ROLL or THE PLAYER CHOOSES. LEVEL_UP.EXE's HEALTH folder throws the class's die in the tray, and NEXT and FINISH wait until health is settled. The roll is kept the moment it's made: the player can't roll again or switch class until the GM clears it. THE PLAYER CHOOSES offers TAKE (the average) or ROLL. The GM sees LEVELING UP on the player's sheet, with the roll and CLEAR THE ROLL. LEVEL_UP.EXE now stays in front of the tray when it opens, as NEW_CHARACTER.EXE does.
+- **Max health per level.** MAX HEALTH on the LEVELS page can now be PER LEVEL. Level 1 has the full die. Each level after it gains half the die, rounded up, plus what EACH LEVEL ADDS (a formula, like `@con_mod`). The die is each class's HIT DIE from CHOICES, or one die for every level. LEVEL_UP.EXE has a HEALTH folder saying what the level adds, and each level's gain is kept on the sheet. A stat changing recounts every level, and the token follows. LEVEL_DOWN takes that level's gain back off. Rolling for it comes next.
+- **Max health from a formula.** On the LEVELS page, MAX HEALTH can be A FORMULA instead of the number on the token, typed in the same formula box as STATS & RULES, so it can read stats, other formulas and levels (`10 + @con * @level`). At the table, the token's max health follows it as the sheet changes, and the token's current health moves along with it. Features that add to max health still add on top.
+- **Picks and new classes in LEVEL_UP.EXE.** When a new level opens a pick (a path, a feat, a school), the player makes it right in the window, and FINISH waits until they have. The window also offers classes they don't have yet, at level 1, greyed out with what they need when they don't meet it. Everything is checked as a pick on the sheet would be, and if one pick can't be made, nothing changes and the window says why.
+- **LEVEL_UP.EXE.** LEVEL UP READY on a sheet now opens a window, as making a character does. With more than one class, the player picks which goes up first. Then they see what the new level unlocks: the class's features, those of anything picked under it, and what everyone gets at that level. Nothing changes until FINISH. LEAVE FOR NOW keeps their place, and the sheet says LEVELING UP · CONTINUE. Picks a new level opens are still made on the sheet for now.
+- **XP on the blank form.** Where characters earn XP, the downloadable PDF form and the JSON template have a line for it under your game's own word, and an uploaded sheet brings that amount with it. Left empty, the character keeps what they have. Typing on the sheet still can't change XP: only the GM, or an uploaded sheet.
+- **Going up a level on a system you build.** Once a player's XP reaches the next level, or the GM gives them a level, LEVEL UP READY blinks on their sheet, and on the rail when it's closed, and they go up themselves, picking which class if they have several. Whether they may is your table's call, not the app's. The GM's LEVEL_UP and LEVEL_DOWN sit in the same window as the XP, and a milestone game gets that window with no XP in it. Where levels go up this way, a player no longer has + and - on a class and can't type a stat called level: the GM still can, and an uploaded sheet still sets it.
+- **XP on a system you build.** The GM gives XP from the window beside PAY_PLAYERS, to one player or several, EACH or SPLIT, under the game's own word, and SET XP TO puts a mistake right. Players see a meter under their HP bar, in cells like it, saying how much is left and what carries over into the next level. Only the GM gives XP: there's nothing for a player to type. Going up a level comes next.
+- **The builder's LEVELS page.** A new page on the rail says how a game's characters advance: XP LEVELS, MILESTONE, both or neither, the same answer as SETUP's. It sets the highest level and the XP table, filled from what level 2 costs and a multiplier for each range of levels, like levels 1 to 5 x 2 and levels 6 to 10 x 1.5. Any level can be typed over. XP past a level carries into the next, as the table holds running totals. Players don't see any of this yet: the meter on the sheet comes next. The XP word is renamed on WORDS, as it already could be.
+- **Picks on the form.** The blank PDF and the JSON template now have a line for each list a character picks from: a dropdown with a level box where one is picked, or names with commas between where more can be, like `Soldier 3, Mage 1`. A list under a feature is on the form too, placed under whatever opens it. An upload is the character, complete: IMPORT reads the lines by name, one the character doesn't meet comes in as it is, said in the preview first, and it replaces whatever a list held, locked by a roll or not. A list it doesn't name is cleared, said in the preview first. Only what it can't place is left out, said by its line: a name it can't find, no room, or nothing opening it. The inventory is the exception: an upload adds to it, stacking what matches, to be tidied on the sheet. An upload doesn't hand out what an option gives.
+- **FILL IT IN FOR THEM.** From the line on a player's sheet, the GM opens the same new character flow on that player's sheet with every limit off: every folder open, NEXT and FINISH never held, stats typed in whatever way the game sets them, and a kit or option not met can be added anyway. Money left unrolled is rolled at FINISH and logged.
+- **CLEAR THE ROLL.** A kept roll stays kept, and the GM can now take one off while filling in: stats, starting money or an option's money. The roll button comes back for whoever is at it, so a player can throw their own dice again, and the old roll stays in the log. Clearing stats also takes their numbers off. Players are now told "Your GM can clear it for another go."
+- **The GM's side of a new character.** On a player's sheet the GM now sees where they are in the guided flow, like `CREATING · STEP 3 OF 6 · THE STATS`. **SKIP IT** marks them done as they stand. **START OVER** asks first, then clears their name, stats, picks and rolls and asks them again, with the buttons blinking. On a finished character it also takes back the kit items and money FINISH gave, as far as it can: an item they no longer have is passed over, and money stops at 0. Characters finished before this was recorded keep what they were given, and the warning says so.
+- **START FRESH, for a system you deleted.** Installing the file of a system deleted here used to offer only BRING IT BACK, with every character, bank and token played in it. START FRESH now sits beside it and installs a new, empty copy. It asks first, as the old characters stay hidden and that file won't bring them back again. The new copy still counts as that file's system, so a later version offers UPDATE. It works from a `.citysys` or a `.zip`.
+- **What a CHOICES option gives now reaches the table (7c4e2).** A new character gets the items and money of every option they hold as they finish NEW_CHARACTER.EXE, nested picks included, with the KITS and MONEY steps on or off, and on top of what those give. Each option says what it gives beside it before it is picked. Money set to a roll is rolled on that option's own step, once, holding NEXT until it is, written to the dice log and thrown in the tray, and it stays with that option if the player swaps away and back. An option that never had a step to roll on, as in a list everyone has, is rolled at FINISH. A plain sheet, an upload or a game with the guided flow off gives nothing, and with the BANK part off no money is said or paid. A sheet designed without an inventory is now refused for options giving items, as it is for kits.
+- **What a choice gives, in the builder (System Builder, Phase 7c):** a CHOICES option, like a backstory or a class, can now say what a new character holding it starts with: items typed like Crowbar, 3x Rations, and money per currency as a number or a roll. They travel in the system file, and the CHOICES IMPORT and its downloads read and write them, in gives and money columns. Players don't get them yet: that comes next.
+- **Starting money (System Builder, Phase 7c):** the NEW CHARACTER page's MONEY step says what each currency starts at: nothing, a number, a roll like 3d6 * 10 in whole pieces of it, or typed in by the player. A roll is made once on the secure dice, thrown in the tray and written to the log. It is all paid into the bank as they finish, once. With the BANK part off, or nothing set, the step isn't asked. An uploaded sheet is paid nothing, as it is taken as it is.
+- **Kits in the GIVE window (System Builder, Phase 7c):** GIVE.EXE now lists a system's kits beside its items, under KITS, each saying what is in it. The GM can hand any kit to anyone with a sheet at any time, whoever it was meant for, including one marked THE GM GIVES IT, or one whose requirement isn't met. The items land in the inventory, and the player is told what was in it.
+- **Starting kits at the table (System Builder, Phase 7c):** the new character window now has a KITS step. It says what everyone gets, and offers the kits to pick from, one at a time, each saying what is in it. A kit going ONLY IF is off until its requirement is met, saying what it needs. Nothing lands until they finish, when each item becomes its own line in the inventory, stacking with the same thing already carried. A kit the GM gives is never shown to players. An uploaded sheet gets no kits, as it is taken as it is.
+- **Kits in the builder (System Builder, Phase 7c):** the NEW CHARACTER page's KITS step now makes named kits of items, typed like Rope, Lantern, 3x Rations, each saying who gets it: EVERYONE GETS IT, A PLAYER MAY PICK IT, ONLY IF a requirement is met, or THE GM GIVES IT. They travel in the system file. Players aren't asked for them yet: that comes next.
+- **Point buy for a new character's stats (System Builder, Phase 7c):** stats can now be set by POINT BUY on the NEW CHARACTER page, with the points to spend, the lowest and highest number, and what each number costs. 1 FOR 1 and CLIMBING fill in the costs, and any box can be changed. Every stat starts at the lowest, the player buys up and down with the points left always in view, and any left over are simply unspent. The server holds them to the points. The builder says if a range doesn't fit a stat, a cost is missing, or the points don't cover every stat at its lowest, and the system can't be published that way.
+- **Rolling a new character's stats (System Builder, Phase 7c):** stats can now be set by ROLL on the NEW CHARACTER page, with a formula like 4d6 drop lowest. The server rolls one number per stat on the secure dice, the table sees it in the tray and the dice log, and what comes up is kept. IN ORDER puts each number straight on the next stat; ARRANGE lets the player place them as they like. The builder says if a formula doesn't read, or could come to a number a stat can't hold, and the system can't be published that way. A roll made in NEW_CHARACTER.EXE, here or on a list, opens the tray beside the window rather than over it.
+- **A fixed array for a new character's stats (System Builder, Phase 7c):** on the NEW CHARACTER page, stats can now be set from A FIXED ARRAY: the same numbers for everyone, each placed on the stat they choose. Players pick a number, then a stat, and can swap or take a number back until they finish. Each step can have its own way, so ABILITIES can use an array while SKILLS are typed in. The builder says if there are too few numbers or one doesn't fit a stat, and the system can't be published that way. While a character is being made, a stat set this way can't be typed over on the sheet. Once they finish, the sheet works as it always has.
+- **Which stats a new character is asked for (System Builder, Phase 7c):** the NEW CHARACTER page now says how the stats are asked. ONE WAY FOR ALL is one step for every stat, with any group left out for numbers nobody sets at creation, like stress. GROUP BY GROUP gives each stats group its own step, which can be moved and switched off on its own. Changing between them keeps the stats in the same place and what was left out still left out. Players are asked what is set here, and a stat left out stays on their sheet. The other ways to set stats come next: until then they are typed in.
+- **NEW_CHARACTER.EXE (System Builder, Phase 7c):** with GUIDED NEW CHARACTER on, a player with a blank sheet sees CHARACTER_CONTROLS blink, then CHARACTER_SHEET, which opens a window walking them through the steps their GM set, in order: who they are, their stats typed in, then each list to pick from. What they choose is written to their sheet as they go, and LEAVE FOR NOW loses nothing: the sheet shows CREATING · CONTINUE, which opens it on the same step. Finished, it closes on their sheet, which works as it always has. It also offers UPLOAD A SHEET, today's IMPORT, taken as it is with no steps after it, and THE BLANK FORM. While making a character a player may take a pick back, except on a list rolled only. Anyone with a sheet already is never asked. Kits, starting money and the other ways to set stats come next.
+- A new builder page, NEW CHARACTER: a GM can turn on GUIDED NEW CHARACTER and set the steps a player is walked through, in their order, each on or off: who they are, the stats, one for each list on CHOICES, kits and money. A list made later joins by itself, and a list placed before a stat it needs says so. Nothing changes at the table yet: the window players get comes next.
+- Formulas can ask what a character has: has(second_wind) is 1 while they hold that option or have that feature unlocked, else 0. It works in formulas, requirements ("MAGE needs SECOND WIND", said by name on the sheet), a feature's amount, a roll's ADD and a rest's amount. The formula box's INSERT lists every option and feature under CHOICES, and catches a misspelt name; so does PROBLEMS. On the map, it reads in names as a row on the formula.
+- On the builder's map (GRAPH), a list with levels is now a LEVELS node, with a row and a dot for its total and each option's level, so a formula reading @soldier_level is wired like any other, and you can draw one in. A feature's bonus is a dashed wire from its list into what it changes. Both are read from CHOICES and changed there: the node's GO TO opens the list, and clicking a bonus wire offers GO TO CHOICES in place of CUT. A list with no levels and no bonuses stays off the map.
+- ROLL FOR IT on the sheet: a list with a table to roll on has a ROLL FOR IT button beside its options. The server rolls it, the dice tray throws it and the log says what came up ("Wren rolled Background (d6) [4 = 4] — SCRIBE"); the sheet marks that option TAKE IT. BY HAND OR ROLL: any option can still be picked, and players may roll again. BY ROLL ONLY: players can't pick by hand, roll once, and take what came up; the GM can pick any option for them and ROLL AGAIN. Works under a feature that opens a list too.
+- A list on the builder's CHOICES page can have a table to roll on, like a book's "roll your background": pick its dice (d6, 2d6, d20, d100 or the system's own) and the rolls are shared out evenly over its options, each one changeable. A roll on two options, or rolls on none, are named beside the table. PLAYERS PICK sets how players choose from it: BY HAND, BY HAND OR ROLL, or BY ROLL ONLY. The CHOICES import and its downloads carry each option's roll. Rolling for it at the table comes next.
+- Where a game's rests are finished on each sheet, the GAME tab's RESTS shows who has finished the rest the GM called: WAITING ON 1 OF 3, a line for each player (finished, or finished by the GM, with what it changed and the dice spent; resting; not finished yet), and the NPCs it rested at once. FINISH FOR one player, or FOR EVERYONE still resting, finishes it as they would have, asked first. The list follows the players as they finish (R4).
+- **Resting on the sheet (R3b).** A system whose rests are finished on each sheet gives every
+  character sheet a RESTS section, after CHOICES: a button for each of the game's rests. Each asks
+  first, so a stray click rests nobody. A rest the recovery dice are spent at opens its panel, with
+  the dice to spend and FINISH, which asks too; a rest with nothing to spend applies once asked.
+  FINISH does everything a called rest does: refills, uses, dice back, health and a line in the log.
+  The GM can rest anyone from their sheet. In the GAME tab, CALL now asks first; in such a system it
+  opens the rest on each player's sheet, CALLED BY THE GM, for them to finish, and NPCs rest at once.
+  The recovery dice move from CHOICES into the rest panel; dice spent any time, or in a system whose
+  rests are at the GM's call, stay in view in the RESTS section. CUSTOMIZE keeps RESTS as a section
+  to move like any other.
+  On the builder's RESTS page, the panel below the rests is headed FOR EVERY REST, as its recovery
+  dice and RESTS ARE FINISHED are the same whichever rest is picked; and each rest's own panel says
+  what it does with the dice ("Hit Dice: spent at this rest · gives back nothing"), with SETTINGS
+  taking you to them.
+- **WHAT PLAYERS GET on RESTS (R3a).** Under the recovery dice, a box says in the system's own words
+  what the settings give a player on their sheet, and what they give the GM: REST buttons or none,
+  when and where the recovery dice are spent, and who opens spending. It changes as the settings
+  change. Under it, the server side of resting from the sheet: a player takes one of the game's
+  rests on their own character, doing everything a called rest does (refills, uses, recovery dice
+  back, health, a line in the log), in a system whose rests are finished on each sheet; the GM may
+  for anyone. The sheet's REST section comes next.
+- **A slow map says why.** A browser with hardware acceleration turned off draws the 3D map slowly,
+  with no word of why. Now the GM and players see a small notice when the browser itself says it
+  draws in software: HARDWARE ACCELERATION IS OFF: THE 3D MAP WILL BE SLOW, with the steps to turn
+  it on in their browser (Firefox, Chrome or Edge). It never shows from a guess. DISMISS stops it
+  for good in that browser. SYSTEM_INFO has MAP SLOW?, the same steps to open any time (some
+  browsers, Firefox among them, draw slowly without saying so), and a WARN ME IF HARDWARE
+  ACCELERATION IS OFF switch, kept in the browser, that turns the warning back on.
+- **Recovery dice on the sheet (R2b).** A character's recovery dice now head their sheet's CHOICES
+  block: the system's name for them, what one heals and where they're spent, and each pool (a d10
+  for each Fighter level, say) as pips lit while left. SPEND rolls as many as − and + say: the dice
+  tray opens, the heal goes onto the character's tokens, and everyone sees the line in the log. For
+  real dice, click a pip to tick one off, or back. A rest that gives them back lights them again.
+  In a system that leaves spending to the GM, the GAME tab's RESTS has OPEN SPENDING: while it is
+  off, players' dice wait ("THE GM OPENS SPENDING"); the GM can spend them on any sheet any time.
+- **Recovery dice can be left to the GM (R2a).** RESTS' RECOVERY DICE has SPENDING: ANY TIME, where
+  players spend them from their sheet whenever they like, or WHEN THE GM OPENS IT, for a GM who wants
+  control, where players spend or tick them off only while the GM has spending open. Under it, the
+  server side of recovery dice at the table: each character's pools from their classes (one per
+  class with a die, as many as its level, or one pool of a formula's count), spending them with a
+  roll that heals through the system's health model onto every token of theirs with a dice-log line
+  for everyone, ticking them off for real dice, and rests giving them back. The pools on the sheet
+  and the GM's switch come next.
+- **Recovery dice and HIT DIE in the builder (R1b).** A class (any option of a levelled list) now
+  has a HIT DIE on CHOICES: NONE, D4 to D20, or OTHER for any size from 2 to 100 sides. RESTS has
+  RECOVERY DICE under the rests, off until turned on: a pool each character spends to heal at a
+  rest, like D&D's hit dice or 13th Age's recoveries, with no presets. Name it, then choose how many
+  each has (one per level, or a formula like 8), what one heals (its die, or its die for each level,
+  plus a formula like `@con_mod`), the rests it is spent at (or any time), and what each rest gives
+  back (nothing, all, half with at least 1, or an amount). RESTS ARE FINISHED says whether a rest the
+  GM calls applies at once or opens on each player's sheet. Turning LEVELLED off takes a list's dice
+  with it, and deleting a rest takes it out of the recovery dice. The pools on the sheet and the REST
+  panel come next; until then these are saved with the system and rests apply at the GM's call.
+- **STATS & RULES' formulas say what they read, and catch a misspelt name.** A name the system
+  hasn't got (`@strr` for `@str`) used to count as 0 without a word, on STATS & RULES and in the
+  graph view's panel, and PUBLISH let it through. Now each formula has a line under it saying it in
+  words ("worked out from Strength", "2 for each level", "your Strength"), and a misspelt name shows
+  there in red with a USE @str button that fixes it. In a condition, the IF, THEN or ELSE with the
+  mistake gets the line. The page's own INSERT panel and VALUE column stay as they were, and all its
+  formulas are read in one request a moment after typing stops.
+- **The formula box on ROLLS and RESTS.** A roll's ADD and AGAINST, and a rest's refill amounts,
+  now get the same box as CHOICES. A line under each says it in words with what it comes to for
+  the sample character: "against your rolled stat · sample, rolling Strength, rolled stat 16:
+  target 16", "1d8 + CON modifier · sample CON modifier 2: 3 to 10". A roll's box rolls the first
+  stat in ROLLED BY. Dice in a rest are said as the least and most they can come to. A misspelt
+  name shows in red with a fix (`@thsi` offers USE @this). A typo in ADD or AGAINST used to count
+  as 0 at the table without a word. The formula button writes common ones for you: THE STAT
+  ROLLED and ITS MODIFIER on a roll, DICE and DICE AND A STAT on a rest (pick how many, which die
+  and which stat or formula). INSERT lists what each box can read, the stat being rolled first on
+  a roll.
+- **Subclasses follow their class's level.** A list a feature opens, like Fighter's Martial
+  Archetype opening the archetypes at 3, now takes the level of the pick that opened it. Champion's
+  features get AT LEVEL on CHOICES, grouped by level, and unlock by the Fighter's level: Improved
+  Critical at 3, Remarkable Athlete at 7. Before, every feature of an archetype unlocked the moment
+  it was picked. This goes down the lists (a Battle Master's maneuvers follow the Fighter too), and a
+  list opened by a feat with no levels still has everything at once. The archetype never adds to the
+  character's level. The list's page says whose level it follows, and the sheet's NEXT line counts
+  toward it. A pick offer for a word starting with a vowel now reads "Pick an Archetype".
+  IMPORT reads and writes these levels too: the level column is now offered and read for any list
+  whose features unlock at a level, an archetype list or one everyone has, where before it was read
+  only for a LEVELLED list and dropped for the rest. A system file carries them as well.
+- **Formulas on CHOICES say what they do, and help you write them.** Under a modifier's amount, a
+  feature's USES and an option's REQUIRES, a line now says the formula in words with what it comes
+  to for the sample character: "+2 for each level · sample Level 3: +6", "needs Strength 13 or
+  more · the sample (Strength 16) meets it". A mistake shows in red before you publish, including a
+  name the system hasn't got: `@lvl` offers USE @level to fix it. The new formula button beside each
+  box opens SHAPE, which writes common ones for you (A NUMBER, PER LEVEL, PER CLASS LEVEL, HALF
+  LEVEL; AT LEAST and LEVEL AT LEAST on a requirement), and INSERT, the names the box can read, put
+  where your cursor is. The × that removes a modifier is now red.
+- **Features that add to the token's maximum (7a5a3).** A feature whose modifier is on HP MAX (or
+  WOUNDS, under a wound count) now moves the token's real maximum, not just the number the sheet
+  names: a level 3 fighter picking Tough (`2 * @level`) goes from 20 to 26 of 26, the current
+  moving with the maximum. A level up or down, or a change to a stat the bonus reads, moves it
+  again, and when the pick stops counting (dropped, or locked) it comes back off. Damage, healing,
+  rests and the health window all read the real number. The sheet names the bonus on its HP box
+  (20 → 26, Tough +6), and CHARACTER_CONTROLS' MAX HEALTH now follows the token when its maximum
+  changes elsewhere, so SAVE_STATS can't write an old number back. A new version of the running
+  game moves every player's token at once.
+- **Lists inside lists, and lists every character has (7a5a2).** On the CHOICES page each list now
+  says how it is PICKED: ON ITS OWN, as before; THROUGH FEATURES, only under the features that open
+  it (a SOLDIER's SPECIALTY at level 3); BOTH, some at the start and more from features, like feats;
+  or EVERYONE HAS IT, nothing to pick, every character has its options (a requirement still deciding
+  who), their features unlocking by the character's level, for what no class gives. A list shows
+  which features open it (OPENED BY), and a feature opening a list says HOW MANY picks it gives. On the
+  sheet, the pick waits right under its feature, PICK A SPECIALTY, and the chosen one hangs there
+  with its own features. Lower the level and it is kept, greyed, until the feature unlocks again;
+  one left with nothing to wait under is listed at the foot for the GM. HELP on CHOICES says how.
+- **A CHOICES list from a file (choices import).** A list with twelve classes and a hundred features
+  no longer has to be typed in by hand. IMPORT on a list opens a panel where you paste or upload a
+  table of its options (`name, description, requires`) and their features (`option, feature, level,
+  words, uses, refill`), from a spreadsheet or typed. PREVIEW shows what it would add and change,
+  each change old to new, before anything happens; APPLY puts it into the draft, live on PUBLISH like
+  any other change. Names are matched, nothing is deleted, and modifiers, rolls and the rest of what
+  a feature does are never touched. A line with a mistake is skipped, and you are told: a warning at
+  the top names each line (click one to jump to it), the line numbers beside the text mark them with
+  the mistake on hover, and APPLY says how many it will skip. DOWNLOAD EXAMPLE gives a file in the
+  right shape made for your system (its stat names, its rests, a level column only for a levelled
+  list); DOWNLOAD THIS LIST gives the list as it is, to keep a copy or to edit and import back
+  without changing anything else.
+- **The GM's tools in the CHOICES block, and bonuses named on the sheet (7a3b2).** On a player's
+  sheet opened from their token, or on their own, the GM can take a pick away (DROP, asked first:
+  the pick and what it gives go together) and add an option the character doesn't meet (it says
+  NEEDS INTELLECT >= 13 · ADD ANYWAY, and stays clickable for the GM only). The GM can also set a
+  player's class levels and tick their uses. And what picks do now shows on the fields themselves:
+  a stat or formula a feature changes gets a small badge with its value, and its tooltip says how it
+  got there ("10 → 11 (Guard Stance +1)"), the same badge CWN's cyberware uses.
+- **Picking on the character sheet (7a3b1).** A custom system with lists now has a CHOICES block on
+  its sheets (on STATS, after IDENTITY, on the automatic sheet; a block you can place on a designed
+  one). Players see each list, their picks with their levels, the features each has unlocked and
+  what they do, and the next one to come. They pick while a list has room (an option they don't meet
+  is greyed, saying what it needs: NEEDS INTELLECT >= 13), raise or lower a class's level, and tick a
+  feature's uses off and back, the rest that refills them named beside them. Hover a list's LEVEL
+  for how it adds up: SOLDIER 3 + MAGE 1. When the server says no, the reason shows under the block.
+  The GM's own tools on a player's sheet (taking a pick away, picking past a requirement) come next.
+- **Features on the CHOICES page (7a2b2).** Each option now has its features, what a pick gives a
+  character, grouped by the level each unlocks at in a levelled list and tagged with what they do.
+  Open one to set its name, level and words, and any of: modifiers on a stat, formula or health
+  field (+1 DEFENSE, +@mage_level), uses the player ticks off and a rest refills, rolls it gives,
+  a change it lets a roll take (ADVANTAGE on a save), and another list to pick from when it
+  unlocks. One feature can do several of these at once. Deleting one asks first, and every
+  setting has a "?". The server already works out what these do to a character's numbers;
+  picking on the sheet comes next.
+- **The CHOICES page in the System Builder (7a2b1).** A new page on the rail, after STATS & RULES,
+  for the lists characters pick from: classes, backgrounds, feats, playbooks, named in your game's
+  own words (CLASS / CLASSES). Each list says how many a character picks (one, several or any),
+  whether picks are LEVELLED, and whether MORE THAN ONCE is allowed, for multiclassing; a line
+  under it says what that means, and which name formulas read its levels by. Its options each have
+  a name, words for the table, and can have a requirement, a formula like @int >= 13. Deleting a
+  list or an option asks first. HELP has a CHOICES topic and every setting a "?". Features, what
+  each pick gives, are made on this page next.
 - **Players needn't see what a roll is against: the builder's choices (6c4h).** At the top of STATS
   & RULES' ROLLS tab, PLAYERS SEE A ROLL'S TARGET: SHOWN, VERDICT ONLY or GM ONLY, with a live example
   under it of what a player sees and what you see. A roll can pick its own in its step 3 (PLAYERS
@@ -267,6 +503,81 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood (tidying)
 
+- **Parts switched off, proven in a browser.** The third gap in e2e/COVERAGE.md is closed: a new
+  browser test runs a custom system with every part on and checks what each shows, the player's
+  BANK and HIT_POINTS buttons, their MAX HEALTH, ARMOR and SAVE_STATS, IMPORT on their sheet, and the
+  GM's initiative tracker, PAY_PLAYERS, GIVE_ITEM and buy-back rate. It then publishes a version with
+  those parts off and checks each one is gone for both, then turns them back on and checks they all
+  return. The parts only the built-in games have (vehicles, cyberware, death saves, luck, XP) have
+  nothing to hide at a custom table; NPC tiers waits for the NPC family.
+- **Lists inside lists, the server's half (7a5a1).** A list can now say how it is picked: on its own
+  (as every list was), only through the features that open it (a SOLDIER's SPECIALTY at level 3), or
+  both (FEATS: one at creation, more from features). A feature opening a list says how many picks it
+  gives. A pick made under a feature counts while that feature is unlocked; lower the level or take
+  the class away and it is kept, waiting, its bonuses and levels gone until the feature unlocks
+  again. Lists can nest as deep as they go, and the builder names any that open each other in a loop.
+  The settings on the CHOICES page and the picks under features on the sheet come next.
+- **Every health model, proven in a browser.** The second gap in e2e/COVERAGE.md is closed: a new
+  browser test plays each of the seven health models a system can choose, one at a time. A player
+  with a token hurts and heals it from HIT_POINTS (a pool under its own name, two tracks where
+  damage past the second spills into the first, damage types marked lightly and heavily, harm
+  levels where a full level moves harm up, a wound count down to INCAPACITATED, hit locations with
+  their notes, and none, which says harm is conditions). The GM sets the second track's maximum.
+  Another player watches from the chat's user list and sees only the picture: the heartbeat, a bar,
+  the worst harm's name, which place is hurt. The test also reads what the server sends that
+  player, and it never holds a number or a note.
+- **Importing a list of choices, the server's half (choices import 1).** The server can now read a
+  file of a list's options and their features (`[options]` name, description, requires;
+  `[features]` option, feature, level, words, uses, refill) against the draft and say what it
+  would add and change, each part from and to, without saving anything. As decided with the
+  mockup: matched by name, nothing deleted or renamed; an empty cell leaves things as they are and
+  `-` clears; a feature is found by its level too only when its name repeats (ABILITY SCORE
+  IMPROVEMENT at 4 and 8); a line with a mistake (an unknown rest, a typo in a formula's @name, a
+  level past 30) is skipped and named by its line, and the rest goes in; modifiers, rolls and the
+  rest of what a feature does are never touched. The IMPORT button on the CHOICES page comes next.
+- **Who sees what on a sheet, proven in a browser.** The first gap in e2e/COVERAGE.md is closed: a
+  new browser test plays a custom system with a sheet the GM laid out. Its owner fills it in and
+  can't change the field kept for the GM; another player, looking them up from the chat's user
+  list, sees only the public lines, and the server sends their browser nothing else; the GM opens
+  the whole sheet the same way and sets the GM's field, which the owner then sees. The way it looks
+  a player up (GLOBAL_CHAT, their name, VIEW_PLAYER_INFO) lets later tests reach another player's
+  token without clicking the 3D map.
+- **Picking on the sheet, the server's half (7a3a).** The server now takes a character's picks
+  from their sheet, checked as decided: a player picks for their own character while a list has
+  room and the requirement is met (told why not, in words: "Mage needs INTELLECT >= 13"), sets
+  their own class levels, and ticks a feature's uses off and back; only the GM takes a pick away,
+  or picks past a requirement. Every save works out what the sheet will show: the picks and their
+  levels, where each bonus comes from, each feature's uses left, and which options a character
+  doesn't meet yet. A rest refills the uses of features it (or a rest it counts as) refills.
+  Nothing kept beside a sheet's fields can be written by a player as a field. The CHOICES block on
+  the sheet comes next.
+- **A map of what the browser tests cover.** e2e/COVERAGE.md lists every option a GM can set in the
+  System Builder, the server tests for its rules, and the browser test that proves it at the table:
+  AT THE TABLE, BUILDER ONLY, or a GAP. An audit found most options built and tested on the server
+  but never played in a browser (health models other than a pool, parts switched off, house rules
+  at the table, conditions on tokens, who sees a sheet's fields, NPC tiers, currencies, most rest
+  and roll options, sheet import). Phase 7 closes them one family at a time, and every piece that
+  adds an option now adds its row and its proof at the table.
+- **What a character's picks do to their numbers (7a1b).** A character's picks are now kept on
+  their sheet, and the server works out what they do on every save. Each class picked has its own
+  level (`@soldier_level`), a levelled list adds them up (`@classes_level`), and `@level` is the
+  total, unless the system already has its own level, which keeps meaning what it always did.
+  Features unlock by level, and their modifiers reach the numbers: a stat stays as the player typed
+  it while formulas and rolls read it with its bonus (CON 14, +2 HARDY, read as 16), and a formula's
+  own bonuses are added before anything reading it. Nothing is written into a stat, so taking a
+  pick away takes its effects with it. A modifier's amount reads stats and levels, never a formula,
+  so nothing can go round in a loop. PUBLISH's preview shows what a changed feature does to each
+  character. Players can't write their picks as a plain field; picking on the sheet comes next.
+- **Choices and features, the format (7a1a).** The first piece of Phase 7 (approved mockup,
+  2026-10-27): a system can now hold the lists a character picks from (classes, backgrounds,
+  feats, playbooks, in the game's own words) and the features each pick gives. A list is picked
+  once, so many times or any number; it can be levelled, with features unlocking by level, and
+  taken more than once, for multiclassing. An option can have a requirement. A feature can change a
+  stat, formula or health field, have uses a rest refills, give rolls or a change to a roll, open
+  another list to pick from, or just be words, several at once. All of it is checked like the rest
+  of a shared file and travels in it beside the system, so a builder from before choices still
+  installs it. PUBLISH says when a version changes them. Nothing uses them yet: what a character
+  picks, and what that does to their numbers, comes next.
 - **Browser tests steady on CI's slower machines.** Every browser test now has two minutes, not
   one: tests of 15 seconds on a desktop ran past a minute on CI. The dice tray's no-queue test
   sends its two quick rolls with the tray already open and nothing drawn between them; drawing the
@@ -432,6 +743,49 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **The builder's tour and HELP know Phase 7.** The first-time tour now stops at ITEMS, NEW CHARACTER and LEVELS too (twelve steps). HELP's pages explain what Phase 7 added: ranks on STATS & RULES; increases, AT LEAST and STOPS AT, what an option gives, hit dice and rolled lists on CHOICES; installs on ITEMS; how each stats step is set, kits, money, FILL IT IN and uploads on NEW CHARACTER; and LEVEL_UP.EXE, max health, SPEND XP and IMPROVE BY USE on LEVELS. The rail's short descriptions of STATS & RULES, ITEMS and LEVELS say what is on them now.
+- A roll's sum reads plainly in the dice history. One die: `3 + 13 = 16`, not `3 = 3 + 13 = 16`. Several: `(4, 2) | 6 + 13 = 19`. A die rolled and not kept says `dropped`, one that isn't a success `miss`. The final total is in bold.
+- The GM's LEVEL_DOWN on a character whose classes are all at level 1 now takes the most recent class off, where it said "Already level 1" (7d7d). Picks made under its features are kept, waiting, and count again if the class comes back. That level's health and any increase it unlocked go with it. A class with more than one level still goes down first, as before, and a character's only class stays at level 1.
+- **A roll on a list's table now locks in what it lands on.** ROLL FOR IT used to mark a result for the player to TAKE. Now the roll picks it, and the player can't roll again, drop it or pick another. They ask the GM, who can CLEAR THE ROLL for them to roll again, ROLL AGAIN for them, or clear it and pick one by hand, which locks it too. Every roll stays in the log. PLAYERS PICK still decides whether a list is picked by hand, by hand or roll, or by roll only, and on BY HAND OR ROLL a player who wants to choose simply picks without rolling. One the character doesn't meet stays marked until they meet it or the GM steps in.
+- **ROLL FOR IT shows its table:** a list you can roll on now shows the dice over its options and each option's range beside it, so PICK A BACKGROUND (d6) reads 1-3 DOCKHAND, 4-6 SCRIBE, and a player can see what a roll should give. What came up is picked out on the table. A player who can't roll on that list doesn't get the table; the GM always does.
+- **What's left to pick on a sheet (System Builder):** the options of a list now sit one to a line under PICK A CLASS, each with what it needs beside it, instead of running together in a row after + CLASS, where a requirement could read as the next option's. An option that can't be picked yet is also easier to read.
+- The character sheet lists CHARACTER first and still opens on STATS. A built sheet can name the tab it opens on; renaming that tab in the builder keeps it, removing it opens on the first.
+- On a sheet's CHOICES, each list (CLASSES, FEATS) folds away on its own, saying how many are picked.
+- The HEALTH box shows its name alone, with CURRENT and MAX each under its number. Temporary HP is added to the current, in the warning color, and a bonus to the maximum (like Tough) colors it and names itself on hover.
+- A built system's automatic character sheet has a CHARACTER tab beside STATS: the name, concept, description and the picks (classes, feats) are there, and STATS keeps the numbers, health and RESTS. A customized sheet keeps its own layout.
+- **The GAME tab's RESTS and BANK are folders.** A custom game's RESTS moved out of TTRPG_SYSTEM,
+  which is for setting the game up, into a folder of its own on the GAME tab, with OPEN SPENDING at
+  its top when the GM has the say over recovery dice. The bank's CURRENCY_ICON, PAY_PLAYERS and
+  sounds are a folder too, with a line under it before GIVE_ITEM and what the GM hands out. Each
+  folder starts open and stays open or shut as the GM leaves it, in that browser. Folder buttons
+  have a solid border, TTRPG_SYSTEM's too, where the buttons inside are dashed.
+- **A rest that rolls no dice no longer pops the dice tray.** When the GM called a rest, every
+  character's line opened the dice tray for that player, and flashed it for everyone else, even when
+  the rest rolled nothing and the tray had only an empty board to show. Now only a rest that rolls
+  dice opens the tray and throws them. One that rolls none still puts its line in the dice log, so
+  everyone can see what it did, and the stream overlay leaves it out.
+- **The same switch at the table.** The dice tray's ANIMATION, the choices a roll asks about before
+  it is rolled (ADVANTAGE, PUSH and the like), and TRY ON THE MAP on a house rule in the builder's
+  graph now use the one switch the builder has: a pill whose knob slides across and lights up when
+  on, the words beside it part of it. A choice that can't be paid stays red and can't be switched.
+- **One switch across the builder, easy to see.** Switches like LEVELLED and MORE THAN ONCE on
+  CHOICES were plain words with a small circle in front, easy to miss as something to click. Every
+  switch in the builder is now the same pill with a knob that slides across and lights up when on:
+  CHOICES (MORE THAN ONCE, LEVELLED, HAS USES), PARTS and its shop buildings and catalogues,
+  CONDITIONS, RESTS, TRY IT's house rules, and every switch on ROLLS and TEST ROLL. The words beside
+  a switch are part of it, so clicking them flips it too. Its colors follow the theme.
+- **The builder's tour and HELP catch up.** The map view from Phase 5 was nowhere in them: HELP
+  now has THE MAP, how to use GRAPH (adding with + ADD or A, wiring by dragging a dot, CUT, the
+  diamonds on wires, notes, map groups and LINE UP, UNDO and REDO, the PROBLEMS corner, hover and
+  TRY ON THE MAP), and STATS & RULES' tour step and topic point to it. The tour has a ninth step,
+  CHOICES, and GETTING STARTED names it on the way down the rail. CONDITIONS says a condition on
+  every roll now changes the system's own rolls, named in the log.
+- **The builder's FEATURES page is now PARTS (7a2a).** It turns parts of the app on and off (the
+  bank, shops, vehicles), and the plan already called them parts. "Features" now means only what a
+  class or other pick gives a character, which the CHOICES page brings next. The rail, the page,
+  HELP, the tour, HOUSE RULES' list of what waits on a rule, WORDS' "off in PARTS" and PUBLISH's
+  preview all say PARTS. Nothing moves and nothing is lost: the page and its settings are as they
+  were.
 - **Each game system has its own bank.** A character's money now belongs to the game it was
   earned in: starting a new campaign on another system opens fresh accounts, and switching
   back finds the old money exactly where it was. On the first start after updating, every
@@ -506,6 +860,42 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The whole-builder browser journey covers Phase 7.** The journey that builds a system through the builder's screens and plays it now also makes a levelled class list with a feature's bonus and turns XP levels on; at the table the player picks the class, its bonus reaches their roll, the GM awards XP, and the player levels up.
+- **IMPROVE BY USE on the server (7f3a1).** A system whose characters improve by use says which stats do (a group's, or every stat; a stat held as a rank doesn't), what marks one (a successful roll of it, any roll of it, or only by hand), the rest it is rolled at (the end of a session to start), the roll and what it must beat (Call of Cthulhu's d100 over the skill), and what it then adds, up to a most. A roll of such a stat marks it as the system says, and the player or the GM can tick or clear a mark by hand. At that rest, or one that counts as it, each marked stat rolls; over its target it goes up, never past its most or its own highest, the rest's line in the log says so, and the marks clear. The settings are checked, carried in the system file, and named when a new version changes them. Nothing to see yet: the builder section and the sheet's marks come next.
+- **SPEND XP, buying, on the server (7f2a2).** A character can buy from the price list with the XP they haven't spent yet. Every purchase goes in a ledger on their sheet: what was bought, what it cost, who bought it and when. A stat goes up a step and an option is picked; a bought pick doesn't use up its list's room, and only the GM can take it away. With PURCHASES WAIT FOR THE GM on, a player's purchase waits, its XP held, until the GM approves it (checked again then) or declines it; the GM's own purchases never wait. The GM can undo any purchase, which takes it back and returns its XP. XP awarded is never lowered, so a level is never lost. Each save tells the sheet the XP unspent and what each next purchase costs. Nothing to see yet: the sheet comes in 7f2c.
+- **SPEND XP's price list on the server (7f2a1).** A system that spends XP keeps a list of what XP buys. RAISE A STAT raises one stat of a group, at a cost formula that reads the stat as it is (@old) and as it will be (@new), up to a most; a stat held as a rank goes up a rank at a time, to its top. AN OPTION buys a pick from a list that has no levels, if it isn't already held and its requirement is met. A switch makes purchases wait for the GM. The list is checked, carried in the system file and named when a new version changes it. AWARD XP, the GM's SET TO and an uploaded sheet now give XP in a system that spends it rather than levelling. Nothing to see yet: the builder page and the sheet come next.
+- Ranks with names, on the server (7f1a). A system can have lists of named ranks, lowest first, each worth a number or a formula (PROFICIENCY: UNTRAINED 0, TRAINED 2 + @level...), shared by any stats. A stat held as a rank keeps its step, and its value is that rank's worth, so every formula, roll and requirement reading it reads the worth; a bonus or a level-up INCREASE on it moves it a rank. Ranks travel in the system file. The builder's RANKS tab and the sheet's picker come next.
+- Installed items, on the server (7e4a). A system's ITEMS can have INSTALLS, like CYBERWARE: each costs against a stat or formula, ADDING TO it up to a limit (Strain up to Might) or TAKING FROM it down to one (Essence down to 0). An item needing one has a cost, fractions allowed. The player or the GM installs it while its line is in the gear; past the limit only the GM can. Its cost counts on that stat as one of its bonuses, never written in, so removing it gives the cost back; its features count while installed; no shop buys an installed line. The builder's fields and the GEAR tab's buttons come next.
+- Items at the table, on the server (7e3a). An item is carried while a gear line with its name is readied or stowed. A player can WEAR and TAKE OFF an item freely, and ATTUNE one that needs a slot while it is worn and one is free; the GM can attune past the count, and set one character's own number of a slot. Taken off, an item stays attuned, its slot still used, until it is ENDed. A worn (and, where it needs it, attuned) item's features count as a class feature's do: its bonuses, named on the sheet by the item, has(), and its uses; one on the token's maximum moves the token. The GEAR tab's buttons come next.
+- Items in a system, on the server (7e2a). A system can now hold items and slots: each slot is a name and how many each character has (ATTUNED, 3), and each item says what its features need to count (carried, worn, or worn and in a slot) with the same features a class has: bonuses, uses, rolls and roll changes. An item's feature never unlocks at a level, opens a list or gives an increase. Items travel in the system file and its .zip. The ITEMS page in the builder comes next.
+- The ways a bonus counts, on the server (7e1a, 7e1b). A feature's modifier can now set a value AT LEAST so high, as well as add to it, and an ADD can say where it STOPS AT, so a feat's +2 and a ring's +2, each stopping at 20, never take a score past 20. Capped bonuses count first, then plain ones, then AT LEAST, so an Amulet of Health's CON 19 or a Belt of Giant Strength's STR 21 still counts. A value already over a cap is never cut back. Each bonus records what it really gave, for the sheet to name what was cut.
+- What each level gained can be put right, on the server (7d7b1). The GM can clear a past level's kept health roll, which then counts as that die's average until the player rolls it again (to the dice tray, and kept). The GM can also set any level's die result outright, level 1 included, or send it back to the average (level 1: the full die). An increase the GM clears is the player's to spend again, checked as in LEVEL_UP.EXE. Each level now says how it was kept, and a level kept without a number averages its own class's die. The record on the sheet comes next.
+- Ability increases are kept and worked out on the server (7d6b1). Going up a level, each INCREASE the new level unlocks is spent with FINISH: every point, no more than its most on one stat, only on the stats it raises, and none past where they stop. It's kept per feature, added to the stats as a modifier is and named on the stat's badge, and taken off again by LEVEL_DOWN. A whole sheet upload clears it, as the upload's stats already include it. The window to spend it in comes next.
+- **`drain` in the backend tests waits for quiet.** The test database now counts the queries it hasn't answered yet, and `drain` waits until none are left, rather than a fixed eight round trips. A shop checkout's chain of queries outran eight under load, which is why some socket tests failed now and then on CI only. The whole backend suite now passes with `TEST_SLOW_DB=1` too.
+- **Timing races in the backend tests, swept.** Some socket tests checked a log line, a token or a message the server writes just after the sheet they had waited for, and failed now and then on CI's slower machines. Each now waits for exactly what it checks. `TEST_SLOW_DB=1 npx vitest run` makes every database answer arrive a few milliseconds late, so these show up on your own machine rather than in CI.
+- **The browser journeys run in five parts on CI, up from four.** Two runs in a row had a part past 10 minutes on its journeys step, so each part now gets a smaller share. The aim is 10 minutes or less per part, and a part is added when one passes that in two runs in a row.
+- **Browser journeys:** a backend test now fails when two journeys use the same system or player name. On CI the tests of a part share a database, so a clash passed as flaky on its retry until a third test used up the retry.
+- A Browser Journeys part that hangs on CI now fails after 25 minutes, with its report kept, and the job stops at 30, instead of holding a machine for GitHub's default six hours.
+- **Recovery dice and resting, as a system says them (R1a).** The first piece of resting on the
+  sheet: a levelled list's option (a class) can have a die, and a system can have recovery dice,
+  named as it likes (Hit Dice, Recoveries): how many each character has, what one heals, the rests
+  they're spent at, and what each rest gives back. It can also say whether a rest the GM calls applies
+  at once or opens on each player's sheet. These are checked like the rest of a system, travel in a
+  system file, and the CHOICES IMPORT reads and writes a class's die. The builder's pages for them
+  and the sheet come in the next pieces.
+- **Notes and skills for AI coding tools in the repo.** `AGENTS.md` holds the project's commands and
+  house rules for any AI coding tool that reads it (Cursor, Copilot, Codex and others), and `CLAUDE.md`
+  loads it for Claude Code, so there is one copy. `.claude/skills/` holds two shared skills, `builder-piece` (the steps for each builder piece)
+  and `mutation-check` (breaking new code on purpose to see the tests catch it). Two helpers moved
+  into `scripts/`: `mutation-check.js`, which runs the tests first, puts every file back and can
+  undo a killed run with `--restore`, and `changelog-add.js`. The rest of `.claude/` (local
+  settings) stays out of the repo.
+- **The browser journeys run in four parts at once on CI.** Each pull request's journeys were run
+  one after another on one machine, about 27 minutes. They now run on four machines at once, each with
+  its own servers and database and a share of the tests, about 12 minutes. The check is still called
+  Browser Journeys and passes only when all four parts do; a failed part uploads its own report
+  (e2e-report-1 to 4). Nothing changes when they are run on a developer's machine. The builder's
+  journey now finds PUBLISH's message by its words, as the formula box added a second status line.
 - **Browser tests.** The first tests in a real browser (e2e/, Playwright): the real app started on a throwaway
   database, the GM signing in, building a system through the builder's screens, publishing it twice and switching
   the game to it; and a custom game played in two browsers at once, a player making a character in its words

@@ -1,9 +1,9 @@
 import React from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DraggableWindow } from '../DraggableWindow';
-import { windowKey } from '../windowFocus';
+import { windowKey, setBuilderOpen, isBuilderOpen } from '../windowFocus';
 
 const baseProps = {
   title: 'TEST_WINDOW',
@@ -167,5 +167,63 @@ describe('like a desktop', () => {
     expect(windowKey("SHOP.EXE · VIC'S ARMS")).toBe('SHOP.EXE');
     expect(windowKey('CUSTOM_DIE.EXE · EDIT')).toBe('CUSTOM_DIE.EXE');
     expect(windowKey('BANK.EXE')).toBe('BANK.EXE');
+  });
+});
+
+describe('while the system builder is open (the map\'s windows over the builder, 2026-10-30)', () => {
+  afterEach(() => { act(() => setBuilderOpen(false)); });
+
+  it('hides every window, never closes one, and brings each back as it was', () => {
+    const onClose = vi.fn();
+    render(<DraggableWindow {...baseProps} onClose={onClose}><input aria-label="note" defaultValue="kept" /></DraggableWindow>);
+    const win = screen.getByText('TEST_WINDOW').closest('.win95-window') as HTMLElement;
+    act(() => setBuilderOpen(true));
+    expect(win.style.display).toBe('none');
+    expect(isBuilderOpen()).toBe(true);
+    act(() => setBuilderOpen(false));
+    expect(win.style.display).toBe('');
+    expect(screen.getByLabelText('note')).toHaveValue('kept');
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('keeps a window\'s own way of showing once the builder shuts', () => {
+    render(<DraggableWindow {...baseProps} windowStyle={{ display: 'flex' }}><span /></DraggableWindow>);
+    const win = screen.getByText('TEST_WINDOW').closest('.win95-window') as HTMLElement;
+    act(() => setBuilderOpen(true));
+    expect(win.style.display).toBe('none');
+    act(() => setBuilderOpen(false));
+    expect(win.style.display).toBe('flex');
+  });
+
+  it('answers no Esc while hidden, and does again after', () => {
+    const onClose = vi.fn();
+    render(<DraggableWindow {...baseProps} onClose={onClose}><span /></DraggableWindow>);
+    act(() => setBuilderOpen(true));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).not.toHaveBeenCalled();
+    act(() => setBuilderOpen(false));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('is kept where it was on a resize while hidden, having no size to fit', () => {
+    const setPos = vi.fn();
+    render(<DraggableWindow {...baseProps} pos={{ x: 5000, y: 5000 }} setPos={setPos}><span /></DraggableWindow>);
+    setPos.mockClear();
+    act(() => setBuilderOpen(true));
+    act(() => { window.dispatchEvent(new Event('resize')); });
+    expect(setPos).not.toHaveBeenCalled();
+    act(() => setBuilderOpen(false));
+    act(() => { window.dispatchEvent(new Event('resize')); });
+    expect(setPos).toHaveBeenCalled();
+  });
+
+  it('opening or shutting twice changes nothing more', () => {
+    const heard = vi.fn();
+    render(<DraggableWindow {...baseProps} onClose={heard}><span /></DraggableWindow>);
+    act(() => { setBuilderOpen(true); setBuilderOpen(true); });
+    expect(isBuilderOpen()).toBe(true);
+    act(() => { setBuilderOpen(false); setBuilderOpen(false); });
+    expect(isBuilderOpen()).toBe(false);
   });
 });

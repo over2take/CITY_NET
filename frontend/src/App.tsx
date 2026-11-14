@@ -32,7 +32,7 @@ import { TokenWindow, type TokenFolder } from './components/TokenWindow';
 import { BootScreen } from './components/BootScreen';
 import { createBootSounds, type BootSounds } from './sounds/bootSounds';
 import { useAmbientHum } from './sounds/useAmbientHum';
-import { buildTokenActions, createPlayerTokenRow, hitPointsTarget, isTokenShape, tokenView, type TokenViewer } from './components/tokenActions';
+import { buildTokenActions, createPlayerTokenRow, hitPointsTarget, linkedHealthTarget, isTokenShape, tokenView, type TokenViewer } from './components/tokenActions';
 import { QuickActions } from './components/QuickActions';
 import { buildBuildingActions } from './components/buildingActions';
 import { TERMINAL_PREVIEW, type TerminalAction } from './components/TerminalWindow';
@@ -53,6 +53,11 @@ import { npcsOnMap } from './sheets/restCalls';
 import { ChatWindow } from './components/ChatWindow';
 import { Sidebar, NavControlsMenu, CharacterControlsMenu, SystemInfoMenu, DiceMenu, QuickAccessMenu, hasSheetCombat } from './components/Sidebar';
 import { CharacterSheetWindow } from './components/CharacterSheetWindow';
+import { NewCharacterWindow } from './components/NewCharacterWindow';
+import { LevelUpWindow } from './components/LevelUpWindow';
+import { TERMINAL_WIDTH } from './components/TerminalWindow';
+import { useNewCharacter } from './hooks/useNewCharacter';
+import { useLevelReady } from './hooks/useLevelReady';
 import { VehiclesWindow } from './components/VehiclesWindow';
 import { EnemyVehiclesWindow } from './components/EnemyVehiclesWindow';
 import { vehicleLook as cwnVehicleLook } from './sheets/vehiclePresets';
@@ -65,6 +70,7 @@ import { useEnemyVehicles } from './hooks/useEnemyVehicles';
 import { hasVehicles } from './sheets/vehicleSystems';
 import { NpcLibrary } from './components/NpcLibrary';
 import { BuilderScreen } from './components/BuilderScreen';
+import { AccelerationNotice } from './components/AccelerationNotice';
 import { isCustomSystem } from './sheets/customTemplates';
 import type { BuilderPage } from './sheets/builderSession';
 import { NpcSheetWindow } from './components/NpcSheetWindow';
@@ -76,7 +82,8 @@ import { getTemplate } from './sheets';
 import { DiceTrayWindow, DiceScene } from './components/DiceTray';
 import { useTrayNotify } from './hooks/useTrayNotify';
 import { useRollFlash } from './hooks/useRollFlash';
-import { rollerOf } from './utils/rollNotify';
+import { rollOpensTray } from './utils/rollNotify';
+import { trayBeside } from './utils/trayBeside';
 import { CustomDieBuilder } from './components/CustomDieBuilder';
 import { useCustomDice } from './hooks/useCustomDice';
 import { EnemyRhombus, FriendlyRhombus, PlayerRhombus, OverlapChecker } from './components/Rhombuses';
@@ -239,6 +246,11 @@ function App() {
   const [currentController, setCurrentController] = useState<string>('');
   const [activeSidebarMenu, setActiveSidebarMenu] = useState<SidebarMenu>('none');
   const [isDiceTrayOpen, setIsDiceTrayOpen] = useState(false);
+  // The roll that opened the tray (2026-10-31): it arrives before the tray is there to hear it, so the
+  // tray is handed it to throw. Read through a ref by the socket handler, which outlives renders.
+  const [trayOpener, setTrayOpener] = useState<unknown>(null);
+  const trayOpenRef = useRef(false);
+  useEffect(() => { trayOpenRef.current = isDiceTrayOpen; }, [isDiceTrayOpen]);
   const [isCustomDieBuilderOpen, setIsCustomDieBuilderOpen] = useState(false);
   const [editingCustomDie, setEditingCustomDie] = useState<CustomDie | null>(null);
   const [customDieBuilderPos, setCustomDieBuilderPos] = useState(() => ({
@@ -394,6 +406,18 @@ function App() {
   const [isVehiclesOpen, setIsVehiclesOpen] = useState(false);
   const [isEnemyVehiclesOpen, setIsEnemyVehiclesOpen] = useState(false);
   const [sheetPos, setSheetPos] = useState(() => ({ x: window.innerWidth / 2 - 220, y: 60 }));
+  const [isNewCharacterOpen, setIsNewCharacterOpen] = useState(false);
+  const [newCharacterPos, setNewCharacterPos] = useState(() => ({ x: window.innerWidth / 2 - 240, y: 80 }));
+  // Read by the socket handler when a roll opens the tray, as trayOpenRef is: null while it is shut.
+  const newCharacterAt = useRef<{ x: number; y: number } | null>(null);
+  const [raiseNewCharacter, setRaiseNewCharacter] = useState(0);
+  const [isLevelUpOpen, setIsLevelUpOpen] = useState(false);
+  const [levelUpPos, setLevelUpPos] = useState(() => ({ x: window.innerWidth / 2 - 200, y: 100 }));
+  // As NEW_CHARACTER.EXE's: where LEVEL_UP.EXE is while open, so a health roll's tray (7d5b) opens beside it, not over it.
+  const levelUpAt = useRef<{ x: number; y: number } | null>(null);
+  const [raiseLevelUp, setRaiseLevelUp] = useState(0);
+  useEffect(() => { levelUpAt.current = isLevelUpOpen ? levelUpPos : null; }, [isLevelUpOpen, levelUpPos]);
+  useEffect(() => { newCharacterAt.current = isNewCharacterOpen ? newCharacterPos : null; }, [isNewCharacterOpen, newCharacterPos]);
   const [vehiclesPos, setVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 200, y: 90 }));
   const [enemyVehiclesPos, setEnemyVehiclesPos] = useState(() => ({ x: window.innerWidth / 2 - 160, y: 130 }));
   const [bankData, setBankData] = useState<{ balance: number, debt: number, firstPayDone?: boolean, highRollerDone?: boolean, currencies?: BankCurrencyAccount[] }>({ balance: 0, debt: 0 });
@@ -484,7 +508,10 @@ function App() {
     return { active: false, color: savedColor, name: '', description: '', hp_max: savedHpMax, hp_current: savedHpCurrent, hp_temp: savedHpTemp };
   });
 
-  // Load player configuration from the database when locations are fetched
+  // Load player configuration from the database when locations are fetched, and again when the
+  // token's maximum changes from elsewhere (the GM, a feature's bonus, 7a5a3): MAX HEALTH must never
+  // hold an old number for SAVE_STATS to write back.
+  const myTokenMax = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName)?.hp_max;
   useEffect(() => {
     if (!userName || !locations.length) return;
     const existing = locations.find((l: any) => l.shape === 'rhombus' && l.owner === userName);
@@ -492,7 +519,7 @@ function App() {
         // DO NOT set active: true here. That should only happen when the user clicks 'DEPLOY'
         setRhombusState(prev => ({ ...prev, ...mergeRhombusHealthFromLocation(existing, prev) }));
     }
-  }, [userName, locations.length]);
+  }, [userName, locations.length, myTokenMax]);
 
   // Sync player configuration to DB whenever they change it in the sidebar
   // Color only — name/description come from the character sheet (the backend
@@ -939,7 +966,16 @@ function App() {
       // originating from the standalone sheet tab which can't call onRolled().
       // Match on the login account: userName in the broadcast is the sheet's
       // display name (handle), which may differ.
-      if (rollerOf(data) === userName) {
+      // A quiet line (a rest that rolled nothing) only joins the log.
+      if (rollOpensTray(data, userName)) {
+        // Not on top of the new character window, or LEVEL_UP.EXE (7d5b): the player's next step is in it (7c3c, 7c4d).
+        const flow = newCharacterAt.current ?? levelUpAt.current;
+        if (newCharacterAt.current) setRaiseNewCharacter((n) => n + 1);
+        if (levelUpAt.current) setRaiseLevelUp((n) => n + 1);
+        if (!trayOpenRef.current) {
+          setTrayOpener(data);
+          if (flow) setDiceTrayPos((tray) => trayBeside(tray, { ...flow, width: TERMINAL_WIDTH }, window.innerWidth));
+        }
         setIsDiceTrayOpen(true);
         setActiveSidebarMenu('dice_menu');
       } else {
@@ -1083,6 +1119,18 @@ function App() {
   const initiativeMode = initiativeSystem === 'cities_without_number'
     ? (globalSettings['cwn_individual_initiative'] === '1' ? 'individual' : 'side')
     : 'individual';
+  // The guided new character (7c2): where this user stands, and what CHARACTER_SHEET opens for it.
+  const newCharacter = useNewCharacter(socketRef, isLoggedIn && !IS_SPECTATOR ? userName : null, gameSystem);
+  const levelReady = useLevelReady(socketRef, isLoggedIn && !IS_SPECTATOR ? userName : null, gameSystem);
+  const openNewCharacter = () => {
+    socketRef.current?.emit('creationAction', { kind: 'open' });
+    setIsNewCharacterOpen(true);
+  };
+  // The first time on a blank sheet it is the flow that opens; after that the sheet, as ever.
+  const openSheet = (open: boolean) => {
+    if (open && newCharacter === 'new') openNewCharacter();
+    else setIsSheetOpen(open);
+  };
   const initiative = useInitiative(socketRef, initiativeSceneKey, initiativeSystem);
   // Held here, not in the window: the buttons that open it need to know whether this
   // table owns any vehicles at all.
@@ -1574,12 +1622,53 @@ function App() {
     if (selectedLocation?.id !== found.token.id) setSelectedLocation(found.token);
     setTokenFolderRequest((r) => ({ folder: 'health', seq: (r?.seq ?? 0) + 1 }));
   };
+  /** The GM's view of a sheet: its linked HP opens that character's health window (2026-10-31). */
+  const openHealthOf = (who: { username?: string | null; locationId?: number | null }) => {
+    const found = linkedHealthTarget(locations, who);
+    if ('notice' in found) { setNotification(found.notice); return; }
+    if (selectedLocation?.id !== found.token.id) setSelectedLocation(found.token);
+    setTokenFolderRequest((r) => ({ folder: 'health', seq: (r?.seq ?? 0) + 1 }));
+  };
   const healthShowing = !!selectedLocation && isTokenShape(selectedLocation.shape) && tokenFolder === 'health';
+
+  /**
+   * Every window App opens, closed: on TERMINATE_SESSION, and when the GM's panel signs out. One list, so a
+   * new window is closed by adding it here once (GIVE.EXE and a dozen others had been left open).
+   */
+  const closeAllWindows = () => {
+    setIsChatOpen(false);
+    setIsDiceTrayOpen(false);
+    setTrayOpener(null);
+    setIsCustomDieBuilderOpen(false);
+    setShowAdminPanel(false);
+    setShowPendingPanel(false);
+    setShowBattleMapManager(false);
+    setShowDirectorPanel(false);
+    setIsBankOpen(false);
+    setIsAdminPayOpen(false);
+    setIsAdminXpOpen(false);
+    setAdminBankPlayer(null);
+    setIsGiveOpen(false);
+    setGiveFor([]);
+    setIsCatalogueOpen(false);
+    setIsSheetOpen(false);
+    setOpenNpcSheet(null);
+    setOpenPlayerSheetUser(null);
+    setIsNewCharacterOpen(false);
+    setIsLevelUpOpen(false);
+    setIsVehiclesOpen(false);
+    setIsEnemyVehiclesOpen(false);
+    setIsRadioFeedOpen(false);
+    setIsRadioPlayerOpen(false);
+    setIsInitiativeOpen(false);
+    setIsNpcLibraryOpen(false);
+    setShopLocation(null);
+    setBuilder(null);
+  };
 
   const handleLogout = () => {
     // 1. Immediately close all UI elements for a clean fade-out
-    setIsChatOpen(false);
-    setIsDiceTrayOpen(false);
+    closeAllWindows();
     setActiveSidebarMenu('none');
     setSelectedLocation(null);
     setTargetObject(null);
@@ -1591,21 +1680,14 @@ function App() {
     setRoadSelectionBounds(null);
     setRoadTrail([]);
     setCameraTarget(null);
-    setShowAdminPanel(false);
-    setIsBankOpen(false);
-    setIsAdminPayOpen(false);
-    setAdminBankPlayer(null);
-    
+
     // Reset Rhombus state but keep color for next login preference
     setRhombusState((p: any) => ({ ...p, active: false }));
 
     if (socketRef.current && userName) {
         socketRef.current.emit('requestRhombusPurge', { owner: userName });
     }
-    
-    setIsSheetOpen(false);
-    setOpenNpcSheet(null);
-    setOpenPlayerSheetUser(null);
+
     setNotification("TERMINATING_SESSION...");
 
     // 2. Wait for animation to finish before unmounting map
@@ -1688,7 +1770,8 @@ function App() {
       {showBattleMapManager && (selectedLocation || activeEditLocation || editId) && (
         <BattleMapManager locationId={selectedLocation ? selectedLocation.id : (activeEditLocation ? activeEditLocation.id : (editId as number))} token={token} onClose={() => setShowBattleMapManager(false)} onMapsChanged={fetchCurrentLocBattleMaps} />
       )}
-      {view === 'battle_map' && activeBattleMapData && (
+      {/* The floor's name and EXIT, at the windows' height: gone while the builder takes over the screen. */}
+      {view === 'battle_map' && activeBattleMapData && !builder && (
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 2000 }}>
           <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'auto' }}>
             <h2 style={{ margin: 0, textShadow: 'var(--glow)', fontSize: '2em' }}>{activeBattleMapData.maps[activeBattleMapData.currentFloorIndex]?.designation?.toUpperCase() || 'UNKNOWN FLOOR'}</h2>
@@ -1740,7 +1823,8 @@ function App() {
               isBankOpen={isBankOpen}
               setIsBankOpen={setIsBankOpen}
               isSheetOpen={isSheetOpen}
-              setIsSheetOpen={setIsSheetOpen}
+              setIsSheetOpen={openSheet}
+              newCharacterWaiting={newCharacter === 'new' || (levelReady && !isSheetOpen)}
               isVehiclesOpen={isVehiclesOpen}
               isEnemyVehiclesOpen={isEnemyVehiclesOpen}
               setIsEnemyVehiclesOpen={setIsEnemyVehiclesOpen}
@@ -1926,7 +2010,7 @@ function App() {
                 token={token}
                 userName={userName}
                 controlsRef={controlsRef}
-                onLogout={() => { setToken(''); setIsAdmin(false); setShowAdminPanel(false); setIsSheetOpen(false); setIsVehiclesOpen(false); setOpenNpcSheet(null); setOpenPlayerSheetUser(null); setIsBankOpen(false); }}
+                onLogout={() => { setToken(''); setIsAdmin(false); closeAllWindows(); }}
                 tempCityMapScale={tempCityMapScale}
                 setTempCityMapScale={setTempCityMapScale}
                 globalSettings={globalSettings}
@@ -2137,6 +2221,8 @@ function App() {
             )}
             {/* A gift from the GM (4g4c): only the player given it is sent one. */}
             <GiftNotices socket={socketRef.current} system={gameSystem} />
+            {/* Hardware acceleration off: the map will be slow, and how to turn it on (GM and players alike). */}
+            <AccelerationNotice />
             <BankWindow
                 pos={bankPos}
                 setPos={setBankPos}
@@ -2168,13 +2254,40 @@ function App() {
                 playerToken={playerToken}
                 adminToken={token}
                 onOpenLink={(source) => {
-                  // Linked fields jump to the window that owns the value
+                  // Linked fields jump to the window that owns the value: this sheet's own
+                  // character's health, for the GM too, never "select a token first" (2026-10-31).
                   if (source === 'bank_balance') setIsBankOpen(true);
+                  else if (token) openHealthOf({ username: userName });
                   else openHealth();
                 }}
                 onRolled={() => setIsDiceTrayOpen(true)}
                 onOpenVehicles={() => setIsVehiclesOpen(true)}
                 currentTheme={currentTheme}
+                onContinueCreating={openNewCharacter}
+                onOpenLevelUp={() => setIsLevelUpOpen(true)}
+              />
+            )}
+            {isLevelUpOpen && (
+              <LevelUpWindow
+                raiseOn={raiseLevelUp}
+                pos={levelUpPos}
+                setPos={setLevelUpPos}
+                socket={socketRef.current}
+                userName={userName}
+                onLeave={() => setIsLevelUpOpen(false)}
+                onDone={() => setIsLevelUpOpen(false)}
+              />
+            )}
+            {isNewCharacterOpen && (
+              <NewCharacterWindow
+                raiseOn={raiseNewCharacter}
+                pos={newCharacterPos}
+                setPos={setNewCharacterPos}
+                socket={socketRef.current}
+                userName={userName}
+                authToken={token || playerToken}
+                onLeave={() => { setIsNewCharacterOpen(false); setIsSheetOpen(true); }}
+                onDone={() => { setIsNewCharacterOpen(false); setIsSheetOpen(true); }}
               />
             )}
             {isEnemyVehiclesOpen && isAdmin && (
@@ -2398,6 +2511,10 @@ function App() {
                 pos={npcSheetPos}
                 setPos={setNpcSheetPos}
                 onClose={() => setOpenPlayerSheetUser(null)}
+                onOpenLink={(source) => {
+                  if (source === 'bank_balance') setAdminBankPlayer(openPlayerSheetUser);
+                  else openHealthOf({ username: openPlayerSheetUser });
+                }}
               />
             )}
             {controlledNpc && (playerToken || token) && (
@@ -2418,6 +2535,7 @@ function App() {
                 npcId={openNpcSheet.id}
                 npcLabel={openNpcSheet.npc_label}
                 locationId={openNpcSheet.locationId}
+                onOpenLink={openNpcSheet.locationId ? (source) => { if (source !== 'bank_balance') openHealthOf({ locationId: openNpcSheet.locationId }); } : undefined}
                 headshots={headshotsForShape(openNpcSheet.token_shape)}
                 pos={npcSheetPos}
                 setPos={setNpcSheetPos}
@@ -2453,12 +2571,13 @@ function App() {
                 <DiceTrayWindow
                     pos={diceTrayPos} 
                     setPos={setDiceTrayPos} 
-                    onClose={() => setIsDiceTrayOpen(false)}
+                    onClose={() => { setIsDiceTrayOpen(false); setTrayOpener(null); }}
                     socketRef={socketRef}
                     authToken={token || playerToken}
                     bell={trayBell === 'on'}
                     onToggleBell={() => setTrayBell(trayBell === 'on' ? 'off' : 'on')}
                     openHistory={rollFlash.openOnHistory}
+                    openingRoll={trayOpener}
                 />
             )}
             {(() => {
@@ -2580,7 +2699,7 @@ function App() {
                   isOwner,
                   words: (term, form, builtIn) => wordFor(gameSystem, term, form, builtIn),
                   open: {
-                    ownSheet: () => setIsSheetOpen(true),
+                    ownSheet: () => openSheet(true),
                     playerSheet: (owner) => setOpenPlayerSheetUser(owner),
                     npcSheet: (sheet) => setOpenNpcSheet(sheet),
                     controlledSheet: (npc) => setControlledNpc(npc),

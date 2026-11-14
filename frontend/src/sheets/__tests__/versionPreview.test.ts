@@ -125,7 +125,7 @@ describe('each change, in words', () => {
 describe('BY CHANGE', () => {
   it('groups the changes in the page\'s order, each with who it reaches and their own value', () => {
     const groups = byChange(preview([VEX, ROOK]));
-    expect(groups.map((g) => g.label)).toEqual(['ON THE SHEET', 'NUMBERS THAT WILL WORK OUT DIFFERENTLY', 'STATS', 'HEALTH', 'MONEY', 'FEATURES', 'CONDITIONS']);
+    expect(groups.map((g) => g.label)).toEqual(['ON THE SHEET', 'NUMBERS THAT WILL WORK OUT DIFFERENTLY', 'STATS', 'HEALTH', 'MONEY', 'PARTS', 'CONDITIONS']);
     const sheetLines = groups[0].lines;
     // Renamed and made GM-only: one field, two lines.
     expect(sheetLines.map((l) => l.what)).toEqual(['GRIT → RESOLVE', 'RESOLVE', 'REPUTATION', 'SECRET', 'CALLING', 'OATH']);

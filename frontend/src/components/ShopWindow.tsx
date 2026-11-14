@@ -8,6 +8,8 @@ import {
   type Settle, type RefusalReason,
 } from '../data/shopRules';
 import { ownedItems, sellableAt, BOOK_SYSTEM } from '../sheets/ownedItems';
+import { installedNames, itemsWorkedOn } from '../sheets/gearItems';
+import { customTemplate } from '../sheets/customTemplates';
 import { uploadedIn, type UploadedEntry } from '../sheets/uploadedCatalogues';
 import { placeUploaded, destinationOf } from '../sheets/shopPlacement';
 import { placeBook, asBookRow, type BookRow } from '../sheets/bookPlacement';
@@ -487,7 +489,9 @@ export function ShopWindow({
    * same list from the same sheet when it pays, which is what stops the two disagreeing -
    * see the note at the top of ownedItems.ts.
    */
-  const owned = sheet ? ownedItems(sheet.data as Record<string, unknown>, system) : [];
+  // A custom system's items installed (7e4c) stay on the sheet, never sold: the server refuses them too.
+  const installed = sheet ? installedNames(customTemplate(system)?.items, itemsWorkedOn(sheet.data as Record<string, unknown>)) : new Set<string>();
+  const owned = sheet ? ownedItems(sheet.data as Record<string, unknown>, system).filter((l) => !installed.has(l.label.trim().toLowerCase())) : [];
   const sellable = sellableAt(owned, catalogues);
   const sellQuery = sellFilter.trim().toLowerCase();
   /** The sell list as shown: narrowed by its filter. Totals still count the whole list. */

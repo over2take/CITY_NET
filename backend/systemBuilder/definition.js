@@ -21,9 +21,13 @@
 //     sheet:   { tabs, header, sections },           // the character sheet (sheet.js)
 //     npc:     { sheet, tiers },                     // NPC layout and power tiers (npc.js)
 //     core:    { health, advancement, dice, distance }, // the setup questions (core.js)
+//     levels:  { top, first, ranges, typed },            // how far characters go, and the XP table (levels.js)
+//     spend:   { buys: [...], wait },                    // what XP buys, SPEND XP's price list (spendXp.js)
+//     improve: { stats, marked, at, roll, over, gain, most }, // IMPROVE BY USE (improveByUse.js)
 //     conditions: { blinded: { on: false }, glitching: { name: 'Glitching', ... } }, // (conditions.js)
 //     rests: { long_rest: { counts_as: ['short_rest'], refills: [...] } },          // (rests.js)
 //     house_rules: [ { id: 'magic', name: 'MAGIC', starts: false } ],  // what waits on one: houseRules.js
+//     choices: [ { id: 'classes', one, many, options: [...] } ],  // lists to pick from and their features (choices.js)
 //   }
 //
 // Problems come in two weights. A **fatal** one means the document cannot be stored at all:
@@ -36,6 +40,7 @@
 // are upgraded on read rather than refused.
 
 const { compileSystem } = require('./derived');
+const { rankedOf, checkRanks } = require('./ranks');
 const { checkSheet } = require('./sheet');
 const { checkNpc } = require('./npc');
 const { checkCore, healthLayout } = require('./core');
@@ -54,6 +59,12 @@ const { checkHouseRules } = require('./houseRules');
 const { checkGraph } = require('./graph');
 const { checkRolls, SEEN } = require('./rollStyles');
 const { checkDice } = require('./diceFaces');
+const { checkChoices, checkHasNames } = require('./choices');
+const { checkCreation, checkGifts } = require('./creation');
+const { checkLevels } = require('./levels');
+const { checkSpend } = require('./spendXp');
+const { checkImprove } = require('./improveByUse');
+const { checkResting } = require('./recovery');
 
 const FORMAT = 1;
 
@@ -69,7 +80,7 @@ const LIMITS = {
   word: 40,
 };
 
-const SECTIONS = new Set(['format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules', 'graph', 'rolls', 'symbols', 'dice', 'target_seen']);
+const SECTIONS = new Set(['improve', 'spend', 'ranks', 'levels', 'format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules', 'graph', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'items', 'resting', 'creation']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -156,8 +167,8 @@ const checkDefinition = (definition) => {
   checkCurrencies(definition.currencies, problems);
   checkBank(definition.bank, problems);
 
-  if (definition.lookups !== undefined || definition.derived !== undefined) {
-    const compiled = compileSystem({ lookups: definition.lookups, derived: definition.derived ?? [] });
+  if (definition.lookups !== undefined || definition.derived !== undefined || definition.ranks !== undefined) {
+    const compiled = compileSystem({ lookups: definition.lookups, derived: definition.derived ?? [], ranked: rankedOf(definition) });
     if (!compiled.ok) problems.push(...compiled.problems);
   }
   const derivedIds = new Set(Array.isArray(definition.derived)
@@ -172,6 +183,11 @@ const checkDefinition = (definition) => {
   ]);
   checkStats(definition.stats, taken, problems);
   checkSamples(definition.samples, statIdsOf(definition), problems);
+  // Ranks (7f1a): the lists, and the stats held as them.
+  checkRanks(definition, problems, {
+    isTable: (name) => isPlainObject(definition.lookups) && Object.prototype.hasOwnProperty.call(definition.lookups, name),
+    taken: new Set([...statIdsOf(definition), ...derivedIds]),
+  });
   checkSheet(definition.sheet, derivedIds, problems);
   checkCore(definition.core, derivedIds, problems);
   checkNpc(definition, derivedIds, problems);
@@ -181,6 +197,14 @@ const checkDefinition = (definition) => {
   checkGraph(definition, problems);
   checkDice(definition, problems);
   checkRolls(definition, problems);
+  checkChoices(definition, problems);
+  checkHasNames(definition, problems);
+  checkResting(definition, problems);
+  checkCreation(definition, problems);
+  checkGifts(definition, problems);
+  checkLevels(definition, problems);
+  checkSpend(definition, problems);
+  checkImprove(definition, problems);
   if (definition.target_seen !== undefined && !SEEN.includes(definition.target_seen)) {
     problems.push({ where: 'target_seen', message: `One of ${SEEN.join(', ')}` });
   }

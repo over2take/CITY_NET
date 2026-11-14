@@ -153,7 +153,7 @@ describe('what waits on a rule', () => {
       { kind: 'SHEET SECTION', id: sheet.sections[0].id, label: sheet.sections[0].label, page: 'sheet' },
       { kind: 'CONDITION', id: 'hexed', label: 'Hexed', page: 'conditions' },
     ]);
-    expect(waitingOn(def, 'markets')).toEqual([{ kind: 'FEATURES PART', id: 'shops', label: 'SHOPS', page: 'features' }]);
+    expect(waitingOn(def, 'markets')).toEqual([{ kind: 'PART', id: 'shops', label: 'SHOPS', page: 'features' }]);
     expect(waitingOn(def, 'nope')).toEqual([]);
   });
 });

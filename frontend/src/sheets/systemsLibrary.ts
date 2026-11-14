@@ -7,7 +7,8 @@
 // Decided with the user: a system installed from a file is tagged INSTALLED (2026-10-06). A
 // system already here is always offered UPDATE or KEEP BOTH; one changed here since it was
 // installed is REPLACED only after a warning that those changes go, and an update keeps the name
-// the system has here (2026-10-06).
+// the system has here (2026-10-06). One deleted here is offered BRING IT BACK, or START FRESH, which
+// asks first as the old characters then stay hidden for good (2026-11-06).
 
 /** One system in the list (GET /api/systems). */
 export interface LibrarySystem {
@@ -110,7 +111,7 @@ export const exportNote = (s: LibrarySystem, withImages: boolean): string => (wi
 
 // ─── Installing a file ──────────────────────────────────────────────────────
 
-export type InstallMode = 'new' | 'update' | 'keep_both';
+export type InstallMode = 'new' | 'fresh' | 'update' | 'keep_both';
 
 /** What the server says about a file before it is installed (POST /api/systems/install/preview). */
 export interface InstallPreview {
@@ -126,7 +127,8 @@ export interface InstallPreview {
   problems: { where: string; message: string }[];
   installed: { id: string; name: string; version: number; edited: boolean }[];
   restores: { id: string; name: string; replacesChanges: boolean } | null;
-  installsAs: Record<InstallMode, string | null>;
+  /** A fresh start goes in under the same name as `new`. */
+  installsAs: Record<Exclude<InstallMode, 'fresh'>, string | null>;
 }
 
 /** The INSIDE badges: what the file holds, counted, leaving out what it doesn't have. */
@@ -195,8 +197,8 @@ export const installPlan = (p: InstallPreview): InstallPlan => {
 
   const name = p.installsAs.new!;
   if (p.restores) {
-    notices.push({ tone: 'good', text: `${p.restores.name} was deleted here. Installing brings it back under its old id, with every character, bank and token played in it.` });
-    if (p.restores.replacesChanges) notices.push({ tone: 'warn', text: 'The deleted copy held changes made here that this file doesn\'t have. They are replaced.' });
+    notices.push({ tone: 'good', text: `${p.restores.name} was deleted here. Bringing it back keeps its old id and every character, bank and token played in it. Starting fresh installs a new one with none of them.` });
+    if (p.restores.replacesChanges) notices.push({ tone: 'warn', text: 'The deleted copy held changes made here that this file doesn\'t have. Bringing it back replaces them.' });
   } else if (hasProblems) {
     notices.push({ tone: 'warn', text: `It has ${plural(p.problems.length, 'problem').toLowerCase()}, so it installs as a draft to fix in the builder. No game can run it until it's fixed and published.` });
   } else {
@@ -204,7 +206,14 @@ export const installPlan = (p: InstallPreview): InstallPlan => {
   }
   if (name !== p.name) notices.push({ tone: 'warn', text: `Another system is called ${p.name}, so this one installs as ${name}.` });
   const label = p.restores ? 'BRING IT BACK' : hasProblems ? 'INSTALL AS A DRAFT' : 'INSTALL';
-  return { notices, actions: [{ label, mode: 'new', installsAs: name, primary: true }] };
+  const actions: InstallAction[] = [{ label, mode: 'new', installsAs: name, primary: true }];
+  if (p.restores) {
+    actions.push({
+      label: hasProblems ? 'START FRESH, AS A DRAFT' : 'START FRESH', mode: 'fresh', installsAs: name,
+      confirm: `The characters, banks and tokens played in the deleted ${p.restores.name} stay hidden, and installing this file won't bring them back again.`,
+    });
+  }
+  return { notices, actions };
 };
 
 /** What the server answers after an install (POST /api/systems/install). */
@@ -218,6 +227,7 @@ export const installedMessage = (r: InstallResult, mode: InstallMode, version: n
   if (mode === 'update') return `Updated ${r.name} to v${version}. Its characters, banks and tokens are untouched.${images}`;
   const draft = r.published ? '' : ` as a draft with ${plural(r.problems.length, 'problem').toLowerCase()} to fix`;
   if (mode === 'keep_both') return `Installed a second copy, ${r.name}, beside the first${draft}.${images}`;
+  if (mode === 'fresh') return `Started ${r.name} fresh${draft || ', with no characters'}.${images}`;
   return `${r.published ? `Installed ${r.name} v${version}. It's in the list and the game-system picker.` : `Installed ${r.name}${draft}.`}${images}`;
 };
 

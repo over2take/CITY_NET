@@ -1,0 +1,1071 @@
+// A system's choices (7a1a; approved mockup docs/mockups/builder-choices.html, 2026-10-27): the
+// lists a character picks from (classes, backgrounds, feats, playbooks), named in the game's own
+// words, and the features each pick gives.
+//
+//   choices: [
+//     { id: 'classes', one: 'Class', many: 'Classes',
+//       picks: 1,            // how many a character picks: a whole number, or 'any'; 1 when absent
+//       levelled: true,      // each pick has a level, and its features unlock by it
+//       again: true,         // MORE THAN ONCE: more can be added after those (multiclassing)
+//       picked: 'features',  // 7a5a: own (on its own, as when absent), features (only under the
+//                            // features that open it), both (its own picks, and those) or everyone
+//                            // (7a5a2: every character has its options, nothing picked)
+//       table: '2d6',        // 7a5b: a table to roll on, as dice: up to 4 of 2 to 100 sides
+//       players: 'roll',     // with a table, how players pick: hand, either (by hand or rolled, as
+//                            // when absent) or roll (rolled only; the GM may still pick any)
+//       options: [
+//         { id: 'soldier', label: 'Soldier', description: '...',
+//           requires: '@str >= 13',          // optional: a formula, met when it isn't 0
+//           die: 10,                         // optional, a levelled list's: its die, by its sides
+//                                            // (R1a: recovery dice; level-up health in 7d)
+//           roll: '4-5',                     // a list with a table's: the roll, or range, that gives it
+//           gives: {                         // 7c4e: what a character holding it starts with, given as they finish
+//             items: [{ name: 'Crowbar', qty: 1 }],   // checked in creation.js checkGifts
+//             money: { gold: { how: 'roll', each: '3d6 * 10' }, honor: { how: 'number', amount: 5 } },
+//           },
+//           features: [
+//             { id: 'guard_stance', label: 'Guard Stance', text: 'Words for the table.',
+//               at: 1,                                          // the pick's level it unlocks at (levelled lists)
+//               modifiers: [{ target: 'defense', amount: '1' }], // added to a stat, formula or health field;
+//                                                               // 7e1: how: 'least', AT LEAST that much instead;
+//                                                               // cap: 20, an ADD that STOPS AT 20
+//               uses: { count: '1', refill: 'short_rest' },     // ticked off on the sheet, refilled by a rest
+//               rolls: ['rally'],                               // rolls of the system it gives
+//               changes: [{ roll: 'mind_save', change: 'advantage' }], // a change it lets one roll take
+//               choice: 'specialties', choice_count: 2,         // a list picked from when it unlocks, and how many (1)
+//               increase: { points: 2, most: 2, stats: 'abilities', cap: 20, instead: 'feats' } }, // 7d6a: points the player
+//                                                               // spreads on stats, at most `most` on one (all of them when
+//                                                               // absent), from one group (all stats when absent),
+//                                                               // none raised past `cap` (no cap when absent); 7d6c: or a
+//                                                               // pick from `instead`, a list picked through features
+//           ] },
+//       ] },
+//   ]
+//
+// A feature does any of these, several at once, or none: then it is words for the table. Option and
+// feature ids share one set across the system, as has() will read them (7b). A requirement is
+// optional, per option: one not met is shown with the reason at the table, and the GM may pick it
+// anyway.
+//
+// A character's picks (7a1b) are kept on their sheet under PICKS_KEY, a name no stat can have, as
+// { classes: [{ option: 'soldier', level: 3 }, { option: 'mage', level: 1 }], feats: ['tough'] }.
+// Players never write it directly (sheets/templates.js playerMayEdit); picking, with its checks,
+// comes with the sheet (7a3). Read here, only what holds is kept: an option of that list, once, no
+// more than the list allows, a level from 1 up in a levelled list (1 when it has none).
+//
+// Lists inside lists (7a5a; approved mockup docs/mockups/nested-choices.html, 2026-10-28): a list
+// picked THROUGH FEATURES (or BOTH) gets a pick under each unlocked feature that opens it, as many as
+// the feature says, stored with `from` naming that feature. A pick whose feature locks again (a level
+// lowered, the pick above it dropped) is kept but not counted, and counts again once it unlocks:
+// heldOf reads every pick kept, picksOf only those that count. Lists never open each other in a loop.
+// A list EVERYONE HAS (7a5a2, the user asked for features no class gives) is never picked: every
+// character holds each option whose requirement they meet, its features unlocking by their total level
+// (the levelled lists' sum, or the system's own `level`).
+//
+// A pick under a feature, in a list without levels of its own, takes the level of the pick that
+// opened it (7a5d, the user on Fighter's Martial Archetype): Champion, opened at Fighter 3, has
+// Remarkable Athlete at Fighter 7. Opened by a pick with no level (a feat), it has everything at once.
+// Its level is never added to @level or any list's: it is the opener's, counted there already.
+//
+// A list may have a table to roll on (7a5b; approved mockup nested-choices, version 2): its dice,
+// and the roll or range each option is on, every roll from the lowest to the highest on exactly one
+// option. The GM says how players pick from it: by hand only, by hand or rolled (as when unsaid), or
+// rolled only. Rolling for it at the table is 7a5b2's.
+//
+// Formulas, rolls, requirements and amounts read has(name) (7b): 1 while the character holds that
+// option or has that feature unlocked, else 0. It comes with the levels, as the field has:name in the
+// overlay, so whatever reads levels reads it. What is held never reads a formula or an amount, so it
+// can't go round in a loop; a list everyone has reads only what is picked, as it does levels.
+//
+// Levels are read in formulas, rolls and modifier amounts: @<option>_level (0 when not taken),
+// @<list>_level, a levelled list's sum, and @level, every levelled list's sum, unless the system
+// has a stat or formula called level of its own, which keeps meaning what it always did (the user,
+// 2026-10-27). A modifier's amount reads the sheet as typed and these levels, never a formula, so a
+// feature's modifiers can never go round in a loop.
+//
+// What the picks do to the numbers is worked out, never written into a stat (overlayOf): a stat
+// stays as the player typed it while formulas and rolls read it with its modifiers; a formula's own
+// modifiers are added once it is worked out, before anything reading it. Take the pick away and its
+// effects are gone at once. definition.js runs the checks; runtime.js, tableRolls.js and
+// versionDiff.js read the overlay. The token's maximum (HP MAX, WOUNDS) is the one exception: it lives
+// on the token, so its modifiers are moved onto the token itself, and back off (tokenMax.js, 7a5a3).
+//
+// The ways a bonus counts (7e1; approved mockup docs/mockups/items.html, 2026-11-10, bonuses.js): a modifier ADDs, and may
+// say where it STOPS AT (`cap`, the user's call: "+2 Con, no higher than 20"), or sets AT LEAST (how: 'least'). Capped ADDs,
+// then plain ADDs, then AT LEAST. Each modifier says what it really gave, for the sheet to name what a cap cut. The token's
+// maximum only ADDs, uncapped (tokenMax.js moves the token by it).
+//
+// An item working (7e3, items.js): its features count as an unlocked feature's do, in the numbers, has() and their uses,
+// each bonus named by the item.
+//
+// An INCREASE (7d6b) is spent by the player as its feature unlocks, going up a level (levelUp.js), and kept under
+// INCREASES_KEY by feature: { asi: { str: 1, dex: 1 } }. It is worked out onto the stats as a modifier is, named by
+// its feature, while the feature is unlocked and what is kept still holds: stats it may raise, whole points from 1,
+// no more than its most on one, no more than its points in all.
+//
+// OR A FEAT INSTEAD (7d6c): an increase may name a list picked through features (or both) as the other choice. Its
+// feature then opens that list for one pick, as a feature opening a list does: that pick, or the points, never both.
+// A pick taken there means the points don't count; once the points are spent, the list has no room there.
+//
+// At the table (7a3a): how many of each feature's uses are spent is kept under USES_KEY, by feature,
+// and a rest that refills them sets them back (resting.js). Every save writes what the sheet shows of
+// the picks under WORKED_KEY (workedOf): the picks and their levels, what each modifier comes from,
+// each feature's uses left, and the options whose requirement isn't met. Picking itself, with who may
+// do what, is picking.js's. The sheet is drawn from choicesShown, the lists without their formulas.
+
+const { parse, evaluate, references, NAME } = require('./expression');
+const { ruleValue } = require('./rules');
+const { tablesOf, lookupIn } = require('./derived');
+const { statIdsOf } = require('./stats');
+const { LEAST, STOP_LIMIT, applyBonuses, stopOf } = require('./bonuses');
+const { restIdsOf } = require('./rests');
+const { healthLayout } = require('./core');
+const { partOn } = require('./parts');
+const { currenciesOf } = require('./currencies');
+const { checkItems, itemsOf, slotsOf, installsOf, workingFeatures, itemsOwned, itemsShown } = require('./items');
+const { stepFieldsOf, rankedStatsOf } = require('./ranks');
+
+/** Where a sheet keeps its picks: starting with _, so no stat, formula or field can be called it. */
+const PICKS_KEY = '_choices';
+/** Where a sheet keeps each feature's uses spent, by feature id. */
+const USES_KEY = '_uses';
+/** Where a sheet keeps how each INCREASE was spent (7d6b): { feature: { stat: points } }. Players never write it. */
+const INCREASES_KEY = '_increases';
+/** Where every save writes what the sheet shows of the picks (workedOf). Never read back as input. */
+const WORKED_KEY = '_worked';
+/**
+ * Where a sheet keeps what ROLL FOR IT last rolled on each list, until it is taken or rolled again
+ * (7a5b2): { [list, or list@feature for a pick under a feature]: { option, roll } }, option null
+ * when the roll is on nothing. Players never write it (no _ field is theirs).
+ */
+const ROLLED_KEY = '_rolled';
+
+const LIMITS = {
+  lists: 20,
+  options: 100,
+  features: 40,
+  modifiers: 10,
+  rolls: 10,
+  /** The highest level a feature unlocks at, and how many of a list a character may pick. */
+  level: 30,
+  picks: 100,
+  label: 40,
+  description: 1000,
+  /** How many picks one feature opening a list gives (7a5a). */
+  opens: 10,
+  /** A levelled option's die, by its sides (R1a). */
+  dieLeast: 2,
+  dieMost: 100,
+  /** How many dice a list's table rolls (7a5b): 2d6, 3d6. */
+  tableDice: 4,
+  /** The most points one INCREASE gives (7d6a), and how far from 0 the stat it stops at may be. */
+  increase: 10,
+  cap: 9999,
+};
+/** How a list is picked (7a5a): on its own, only under the features that open it, both, or not at all (everyone has it). */
+const PICKED = ['own', 'features', 'both', 'everyone'];
+/** How players pick from a list with a table (7a5b): by hand only, by hand or rolled, or rolled only. */
+const PLAYERS = ['hand', 'either', 'roll'];
+const LIST_KEYS = new Set(['id', 'one', 'many', 'picks', 'levelled', 'again', 'picked', 'table', 'players', 'options']);
+const OPTION_KEYS = new Set(['id', 'label', 'description', 'requires', 'die', 'roll', 'gives', 'features']);
+const FEATURE_KEYS = new Set(['id', 'label', 'text', 'at', 'modifiers', 'uses', 'rolls', 'changes', 'choice', 'choice_count', 'increase']);
+const INCREASE_KEYS = new Set(['points', 'most', 'stats', 'cap', 'instead']);
+
+const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+const list = (v) => (Array.isArray(v) ? v : []);
+
+/** A definition's lists, the entries well formed enough to read. */
+const choicesOf = (definition) => list(definition && definition.choices).filter((c) => isPlainObject(c) && typeof c.id === 'string');
+
+/** The sheet's own fields a modifier may change: the system's stats and health fields. */
+const fieldTargetsOf = (definition) => new Set([
+  ...statIdsOf(definition),
+  ...healthLayout(isPlainObject(definition.core) ? definition.core.health : undefined).sections.flatMap((s) => s.fields.map((f) => f.id)),
+].filter((id) => typeof id === 'string'));
+const derivedIdsOf = (definition) => new Set(list(definition.derived).filter(isPlainObject).map((d) => d.id).filter((id) => typeof id === 'string'));
+
+/** What a modifier may change: the system's stats, formulas and health fields. */
+const targetsOf = (definition) => new Set([...fieldTargetsOf(definition), ...derivedIdsOf(definition)]);
+
+/** The health field linked to the token's maximum (HP MAX, WOUNDS), or null: its modifiers live on the token (tokenMax.js). */
+const tokenMaxFieldOf = (definition) => {
+  const fields = healthLayout(isPlainObject(definition.core) ? definition.core.health : undefined).sections.flatMap((s) => s.fields);
+  const field = fields.find((f) => f.source === 'token_hp_max');
+  return field ? field.id : null;
+};
+
+const optionsOf = (c) => list(c.options).filter((o) => isPlainObject(o) && typeof o.id === 'string');
+
+/** A list's table as dice (7a5b): { count, sides, low, high }, or null without one or with dice it can't roll. */
+const tableOf = (c) => {
+  const m = typeof c.table === 'string' ? /^([1-9]\d*)?d(\d+)$/.exec(c.table.trim().toLowerCase()) : null;
+  if (!m) return null;
+  const count = m[1] ? Number(m[1]) : 1;
+  const sides = Number(m[2]);
+  if (count > LIMITS.tableDice || sides < LIMITS.dieLeast || sides > LIMITS.dieMost) return null;
+  return { count, sides, low: count, high: count * sides };
+};
+
+/** An option's roll on a table, `4` or `4-5`, as [from, to], or null when it isn't one. */
+const rollRangeOf = (roll) => {
+  const m = typeof roll === 'string' ? /^\s*(\d+)\s*(?:-\s*(\d+)\s*)?$/.exec(roll) : null;
+  if (!m) return null;
+  const from = Number(m[1]);
+  const to = m[2] === undefined ? from : Number(m[2]);
+  return from <= to ? [from, to] : null;
+};
+
+/** How players pick from a list: by hand without a table; with one, as the list says, by hand or rolled when it says nothing. */
+const playersOf = (c) => (!tableOf(c) ? 'hand' : PLAYERS.includes(c.players) ? c.players : 'either');
+
+/** The option a roll of `total` lands on in a list's table, or null for none. */
+const rolledOn = (c, total) => optionsOf(c).find((o) => {
+  const range = rollRangeOf(o.roll);
+  return !!range && total >= range[0] && total <= range[1];
+}) || null;
+
+/** Where a list's roll is kept: the list, or the list under the feature it is picked through. */
+const rolledKey = (listId, from) => (from ? `${listId}@${from}` : listId);
+
+/** What ROLL FOR IT last rolled on a list (under `from`), as kept: { option, roll }, or null. */
+const rolledOf = (data, listId, from) => {
+  const all = isPlainObject(data) && isPlainObject(data[ROLLED_KEY]) ? data[ROLLED_KEY] : {};
+  const r = all[rolledKey(listId, from)];
+  return isPlainObject(r) && Number.isInteger(r.roll) ? { option: typeof r.option === 'string' ? r.option : null, roll: r.roll } : null;
+};
+const levelledOf = (definition) => choicesOf(definition).filter((c) => c.levelled === true);
+
+/** The level names a system's formulas can read: each option's, each list's sum, and @level unless it has its own. */
+const levelNamesOf = (definition) => {
+  const levelled = levelledOf(definition);
+  return new Set([
+    ...levelled.flatMap((c) => [`${c.id}_level`, ...optionsOf(c).map((o) => `${o.id}_level`)]),
+    ...(levelled.length && !targetsOf(definition).has('level') ? ['level'] : []),
+  ]);
+};
+
+/**
+ * The lists whose features unlock at a level (7a5d): a levelled list's, by its pick's; one everyone
+ * has, by the character's; and one without levels picked through features (or both) and opened from
+ * one of those, by the level of what opened it. Each as its id.
+ */
+const unlocksByLevelOf = (definition) => {
+  const lists = choicesOf(definition);
+  const opens = opensOf(definition);
+  const out = new Set(lists.filter((c) => c.levelled === true || pickedOf(c) === 'everyone').map((c) => c.id));
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const c of lists) {
+      if (out.has(c.id) || !['features', 'both'].includes(pickedOf(c))) continue;
+      if ([...opens].some(([from, to]) => out.has(from) && to.includes(c.id))) { out.add(c.id); changed = true; }
+    }
+  }
+  return out;
+};
+
+/** A definition's `choices` checked, its problems added to `problems`. */
+const checkChoices = (definition, problems) => {
+  // Items (7e2) are checked here too, their features as a pick's, so they are checked with no lists at all.
+  if (definition.choices === undefined && definition.items === undefined) return;
+  if (definition.choices !== undefined && !Array.isArray(definition.choices)) { problems.push({ where: 'choices', message: 'Must be a list of choices' }); return; }
+  const lists = list(definition.choices);
+  if (lists.length > LIMITS.lists) problems.push({ where: 'choices', message: `At most ${LIMITS.lists} lists` });
+
+  const tables = new Set(isPlainObject(definition.lookups) ? Object.keys(definition.lookups) : []);
+  const isFunction = (name) => tables.has(name);
+  const targets = targetsOf(definition);
+  const formulas = derivedIdsOf(definition);
+  const levels = levelNamesOf(definition);
+  const optionLevels = new Set(levelledOf(definition).flatMap((c) => optionsOf(c).map((o) => `${o.id}_level`)));
+  const byLevel = unlocksByLevelOf(definition);
+  const rests = restIdsOf(definition);
+  const rolls = new Map(list(definition.rolls).filter((r) => isPlainObject(r) && typeof r.id === 'string')
+    .map((r) => [r.id, new Set(list(r.changes).filter(isPlainObject).map((c) => c.id))]));
+  const listIds = new Set(choicesOf(definition).map((c) => c.id));
+  // The groups an INCREASE may name (7d6a): those with a stat in them.
+  const statGroups = new Set(list(definition.stats).filter((g) => isPlainObject(g) && typeof g.id === 'string' && list(g.stats).some((s) => isPlainObject(s) && typeof s.id === 'string')).map((g) => g.id));
+  const listSeen = new Set();
+  const named = new Set();
+
+  const text = (value, where, max, { required = false } = {}) => {
+    if (value === undefined) { if (required) problems.push({ where, message: 'Required' }); return; }
+    if (typeof value !== 'string' || (required && !value.trim())) { problems.push({ where, message: required ? 'Cannot be blank' : 'Must be text' }); return; }
+    if (value.length > max) problems.push({ where, message: `Longer than ${max} characters` });
+  };
+  const formula = (value, where) => {
+    if (typeof value !== 'string' || !value.trim()) { problems.push({ where, message: 'Must be formula text' }); return; }
+    try { parse(value, isFunction); } catch (e) { problems.push({ where, message: e.message }); }
+  };
+  const id = (value, where, seen, what) => {
+    if (typeof value !== 'string' || !NAME.test(value)) { problems.push({ where, message: 'Ids use lowercase letters, digits and _, starting with a letter' }); return false; }
+    if (seen.has(value)) { problems.push({ where, message: `${what} has this id already` }); return false; }
+    seen.add(value);
+    return true;
+  };
+  const keys = (obj, allowed, where, what) => {
+    for (const key of Object.keys(obj)) if (!allowed.has(key)) problems.push({ where: `${where}, ${key}`, message: `Not part of ${what}` });
+  };
+
+  /**
+   * A list's table (7a5b): each option on a roll or range within the dice, no roll on two options,
+   * and none left with nothing on it (the first few named).
+   */
+  const checkTable = (c, table, where) => {
+    const on = new Map();
+    for (const o of optionsOf(c).slice(0, LIMITS.options)) {
+      const range = rollRangeOf(o.roll);
+      const name = typeof o.label === 'string' && o.label.trim() ? o.label.trim() : o.id;
+      if (!range || range[0] < table.low || range[1] > table.high) {
+        problems.push({ where: `${where}, option ${o.id}, roll`, message: `A roll from ${table.low} to ${table.high}, or a range like ${table.low}-${table.low + 1}` });
+        continue;
+      }
+      for (let n = range[0]; n <= range[1]; n += 1) {
+        if (on.has(n)) problems.push({ where: `${where}, option ${o.id}, roll`, message: `${n} is both ${on.get(n)} and ${name}` });
+        else on.set(n, name);
+      }
+    }
+    const gaps = [];
+    for (let n = table.low; n <= table.high; n += 1) if (!on.has(n)) gaps.push(n);
+    if (gaps.length) problems.push({ where: `${where}, table`, message: `Nothing on ${gaps.slice(0, 6).join(', ')}${gaps.length > 6 ? '…' : ''}` });
+  };
+
+  /** A feature; an item's (7e2) counts while the item is worn, so it has no level, list or increase. */
+  const checkFeature = (feature, where, levelled, ownList, item = false) => {
+    keys(feature, FEATURE_KEYS, where, 'a feature');
+    if (item) {
+      for (const k of ['at', 'choice', 'choice_count', 'increase']) {
+        if (feature[k] !== undefined) problems.push({ where: `${where}, ${k}`, message: 'An item\'s feature counts while it is worn: no level, list or increase' });
+      }
+    }
+    const f = item ? { ...feature, at: undefined, choice: undefined, choice_count: undefined, increase: undefined } : feature;
+    id(f.id, where, named, 'Another option or feature');
+    text(f.label, `${where}, label`, LIMITS.label, { required: true });
+    text(f.text, `${where}, text`, LIMITS.description);
+    if (f.at !== undefined) {
+      if (!levelled) problems.push({ where: `${where}, at`, message: 'Only the features of a list with levels unlock at a level: a levelled list, one everyone has, or one a feature of those opens' });
+      else if (!Number.isInteger(f.at) || f.at < 1 || f.at > LIMITS.level) problems.push({ where: `${where}, at`, message: `A level from 1 to ${LIMITS.level}` });
+    }
+    if (f.modifiers !== undefined) {
+      if (!Array.isArray(f.modifiers)) problems.push({ where: `${where}, modifiers`, message: 'Must be a list of modifiers' });
+      else {
+        if (f.modifiers.length > LIMITS.modifiers) problems.push({ where: `${where}, modifiers`, message: `At most ${LIMITS.modifiers}` });
+        f.modifiers.slice(0, LIMITS.modifiers).forEach((m, i) => {
+          const at = `${where}, modifier ${i + 1}`;
+          if (!isPlainObject(m)) { problems.push({ where: at, message: 'Must say what it changes and by how much' }); return; }
+          keys(m, new Set(['target', 'amount', 'how', 'cap']), at, 'a modifier');
+          if (typeof m.target !== 'string' || !targets.has(m.target)) problems.push({ where: `${at}, target`, message: 'Not one of this system\'s stats, formulas or health fields' });
+          // 7e1: ADD (as when absent) or AT LEAST; the token's maximum only adds.
+          if (m.how !== undefined && m.how !== LEAST) problems.push({ where: `${at}, how`, message: 'ADD, or AT LEAST' });
+          else if (m.how === LEAST && m.target === tokenMaxFieldOf(definition)) problems.push({ where: `${at}, how`, message: 'The token\'s maximum is only added to' });
+          // STOPS AT, on an ADD: never on AT LEAST, a value already, or the token's maximum, only ever added to.
+          if (m.cap !== undefined) {
+            if (stopOf(m.cap) === null) problems.push({ where: `${at}, cap`, message: `A whole number from -${STOP_LIMIT} to ${STOP_LIMIT}` });
+            else if (m.how === LEAST) problems.push({ where: `${at}, cap`, message: 'Only an ADD stops somewhere: AT LEAST is a value already' });
+            else if (m.target === tokenMaxFieldOf(definition)) problems.push({ where: `${at}, cap`, message: 'The token\'s maximum is only added to' });
+          }
+          formula(m.amount, `${at}, amount`);
+          // Worked out from the sheet as typed and the levels: a formula could read this modifier back.
+          if (typeof m.amount === 'string') {
+            let read = [];
+            try { read = [...references(parse(m.amount, isFunction)).fields]; } catch { /* reported above */ }
+            for (const name of read.filter((n) => formulas.has(n) && !levels.has(n))) {
+              problems.push({ where: `${at}, amount`, message: `Reads @${name}, a formula: an amount reads the sheet as typed and levels` });
+            }
+          }
+        });
+      }
+    }
+    if (f.uses !== undefined) {
+      if (!isPlainObject(f.uses)) problems.push({ where: `${where}, uses`, message: 'Must say how many, and what refills them' });
+      else {
+        keys(f.uses, new Set(['count', 'refill']), `${where}, uses`, 'uses');
+        formula(f.uses.count, `${where}, uses, count`);
+        if (f.uses.refill !== undefined && (typeof f.uses.refill !== 'string' || !rests.has(f.uses.refill))) {
+          problems.push({ where: `${where}, uses, refill`, message: 'Not one of this system\'s rests' });
+        }
+      }
+    }
+    if (f.rolls !== undefined) {
+      if (!Array.isArray(f.rolls)) problems.push({ where: `${where}, rolls`, message: 'Must be a list of rolls' });
+      else {
+        if (f.rolls.length > LIMITS.rolls) problems.push({ where: `${where}, rolls`, message: `At most ${LIMITS.rolls}` });
+        for (const r of f.rolls.slice(0, LIMITS.rolls)) {
+          if (typeof r !== 'string' || !rolls.has(r)) problems.push({ where: `${where}, rolls`, message: `${typeof r === 'string' ? r : 'That'} is not one of this system's rolls` });
+        }
+      }
+    }
+    if (f.changes !== undefined) {
+      if (!Array.isArray(f.changes)) problems.push({ where: `${where}, changes`, message: 'Must be a list of a roll and its change' });
+      else {
+        if (f.changes.length > LIMITS.rolls) problems.push({ where: `${where}, changes`, message: `At most ${LIMITS.rolls}` });
+        f.changes.slice(0, LIMITS.rolls).forEach((c, i) => {
+          const at = `${where}, change ${i + 1}`;
+          if (!isPlainObject(c)) { problems.push({ where: at, message: 'Must name a roll and one of its changes' }); return; }
+          keys(c, new Set(['roll', 'change']), at, 'a change');
+          if (typeof c.roll !== 'string' || !rolls.has(c.roll)) problems.push({ where: `${at}, roll`, message: 'Not one of this system\'s rolls' });
+          else if (typeof c.change !== 'string' || !rolls.get(c.roll).has(c.change)) problems.push({ where: `${at}, change`, message: 'Not one of that roll\'s changes' });
+        });
+      }
+    }
+    if (f.increase !== undefined) {
+      const at = `${where}, increase`;
+      const inc = f.increase;
+      if (!isPlainObject(inc)) problems.push({ where: at, message: 'Must say how many points, and the most on one stat' });
+      else {
+        keys(inc, INCREASE_KEYS, at, 'an increase');
+        if (!statGroups.size) problems.push({ where: at, message: 'This system has no stats to raise: make them on STATS & RULES' });
+        const points = Number.isInteger(inc.points) && inc.points >= 1 && inc.points <= LIMITS.increase;
+        if (!points) problems.push({ where: `${at}, points`, message: `From 1 to ${LIMITS.increase} points` });
+        if (inc.most !== undefined && (!Number.isInteger(inc.most) || inc.most < 1 || (points && inc.most > inc.points))) problems.push({ where: `${at}, most`, message: 'From 1 to the points it gives' });
+        if (inc.stats !== undefined && !statGroups.has(inc.stats)) problems.push({ where: `${at}, stats`, message: 'Not one of this system\'s groups of stats' });
+        if (inc.cap !== undefined && (!Number.isInteger(inc.cap) || Math.abs(inc.cap) > LIMITS.cap)) problems.push({ where: `${at}, cap`, message: `A whole number from -${LIMITS.cap} to ${LIMITS.cap}` });
+        // OR A FEAT INSTEAD (7d6c): a list picked through features, never its own.
+        if (inc.instead !== undefined) {
+          const other = choicesOf(definition).find((c) => c.id === inc.instead);
+          if (!other) problems.push({ where: `${at}, instead`, message: 'Not one of this system\'s lists' });
+          else if (inc.instead === ownList) problems.push({ where: `${at}, instead`, message: 'A list can\'t be picked from inside itself' });
+          else if (!['features', 'both'].includes(pickedOf(other))) problems.push({ where: `${at}, instead`, message: `${String(other.many || other.id).toUpperCase()} is picked on its own: set it to THROUGH FEATURES or BOTH` });
+        }
+      }
+    }
+    if (f.choice !== undefined) {
+      if (typeof f.choice !== 'string' || !listIds.has(f.choice)) problems.push({ where: `${where}, choice`, message: 'Not one of this system\'s lists' });
+      else if (f.choice === ownList) problems.push({ where: `${where}, choice`, message: 'A list can\'t be picked from inside itself' });
+    }
+    if (f.choice_count !== undefined) {
+      if (f.choice === undefined) problems.push({ where: `${where}, choice_count`, message: 'Only a feature that opens a list says how many' });
+      else if (!Number.isInteger(f.choice_count) || f.choice_count < 1 || f.choice_count > LIMITS.opens) problems.push({ where: `${where}, choice_count`, message: `A number from 1 to ${LIMITS.opens}` });
+    }
+  };
+
+  const names = new Map(choicesOf(definition).map((c) => [c.id, String(c.many || c.id).toUpperCase()]));
+  for (const { list: id, path } of loopsOf(definition)) {
+    problems.push({ where: `list ${id}`, message: `Its features open lists that lead back to it: ${path.map((p) => names.get(p)).join(' → ')}` });
+  }
+
+  lists.slice(0, LIMITS.lists).forEach((c, i) => {
+    const where = isPlainObject(c) && typeof c.id === 'string' && NAME.test(c.id) ? `list ${c.id}` : `list ${i + 1}`;
+    if (!isPlainObject(c)) { problems.push({ where, message: 'Must be a list to pick from' }); return; }
+    keys(c, LIST_KEYS, where, 'a list');
+    id(c.id, where, listSeen, 'Another list');
+    text(c.one, `${where}, one`, LIMITS.label, { required: true });
+    text(c.many, `${where}, many`, LIMITS.label, { required: true });
+    if (c.picks !== undefined && c.picks !== 'any' && (!Number.isInteger(c.picks) || c.picks < 1 || c.picks > LIMITS.picks)) {
+      problems.push({ where: `${where}, picks`, message: `A number from 1 to ${LIMITS.picks}, or any` });
+    }
+    for (const key of ['levelled', 'again']) {
+      if (c[key] !== undefined && typeof c[key] !== 'boolean') problems.push({ where: `${where}, ${key}`, message: `Must say ${key}: true or ${key}: false` });
+    }
+    if (c.picked !== undefined && !PICKED.includes(c.picked)) problems.push({ where: `${where}, picked`, message: 'own (on its own), features (through the features that open it), both, or everyone (every character has it)' });
+    if (c.picked === 'everyone' && c.levelled === true) problems.push({ where: `${where}, levelled`, message: 'A list everyone has has no levels of its own: its features unlock by the character\'s level' });
+    if (c.levelled === true && typeof c.id === 'string' && (targets.has(`${c.id}_level`) || optionLevels.has(`${c.id}_level`))) {
+      problems.push({ where, message: `Its levels add up as @${c.id}_level, which a stat, formula or option already has` });
+    }
+    const table = tableOf(c);
+    if (c.table !== undefined && !table) problems.push({ where: `${where}, table`, message: `Dice like d6, 2d6, d20 or d100: up to ${LIMITS.tableDice} dice of ${LIMITS.dieLeast} to ${LIMITS.dieMost} sides` });
+    if (c.table !== undefined && c.picked === 'everyone') problems.push({ where: `${where}, table`, message: 'A list everyone has is never picked, so never rolled for' });
+    if (c.players !== undefined && !PLAYERS.includes(c.players)) problems.push({ where: `${where}, players`, message: 'hand (by hand), either (by hand or rolled) or roll (rolled only)' });
+    else if (c.players !== undefined && c.players !== 'hand' && c.table === undefined) problems.push({ where: `${where}, players`, message: 'Only a list with a table to roll on is rolled for' });
+    if (!Array.isArray(c.options)) { problems.push({ where: `${where}, options`, message: 'Must be a list of options' }); return; }
+    if (table) checkTable(c, table, where);
+    if (c.options.length > LIMITS.options) problems.push({ where: `${where}, options`, message: `At most ${LIMITS.options} options` });
+    c.options.slice(0, LIMITS.options).forEach((o, j) => {
+      const at = isPlainObject(o) && typeof o.id === 'string' && NAME.test(o.id) ? `${where}, option ${o.id}` : `${where}, option ${j + 1}`;
+      if (!isPlainObject(o)) { problems.push({ where: at, message: 'Must be an option' }); return; }
+      keys(o, OPTION_KEYS, at, 'an option');
+      if (id(o.id, at, named, 'Another option or feature') && c.levelled === true && targets.has(`${o.id}_level`)) {
+        problems.push({ where: at, message: `Its level is read as @${o.id}_level, which a stat or formula already has` });
+      }
+      text(o.label, `${at}, label`, LIMITS.label, { required: true });
+      text(o.description, `${at}, description`, LIMITS.description);
+      if (o.requires !== undefined) formula(o.requires, `${at}, requires`);
+      if (o.roll !== undefined && c.table === undefined) problems.push({ where: `${at}, roll`, message: 'Only an option of a list with a table to roll on has a roll' });
+      if (o.die !== undefined) {
+        if (c.levelled !== true) problems.push({ where: `${at}, die`, message: 'Only an option of a levelled list has a die' });
+        else if (!Number.isInteger(o.die) || o.die < LIMITS.dieLeast || o.die > LIMITS.dieMost) problems.push({ where: `${at}, die`, message: `A die of ${LIMITS.dieLeast} to ${LIMITS.dieMost} sides` });
+      }
+      if (o.features === undefined) return;
+      if (!Array.isArray(o.features)) { problems.push({ where: `${at}, features`, message: 'Must be a list of features' }); return; }
+      if (o.features.length > LIMITS.features) problems.push({ where: `${at}, features`, message: `At most ${LIMITS.features} features` });
+      o.features.slice(0, LIMITS.features).forEach((f, k) => {
+        const fw = isPlainObject(f) && typeof f.id === 'string' && NAME.test(f.id) ? `${at}, feature ${f.id}` : `${at}, feature ${k + 1}`;
+        if (!isPlainObject(f)) { problems.push({ where: fw, message: 'Must be a feature' }); return; }
+        checkFeature(f, fw, byLevel.has(c.id), c.id);
+      });
+    });
+  });
+  checkItems(definition, problems, {
+    id, text, keys, named, labelMost: LIMITS.label, descriptionMost: LIMITS.description,
+    checkFeature: (f, where) => checkFeature(f, where, false, null, true),
+    // An install's limit, and what it costs against (7e4).
+    formula, targets, onToken: tokenMaxFieldOf(definition),
+  });
+};
+
+/** The lists each list's features open, other than itself (that is refused on its own). */
+const opensOf = (definition) => {
+  const lists = choicesOf(definition);
+  const ids = new Set(lists.map((c) => c.id));
+  return new Map(lists.map((c) => [c.id, [...new Set(optionsOf(c).flatMap((o) => list(o.features)).filter(isPlainObject)
+    .flatMap((f) => [f, ...(isPlainObject(f.increase) && typeof f.increase.instead === 'string' ? [{ choice: f.increase.instead }] : [])])
+    .map((f) => f.choice).filter((id) => typeof id === 'string' && id !== c.id && ids.has(id)))]]));
+};
+
+/** Each list that leads back to itself through others, with the way round: [{ list, path }]. */
+const loopsOf = (definition) => {
+  const opens = opensOf(definition);
+  const out = [];
+  for (const start of opens.keys()) {
+    // Breadth first, so the way round named is the shortest.
+    const came = new Map([[start, null]]);
+    const queue = [start];
+    let found = null;
+    while (queue.length && !found) {
+      const at = queue.shift();
+      for (const next of opens.get(at) || []) {
+        if (next === start) { found = at; break; }
+        if (!came.has(next)) { came.set(next, at); queue.push(next); }
+      }
+    }
+    if (!found) continue;
+    const path = [start];
+    for (let at = found; at !== start; at = came.get(at)) path.splice(1, 0, at);
+    out.push({ list: start, path: [...path, start] });
+  }
+  return out;
+};
+
+/** How many of a list a character may have: as many as it picks, or no end when more can follow (again) or any. */
+const capOf = (c) => (c.again === true || c.picks === 'any' ? Infinity : Number.isInteger(c.picks) ? c.picks : 1);
+
+/** How a list is picked: on its own when it says nothing. */
+const pickedOf = (c) => (PICKED.includes(c.picked) ? c.picked : 'own');
+/** How many picks a feature opening a list gives: 1 when it says nothing. */
+const openCountOf = (f) => (Number.isInteger(f.choice_count) && f.choice_count >= 1 ? Math.min(f.choice_count, LIMITS.opens) : 1);
+
+/**
+ * The features among `picks` that open a list picked through features (or both), each with how
+ * many picks it gives and how many of them are taken: [{ feature, list, count, used }]. An INCREASE's list
+ * offered instead (7d6c) is one more, `instead: true`, giving one pick, or none once `data` has its points spent.
+ */
+const openingsOf = (definition, picks, data = null) => {
+  const lists = new Map(choicesOf(definition).map((c) => [c.id, c]));
+  const unlocked = unlockedOf(picks);
+  const used = (feature, c) => picks.filter((p) => p.from === feature.id && p.list === c).length;
+  const increases = isPlainObject(data) && isPlainObject(data[INCREASES_KEY]) ? data[INCREASES_KEY] : {};
+  return [
+    ...unlocked.filter(({ feature }) => typeof feature.choice === 'string' && lists.has(feature.choice) && ['features', 'both'].includes(pickedOf(lists.get(feature.choice))))
+      .map(({ feature }) => ({ feature, list: lists.get(feature.choice), count: openCountOf(feature), used: used(feature, lists.get(feature.choice)) })),
+    ...unlocked.flatMap(({ feature }) => {
+      const inc = increaseOf(definition, feature);
+      if (!inc || !inc.instead) return [];
+      const c = lists.get(inc.instead);
+      return [{ feature, list: c, count: spentOf(inc, increases[feature.id]) ? 0 : 1, used: used(feature, c), instead: true }];
+    }),
+  ];
+};
+
+/**
+ * Every pick a character's sheet keeps: [{ list, option, level, from, active }], the list and option
+ * as the definition has them, level null in a list that isn't levelled (one picked under a feature
+ * has the level of the pick that opened it, 7a5d), `from` the feature it was
+ * picked under (null for a list's own), `active` whether it counts. A list's own picks count up to
+ * what it allows (those past it aren't kept); one picked under a feature counts while that feature is
+ * unlocked by a pick that counts, and has room, worked out down the lists until nothing more
+ * changes. Picks that don't count are kept for when they do: a list switched to THROUGH FEATURES
+ * keeps its own, a list switched back keeps those picked under features.
+ */
+const heldOf = (definition, data) => {
+  const stored = isPlainObject(data) && isPlainObject(data[PICKS_KEY]) ? data[PICKS_KEY] : {};
+  const sheet = isPlainObject(data) ? data : {};
+  const held = [];
+  const everyone = [];
+  for (const c of choicesOf(definition)) {
+    const mode = pickedOf(c);
+    if (mode === 'everyone') {
+      for (const option of optionsOf(c)) {
+        const p = { list: c, option, level: null, from: null, active: true, everyone: true };
+        held.push(p);
+        everyone.push(p);
+      }
+      continue;
+    }
+    const mine = Object.prototype.hasOwnProperty.call(stored, c.id) && Array.isArray(stored[c.id]) ? stored[c.id] : [];
+    const options = new Map(optionsOf(c).map((o) => [o.id, o]));
+    const taken = new Set();
+    let own = 0;
+    for (const p of mine.slice(0, LIMITS.options)) {
+      const id = isPlainObject(p) ? p.option : p;
+      if (typeof id !== 'string' || !options.has(id) || taken.has(id)) continue;
+      const from = isPlainObject(p) && typeof p.from === 'string' ? p.from : null;
+      // Bought with XP (7f2a2, spendXp.js): it always counts, past what the list allows and however it is picked.
+      const bought = isPlainObject(p) && Number.isInteger(p.bought) ? p.bought : null;
+      // A list's own picks past what it allows were never kept.
+      if (!from && bought === null && mode !== 'features' && own >= capOf(c)) continue;
+      taken.add(id);
+      const level = c.levelled !== true ? null
+        : isPlainObject(p) && Number.isInteger(p.level) && p.level >= 1 ? Math.min(p.level, LIMITS.level) : 1;
+      const counts = bought !== null ? true : from ? (mode === 'own' ? false : null) : mode !== 'features';
+      if (counts && bought === null) own += 1;
+      // Locked by a roll, or by the GM (picking.js): a player can't change it.
+      const locked = isPlainObject(p) && p.locked === true;
+      const roll = locked && Number.isInteger(p.roll) ? p.roll : null;
+      held.push({ list: c, option: options.get(id), level, from, active: counts, ...(locked ? { locked } : {}), ...(roll === null ? {} : { roll }), ...(bought === null ? {} : { bought }) });
+    }
+  }
+  // What everyone has: the options whose requirement is met on the sheet as typed and the levels so
+  // far (never what picks add, which would read back into this), at the character's total level.
+  const ownLevel = targetsOf(definition).has('level');
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+  // At least 1, so a character with no class yet has what comes at the start; in a system with no
+  // levels at all, null: every feature counts.
+  const levelled = levelledOf(definition).length > 0;
+  const totalLevel = () => (ownLevel ? Math.max(1, Math.floor(num(sheet.level)))
+    : levelled ? Math.max(1, levelsOf(definition, held.filter((p) => p.active === true && !p.everyone)).level ?? 0) : null);
+  if (everyone.length) {
+    const picked = held.filter((p) => p.active === true && !p.everyone);
+    const levels = { ...levelsOf(definition, picked), ...ownedBy(picked) };
+    const tables = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
+    const own = (o, name) => Object.prototype.hasOwnProperty.call(o, name);
+    const env = {
+      field: (name) => (own(levels, name) ? levels[name] : num(sheet[name])),
+      rule: (name) => ruleValue(name, sheet),
+      table: (name, x) => lookupIn(own(tables, name) ? tables[name] : [], x),
+    };
+    for (const p of everyone) {
+      const needs = p.option.requires;
+      if (typeof needs !== 'string' || !needs.trim()) continue;
+      let n = null;
+      try { n = evaluate(parse(needs, (name) => own(tables, name)), env); } catch { n = null; }
+      if (Number.isFinite(n) && n === 0) held.splice(held.indexOf(p), 1);
+    }
+  }
+  // Picks under features, settled from the top down: each pass may unlock features for the next.
+  for (let changed = true; changed;) {
+    changed = false;
+    const total = totalLevel();
+    for (const p of everyone) p.level = total;
+    // 7a5d: a pick under a feature, in a list without levels, at the level of the pick that opened it.
+    for (const p of held) {
+      if (!p.from || p.list.levelled === true) continue;
+      const opener = held.find((q) => list(q.option.features).some((f) => isPlainObject(f) && f.id === p.from));
+      const level = opener ? opener.level : null;
+      if (level !== p.level) { p.level = level; changed = true; }
+    }
+    // By feature and list: a feature may open one list and offer another instead of its increase (7d6c).
+    const room = new Map(openingsOf(definition, held.filter((p) => p.active === true))
+      .map((o) => [`${o.feature.id} ${o.list.id}`, { left: o.count - o.used }]));
+    for (const p of held.filter((x) => x.active === null)) {
+      const r = room.get(`${p.from} ${p.list.id}`);
+      if (r && r.left > 0) { p.active = true; r.left -= 1; changed = true; }
+    }
+  }
+  for (const p of held) if (p.active === null) p.active = false;
+  for (const p of everyone) delete p.everyone;
+  return held;
+};
+
+/**
+ * A character's picks that count: [{ list, option, level, from }], as heldOf reads them. What the
+ * numbers, uses, rests and rolls read.
+ */
+const picksOf = (definition, data) => heldOf(definition, data).filter((p) => p.active)
+  .map(({ list: c, option, level, from }) => ({ list: c, option, level, from }));
+
+/**
+ * A feature's INCREASE as it reads (7d6b): its points, the most on one stat (all of them when unsaid), the ids of the
+ * stats it may raise (a group's, or every stat's), and where they stop (null for no limit). Null without one.
+ */
+const increaseOf = (definition, feature) => {
+  const inc = isPlainObject(feature) ? feature.increase : null;
+  if (!isPlainObject(inc) || !Number.isInteger(inc.points) || inc.points < 1) return null;
+  const stats = list(definition.stats).filter((g) => isPlainObject(g) && (inc.stats === undefined || g.id === inc.stats))
+    .flatMap((g) => list(g.stats)).filter((s) => isPlainObject(s) && typeof s.id === 'string').map((s) => s.id);
+  const most = Number.isInteger(inc.most) && inc.most >= 1 ? Math.min(inc.most, inc.points) : inc.points;
+  const other = choicesOf(definition).find((c) => c.id === inc.instead) || null;
+  // A list picked on its own has no pick to give here (7d6c).
+  const instead = other && ['features', 'both'].includes(pickedOf(other)) ? other.id : null;
+  return { points: inc.points, most, stats, cap: Number.isInteger(inc.cap) ? inc.cap : null, instead };
+};
+
+/** How an increase was spent, while it holds: { stat: points } on stats it may raise, whole from 1, within its most and its points. */
+const spentOf = (inc, spread) => {
+  if (!inc || !isPlainObject(spread)) return null;
+  let total = 0;
+  for (const [stat, n] of Object.entries(spread)) {
+    if (!inc.stats.includes(stat) || !Number.isInteger(n) || n < 1 || n > inc.most) return null;
+    total += n;
+  }
+  return total >= 1 && total <= inc.points ? spread : null;
+};
+
+/** The levels `picks` give, by the names formulas read them (levelNamesOf): untaken options read 0. */
+const levelsOf = (definition, picks) => {
+  const levels = {};
+  let total = 0;
+  const levelled = levelledOf(definition);
+  for (const c of levelled) {
+    for (const o of optionsOf(c)) levels[`${o.id}_level`] = 0;
+    let sum = 0;
+    for (const p of picks.filter((x) => x.list === c)) { levels[`${p.option.id}_level`] = p.level; sum += p.level; }
+    levels[`${c.id}_level`] = sum;
+    total += sum;
+  }
+  if (levelled.length && !targetsOf(definition).has('level')) levels.level = total;
+  return levels;
+};
+
+/** The features `picks` have unlocked: [{ feature, option, list }], each pick's in its order. */
+const unlockedOf = (picks) => picks.flatMap((p) => list(p.option.features)
+  .filter((f) => isPlainObject(f) && typeof f.id === 'string' && (p.level === null || (Number.isInteger(f.at) ? f.at : 1) <= p.level))
+  .map((feature) => ({ feature, option: p.option, list: p.list })));
+
+/** What has(name) reads for `picks`: has:<id> for each option held and each feature it has unlocked. */
+function ownedBy(picks) {
+  const owned = {};
+  for (const p of picks) owned[`has:${p.option.id}`] = 1;
+  for (const { feature } of unlockedOf(picks)) owned[`has:${feature.id}`] = 1;
+  return owned;
+}
+
+/** Every option, feature and item (7e3) has() can name, by id, with what players call it. */
+const ownableOf = (definition) => new Map([...choicesOf(definition).flatMap((c) => optionsOf(c)), ...itemsOf(definition)].flatMap((o) => [
+  [o.id, o.label || o.id],
+  ...list(o.features).filter((f) => isPlainObject(f) && typeof f.id === 'string').map((f) => [f.id, f.label || f.id]),
+]));
+
+/** The keys of a definition that hold formula text, wherever they sit. */
+const FORMULA_KEYS = new Set(['formula', 'when', 'then', 'else', 'requires', 'amount', 'count', 'add', 'against', 'plus']);
+/** How a problem names what it is in, as the other checks do: "list classes, option mage, requires". */
+const IN_WORDS = { derived: 'derived', choices: 'list', options: 'option', features: 'feature', rolls: 'roll', changes: 'change' };
+
+/**
+ * Each has(name) in a definition's formulas naming no option or feature: a slip there would read as
+ * "doesn't have it" for ever. Formula text sits in many sections, so it is found by its key.
+ */
+const checkHasNames = (definition, problems) => {
+  const known = ownableOf(definition);
+  const walk = (v, where) => {
+    if (Array.isArray(v)) { v.forEach((x) => walk(x, where)); return; }
+    if (!isPlainObject(v)) return;
+    for (const [key, value] of Object.entries(v)) {
+      if (typeof value === 'string') {
+        if (!FORMULA_KEYS.has(key)) continue;
+        for (const m of value.matchAll(/\bhas\(\s*([a-z][a-z0-9_]*)\s*\)/g)) {
+          if (!known.has(m[1])) problems.push({ where: [...where, key].join(', '), message: `has(${m[1]}): no option or feature is called that` });
+        }
+      } else if (Array.isArray(value) && IN_WORDS[key]) {
+        for (const x of value) walk(x, [...where, `${IN_WORDS[key]} ${isPlainObject(x) && typeof x.id === 'string' ? x.id : '?'}`]);
+      } else walk(value, [...where, key]);
+    }
+  };
+  walk(definition, []);
+};
+
+/** A bonus as the sheet names it: what it gave only where that differs, AT LEAST, and the cap where it cut. */
+const lineShown = (l) => ({ feature: l.feature, amount: l.amount, ...(l.got !== l.amount ? { got: l.got } : {}), ...(l.least ? { least: true } : {}), ...(l.stop !== undefined && l.stop !== null ? { stop: l.stop } : {}) });
+
+/**
+ * What a character's picks do to their numbers: `{ sheet, add, bonus, levels, from, applied }`, the overlay
+ * derived.js reads. `sheet` holds the levels and each stat or health field a feature changes, as
+ * modified; `bonus` each formula's bonuses, { adds, least }, counted once it is worked out (7e1), and `add`
+ * their ADDs summed; `from` every modifier by what it changes, [{ feature, amount }], for the sheet to name, with what
+ * it really gave (`got`) where the cap cut it, and `least`; `applied`, filled in as derived.js works the formulas
+ * out, the same for each formula. Empty for a sheet with no picks.
+ */
+const overlayOf = (definition, data) => {
+  const sheet = isPlainObject(data) ? data : {};
+  const picks = picksOf(definition, sheet);
+  const levels = levelsOf(definition, picks);
+  // What the picks hold, and the items working (7e3).
+  const owned = { ...ownedBy(picks), ...itemsOwned(definition, sheet) };
+  const own = (o, name) => Object.prototype.hasOwnProperty.call(o, name);
+  const tables = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+  const env = {
+    field: (name) => (own(levels, name) ? levels[name] : own(owned, name) ? owned[name] : num(sheet[name])),
+    rule: (name) => ruleValue(name, sheet),
+    table: (name, x) => lookupIn(own(tables, name) ? tables[name] : [], x),
+  };
+  const isTable = (name) => own(tables, name);
+  const targets = targetsOf(definition);
+  // A stat held as a rank (7f1a): a bonus or INCREASE on it moves its step, which its worth is read from.
+  const steps = stepFieldsOf(definition);
+  const fields = new Set([...fieldTargetsOf(definition), ...steps.values()]);
+  const bonuses = {};
+  const increases = isPlainObject(sheet[INCREASES_KEY]) ? sheet[INCREASES_KEY] : {};
+  const added = (stat, amount, feature, least = false, cap = null, item = null) => {
+    const target = steps.get(stat) || stat;
+    const b = own(bonuses, target) ? bonuses[target] : (bonuses[target] = { adds: [], least: [] });
+    // An item's bonus is named by the item (7e3): Ring of Constitution +2.
+    b[least ? 'least' : 'adds'].push({ feature: item ? item.label || item.id : feature.label || feature.id, amount, ...(cap === null ? {} : { cap }) });
+  };
+  for (const { feature, item = null } of [...unlockedOf(picks), ...workingFeatures(definition, sheet)]) {
+    // An INCREASE as it was spent (7d6b), on the stats it raises.
+    const inc = own(increases, feature.id) ? increaseOf(definition, feature) : null;
+    // A pick taken instead (7d6c): the points don't count.
+    const instead = inc && inc.instead && picks.some((p) => p.from === feature.id && p.list.id === inc.instead);
+    const spent = inc && !instead ? spentOf(inc, increases[feature.id]) : null;
+    for (const [stat, n] of Object.entries(spent || {})) added(stat, n, feature);
+    for (const m of list(feature.modifiers).slice(0, LIMITS.modifiers)) {
+      if (!isPlainObject(m) || typeof m.target !== 'string' || !targets.has(m.target) || typeof m.amount !== 'string') continue;
+      let amount;
+      try { amount = evaluate(parse(m.amount, isTable), env); } catch { continue; }
+      if (!Number.isFinite(amount)) continue;
+      added(m.target, amount, feature, m.how === LEAST, m.how === LEAST ? null : stopOf(m.cap), item);
+    }
+  }
+  const over = { ...levels, ...owned };
+  const add = {};
+  const bonus = {};
+  const from = {};
+  // The token's maximum already holds its modifiers (7a5a3, tokenMax.js): read as it is, never added twice. It only adds.
+  const onToken = tokenMaxFieldOf(definition);
+  for (const [target, b] of Object.entries(bonuses)) {
+    // The checks refuse AT LEAST and STOPS AT there.
+    if (target === onToken) from[target] = b.adds;
+    else if (fields.has(target)) {
+      const done = applyBonuses(num(sheet[target]), b);
+      over[target] = done.value;
+      from[target] = done.lines.map(lineShown);
+    } else {
+      bonus[target] = b;
+      add[target] = b.adds.reduce((n, a) => n + a.amount, 0);
+      from[target] = [...b.adds.map(({ feature, amount }) => ({ feature, amount })), ...b.least.map((l) => ({ ...l, least: true }))];
+    }
+  }
+  return { sheet: over, add, bonus, levels, from, applied: {} };
+};
+
+/** The sheet as rolls read it: the stats and health fields with their modifiers, and the levels. Never stored. */
+const effectiveData = (definition, data) => ({ ...(isPlainObject(data) ? data : {}), ...overlayOf(definition, data).sheet });
+
+/**
+ * Formula text worked out on the sheet as it reads now: stats with their modifiers, the levels, and
+ * formulas as last saved. Null when it can't be (it never happens to a published system's).
+ */
+const valueOn = (definition, data, text) => {
+  if (typeof text !== 'string') return null;
+  const sheet = effectiveData(definition, data);
+  const own = (o, name) => Object.prototype.hasOwnProperty.call(o, name);
+  const tables = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+  try {
+    const n = evaluate(parse(text, (name) => own(tables, name)), {
+      field: (name) => num(sheet[name]),
+      rule: (name) => ruleValue(name, sheet),
+      table: (name, x) => lookupIn(own(tables, name) ? tables[name] : [], x),
+    });
+    return Number.isFinite(n) ? n : null;
+  } catch { return null; }
+};
+
+/** Whether a character meets an option's requirement: one with none always does. */
+const meets = (definition, data, option) => {
+  if (!isPlainObject(option) || typeof option.requires !== 'string' || !option.requires.trim()) return true;
+  const v = valueOn(definition, data, option.requires);
+  return v === null || v !== 0;
+};
+
+/** Every name a sheet shows for what a formula can read: stats, formulas, health fields, levels. */
+const namesOf = (definition) => {
+  const names = new Map();
+  for (const g of list(definition.stats)) for (const s of list(g.stats)) if (typeof s.id === 'string') names.set(s.id, s.label || s.id);
+  for (const d of list(definition.derived)) if (typeof d.id === 'string') names.set(d.id, d.label || d.id);
+  for (const s of healthLayout(isPlainObject(definition.core) ? definition.core.health : undefined).sections) for (const f of s.fields) names.set(f.id, f.label || f.id);
+  for (const c of levelledOf(definition)) {
+    names.set(`${c.id}_level`, `${c.many || c.id} level`);
+    for (const o of optionsOf(c)) names.set(`${o.id}_level`, `${o.label || o.id} level`);
+  }
+  if (!names.has('level') && levelledOf(definition).length) names.set('level', 'Level');
+  return names;
+};
+
+/** A requirement in the words the sheet shows: @int >= 13 as INTELLECT >= 13. */
+const needsText = (definition, text) => {
+  const names = namesOf(definition);
+  const ownable = ownableOf(definition);
+  return String(text)
+    .replace(/\bhas\(\s*([a-z][a-z0-9_]*)\s*\)/g, (_, id) => String(ownable.get(id) || id).toUpperCase())
+    .replace(/@([a-z][a-z0-9_]*)/g, (_, id) => String(names.get(id) || id).toUpperCase()).trim();
+};
+
+/** Each unlocked feature, and each working item's (7e3), with uses: how many it has (its count worked out), how many are spent, and its rest. */
+const usesOf = (definition, data) => {
+  const stored = isPlainObject(data) && isPlainObject(data[USES_KEY]) ? data[USES_KEY] : {};
+  return [...unlockedOf(picksOf(definition, data)), ...workingFeatures(definition, data)].filter(({ feature }) => isPlainObject(feature.uses)).map(({ feature }) => {
+    const max = Math.max(0, Math.floor(valueOn(definition, data, feature.uses.count) ?? 0));
+    const had = Object.prototype.hasOwnProperty.call(stored, feature.id) ? Number(stored[feature.id]) : 0;
+    const spent = Math.max(0, Math.min(max, Number.isInteger(had) ? had : 0));
+    return { feature, max, spent, refill: typeof feature.uses.refill === 'string' ? feature.uses.refill : null };
+  });
+};
+
+/** The kits going ONLY IF (7c4b), whose requirement is the sheet's to work out as an option's is. */
+const kitsNeedingOf = (definition) => list(isPlainObject(definition.creation) ? definition.creation.kits : undefined).filter((k) => isPlainObject(k) && k.who === 'needs');
+
+/** Whether a system has anything for workedOf to say: a list to pick from, or a kit with a requirement. */
+const worksOutPicks = (definition) => choicesOf(definition).length > 0 || kitsNeedingOf(definition).length > 0 || itemsOf(definition).length > 0;
+
+/**
+ * What the sheet shows of a character's picks, worked out on every save: every pick kept with its
+ * level, the feature it was picked under and whether it waits (7a5a), each feature's picks open, the
+ * levels formulas read, what each changed value's modifiers come from, each feature's uses
+ * ({ max, spent }), the options not taken whose requirement isn't met, and any kits going ONLY IF that
+ * aren't met (7c4b), which a player can't see the formula of any more than an option's.
+ */
+const workedOf = (definition, data, overlay = overlayOf(definition, data)) => {
+  const held = heldOf(definition, data);
+  const picks = held.filter((p) => p.active);
+  const taken = new Set(held.map((p) => p.option.id));
+  const kits = kitsNeedingOf(definition);
+  return {
+    ...(kits.length ? { kitsUnmet: kits.filter((k) => !meets(definition, data, k)).map((k) => k.id) } : {}),
+    picks: held.map((p) => ({ list: p.list.id, option: p.option.id, ...(p.level === null ? {} : { level: p.level }),
+      ...(p.from ? { from: p.from } : {}), ...(p.active ? {} : { waiting: true }), ...(p.locked ? { locked: true } : {}), ...(p.roll === undefined ? {} : { roll: p.roll }),
+      ...(p.bought === undefined ? {} : { bought: p.bought }) })),
+    // 7a5a: each unlocked feature opening a list picked through features, and how many it gives and has.
+    opens: openingsOf(definition, picks, data).map((o) => ({ feature: o.feature.id, list: o.list.id, count: o.count, used: o.used, ...(o.instead ? { instead: true } : {}) })),
+    levels: levelsOf(definition, picks),
+    // A formula's bonuses as derived.js counted them (7e1), when it has: what each really gave.
+    from: { ...overlay.from, ...Object.fromEntries(Object.entries(overlay.applied || {}).map(([id, lines]) => [id, lines.map(lineShown)])) },
+    uses: Object.fromEntries(usesOf(definition, data).map((u) => [u.feature.id, { max: u.max, spent: u.spent }])),
+    // 7d7b: each unlocked INCREASE with nothing spent and no pick taken in its place, for the player to spend on the sheet.
+    ...(() => {
+      const spent = isPlainObject(data) && isPlainObject(data[INCREASES_KEY]) ? data[INCREASES_KEY] : {};
+      const open = unlockedOf(picks).map((u) => u.feature).filter((f) => {
+        const inc = increaseOf(definition, f);
+        return inc && !spentOf(inc, spent[f.id]) && !(inc.instead && picks.some((p) => p.from === f.id && p.list.id === inc.instead));
+      }).map((f) => f.id);
+      return open.length ? { increasesOpen: open } : {};
+    })(),
+    unmet: choicesOf(definition).flatMap((c) => optionsOf(c).filter((o) => !taken.has(o.id) && !meets(definition, data, o)).map((o) => o.id)),
+    // 7e3: each carried item's state and each slot's count, for the sheet's gear.
+    ...(itemsOf(definition).length ? itemsShown(definition, data, (text) => valueOn(definition, data, text)) : {}),
+  };
+};
+
+/** What a system with no currencies of its own calls the app's single money. */
+const MAIN_MONEY = 'main';
+
+/** Each currency, as this system has them: the app's single money where it has none of its own. */
+const moneyCurrencies = (definition) => {
+  const own = currenciesOf(definition);
+  return own.length ? own : [{ id: MAIN_MONEY, name: 'Money' }];
+};
+
+/** The items an option gives (7c4e): those written as items. */
+const giftItemsOf = (option) => list(isPlainObject(option.gives) ? option.gives.items : undefined).filter(isPlainObject);
+
+/**
+ * The money an option gives (7c4e), in the system's order: { currency, how, ... }. None with the bank
+ * off, as there is nowhere to pay it. A currency since deleted is passed over.
+ */
+const giftMoneyOf = (definition, option) => {
+  const money = isPlainObject(option.gives) && isPlainObject(option.gives.money) ? option.gives.money : {};
+  if (!partOn(definition, 'bank')) return [];
+  return moneyCurrencies(definition)
+    .filter((c) => isPlainObject(money[c.id]) && ['number', 'roll'].includes(money[c.id].how))
+    .map((c) => ({ ...money[c.id], currency: c }));
+};
+
+/** What an option gives as a player reads it, before and after picking it; null when it gives nothing. */
+const giftsShown = (definition, option) => {
+  const items = giftItemsOf(option).map(({ name, qty }) => ({ name, qty }));
+  const money = giftMoneyOf(definition, option).map(({ currency, how, amount, each }) => ({ id: currency.id, name: currency.name, how, amount, each }));
+  if (!items.length && !money.length) return null;
+  return { ...(items.length ? { items } : {}), ...(money.length ? { money } : {}) };
+};
+
+/** An increase as the sheet and LEVEL_UP.EXE draw it (7d6b). */
+const increaseShown = (inc, names, ranks = new Map()) => ({
+  points: inc.points, most: inc.most,
+  // A stat held as a rank (7f1c2) with its ranks by name: raised a step a point, up to the top.
+  stats: inc.stats.map((id) => ({ id, label: String(names.get(id) || id), ...(ranks.has(id) ? { ranks: ranks.get(id).list.map((k) => k.name) } : {}) })), ...(inc.cap === null ? {} : { cap: inc.cap }),
+  ...(inc.instead ? { instead: inc.instead } : {}),
+});
+
+/**
+ * How the sheet reads a system's features (7a3a; shared with its items, 7e3b): each feature's words, its level where
+ * its list unlocks by level, and what it does, named. Never a formula.
+ */
+const featuresShownBy = (definition) => {
+  const names = namesOf(definition);
+  const rolls = new Map(list(definition.rolls).filter((r) => typeof r.id === 'string').map((r) => [r.id, r]));
+  const restName = new Map(list(Object.entries(isPlainObject(definition.rests) ? definition.rests : {}).map(([id, r]) => ({ id, ...r }))).map((r) => [r.id, r.name]));
+  const STANDARD_REST = { short_rest: 'Short rest', long_rest: 'Long rest', end_of_scene: 'End of scene', end_of_session: 'End of session' };
+  const lists = choicesOf(definition);
+  return (features, { levelled = false } = {}) => list(features).filter((f) => isPlainObject(f) && typeof f.id === 'string').map((f) => ({
+    id: f.id, label: f.label || f.id,
+    ...(typeof f.text === 'string' && f.text.trim() ? { text: f.text } : {}),
+    ...(levelled ? { at: Number.isInteger(f.at) && f.at >= 1 ? f.at : 1 } : {}),
+    ...(list(f.modifiers).length ? { modifies: [...new Set(list(f.modifiers).map((m) => String(names.get(m.target) || m.target)))] } : {}),
+    ...(isPlainObject(f.uses) ? { uses: { refill: typeof f.uses.refill === 'string' ? (restName.get(f.uses.refill) || STANDARD_REST[f.uses.refill] || f.uses.refill) : null } } : {}),
+    ...(Array.isArray(f.rolls) && f.rolls.length ? { rolls: f.rolls.map((id) => (rolls.get(id) ? rolls.get(id).label || id : id)) } : {}),
+    ...(list(f.changes).length ? { changes: list(f.changes).map((ch) => {
+      const roll = rolls.get(ch.roll);
+      const change = roll ? list(roll.changes).find((x) => x.id === ch.change) : null;
+      return `${(change && change.label) || ch.change} on ${(roll && roll.label) || ch.roll}`;
+    }) } : {}),
+    ...(typeof f.choice === 'string' && lists.some((l) => l.id === f.choice) ? { opens: f.choice, opensCount: openCountOf(f) } : {}),
+    // An INCREASE (7d6b): its points, the most on one, the stats it may raise by name, and where they stop.
+    ...(increaseOf(definition, f) ? { increase: increaseShown(increaseOf(definition, f), names, new Map(rankedStatsOf(definition).map(({ stat, ranks }) => [stat.id, ranks]))) } : {}),
+  }));
+};
+
+/**
+ * The lists as the sheet draws them (7a3a): names, how many and how, each option's words and what
+ * it needs in words, what it gives (7c4e), and each feature as featuresShownBy reads it.
+ */
+const choicesShown = (definition) => {
+  const lists = choicesOf(definition);
+  const byLevel = unlocksByLevelOf(definition);
+  const featuresShown = featuresShownBy(definition);
+  return lists.map((c) => ({
+    id: c.id, one: c.one, many: c.many,
+    picks: c.picks === 'any' ? 'any' : Number.isInteger(c.picks) ? c.picks : 1,
+    again: c.again === true, levelled: c.levelled === true, picked: pickedOf(c),
+    // A table to roll on, and how players pick from it (7a5b2).
+    ...(tableOf(c) ? { table: c.table.trim().toLowerCase() } : {}), players: playersOf(c),
+    options: optionsOf(c).map((o) => ({
+      id: o.id, label: o.label || o.id,
+      ...(tableOf(c) && rollRangeOf(o.roll) ? { roll: rollRangeOf(o.roll).join('-').replace(/^(\d+)-\1$/, '$1') } : {}),
+      ...(typeof o.description === 'string' && o.description.trim() ? { description: o.description } : {}),
+      ...(typeof o.requires === 'string' && o.requires.trim() ? { needs: needsText(definition, o.requires) } : {}),
+      ...(giftsShown(definition, o) ? { gives: giftsShown(definition, o) } : {}),
+      features: featuresShown(o.features, { levelled: byLevel.has(c.id) }),
+    })),
+  }));
+};
+
+/**
+ * A system's items as the sheet draws them (7e3b): its slots, each by name and how many a character has, and each item's
+ * words, what it needs, and its features read as a pick's are; its installs (7e4c) by name. Null for a system without any.
+ */
+const itemsRenderedOf = (definition) => {
+  const slots = slotsOf(definition);
+  const installs = installsOf(definition);
+  const items = itemsOf(definition);
+  if (!slots.length && !items.length && !installs.length) return null;
+  const featuresShown = featuresShownBy(definition);
+  const names = namesOf(definition);
+  return {
+    slots: slots.map((s) => ({ id: s.id, label: s.label || s.id, count: Number.isInteger(s.count) ? s.count : 0 })),
+    // Each install (7e4c): its name, what it costs against by name, and which way; never the limit's formula.
+    ...(installs.length ? { installs: installs.map((s) => ({ id: s.id, label: s.label || s.id, against: String(names.get(s.against) || s.against || ''), way: s.way === 'takes' ? 'takes' : 'adds' })) } : {}),
+    list: items.map((i) => ({
+      id: i.id, label: i.label || i.id,
+      ...(typeof i.description === 'string' && i.description.trim() ? { description: i.description } : {}),
+      needs: i.needs || 'worn',
+      ...(typeof i.cost === 'number' && Number.isFinite(i.cost) && installs.some((s) => s.id === i.needs) ? { cost: i.cost } : {}),
+      features: featuresShown(i.features),
+    })),
+  };
+};
+
+module.exports = {
+  LIMITS, PICKED, PLAYERS, PICKS_KEY, USES_KEY, INCREASES_KEY, increaseOf, spentOf, WORKED_KEY, ROLLED_KEY, rolledOn, rolledKey, rolledOf, checkChoices, checkHasNames, ownableOf, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
+  tableOf, rollRangeOf, playersOf,
+  capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, worksOutPicks, choicesShown, itemsRenderedOf, tokenMaxFieldOf,
+  MAIN_MONEY, moneyCurrencies, giftItemsOf, giftMoneyOf, openCountOf, targetsOf,
+};

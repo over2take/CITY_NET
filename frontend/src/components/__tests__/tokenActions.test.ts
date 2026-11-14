@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { hitPointsTarget, tokenActionKeys, tokenView, attackAsOptions, type TokenViewer } from '../tokenActions';
+import { hitPointsTarget, linkedHealthTarget, tokenActionKeys, tokenView, attackAsOptions, type TokenViewer } from '../tokenActions';
 import { controlsToken } from '../../utils/tokenControl';
 
 describe('who a viewer may attack as (4b5b4b)', () => {
@@ -181,5 +181,24 @@ describe('whose health HIT_POINTS opens', () => {
   it('asks the GM to select a token when none, or a building, is selected', () => {
     expect(hitPointsTarget({ isGm: true, selected: null, locations, userName: 'gm' })).toEqual({ notice: 'SELECT_A_TOKEN_FIRST' });
     expect(hitPointsTarget({ isGm: true, selected: bar, locations, userName: 'gm' })).toEqual({ notice: 'SELECT_A_TOKEN_FIRST' });
+  });
+});
+
+describe("the token a sheet's linked health opens, in the GM's view (2026-10-31)", () => {
+  const locations = [
+    { id: 1, shape: 'rhombus', owner: 'cody', name: 'Cody' },
+    { id: 2, shape: 'enemy_rhombus', owner: null, name: 'GANGER' },
+    { id: 3, shape: 'box', owner: 'cody', name: 'House' },
+  ];
+
+  it("a player's own token, or an NPC's by its id", () => {
+    expect(linkedHealthTarget(locations, { username: 'cody' })).toEqual({ token: locations[0] });
+    expect(linkedHealthTarget(locations, { locationId: 2 })).toEqual({ token: locations[1] });
+  });
+
+  it('says so when the character has no token on this map, or the id is not a token', () => {
+    expect(linkedHealthTarget(locations, { username: 'vex' })).toEqual({ notice: 'VEX HAS NO TOKEN ON THIS MAP' });
+    expect(linkedHealthTarget(locations, { locationId: 3 })).toEqual({ notice: 'THIS NPC HAS NO TOKEN ON THIS MAP' });
+    expect(linkedHealthTarget(locations, { locationId: 9 })).toEqual({ notice: 'THIS NPC HAS NO TOKEN ON THIS MAP' });
   });
 });

@@ -57,6 +57,7 @@ const untilValue = async (read, check, opts = {}) =>
  * layer; a handler whose callback queues more work needs another, so several rounds run in
  * sequence, each waiting on the database rather than on a clock.
  *
+ * The rounds are the least it waits; on a database that counts its queries it then waits for quiet (below).
  * Eight is chosen to cover the deepest nesting in these handlers - read settings, read the
  * sheet, read the token, write, re-read - with room to spare. Extra rounds on an already
  * quiet database cost microseconds, so the ceiling is generous on purpose.
@@ -70,11 +71,29 @@ const untilValue = async (read, check, opts = {}) =>
  * before drain means anything. Where a handler hops off the database (a timer, a file, crypto)
  * before its next query, a round can still pass it: wait for the result with `until` there.
  */
+const QUIET_ROUNDS = 2;
+const QUIET_MOST_MS = 5000;
 const drain = (db, rounds = 8) => new Promise((resolve, reject) => {
+  // A database from makeTestDb counts its queries (helpers/testDb.js): then this also waits until none is out and
+  // none has been asked but its own, two rounds running, so a handler's chain of queries is waited for however
+  // long it runs. Capped, so a check that nothing happened still ends. Since the race sweep (2026-11-08): a
+  // checkout's chain outran eight rounds under load.
+  const counting = typeof db.__pending === 'number';
+  const deadline = Date.now() + QUIET_MOST_MS;
   let left = rounds;
+  let quiet = 0;
   const round = () => {
-    if (left-- <= 0) return resolve();
-    db.get('SELECT 1', (err) => (err ? reject(err) : round()));
+    const before = counting ? db.__asked : 0;
+    db.get('SELECT 1', (err) => {
+      if (err) return reject(err);
+      left -= 1;
+      // A turn of the event loop, so a callback's own next query is asked before this looks.
+      return setImmediate(() => {
+        if (counting) quiet = db.__pending === 0 && db.__asked === before + 1 ? quiet + 1 : 0;
+        const done = left <= 0 && (!counting || quiet >= QUIET_ROUNDS);
+        return done || Date.now() > deadline ? resolve() : round();
+      });
+    });
   };
   round();
 });

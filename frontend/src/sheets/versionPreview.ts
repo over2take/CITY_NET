@@ -34,7 +34,7 @@ export const GROUPS: { id: string; label: string; kinds: Change['kind'][] }[] = 
   { id: 'stats', label: 'STATS', kinds: ['stat'] },
   { id: 'health', label: 'HEALTH', kinds: ['health'] },
   { id: 'money', label: 'MONEY', kinds: ['currency'] },
-  { id: 'features', label: 'FEATURES', kinds: ['part'] },
+  { id: 'features', label: 'PARTS', kinds: ['part'] },
   { id: 'conditions', label: 'CONDITIONS', kinds: ['condition'] },
   { id: 'house_rules', label: 'HOUSE RULES', kinds: ['house_rule'] },
 ];
@@ -45,6 +45,8 @@ export const OTHER_NAMES: Record<string, string> = {
   words: 'words', buildings: 'building and catalogue names', bank: 'bank settings', lookups: 'tables',
   npc: 'NPC tiers', rests: 'rests',
   rolls: 'rolls', symbols: 'symbols', dice: 'dice', target_seen: 'who sees a roll\'s target',
+  choices: 'choices and their features', creation: 'the new character steps', levels: 'how characters go up',
+  spend: 'what XP buys', improve: 'how stats improve by use',
 };
 
 /** A value one character holds, or worked out, written plainly. */
