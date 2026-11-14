@@ -183,9 +183,10 @@ describe('the render copy (7e3b)', () => {
     expect(shown.list[2].features).toEqual([{ id: 'quiet', label: 'Quiet', uses: { refill: 'Long rest' } }]);
     // Never a level, as only a levelled list's are.
     expect(shown.list[0].features[0]).not.toHaveProperty('at');
-    expect(shown.list[4]).toEqual({ id: 'pin', label: 'pin', needs: 'worn', features: [{ id: 'f', label: 'f' }] });
-    expect(itemsRenderedOf({ ...WORN, items: { slots: [{ id: 'bond', label: 'BONDED' }, { id: 'tied', count: 2 }] } })).toEqual({ slots: [{ id: 'bond', label: 'BONDED', count: 0 }, { id: 'tied', label: 'tied', count: 2 }], list: [] });
-    expect(itemsRenderedOf({ ...WORN, items: { list: [{ id: 'x', label: 'X', description: 'Shiny.' }] } })).toEqual({ slots: [], list: [{ id: 'x', label: 'X', description: 'Shiny.', needs: 'worn', features: [] }] });
+    // Its type, GEAR where the system makes none, and its values (8a1).
+    expect(shown.list[4]).toEqual({ id: 'pin', label: 'pin', needs: 'worn', features: [{ id: 'f', label: 'f' }], type: 'gear', values: {} });
+    expect(itemsRenderedOf({ ...WORN, items: { slots: [{ id: 'bond', label: 'BONDED' }, { id: 'tied', count: 2 }] } })).toEqual({ slots: [{ id: 'bond', label: 'BONDED', count: 0 }, { id: 'tied', label: 'tied', count: 2 }], list: [], types: [{ id: 'gear', label: 'GEAR', one: 'Gear', columns: [{ id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' }, { id: 'price', label: 'PRICE', kind: 'number' }] }] });
+    expect(itemsRenderedOf({ ...WORN, items: { list: [{ id: 'x', label: 'X', description: 'Shiny.' }] } })).toEqual({ slots: [], list: [{ id: 'x', label: 'X', description: 'Shiny.', needs: 'worn', features: [], type: 'gear', values: {} }], types: [{ id: 'gear', label: 'GEAR', one: 'Gear', columns: [{ id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' }, { id: 'price', label: 'PRICE', kind: 'number' }] }] });
     expect(itemsRenderedOf({ ...WORN, items: undefined })).toBeNull();
     expect(itemsRenderedOf({ ...WORN, items: {} })).toBeNull();
     // On the copy the sheet loads.

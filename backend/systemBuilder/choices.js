@@ -124,6 +124,7 @@ const { partOn } = require('./parts');
 const { currenciesOf } = require('./currencies');
 const { checkItems, itemsOf, slotsOf, installsOf, workingFeatures, itemsOwned, itemsShown } = require('./items');
 const { stepFieldsOf, rankedStatsOf } = require('./ranks');
+const { ownTypes, typeNamed, itemValues, typesShown } = require('./itemTypes');
 
 /** Where a sheet keeps its picks: starting with _, so no stat, formula or field can be called it. */
 const PICKS_KEY = '_choices';
@@ -499,6 +500,8 @@ const checkChoices = (definition, problems) => {
     checkFeature: (f, where) => checkFeature(f, where, false, null, true),
     // An install's limit, and what it costs against (7e4).
     formula, targets, onToken: tokenMaxFieldOf(definition),
+    // An item's dice read the sheet's names, and a COUNT is refilled by a rest (8a1).
+    boxNames: { known: (n) => namesOf(definition).has(n), refused: (n) => `@${n}: no stat or formula is called that` }, restIds: new Set(restIdsOf(definition)),
   });
 };
 
@@ -1046,7 +1049,8 @@ const itemsRenderedOf = (definition) => {
   const slots = slotsOf(definition);
   const installs = installsOf(definition);
   const items = itemsOf(definition);
-  if (!slots.length && !items.length && !installs.length) return null;
+  if (!slots.length && !items.length && !installs.length && !ownTypes(definition)) return null;
+  const boxNames = { known: (n) => namesOf(definition).has(n), refused: (n) => `@${n}` };
   const featuresShown = featuresShownBy(definition);
   const names = namesOf(definition);
   return {
@@ -1059,7 +1063,11 @@ const itemsRenderedOf = (definition) => {
       needs: i.needs || 'worn',
       ...(typeof i.cost === 'number' && Number.isFinite(i.cost) && installs.some((s) => s.id === i.needs) ? { cost: i.cost } : {}),
       features: featuresShown(i.features),
+      // Its type and its columns' values (8a1).
+      type: typeNamed(definition, i.type).id, values: itemValues(definition, i, boxNames),
     })),
+    // The item types and their columns (8a1).
+    types: typesShown(definition, items),
   };
 };
 

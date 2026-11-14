@@ -11,6 +11,7 @@
 //         features: [{ id: 'hardy', label: 'Hardy', modifiers: [{ target: 'con', amount: '2', cap: 20 }] }] },
 //     ],
 //     installs: [{ id: 'cyberware', label: 'CYBERWARE', against: 'strain', way: 'adds', limit: '@might' }],  // 7e4
+//     types: [...],   // what kind of thing each item is, and its columns (8a1, itemTypes.js); an item's `type` and `values`
 //   }
 //
 // An item's features are a class's, checked the same (choices.js checkFeature), but for what only a pick has: a level,
@@ -35,14 +36,16 @@
 //
 // Pure: checks, reads and the changes asked for.
 
+const { checkTypes, checkItemType } = require('./itemTypes');
+
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
 
 const LIMITS = { items: 200, slots: 10, count: 20, features: 20, installs: 10, cost: 1000 };
-const ITEMS_KEYS = new Set(['slots', 'installs', 'list']);
+const ITEMS_KEYS = new Set(['slots', 'installs', 'list', 'types']);
 const SLOT_KEYS = new Set(['id', 'label', 'count']);
 const INSTALL_KEYS = new Set(['id', 'label', 'against', 'way', 'limit']);
-const ITEM_KEYS = new Set(['id', 'label', 'description', 'needs', 'cost', 'features']);
+const ITEM_KEYS = new Set(['id', 'label', 'description', 'needs', 'cost', 'features', 'type', 'values']);
 /** How an install's cost counts against what it costs (7e4): adding to it up to its limit, or taking from it down to it. */
 const WAYS = ['adds', 'takes'];
 /** What an item's features need, other than a slot. */
@@ -68,9 +71,10 @@ const itemsOf = (definition) => list(isPlainObject(definition && definition.item
 /**
  * Problems with a definition's `items`, pushed onto `problems`. `tools` are the CHOICES check's own (choices.js): `id`,
  * `text` and `keys` read as they do there, `named` the one set of option and feature names, and `checkFeature` an item's
- * feature checked as a pick's is, with what only a pick has refused.
+ * feature checked as a pick's is, with what only a pick has refused. `boxNames` says what an item's dice may read (8a1)
+ * and `restIds` the rests a COUNT may be refilled by.
  */
-const checkItems = (definition, problems, { id, text, keys, named, checkFeature, labelMost, descriptionMost, formula, targets = new Set(), onToken = null }) => {
+const checkItems = (definition, problems, { id, text, keys, named, checkFeature, labelMost, descriptionMost, formula, targets = new Set(), onToken = null, boxNames = { known: () => false, refused: (n) => `@${n}` }, restIds = new Set() }) => {
   const items = definition.items;
   if (items === undefined) return;
   if (!isPlainObject(items)) { problems.push({ where: 'items', message: 'Must say its slots and its items' }); return; }
@@ -111,6 +115,9 @@ const checkItems = (definition, problems, { id, text, keys, named, checkFeature,
       });
     }
   }
+  // Item types (8a1): a COUNT reloads from the system's items.
+  const itemIds = new Set(list(items.list).filter((i) => isPlainObject(i) && typeof i.id === 'string').map((i) => i.id));
+  checkTypes(definition, problems, { text, keys, labelMost, itemIds, restIds });
   if (items.list === undefined) return;
   if (!Array.isArray(items.list)) { problems.push({ where: 'items, list', message: 'Must be a list of items' }); return; }
   if (items.list.length > LIMITS.items) problems.push({ where: 'items, list', message: `At most ${LIMITS.items} items` });
@@ -128,6 +135,8 @@ const checkItems = (definition, problems, { id, text, keys, named, checkFeature,
     if (installIds.has(item.needs)) {
       if (typeof item.cost !== 'number' || !Number.isFinite(item.cost) || item.cost < 0 || item.cost > LIMITS.cost) problems.push({ where: `${where}, cost`, message: `What installing it costs: 0 to ${LIMITS.cost}, fractions allowed` });
     } else if (item.cost !== undefined) problems.push({ where: `${where}, cost`, message: 'Only an item needing an install has a cost' });
+    // Its type and its columns' values (8a1).
+    checkItemType(definition, item, where, problems, boxNames);
     if (item.features === undefined) return;
     if (!Array.isArray(item.features)) { problems.push({ where: `${where}, features`, message: 'Must be a list of features' }); return; }
     if (item.features.length > LIMITS.features) problems.push({ where: `${where}, features`, message: `At most ${LIMITS.features} features` });
