@@ -108,7 +108,7 @@ describe('the render copy (7e4c)', () => {
     // Never the limit's formula; an install unnamed or against nothing said as it is.
     expect(JSON.stringify(shown.installs)).not.toContain('@might');
     expect(itemsRenderedOf({ ...WIRED, items: { installs: [{ id: 'x', against: 'nope' }, { id: 'y' }] } }))
-      .toEqual({ slots: [], installs: [{ id: 'x', label: 'x', against: 'nope', way: 'adds' }, { id: 'y', label: 'y', against: '', way: 'adds' }], list: [] });
+      .toEqual({ slots: [], installs: [{ id: 'x', label: 'x', against: 'nope', way: 'adds' }, { id: 'y', label: 'y', against: '', way: 'adds' }], list: [], types: [{ id: 'gear', label: 'GEAR', one: 'Gear', columns: [{ id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' }, { id: 'price', label: 'PRICE', kind: 'number' }] }] });
     // A cost on an item not needing an install is never sent.
     expect(itemsRenderedOf({ ...WIRED, items: { ...WIRED.items, list: [{ id: 'r', label: 'R', needs: 'attuned', cost: 3, features: [] }] } }).list[0]).not.toHaveProperty('cost');
     expect(itemsRenderedOf({ ...WIRED, items: { slots: WIRED.items.slots } })).not.toHaveProperty('installs');

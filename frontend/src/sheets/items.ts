@@ -49,7 +49,10 @@ export const itemFeatures = (item: Item): Feature[] => (Array.isArray(item.featu
 
 /** The definition with these slots and items, its installs kept (or these); an empty part, and empty items, store nothing. */
 const withItems = (def: Definition, slots: ItemSlot[], list: Item[], installs: ItemInstall[] = itemInstalls(def)): Definition => {
-  const items = { ...(slots.length ? { slots } : {}), ...(installs.length ? { installs } : {}), ...(list.length ? { list } : {}) };
+  // Whatever else the items hold (their types, 8a1) is kept as it is.
+  const rest: Obj = { ...itemsPart(def) };
+  delete rest.slots; delete rest.installs; delete rest.list;
+  const items = { ...rest, ...(slots.length ? { slots } : {}), ...(installs.length ? { installs } : {}), ...(list.length ? { list } : {}) };
   const next: Definition = { ...def };
   if (Object.keys(items).length) next.items = items; else delete next.items;
   return next;

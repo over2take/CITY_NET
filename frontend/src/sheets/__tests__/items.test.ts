@@ -188,3 +188,19 @@ describe('installs (7e4b)', () => {
     sound(gone);
   });
 });
+
+describe('item types kept (8a1)', () => {
+  it('a slot or an item changed keeps the types and each item\'s type and values, as the server checks them', () => {
+    const types = [{ id: 'weapons', label: 'WEAPONS', columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }] }];
+    const typed = { ...WORN, items: { ...(WORN.items as object), types, list: [{ id: 'ring', label: 'Ring', needs: 'attuned', type: 'weapons', values: { damage: '1d4' } }] } } as unknown as Definition;
+    const renamed = withItem(typed, 'ring', { label: 'Old Ring' });
+    expect((renamed.items as { types: unknown }).types).toEqual(types);
+    expect(itemList(renamed)[0]).toMatchObject({ label: 'Old Ring', type: 'weapons', values: { damage: '1d4' } });
+    const slot = withNewSlot(renamed)!.definition;
+    expect((slot.items as { types: unknown }).types).toEqual(types);
+    sound(slot);
+    // Every slot and item gone, the types stay.
+    const bare = withoutItem(withoutSlot(withoutSlot(slot, 'attuned'), 'new_slot'), 'ring');
+    expect(bare.items).toEqual({ types });
+  });
+});
