@@ -317,6 +317,7 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
           {...(!playerUsername && socket && locationId !== undefined ? {
             onRoll: (fieldId: string, luck?: number, luckNegate?: boolean, pick?: RollPick) => socket.emit('requestSheetRoll', { fieldId, location_id: locationId, ...(luck ? { luck } : {}), ...(luckNegate ? { luckNegate } : {}), ...(pick ? { rollId: pick.rollId, changes: pick.changes } : {}) }),
             onRollAbility: (formula: string, label: string) => socket.emit('rollAbility', { formula, label, location_id: locationId }),
+            onGearRoll: (line: number, column: string) => socket.emit('requestSheetRoll', { gear: { line, column }, location_id: locationId }),
           } : {})}
           onPortraitUpload={handlePortraitUpload}
           portraitShadow={shadowFilter}

@@ -31,11 +31,11 @@ const ITEMS: ItemsShown = {
 };
 const line = (name: string, more = {}) => ({ name, qty: 1, enc: '', bundled: false, carry: 'stowed', location: '', ...more });
 
-const show = (lines: object[], { readOnly = false, items = ITEMS as ItemsShown | undefined } = {}) => {
+const show = (lines: object[], { readOnly = false, items = ITEMS as ItemsShown | undefined, onGearRoll = undefined as ((line: number, column: string) => void) | undefined } = {}) => {
   const writes: object[][] = [];
   const Harness = () => {
     const [data, setData] = useState<Record<string, unknown>>({ inventory: JSON.stringify(lines) });
-    return <InventorySection section={SECTION} data={data as never} readOnly={readOnly} itemsShown={items}
+    return <InventorySection section={SECTION} data={data as never} readOnly={readOnly} itemsShown={items} onGearRoll={onGearRoll}
       onFieldChange={(id, v) => { writes.push(JSON.parse(v as string)); setData((d) => ({ ...d, [id]: v })); }} />;
   };
   render(<Harness />);
@@ -98,6 +98,29 @@ describe('a table per type', () => {
     expect((table('WEAPONS').getByLabelText('Item 1 GRADE') as HTMLSelectElement).disabled).toBe(true);
     expect(screen.queryByRole('button', { name: /by hand/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Remove item/ })).toBeNull();
+  });
+
+  it('ROLL beside each DAMAGE (8a3b): its line and column sent; nothing to roll, nothing to press; read only, still there', async () => {
+    const rolled: [number, string][] = [];
+    show([line('Rope'), line('Pistol'), line('A stick', { type: 'weapons', values: { damage: '1d4' } })], { onGearRoll: (l, c) => rolled.push([l, c]) });
+    await userEvent.click(table('WEAPONS').getByRole('button', { name: 'Roll Item 2 DAMAGE' }));
+    await userEvent.click(table('WEAPONS').getByRole('button', { name: 'Roll Item 3 DAMAGE' }));
+    expect(rolled).toEqual([[1, 'damage'], [2, 'damage']]);
+    // Only DAMAGE and DICE roll: RANGE has none.
+    expect(table('WEAPONS').queryByRole('button', { name: 'Roll Item 2 RANGE' })).toBeNull();
+    expect(table('WEAPONS').getByRole('button', { name: 'Roll Item 2 DAMAGE' }).title).toBe('Roll 2d6');
+    const rope = table('WEAPONS').getByRole('button', { name: 'Roll Item 1 DAMAGE' }) as HTMLButtonElement;
+    expect(rope.disabled).toBe(true);
+    expect(rope.title).toBe('Nothing to roll');
+    // The box beside it is the line's own, as without ROLL.
+    expect((table('WEAPONS').getByLabelText('Item 2 DAMAGE') as HTMLInputElement).placeholder).toBe('2d6');
+    cleanup();
+    show([line('Pistol')], { readOnly: true, onGearRoll: () => {} });
+    expect(table('WEAPONS').getByRole('button', { name: 'Roll Item 1 DAMAGE' })).toBeTruthy();
+    expect((table('WEAPONS').getByLabelText('Item 1 DAMAGE') as HTMLInputElement).readOnly).toBe(true);
+    cleanup();
+    show([line('Pistol')]);
+    expect(table('WEAPONS').queryByRole('button', { name: /^Roll/ })).toBeNull();
   });
 
   it('a system without types keeps the one list', () => {

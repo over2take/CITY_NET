@@ -20,6 +20,8 @@ export interface PlayerSheetActions {
   onCastSpell: (index: number) => void;
   onRollAbility: (formula: string, label: string) => void;
   onResistDrain: (drainValue: number, attr: string, label: string) => void;
+  /** A line of gear's DAMAGE or DICE rolled (8a3b): the line by its place in the inventory, the column by id. */
+  onGearRoll?: (line: number, column: string) => void;
 }
 
 export function usePlayerSheet(
@@ -172,6 +174,7 @@ export function usePlayerSheet(
     onCastSpell: (index: number) => { socket?.emit('castSpell', { index }); rolled(); },
     onRollAbility: (formula: string, label: string) => { socket?.emit('rollAbility', { formula, label }); rolled(); },
     onResistDrain: (drainValue: number, attr: string, label: string) => { socket?.emit('resistDrain', { drainValue, attr, label }); rolled(); },
+    onGearRoll: (line: number, column: string) => { socket?.emit('requestSheetRoll', { gear: { line, column } }); rolled(); },
   };
 
   const template = sheet ? getTemplate(sheet.system) : null;

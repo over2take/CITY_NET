@@ -11,6 +11,7 @@ const sheetTemplates = require('../sheets/templates');
 const { mutateSheet, mutateSheetForUser, patchSheet } = require('../sheets/mutate');
 const cyberware = require('../sheets/cyberware');
 const sheetRolls = require('../sheets/rolls');
+const { rollGear } = require('../systemBuilder/gearRolls');
 const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
 const cyberEffects = require('../sheets/cyberwareEffects');
@@ -1639,9 +1640,42 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('requestSheetRoll', (payload) => {
       const info = userSockets.get(socket.id);
       if (!info || !info.userName) return;
-      if (!payload || typeof payload.fieldId !== 'string') return;
+      // A line of gear's DAMAGE or DICE (8a3b) comes as { gear: { line, column } } in place of a field.
+      const gear = payload && typeof payload === 'object' && payload.gear && typeof payload.gear === 'object' ? payload.gear : null;
+      if (!payload || (typeof payload.fieldId !== 'string' && !gear)) return;
       getGameSystem((err, system) => {
         if (err) return;
+        const custom0 = customSystems.definitionOf(system);
+        if (gear) {
+          if (!custom0) return;
+          rollSheetOf(info, payload, system, ({ row, forName }) => {
+            let data;
+            try { data = JSON.parse(row.data || '{}'); } catch { return; }
+            const made = rollGear(custom0, data, gear.line, gear.column, { rng: cryptoRng, who: identity.displayName(info.userName), forName });
+            if (!made.ok) return;
+            const color = typeof payload.color === 'string' ? payload.color : '#00ff00';
+            const results = made.dice.flatMap((d) => d.rolls);
+            const broadcastData = {
+              userName: identity.displayName(info.userName),
+              account: info.userName,
+              results,
+              diceSides: made.dice.flatMap((d) => d.rolls.map(() => d.sides)),
+              modifiers: made.add !== 0 ? [made.add] : [],
+              color,
+              total: made.value,
+              historyString: made.history,
+            };
+            db.run(
+              'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
+              [info.userName, made.value, JSON.stringify(results), color, made.history],
+              (err3) => {
+                if (err3) console.error('Error saving gear roll:', err3);
+                emitRoll(io, connections, isGmSocket, broadcastData);
+              }
+            );
+          });
+          return;
+        }
         // A custom system's own rolls (6a2b): the roll its ROLLED BY gives the field, worked out
         // on the stored sheet with the server's secure dice, into the same log and tray.
         const custom = customSystems.definitionOf(system);

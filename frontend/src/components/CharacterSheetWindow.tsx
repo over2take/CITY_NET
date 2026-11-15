@@ -133,6 +133,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
           onOpenLink={onOpenLink}
           onRoll={actions.onRoll}
+          onGearRoll={actions.onGearRoll}
           onDeathSave={actions.onDeathSave}
           onStabilize={actions.onStabilize}
           onCastSpell={actions.onCastSpell}
