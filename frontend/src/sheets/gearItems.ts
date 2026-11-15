@@ -19,11 +19,11 @@ import type { InventoryItem } from './inventory';
 /** A slot as the render copy says it: its name, and how many each character has. */
 export interface SlotShown { id: string; label: string; count: number }
 /** An item as the render copy says it: what its features need ('carried', 'worn' or a slot's id), and its features. */
-export interface ItemShown { id: string; label: string; description?: string; needs: string; cost?: number; features: FeatureShown[] }
+export interface ItemShown { id: string; label: string; description?: string; needs: string; cost?: number; features: FeatureShown[]; type?: string; values?: Record<string, string | number> }
 /** An install as the render copy says it (7e4c): its name, what it costs against by name, which way. */
 export interface InstallShown { id: string; label: string; against: string; way: 'adds' | 'takes' }
 /** A system's items, slots and installs (backend choices.js itemsRenderedOf). */
-export interface ItemsShown { slots: SlotShown[]; installs?: InstallShown[]; list: ItemShown[] }
+export interface ItemsShown { slots: SlotShown[]; installs?: InstallShown[]; list: ItemShown[]; types?: import('./gearTypes').TypeShown[] }
 
 /** What the server worked out of one carried item (backend items.js itemsShown). */
 export interface ItemWorked { id: string; needs: string; worn?: true; attuned?: true; installed?: true; working?: true }

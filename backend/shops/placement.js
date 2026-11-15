@@ -37,6 +37,8 @@ const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 
 // ─── The inventory (frontend inventory.ts) ────────────────────────────────────
 
+const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+
 const carryOf = (v) => {
   const s = str(v).trim().toLowerCase();
   return s === 'readied' || s === 'stowed' ? s : 'stash';
@@ -52,6 +54,10 @@ const normaliseItem = (raw) => {
     bundled: r.bundled === true,
     carry: carryOf(r.carry),
     location: str(r.location),
+    // A custom system's type, values and counts (8a1), kept as they are where a line has them.
+    ...(typeof r.type === 'string' && r.type ? { type: r.type } : {}),
+    ...(isPlainObject(r.values) ? { values: { ...r.values } } : {}),
+    ...(isPlainObject(r.counts) ? { counts: { ...r.counts } } : {}),
   };
 };
 

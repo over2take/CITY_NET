@@ -7,6 +7,8 @@ import {
 import { itemLines, itemsWorkedOn, gearRow, slotCounters, installCounters, itemUses, type ItemsShown, type ItemAction } from '../sheets/gearItems';
 import { workedOn, type ChoicesAction } from '../sheets/choicesShown';
 import { GearItemLine, GearSlots } from './GearItemLine';
+import { GearTypeTables } from './GearTypeTables';
+import { typesOf } from '../sheets/gearTypes';
 
 // Everything a character carries that is not a weapon.
 //
@@ -86,8 +88,19 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
   // Encumbrance is Cities Without Number's. A system with no carrying rule gets the table
   // without the column, rather than a rule invented for it.
   const showEnc = section.inventoryEnc === true;
+  // A custom system with item types (8a3a): a table per type instead of the one list.
+  const typed = typesOf(itemsShown).length > 0;
 
   const write = (next: InventoryItem[]) => onFieldChange(INVENTORY_FIELD, writeInventory(next));
+  /** Under a line that is a system's item: its WEAR, ATTUNE and uses (7e3b). */
+  const underLine = (i: number) => {
+    if (!lineItems.has(i)) return null;
+    const it = lineItems.get(i)!;
+    return (
+      <GearItemLine item={it} row={gearRow(it, worked, itemsShown?.slots ?? [], { gm, readOnly: readOnly || !onItem, installs: itemsShown?.installs ?? [] })}
+        uses={itemUses(it, uses)} canUse={!readOnly && !!onChoices} onItem={onItem} onChoices={onChoices} />
+    );
+  };
   const patch = (i: number, change: Partial<InventoryItem>) =>
     write(items.map((it, n) => (n === i ? { ...it, ...change } : it)));
 
@@ -110,7 +123,10 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
       <GearSlots counters={counters} installs={installs} gm={gm && !readOnly} onItem={onItem} />
       {/* Scrollable: an inventory grows, and the tab strip below should not move every
           time somebody picks up a rope. */}
-      <div className="crt-scroll" style={{ maxHeight: '220px', overflowY: 'auto', paddingRight: '4px' }}>
+      <div className="crt-scroll" style={{ maxHeight: typed ? '360px' : '220px', overflowY: 'auto', paddingRight: '4px' }}>
+        {typed && itemsShown ? (
+          <GearTypeTables items={items} itemsShown={itemsShown} readOnly={readOnly} write={write} locked={locked} under={(i) => underLine(i)} />
+        ) : (
         <div style={{ display: 'grid', gridTemplateColumns: columns, gap: '4px 6px', alignItems: 'center' }}>
           <div style={heading}>ITEM</div>
           <div style={heading}>QTY</div>
@@ -214,16 +230,11 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
                   }}
                 >×</button>
               )}
-              {lineItems.has(i) && (() => {
-                const it = lineItems.get(i)!;
-                return (
-                  <GearItemLine item={it} row={gearRow(it, worked, itemsShown?.slots ?? [], { gm, readOnly: readOnly || !onItem, installs: itemsShown?.installs ?? [] })}
-                    uses={itemUses(it, uses)} canUse={!readOnly && !!onChoices} onItem={onItem} onChoices={onChoices} />
-                );
-              })()}
+              {underLine(i)}
             </React.Fragment>
           ))}
         </div>
+        )}
 
         {refused && lineItems.size > 0 && (
           <div role="alert" style={{ fontSize: '0.6rem', color: 'var(--warning)', padding: '2px 0' }}>{refused}</div>
@@ -236,7 +247,7 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
         )}
       </div>
 
-      {!readOnly && (
+      {!readOnly && !typed && (
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
           <button
             type="button"

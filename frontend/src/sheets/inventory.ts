@@ -42,6 +42,12 @@ export interface InventoryItem {
   carry: CarryState;
   /** Where it is, for stashed things. The same note the weapon stash keeps. */
   location: string;
+  /** A custom system's item type it is (8a1), where it says: a line made by hand. Else its item's, or the first. */
+  type?: string;
+  /** Its own column values (8a1), over its item's: { damage: '1d4' }. */
+  values?: Record<string, string | number>;
+  /** How many each COUNT column has left (8a1): { ammo: 4 }. Full where it says nothing. */
+  counts?: Record<string, number>;
 }
 
 const str = (v: unknown): string =>
@@ -51,6 +57,8 @@ const num = (v: unknown): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : 0;
 };
+
+const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 const carryOf = (v: unknown): CarryState => {
   const s = str(v).trim().toLowerCase();
@@ -69,6 +77,10 @@ export const normaliseItem = (raw: unknown): InventoryItem => {
     bundled: r.bundled === true,
     carry: carryOf(r.carry),
     location: str(r.location),
+    // A custom system's type, values and counts (8a1), kept as they are where a line has them; the server reads them.
+    ...(typeof r.type === 'string' && r.type ? { type: r.type } : {}),
+    ...(isObject(r.values) ? { values: { ...r.values } as Record<string, string | number> } : {}),
+    ...(isObject(r.counts) ? { counts: { ...r.counts } as Record<string, number> } : {}),
   };
 };
 

@@ -1067,7 +1067,8 @@ const itemsRenderedOf = (definition) => {
       type: typeNamed(definition, i.type).id, values: itemValues(definition, i, boxNames),
     })),
     // The item types and their columns (8a1).
-    types: typesShown(definition, items),
+    // The types only where the system makes its own (8a3a): a sheet then draws a table per type; else the one list, as before.
+    ...(ownTypes(definition) ? { types: typesShown(definition, items) } : {}),
   };
 };
 
