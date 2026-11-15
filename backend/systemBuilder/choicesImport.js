@@ -392,4 +392,5 @@ const readChoicesFile = (definition, listId, input) => {
   return { ok: true, list: next, added, changed, same: unchanged, skipped, notes, changes };
 };
 
-module.exports = { readChoicesFile, MAX_BYTES };
+// The helpers ITEMS' import (itemsImport.js, 8aL3a) reads its file with too.
+module.exports = { readChoicesFile, MAX_BYTES, CLEAR, idFrom, same, sameWords, refillsOf, formulaProblem };
