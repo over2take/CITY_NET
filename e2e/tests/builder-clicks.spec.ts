@@ -159,12 +159,15 @@ test('every control in the builder takes a click, on every page', async ({ page 
       // An item open needing the install, so its COST box is there, a WEAPON so a field of each kind is, with a feature
       // giving uses and a modifier.
       await itemsTab('ITEMS').click();
-      await page.getByRole('button', { name: '+ ITEM' }).click();
-      const item = page.getByRole('region', { name: 'NEW ITEM item' });
+      // From + beside GEAR, the default (8aL2), with FIND typed into so its count is there too.
+      await page.getByRole('button', { name: 'Add a Gear' }).click();
+      const item = page.getByRole('region', { name: 'NEW GEAR item' });
       await item.getByRole('combobox', { name: 'ITS FEATURES NEED' }).selectOption('new_install');
       await expect(item.getByRole('spinbutton', { name: 'COST' })).toBeVisible();
       await item.getByRole('combobox', { name: 'TYPE' }).selectOption('weapons');
-      await expect(item.getByRole('textbox', { name: 'NEW ITEM DAMAGE' })).toBeVisible();
+      await expect(item.getByRole('textbox', { name: 'NEW GEAR DAMAGE' })).toBeVisible();
+      await page.getByRole('searchbox', { name: 'Find an item' }).fill('new');
+      await expect(page.getByRole('region', { name: 'Items', exact: true }).getByRole('status')).toHaveText('1 OF 1');
       await item.getByRole('button', { name: '+ FEATURE' }).click();
       const feature = item.getByRole('group', { name: 'Feature NEW FEATURE' });
       await feature.getByRole('switch', { name: /HAS USES/ }).click();

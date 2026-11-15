@@ -1,18 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
-  itemSlots, itemList, itemFeatures, withNewSlot, withSlot, withoutSlot, withNewItem, withItem, withoutItem, needsChoices, needsWords, LIMITS,
+  itemSlots, itemList, withNewSlot, withSlot, withoutSlot, withNewItem, withItem, withoutItem, needsChoices, needsWords, LIMITS,
   itemInstalls, withNewInstall, withInstall, withoutInstall, installOf,
   type Item, type ItemInstall,
 } from '../sheets/items';
-import { kindsOf, modifierTargets, tokenMaxTarget } from '../sheets/choices';
+import { modifierTargets, tokenMaxTarget } from '../sheets/choices';
 import { useFormulaBox } from '../hooks/useFormulaBox';
 import { HINTS } from '../sheets/builderHelp';
 import { ColumnHead, FieldName } from './HelpHint';
 import { ItemFeaturesEditor } from './FeaturesEditor';
 import { ItemTypesSection, ItemValues } from './ItemTypesSection';
 import { useBuilderPlace } from '../hooks/useBuilderPlace';
-import { ownTypes, typeOf } from '../sheets/itemTypes';
+import { ownTypes, typeOf, itemTypes, withItemType } from '../sheets/itemTypes';
 
 // The builder's ITEMS page (7e2b; approved mockup docs/mockups/items.html, 2026-11-10): SLOTS, what an item may need
 // besides being worn, each character having so many (ATTUNED, 3); and the ITEMS, each with its name, words, what its
@@ -29,6 +29,9 @@ import { ownTypes, typeOf } from '../sheets/itemTypes';
 // TABS (8aL1; approved mockup docs/mockups/items-layout.html, 2026-11-14): TYPES · SLOTS & INSTALLS · ITEMS, in the order
 // a system is set up, styled as STATS & RULES' tabs, one line of words each, the rest in HELP; the tab and the open item
 // kept while the builder is open (hooks/useBuilderPlace).
+//
+// ITEMS beside their list (8aL2, the same mockup): grouped by type, + per type, FIND as it is typed into, the open item
+// with what every item fills first.
 
 interface Props {
   definition: Definition;
@@ -66,54 +69,128 @@ function DeleteButton({ what, gone, onDelete }: { what: string; gone: string; on
     : <button type="button" className="utility-btn danger-btn" style={btn} onClick={() => setAsking(true)}>DELETE ITEM</button>;
 }
 
-/** One item: its name and what it needs on a line that opens it, and, open, its form and features. */
-function ItemCard({ definition, edit, item, api, open, onOpen }: Props & { item: Item; open: boolean; onOpen: (open: boolean) => void }) {
-  const name = item.label.trim() || 'NEEDS A NAME';
+/**
+ * The open item (8aL2; approved mockup docs/mockups/items-layout.html, 2026-11-14): what every item fills first, its
+ * NAME, TYPE and its type's columns; then what only some need, ITS FEATURES NEED, COST and WORDS; then its features.
+ * `fresh` is a new one: its name is selected, ready to type over.
+ */
+function ItemPanel({ definition, edit, item, api, fresh }: Props & { item: Item; fresh: boolean }) {
   const id = (part: string) => `item-${item.id}-${part}`;
-  const features = itemFeatures(item);
-  const kinds = [...new Set(features.flatMap(kindsOf))];
+  const nameBox = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (fresh) { nameBox.current?.focus(); nameBox.current?.select(); } }, [fresh]);
   return (
-    <div role="region" aria-label={`${item.label || item.id} item`} style={{ display: 'flex', flexDirection: 'column', gap: 6, borderLeft: '2px solid var(--dark-green)', paddingLeft: 8 }}>
-      <button type="button" aria-expanded={open} onClick={() => onOpen(!open)}
-        style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', background: 'none', border: 0, padding: '3px 0', textAlign: 'left', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12,
-          color: item.label.trim() ? 'var(--green)' : 'var(--danger)' }}>
-        <span>{open ? '▾' : '▸'} {name.toUpperCase()}</span>
-        {ownTypes(definition) && <span style={tag}>{(() => { const t = typeOf(definition, item.type); return (t.one?.trim() || t.label.trim() || t.id).toUpperCase(); })()}</span>}
-        <span style={tag}>{needsWords(definition, item)}</span>
-        {kinds.length > 0 && <span style={{ ...small, letterSpacing: 1 }}>{features.length} {features.length === 1 ? 'FEATURE' : 'FEATURES'}</span>}
-      </button>
-      {open && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 12px', border: '1px solid var(--green)' }}>
-          <div style={grid}>
-            <FieldName beside htmlFor={id('name')} hint={HINTS['items.name']} style={small}>NAME</FieldName>
-            <input id={id('name')} type="text" maxLength={LIMITS.label} value={item.label} style={input}
-              aria-invalid={!item.label.trim() ? true : undefined} onChange={(e) => edit(withItem(definition, item.id, { label: e.target.value }))} />
-            <FieldName beside htmlFor={id('words')} hint={HINTS['items.words']} style={small}>WORDS</FieldName>
-            <textarea id={id('words')} rows={2} maxLength={LIMITS.description} value={item.description ?? ''} style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }}
-              onChange={(e) => edit(withItem(definition, item.id, { description: e.target.value }))} />
-            <FieldName beside htmlFor={id('needs')} hint={HINTS['items.needs']} style={small}>ITS FEATURES NEED</FieldName>
-            <select id={id('needs')} value={item.needs || 'worn'} style={{ ...input, justifySelf: 'start' }}
-              onChange={(e) => edit(withItem(definition, item.id, { needs: e.target.value }))}>
-              {!needsChoices(definition).some((n) => n.id === (item.needs || 'worn')) && <option value={item.needs}>{needsWords(definition, item)}</option>}
-              {needsChoices(definition).map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
-            </select>
-            {/* What installing it costs (7e4b), only for an item needing an install. */}
-            {installOf(definition, item) && <>
-              <FieldName beside htmlFor={id('cost')} hint={HINTS['items.cost']} style={small}>COST</FieldName>
-              <span style={row}>
-                <input id={id('cost')} type="number" min={0} max={LIMITS.cost} step="any" value={item.cost ?? ''} style={{ ...input, width: 80 }}
-                  onChange={(e) => { const n = Number(e.target.value); if (e.target.value.trim() && Number.isFinite(n)) edit(withItem(definition, item.id, { cost: n })); }} />
-                <span style={{ ...why, fontSize: 11 }}>{costWords(definition, installOf(definition, item)!)}</span>
-              </span>
-            </>}
-            <ItemValues definition={definition} edit={edit} api={api} item={item} />
-          </div>
-          <ItemFeaturesEditor definition={definition} edit={edit} item={item} api={api} />
-          <div style={{ ...row, justifyContent: 'flex-end' }}>
-            <DeleteButton what={item.label.trim() || item.id} gone="Its features go with it." onDelete={() => edit(withoutItem(definition, item.id))} />
-          </div>
+    <div role="region" aria-label={`${item.label || item.id} item`} style={{ ...panel, border: '1px solid var(--green)' }}>
+      <div style={grid}>
+        <FieldName beside htmlFor={id('name')} hint={HINTS['items.name']} style={small}>NAME</FieldName>
+        <input ref={nameBox} id={id('name')} type="text" maxLength={LIMITS.label} value={item.label} style={{ ...input, width: 240, justifySelf: 'start' }}
+          aria-invalid={!item.label.trim() ? true : undefined} onChange={(e) => edit(withItem(definition, item.id, { label: e.target.value }))} />
+        <ItemValues definition={definition} edit={edit} api={api} item={item} />
+      </div>
+      <div style={{ borderTop: '1px dashed var(--dark-green)' }} />
+      <div style={grid}>
+        <FieldName beside htmlFor={id('needs')} hint={HINTS['items.needs']} style={small}>ITS FEATURES NEED</FieldName>
+        <select id={id('needs')} value={item.needs || 'worn'} style={{ ...input, justifySelf: 'start' }}
+          onChange={(e) => edit(withItem(definition, item.id, { needs: e.target.value }))}>
+          {!needsChoices(definition).some((n) => n.id === (item.needs || 'worn')) && <option value={item.needs}>{needsWords(definition, item)}</option>}
+          {needsChoices(definition).map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}
+        </select>
+        {/* What installing it costs (7e4b), only for an item needing an install. */}
+        {installOf(definition, item) && <>
+          <FieldName beside htmlFor={id('cost')} hint={HINTS['items.cost']} style={small}>COST</FieldName>
+          <span style={row}>
+            <input id={id('cost')} type="number" min={0} max={LIMITS.cost} step="any" value={item.cost ?? ''} style={{ ...input, width: 80 }}
+              onChange={(e) => { const n = Number(e.target.value); if (e.target.value.trim() && Number.isFinite(n)) edit(withItem(definition, item.id, { cost: n })); }} />
+            <span style={{ ...why, fontSize: 11 }}>{costWords(definition, installOf(definition, item)!)}</span>
+          </span>
+        </>}
+        <FieldName beside htmlFor={id('words')} hint={HINTS['items.words']} style={small}>WORDS</FieldName>
+        <textarea id={id('words')} rows={2} maxLength={LIMITS.description} value={item.description ?? ''} style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }}
+          onChange={(e) => edit(withItem(definition, item.id, { description: e.target.value }))} />
+      </div>
+      <ItemFeaturesEditor definition={definition} edit={edit} item={item} api={api} />
+      <div style={{ ...row, justifyContent: 'flex-end' }}>
+        <DeleteButton what={item.label.trim() || item.id} gone="Its features go with it." onDelete={() => edit(withoutItem(definition, item.id))} />
+      </div>
+    </div>
+  );
+}
+
+/** What an item needs, as a short tag in the list: its slot's or install's name, or CARRIED; nothing for WORN. */
+const needsTag = (definition: Definition, item: Item): string | null => {
+  const needs = item.needs || 'worn';
+  if (needs === 'worn') return null;
+  // CARRIED, or a slot or install gone, says its own word.
+  const named = [...itemSlots(definition), ...itemInstalls(definition)].find((s) => s.id === needs);
+  return (named ? named.label.trim() || named.id : needs).toUpperCase();
+};
+
+/**
+ * ITEMS (8aL2): the items in a list grouped by type beside the open one, as CHOICES has its lists; each type with its own
+ * + (+ WEAPON makes a weapon, opened, its name ready to type); FIND filters as it is typed into, matching anywhere in a
+ * name, a type with none left folded away.
+ */
+function ItemsTab({ definition, edit, api, open, setOpen }: Props & { open: string | null; setOpen: (id: string | null) => void }) {
+  const items = itemList(definition);
+  const types = itemTypes(definition);
+  const [find, setFind] = useState('');
+  const [fresh, setFresh] = useState<string | null>(null);
+  const looking = find.trim().toLowerCase();
+  const shown = items.filter((i) => !looking || (i.label || i.id).toLowerCase().includes(looking));
+  const current = items.find((i) => i.id === open) ?? items[0];
+  const add = (typeId: string, one: string) => {
+    const made = withNewItem(definition);
+    if (!made) return;
+    let next = withItem(made.definition, made.id, { label: `NEW ${one.toUpperCase()}` });
+    if (ownTypes(definition)) next = withItemType(next, made.id, typeId);
+    edit(next);
+    setOpen(made.id);
+    setFresh(made.id);
+    setFind('');
+  };
+  const full = items.length >= LIMITS.items;
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 260px) minmax(0, 1fr)', gap: 14, alignItems: 'start' }}>
+      <section aria-label="Items" style={{ border: '1px solid var(--dark-green)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--dark-green)', display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <FieldName hint={HINTS['items.items']} style={small}>ITEMS · {items.length} OF {LIMITS.items}</FieldName>
+          <input type="search" aria-label="Find an item" placeholder="FIND" value={find} style={{ ...input, width: '100%' }} onChange={(e) => setFind(e.target.value)} />
+          {looking && <span role="status" style={{ ...small, letterSpacing: 1 }}>{shown.length} OF {items.length}</span>}
         </div>
-      )}
+        <div className="crt-scroll" style={{ maxHeight: 520, overflowY: 'auto' }}>
+          {types.map((t) => {
+            const mine = shown.filter((i) => typeOf(definition, i.type).id === t.id);
+            if (looking && !mine.length) return null;
+            const name = (t.label.trim() || t.id).toUpperCase();
+            const one = t.one?.trim() || t.label.trim() || t.id;
+            return (
+              <div key={t.id} role="group" aria-label={`${name} items`} style={{ borderTop: '1px solid var(--dark-green)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, padding: '5px 8px' }}>
+                  <span style={{ ...small, letterSpacing: 2 }}>{name} · {mine.length}</span>
+                  <button type="button" className="utility-btn" style={{ ...btn, padding: '2px 7px' }} disabled={full} aria-label={`Add a ${one}`}
+                    onClick={() => add(t.id, one)}>+ {one.toUpperCase()}</button>
+                </div>
+                {mine.map((i) => {
+                  const on = current?.id === i.id;
+                  const needs = needsTag(definition, i);
+                  return (
+                    <button key={i.id} type="button" aria-current={on ? 'true' : undefined} title={needsWords(definition, i)}
+                      onClick={() => { setOpen(i.id); setFresh(null); }}
+                      style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'space-between', width: '100%', background: on ? 'color-mix(in srgb, var(--green) 14%, transparent)' : 'none',
+                        border: 0, borderLeft: `2px solid ${on ? 'var(--green)' : 'transparent'}`, color: i.label.trim() ? 'var(--green)' : 'var(--danger)',
+                        fontFamily: 'monospace', fontSize: 12, padding: '4px 8px 4px 14px', cursor: 'pointer', textAlign: 'left' }}>
+                      <span style={{ overflowWrap: 'anywhere' }}>{i.label.trim() || 'NEEDS A NAME'}</span>
+                      {needs && <span style={tag}>{needs}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+      {current
+        ? <ItemPanel key={current.id} definition={definition} edit={edit} item={current} api={api} fresh={fresh === current.id} />
+        : <p style={{ ...why, fontSize: 11, padding: '8px 0' }}>None yet. + beside a type makes one: an item here is one that does something, or has columns worth filling. A rope or a lantern needs nothing on this page.</p>}
     </div>
   );
 }
@@ -174,16 +251,9 @@ const TABS: [ItemsTab, string][] = [['types', 'TYPES'], ['slots', 'SLOTS & INSTA
 export function ItemsPage({ definition, edit, api, place = 'items' }: Props & { place?: string }) {
   const installs = itemInstalls(definition);
   const slots = itemSlots(definition);
-  const items = itemList(definition);
   // Where the GM was, kept while the builder is open (8aL1): a first visit opens on TYPES.
   const [tab, setTab] = useBuilderPlace<ItemsTab>(`${place}:tab`, 'types');
   const [open, setOpen] = useBuilderPlace<string | null>(`${place}:item`, null);
-  const addItem = () => {
-    const made = withNewItem(definition);
-    if (!made) return;
-    edit(made.definition);
-    setOpen(made.id);
-  };
   const line = (words: string) => <p style={{ ...why, fontSize: 11, maxWidth: '80ch' }}>{words}</p>;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 1100 }}>
@@ -249,15 +319,7 @@ export function ItemsPage({ definition, edit, api, place = 'items' }: Props & { 
 
       {tab === 'items' && <>
         {line('The things a character carries, wears or installs that do something. A shop sells one by its name; GIVE.EXE hands one out.')}
-        <section aria-label="Items" style={panel}>
-          <div style={row}>
-            <FieldName hint={HINTS['items.items']} style={small}>ITEMS · {items.length} OF {LIMITS.items}</FieldName>
-            <span style={{ flex: 1 }} />
-            <button type="button" className="utility-btn" style={btn} disabled={items.length >= LIMITS.items} onClick={addItem}>+ ITEM</button>
-          </div>
-          {!items.length && <p style={{ ...why, fontSize: 11 }}>None yet. An item here is one that does something; a rope or a lantern needs nothing on this page.</p>}
-          {items.map((i) => <ItemCard key={i.id} definition={definition} edit={edit} item={i} api={api} open={open === i.id} onOpen={(o) => setOpen(o ? i.id : null)} />)}
-        </section>
+        <ItemsTab definition={definition} edit={edit} api={api} open={open} setOpen={setOpen} />
       </>}
     </div>
   );

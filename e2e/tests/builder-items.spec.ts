@@ -29,8 +29,8 @@ test('ITEMS: an ATTUNED slot and a Ring of Constitution needing it, +2 Con stopp
 
   // The ring, needing it, with Hardy: +2 Con, stopping at 20, on ITEMS.
   await itemsTab('ITEMS').click();
-  await page.getByRole('button', { name: '+ ITEM' }).click();
-  const fresh = page.getByRole('region', { name: 'NEW ITEM item' });
+  await page.getByRole('button', { name: 'Add a Gear' }).click();
+  const fresh = page.getByRole('region', { name: 'NEW GEAR item' });
   await fresh.getByRole('textbox', { name: 'NAME' }).fill('Ring of Constitution');
   const ring = page.getByRole('region', { name: 'Ring of Constitution item' });
   await ring.getByRole('textbox', { name: 'WORDS' }).fill('A plain band, warm to the touch.');
@@ -61,7 +61,7 @@ test('ITEMS: an ATTUNED slot and a Ring of Constitution needing it, +2 Con stopp
   await openIt();
   await expect(itemsTab('TYPES')).toHaveAttribute('aria-selected', 'true');
   await itemsTab('ITEMS').click();
-  await expect(page.getByRole('button', { name: /RING OF CONSTITUTION/ })).toContainText('WORN AND ATTUNED');
+  await expect(page.getByRole('region', { name: 'Items', exact: true }).getByRole('button', { name: /^Ring of Constitution/ })).toContainText('ATTUNED');
 });
 
 // INSTALLS (7e4b; approved mockup docs/mockups/installed.html, 2026-11-11): CYBERWARE costing against Strain, never past
@@ -92,8 +92,8 @@ test('INSTALLS: CYBERWARE against Strain never past Might, and a Cranial Jack co
   await expect(install.getByRole('status')).toContainText(/MIGHT/i, { timeout: 15_000 });
 
   await itemsTab('ITEMS').click();
-  await page.getByRole('button', { name: '+ ITEM' }).click();
-  await page.getByRole('region', { name: 'NEW ITEM item' }).getByRole('textbox', { name: 'NAME' }).fill('Cranial Jack');
+  await page.getByRole('button', { name: 'Add a Gear' }).click();
+  await page.getByRole('region', { name: 'NEW GEAR item' }).getByRole('textbox', { name: 'NAME' }).fill('Cranial Jack');
   const jack = page.getByRole('region', { name: 'Cranial Jack item' });
   await jack.getByRole('combobox', { name: 'ITS FEATURES NEED' }).selectOption({ label: 'INSTALLED AS CYBERWARE' });
   await expect(jack.getByText('STRAIN · FRACTIONS ARE FINE: 0.25')).toBeVisible();
@@ -111,7 +111,7 @@ test('INSTALLS: CYBERWARE against Strain never past Might, and a Cranial Jack co
   await page.reload();
   await openIt();
   await itemsTab('ITEMS').click();
-  await expect(page.getByRole('button', { name: /CRANIAL JACK/ })).toContainText('INSTALLED AS CYBERWARE');
+  await expect(page.getByRole('region', { name: 'Items', exact: true }).getByRole('button', { name: /^Cranial Jack/ })).toContainText('CYBERWARE');
   await itemsTab('SLOTS & INSTALLS').click();
   await expect(page.getByTestId('install-new_install').getByRole('combobox', { name: 'COSTS AGAINST' })).toHaveValue('strain');
 });
