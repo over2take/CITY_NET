@@ -40,6 +40,9 @@ const open = (start: Definition = WORN, tab: ItemsTab = 'TYPES') => {
 };
 const slot = (id: string) => within(screen.getByTestId(`slot-${id}`));
 const ring = () => within(screen.getByRole('region', { name: 'Ring item' }));
+/** An item's line in the list (8aL2), by the start of its name. */
+const listed = (name: string) => within(screen.getByRole('region', { name: 'Items' })).getByRole('button', { name: new RegExp(`^${name}`) });
+const TWO_ITEMS = { ...WORN, items: { ...(WORN as unknown as { items: object }).items, list: [{ id: 'ring', label: 'Ring', needs: 'attuned' }, { id: 'boots', label: 'Boots' }] } } as unknown as Definition;
 
 describe('SLOTS', () => {
   it('each with its name and how many each character has; + SLOT; × removes it', async () => {
@@ -78,12 +81,13 @@ describe('SLOTS', () => {
   });
 
   it('the tab and the open item are where they were left, while the builder is open; another system starts on TYPES', async () => {
-    open(WORN, 'ITEMS');
-    await userEvent.click(screen.getByRole('button', { name: /RING/ }));
+    open(TWO_ITEMS, 'ITEMS');
+    await userEvent.click(listed('Boots'));
     cleanup();
-    open();
+    open(TWO_ITEMS);
     expect(screen.getByRole('tab', { name: 'ITEMS' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('button', { name: /RING/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(listed('Boots').getAttribute('aria-current')).toBe('true');
+    expect(screen.getByRole('region', { name: 'Boots item' })).toBeTruthy();
     cleanup();
     render(<ItemsPage definition={WORN} edit={() => {}} place="items:another" />);
     expect(screen.getByRole('tab', { name: 'TYPES' }).getAttribute('aria-selected')).toBe('true');
@@ -104,16 +108,30 @@ describe('SLOTS', () => {
   });
 });
 
-describe('ITEMS', () => {
-  it('each a line saying what it needs; opened, its name, words and needs', async () => {
+describe('ITEMS (beside their list since 8aL2)', () => {
+  it('a list grouped by type beside the open item, the first open to start; each line saying what it needs', async () => {
+    open(TWO_ITEMS, 'ITEMS');
+    const gear = within(screen.getByRole('group', { name: 'GEAR items' }));
+    expect(gear.getByText('GEAR · 2')).toBeTruthy();
+    expect(listed('Ring').getAttribute('aria-current')).toBe('true');
+    expect(listed('Ring').textContent).toBe('RingATTUNED');
+    expect(listed('Ring').title).toBe('WORN AND ATTUNED');
+    // WORN says nothing in the list.
+    expect(listed('Boots').textContent).toBe('Boots');
+    expect(screen.getByRole('region', { name: 'Ring item' })).toBeTruthy();
+    await userEvent.click(listed('Boots'));
+    expect(listed('Boots').getAttribute('aria-current')).toBe('true');
+    expect(screen.queryByRole('region', { name: 'Ring item' })).toBeNull();
+    expect(screen.getByRole('region', { name: 'Boots item' })).toBeTruthy();
+  });
+
+  it('the open item: NAME, TYPE and its columns first, then what it needs, its cost and words; each written', async () => {
     const last = open(WORN, 'ITEMS');
-    const line = screen.getByRole('button', { name: /RING/ });
-    expect(line.getAttribute('aria-expanded')).toBe('false');
-    expect(line.textContent).toContain('WORN AND ATTUNED');
-    expect(line.textContent).toContain('1 FEATURE');
-    await userEvent.click(line);
+    const labels = [...screen.getByRole('region', { name: 'Ring item' }).querySelectorAll('label')].map((l) => l.textContent);
+    expect(labels.slice(0, 6)).toEqual(['NAME', 'TYPE', 'WEIGHT', 'PRICE', 'ITS FEATURES NEED', 'WORDS']);
     fireEvent.change(ring().getByLabelText('NAME'), { target: { value: 'Ring of Constitution' } });
     expect(last().items!.list![0]).toMatchObject({ label: 'Ring of Constitution' });
+    expect(listed('Ring of Constitution')).toBeTruthy();
     const card = within(screen.getByRole('region', { name: 'Ring of Constitution item' }));
     fireEvent.change(card.getByLabelText('WORDS'), { target: { value: 'A plain band.' } });
     expect(last().items!.list![0]).toMatchObject({ description: 'A plain band.' });
@@ -122,11 +140,18 @@ describe('ITEMS', () => {
     expect(last().items!.list![0]).not.toHaveProperty('needs');
     await userEvent.selectOptions(card.getByLabelText('ITS FEATURES NEED'), 'carried');
     expect(last().items!.list![0]).toMatchObject({ needs: 'carried' });
+    expect(listed('Ring of Constitution').textContent).toContain('CARRIED');
+  });
+
+  it('a line says a slot or install by its name, not its id', () => {
+    open({ ...WORN, items: { slots: [{ id: 'bond', label: 'Bonded', count: 1 }], installs: [{ id: 'cyber', label: 'Cyberware', against: 'con', limit: '1' }],
+      list: [{ id: 'ring', label: 'Ring', needs: 'bond' }, { id: 'jack', label: 'Jack', needs: 'cyber', cost: 1 }] } } as unknown as Definition, 'ITEMS');
+    expect(listed('Ring').textContent).toBe('RingBONDED');
+    expect(listed('Jack').textContent).toBe('JackCYBERWARE');
   });
 
   it('its features: the CHOICES form without a level, a list or an increase', async () => {
     open(WORN, 'ITEMS');
-    await userEvent.click(screen.getByRole('button', { name: /RING/ }));
     await userEvent.click(ring().getByRole('button', { name: /HARDY/ }));
     const form = within(ring().getByRole('group', { name: 'Feature Hardy' }));
     expect(form.getByRole('group', { name: 'Modifiers' })).toBeTruthy();
@@ -138,38 +163,81 @@ describe('ITEMS', () => {
     expect(ring().getByText('FEATURES · 1 OF 20')).toBeTruthy();
   });
 
-  it('+ ITEM opens a new one; + FEATURE on it; DELETE ITEM asks first', async () => {
+  it('+ beside a type makes one of it, opened with its name selected to type over; + FEATURE; DELETE ITEM asks first', async () => {
     const last = open(WORN, 'ITEMS');
-    await userEvent.click(screen.getByRole('button', { name: '+ ITEM' }));
-    expect(last().items!.list![1]).toEqual({ id: 'new_item', label: 'NEW ITEM' });
-    const fresh = within(screen.getByRole('region', { name: 'NEW ITEM item' }));
-    expect(fresh.getByRole('button', { name: /NEW ITEM/ }).getAttribute('aria-expanded')).toBe('true');
+    await userEvent.click(screen.getByRole('button', { name: 'Add a Gear' }));
+    // No types of its own: GEAR, unsaid.
+    expect(last().items!.list![1]).toEqual({ id: 'new_item', label: 'NEW GEAR' });
+    const fresh = within(screen.getByRole('region', { name: 'NEW GEAR item' }));
+    const name = fresh.getByLabelText('NAME') as HTMLInputElement;
+    expect(document.activeElement).toBe(name);
+    expect([name.selectionStart, name.selectionEnd]).toEqual([0, 'NEW GEAR'.length]);
+    expect(listed('NEW GEAR').getAttribute('aria-current')).toBe('true');
     await userEvent.click(fresh.getByRole('button', { name: '+ FEATURE' }));
-    expect(last().items!.list![1]).toEqual({ id: 'new_item', label: 'NEW ITEM', features: [{ id: 'new_feature', label: 'NEW FEATURE' }] });
+    expect(last().items!.list![1]).toEqual({ id: 'new_item', label: 'NEW GEAR', features: [{ id: 'new_feature', label: 'NEW FEATURE' }] });
     await userEvent.click(fresh.getByRole('button', { name: 'DELETE ITEM' }));
-    expect(fresh.getByText(/Delete NEW ITEM\? Its features go with it\./)).toBeTruthy();
+    expect(fresh.getByText(/Delete NEW GEAR\? Its features go with it\./)).toBeTruthy();
     await userEvent.click(fresh.getByRole('button', { name: 'KEEP' }));
     await userEvent.click(fresh.getByRole('button', { name: 'DELETE ITEM' }));
     await userEvent.click(fresh.getByRole('button', { name: 'DELETE' }));
     expect(last().items!.list).toHaveLength(1);
+    // Gone, the first opens again.
+    expect(screen.getByRole('region', { name: 'Ring item' })).toBeTruthy();
+  });
+
+  it('+ beside a type of its own says the type; opening another item leaves nothing selected', async () => {
+    const TYPED = { ...WORN, items: { types: [{ id: 'gear', label: 'GEAR', columns: [] }, { id: 'arms', label: 'ARMS', one: 'Arm', columns: [] }], list: [{ id: 'ring', label: 'Ring' }] } } as unknown as Definition;
+    const last = open(TYPED, 'ITEMS');
+    await userEvent.click(screen.getByRole('button', { name: 'Add a Arm' }));
+    expect(last().items!.list![1]).toEqual({ id: 'new_item', label: 'NEW ARM', type: 'arms' });
+    expect(within(screen.getByRole('group', { name: 'ARMS items' })).getByText('ARMS · 1')).toBeTruthy();
+    await userEvent.click(listed('Ring'));
+    expect(document.activeElement).not.toBe(ring().getByLabelText('NAME'));
+    // Back to the new one: it is no longer new, so nothing is selected.
+    await userEvent.click(listed('NEW ARM'));
+    expect(document.activeElement).not.toBe(within(screen.getByRole('region', { name: 'NEW ARM item' })).getByLabelText('NAME'));
+  });
+
+  it('FIND filters as it is typed into, anywhere in a name; a type with none left folds away; the count said', async () => {
+    const MANY = { ...WORN, items: { types: [{ id: 'gear', label: 'GEAR', columns: [] }, { id: 'arms', label: 'ARMS', one: 'Arm', columns: [] }],
+      list: [{ id: 'rope', label: 'Rope' }, { id: 'pistol', label: 'Pistol', type: 'arms' }, { id: 'rounds', label: 'Pistol Rounds' }] } } as unknown as Definition;
+    open(MANY, 'ITEMS');
+    const find = screen.getByRole('searchbox', { name: 'Find an item' });
+    await userEvent.type(find, 'pis');
+    const items = within(screen.getByRole('region', { name: 'Items' }));
+    expect(items.getAllByRole('button').filter((b) => !b.textContent!.startsWith('+')).map((b) => b.textContent)).toEqual(['Pistol Rounds', 'Pistol']);
+    expect(items.getByRole('status').textContent).toBe('2 OF 3');
+    await userEvent.clear(find);
+    await userEvent.type(find, 'rounds');
+    expect(screen.queryByRole('group', { name: 'ARMS items' })).toBeNull();
+    expect(items.getByRole('group', { name: 'GEAR items' })).toBeTruthy();
+    await userEvent.clear(find);
+    expect(items.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('group', { name: 'ARMS items' })).toBeTruthy();
   });
 
   it('one needing a slot that is gone keeps saying so, to be set again', async () => {
     open({ ...WORN, items: { list: [{ id: 'ring', label: 'Ring', needs: 'bound' }] } } as unknown as Definition, 'ITEMS');
-    await userEvent.click(screen.getByRole('button', { name: /RING/ }));
+    expect(listed('Ring').textContent).toContain('BOUND');
     const needs = ring().getByLabelText('ITS FEATURES NEED') as HTMLSelectElement;
     expect(needs.value).toBe('bound');
     expect([...needs.options].map((o) => o.textContent)).toEqual(['WORN AND BOUND', 'CARRIED', 'WORN']);
   });
 
-  it('a nameless one says so, in the danger color', async () => {
+  it('a nameless one says so', async () => {
     open({ ...WORN, items: { list: [{ id: 'x', label: '' }] } } as unknown as Definition, 'ITEMS');
-    expect(screen.getByRole('button', { name: /NEEDS A NAME/ })).toBeTruthy();
+    expect(listed('NEEDS A NAME')).toBeTruthy();
   });
 
-  it('none: says what one is', () => {
+  it('none: says what one is, and the + to make one', () => {
     open({ ...WORN, items: { slots: WORN.items } } as unknown as Definition, 'ITEMS');
-    expect(screen.getByText(/None yet\. An item here is one that does something/)).toBeTruthy();
+    expect(screen.getByText(/^None yet\. \+ beside a type makes one/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Add a Gear' })).toBeTruthy();
+  });
+
+  it('at the most, no + makes another', () => {
+    open({ ...WORN, items: { list: Array.from({ length: 200 }, (_, i) => ({ id: `i${i}`, label: `I${i}` })) } } as unknown as Definition, 'ITEMS');
+    expect((screen.getByRole('button', { name: 'Add a Gear' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 
@@ -219,7 +287,6 @@ describe('INSTALLS (7e4b)', () => {
 
   it('an item INSTALLED AS one gets a COST, naming what it counts on; worn again, none', async () => {
     const last = open(WIRED, 'ITEMS') as unknown as () => Wired;
-    await userEvent.click(screen.getByRole('button', { name: /RING/ }));
     expect(ring().queryByLabelText('COST')).toBeNull();
     fireEvent.change(ring().getByLabelText('ITS FEATURES NEED'), { target: { value: 'cyberware' } });
     expect(last().items!.list![0]).toMatchObject({ needs: 'cyberware', cost: 1 });
@@ -335,8 +402,7 @@ describe('ITEM TYPES (8a2)', () => {
     await userEvent.click(preset('WEAPON'));
     await userEvent.click(preset('ARMOR'));
     await userEvent.click(screen.getByRole('tab', { name: 'ITEMS' }));
-    await userEvent.click(screen.getByRole('button', { name: /RING/ }));
-    expect(screen.getByRole('button', { name: /RING/ }).textContent).toContain('GEAR');
+    expect(within(screen.getByRole('group', { name: 'GEAR items' })).getByRole('button', { name: /^Ring/ })).toBeTruthy();
     const typeBox = () => ring().getByLabelText('TYPE', { selector: '#item-ring-type' }) as HTMLSelectElement;
     expect([...typeBox().options].map((o) => o.textContent)).toEqual(['GEAR', 'WEAPONS', 'ARMOR']);
     fireEvent.change(ring().getByLabelText('WEIGHT'), { target: { value: '0.5' } });
@@ -344,7 +410,8 @@ describe('ITEM TYPES (8a2)', () => {
     expect(last().items!.list![0]).toMatchObject({ values: { weight: 0.5, price: 15 } });
     fireEvent.change(typeBox(), { target: { value: 'weapons' } });
     expect(last().items!.list![0]).toMatchObject({ type: 'weapons', values: { weight: 0.5, price: 15 } });
-    expect(screen.getByRole('button', { name: /RING/ }).textContent).toContain('WEAPON');
+    // Made a WEAPON, it moves to that list.
+    expect(within(screen.getByRole('group', { name: 'WEAPONS items' })).getByRole('button', { name: /^Ring/ })).toBeTruthy();
     fireEvent.change(ring().getByLabelText('DAMAGE'), { target: { value: '1d8 + @con' } });
     fireEvent.change(ring().getByLabelText('RANGE'), { target: { value: 'melee' } });
     fireEvent.change(ring().getByLabelText('AMMO'), { target: { value: '6.7' } });
