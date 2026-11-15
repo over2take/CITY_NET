@@ -18,14 +18,17 @@ test('ITEMS: an ATTUNED slot and a Ring of Constitution needing it, +2 Con stopp
     await builderPage(page, 'ITEMS');
   };
   await openIt();
+  const itemsTab = (name: string) => page.getByRole('tablist', { name: 'Items' }).getByRole('tab', { name, exact: true });
 
-  // The slot: ATTUNED, three each.
+  // The slot: ATTUNED, three each, on SLOTS & INSTALLS (8aL1).
+  await itemsTab('SLOTS & INSTALLS').click();
   await page.getByRole('button', { name: '+ SLOT' }).click();
   const slot = page.getByTestId('slot-new_slot');
   await slot.getByRole('textbox', { name: 'NEW SLOT slot name' }).fill('ATTUNED');
   await slot.getByRole('spinbutton', { name: 'ATTUNED each character has' }).fill('3');
 
-  // The ring, needing it, with Hardy: +2 Con, stopping at 20.
+  // The ring, needing it, with Hardy: +2 Con, stopping at 20, on ITEMS.
+  await itemsTab('ITEMS').click();
   await page.getByRole('button', { name: '+ ITEM' }).click();
   const fresh = page.getByRole('region', { name: 'NEW ITEM item' });
   await fresh.getByRole('textbox', { name: 'NAME' }).fill('Ring of Constitution');
@@ -53,9 +56,11 @@ test('ITEMS: an ATTUNED slot and a Ring of Constitution needing it, +2 Con stopp
       features: [{ id: 'new_feature', label: 'Hardy', modifiers: [{ target: 'con', amount: '2', cap: 20 }] }] }],
   });
 
-  // Kept: a reload finds it, saying what it needs.
+  // Kept: a reload finds it, saying what it needs; the page starts on TYPES again.
   await page.reload();
   await openIt();
+  await expect(itemsTab('TYPES')).toHaveAttribute('aria-selected', 'true');
+  await itemsTab('ITEMS').click();
   await expect(page.getByRole('button', { name: /RING OF CONSTITUTION/ })).toContainText('WORN AND ATTUNED');
 });
 
@@ -75,7 +80,9 @@ test('INSTALLS: CYBERWARE against Strain never past Might, and a Cranial Jack co
     await builderPage(page, 'ITEMS');
   };
   await openIt();
+  const itemsTab = (name: string) => page.getByRole('tablist', { name: 'Items' }).getByRole('tab', { name, exact: true });
 
+  await itemsTab('SLOTS & INSTALLS').click();
   await page.getByRole('button', { name: '+ INSTALL' }).click();
   const install = page.getByTestId('install-new_install');
   await install.getByRole('textbox', { name: 'NAME' }).fill('CYBERWARE');
@@ -84,6 +91,7 @@ test('INSTALLS: CYBERWARE against Strain never past Might, and a Cranial Jack co
   // The limit read in words, from the formula box.
   await expect(install.getByRole('status')).toContainText(/MIGHT/i, { timeout: 15_000 });
 
+  await itemsTab('ITEMS').click();
   await page.getByRole('button', { name: '+ ITEM' }).click();
   await page.getByRole('region', { name: 'NEW ITEM item' }).getByRole('textbox', { name: 'NAME' }).fill('Cranial Jack');
   const jack = page.getByRole('region', { name: 'Cranial Jack item' });
@@ -102,6 +110,8 @@ test('INSTALLS: CYBERWARE against Strain never past Might, and a Cranial Jack co
   // Kept: a reload finds it, saying what it needs.
   await page.reload();
   await openIt();
+  await itemsTab('ITEMS').click();
   await expect(page.getByRole('button', { name: /CRANIAL JACK/ })).toContainText('INSTALLED AS CYBERWARE');
+  await itemsTab('SLOTS & INSTALLS').click();
   await expect(page.getByTestId('install-new_install').getByRole('combobox', { name: 'COSTS AGAINST' })).toHaveValue('strain');
 });

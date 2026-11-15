@@ -137,30 +137,39 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await expect(feature.getByRole('group', { name: 'Help writing Modifier 1: by' })).toBeVisible();
     }
     if (p === 'ITEMS') {
-      // A slot, and an item open with a feature giving uses and a modifier, so every box of the page is there (7e2b).
-      await page.getByRole('button', { name: '+ SLOT' }).click();
-      await expect(page.getByTestId('slot-new_slot')).toBeVisible();
-      // An install too, and the item needing it, so its COST box is there (7e4b).
-      await page.getByRole('button', { name: '+ INSTALL' }).click();
-      await expect(page.getByTestId('install-new_install')).toBeVisible();
-      await page.getByRole('button', { name: '+ ITEM' }).click();
-      const item = page.getByRole('region', { name: 'NEW ITEM item' });
-      await item.getByRole('combobox', { name: 'ITS FEATURES NEED' }).selectOption('new_install');
-      await expect(item.getByRole('spinbutton', { name: 'COST' })).toBeVisible();
-      await item.getByRole('button', { name: '+ FEATURE' }).click();
-      const feature = item.getByRole('group', { name: 'Feature NEW FEATURE' });
-      await feature.getByRole('switch', { name: /HAS USES/ }).click();
-      await feature.getByRole('button', { name: '+ MODIFIER' }).click();
-      await expect(feature.getByRole('spinbutton', { name: 'Modifier 1: stops at' })).toBeVisible();
-      // ITEM TYPES (8a2): WEAPONS from its preset with a PICK ONE column too, so every kind's parts are there, and the
-      // item a WEAPON, so a field of each kind is.
+      // Three tabs (8aL1), each swept as it is. TYPES first, open on a first visit: WEAPONS from its preset with a PICK ONE
+      // column too, so every kind's parts are there, and ON THE SHEET under it.
+      const itemsTab = (name: string) => page.getByRole('tablist', { name: 'Items' }).getByRole('tab', { name, exact: true });
+      await expect(itemsTab('TYPES')).toHaveAttribute('aria-selected', 'true');
       await page.getByRole('region', { name: 'Item types' }).getByRole('group', { name: 'Add an item type' }).getByRole('button', { name: 'WEAPON', exact: true }).click();
       const weapons = page.getByRole('region', { name: 'WEAPONS type' });
       await weapons.getByRole('button', { name: '+ COLUMN' }).click();
       await weapons.getByRole('combobox', { name: 'NEW COLUMN kind' }).selectOption('pick');
       await expect(weapons.getByRole('textbox', { name: 'NEW COLUMN words' })).toBeVisible();
+      await expect(weapons.getByRole('button', { name: 'MAKE DEFAULT' })).toBeVisible();
+      await expect(weapons.getByRole('group', { name: 'WEAPONS on the sheet' })).toBeVisible();
+      missed['ITEMS · TYPES'] = await faults(page);
+      // A slot and an install (7e2b, 7e4b), side by side.
+      await itemsTab('SLOTS & INSTALLS').click();
+      await page.getByRole('button', { name: '+ SLOT' }).click();
+      await expect(page.getByTestId('slot-new_slot')).toBeVisible();
+      await page.getByRole('button', { name: '+ INSTALL' }).click();
+      await expect(page.getByTestId('install-new_install')).toBeVisible();
+      missed['ITEMS · SLOTS & INSTALLS'] = await faults(page);
+      // An item open needing the install, so its COST box is there, a WEAPON so a field of each kind is, with a feature
+      // giving uses and a modifier.
+      await itemsTab('ITEMS').click();
+      await page.getByRole('button', { name: '+ ITEM' }).click();
+      const item = page.getByRole('region', { name: 'NEW ITEM item' });
+      await item.getByRole('combobox', { name: 'ITS FEATURES NEED' }).selectOption('new_install');
+      await expect(item.getByRole('spinbutton', { name: 'COST' })).toBeVisible();
       await item.getByRole('combobox', { name: 'TYPE' }).selectOption('weapons');
       await expect(item.getByRole('textbox', { name: 'NEW ITEM DAMAGE' })).toBeVisible();
+      await item.getByRole('button', { name: '+ FEATURE' }).click();
+      const feature = item.getByRole('group', { name: 'Feature NEW FEATURE' });
+      await feature.getByRole('switch', { name: /HAS USES/ }).click();
+      await feature.getByRole('button', { name: '+ MODIFIER' }).click();
+      await expect(feature.getByRole('spinbutton', { name: 'Modifier 1: stops at' })).toBeVisible();
     }
     if (p === 'STATS & RULES') {
       // A group with a stat, so its table and column heads are there.

@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
-  itemTypes, ownTypes, typeOf, itemValues, withNewType, withType, withoutType, withNewColumn, withColumn, withoutColumn,
+  itemTypes, ownTypes, typeOf, itemValues, withNewType, withType, withoutType, withDefaultType, withNewColumn, withColumn, withoutColumn,
   withItemType, withItemValue, wordsFrom, KINDS, PRESETS, LIMITS, type ItemColumn, type ItemType, type ColumnKind,
 } from '../sheets/itemTypes';
 import { itemList, type Item } from '../sheets/items';
 import { restsOf } from '../sheets/rests';
 import { useFormulaBox } from '../hooks/useFormulaBox';
+import { useBuilderPlace } from '../hooks/useBuilderPlace';
 import { HINTS } from '../sheets/builderHelp';
 import { ColumnHead, FieldName } from './HelpHint';
 
@@ -27,12 +28,10 @@ const input: React.CSSProperties = {
   background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'monospace', fontSize: 12, padding: '4px 6px', minWidth: 0, boxSizing: 'border-box',
 };
 const row: React.CSSProperties = { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' };
-const panel: React.CSSProperties = { border: '1px solid var(--dark-green)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 };
 const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '170px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' };
 const th: React.CSSProperties = { textAlign: 'left', fontSize: 10, letterSpacing: 2, opacity: 0.75, fontWeight: 'normal', padding: '4px 6px' };
 const td: React.CSSProperties = { padding: '3px 6px', verticalAlign: 'top' };
 const tag: React.CSSProperties = { fontSize: 9, letterSpacing: 1, border: '1px solid currentColor', padding: '0 4px', color: 'var(--cyan)', whiteSpace: 'nowrap' };
-const pressed = (on: boolean): React.CSSProperties => ({ ...btn, background: on ? 'var(--green)' : undefined, color: on ? 'var(--black)' : undefined });
 
 const nameOf = (t: ItemType) => t.label.trim() || t.id;
 const columnName = (c: ItemColumn) => c.label.trim() || c.id;
@@ -99,36 +98,82 @@ function ColumnAnd({ definition, edit, type, c }: Props & { type: ItemType; c: I
   );
 }
 
-/** ITEM TYPES: a tab for each, the presets and BLANK, and the open type's name, ONE and columns. */
-export function ItemTypesSection({ definition, edit }: Props) {
+/** What the open type's table looks like on a sheet: its heads, its first item as the line (8aL1). */
+function OnTheSheet({ definition, type }: Props & { type: ItemType }) {
+  const first = itemList(definition).find((i) => typeOf(definition, i.type).id === type.id);
+  const values = first ? itemValues(definition, first) : {};
+  const cellStyle: React.CSSProperties = { padding: '2px 6px', color: 'var(--cyan)', whiteSpace: 'nowrap' };
+  const headStyle: React.CSSProperties = { ...th, padding: '2px 6px', fontSize: 9, letterSpacing: 1, borderBottom: '1px solid var(--dark-green)' };
+  return (
+    <div role="group" aria-label={`${nameOf(type)} on the sheet`} style={{ border: '1px dashed var(--cyan)', padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+      <span style={small}>ON THE SHEET · {nameOf(type).toUpperCase()}</span>
+      <div className="crt-scroll" style={{ overflowX: 'auto' }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: 11 }}>
+          <thead><tr>
+            <th style={headStyle}>NAME</th><th style={headStyle}>QTY</th>
+            {type.columns.map((c) => <th key={c.id} style={headStyle}>{columnName(c).toUpperCase()}{c.kind === 'number' && c.unit?.trim() ? ` (${c.unit})` : ''}</th>)}
+            <th style={headStyle}>WHERE</th>
+          </tr></thead>
+          <tbody><tr>
+            <td style={cellStyle}>{first ? first.label.trim() || first.id : 'A line by hand'}</td><td style={cellStyle}>1</td>
+            {type.columns.map((c) => <td key={c.id} style={cellStyle}>{values[c.id] === undefined ? '—' : String(values[c.id])}</td>)}
+            <td style={cellStyle}>STOWED</td>
+          </tr></tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * ITEM TYPES (8aL1; approved mockup docs/mockups/items-layout.html, 2026-11-14): the types listed, the DEFAULT first,
+ * with the presets and BLANK under them; beside them the open type's name, ONE, columns and how it looks on a sheet.
+ * `place` keeps which type is open while the builder is open.
+ */
+export function ItemTypesSection({ definition, edit, place = 'items' }: Props & { place?: string }) {
   const types = itemTypes(definition);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useBuilderPlace<string | null>(`${place}:type`, null);
   const [lastKind, setLastKind] = useState<ColumnKind | null>(null);
   const [asking, setAsking] = useState(false);
   const type = types.find((t) => t.id === openId) ?? types[0];
+  const isDefault = type.id === types[0].id;
   const full = types.length >= LIMITS.types;
-  const add = (preset?: string) => { const made = withNewType(definition, preset); if (made) { edit(made.definition); setOpenId(made.id); setAsking(false); } };
+  const add = (preset?: string) => { const made = withNewType(definition, preset); if (made) { edit(made.definition); setOpenId(made.id); setAsking(false); setLastKind(null); } };
   const shownKind = lastKind ?? type.columns[type.columns.length - 1]?.kind ?? 'number';
-  const count = itemList(definition).filter((i) => typeOf(definition, i.type).id === type.id).length;
+  const items = itemList(definition);
+  const countOf = (id: string) => items.filter((i) => typeOf(definition, i.type).id === id).length;
+  const count = countOf(type.id);
   return (
-    <section aria-label="Item types" style={panel}>
-      <div style={row}>
-        <FieldName hint={HINTS['items.types']} style={small}>ITEM TYPES · {types.length} OF {LIMITS.types}</FieldName>
+    <section aria-label="Item types" style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 250px) minmax(0, 1fr)', gap: 14, alignItems: 'start' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+        <div style={{ border: '1px solid var(--dark-green)', display: 'flex', flexDirection: 'column' }}>
+          <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--dark-green)' }}>
+            <FieldName hint={HINTS['items.types']} style={small}>ITEM TYPES · {types.length} OF {LIMITS.types}</FieldName>
+          </div>
+          <div role="group" aria-label="The item types" style={{ display: 'flex', flexDirection: 'column' }}>
+            {types.map((t, i) => {
+              const on = t.id === type.id;
+              return (
+                <button key={t.id} type="button" aria-label={nameOf(t).toUpperCase()} aria-pressed={on}
+                  onClick={() => { setOpenId(t.id); setAsking(false); setLastKind(null); }}
+                  style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'space-between', background: on ? 'color-mix(in srgb, var(--green) 14%, transparent)' : 'none',
+                    border: 0, borderLeft: `2px solid ${on ? 'var(--green)' : 'transparent'}`, color: 'var(--green)', fontFamily: 'monospace', fontSize: 12, padding: '5px 8px', cursor: 'pointer', textAlign: 'left' }}>
+                  <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{nameOf(t).toUpperCase()}{i === 0 && <span style={tag}>DEFAULT</span>}</span>
+                  <span style={{ ...small, letterSpacing: 1 }}>{countOf(t.id)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div role="group" aria-label="Add an item type" style={row}>
+          <span style={{ ...why, fontSize: 11, flexBasis: '100%' }}>+ FROM A PRESET</span>
+          {PRESETS.map((p) => <button key={p.id} type="button" className="utility-btn" style={btn} disabled={full} onClick={() => add(p.id)}>{p.label}</button>)}
+          <button type="button" className="utility-btn" style={btn} disabled={full} onClick={() => add()}>+ BLANK</button>
+        </div>
+        {!ownTypes(definition) && <p style={{ ...why, fontSize: 11 }}>Every system starts with GEAR, a WEIGHT and a PRICE: change it, or add a type beside it.</p>}
       </div>
-      <div role="group" aria-label="The item types" style={row}>
-        {types.map((t) => (
-          <button key={t.id} type="button" className="utility-btn" aria-pressed={t.id === type.id} style={pressed(t.id === type.id)}
-            onClick={() => { setOpenId(t.id); setAsking(false); setLastKind(null); }}>{nameOf(t).toUpperCase()}</button>
-        ))}
-      </div>
-      <div role="group" aria-label="Add an item type" style={row}>
-        <span style={{ ...why, fontSize: 11 }}>+ FROM A PRESET</span>
-        {PRESETS.map((p) => <button key={p.id} type="button" className="utility-btn" style={btn} disabled={full} onClick={() => add(p.id)}>{p.label}</button>)}
-        <button type="button" className="utility-btn" style={btn} disabled={full} onClick={() => add()}>+ BLANK</button>
-      </div>
-      {!ownTypes(definition) && <p style={{ ...why, fontSize: 11 }}>Every system starts with GEAR, a WEIGHT and a PRICE: change it, or add a type beside it.</p>}
 
-      <div role="region" aria-label={`${nameOf(type)} type`} style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 12px', border: '1px solid var(--green)' }}>
+      <div role="region" aria-label={`${nameOf(type)} type`} style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '10px 12px', border: '1px solid var(--green)', minWidth: 0 }}>
         <div style={grid}>
           <FieldName beside htmlFor={`type-${type.id}-name`} hint={HINTS['items.typeName']} style={small}>NAME</FieldName>
           <input id={`type-${type.id}-name`} type="text" maxLength={LIMITS.label} value={type.label} style={{ ...input, width: 200, justifySelf: 'start' }}
@@ -137,7 +182,7 @@ export function ItemTypesSection({ definition, edit }: Props) {
           <input id={`type-${type.id}-one`} type="text" maxLength={LIMITS.label} value={type.one ?? ''} placeholder={type.label} style={{ ...input, width: 200, justifySelf: 'start' }}
             onChange={(e) => edit(withType(definition, type.id, { one: e.target.value }))} />
         </div>
-        <div style={{ overflowX: 'auto' }}>
+        <div className="crt-scroll" style={{ overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>
             <thead><tr>
               <ColumnHead style={th} hint={HINTS['items.column']}>COLUMN</ColumnHead>
@@ -168,6 +213,10 @@ export function ItemTypesSection({ definition, edit }: Props) {
         <div style={row}>
           <button type="button" className="utility-btn" style={btn} disabled={type.columns.length >= LIMITS.columns}
             onClick={() => { const made = withNewColumn(definition, type.id); if (made) { edit(made.definition); setLastKind('number'); } }}>+ COLUMN</button>
+          {isDefault
+            ? <span style={{ ...why, fontSize: 11 }}>THE DEFAULT: a line that is no item lands here, and a new item starts as one.</span>
+            : <button type="button" className="utility-btn" style={btn} title="Lines that are no item land here, and new items start as one"
+                onClick={() => edit(withDefaultType(definition, type.id))}>MAKE DEFAULT</button>}
           <span style={{ flex: 1 }} />
           {types.length > 1 && (asking
             ? <span role="group" aria-label={`Delete ${nameOf(type)}`} style={row}>
@@ -180,6 +229,7 @@ export function ItemTypesSection({ definition, edit }: Props) {
             : <button type="button" className="utility-btn danger-btn" style={btn} onClick={() => setAsking(true)}>DELETE TYPE</button>)}
         </div>
         <p role="status" style={{ ...why, fontSize: 11 }}>{KINDS.find((k) => k.id === shownKind)?.why}</p>
+        <OnTheSheet definition={definition} edit={edit} type={type} />
       </div>
     </section>
   );

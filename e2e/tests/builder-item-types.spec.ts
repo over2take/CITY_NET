@@ -40,7 +40,9 @@ test('ITEM TYPES: WEAPONS from its preset with AMMO and a GRADE, and a Pistol fi
   await expect(weapons.getByRole('status')).toHaveText(/^PICK ONE: one of the words you list/);
   await weapons.getByRole('textbox', { name: 'GRADE words' }).fill('LIGHT, HEAVY');
 
-  // The Pistol, a WEAPON, each column filled.
+  // The Pistol, a WEAPON, each column filled, on ITEMS (8aL1).
+  const itemsTab = (tab: string) => page.getByRole('tablist', { name: 'Items' }).getByRole('tab', { name: tab, exact: true });
+  await itemsTab('ITEMS').click();
   await page.getByRole('button', { name: '+ ITEM' }).click();
   await page.getByRole('region', { name: 'NEW ITEM item' }).getByRole('textbox', { name: 'NAME' }).fill('Pistol');
   const pistol = page.getByRole('region', { name: 'Pistol item' });
@@ -74,6 +76,8 @@ test('ITEM TYPES: WEAPONS from its preset with AMMO and a GRADE, and a Pistol fi
   // Kept: a reload finds the Pistol a WEAPON, and WEAPONS beside GEAR.
   await page.reload();
   await openIt();
+  await itemsTab('ITEMS').click();
   await expect(page.getByRole('region', { name: 'Pistol item' }).getByRole('button').first()).toContainText('WEAPON');
-  await expect(page.getByRole('region', { name: 'Item types' }).getByRole('group', { name: 'The item types' }).getByRole('button')).toHaveText(['GEAR', 'WEAPONS']);
+  await itemsTab('TYPES').click();
+  await expect(page.getByRole('region', { name: 'Item types' }).getByRole('group', { name: 'The item types' }).getByRole('button')).toHaveText([/^GEAR\s*DEFAULT\s*1$/, /^WEAPONS\s*1$/]);
 });
