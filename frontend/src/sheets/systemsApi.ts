@@ -6,6 +6,7 @@
 import type { InstallMode, InstallPreview, InstallResult, LibrarySystem } from './systemsLibrary';
 import type { PublishPreview } from './versionPreview';
 import type { ImportPreview } from './choicesImport';
+import type { ItemsImportPreview } from './itemsImport';
 import type { FormulaKind, FormulaRead } from './formulaBox';
 import type { CustomRenderSheet } from './customTemplates';
 import type { GameCondition } from './tokenConditions';
@@ -191,6 +192,9 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      */
     importChoices: (definition: Definition, list: string, text: string) =>
       call<ImportPreview>(fetcher, token, '/api/systems/import-choices', 'POST', { definition, list, text }),
+    /** The ITEMS tab's IMPORT (8aL3a): a file of items read against a draft, what would change; nothing saved. */
+    importItems: (definition: Definition, text: string) =>
+      call<ItemsImportPreview>(fetcher, token, '/api/systems/import-items', 'POST', { definition, text }),
     /**
      * One of a draft's NPC tiers worked out and rolled for a level, without saving (NPCS, TRY IT):
      * each box's value and dice, or what is wrong with it.

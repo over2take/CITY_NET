@@ -24,7 +24,8 @@ export interface Item { id: string; label: string; description?: string; needs?:
 /** An install (7e4): what each costs against, ADDING TO it (`adds`, as when it says nothing) or TAKING FROM it, and its limit, a formula. */
 export interface ItemInstall { id: string; label: string; against: string; way?: 'adds' | 'takes'; limit: string }
 
-export const LIMITS = { items: 200, slots: 10, count: 20, features: 20, label: 40, description: 2000, installs: 10, cost: 1000 };
+// An item's words are 1000 characters at most, as the server checks them (it said 2000 here until 8aL3b).
+export const LIMITS = { items: 200, slots: 10, count: 20, features: 20, label: 40, description: 1000, installs: 10, cost: 1000 };
 
 const itemsPart = (def: Definition): Obj => (isObject(def.items) ? def.items : {});
 
