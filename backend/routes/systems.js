@@ -26,6 +26,7 @@ const { rollTier } = require('../systemBuilder/tierRolls');
 const { tryHealth } = require('../systemBuilder/tryHealth');
 const { tryRest } = require('../systemBuilder/tryRest');
 const { readChoicesFile } = require('../systemBuilder/choicesImport');
+const { readItemsFile } = require('../systemBuilder/itemsImport');
 const { exampleList, exampleDefinition, exampleKind, KINDS } = require('../systemBuilder/examples');
 const { checkTableConditions, saveTableConditions } = require('../systemBuilder/tableConditions');
 const { isBuiltIn } = require('../sheets/templates');
@@ -423,6 +424,20 @@ module.exports = (db, io = null) => {
     const checked = checkDefinition(definition);
     if (checked.fatal) return res.status(400).json({ error: checked.fatal });
     const { ok, error, ...read } = readChoicesFile(definition, list, text);
+    if (!ok) return res.status(400).json({ error });
+    res.json(read);
+  });
+
+  /**
+   * The ITEMS tab's IMPORT (8aL3a): a file of items, a section per type, and their features read against a draft;
+   * answers with the items part as it would be, what is added and changed, and each line skipped and why, which the
+   * builder puts into the draft. Changes nothing.
+   */
+  router.post('/import-items', gm, (req, res) => {
+    const { definition, text } = req.body || {};
+    const checked = checkDefinition(definition);
+    if (checked.fatal) return res.status(400).json({ error: checked.fatal });
+    const { ok, error, ...read } = readItemsFile(definition, text);
     if (!ok) return res.status(400).json({ error });
     res.json(read);
   });
