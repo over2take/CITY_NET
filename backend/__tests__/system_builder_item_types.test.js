@@ -163,10 +163,11 @@ describe('the sheet is told them', () => {
     // A COUNT with nothing said: USE, no rest, no reload; a type with no singular: its name.
     const plain = itemsRenderedOf(withTypes([{ id: 'w', label: 'WANDS', columns: [{ id: 'charges', label: 'CHARGES', kind: 'count' }] }], []));
     expect(plain.types).toEqual([{ id: 'w', label: 'WANDS', one: 'WANDS', columns: [{ id: 'charges', label: 'CHARGES', kind: 'count', button: 'USE' }] }]);
-    // Types alone are enough to tell; nothing at all, nothing to tell; GEAR where none are made.
-    expect(itemsRenderedOf({ ...TYPED, items: { list: [{ id: 'rope', label: 'Rope' }] } }).types).toEqual([{ id: 'gear', label: 'GEAR', one: 'Gear', columns: [
-      { id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' }, { id: 'price', label: 'PRICE', kind: 'number' },
-    ] }]);
+    // Types alone are enough to tell; nothing at all, nothing to tell. A system making none tells no types (8a3a): its
+    // sheet keeps the one list, its items still GEAR with their values.
+    const none = itemsRenderedOf({ ...TYPED, items: { list: [{ id: 'rope', label: 'Rope', values: { weight: 10 } }] } });
+    expect(none).not.toHaveProperty('types');
+    expect(none.list[0]).toMatchObject({ type: 'gear', values: { weight: 10 } });
     expect(itemsRenderedOf({ ...TYPED, items: {} })).toBeNull();
   });
 
