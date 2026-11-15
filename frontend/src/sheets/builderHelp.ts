@@ -68,6 +68,7 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
     'Things a character carries, wears or attunes to that do something: each with a name, its type\'s columns, words, and the features it gives, made as a feature on CHOICES is (a bonus, uses a rest refills, a roll, a change to a roll), never at a level, opening a list or giving an increase.',
     'ITS FEATURES NEED says when they count: CARRIED, WORN, or WORN and in a SLOT. A slot is something each character has so many of, like D&D\'s ATTUNED, three each. Make none and the word never shows.',
     'A shop sells an item by its name, as it sells anything: a catalogue line with the item\'s name is that item. Once the system is running, CATALOGUES.EXE\'s DOWNLOAD ITEMS starts a catalogue of them, prices to fill in; the GM can also hand one out from GIVE.EXE\'s ITEMS.',
+    'A long list is quicker from a file: IMPORT under the items reads a table, a section per type headed by its own columns, then what each needs, its cost and words, and the features below. It shows what it would add and change and any line with a mistake, and puts it into the draft. DOWNLOAD EXAMPLE gives a file made from this system; DOWNLOAD THIS LIST gives the items as they are, to keep or to edit and import back.',
     'An INSTALL, like CYBERWARE, is something a character has put in: each item needing it costs against a stat (STRAIN), added to it or taken from it, up to a limit that can be a formula. Past the limit only the GM can install it. An installed item can\'t be sold, and REMOVE gives its cost back.',
   ] },
   { page: 'sheet', title: 'CHARACTER SHEET', body: [
@@ -283,6 +284,7 @@ export const HINTS = {
   'items.column': 'A column of the type\'s table, named as its head reads. Its name can change; what it is underneath stays, so the values filled in keep.',
   'items.kind': 'What the column holds: a NUMBER, TEXT, DAMAGE (dice that are damage), DICE (any other roll, like healing), a COUNT spent and refilled, or PICK ONE of the words you list. A new kind clears what items had filled in for it.',
   'items.and': 'What the kind needs besides: a NUMBER\'s unit (LB), a COUNT\'s button (FIRE), the rest that refills it and the items it reloads from (Pistol Rounds), PICK ONE\'s words with commas between.',
+  'items.import': 'Fill the items from a file: a section per type, headed by its own columns, then needs, cost and words, and their features below. DOWNLOAD EXAMPLE gives one made from this system; DOWNLOAD THIS LIST gives the items as they are, to keep or edit and import back.',
   'items.type': 'Which type this item is: it fills that type\'s columns. Made another type, it keeps only the values of columns both types have.',
   'choices.features': 'What this pick gives a character, each unlocking at a level in a levelled list. One feature can do several things at once, or be words for the table.',
   'choices.featureName': 'What players see for this feature on their sheet: GUARD STANCE, RALLY.',

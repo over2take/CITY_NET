@@ -166,6 +166,11 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await expect(item.getByRole('spinbutton', { name: 'COST' })).toBeVisible();
       await item.getByRole('combobox', { name: 'TYPE' }).selectOption('weapons');
       await expect(item.getByRole('textbox', { name: 'NEW GEAR DAMAGE' })).toBeVisible();
+      // IMPORT (8aL3b) open beside the list, swept as it is, then closed again.
+      await page.getByRole('group', { name: 'Items from a file' }).getByRole('button', { name: 'IMPORT' }).click();
+      await expect(page.getByRole('region', { name: 'Import items' })).toBeVisible();
+      missed['ITEMS · IMPORT'] = await faults(page);
+      await page.getByRole('region', { name: 'Import items' }).getByRole('button', { name: 'CLOSE' }).click();
       await page.getByRole('searchbox', { name: 'Find an item' }).fill('new');
       await expect(page.getByRole('region', { name: 'Items', exact: true }).getByRole('status')).toHaveText('1 OF 1');
       await item.getByRole('button', { name: '+ FEATURE' }).click();

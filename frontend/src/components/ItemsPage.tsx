@@ -13,6 +13,9 @@ import { ItemFeaturesEditor } from './FeaturesEditor';
 import { ItemTypesSection, ItemValues } from './ItemTypesSection';
 import { useBuilderPlace } from '../hooks/useBuilderPlace';
 import { ownTypes, typeOf, itemTypes, withItemType } from '../sheets/itemTypes';
+import { exampleItemsFile, itemsListFile, itemsFileName } from '../sheets/itemsImport';
+import { downloadText } from '../utils/downloadText';
+import { ItemsImport } from './ItemsImport';
 
 // The builder's ITEMS page (7e2b; approved mockup docs/mockups/items.html, 2026-11-10): SLOTS, what an item may need
 // besides being worn, each character having so many (ATTUNED, 3); and the ITEMS, each with its name, words, what its
@@ -134,6 +137,9 @@ function ItemsTab({ definition, edit, api, open, setOpen }: Props & { open: stri
   const types = itemTypes(definition);
   const [find, setFind] = useState('');
   const [fresh, setFresh] = useState<string | null>(null);
+  // IMPORT (8aL3b): open beside the list in place of the open item; what its last APPLY said.
+  const [importing, setImporting] = useState(false);
+  const [applied, setApplied] = useState<string | null>(null);
   const looking = find.trim().toLowerCase();
   const shown = items.filter((i) => !looking || (i.label || i.id).toLowerCase().includes(looking));
   const current = items.find((i) => i.id === open) ?? items[0];
@@ -150,6 +156,7 @@ function ItemsTab({ definition, edit, api, open, setOpen }: Props & { open: stri
   const full = items.length >= LIMITS.items;
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 260px) minmax(0, 1fr)', gap: 14, alignItems: 'start' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
       <section aria-label="Items" style={{ border: '1px solid var(--dark-green)', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <div style={{ padding: '6px 8px', borderBottom: '1px solid var(--dark-green)', display: 'flex', flexDirection: 'column', gap: 5 }}>
           <FieldName hint={HINTS['items.items']} style={small}>ITEMS · {items.length} OF {LIMITS.items}</FieldName>
@@ -174,7 +181,7 @@ function ItemsTab({ definition, edit, api, open, setOpen }: Props & { open: stri
                   const needs = needsTag(definition, i);
                   return (
                     <button key={i.id} type="button" aria-current={on ? 'true' : undefined} title={needsWords(definition, i)}
-                      onClick={() => { setOpen(i.id); setFresh(null); }}
+                      onClick={() => { setOpen(i.id); setFresh(null); setImporting(false); }}
                       style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'space-between', width: '100%', background: on ? 'color-mix(in srgb, var(--green) 14%, transparent)' : 'none',
                         border: 0, borderLeft: `2px solid ${on ? 'var(--green)' : 'transparent'}`, color: i.label.trim() ? 'var(--green)' : 'var(--danger)',
                         fontFamily: 'monospace', fontSize: 12, padding: '4px 8px 4px 14px', cursor: 'pointer', textAlign: 'left' }}>
@@ -188,7 +195,19 @@ function ItemsTab({ definition, edit, api, open, setOpen }: Props & { open: stri
           })}
         </div>
       </section>
-      {current
+      <div role="group" aria-label="Items from a file" style={row}>
+        <button type="button" className={`utility-btn${importing ? ' active' : ''}`} style={btn} aria-pressed={importing} onClick={() => { setImporting(!importing); setApplied(null); }}>IMPORT</button>
+        <button type="button" className="utility-btn" style={btn} title="A file made from this system, a section per type, with made-up rows to replace"
+          onClick={() => downloadText(itemsFileName(definition, 'example'), exampleItemsFile(definition))}>DOWNLOAD EXAMPLE</button>
+        <button type="button" className="utility-btn" style={btn} title="The items as they are now, to keep as a copy or edit and import back"
+          onClick={() => downloadText(itemsFileName(definition, 'list'), itemsListFile(definition))}>DOWNLOAD THIS LIST</button>
+      </div>
+      {applied && <p role="status" aria-label="Import" style={{ ...why, fontSize: 11, color: 'var(--cyan)' }}>{applied}</p>}
+      </div>
+      {importing
+        ? <ItemsImport definition={definition} api={api} edit={edit} onClose={() => setImporting(false)}
+            onApplied={(added, said) => { setImporting(false); setApplied(said); if (added.length) { setOpen(added[0]); setFresh(null); } }} />
+        : current
         ? <ItemPanel key={current.id} definition={definition} edit={edit} item={current} api={api} fresh={fresh === current.id} />
         : <p style={{ ...why, fontSize: 11, padding: '8px 0' }}>None yet. + beside a type makes one: an item here is one that does something, or has columns worth filling. A rope or a lantern needs nothing on this page.</p>}
     </div>
