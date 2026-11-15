@@ -65,6 +65,9 @@ export function ControlledNpcSheetWindow({ token, locationId, name, socket, pos,
   const roll = useCallback((fieldId: string, luck?: number, luckNegate?: boolean, pick?: RollPick) => {
     socket?.emit('requestSheetRoll', { fieldId, location_id: locationId, ...(luck ? { luck } : {}), ...(luckNegate ? { luckNegate } : {}), ...(pick ? { rollId: pick.rollId, changes: pick.changes } : {}) });
   }, [socket, locationId]);
+  const rollGear = useCallback((line: number, column: string) => {
+    socket?.emit('requestSheetRoll', { gear: { line, column }, location_id: locationId });
+  }, [socket, locationId]);
   const rollAbility = useCallback((formula: string, label: string) => {
     socket?.emit('rollAbility', { formula, label, location_id: locationId });
   }, [socket, locationId]);
@@ -94,6 +97,7 @@ export function ControlledNpcSheetWindow({ token, locationId, name, socket, pos,
           readOnly
           onFieldChange={() => undefined}
           onRoll={roll}
+          onGearRoll={rollGear}
           onRollAbility={rollAbility}
           hiddenTabs={hiddenTabsFor(sheet.system, ruleSettings)}
         />

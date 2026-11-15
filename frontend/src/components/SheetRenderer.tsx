@@ -137,6 +137,8 @@ interface SheetRendererProps {
   onLevelUp?: () => void;
   /** WEAR and ATTUNE a custom system's items on the GEAR tab (7e3b): asks the server (an itemAction). */
   onItem?: (action: import('../sheets/gearItems').ItemAction) => void;
+  /** A line of gear's DAMAGE or DICE rolled into the log (8a3b): the line's place in the inventory, the column's id. */
+  onGearRoll?: (line: number, column: string) => void;
   /** SPEND XP's BUY, and the GM's APPROVE, DECLINE and UNDO (7f2c1): asks the server (a spendAction). */
   onSpend?: (action: import('../sheets/spendShown').SpendAction) => void;
   /** IMPROVE BY USE's mark ticked or cleared (7f3b): asks the server (an improveAction). */
@@ -1808,7 +1810,7 @@ function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection 
   return fields.length === 0 ? null : { ...section, fields };
 }
 
-export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onSpend, onImprove }: SheetRendererProps) {
+export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onGearRoll, onSpend, onImprove }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   // The tab it opens on: the one the template names (a built system's starter opens on STATS,
   // with CHARACTER first in the row), else the first.
@@ -2034,7 +2036,7 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
                   {section.layout === 'inventory' && <InventorySection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} rowActions={[consumeAction, loadAction].filter(Boolean) as RowAction[]}
-                    itemsShown={template.items} gm={gm} onItem={onItem} onChoices={onChoices} refused={choicesRefused} />}
+                    itemsShown={template.items} gm={gm} onItem={onItem} onGearRoll={onGearRoll} onChoices={onChoices} refused={choicesRefused} />}
                   {section.layout === 'weapon_stash' && <WeaponStashSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} rows={weaponRows} />}
                   {section.layout === 'encumbrance' && <EncumbranceSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} enforced={encumbranceEnforced} />}
                   {section.layout === 'cyberware' && <CyberwareSection section={section} template={template} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}

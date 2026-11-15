@@ -5,7 +5,7 @@ import { signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer, sheetTab 
 // and a GEAR table; a stick made by hand, its DAMAGE and GRADE its own; a line named like the Pistol showing its values
 // faint until typed over; a rope in GEAR; saved as made, and each in its table after a reload.
 
-test('GEAR as a table per type: a stick made by hand, the Pistol\'s values under a line of its name, saved and kept (8a3a)', async ({ browser, request }, info) => {
+test('GEAR as a table per type: a stick made by hand and its DAMAGE rolled, the Pistol\'s values under a line of its name, saved and kept (8a3a, 8a3b)', async ({ browser, request }, info) => {
   test.setTimeout(120_000);
   const again = info.retry ? `_${info.retry + 1}` : '';
   const gm = await gmToken(request);
@@ -46,6 +46,16 @@ test('GEAR as a table per type: a stick made by hand, the Pistol\'s values under
   await weapons.getByLabel('Item 1 name', { exact: true }).fill('A stick');
   await weapons.getByLabel('Item 1 DAMAGE', { exact: true }).fill('1d4');
   await weapons.getByLabel('Item 1 GRADE', { exact: true }).selectOption('HEAVY');
+
+  // ROLL beside its DAMAGE (8a3b): rolled by the server into the log, said in the tray's history.
+  await expect.poll(async () => JSON.parse(String((await sheetOf()).inventory ?? '[]'))[0]?.values?.damage, { timeout: 15_000 }).toBe('1d4');
+  await weapons.getByRole('button', { name: 'Roll Item 1 DAMAGE' }).click();
+  const tray = mine.getByText('DICE_TRAY.EXE', { exact: true });
+  await expect(tray).toBeVisible({ timeout: 15_000 });
+  await mine.getByTitle('TOGGLE_HISTORY').click();
+  await expect(mine.getByTestId('dice-history').locator('> div').filter({ hasText: 'rolled A stick DAMAGE 1d4' }).last()).toBeVisible({ timeout: 15_000 });
+  await mine.keyboard.press('Escape');
+  await expect(tray).toBeHidden();
 
   // A line named like the Pistol: its values faint, until RANGE is typed over.
   await weapons.getByRole('button', { name: 'Add a Weapon by hand' }).click();

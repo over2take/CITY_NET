@@ -16,6 +16,8 @@ interface Props {
   locked: (index: number) => boolean;
   /** What goes under a line: an item's WEAR, ATTUNE and uses. */
   under: (index: number) => React.ReactNode;
+  /** A DAMAGE or DICE cell rolled into the log (8a3b), where the viewer may roll: read only or not, as a stat's ROLL. */
+  onRoll?: (index: number, column: string) => void;
 }
 
 const input: React.CSSProperties = {
@@ -25,11 +27,23 @@ const input: React.CSSProperties = {
 const heading: React.CSSProperties = { fontSize: '0.55rem', opacity: 0.65, letterSpacing: '1px', textAlign: 'left', alignSelf: 'end', overflowWrap: 'anywhere', lineHeight: 1.2 };
 
 /** How wide a column of a kind is. */
-const WIDTH: Record<ColumnShown['kind'], string> = { number: '60px', count: '56px', text: '110px', damage: '120px', dice: '120px', pick: '90px' };
+const WIDTH: Record<ColumnShown['kind'], string> = { number: '60px', count: '56px', text: '110px', damage: '150px', dice: '150px', pick: '90px' };
 
 /** One cell: a box of the line's own value, its item's showing faint where it has none. */
-function CellBox({ cell, label, readOnly, onType }: { cell: Cell; label: string; readOnly: boolean; onType: (typed: string) => void }) {
+function CellBox({ cell, label, readOnly, onType, onRoll }: { cell: Cell; label: string; readOnly: boolean; onType: (typed: string) => void; onRoll?: () => void }) {
   const { column } = cell;
+  // DAMAGE and DICE (8a3b): ROLL beside the box, the dice that count (its own, else its item's) rolled by the server.
+  if ((column.kind === 'damage' || column.kind === 'dice') && onRoll) {
+    return (
+      <span style={{ display: 'flex', gap: '3px', minWidth: 0 }}>
+        <input aria-label={label} type="text" value={valueText(cell.own)} placeholder={valueText(cell.given)} readOnly={readOnly}
+          onChange={(e) => onType(e.target.value)} style={input} />
+        <button type="button" className="utility-btn" aria-label={`Roll ${label}`} disabled={cell.value === undefined}
+          title={cell.value === undefined ? 'Nothing to roll' : `Roll ${valueText(cell.value)}`} onClick={onRoll}
+          style={{ fontSize: '0.5rem', padding: '0 4px', letterSpacing: '1px', flexShrink: 0 }}>ROLL</button>
+      </span>
+    );
+  }
   if (column.kind === 'pick') {
     return (
       <select aria-label={label} value={valueText(cell.own)} disabled={readOnly} style={input} onChange={(e) => onType(e.target.value)}>
@@ -46,7 +60,7 @@ function CellBox({ cell, label, readOnly, onType }: { cell: Cell; label: string;
   );
 }
 
-export function GearTypeTables({ items, itemsShown, readOnly, write, locked, under }: Props) {
+export function GearTypeTables({ items, itemsShown, readOnly, write, locked, under, onRoll }: Props) {
   const tables = gearTables(itemsShown, items);
   const patch = (i: number, next: InventoryItem) => write(items.map((it, n) => (n === i ? next : it)));
   return (
@@ -80,7 +94,7 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, und
                         onChange={(e) => patch(i, { ...line, qty: Math.max(1, Number(e.target.value) || 1) })} style={{ ...input, textAlign: 'center' }} />
                       {lc.cells.map((cell) => (
                         <CellBox key={cell.column.id} cell={cell} label={`Item ${i + 1} ${cell.column.label}`} readOnly={readOnly}
-                          onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} />
+                          onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} onRoll={onRoll ? () => onRoll(i, cell.column.id) : undefined} />
                       ))}
                       <select aria-label={`Item ${i + 1} carried`} value={line.carry} disabled={readOnly || locked(i)} title={locked(i) ? 'Installed: REMOVE it first' : undefined}
                         onChange={(e) => patch(i, { ...line, carry: e.target.value as InventoryItem['carry'] })} style={input}>
