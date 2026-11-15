@@ -125,6 +125,20 @@ export const withoutType = (def: Definition, id: string): Definition => {
   return withPart(def, types.filter((t) => t.id !== id), storedItems(def).map((i) => (typeOf(def, i.type).id !== id ? i : itemWith(i, undefined, {}))));
 };
 
+/**
+ * A type made the DEFAULT (8aL1; approved mockup docs/mockups/items-layout.html, 2026-11-14): moved to the top, where a
+ * line that is no item lands and a new item starts. An item that said nothing was the old default, and is said to be it,
+ * so none changes type. Already the default, or gone: as it was.
+ */
+export const withDefaultType = (def: Definition, id: string): Definition => {
+  const types = itemTypes(def);
+  const at = types.findIndex((t) => t.id === id);
+  if (at <= 0) return def;
+  const was = types[0].id;
+  return withPart(def, [types[at], ...types.filter((t) => t.id !== id)],
+    storedItems(def).map((i) => (typeof i.type === 'string' && types.some((t) => t.id === i.type) ? i : itemWith(i, was, valuesOf(i)))));
+};
+
 // ─── COLUMNS ────────────────────────────────────────────────────────────────
 
 const withColumns = (def: Definition, typeId: string, change: (columns: ItemColumn[]) => ItemColumn[], items?: Obj[]): Definition =>

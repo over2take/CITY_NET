@@ -63,9 +63,11 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
     'A long list is quicker from a file: IMPORT on a list reads a table of options and features (from a spreadsheet, or typed), shows what it would add and change and any line with a mistake, and puts it into the draft. DOWNLOAD EXAMPLE gives a file in the right shape for your system; DOWNLOAD THIS LIST gives the list as it is, to keep or to edit and import back.',
   ] },
   { page: 'items', title: 'ITEMS', body: [
-    'Things a character carries, wears or attunes to that do something: each with a name, words, and the features it gives, made as a feature on CHOICES is (a bonus, uses a rest refills, a roll, a change to a roll), never at a level, opening a list or giving an increase.',
+    'Three tabs, in the order a system is set up: TYPES (what kinds of thing your game has), SLOTS & INSTALLS (for the games that need them), then ITEMS. The page opens where you left it.',
+    'A TYPE is a kind of thing with columns of its own: WEAPONS with a DAMAGE and AMMO, ARMOR with a DEFENSE. Start one from a preset or blank; ON THE SHEET shows its table as a player will see it. Every system starts with GEAR. The DEFAULT type, first in the list, is where a line that is no item lands and what a new item starts as: MAKE DEFAULT moves another to the top.',
+    'Things a character carries, wears or attunes to that do something: each with a name, its type\'s columns, words, and the features it gives, made as a feature on CHOICES is (a bonus, uses a rest refills, a roll, a change to a roll), never at a level, opening a list or giving an increase.',
     'ITS FEATURES NEED says when they count: CARRIED, WORN, or WORN and in a SLOT. A slot is something each character has so many of, like D&D\'s ATTUNED, three each. Make none and the word never shows.',
-    'A shop sells an item by its name, as it sells anything: a catalogue line with the item\'s name is that item.',
+    'A shop sells an item by its name, as it sells anything: a catalogue line with the item\'s name is that item. Once the system is running, CATALOGUES.EXE\'s DOWNLOAD ITEMS starts a catalogue of them, prices to fill in; the GM can also hand one out from GIVE.EXE\'s ITEMS.',
     'An INSTALL, like CYBERWARE, is something a character has put in: each item needing it costs against a stat (STRAIN), added to it or taken from it, up to a limit that can be a formula. Past the limit only the GM can install it. An installed item can\'t be sold, and REMOVE gives its cost back.',
   ] },
   { page: 'sheet', title: 'CHARACTER SHEET', body: [

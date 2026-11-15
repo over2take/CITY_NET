@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
   GEAR, PRESETS, LIMITS, itemTypes, ownTypes, typeOf, itemValues, withNewType, withType, withoutType, withNewColumn, withColumn,
-  withoutColumn, withItemType, withItemValue, wordsFrom, withoutRefillBy, withoutReloadFrom, type ItemType,
+  withoutColumn, withItemType, withItemValue, wordsFrom, withoutRefillBy, withoutReloadFrom, withDefaultType, type ItemType,
 } from '../itemTypes';
 import { withoutItem } from '../items';
 import { withNewRest, withoutRest } from '../rests';
@@ -94,6 +94,28 @@ describe('the types', () => {
     sound(first);
     expect(withoutType(BASE, 'gear')).toBe(BASE);
     expect(withoutType(gone, 'gear')).toBe(gone);
+  });
+});
+
+describe('the DEFAULT type (8aL1)', () => {
+  it('moved to the top; an item that said nothing, or named a type gone, is said to be the old default, its values kept', () => {
+    let def = withNewType(weapons(), 'armor')!.definition;
+    def = withItemValue(def, 'rounds', 'weight', 0.05);
+    def = withItemType(def, 'sword', 'weapons');
+    def = { ...def, items: { ...(def.items as object), list: [...listIn(def), { id: 'old', label: 'Old', type: 'gone' }] } } as unknown as Definition;
+    const moved = withDefaultType(def, 'armor');
+    expect(typesIn(moved)!.map((t) => t.id)).toEqual(['armor', 'gear', 'weapons']);
+    expect(listIn(moved)).toEqual([
+      { id: 'sword', label: 'Sword', type: 'weapons' },
+      { id: 'rounds', label: 'Pistol Rounds', type: 'gear', values: { weight: 0.05 } },
+      { id: 'old', label: 'Old', type: 'gear' },
+    ]);
+    // Nobody changed type.
+    listIn(def).forEach((i, k) => expect(typeOf(moved, listIn(moved)[k].type).id, String(i.id)).toBe(typeOf(def, i.type).id));
+    // Already the default, or gone: as it was.
+    expect(withDefaultType(def, 'gear')).toBe(def);
+    expect(withDefaultType(def, 'nope')).toBe(def);
+    sound(withDefaultType(weapons(), 'weapons'));
   });
 });
 

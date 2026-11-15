@@ -11,6 +11,7 @@ import { HINTS } from '../sheets/builderHelp';
 import { ColumnHead, FieldName } from './HelpHint';
 import { ItemFeaturesEditor } from './FeaturesEditor';
 import { ItemTypesSection, ItemValues } from './ItemTypesSection';
+import { useBuilderPlace } from '../hooks/useBuilderPlace';
 import { ownTypes, typeOf } from '../sheets/itemTypes';
 
 // The builder's ITEMS page (7e2b; approved mockup docs/mockups/items.html, 2026-11-10): SLOTS, what an item may need
@@ -22,8 +23,12 @@ import { ownTypes, typeOf } from '../sheets/itemTypes';
 // INSTALLS (7e4b; approved mockup docs/mockups/installed.html, 2026-11-11): what an item may be put in as, each costing
 // against a stat or formula, ADDS TO or TAKES FROM, up to or down to its limit; an item needing one has a COST.
 //
-// ITEM TYPES (8a2; approved mockup docs/mockups/item-types.html, 2026-11-14), above the items: ItemTypesSection.tsx; an
-// item has a TYPE and fills its columns.
+// ITEM TYPES (8a2; approved mockup docs/mockups/item-types.html, 2026-11-14): ItemTypesSection.tsx; an item has a TYPE
+// and fills its columns.
+//
+// TABS (8aL1; approved mockup docs/mockups/items-layout.html, 2026-11-14): TYPES · SLOTS & INSTALLS · ITEMS, in the order
+// a system is set up, styled as STATS & RULES' tabs, one line of words each, the rest in HELP; the tab and the open item
+// kept while the builder is open (hooks/useBuilderPlace).
 
 interface Props {
   definition: Definition;
@@ -43,6 +48,10 @@ const panel: React.CSSProperties = { border: '1px solid var(--dark-green)', padd
 const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '170px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' };
 const th: React.CSSProperties = { textAlign: 'left', fontSize: 10, letterSpacing: 2, opacity: 0.75, fontWeight: 'normal', padding: '4px 6px' };
 const td: React.CSSProperties = { padding: '3px 6px' };
+const tabStyle = (on: boolean): React.CSSProperties => ({
+  background: on ? 'color-mix(in srgb, var(--green) 10%, transparent)' : 'none', border: 0, borderBottom: `2px solid ${on ? 'var(--green)' : 'transparent'}`,
+  color: on ? 'var(--green)' : 'color-mix(in srgb, var(--green) 55%, transparent)', fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, padding: '7px 14px', cursor: 'pointer',
+});
 const tag: React.CSSProperties = { fontSize: 9, letterSpacing: 1, border: '1px solid currentColor', padding: '0 4px', color: 'var(--cyan)', whiteSpace: 'nowrap' };
 
 /** Asks before deleting: DELETE, then DELETE / KEEP with what goes. */
@@ -158,81 +167,98 @@ function InstallRow({ definition, edit, api, s }: Props & { s: ItemInstall }) {
   );
 }
 
-export function ItemsPage({ definition, edit, api }: Props) {
+type ItemsTab = 'types' | 'slots' | 'items';
+/** The tabs in the order a system is set up (8aL1, the user's call): what an item can be and need, then the items. */
+const TABS: [ItemsTab, string][] = [['types', 'TYPES'], ['slots', 'SLOTS & INSTALLS'], ['items', 'ITEMS']];
+
+export function ItemsPage({ definition, edit, api, place = 'items' }: Props & { place?: string }) {
   const installs = itemInstalls(definition);
   const slots = itemSlots(definition);
   const items = itemList(definition);
-  const [open, setOpen] = useState<string | null>(null);
+  // Where the GM was, kept while the builder is open (8aL1): a first visit opens on TYPES.
+  const [tab, setTab] = useBuilderPlace<ItemsTab>(`${place}:tab`, 'types');
+  const [open, setOpen] = useBuilderPlace<string | null>(`${place}:item`, null);
   const addItem = () => {
     const made = withNewItem(definition);
     if (!made) return;
     edit(made.definition);
     setOpen(made.id);
   };
+  const line = (words: string) => <p style={{ ...why, fontSize: 11, maxWidth: '80ch' }}>{words}</p>;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 980 }}>
-      <p style={{ ...why, maxWidth: '72ch' }}>
-        Things a character carries, wears or attunes to that do something: a bonus, uses a rest refills, a roll. A shop sells one by its name, as it sells anything: once this system is running, CATALOGUES.EXE&apos;s DOWNLOAD ITEMS starts a catalogue of them, prices to fill in. The GM can also hand one out from GIVE.EXE&apos;s ITEMS.
-      </p>
-      <p style={{ ...why, maxWidth: '72ch' }}>
-        SLOTS limit how many items can work at once, like D&amp;D&apos;s attunement: each character has so many (three), and an item that needs a slot only works while it&apos;s worn and holds one. Name the slot whatever your game calls it. With none, every item simply counts when it&apos;s carried or worn.
-      </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 1100 }}>
+      <div role="tablist" aria-label="Items" style={{ display: 'flex', borderBottom: '1px solid var(--dark-green)', flexWrap: 'wrap' }}>
+        {TABS.map(([id, label]) => (
+          <button key={id} type="button" role="tab" aria-selected={tab === id} style={tabStyle(tab === id)} onClick={() => setTab(id)}>{label}</button>
+        ))}
+      </div>
 
-      <section aria-label="Slots" style={panel}>
-        <div style={row}>
-          <FieldName hint={HINTS['items.slots']} style={small}>SLOTS · {slots.length} OF {LIMITS.slots}</FieldName>
-          <span style={{ flex: 1 }} />
-          <button type="button" className="utility-btn" style={btn} disabled={slots.length >= LIMITS.slots}
-            onClick={() => { const made = withNewSlot(definition); if (made) edit(made.definition); }}>+ SLOT</button>
+      {tab === 'types' && <>
+        {line('What kinds of thing your game has, each with its own columns. A sheet shows each as its own table.')}
+        <ItemTypesSection definition={definition} edit={edit} place={place} />
+      </>}
+
+      {tab === 'slots' && <>
+        {line('For the few games that need them: how many items can work at once, and what is put in rather than worn.')}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 14, alignItems: 'start' }}>
+          <section aria-label="Slots" style={panel}>
+            <div style={row}>
+              <FieldName hint={HINTS['items.slots']} style={small}>SLOTS · {slots.length} OF {LIMITS.slots}</FieldName>
+              <span style={{ flex: 1 }} />
+              <button type="button" className="utility-btn" style={btn} disabled={slots.length >= LIMITS.slots}
+                onClick={() => { const made = withNewSlot(definition); if (made) edit(made.definition); }}>+ SLOT</button>
+            </div>
+            {slots.length
+              ? (
+                <table style={{ borderCollapse: 'collapse', fontSize: 12, alignSelf: 'start' }}>
+                  <thead><tr>
+                    <ColumnHead style={th}>NAME</ColumnHead>
+                    <ColumnHead style={th} hint={HINTS['items.count']}>EACH CHARACTER HAS</ColumnHead>
+                    <ColumnHead style={th} />
+                  </tr></thead>
+                  <tbody>
+                    {slots.map((s) => (
+                      <tr key={s.id} data-testid={`slot-${s.id}`}>
+                        <td style={td}><input type="text" aria-label={`${s.label || s.id} slot name`} maxLength={LIMITS.label} value={s.label} style={{ ...input, width: 180 }}
+                          aria-invalid={!s.label.trim() ? true : undefined} onChange={(e) => edit(withSlot(definition, s.id, { label: e.target.value }))} /></td>
+                        <td style={td}><input type="number" aria-label={`${s.label || s.id} each character has`} min={0} max={LIMITS.count} step={1} value={s.count} style={{ ...input, width: 70 }}
+                          onChange={(e) => { if (e.target.value.trim()) edit(withSlot(definition, s.id, { count: Number(e.target.value) })); }} /></td>
+                        <td style={td}><button type="button" className="utility-btn" style={{ ...btn, padding: '2px 7px' }} aria-label={`Remove the ${s.label || s.id} slot`}
+                          onClick={() => edit(withoutSlot(definition, s.id))}>×</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )
+              : <p style={{ ...why, fontSize: 11 }}>None: every item counts carried or worn, and the word never shows at the table. D&amp;D&apos;s ATTUNED, three each, is a slot: an item needing one works only while worn and holding one.</p>}
+          </section>
+
+          <section aria-label="Installs" style={panel}>
+            <div style={row}>
+              <FieldName hint={HINTS['items.installs']} style={small}>INSTALLS · {installs.length} OF {LIMITS.installs}</FieldName>
+              <span style={{ flex: 1 }} />
+              <button type="button" className="utility-btn" style={btn} disabled={installs.length >= LIMITS.installs}
+                onClick={() => { const made = withNewInstall(definition); if (made) edit(made.definition); }}>+ INSTALL</button>
+            </div>
+            {installs.length
+              ? installs.map((s) => <InstallRow key={s.id} definition={definition} edit={edit} api={api} s={s} />)
+              : <p style={{ ...why, fontSize: 11 }}>None: no item can need installing, and the word never shows at the table. Cyberware against System Strain, or bioware against Essence, is an install.</p>}
+          </section>
         </div>
-        {slots.length
-          ? (
-            <table style={{ borderCollapse: 'collapse', fontSize: 12, alignSelf: 'start' }}>
-              <thead><tr>
-                <ColumnHead style={th}>NAME</ColumnHead>
-                <ColumnHead style={th} hint={HINTS['items.count']}>EACH CHARACTER HAS</ColumnHead>
-                <ColumnHead style={th} />
-              </tr></thead>
-              <tbody>
-                {slots.map((s) => (
-                  <tr key={s.id} data-testid={`slot-${s.id}`}>
-                    <td style={td}><input type="text" aria-label={`${s.label || s.id} slot name`} maxLength={LIMITS.label} value={s.label} style={{ ...input, width: 180 }}
-                      aria-invalid={!s.label.trim() ? true : undefined} onChange={(e) => edit(withSlot(definition, s.id, { label: e.target.value }))} /></td>
-                    <td style={td}><input type="number" aria-label={`${s.label || s.id} each character has`} min={0} max={LIMITS.count} step={1} value={s.count} style={{ ...input, width: 70 }}
-                      onChange={(e) => { if (e.target.value.trim()) edit(withSlot(definition, s.id, { count: Number(e.target.value) })); }} /></td>
-                    <td style={td}><button type="button" className="utility-btn" style={{ ...btn, padding: '2px 7px' }} aria-label={`Remove the ${s.label || s.id} slot`}
-                      onClick={() => edit(withoutSlot(definition, s.id))}>×</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )
-          : <p style={{ ...why, fontSize: 11 }}>None: every item counts carried or worn, and the word never shows at the table. D&amp;D&apos;s ATTUNED, three each, is a slot.</p>}
-      </section>
+      </>}
 
-      <section aria-label="Installs" style={panel}>
-        <div style={row}>
-          <FieldName hint={HINTS['items.installs']} style={small}>INSTALLS · {installs.length} OF {LIMITS.installs}</FieldName>
-          <span style={{ flex: 1 }} />
-          <button type="button" className="utility-btn" style={btn} disabled={installs.length >= LIMITS.installs}
-            onClick={() => { const made = withNewInstall(definition); if (made) edit(made.definition); }}>+ INSTALL</button>
-        </div>
-        {installs.length
-          ? installs.map((s) => <InstallRow key={s.id} definition={definition} edit={edit} api={api} s={s} />)
-          : <p style={{ ...why, fontSize: 11 }}>None: no item can need installing, and the word never shows at the table. Cyberware against System Strain, or bioware against Essence, is an install.</p>}
-      </section>
-
-      <ItemTypesSection definition={definition} edit={edit} />
-
-      <section aria-label="Items" style={panel}>
-        <div style={row}>
-          <FieldName hint={HINTS['items.items']} style={small}>ITEMS · {items.length} OF {LIMITS.items}</FieldName>
-          <span style={{ flex: 1 }} />
-          <button type="button" className="utility-btn" style={btn} disabled={items.length >= LIMITS.items} onClick={addItem}>+ ITEM</button>
-        </div>
-        {!items.length && <p style={{ ...why, fontSize: 11 }}>None yet. An item here is one that does something; a rope or a lantern needs nothing on this page.</p>}
-        {items.map((i) => <ItemCard key={i.id} definition={definition} edit={edit} item={i} api={api} open={open === i.id} onOpen={(o) => setOpen(o ? i.id : null)} />)}
-      </section>
+      {tab === 'items' && <>
+        {line('The things a character carries, wears or installs that do something. A shop sells one by its name; GIVE.EXE hands one out.')}
+        <section aria-label="Items" style={panel}>
+          <div style={row}>
+            <FieldName hint={HINTS['items.items']} style={small}>ITEMS · {items.length} OF {LIMITS.items}</FieldName>
+            <span style={{ flex: 1 }} />
+            <button type="button" className="utility-btn" style={btn} disabled={items.length >= LIMITS.items} onClick={addItem}>+ ITEM</button>
+          </div>
+          {!items.length && <p style={{ ...why, fontSize: 11 }}>None yet. An item here is one that does something; a rope or a lantern needs nothing on this page.</p>}
+          {items.map((i) => <ItemCard key={i.id} definition={definition} edit={edit} item={i} api={api} open={open === i.id} onOpen={(o) => setOpen(o ? i.id : null)} />)}
+        </section>
+      </>}
     </div>
   );
 }

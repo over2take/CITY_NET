@@ -7,6 +7,7 @@ import { ItemsPage } from '../ItemsPage';
 import type { Definition } from '../../sheets/systemsApi';
 import { HINTS, TOPICS } from '../../sheets/builderHelp';
 import { BUILDER_PAGES } from '../../sheets/builderSession';
+import { forgetBuilderPlaces } from '../../hooks/useBuilderPlace';
 
 /**
  * The builder's ITEMS page (7e2b; approved mockup docs/mockups/items.html, 2026-11-10): SLOTS, each with its name and how
@@ -14,7 +15,7 @@ import { BUILDER_PAGES } from '../../sheets/builderSession';
  * CHOICES form without a level, a list or an increase.
  */
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); forgetBuilderPlaces(); });
 
 const WORN = {
   format: 1, name: 'Worn', core: { health: { model: 'pool' } },
@@ -26,13 +27,15 @@ const WORN = {
   },
 } as unknown as Definition;
 
-const open = (start: Definition = WORN) => {
+type ItemsTab = 'TYPES' | 'SLOTS & INSTALLS' | 'ITEMS';
+const open = (start: Definition = WORN, tab: ItemsTab = 'TYPES') => {
   const edits: Definition[] = [];
   const Harness = () => {
     const [def, setDef] = useState(start);
     return <ItemsPage definition={def} edit={(next) => { edits.push(next); setDef(next); }} />;
   };
   render(<Harness />);
+  if (tab !== 'TYPES') fireEvent.click(screen.getByRole('tab', { name: tab }));
   return () => edits[edits.length - 1] as unknown as { items?: { slots?: object[]; list?: object[] } };
 };
 const slot = (id: string) => within(screen.getByTestId(`slot-${id}`));
@@ -40,7 +43,7 @@ const ring = () => within(screen.getByRole('region', { name: 'Ring item' }));
 
 describe('SLOTS', () => {
   it('each with its name and how many each character has; + SLOT; × removes it', async () => {
-    const last = open();
+    const last = open(WORN, 'SLOTS & INSTALLS');
     expect((slot('attuned').getByLabelText('ATTUNED slot name') as HTMLInputElement).value).toBe('ATTUNED');
     expect((slot('attuned').getByLabelText('ATTUNED each character has') as HTMLInputElement).value).toBe('3');
     expect(screen.getByText('SLOTS · 1 OF 10')).toBeTruthy();
@@ -59,13 +62,43 @@ describe('SLOTS', () => {
     expect(last().items!.list![0]).not.toHaveProperty('needs');
   });
 
-  it('the page says what slots are, at the top', () => {
+  it('the page is three tabs in the order a system is set up (8aL1), each with a line saying what it is for', async () => {
     open();
-    expect(screen.getByText(/^SLOTS limit how many items can work at once, like D&D's attunement/)).toBeTruthy();
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['TYPES', 'SLOTS & INSTALLS', 'ITEMS']);
+    expect(screen.getByRole('tab', { name: 'TYPES' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText(/^What kinds of thing your game has/)).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Slots' })).toBeNull();
+    await userEvent.click(screen.getByRole('tab', { name: 'SLOTS & INSTALLS' }));
+    expect(screen.getByText(/^For the few games that need them/)).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Slots' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Installs' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('tab', { name: 'ITEMS' }));
+    expect(screen.getByText(/^The things a character carries, wears or installs/)).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Item types' })).toBeNull();
+  });
+
+  it('the tab and the open item are where they were left, while the builder is open; another system starts on TYPES', async () => {
+    open(WORN, 'ITEMS');
+    await userEvent.click(screen.getByRole('button', { name: /RING/ }));
+    cleanup();
+    open();
+    expect(screen.getByRole('tab', { name: 'ITEMS' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('button', { name: /RING/ }).getAttribute('aria-expanded')).toBe('true');
+    cleanup();
+    render(<ItemsPage definition={WORN} edit={() => {}} place="items:another" />);
+    expect(screen.getByRole('tab', { name: 'TYPES' }).getAttribute('aria-selected')).toBe('true');
+    // The open type too.
+    cleanup();
+    const TWO = { ...WORN, items: { types: [{ id: 'gear', label: 'GEAR', columns: [] }, { id: 'relics', label: 'RELICS', columns: [] }] } } as unknown as Definition;
+    render(<ItemsPage definition={TWO} edit={() => {}} place="items:two" />);
+    await userEvent.click(within(screen.getByRole('group', { name: 'The item types' })).getByRole('button', { name: 'RELICS' }));
+    cleanup();
+    render(<ItemsPage definition={TWO} edit={() => {}} place="items:two" />);
+    expect(screen.getByRole('region', { name: 'RELICS type' })).toBeTruthy();
   });
 
   it('none: says what one is for', () => {
-    open({ ...WORN, items: { list: [] } } as unknown as Definition);
+    open({ ...WORN, items: { list: [] } } as unknown as Definition, 'SLOTS & INSTALLS');
     expect(screen.getByText(/None: every item counts carried or worn/)).toBeTruthy();
     expect(within(screen.getByRole('region', { name: 'Slots' })).queryByRole('table')).toBeNull();
   });
@@ -73,7 +106,7 @@ describe('SLOTS', () => {
 
 describe('ITEMS', () => {
   it('each a line saying what it needs; opened, its name, words and needs', async () => {
-    const last = open();
+    const last = open(WORN, 'ITEMS');
     const line = screen.getByRole('button', { name: /RING/ });
     expect(line.getAttribute('aria-expanded')).toBe('false');
     expect(line.textContent).toContain('WORN AND ATTUNED');
@@ -92,7 +125,7 @@ describe('ITEMS', () => {
   });
 
   it('its features: the CHOICES form without a level, a list or an increase', async () => {
-    open();
+    open(WORN, 'ITEMS');
     await userEvent.click(screen.getByRole('button', { name: /RING/ }));
     await userEvent.click(ring().getByRole('button', { name: /HARDY/ }));
     const form = within(ring().getByRole('group', { name: 'Feature Hardy' }));
@@ -106,7 +139,7 @@ describe('ITEMS', () => {
   });
 
   it('+ ITEM opens a new one; + FEATURE on it; DELETE ITEM asks first', async () => {
-    const last = open();
+    const last = open(WORN, 'ITEMS');
     await userEvent.click(screen.getByRole('button', { name: '+ ITEM' }));
     expect(last().items!.list![1]).toEqual({ id: 'new_item', label: 'NEW ITEM' });
     const fresh = within(screen.getByRole('region', { name: 'NEW ITEM item' }));
@@ -122,7 +155,7 @@ describe('ITEMS', () => {
   });
 
   it('one needing a slot that is gone keeps saying so, to be set again', async () => {
-    open({ ...WORN, items: { list: [{ id: 'ring', label: 'Ring', needs: 'bound' }] } } as unknown as Definition);
+    open({ ...WORN, items: { list: [{ id: 'ring', label: 'Ring', needs: 'bound' }] } } as unknown as Definition, 'ITEMS');
     await userEvent.click(screen.getByRole('button', { name: /RING/ }));
     const needs = ring().getByLabelText('ITS FEATURES NEED') as HTMLSelectElement;
     expect(needs.value).toBe('bound');
@@ -130,12 +163,12 @@ describe('ITEMS', () => {
   });
 
   it('a nameless one says so, in the danger color', async () => {
-    open({ ...WORN, items: { list: [{ id: 'x', label: '' }] } } as unknown as Definition);
+    open({ ...WORN, items: { list: [{ id: 'x', label: '' }] } } as unknown as Definition, 'ITEMS');
     expect(screen.getByRole('button', { name: /NEEDS A NAME/ })).toBeTruthy();
   });
 
   it('none: says what one is', () => {
-    open({ ...WORN, items: { slots: WORN.items } } as unknown as Definition);
+    open({ ...WORN, items: { slots: WORN.items } } as unknown as Definition, 'ITEMS');
     expect(screen.getByText(/None yet\. An item here is one that does something/)).toBeTruthy();
   });
 });
@@ -159,7 +192,7 @@ describe('INSTALLS (7e4b)', () => {
   const cyber = () => within(screen.getByTestId('install-cyberware'));
 
   it('each with its name, what it costs against, which way and its limit; + INSTALL; × removes it', async () => {
-    const last = open(WIRED) as unknown as () => Wired;
+    const last = open(WIRED, 'SLOTS & INSTALLS') as unknown as () => Wired;
     expect(screen.getByText('INSTALLS · 1 OF 10')).toBeTruthy();
     expect((cyber().getByLabelText('NAME') as HTMLInputElement).value).toBe('CYBERWARE');
     const against = cyber().getByLabelText('COSTS AGAINST') as HTMLSelectElement;
@@ -185,7 +218,7 @@ describe('INSTALLS (7e4b)', () => {
   });
 
   it('an item INSTALLED AS one gets a COST, naming what it counts on; worn again, none', async () => {
-    const last = open(WIRED) as unknown as () => Wired;
+    const last = open(WIRED, 'ITEMS') as unknown as () => Wired;
     await userEvent.click(screen.getByRole('button', { name: /RING/ }));
     expect(ring().queryByLabelText('COST')).toBeNull();
     fireEvent.change(ring().getByLabelText('ITS FEATURES NEED'), { target: { value: 'cyberware' } });
@@ -202,7 +235,7 @@ describe('INSTALLS (7e4b)', () => {
   });
 
   it('none: said what one is; every hint written', () => {
-    open();
+    open(WORN, 'SLOTS & INSTALLS');
     expect(screen.getByText(/^None: no item can need installing/)).toBeTruthy();
     for (const k of ['items.installs', 'items.against', 'items.way', 'items.limit', 'items.cost']) expect(HINTS[k], k).toBeTruthy();
   });
@@ -228,7 +261,7 @@ describe('ITEM TYPES (8a2)', () => {
     fireEvent.change(type('WEAPONS').getByLabelText('NAME'), { target: { value: 'ARMS' } });
     fireEvent.change(type('ARMS').getByLabelText('ONE'), { target: { value: 'Arm' } });
     expect(last().items!.types![1]).toMatchObject({ id: 'weapons', label: 'ARMS', one: 'Arm' });
-    expect(type('ARMS').getAllByRole('row').slice(1).map((r) => (within(r).getAllByRole('textbox')[0] as HTMLInputElement).value)).toEqual(['DAMAGE', 'RANGE', 'AMMO', 'WEIGHT', 'PRICE']);
+    expect(type('ARMS').getAllByTestId(/^column-/).map((r) => (within(r).getAllByRole('textbox')[0] as HTMLInputElement).value)).toEqual(['DAMAGE', 'RANGE', 'AMMO', 'WEIGHT', 'PRICE']);
     // GEAR again, by its tab.
     await userEvent.click(tab('GEAR'));
     expect(type('GEAR').getByLabelText('PRICE kind')).toBeTruthy();
@@ -301,6 +334,7 @@ describe('ITEM TYPES (8a2)', () => {
     const last = open() as unknown as () => Typed;
     await userEvent.click(preset('WEAPON'));
     await userEvent.click(preset('ARMOR'));
+    await userEvent.click(screen.getByRole('tab', { name: 'ITEMS' }));
     await userEvent.click(screen.getByRole('button', { name: /RING/ }));
     expect(screen.getByRole('button', { name: /RING/ }).textContent).toContain('GEAR');
     const typeBox = () => ring().getByLabelText('TYPE', { selector: '#item-ring-type' }) as HTMLSelectElement;
@@ -326,6 +360,33 @@ describe('ITEM TYPES (8a2)', () => {
     expect([...grade.options].map((o) => o.textContent)).toEqual(['—', 'LIGHT', 'MEDIUM', 'HEAVY']);
     fireEvent.change(grade, { target: { value: 'HEAVY' } });
     expect(last().items!.list![0]).toMatchObject({ type: 'armor', values: { price: 15, type: 'HEAVY' } });
+  });
+
+  it('the DEFAULT first, said so; MAKE DEFAULT moves one to the top, an item saying nothing kept as it was', async () => {
+    const last = open() as unknown as () => Typed;
+    expect(tab('GEAR').textContent).toContain('DEFAULT');
+    expect(type('GEAR').getByText(/^THE DEFAULT: a line that is no item lands here/)).toBeTruthy();
+    expect(type('GEAR').queryByRole('button', { name: 'MAKE DEFAULT' })).toBeNull();
+    await userEvent.click(preset('WEAPON'));
+    expect(tab('WEAPONS').textContent).not.toContain('DEFAULT');
+    await userEvent.click(type('WEAPONS').getByRole('button', { name: 'MAKE DEFAULT' }));
+    expect(last().items!.types!.map((t) => t.id)).toEqual(['weapons', 'gear']);
+    // The ring said nothing, so it was GEAR: it is said to be, still GEAR.
+    expect(last().items!.list![0]).toMatchObject({ id: 'ring', type: 'gear' });
+    expect(tab('WEAPONS').textContent).toContain('DEFAULT');
+    // How many of each, beside each.
+    expect(tab('GEAR').textContent).toMatch(/1$/);
+    expect(tab('WEAPONS').textContent).toMatch(/0$/);
+  });
+
+  it('ON THE SHEET: the open type\'s table as a player sees it, its first item the line', async () => {
+    open({ ...WORN, items: { types: [{ id: 'arms', label: 'ARMS', columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }, { id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' }] }],
+      list: [{ id: 'axe', label: 'Axe', type: 'arms', values: { damage: '1d8' } }] } } as unknown as Definition);
+    const sheet = within(screen.getByRole('group', { name: 'ARMS on the sheet' }));
+    expect(sheet.getAllByRole('columnheader').map((h) => h.textContent)).toEqual(['NAME', 'QTY', 'DAMAGE', 'WEIGHT (LB)', 'WHERE']);
+    expect(sheet.getAllByRole('cell').map((c) => c.textContent)).toEqual(['Axe', '1', '1d8', '—', 'STOWED']);
+    await userEvent.click(preset('+ BLANK'));
+    expect(within(screen.getByRole('group', { name: 'NEW TYPE on the sheet' })).getAllByRole('cell')[0].textContent).toBe('A line by hand');
   });
 
   it('every hint written', () => {
