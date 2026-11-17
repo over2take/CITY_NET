@@ -5,7 +5,7 @@ import { signInAsPlayer, gmToken, runningSystem, approvedPlayer, sheetTab, asGm 
 // SHEET.EXE, it is drawn in the player's theme, WEAR on a line of gear works there and the window shows it, and a
 // weapon's DAMAGE rolls from it into the log.
 
-test('the sheet in a new tab: in the theme, WEAR and a DAMAGE ROLL work there as in SHEET.EXE (8s1a)', async ({ browser, request }, info) => {
+test('the sheet in a new tab: in the theme, WEAR and a DAMAGE ROLL work there as in SHEET.EXE, the roll thrown in the main app\'s tray (8s1a, 8s1b)', async ({ browser, request }, info) => {
   test.setTimeout(120_000);
   const again = info.retry ? `_${info.retry + 1}` : '';
   const gm = await gmToken(request);
@@ -60,6 +60,8 @@ test('the sheet in a new tab: in the theme, WEAR and a DAMAGE ROLL work there as
 
   // The club's DAMAGE rolled from the tab: in the log, said on the tab once the dice have landed.
   await tab.getByRole('region', { name: 'WEAPONS gear' }).getByRole('button', { name: 'Roll Item 2 DAMAGE' }).click();
+  // Thrown in the main app's dice tray (8s1b): the tab has none of its own.
+  await expect(mine.getByText('DICE_TRAY.EXE', { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(tab.getByText(/^⌁ .* rolled Club DAMAGE 1d6 \[\d = \d\]$/)).toBeVisible({ timeout: 20_000 });
   await context.close();
 });

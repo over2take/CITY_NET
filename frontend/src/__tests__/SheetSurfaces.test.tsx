@@ -1,6 +1,7 @@
 import React from 'react';
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { render, cleanup, act, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 /**
  * The standalone sheet tab and SHEET.EXE are one sheet (8s1a; the user, 2026-11-15: "they should be identical").
@@ -125,6 +126,33 @@ describe('the tab and the window hand the sheet the same', () => {
     await vi.waitFor(() => expect(last().recoveryOpen).toBe(true));
     await s.serve('choicesRefused', { error: 'Not at this level' });
     expect(last().choicesRefused).toBe('Not at this level');
+  });
+});
+
+describe('IMPORT and what the GM gives, on both (8s1b)', () => {
+  it('IMPORT where the system can import, on the window and the tab alike; none where it can\'t; IMPORT.EXE from the tab', async () => {
+    const CPR = { ...SHEET, system: 'cyberpunk_red' };
+    const win = fakeSocket();
+    render(<CharacterSheetWindow pos={{ x: 0, y: 0 }} setPos={() => {}} onClose={() => {}} socket={win} userName="kes" />);
+    await win.serve('sheetData', CPR);
+    expect(screen.getAllByRole('button', { name: 'IMPORT' })).toHaveLength(1);
+    cleanup();
+    openTab();
+    await tabSocket.current!.serve('sheetData', CPR);
+    expect(screen.queryByText('IMPORT.EXE')).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'IMPORT' }));
+    expect(screen.getByText('IMPORT.EXE')).toBeTruthy();
+    cleanup();
+    openTab();
+    await tabSocket.current!.serve('sheetData', SHEET);
+    expect(screen.queryByRole('button', { name: 'IMPORT' })).toBeNull();
+  });
+
+  it('what the GM gives is said on the tab, as in the main app', async () => {
+    openTab();
+    await tabSocket.current!.serve('sheetData', SHEET);
+    await tabSocket.current!.serve('itemReceived', { item: 'Cutlass', qty: 1 });
+    expect(document.body.textContent).toContain('GAVE YOU CUTLASS ×1');
   });
 });
 

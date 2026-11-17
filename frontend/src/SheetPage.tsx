@@ -7,6 +7,8 @@ import { useCustomTemplates } from './hooks/useCustomTemplates';
 import { THEMES } from './theme/themes';
 import { withCreationLocks } from './sheets/newCharacterFlow';
 import { LIVE_THEME_KEY } from './utils/liveTheme';
+import { SheetImportButton } from './components/SheetImportButton';
+import { GiftNotices } from './components/GiftNotices';
 
 // Standalone character-sheet tab (?sheet=true). Gives the player a full
 // browser tab for their sheet instead of the in-game floating window.
@@ -23,6 +25,10 @@ import { LIVE_THEME_KEY } from './utils/liveTheme';
 // `sheetProps`, spread whole as the window spreads it. The handshake is kept for the life of the tab
 // (sessionStorage), so a refresh stays signed in; the page is a `.crt-container` like the app's, so what
 // floats (hints, pickers, dialogs) takes the theme; and the theme follows the main app's as it changes.
+//
+// 8s1b: IMPORT and IMPORT.EXE as the window has them (SheetImportButton), and what the GM gives said here too
+// (GiftNotices, the main app's own). A roll from here opens and throws in the main app's dice tray, which opens for
+// any roll of this account (App rollOpensTray); this page only says the result once it has landed.
 
 const validTheme = (t: unknown): string | null =>
   typeof t === 'string' && t in THEMES ? t : null;
@@ -141,12 +147,17 @@ export default function SheetPage() {
           letterSpacing: '2px', fontSize: '0.8rem',
         }}>
           <span>CHARACTER_SHEET // {(userName ?? 'UNKNOWN').toUpperCase()}</span>
-          {template && (
-            <span style={{ border: '1px solid var(--green)', padding: '1px 8px', fontSize: '0.65rem' }}>
-              {template.name.toUpperCase()}
-            </span>
-          )}
+          <span style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <SheetImportButton socket={socket} system={sheet?.system} data={sheet?.data} at={{ x: 120, y: 80 }}
+              className="utility-btn" style={{ fontSize: '0.6rem', padding: '1px 8px', letterSpacing: '1px' }} />
+            {template && (
+              <span style={{ border: '1px solid var(--green)', padding: '1px 8px', fontSize: '0.65rem' }}>
+                {template.name.toUpperCase()}
+              </span>
+            )}
+          </span>
         </div>
+        <GiftNotices socket={socket} system={sheet?.system} />
         {lost && (
           <div role="alert" style={{
             border: '1px solid var(--danger)', color: 'var(--danger)', padding: '4px 10px', marginBottom: '4px', fontSize: '0.7rem', letterSpacing: '1px',
