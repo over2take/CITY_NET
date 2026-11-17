@@ -35,7 +35,8 @@ export interface RollPick { rollId: string; changes: string[] }
 export interface CustomFieldRoll {
   id: string; label: string;
   /** A change's cost (6b3a): the stat and its name, how much, taken or (`adds`) added, and the stat's highest when added to. */
-  changes: { id: string; label: string; cost?: { from: string; amount: number; label?: string; adds?: boolean; max?: number } }[];
+  /** `keep`: a change keeping the highest or lowest die (Advantage, Disadvantage), offered as one choice with STRAIGHT ROLL. */
+  changes: { id: string; label: string; keep?: 'highest' | 'lowest'; cost?: { from: string; amount: number; label?: string; adds?: boolean; max?: number } }[];
 }
 
 export interface SheetField {

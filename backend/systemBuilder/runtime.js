@@ -170,7 +170,11 @@ const renderOf = (id, definition, on = new Set()) => ({
     id: r.id,
     label: typeof r.label === 'string' && r.label.trim() ? r.label : r.id,
     fields: fieldsRolledBy(definition, r),
-    changes: (Array.isArray(r.changes) ? r.changes : []).map((c) => ({ id: c.id, label: c.label, ...(c.cost ? { cost: costShown(definition, c.cost) } : {}) })),
+    // A change keeping the highest or lowest die says so (Advantage, Disadvantage): the chooser offers those as one
+    // choice, with a STRAIGHT ROLL, as two picked together only cancel out (the user, 2026-11-17).
+    changes: (Array.isArray(r.changes) ? r.changes : []).map((c) => ({ id: c.id, label: c.label,
+      ...(c.extra && (c.extra.keep === 'highest' || c.extra.keep === 'lowest') ? { keep: c.extra.keep } : {}),
+      ...(c.cost ? { cost: costShown(definition, c.cost) } : {}) })),
   })),
   // Its lists to pick from (7a3a): names, options and features in words, never a formula.
   choices: choicesShown(definition),

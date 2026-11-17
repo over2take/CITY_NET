@@ -205,7 +205,7 @@ describe('the chooser by the sheet (6b2b)', () => {
   const CHOOSING: CustomRender = {
     ...VAULT,
     rolls: [
-      { id: 'check', label: 'Might check', fields: ['might', 'might_mod'], changes: [{ id: 'advantage', label: 'Advantage' }] },
+      { id: 'check', label: 'Might check', fields: ['might', 'might_mod'], changes: [{ id: 'advantage', label: 'Advantage', keep: 'highest' }, { id: 'disadvantage', label: 'Disadvantage', keep: 'lowest' }, { id: 'forward', label: 'Forward' }, { id: 'inspired', label: 'Inspired', keep: 'highest', cost: { from: 'inspiration', amount: 1, label: 'Inspiration' } }] },
       { id: 'push', label: 'Pushed check', fields: ['might'], changes: [{ id: 'push', label: 'Push', cost: { from: 'stress', amount: 2, label: 'Stress' } }] },
       { id: 'plain', label: 'Plain', fields: ['armor'], changes: [] },
       { id: 'blades', label: 'Action', fields: ['gold'], changes: [{ id: 'push', label: 'Push yourself', cost: { from: 'stress', amount: 2, label: 'Stress', adds: true, max: 9 } }] },
@@ -229,9 +229,9 @@ describe('the chooser by the sheet (6b2b)', () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Roll Might check' })[0]);
     expect(onRoll).not.toHaveBeenCalled();
     const ask = screen.getByRole('dialog', { name: 'Roll MIGHT' });
-    expect(within(ask).getAllByRole('radio').map((r) => r.textContent)).toEqual(['MIGHT CHECK', 'PUSHED CHECK']);
-    fireEvent.click(within(ask).getByRole('switch', { name: 'ADVANTAGE' }));
-    fireEvent.click(within(ask).getByRole('button', { name: 'ROLL MIGHT CHECK' }));
+    expect(within(within(ask).getByRole('radiogroup', { name: 'Which roll' })).getAllByRole('radio').map((r) => r.textContent)).toEqual(['MIGHT CHECK', 'PUSHED CHECK']);
+    fireEvent.click(within(ask).getByRole('radio', { name: 'ADVANTAGE' }));
+    fireEvent.click(within(ask).getByRole('button', { name: 'ROLL' }));
     expect(onRoll).toHaveBeenCalledWith('might', undefined, undefined, { rollId: 'check', changes: ['advantage'] });
     expect(screen.queryByRole('dialog')).toBeNull();
   });
@@ -240,12 +240,12 @@ describe('the chooser by the sheet (6b2b)', () => {
     const onRoll = draw({ might: 14, stress: 4 });
     fireEvent.click(screen.getAllByRole('button', { name: 'Roll Might check' })[0]);
     const ask = screen.getByRole('dialog');
-    fireEvent.click(within(ask).getByRole('switch', { name: 'ADVANTAGE' }));
+    fireEvent.click(within(ask).getByRole('radio', { name: 'ADVANTAGE' }));
     fireEvent.click(within(ask).getByRole('radio', { name: 'PUSHED CHECK' }));
     const push = within(ask).getByRole('switch', { name: 'PUSH · COSTS 2 STRESS · YOU HAVE 4' }) as HTMLButtonElement;
     expect(push.disabled).toBe(false);
     fireEvent.click(push);
-    fireEvent.click(within(ask).getByRole('button', { name: 'ROLL PUSHED CHECK' }));
+    fireEvent.click(within(ask).getByRole('button', { name: 'ROLL' }));
     expect(onRoll).toHaveBeenCalledWith('might', undefined, undefined, { rollId: 'push', changes: ['push'] });
   });
 
@@ -262,7 +262,7 @@ describe('the chooser by the sheet (6b2b)', () => {
     expect(adds.disabled).toBe(true);
     expect(adds.title).toBe('That would take it past its highest');
     fireEvent.click(adds);
-    fireEvent.click(screen.getByRole('button', { name: 'ROLL ACTION' }));
+    fireEvent.click(screen.getByRole('button', { name: 'ROLL' }));
     expect(onRoll).toHaveBeenCalledWith('gold', undefined, undefined, { rollId: 'blades', changes: [] });
   });
 
@@ -288,9 +288,48 @@ describe('the chooser by the sheet (6b2b)', () => {
     const onRoll = draw();
     fireEvent.click(screen.getAllByRole('button', { name: 'Roll Might check' })[1]);
     const ask = screen.getByRole('dialog', { name: 'Roll MOD' });
-    expect(within(ask).queryByRole('radio')).toBeNull();
-    fireEvent.click(within(ask).getByRole('button', { name: 'ROLL MIGHT CHECK' }));
+    expect(within(ask).queryByRole('radiogroup', { name: 'Which roll' })).toBeNull();
+    fireEvent.click(within(ask).getByRole('button', { name: 'ROLL' }));
     expect(onRoll).toHaveBeenCalledWith('might_mod', undefined, undefined, { rollId: 'check', changes: [] });
+  });
+
+  it('HOW IT ROLLS: STRAIGHT ROLL to start, one of ADVANTAGE or DISADVANTAGE in its place; the others switches beside it; ROLL centered (the user, 2026-11-17)', () => {
+    const onRoll = draw({ might: 14, inspiration: 0 });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Roll Might check' })[1]);
+    const ask = screen.getByRole('dialog', { name: 'Roll MOD' });
+    const how = within(within(ask).getByRole('radiogroup', { name: 'How it rolls' }));
+    expect(how.getAllByRole('radio').map((r) => [r.textContent, r.getAttribute('aria-checked')])).toEqual([
+      ['STRAIGHT ROLL', 'true'], ['ADVANTAGE', 'false'], ['DISADVANTAGE', 'false'], ['INSPIRED · COSTS 1 INSPIRATION · YOU HAVE 0', 'false']]);
+    // A keeping change it can't pay is off, as a switch's is.
+    const inspired = how.getByRole('radio', { name: /^INSPIRED/ }) as HTMLButtonElement;
+    expect([inspired.disabled, inspired.title]).toEqual([true, 'There is not enough to pay it']);
+    // FORWARD adds to the total: a switch, beside whichever is picked. The keeping ones are no switches.
+    expect(within(ask).getAllByRole('switch').map((s) => s.textContent)).toEqual(['FORWARD']);
+    fireEvent.click(how.getByRole('radio', { name: 'ADVANTAGE' }));
+    fireEvent.click(how.getByRole('radio', { name: 'DISADVANTAGE' }));
+    expect(how.getAllByRole('radio').filter((r) => r.getAttribute('aria-checked') === 'true').map((r) => r.textContent)).toEqual(['DISADVANTAGE']);
+    fireEvent.click(within(ask).getByRole('switch', { name: 'FORWARD' }));
+    const roll = within(ask).getByRole('button', { name: 'ROLL' });
+    expect((roll.parentElement as HTMLElement).style.justifyContent).toBe('center');
+    fireEvent.click(roll);
+    expect(onRoll).toHaveBeenLastCalledWith('might_mod', undefined, undefined, { rollId: 'check', changes: ['disadvantage', 'forward'] });
+    // STRAIGHT ROLL again: no keeping change sent.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Roll Might check' })[1]);
+    const again = within(screen.getByRole('dialog', { name: 'Roll MOD' }));
+    fireEvent.click(again.getByRole('radio', { name: 'ADVANTAGE' }));
+    fireEvent.click(again.getByRole('radio', { name: 'STRAIGHT ROLL' }));
+    fireEvent.click(again.getByRole('button', { name: 'ROLL' }));
+    expect(onRoll).toHaveBeenLastCalledWith('might_mod', undefined, undefined, { rollId: 'check', changes: [] });
+  });
+
+  it('another roll starts straight again', () => {
+    draw();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Roll Might check' })[0]);
+    const ask = within(screen.getByRole('dialog'));
+    fireEvent.click(ask.getByRole('radio', { name: 'ADVANTAGE' }));
+    fireEvent.click(ask.getByRole('radio', { name: 'PUSHED CHECK' }));
+    fireEvent.click(ask.getByRole('radio', { name: 'MIGHT CHECK' }));
+    expect(ask.getByRole('radio', { name: 'STRAIGHT ROLL' }).getAttribute('aria-checked')).toBe('true');
   });
 
   it('CANCEL or Escape closes it, rolling nothing', () => {

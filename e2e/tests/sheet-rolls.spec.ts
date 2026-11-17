@@ -77,8 +77,10 @@ test('a player rolls a custom system\'s rolls from their sheet, picking first wh
   await rolls.nth(0).click();
   const ask = page.getByRole('dialog', { name: 'Roll Grit' });
   await ask.getByRole('radio', { name: 'GRIT SAVE' }).click();
-  await ask.getByRole('switch', { name: 'ADVANTAGE' }).click();
-  await ask.getByRole('button', { name: 'ROLL GRIT SAVE' }).click();
+  // HOW IT ROLLS: STRAIGHT ROLL picked to start, ADVANTAGE in its place (the user, 2026-11-17).
+  await expect(ask.getByRole('radiogroup', { name: 'How it rolls' }).getByRole('radio', { name: 'STRAIGHT ROLL' })).toHaveAttribute('aria-checked', 'true');
+  await ask.getByRole('radio', { name: 'ADVANTAGE' }).click();
+  await ask.getByRole('button', { name: 'ROLL', exact: true }).click();
   await expect(ask).toHaveCount(0);
   await expect.poll(() => broadcasts.length, { timeout: 15_000 }).toBe(2);
   // Two d20, the higher kept, + Grit 3.
@@ -92,7 +94,7 @@ test('a player rolls a custom system\'s rolls from their sheet, picking first wh
   await rolls.nth(0).click();
   await ask.getByRole('radio', { name: 'GRIT SAVE' }).click();
   await ask.getByRole('switch', { name: 'PUSH · ADDS 2 STRESS · 1 OF 4' }).click();
-  await ask.getByRole('button', { name: 'ROLL GRIT SAVE' }).click();
+  await ask.getByRole('button', { name: 'ROLL', exact: true }).click();
   await expect.poll(() => broadcasts.length, { timeout: 15_000 }).toBe(3);
   expect(broadcasts[2].historyString).toMatch(/^Rook rolled Grit save \(Grit\) \(Push: \+2 STRESS\) \[\d+ \+ 5 = \d+\]$/);
   await expect(page.getByLabel('Stress', { exact: true })).toHaveValue('3');
