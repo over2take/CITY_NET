@@ -178,7 +178,35 @@ function BattleAdminPanel({
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function AdminPanel({
+/**
+ * The GM's panel: the battle map's own on a battle map, the city's everywhere else. Two components rather than an early
+ * return in one, so neither's hooks are ever counted against the other's: the city panel's useWords/useParts had come
+ * before the battle map's early return (2026-10-01), and entering a battle map then broke React's hook order.
+ */
+export function AdminPanel(props: any) {
+  if (props.view !== 'battle_map') return <CityAdminPanel {...props} />;
+  const {
+    token, isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, tempBattleMapScale, setTempBattleMapScale,
+    activeBattleMapData, locations, refreshLocations, handleSaveDefault, handleLoadDefault, setIsAdminPayOpen, setIsAdminXpOpen,
+    setIsCatalogueOpen, setIsGiveOpen, secureModeEnabled, onLogout, globalSettings, fetchGlobalSettings, onOpenNpcLibrary, onOpenSystems,
+    activeUsers, isPrimaryAdmin, socketRef,
+  } = props;
+  return (
+    <BattleAdminPanel
+      token={token}
+      isDeployingEnemy={isDeployingEnemy} setIsDeployingEnemy={setIsDeployingEnemy}
+      isDeployingFriendly={isDeployingFriendly} setIsDeployingFriendly={setIsDeployingFriendly}
+      tempBattleMapScale={tempBattleMapScale} setTempBattleMapScale={setTempBattleMapScale}
+      activeBattleMapData={activeBattleMapData} locations={locations} refreshLocations={refreshLocations}
+      handleSaveDefault={handleSaveDefault} handleLoadDefault={handleLoadDefault}
+      setIsAdminPayOpen={setIsAdminPayOpen} setIsAdminXpOpen={setIsAdminXpOpen} setIsCatalogueOpen={setIsCatalogueOpen} setIsGiveOpen={setIsGiveOpen} secureModeEnabled={secureModeEnabled} onLogout={onLogout}
+      globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings}
+      onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} isPrimaryAdmin={isPrimaryAdmin} socket={socketRef.current}
+    />
+  );
+}
+
+function CityAdminPanel({
   socketRef, token, onLogout, refreshLocations, refreshRoads, locations, roads, editData, setEditData, editId, setEditId,
   transformMode, setTransformMode, targetObject, blockBuildings, setBlockBuildings, selectedLocation,
   setSelectedLocation, setTargetObject, isChatOpen, setIsChatOpen, controlsRef, view, setView, pendingRequests, setPendingRequests,
@@ -201,8 +229,7 @@ export function AdminPanel({
   editorGenParts, setEditorGenParts, editorGenType, setEditorGenType, editorStyleIndex, setEditorStyleIndex,
   isCopyingSize, setIsCopyingSize, isAdmin, isPrimaryAdmin, setShowBattleMapManager,
   isPlantingTrees, setIsPlantingTrees, treeBatchSize, setTreeBatchSize, userName,
-    isDeployingEnemy, setIsDeployingEnemy, isDeployingFriendly, setIsDeployingFriendly, handleSaveDefault, handleLoadDefault,
-    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, tempBattleMapScale, setTempBattleMapScale, activeBattleMapData, setIsAdminPayOpen, setIsAdminXpOpen, setIsCatalogueOpen, setIsGiveOpen,
+    tempCityMapScale, setTempCityMapScale, globalSettings, fetchGlobalSettings, activeBattleMapData, setIsAdminPayOpen, setIsAdminXpOpen, setIsCatalogueOpen, setIsGiveOpen,
     secureModeEnabled, currentLocBattleMaps, enterBattleMap,
     signs, fetchSigns, remoteFonts, setRemoteFonts, isPlacingSign, setIsPlacingSign, pendingSignPos, setPendingSignPos, selectedSignId, setSelectedSignId, signTransformMode, setSignTransformMode, signTransformActive, setSignTransformActive, handleUpdateSign, signMesh,
     activeUsers, onGrantAccess, onRevokeAccess, onOpenNpcLibrary, onOpenSystems, onToggleHidden,
@@ -211,25 +238,9 @@ export function AdminPanel({
     cityGenDrawMode, setCityGenDrawMode, genBoundaryTrail, setGenBoundaryTrail,
     cityLayout, setCityLayout, citySeed, setCitySeed, lastCitySeed, setLastCitySeed, cityWater, setCityWater, cityParkPonds, setCityParkPonds, cityRoundabouts, setCityRoundabouts,
   }: any) {
-  // A custom system's own words for the GAME tab; today's text otherwise. Before the early
-  // return below: it is a hook.
+  // A custom system's own words for the GAME tab; today's text otherwise.
   const word = useWords(gameSystem);
   const bankOn = useParts(gameSystem)('bank');
-  if (view === 'battle_map') {
-    return (
-      <BattleAdminPanel
-        token={token}
-        isDeployingEnemy={isDeployingEnemy} setIsDeployingEnemy={setIsDeployingEnemy}
-        isDeployingFriendly={isDeployingFriendly} setIsDeployingFriendly={setIsDeployingFriendly}
-        tempBattleMapScale={tempBattleMapScale} setTempBattleMapScale={setTempBattleMapScale}
-        activeBattleMapData={activeBattleMapData} locations={locations} refreshLocations={refreshLocations}
-        handleSaveDefault={handleSaveDefault} handleLoadDefault={handleLoadDefault}
-        setIsAdminPayOpen={setIsAdminPayOpen} setIsAdminXpOpen={setIsAdminXpOpen} setIsCatalogueOpen={setIsCatalogueOpen} setIsGiveOpen={setIsGiveOpen} secureModeEnabled={secureModeEnabled} onLogout={onLogout}
-        globalSettings={globalSettings} fetchGlobalSettings={fetchGlobalSettings}
-        onOpenNpcLibrary={onOpenNpcLibrary} onOpenSystems={onOpenSystems} activeUsers={activeUsers} isPrimaryAdmin={isPrimaryAdmin} socket={socketRef.current}
-      />
-    );
-  }
 
   const [density, setDensity] = useState(8);
   const [overpassDensity, setOverpassDensity] = useState<OverpassDensity>('normal');
