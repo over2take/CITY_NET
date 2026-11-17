@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Levelling up and making a character from the sheet's own tab (8s1c).** On the ⧉ tab, LEVEL UP READY now opens LEVEL_UP.EXE, and a character still being made shows CREATING · CONTINUE, which opens NEW_CHARACTER.EXE where you left it, the same windows as in the main app.
 - **More of SHEET.EXE on the sheet's own tab (8s1b).** The ⧉ tab now has IMPORT, opening the same IMPORT.EXE as the window, and shows "THE GM GAVE YOU…" when the GM hands you something. A roll made on the tab opens and throws in the dice tray of your main window, as the table sees it.
 - **The character sheet opened in its own tab now does everything SHEET.EXE does (8s1a).** The ⧉ tab had been left behind: on a built system you couldn't wear, attune or install items there, pick or drop choices, level up, spend XP, mark stats, rest or roll a weapon's damage. It can now, and a test keeps the tab and the window offering the same from here on. The tab's hints and pop-ups now take your theme instead of falling back to green, the tab follows a theme change made in the main app, a refresh no longer signs it out, it says when the connection is lost, and the roll line on it shows only your own rolls (it showed whoever rolled last).
 - **An item's words could be typed past what the server allows.** The ITEMS page let an item's words run to 2000 characters, but a system only keeps 1000, so a long description showed as a problem. The box now stops at 1000.
