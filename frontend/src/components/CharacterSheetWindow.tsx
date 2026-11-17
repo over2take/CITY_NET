@@ -1,14 +1,11 @@
-import React, { useState, useCallback } from 'react';
-import ReactDOM from 'react-dom';
+import React, { useCallback } from 'react';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
-import { ImportSheetDialog } from './ImportSheetDialog';
+import { SheetImportButton } from './SheetImportButton';
 import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
 import { VehicleBadgeButton } from './VehicleBadgeButton';
 import type { SheetLinkSource } from '../sheets';
-import { canImport } from '../sheets/importable';
 import { flowState, withCreationLocks } from '../sheets/newCharacterFlow';
-import { themeRoot } from '../utils/themeRoot';
 
 // The player's own character sheet (in-game floating window). Identity is
 // the socket's registered user - the server only ever returns / edits the
@@ -39,8 +36,6 @@ interface CharacterSheetWindowProps {
 }
 
 export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, onOpenVehicles, currentTheme, onContinueCreating, onOpenLevelUp }: CharacterSheetWindowProps) {
-  const [isImportOpen, setIsImportOpen] = useState(false);
-  const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
   // Every play prop comes from the shared hook, as the standalone tab's do (8s1a): spread whole, never picked.
   const { sheet, template, handleFieldChange, handleFieldsChange, sheetProps } = usePlayerSheet(socket, userName, { onRolled });
 
@@ -67,15 +62,8 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
             onDisembark={(occupant) => socket?.emit('seatOut', { occupant })}
             compact
           />
-          {/* A built-in game with an importer, or a custom system with SHEET IMPORT on (4h2c). */}
-          {canImport(sheet?.system) && <button
-            title="Import from PDF / JSON / text"
-            className="win95-close-btn"
-            style={{ fontSize: '9px', width: 'auto', padding: '0 5px' }}
-            onClick={() => setIsImportOpen(true)}
-          >
-            IMPORT
-          </button>}
+          {/* A built-in game with an importer, or a custom system with SHEET IMPORT on (4h2c); the tab's too (8s1b). */}
+          <SheetImportButton socket={socket} system={sheet?.system} data={sheet?.data} at={{ x: pos.x + 60, y: pos.y + 60 }} />
           {template && (
             <span style={{ border: '1px solid currentColor', padding: '0 6px', fontSize: '0.6rem', letterSpacing: '1px' }}>
               {template.name.toUpperCase()}
@@ -134,22 +122,6 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>ACCESSING RECORD...</div>
       )}
     </DraggableWindow>
-    {isImportOpen && ReactDOM.createPortal(
-      <ImportSheetDialog
-        gameSystem={sheet?.system}
-        currentData={sheet?.data}
-        pos={importPos}
-        setPos={setImportPos}
-        onClose={() => setIsImportOpen(false)}
-        onApply={(fields, opts) => {
-          socket?.emit('importSheetFields', {
-            fields, replace: opts?.replace, cyberware: opts?.cyberware, picks: opts?.picks,
-          });
-        }}
-      />,
-      // Inside the theme, so IMPORT.EXE takes the theme's colors rather than Classic's.
-      themeRoot(),
-    )}
     </>
   );
 }
