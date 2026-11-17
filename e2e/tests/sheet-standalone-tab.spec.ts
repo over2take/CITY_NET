@@ -96,3 +96,41 @@ test('a character being made: CREATING · CONTINUE on the tab opens NEW_CHARACTE
   await expect(tab.getByText(/^NEW_CHARACTER\.EXE · TABMADE/)).toBeVisible({ timeout: 15_000 });
   await context.close();
 });
+
+// BANK, HEALTH and VEHICLES lean on the map (8s1d): a linked field on the tab asks the main window to open its own, and
+// the tab says it did. With the main window gone, the tab says to open it.
+test('Cash on the tab opens BANK.EXE in the main window, and says so; with no main window, says to open it (8s1d)', async ({ browser, request }, info) => {
+  test.setTimeout(120_000);
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Tabasks${again}`, core: { health: { model: 'pool' } },
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'might', label: 'Might' }] }],
+  });
+  const player = { username: `e2e_tabasks${again}`, password: 'e2e-player-password' };
+  await approvedPlayer(request, gm, player);
+
+  const context = await browser.newContext({ baseURL: info.project.use.baseURL });
+  const mine = await context.newPage();
+  await signInAsPlayer(mine, player);
+  await mine.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
+  await mine.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+  const [tab] = await Promise.all([context.waitForEvent('page'), mine.getByRole('button', { name: 'Open in new tab' }).click()]);
+  await tab.waitForLoadState();
+  await expect(tab.getByText(`CHARACTER_SHEET // ${player.username.toUpperCase()}`)).toBeVisible({ timeout: 15_000 });
+  await sheetTab(tab, 'GEAR');
+
+  // GEAR's one linked field, MONEY's Cash.
+  const cash = tab.getByTitle('Kept on the token or in the bank: click to open it');
+  await expect(cash).toHaveCount(1, { timeout: 15_000 });
+  await expect(mine.getByText('BANK.EXE', { exact: true })).toHaveCount(0);
+  await cash.click();
+  await expect(mine.getByText('BANK.EXE', { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(tab.getByRole('status', { name: 'Main window' })).toHaveText(/OPENED IN YOUR MAIN WINDOW: BANK/, { timeout: 15_000 });
+
+  // The main window closed: nothing answers, and the tab says to open it.
+  await mine.close();
+  await cash.click();
+  await expect(tab.getByRole('status', { name: 'Main window' })).toContainText('BANK opens in the main window', { timeout: 15_000 });
+  await context.close();
+});
