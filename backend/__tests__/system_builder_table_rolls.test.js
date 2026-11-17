@@ -423,8 +423,8 @@ describe('the rolls players\' browsers get (6b2a)', () => {
   it('each roll\'s name, the fields with a die button for it, and its changes with their costs; never how it rolls', () => {
     const rolls = renderOf('sys_hearthhearthhear', HEARTH).rolls;
     expect(rolls).toEqual([
-      { id: 'skill', label: 'Skill check', fields: ['fight', 'lore'], changes: [{ id: 'forward', label: 'Forward' }, { id: 'push', label: 'Push', cost: { from: 'stress', amount: 2, label: 'stress' } }] },
-      { id: 'check', label: 'Ability check', fields: ['str', 'wit'], changes: [{ id: 'advantage', label: 'Advantage' }, { id: 'disadvantage', label: 'Disadvantage' }] },
+      { id: 'skill', label: 'Skill check', fields: ['fight', 'lore'], changes: [{ id: 'forward', label: 'Forward' }, { id: 'push', label: 'Push', keep: 'highest', cost: { from: 'stress', amount: 2, label: 'stress' } }] },
+      { id: 'check', label: 'Ability check', fields: ['str', 'wit'], changes: [{ id: 'advantage', label: 'Advantage', keep: 'highest' }, { id: 'disadvantage', label: 'Disadvantage', keep: 'lowest' }] },
       { id: 'saving', label: 'Save', fields: ['save'], changes: [] },
       { id: 'brawl', label: 'Brawl', fields: ['fight'], changes: [] },
     ]);
