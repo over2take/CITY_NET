@@ -117,4 +117,12 @@ describe('App smoke test', () => {
     const { container } = render(<App />);
     expect(container.firstChild).not.toBeNull();
   });
+
+  it('says its theme where an open standalone sheet tab hears it (8s1a)', () => {
+    localStorage.removeItem('citynet_live_theme');
+    localStorage.setItem('citynet_theme', 'solar');
+    render(<App />);
+    expect(localStorage.getItem('citynet_live_theme')).toBe('solar');
+    localStorage.removeItem('citynet_theme');
+  });
 });

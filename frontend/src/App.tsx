@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { LIVE_THEME_KEY } from './utils/liveTheme';
 import { createPortal } from 'react-dom';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls, CameraControls, PerspectiveCamera, Grid, TransformControls, Bvh, Html, OrthographicCamera } from '@react-three/drei';
@@ -125,6 +126,7 @@ import { parseVehicleState } from './types';
 import { IS_SPECTATOR } from './streamerMode';
 
 function App() {
+  // Said where an open standalone sheet tab hears it (SheetPage LIVE_THEME_KEY, 8s1a), so the tab follows a change.
   const [currentTheme, setCurrentTheme] = useState<ThemeName>(() => {
     // Pre-login theme choice (accessibility) survives refreshes locally;
     // secure login overlays the account's saved theme from the JWT.
@@ -134,6 +136,7 @@ function App() {
     } catch { /* private mode */ }
     return 'classic';
   });
+  useEffect(() => { try { localStorage.setItem(LIVE_THEME_KEY, currentTheme); } catch { /* private mode */ } }, [currentTheme]);
   const controlsRef = useRef<any>(null);
   const { locations, setLocations, districts, setDistricts, roads, setRoads, waterBodies, setWaterBodies, overpasses, signs, fetchLocations, fetchDistricts, fetchRoads, fetchWaterBodies, fetchOverpasses, fetchSigns, fetchAll, setMapAuthToken } = useMapData();
   const [editingDistrict, setEditingDistrict] = useState<District | null>(null);

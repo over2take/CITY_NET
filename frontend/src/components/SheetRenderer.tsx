@@ -61,7 +61,7 @@ function DiceIcon({ size = 14 }: { size?: number }) {
 //   [ scrollable sections for the active tab ]
 //   [ bottom tab bar: STATS / SKILLS / GEAR / NOTES ]
 
-interface SheetRendererProps {
+export interface SheetRendererProps {
   template: SheetTemplate;
   data: SheetData;
   readOnly?: boolean;

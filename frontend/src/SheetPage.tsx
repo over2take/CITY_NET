@@ -6,6 +6,7 @@ import { usePlayerSheet, uploadSheetPortrait } from './hooks/usePlayerSheet';
 import { useCustomTemplates } from './hooks/useCustomTemplates';
 import { THEMES } from './theme/themes';
 import { withCreationLocks } from './sheets/newCharacterFlow';
+import { LIVE_THEME_KEY } from './utils/liveTheme';
 
 // Standalone character-sheet tab (?sheet=true). Gives the player a full
 // browser tab for their sheet instead of the in-game floating window.
@@ -17,9 +18,17 @@ import { withCreationLocks } from './sheets/newCharacterFlow';
 // reads it once and deletes it. Fallback: the remembered userName from a
 // simple-mode login. Secure Mode still verifies the token server-side on
 // identify - this page can't fake its way in.
+//
+// Identical to the window (8s1a, the user's call 2026-11-15): every play prop comes from usePlayerSheet's
+// `sheetProps`, spread whole as the window spreads it. The handshake is kept for the life of the tab
+// (sessionStorage), so a refresh stays signed in; the page is a `.crt-container` like the app's, so what
+// floats (hints, pickers, dialogs) takes the theme; and the theme follows the main app's as it changes.
 
 const validTheme = (t: unknown): string | null =>
   typeof t === 'string' && t in THEMES ? t : null;
+
+/** The handshake, kept for the life of this tab so a refresh is still signed in. */
+const TAB_AUTH_KEY = 'sheet_tab_auth';
 
 const readAuth = (): { userName: string | null; playerToken: string | null; adminToken: string | null; theme: string } => {
   // Theme: the handshake carries the main app's active theme; fall back to
@@ -27,9 +36,14 @@ const readAuth = (): { userName: string | null; playerToken: string | null; admi
   let fallbackTheme = 'classic';
   try { fallbackTheme = validTheme(localStorage.getItem('citynet_theme')) ?? 'classic'; } catch { /* private mode */ }
   try {
-    const raw = localStorage.getItem('sheet_tab_auth');
+    // A new handshake from the main app, else the one this tab was opened with, kept across a refresh.
+    const fresh = localStorage.getItem(TAB_AUTH_KEY);
+    if (fresh) {
+      localStorage.removeItem(TAB_AUTH_KEY);
+      try { sessionStorage.setItem(TAB_AUTH_KEY, fresh); } catch { /* private mode */ }
+    }
+    const raw = fresh ?? sessionStorage.getItem(TAB_AUTH_KEY);
     if (raw) {
-      localStorage.removeItem('sheet_tab_auth');
       const parsed = JSON.parse(raw);
       if (parsed.userName) {
         return {
@@ -45,8 +59,21 @@ const readAuth = (): { userName: string | null; playerToken: string | null; admi
 };
 
 export default function SheetPage() {
-  const [{ userName, playerToken, adminToken, theme }] = useState(readAuth);
+  const [{ userName, playerToken, adminToken, theme: opened }] = useState(readAuth);
+  const [theme, setTheme] = useState(opened);
   const [error, setError] = useState<string | null>(null);
+  /** Whether the live connection is down: what is changed meanwhile isn't reaching the table. */
+  const [lost, setLost] = useState(false);
+
+  // The theme as the main app changes it, while this tab is open.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      const next = e.key === LIVE_THEME_KEY ? validTheme(e.newValue) : null;
+      if (next) setTheme(next);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
   const [lastRoll, setLastRoll] = useState<string | null>(null);
   const [socket, setSocket] = useState<any>(null);
   const socketRef = useRef<any>(null);
@@ -67,19 +94,21 @@ export default function SheetPage() {
       s.emit('requestMySheet');
     };
 
-    s.on('connect', identify);
+    s.on('connect', () => { setLost(false); identify(); });
+    s.on('disconnect', () => setLost(true));
     s.on('authError', (e: { message: string }) => setError(e.message));
-    // No dice tray on this page — delay matches the 5s dice animation in the main app
-    s.on('diceRollBroadcast', (roll: { historyString?: string }) => {
-      if (roll?.historyString) setTimeout(() => setLastRoll(roll.historyString!), 5000);
+    // No dice tray on this page — delay matches the 5s dice animation in the main app. Only this player's own rolls:
+    // the broadcast is everyone's, and the line used to show whoever rolled last.
+    s.on('diceRollBroadcast', (roll: { historyString?: string; account?: string }) => {
+      if (roll?.historyString && roll.account === userName) setTimeout(() => setLastRoll(roll.historyString!), 5000);
     });
     setSocket(s);
 
     return () => { s.disconnect(); };
   }, [userName, playerToken, adminToken]);
 
-  const { sheet, template, handleFieldChange, handleFieldsChange, allowFumbleShield, xpRate, encumbranceEnforced, hiddenTabs, actions } =
-    usePlayerSheet(socket, userName);
+  // Every play prop from the shared hook, spread whole, as the window's are (8s1a).
+  const { sheet, template, handleFieldChange, handleFieldsChange, sheetProps } = usePlayerSheet(socket, userName);
   // A custom system's sheet is drawn once its template arrives (sheets/customTemplates.ts).
   useCustomTemplates(sheet?.system);
 
@@ -95,8 +124,9 @@ export default function SheetPage() {
       : 'ACCESSING RECORD...';
 
   return (
-    <div className={`theme-${theme}`} style={{
-      minHeight: '100vh', background: 'var(--black, #050805)', color: 'var(--green, #00ff00)',
+    // A `.crt-container` as the app's is, so what floats is drawn inside the theme (themeRoot); sized as a page here.
+    <div className={`crt-container theme-${theme}`} style={{
+      width: '100%', height: 'auto', minHeight: '100vh', background: 'var(--black, #050805)', color: 'var(--green, #00ff00)',
       fontFamily: 'monospace', display: 'flex', justifyContent: 'center', padding: '20px 16px',
       boxSizing: 'border-box',
     }}>
@@ -117,6 +147,13 @@ export default function SheetPage() {
             </span>
           )}
         </div>
+        {lost && (
+          <div role="alert" style={{
+            border: '1px solid var(--danger)', color: 'var(--danger)', padding: '4px 10px', marginBottom: '4px', fontSize: '0.7rem', letterSpacing: '1px',
+          }}>
+            CONNECTION LOST · RECONNECTING… What you change now won&apos;t reach the table until it is back.
+          </div>
+        )}
         {lastRoll && (
           <div style={{
             border: '1px solid var(--green)', background: 'color-mix(in srgb, var(--black) 50%, transparent)',
@@ -135,16 +172,7 @@ export default function SheetPage() {
               onFieldsChange={handleFieldsChange}
               gm={!!adminToken}
               onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
-              onRoll={actions.onRoll}
-              onDeathSave={actions.onDeathSave}
-              onStabilize={actions.onStabilize}
-              xpRate={xpRate}
-              encumbranceEnforced={encumbranceEnforced}
-              onCastSpell={actions.onCastSpell}
-              onRollAbility={actions.onRollAbility}
-              onResistDrain={actions.onResistDrain}
-              allowFumbleShield={allowFumbleShield}
-              hiddenTabs={hiddenTabs}
+              {...sheetProps}
             />
           </div>
         ) : (
