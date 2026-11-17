@@ -4,6 +4,9 @@ import { getTemplate, getMaxPairs, hiddenTabsFor, type CharacterSheet, type Shee
 import { SLOW_ADVANCEMENT_RULE } from '../sheets/cwnAdvancement';
 import { ENCUMBRANCE_RULE } from '../sheets/cwnEncumbrance';
 import { OVERDRAFT_RULE } from '../data/shopRules';
+import { isOpen } from '../sheets/restCalls';
+import { useChoicesRefused } from './useChoicesRefused';
+import type { SheetRendererProps } from '../components/SheetRenderer';
 
 // Shared client logic for the player's own character sheet, used by both
 // surfaces that render it: the in-game floating window
@@ -12,6 +15,11 @@ import { OVERDRAFT_RULE } from '../data/shopRules';
 // with max-pair clamping, house-rule flags, and the server-side action
 // emitters (roll / death save / stabilize / cast). Add sheet behavior HERE,
 // not in the surfaces - that's how the two stay in sync.
+//
+// `sheetProps` (8s1a) is every play prop a sheet surface hands SheetRenderer, the actions with what the server last
+// refused and whether recovery is open: both surfaces spread it whole, so a new action reaches the standalone tab and
+// the window together (the user, 2026-11-15: "they should be identical"). Phase 7's choices, levels, items, spending,
+// improving and rests had been wired into the window alone; a test (SheetSurfaces.test.tsx) now holds them level.
 
 export interface PlayerSheetActions {
   onRoll: (fieldId: string, luck?: number, negateFumble?: boolean, pick?: RollPick) => void;
@@ -22,6 +30,14 @@ export interface PlayerSheetActions {
   onResistDrain: (drainValue: number, attr: string, label: string) => void;
   /** A line of gear's DAMAGE or DICE rolled (8a3b): the line by its place in the inventory, the column by id. */
   onGearRoll?: (line: number, column: string) => void;
+  /** Picks, drops and uses on CHOICES (7a3), levels (7d), items (7e), SPEND XP (7f2), marks (7f3), rests and recovery dice. */
+  onChoices: NonNullable<SheetRendererProps['onChoices']>;
+  onLevel: NonNullable<SheetRendererProps['onLevel']>;
+  onItem: NonNullable<SheetRendererProps['onItem']>;
+  onSpend: NonNullable<SheetRendererProps['onSpend']>;
+  onImprove: NonNullable<SheetRendererProps['onImprove']>;
+  onRecoverySpend: NonNullable<SheetRendererProps['onRecoverySpend']>;
+  onRestTake: NonNullable<SheetRendererProps['onRestTake']>;
 }
 
 export function usePlayerSheet(
@@ -40,6 +56,8 @@ export function usePlayerSheet(
   // The unmount handler runs once and would otherwise close over the first socket it saw.
   const socketRef = useRef(socket);
   socketRef.current = socket;
+  // Why the server last said no to a pick, a level, a use or a rest, under the CHOICES block.
+  const choicesRefused = useChoicesRefused(socket);
 
   useEffect(() => {
     if (!socket || !userName) return;
@@ -175,6 +193,13 @@ export function usePlayerSheet(
     onRollAbility: (formula: string, label: string) => { socket?.emit('rollAbility', { formula, label }); rolled(); },
     onResistDrain: (drainValue: number, attr: string, label: string) => { socket?.emit('resistDrain', { drainValue, attr, label }); rolled(); },
     onGearRoll: (line: number, column: string) => { socket?.emit('requestSheetRoll', { gear: { line, column } }); rolled(); },
+    onChoices: (action) => socket?.emit('choicesAction', action),
+    onLevel: (action) => socket?.emit('levelAction', action),
+    onItem: (action) => socket?.emit('itemAction', action),
+    onSpend: (action) => socket?.emit('spendAction', action),
+    onImprove: (action) => socket?.emit('improveAction', action),
+    onRecoverySpend: (pool, count) => socket?.emit('recoverySpend', { pool, count }),
+    onRestTake: (rest) => socket?.emit('restTake', { rest }),
   };
 
   const template = sheet ? getTemplate(sheet.system) : null;
@@ -194,9 +219,17 @@ export function usePlayerSheet(
   const overdraftAllowed =
     ruleSettings.find((r) => r.key === OVERDRAFT_RULE)?.value === '1';
 
+  // Whether the GM has spending recovery dice open (R2b), read with the house rules.
+  const recoveryOpen = isOpen(ruleSettings);
+
+  /** Every play prop a surface hands SheetRenderer: both spread it whole (8s1a). */
+  const sheetProps = {
+    ...actions, choicesRefused, recoveryOpen, allowFumbleShield, xpRate, encumbranceEnforced, hiddenTabs,
+  } satisfies Partial<SheetRendererProps>;
+
   return {
     sheet, template, handleFieldChange, handleFieldsChange,
-    allowFumbleShield, xpRate, encumbranceEnforced, overdraftAllowed, hiddenTabs, actions,
+    allowFumbleShield, xpRate, encumbranceEnforced, overdraftAllowed, hiddenTabs, actions, sheetProps,
   };
 }
 

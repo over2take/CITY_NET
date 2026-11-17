@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **The character sheet opened in its own tab now does everything SHEET.EXE does (8s1a).** The ⧉ tab had been left behind: on a built system you couldn't wear, attune or install items there, pick or drop choices, level up, spend XP, mark stats, rest or roll a weapon's damage. It can now, and a test keeps the tab and the window offering the same from here on. The tab's hints and pop-ups now take your theme instead of falling back to green, the tab follows a theme change made in the main app, a refresh no longer signs it out, it says when the connection is lost, and the roll line on it shows only your own rolls (it showed whoever rolled last).
 - **An item's words could be typed past what the server allows.** The ITEMS page let an item's words run to 2000 characters, but a system only keeps 1000, so a long description showed as a problem. The box now stops at 1000.
 - **The builder's tour points at what it explains, on a smaller window too.** With the pages Phase 7 added, the builder's rail is taller than a laptop screen, and the tour's TRY IT step pointed at a button scrolled out of sight. The tour now scrolls the rail to the button it explains, and keeps its box wholly on the screen however many lines its words wrap to.
 - TERMINATE_SESSION closes every window. GIVE.EXE, the shop catalogues, XP, LEVEL_UP, the new character, vehicles, the radio, initiative, the NPC library, the System Builder and a shop had stayed open, GIVE.EXE coming back on the GM's next sign-in.

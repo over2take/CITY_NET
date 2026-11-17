@@ -1,6 +1,4 @@
 import React, { useState, useCallback } from 'react';
-import { useChoicesRefused } from '../hooks/useChoicesRefused';
-import { useRecoveryOpen } from '../hooks/useRecoveryOpen';
 import ReactDOM from 'react-dom';
 import { DraggableWindow } from './DraggableWindow';
 import { SheetRenderer } from './SheetRenderer';
@@ -43,11 +41,8 @@ interface CharacterSheetWindowProps {
 export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, onOpenVehicles, currentTheme, onContinueCreating, onOpenLevelUp }: CharacterSheetWindowProps) {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [importPos, setImportPos] = useState({ x: pos.x + 60, y: pos.y + 60 });
-  const { sheet, template, handleFieldChange, handleFieldsChange, allowFumbleShield, xpRate, encumbranceEnforced, hiddenTabs, actions } =
-    usePlayerSheet(socket, userName, { onRolled });
-  // Why the server last said no to a pick, a level or a use (7a3b1), under the CHOICES block.
-  const refused = useChoicesRefused(socket);
-  const recoveryOpen = useRecoveryOpen(socket);
+  // Every play prop comes from the shared hook, as the standalone tab's do (8s1a): spread whole, never picked.
+  const { sheet, template, handleFieldChange, handleFieldsChange, sheetProps } = usePlayerSheet(socket, userName, { onRolled });
 
   const handlePortraitUpload = useCallback(
     (file: File) => uploadSheetPortrait(adminToken || playerToken, file),
@@ -132,27 +127,8 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
           onSectionAction={(id) => { if (id === 'vehicles') onOpenVehicles?.(); }}
           onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
           onOpenLink={onOpenLink}
-          onRoll={actions.onRoll}
-          onGearRoll={actions.onGearRoll}
-          onDeathSave={actions.onDeathSave}
-          onStabilize={actions.onStabilize}
-          onCastSpell={actions.onCastSpell}
-          onRollAbility={actions.onRollAbility}
           onLevelUp={onOpenLevelUp}
-          onResistDrain={actions.onResistDrain}
-          allowFumbleShield={allowFumbleShield}
-          xpRate={xpRate}
-          encumbranceEnforced={encumbranceEnforced}
-          hiddenTabs={hiddenTabs}
-          onChoices={(action) => socket?.emit('choicesAction', action)}
-          choicesRefused={refused}
-          onLevel={(action) => socket?.emit('levelAction', action)}
-          onItem={(action) => socket?.emit('itemAction', action)}
-          onSpend={(action) => socket?.emit('spendAction', action)}
-          onImprove={(action) => socket?.emit('improveAction', action)}
-          onRecoverySpend={(pool, count) => socket?.emit('recoverySpend', { pool, count })}
-          onRestTake={(rest) => socket?.emit('restTake', { rest })}
-          recoveryOpen={recoveryOpen}
+          {...sheetProps}
         />
       ) : (
         <div style={{ fontSize: '0.7rem', opacity: 0.6, padding: '10px' }}>ACCESSING RECORD...</div>
