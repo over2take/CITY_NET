@@ -35,6 +35,7 @@ vi.mock('socket.io-client', () => ({ io: () => tabSocket.current }));
 import { CharacterSheetWindow } from '../components/CharacterSheetWindow';
 import SheetPage from '../SheetPage';
 import { LIVE_THEME_KEY } from '../utils/liveTheme';
+import { answerMainWindowAsks } from '../utils/mainWindow';
 
 const SHEET = { username: 'kes', system: 'generic', data: { name: 'Kes' } };
 let settings: { key: string; value: string }[] = [];
@@ -71,20 +72,13 @@ const propsOf = async () => {
   return { windowProps, tabProps: last() };
 };
 
-/** What the window has that the tab is still to get, and the piece bringing each: none may be missing silently. */
-const WINDOW_ONLY = {
-  onOpenLink: '8s1d: HEALTH and BANK on the tab',
-  onSectionAction: '8s1d: VEHICLES on the tab',
-};
-
 describe('the tab and the window hand the sheet the same', () => {
-  it('every prop the window gives, the tab gives too, but those named as still to come', async () => {
+  it('every prop the window gives, the tab gives too, and no other (8s1d: none left to come)', async () => {
     const { windowProps, tabProps } = await propsOf();
-    const windowKeys = Object.keys(windowProps).filter((k) => windowProps[k] !== undefined && !(k in WINDOW_ONLY)).sort();
+    const windowKeys = Object.keys(windowProps).filter((k) => windowProps[k] !== undefined).sort();
     const tabKeys = Object.keys(tabProps).filter((k) => tabProps[k] !== undefined).sort();
     expect(tabKeys).toEqual(windowKeys);
-    // Those still to come are the window's, so none is stale.
-    for (const k of Object.keys(WINDOW_ONLY)) expect(windowProps[k], k).toBeTypeOf('function');
+    for (const k of ['onOpenLink', 'onSectionAction', 'onLevelUp']) expect(tabProps[k], k).toBeTypeOf('function');
     // Every play prop is among them, from the oldest rolls to what Phase 7 and 8 added.
     for (const k of ['onRoll', 'onDeathSave', 'onStabilize', 'onCastSpell', 'onRollAbility', 'onResistDrain', 'onGearRoll',
       'onChoices', 'onLevel', 'onItem', 'onSpend', 'onImprove', 'onRecoverySpend', 'onRestTake']) expect(tabProps[k], k).toBeTypeOf('function');
@@ -189,6 +183,50 @@ describe('LEVEL_UP.EXE and NEW_CHARACTER.EXE on the tab (8s1c)', () => {
       await tabSocket.current!.serve('sheetData', { username: 'kes', system: ID, data: { name: 'Kes' } });
       expect(screen.queryByRole('button', { name: 'CREATING · CONTINUE' })).toBeNull();
     } finally { clearCustomTemplates(); }
+  });
+});
+
+describe('BANK, HEALTH and VEHICLES: the tab asks the main window (8s1d)', () => {
+  const stops: (() => void)[] = [];
+  afterEach(() => { while (stops.length) stops.pop()!(); });
+
+  it('a linked field or VEHICLES asks the main window, which opens its own and is said to have', async () => {
+    const opened: string[] = [];
+    stops.push(answerMainWindowAsks('kes', (what) => opened.push(what)));
+    openTab();
+    await tabSocket.current!.serve('sheetData', SHEET);
+    const p = last() as Record<string, (...a: unknown[]) => void>;
+    await act(async () => { p.onOpenLink('bank_balance'); });
+    expect(await screen.findByText('OPENED IN YOUR MAIN WINDOW: BANK')).toBeTruthy();
+    await act(async () => { p.onOpenLink('token_hp'); });
+    expect(await screen.findByText('OPENED IN YOUR MAIN WINDOW: HEALTH')).toBeTruthy();
+    // Another section's action asks nothing.
+    await act(async () => { p.onSectionAction('skills'); });
+    await act(async () => { p.onSectionAction('vehicles'); });
+    expect(await screen.findByText('OPENED IN YOUR MAIN WINDOW: VEHICLES')).toBeTruthy();
+    expect(opened).toEqual(['bank', 'health', 'vehicles']);
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByRole('status', { name: 'Main window' })).toBeNull();
+  });
+
+  it('with no main window open it says so, and how to', async () => {
+    openTab();
+    await tabSocket.current!.serve('sheetData', SHEET);
+    await act(async () => { (last().onOpenLink as (s: string) => void)('bank_balance'); });
+    const note = screen.getByRole('status', { name: 'Main window' });
+    expect(note.textContent).toContain('ASKING YOUR MAIN WINDOW TO OPEN BANK…');
+    await vi.waitFor(() => expect(note.textContent).toContain('BANK opens in the main window: open CITY_NET there, signed in as you, and try again.'), { timeout: 3000 });
+  });
+
+  it('the vehicle you sit in shows in the header, and leaving it gets you out, as in SHEET.EXE', async () => {
+    openTab();
+    const s = tabSocket.current!;
+    await s.serve('sheetData', SHEET);
+    expect(screen.queryByRole('button', { name: /Get out of/ })).toBeNull();
+    await s.serve('sheetData', { ...SHEET, inVehicle: { name: 'Hauler', moving: false, hp: 20, hpMax: 20 } });
+    s.sent.length = 0;
+    await userEvent.click(screen.getByRole('button', { name: 'Get out of the Hauler' }));
+    expect(s.sent).toEqual([['seatOut', { occupant: 'kes' }]]);
   });
 });
 

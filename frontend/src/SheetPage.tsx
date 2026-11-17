@@ -12,6 +12,8 @@ import { GiftNotices } from './components/GiftNotices';
 import { SheetCreatingLine } from './components/SheetCreatingLine';
 import { LevelUpWindow } from './components/LevelUpWindow';
 import { NewCharacterWindow } from './components/NewCharacterWindow';
+import { VehicleBadgeButton } from './components/VehicleBadgeButton';
+import { askMainWindow, askOfLink, ASK_WORDS, type MainWindowAsk } from './utils/mainWindow';
 
 // Standalone character-sheet tab (?sheet=true). Gives the player a full
 // browser tab for their sheet instead of the in-game floating window.
@@ -35,6 +37,10 @@ import { NewCharacterWindow } from './components/NewCharacterWindow';
 //
 // 8s1c: LEVEL UP READY opens LEVEL_UP.EXE here, and CREATING · CONTINUE NEW_CHARACTER.EXE, the main app's own
 // windows, as SHEET.EXE opens them (App.tsx). The dice tray they would open beside is the main app's.
+//
+// 8s1d: BANK, HEALTH and VEHICLES lean on the map, so a linked field or the VEHICLES section asks the main app to
+// open its own (utils/mainWindow.ts) and this page says whether it did. The vehicle you sit in shows in the header
+// with DISEMBARK, as in SHEET.EXE's title.
 
 const validTheme = (t: unknown): string | null =>
   typeof t === 'string' && t in THEMES ? t : null;
@@ -81,6 +87,13 @@ export default function SheetPage() {
   const [levelUpPos, setLevelUpPos] = useState(() => ({ x: Math.max(16, window.innerWidth / 2 - 200), y: 100 }));
   const [newCharacterOpen, setNewCharacterOpen] = useState(false);
   const [newCharacterPos, setNewCharacterPos] = useState(() => ({ x: Math.max(16, window.innerWidth / 2 - 240), y: 80 }));
+  // What the main app was last asked to open (8s1d), and whether it said it did.
+  const [asked, setAsked] = useState<{ what: MainWindowAsk; opened: boolean | null } | null>(null);
+  const askMain = useCallback((what: MainWindowAsk) => {
+    if (!userName) return;
+    setAsked({ what, opened: null });
+    void askMainWindow(what, userName).then((opened) => setAsked((a) => (a?.what === what ? { what, opened } : a)));
+  }, [userName]);
 
   // The theme as the main app changes it, while this tab is open.
   useEffect(() => {
@@ -159,6 +172,10 @@ export default function SheetPage() {
         }}>
           <span>CHARACTER_SHEET // {(userName ?? 'UNKNOWN').toUpperCase()}</span>
           <span style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {userName && (
+              <VehicleBadgeButton vehicle={sheet?.inVehicle} occupant={userName} userName={userName}
+                onDisembark={(occupant) => socket?.emit('seatOut', { occupant })} />
+            )}
             <SheetImportButton socket={socket} system={sheet?.system} data={sheet?.data} at={{ x: 120, y: 80 }}
               className="utility-btn" style={{ fontSize: '0.6rem', padding: '1px 8px', letterSpacing: '1px' }} />
             {template && (
@@ -184,6 +201,22 @@ export default function SheetPage() {
             ⌁ {lastRoll}
           </div>
         )}
+        {asked && (
+          <div role="status" aria-label="Main window" style={{
+            border: `1px solid ${asked.opened === false ? 'var(--warning)' : 'var(--green)'}`,
+            color: asked.opened === false ? 'var(--warning)' : 'var(--green)',
+            padding: '4px 10px', marginBottom: '4px', fontSize: '0.7rem', letterSpacing: '1px',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px',
+          }}>
+            <span>
+              {asked.opened === null && `ASKING YOUR MAIN WINDOW TO OPEN ${ASK_WORDS[asked.what]}…`}
+              {asked.opened === true && `OPENED IN YOUR MAIN WINDOW: ${ASK_WORDS[asked.what]}`}
+              {asked.opened === false && `${ASK_WORDS[asked.what]} opens in the main window: open CITY_NET there, signed in as you, and try again.`}
+            </span>
+            <button type="button" aria-label="Dismiss" onClick={() => setAsked(null)}
+              style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontFamily: 'inherit' }}>✕</button>
+          </div>
+        )}
         <SheetCreatingLine template={template} data={sheet?.data}
           onContinue={() => { socket?.emit('creationAction', { kind: 'open' }); setNewCharacterOpen(true); }} />
         {sheet && template ? (
@@ -197,6 +230,8 @@ export default function SheetPage() {
               gm={!!adminToken}
               onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
               onLevelUp={() => setLevelUpOpen(true)}
+              onOpenLink={(source) => askMain(askOfLink(source))}
+              onSectionAction={(id) => { if (id === 'vehicles') askMain('vehicles'); }}
               {...sheetProps}
             />
           </div>

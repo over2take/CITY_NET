@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback, useEffectEvent } from 'react';
 import { LIVE_THEME_KEY } from './utils/liveTheme';
 import { createPortal } from 'react-dom';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
@@ -124,6 +124,7 @@ import { DEFAULT_DIRECTOR_STATE, ALL_VISIBLE } from './types';
 import type { DirectorState, AttackVehicle } from './types';
 import { parseVehicleState } from './types';
 import { IS_SPECTATOR } from './streamerMode';
+import { answerMainWindowAsks, askOfLink, type MainWindowAsk } from './utils/mainWindow';
 
 function App() {
   // Said where an open standalone sheet tab hears it (SheetPage LIVE_THEME_KEY, 8s1a), so the tab follows a change.
@@ -1632,6 +1633,20 @@ function App() {
     if (selectedLocation?.id !== found.token.id) setSelectedLocation(found.token);
     setTokenFolderRequest((r) => ({ folder: 'health', seq: (r?.seq ?? 0) + 1 }));
   };
+  /**
+   * What a sheet's links open, from SHEET.EXE or the standalone tab (8s1d): the bank for the balance, VEHICLES, and for
+   * the rest this sheet's own character's health, for the GM too, never "select a token first" (2026-10-31).
+   */
+  const openSheetWindow = (what: MainWindowAsk) => {
+    if (what === 'bank') setIsBankOpen(true);
+    else if (what === 'vehicles') setIsVehiclesOpen(true);
+    else if (token) openHealthOf({ username: userName });
+    else openHealth();
+  };
+  // The standalone sheet tab asks this window to open BANK, HEALTH or VEHICLES (8s1d), as SHEET.EXE's own links do: the
+  // same action, as an effect event so the listener reads the current state without restarting on every render.
+  const onSheetTabAsk = useEffectEvent((what: MainWindowAsk) => openSheetWindow(what));
+  useEffect(() => (userName ? answerMainWindowAsks(userName, (what) => onSheetTabAsk(what)) : undefined), [userName]);
   const healthShowing = !!selectedLocation && isTokenShape(selectedLocation.shape) && tokenFolder === 'health';
 
   /**
@@ -2256,15 +2271,9 @@ function App() {
                 userName={userName}
                 playerToken={playerToken}
                 adminToken={token}
-                onOpenLink={(source) => {
-                  // Linked fields jump to the window that owns the value: this sheet's own
-                  // character's health, for the GM too, never "select a token first" (2026-10-31).
-                  if (source === 'bank_balance') setIsBankOpen(true);
-                  else if (token) openHealthOf({ username: userName });
-                  else openHealth();
-                }}
+                onOpenLink={(source) => openSheetWindow(askOfLink(source))}
                 onRolled={() => setIsDiceTrayOpen(true)}
-                onOpenVehicles={() => setIsVehiclesOpen(true)}
+                onOpenVehicles={() => openSheetWindow('vehicles')}
                 currentTheme={currentTheme}
                 onContinueCreating={openNewCharacter}
                 onOpenLevelUp={() => setIsLevelUpOpen(true)}
