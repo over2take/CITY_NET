@@ -74,7 +74,6 @@ const propsOf = async () => {
 /** What the window has that the tab is still to get, and the piece bringing each: none may be missing silently. */
 const WINDOW_ONLY = {
   onOpenLink: '8s1d: HEALTH and BANK on the tab',
-  onLevelUp: '8s1c: LEVEL_UP.EXE on the tab',
   onSectionAction: '8s1d: VEHICLES on the tab',
 };
 
@@ -153,6 +152,43 @@ describe('IMPORT and what the GM gives, on both (8s1b)', () => {
     await tabSocket.current!.serve('sheetData', SHEET);
     await tabSocket.current!.serve('itemReceived', { item: 'Cutlass', qty: 1 });
     expect(document.body.textContent).toContain('GAVE YOU CUTLASS ×1');
+  });
+});
+
+describe('LEVEL_UP.EXE and NEW_CHARACTER.EXE on the tab (8s1c)', () => {
+  const ID = 'sys_0a1b2c3d4e5f6a7b';
+  const RENDER = {
+    id: ID, name: 'Tabflow', words: {}, derived: [],
+    sheet: { header: { nameField: 'name' }, sections: [{ id: 'identity', label: 'IDENTITY', layout: 'list', fields: [{ id: 'name', label: 'Name', type: 'text' }] }] },
+    choices: [],
+    creation: { steps: ['who'], stats: [] },
+  };
+
+  it('LEVEL UP READY opens LEVEL_UP.EXE on the tab, as SHEET.EXE opens it', async () => {
+    openTab();
+    await tabSocket.current!.serve('sheetData', SHEET);
+    expect(document.body.textContent).not.toMatch(/LEVEL_UP\.EXE/);
+    await act(async () => { (last().onLevelUp as () => void)(); });
+    expect(document.body.textContent).toMatch(/LEVEL_UP\.EXE/);
+  });
+
+  it('a sheet being made says CREATING · CONTINUE on the tab, which opens NEW_CHARACTER.EXE where it was left', async () => {
+    const { registerCustomTemplate, clearCustomTemplates } = await import('../sheets/customTemplates');
+    registerCustomTemplate(RENDER as never);
+    try {
+      openTab();
+      const s = tabSocket.current!;
+      await s.serve('sheetData', { username: 'kes', system: ID, data: { _creating: { at: 'who' } } });
+      s.sent.length = 0;
+      await userEvent.click(screen.getByRole('button', { name: 'CREATING · CONTINUE' }));
+      expect(s.sent[0]).toEqual(['creationAction', { kind: 'open' }]);
+      expect(document.body.textContent).toContain('NEW_CHARACTER.EXE ·');
+      // A sheet that isn't being made says nothing of it.
+      cleanup();
+      openTab();
+      await tabSocket.current!.serve('sheetData', { username: 'kes', system: ID, data: { name: 'Kes' } });
+      expect(screen.queryByRole('button', { name: 'CREATING · CONTINUE' })).toBeNull();
+    } finally { clearCustomTemplates(); }
   });
 });
 

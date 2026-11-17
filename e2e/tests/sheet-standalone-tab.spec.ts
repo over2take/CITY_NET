@@ -65,3 +65,34 @@ test('the sheet in a new tab: in the theme, WEAR and a DAMAGE ROLL work there as
   await expect(tab.getByText(/^⌁ .* rolled Club DAMAGE 1d6 \[\d = \d\]$/)).toBeVisible({ timeout: 20_000 });
   await context.close();
 });
+
+// A character still being made (8s1c): the tab says CREATING · CONTINUE as SHEET.EXE does, and opens NEW_CHARACTER.EXE
+// on the tab itself, the main app's own window.
+test('a character being made: CREATING · CONTINUE on the tab opens NEW_CHARACTER.EXE there (8s1c)', async ({ browser, request }, info) => {
+  test.setTimeout(120_000);
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Tabmade${again}`, core: { health: { model: 'pool' } },
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'might', label: 'Might' }] }],
+    creation: { on: true },
+  });
+  const player = { username: `e2e_tabmade${again}`, password: 'e2e-player-password' };
+  await approvedPlayer(request, gm, player);
+
+  const context = await browser.newContext({ baseURL: info.project.use.baseURL });
+  const mine = await context.newPage();
+  await signInAsPlayer(mine, player);
+  await mine.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
+  // A blank sheet opens the flow first; leaving it, SHEET.EXE says it is under way.
+  await mine.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+  await expect(mine.getByText(/^NEW_CHARACTER\.EXE/)).toBeVisible({ timeout: 15_000 });
+  await mine.keyboard.press('Escape');
+  await expect(mine.getByRole('button', { name: 'CREATING · CONTINUE' })).toBeVisible({ timeout: 15_000 });
+
+  const [tab] = await Promise.all([context.waitForEvent('page'), mine.getByRole('button', { name: 'Open in new tab' }).click()]);
+  await tab.waitForLoadState();
+  await tab.getByRole('button', { name: 'CREATING · CONTINUE' }).click();
+  await expect(tab.getByText(/^NEW_CHARACTER\.EXE · TABMADE/)).toBeVisible({ timeout: 15_000 });
+  await context.close();
+});

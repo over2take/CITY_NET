@@ -5,7 +5,8 @@ import { SheetImportButton } from './SheetImportButton';
 import { usePlayerSheet, uploadSheetPortrait } from '../hooks/usePlayerSheet';
 import { VehicleBadgeButton } from './VehicleBadgeButton';
 import type { SheetLinkSource } from '../sheets';
-import { flowState, withCreationLocks } from '../sheets/newCharacterFlow';
+import { withCreationLocks } from '../sheets/newCharacterFlow';
+import { SheetCreatingLine } from './SheetCreatingLine';
 
 // The player's own character sheet (in-game floating window). Identity is
 // the socket's registered user - the server only ever returns / edits the
@@ -98,12 +99,7 @@ export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, p
       }}
       contentStyle={{ flex: 1, minHeight: 0, maxHeight: 'none', display: 'flex', flexDirection: 'column', padding: '4px 10px 0' }}
     >
-      {onContinueCreating && flowState(template, sheet?.data) !== 'none' && (
-        <button type="button" onClick={onContinueCreating}
-          style={{ background: 'none', border: '1px solid var(--warning)', color: 'var(--warning)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', padding: '3px 8px', margin: '4px 0', flexShrink: 0 }}>
-          CREATING · CONTINUE
-        </button>
-      )}
+      <SheetCreatingLine template={template} data={sheet?.data} onContinue={onContinueCreating} />
       {sheet && template ? (
         <SheetRenderer
           template={withCreationLocks(template, sheet.data)}

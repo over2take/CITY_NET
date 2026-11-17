@@ -9,6 +9,9 @@ import { withCreationLocks } from './sheets/newCharacterFlow';
 import { LIVE_THEME_KEY } from './utils/liveTheme';
 import { SheetImportButton } from './components/SheetImportButton';
 import { GiftNotices } from './components/GiftNotices';
+import { SheetCreatingLine } from './components/SheetCreatingLine';
+import { LevelUpWindow } from './components/LevelUpWindow';
+import { NewCharacterWindow } from './components/NewCharacterWindow';
 
 // Standalone character-sheet tab (?sheet=true). Gives the player a full
 // browser tab for their sheet instead of the in-game floating window.
@@ -29,6 +32,9 @@ import { GiftNotices } from './components/GiftNotices';
 // 8s1b: IMPORT and IMPORT.EXE as the window has them (SheetImportButton), and what the GM gives said here too
 // (GiftNotices, the main app's own). A roll from here opens and throws in the main app's dice tray, which opens for
 // any roll of this account (App rollOpensTray); this page only says the result once it has landed.
+//
+// 8s1c: LEVEL UP READY opens LEVEL_UP.EXE here, and CREATING · CONTINUE NEW_CHARACTER.EXE, the main app's own
+// windows, as SHEET.EXE opens them (App.tsx). The dice tray they would open beside is the main app's.
 
 const validTheme = (t: unknown): string | null =>
   typeof t === 'string' && t in THEMES ? t : null;
@@ -70,6 +76,11 @@ export default function SheetPage() {
   const [error, setError] = useState<string | null>(null);
   /** Whether the live connection is down: what is changed meanwhile isn't reaching the table. */
   const [lost, setLost] = useState(false);
+  // LEVEL_UP.EXE and NEW_CHARACTER.EXE on this tab (8s1c), where they are, as the main app holds them.
+  const [levelUpOpen, setLevelUpOpen] = useState(false);
+  const [levelUpPos, setLevelUpPos] = useState(() => ({ x: Math.max(16, window.innerWidth / 2 - 200), y: 100 }));
+  const [newCharacterOpen, setNewCharacterOpen] = useState(false);
+  const [newCharacterPos, setNewCharacterPos] = useState(() => ({ x: Math.max(16, window.innerWidth / 2 - 240), y: 80 }));
 
   // The theme as the main app changes it, while this tab is open.
   useEffect(() => {
@@ -173,6 +184,8 @@ export default function SheetPage() {
             ⌁ {lastRoll}
           </div>
         )}
+        <SheetCreatingLine template={template} data={sheet?.data}
+          onContinue={() => { socket?.emit('creationAction', { kind: 'open' }); setNewCharacterOpen(true); }} />
         {sheet && template ? (
           <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 90px)' }}>
             <SheetRenderer
@@ -183,6 +196,7 @@ export default function SheetPage() {
               onFieldsChange={handleFieldsChange}
               gm={!!adminToken}
               onPortraitUpload={(adminToken || playerToken) ? handlePortraitUpload : undefined}
+              onLevelUp={() => setLevelUpOpen(true)}
               {...sheetProps}
             />
           </div>
@@ -190,6 +204,14 @@ export default function SheetPage() {
           <div style={{ fontSize: '0.75rem', opacity: 0.7, padding: '30px 0', letterSpacing: '1px' }}>{message}</div>
         )}
       </div>
+      {userName && levelUpOpen && (
+        <LevelUpWindow pos={levelUpPos} setPos={setLevelUpPos} socket={socket} userName={userName}
+          onLeave={() => setLevelUpOpen(false)} onDone={() => setLevelUpOpen(false)} />
+      )}
+      {userName && newCharacterOpen && (
+        <NewCharacterWindow pos={newCharacterPos} setPos={setNewCharacterPos} socket={socket} userName={userName}
+          authToken={adminToken || playerToken} onLeave={() => setNewCharacterOpen(false)} onDone={() => setNewCharacterOpen(false)} />
+      )}
     </div>
   );
 }
