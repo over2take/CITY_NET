@@ -113,9 +113,14 @@ interface HitPointsPanelProps {
   onCreate?: () => Promise<void> | void;
   /** For a custom system's health model: the detail comes over the socket (useHealthView). */
   socket?: any;
+  /**
+   * Opened under the sheet's vitals strip (8s3b), which has the amount, HEAL, DAMAGE (CWN's STIM too) and TEMP: one
+   * pool's panel leaves those out rather than showing them twice. The map's HEALTH window has it off.
+   */
+  underStrip?: boolean;
 }
 
-export function HitPointsPanel({ target, token, refreshLocations, gameSystem, onCreate, socket }: HitPointsPanelProps) {
+export function HitPointsPanel({ target, token, refreshLocations, gameSystem, onCreate, socket, underStrip = false }: HitPointsPanelProps) {
   const [actionAmount, setActionAmount] = useState(0);
   const [tempAmount, setTempAmount] = useState(0);
   const [maxAmount, setMaxAmount] = useState(0);
@@ -254,7 +259,7 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
       {injuryMap}
       {conditions}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+      {!underStrip && <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
         <input type="number" placeholder="0" aria-label="Amount" value={actionAmount || ''} onChange={e => setActionAmount(parseInt(e.target.value) || 0)} style={{ width: '100%', boxSizing: 'border-box' }} />
         <div style={{ display: 'flex', gap: '10px' }}>
           <button className="upload-btn" onClick={() => updateHealth('heal', actionAmount)} style={{ flex: 1 }}>HEAL</button>
@@ -275,9 +280,9 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
             {healMsg ?? 'STIM_HEAL (+1 STRAIN)'}
           </button>
         )}
-      </div>
+      </div>}
 
-      <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {(!underStrip || token !== '') && <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {token !== '' && (
           <div>
             <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX_{asLabel(hp)}</label>
@@ -287,8 +292,8 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
             </div>
           </div>
         )}
-        {tempRow}
-      </div>
+        {!underStrip && tempRow}
+      </div>}
     </div>
   );
 }

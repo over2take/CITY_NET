@@ -19,7 +19,13 @@ export interface SheetVitals {
   reload: () => void;
 }
 
-export type VitalsAction = 'damage' | 'heal' | 'set_temp';
+export type VitalsAction = 'damage' | 'heal' | 'set_temp' | 'stim_heal';
+
+/**
+ * Whether the strip offers STIM: CWN's field healing (stims, medkits), which heals and adds +1 System Strain, refused
+ * once strain is maxed. As the HEALTH window's STIM_HEAL; the strip has it since the panel under it leaves it out.
+ */
+export const hasStim = (system: string): boolean => system === 'cities_without_number';
 
 /** The amount typed, as a whole number from 0 to 9999; anything else is 0. */
 export const amountOf = (text: string): number => {

@@ -4,7 +4,7 @@ import { HitPointsPanel } from './HitPoints';
 import { useHealthView } from '../hooks/useHealthView';
 import { isCustomSystem } from '../sheets';
 import { useWords } from '../sheets/words';
-import { amountOf, healthBody, takesAnAmount, hasHealth, type SheetVitals, type VitalsAction } from '../sheets/vitals';
+import { amountOf, healthBody, takesAnAmount, hasHealth, hasStim, type SheetVitals, type VitalsAction } from '../sheets/vitals';
 import { createPlayerTokenRow } from './tokenActions';
 
 // The vitals strip (8s3b; mockup docs/mockups/vitals-strip.html, approved 2026-11-17): under the sheet header's HP bar,
@@ -77,6 +77,11 @@ export function VitalsStrip({ vitals, open, onToggle }: { vitals: SheetVitals; o
               />
               <button type="button" disabled={busy} onClick={() => { void send('damage'); }} style={button('var(--danger)')}>DAMAGE</button>
               <button type="button" disabled={busy} onClick={() => { void send('heal'); }} style={button('var(--green)')}>HEAL</button>
+              {hasStim(system) && (
+                <button type="button" disabled={busy} onClick={() => { void send('stim_heal'); }}
+                  title="Field healing (stims, medkits): heals and adds +1 System Strain. Refused when strain is maxed. HEAL is natural or rest healing."
+                  style={button('var(--warning)')}>STIM +1 STRAIN</button>
+              )}
             </span>
             <span style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
               <span style={{ opacity: 0.7 }}>TEMP</span>
@@ -94,7 +99,8 @@ export function VitalsStrip({ vitals, open, onToggle }: { vitals: SheetVitals; o
       </div>
       {open && (
         <div role="region" aria-label="Health" style={{ border: '1px solid var(--dark-green)', padding: '8px 10px' }}>
-          <HitPointsPanel target={token as unknown as Location} token={authToken} refreshLocations={reload} gameSystem={system} socket={socket} />
+          {/* Without what the strip already has: one set of DAMAGE, HEAL and TEMP, not two. */}
+          <HitPointsPanel target={token as unknown as Location} token={authToken} refreshLocations={reload} gameSystem={system} socket={socket} underStrip />
         </div>
       )}
     </div>

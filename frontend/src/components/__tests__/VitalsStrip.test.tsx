@@ -90,6 +90,22 @@ describe('DAMAGE, HEAL and TEMP', () => {
   });
 });
 
+describe('CWN\'s STIM', () => {
+  it('on the strip in CWN alone, sent as HEALTH\'s STIM_HEAL; strain maxed said as the server says it', async () => {
+    draw();
+    expect(screen.queryByRole('button', { name: 'STIM +1 STRAIN' })).toBeNull();
+    cleanup();
+    draw({ system: 'cities_without_number' });
+    await userEvent.type(amount(), '4');
+    await userEvent.click(screen.getByRole('button', { name: 'STIM +1 STRAIN' }));
+    expect(healthCalls().map((c) => c.body)).toEqual([{ action: 'stim_heal', amount: 4 }]);
+    answer = { ok: false, body: { error: 'STRAIN MAXED — NO STIM BENEFIT' } };
+    await userEvent.type(amount(), '2');
+    await userEvent.click(screen.getByRole('button', { name: 'STIM +1 STRAIN' }));
+    expect(screen.getByRole('alert').textContent).toBe('STRAIN MAXED — NO STIM BENEFIT');
+  });
+});
+
 describe('HEALTH here', () => {
   it('HEALTH ▾ and a click on the HP bar open and close HEALTH\'s own panel; the linked window isn\'t asked', async () => {
     const onOpenLink = vi.fn();
@@ -97,9 +113,12 @@ describe('HEALTH here', () => {
     expect(screen.queryByRole('region', { name: 'Health' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: /^HEALTH/ }));
     const region = screen.getByRole('region', { name: 'Health' });
-    // HEALTH's own panel: its numbers and its own DAMAGE.
+    // HEALTH's own panel: its numbers, conditions and MAX; not a second DAMAGE, HEAL, amount or TEMP (the user, 2026-11-17).
     expect(region.textContent).toContain('14 / 20');
-    expect(within(region).getByRole('button', { name: 'DAMAGE' })).toBeTruthy();
+    expect(within(region).getByRole('button', { name: '+ CONDITION' })).toBeTruthy();
+    expect(within(region).getByRole('spinbutton', { name: 'Max HP' })).toBeTruthy();
+    for (const name of ['DAMAGE', 'HEAL']) expect(within(region).queryByRole('button', { name }), name).toBeNull();
+    for (const name of ['Amount', 'Temp HP']) expect(within(region).queryByRole('spinbutton', { name }), name).toBeNull();
     const bar = screen.getByTitle('Synced with your token: click to open HEALTH here');
     expect(bar.getAttribute('aria-expanded')).toBe('true');
     await userEvent.click(bar);

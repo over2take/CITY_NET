@@ -51,6 +51,8 @@ test('DAMAGE in SHEET.EXE and HEAL on the tab move the token and both sheets; th
   await bar(tab).click();
   const health = tab.getByRole('region', { name: 'Health' });
   await expect(health).toContainText('18 / 20');
-  await expect(health.getByRole('button', { name: 'DAMAGE', exact: true })).toBeVisible();
+  await expect(health.getByRole('button', { name: '+ CONDITION', exact: true })).toBeVisible();
+  // Not a second DAMAGE and HEAL: the strip has them.
+  await expect(health.getByRole('button', { name: 'DAMAGE', exact: true })).toHaveCount(0);
   await context.close();
 });
