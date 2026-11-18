@@ -66,6 +66,43 @@ describe('the GM on a player\'s sheet', () => {
   });
 });
 
+describe('FIRE and RELOAD in the GM\'s view (8a4b)', () => {
+  const ARMORY = 'sys_bbbbbbbbbbbbbbbb';
+  const openGear = async (playerUsername?: string) => {
+    registerCustomTemplate({
+      id: ARMORY, name: 'Armory', parts: {}, derived: [], words: {},
+      sheet: { sections: [{ id: 'gear', label: 'GEAR', layout: 'inventory', fields: [] }] },
+      items: { slots: [], list: [{ id: 'pistol', label: 'Pistol', needs: 'carried', features: [], type: 'weapons', values: { ammo: 6 } }],
+        types: [{ id: 'weapons', label: 'WEAPONS', one: 'Weapon', columns: [{ id: 'ammo', label: 'AMMO', kind: 'count', button: 'FIRE', reload: ['Pistol Rounds'] }] }] },
+    } as never);
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (String(url).includes('/api/settings')
+      ? { ok: true, json: async () => [] }
+      : { ok: true, json: async () => ({ id: 3, username: 'GHOST', system: ARMORY, portrait_url: null, is_npc: playerUsername ? 0 : 1,
+        data: { name: 'Wren', inventory: JSON.stringify([{ name: 'Pistol', qty: 1, enc: '', bundled: false, carry: 'readied', location: '', counts: { ammo: 2 } }]) } }) })));
+    const s = socket();
+    render(<NpcSheetWindow token="admintoken" npcId={3} npcLabel="Wren" pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()} socket={s}
+      {...(playerUsername ? { playerUsername } : {})} />);
+    await waitFor(() => expect(screen.getByRole('note', { name: 'Item 1 AMMO: 2 / 6' })).toBeTruthy());
+    return s;
+  };
+
+  it('a player\'s line: FIRE and RELOAD sent for the player named, answered', async () => {
+    const s = await openGear('GHOST');
+    fireEvent.click(screen.getByRole('button', { name: 'FIRE Item 1 AMMO' }));
+    expect(s.emit).toHaveBeenCalledWith('countAction', { kind: 'spend', line: 0, column: 'ammo', username: 'GHOST' }, expect.any(Function));
+    const answer = s.emit.mock.calls.find((c) => c[0] === 'countAction')![2] as (a: unknown) => void;
+    act(() => answer({ ok: false, ask: [{ line: 1, name: 'Pistol Rounds', qty: 4 }, { line: 2, name: 'Pistol Rounds', qty: 9 }] }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Pistol Rounds ×9' }));
+    expect(s.emit).toHaveBeenCalledWith('countAction', { kind: 'reload', line: 0, column: 'ammo', username: 'GHOST', from: 2 }, expect.any(Function));
+  });
+
+  it('an NPC\'s line: the count in words, no FIRE or RELOAD (the server\'s are for players)', async () => {
+    await openGear();
+    expect(screen.queryByRole('button', { name: 'FIRE Item 1 AMMO' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reload Item 1 AMMO' })).toBeNull();
+  });
+});
+
 describe('an NPC\'s sheet', () => {
   it('asks nothing: the block only shows', async () => {
     const s = await open();

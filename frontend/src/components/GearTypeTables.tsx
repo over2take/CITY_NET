@@ -1,7 +1,7 @@
 import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { CARRY_STATES, type InventoryItem } from '../sheets/inventory';
 import type { ItemsShown } from '../sheets/gearItems';
-import { gearTables, valueText, withLineValue, newLineOf, shownCells, cellWords, type Cell } from '../sheets/gearTypes';
+import { gearTables, valueText, withLineValue, newLineOf, shownCells, cellWords, countOf, type Cell, type CountAnswer, type CountKind } from '../sheets/gearTypes';
 import { diceWords, SHAPES, shapeText, insertName, type GearDiceRead } from '../sheets/gearDice';
 import { FormulaIcon } from './FormulaIcon';
 
@@ -11,7 +11,8 @@ import { FormulaIcon } from './FormulaIcon';
 // item's faint, ROLL beside a DAMAGE or DICE; an empty column one it doesn't have. ✎ opens every column as a box, one line
 // at a time, closed by DONE, ✎ again or opening another; a line made by hand opens so. One layout in SHEET.EXE and the
 // standalone tab, the wider fitting more on a line. What goes where is sheets/gearTypes.ts; the lines are the one
-// inventory, written back whole.
+// inventory, written back whole. A COUNT reads "AMMO 4 / 6" with its button (FIRE) and RELOAD beside it (8a4b), done by
+// the server, which asks which carried line to reload from when there are several.
 
 interface Props {
   items: InventoryItem[];
@@ -26,6 +27,11 @@ interface Props {
   onRoll?: (index: number, column: string) => void;
   /** A DAMAGE or DICE as typed under ✎, read as ROLL would on this character (8a3c2): its words line and eˣ. */
   onReadDice?: (text: string) => Promise<GearDiceRead | null>;
+  /**
+   * A COUNT's button (FIRE, USE) or RELOAD, done by the server (8a4b): the line by its place, the column by id, RELOAD's
+   * `from` the carried line picked once asked. Null where no answer came.
+   */
+  onCount?: (index: number, column: string, kind: CountKind, from?: number) => Promise<CountAnswer | null>;
 }
 
 const input: React.CSSProperties = {
@@ -126,14 +132,34 @@ function DiceBox({ cell, label, onType, onRead }: { cell: Cell; label: string; o
   );
 }
 
-export function GearTypeTables({ items, itemsShown, readOnly, write, locked, under, onRoll, onReadDice }: Props) {
+export function GearTypeTables({ items, itemsShown, readOnly, write, locked, under, onRoll, onReadDice, onCount }: Props) {
   // The one line open under ✎, by its place in the inventory.
   const [open, setOpen] = useState<number | null>(null);
+  // A COUNT's RELOAD asking which carried line to take from, or what the server said no with, on the line that asked.
+  const [asked, setAsked] = useState<{ index: number; column: string; label: string; from: { line: number; name: string; qty: number }[] } | null>(null);
+  const [said, setSaid] = useState<{ index: number; text: string } | null>(null);
+  // Waiting on the server: the buttons held, so a quick second FIRE never spends from an answer not yet back.
+  const [busy, setBusy] = useState(false);
   const tables = gearTables(itemsShown, items);
   const patch = (i: number, next: InventoryItem) => write(items.map((it, n) => (n === i ? next : it)));
   const remove = (i: number) => {
     write(items.filter((_, n) => n !== i));
     setOpen((o) => (o === null || o === i ? null : o > i ? o - 1 : o));
+    // Lines after it move up: what was asked or said of one is no longer where it was.
+    setAsked(null);
+    setSaid(null);
+  };
+  const count = (index: number, column: string, label: string, kind: CountKind, from?: number) => {
+    if (!onCount) return;
+    setBusy(true);
+    setAsked(null);
+    setSaid(null);
+    void onCount(index, column, kind, from).then((answer) => {
+      setBusy(false);
+      if (!answer) setSaid({ index, text: 'No answer from the server: try again' });
+      else if ('ask' in answer) setAsked({ index, column, label, from: answer.ask });
+      else if (!answer.ok) setSaid({ index, text: answer.error });
+    });
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -180,13 +206,28 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, und
                     {cells.map((cell) => {
                       const label = `Item ${i + 1} ${cell.column.label}`;
                       const rolls = (cell.column.kind === 'damage' || cell.column.kind === 'dice') && onRoll;
+                      // A COUNT (8a4b; decision 6 of the gear mockup): "AMMO 4 / 6", its button and RELOAD beside it, like ROLL.
+                      const left = cell.column.kind === 'count' && onCount ? countOf(line, cell) : null;
+                      const word = cell.column.label.toUpperCase();
+                      const button = (cell.column.button || 'USE').toUpperCase();
+                      const reload = cell.column.reload ?? [];
                       return (
-                        <span key={cell.column.id} role="note" aria-label={`${label}: ${cellWords(cell)}`} style={{ display: 'inline-flex', gap: '4px', alignItems: 'center', whiteSpace: 'nowrap' }}>
-                          <b style={{ ...small, fontWeight: 'normal' }}>{cell.column.label.toUpperCase()}</b>
-                          <span title={cell.own === undefined ? 'As the item has it' : 'This line\'s own'} style={{ opacity: cell.own === undefined ? 0.7 : 1 }}>{cellWords(cell)}</span>
+                        <span key={cell.column.id} role="note" aria-label={`${label}: ${cellWords(cell, line)}`} style={{ display: 'inline-flex', gap: '4px', alignItems: 'center', whiteSpace: 'nowrap' }}>
+                          <b style={{ ...small, fontWeight: 'normal' }}>{word}</b>
+                          <span title={cell.own === undefined ? 'As the item has it' : 'This line\'s own'} style={{ opacity: cell.own === undefined ? 0.7 : 1 }}>{cellWords(cell, line)}</span>
                           {rolls && (
                             <button type="button" className="utility-btn" aria-label={`Roll ${label}`} title={`Roll ${valueText(cell.value)}`}
                               onClick={() => onRoll(i, cell.column.id)} style={smallButton}>ROLL</button>
+                          )}
+                          {left && (
+                            <button type="button" className="utility-btn" aria-label={`${button} ${label}`} disabled={busy || left.now <= 0}
+                              title={left.now <= 0 ? `No ${word} left` : `Use one of the ${word}`}
+                              onClick={() => count(i, cell.column.id, word, 'spend')} style={smallButton}>{button}</button>
+                          )}
+                          {left && reload.length > 0 && (
+                            <button type="button" className="utility-btn" aria-label={`Reload ${label}`} disabled={busy || left.now >= left.most}
+                              title={left.now >= left.most ? `The ${word} is full` : `From ${reload.join(' or ')} you carry`}
+                              onClick={() => count(i, cell.column.id, word, 'reload')} style={smallButton}>RELOAD</button>
                           )}
                         </span>
                       );
@@ -196,6 +237,21 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, und
                       <span style={{ display: 'inline-flex', gap: '4px', whiteSpace: 'nowrap' }}><b style={{ ...small, fontWeight: 'normal' }}>STASHED</b>{line.location}</span>
                     )}
                   </div>
+                )}
+                {/* RELOAD with more than one kind carried (Pistol Rounds, AP Rounds): which, asked on the line. */}
+                {asked && asked.index === i && (
+                  <div role="group" aria-label={`Item ${i + 1} reload ${asked.label} from`} style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 6px', alignItems: 'center', fontSize: '0.6rem' }}>
+                    <span style={small}>RELOAD {asked.label} FROM</span>
+                    {asked.from.map((s) => (
+                      <button key={s.line} type="button" className="utility-btn" disabled={busy} onClick={() => count(i, asked.column, asked.label, 'reload', s.line)}
+                        style={{ fontSize: '0.55rem', padding: '1px 6px' }}>{s.name} ×{s.qty}</button>
+                    ))}
+                    <button type="button" onClick={() => setAsked(null)}
+                      style={{ background: 'none', border: 0, color: 'var(--green)', fontFamily: 'inherit', fontSize: '0.55rem', letterSpacing: '1px', cursor: 'pointer', opacity: 0.75 }}>CANCEL</button>
+                  </div>
+                )}
+                {said && said.index === i && (
+                  <span role="status" style={{ fontSize: '0.6rem', color: 'var(--warning)' }}>{said.text}</span>
                 )}
                 {!editing && !readOnly && cells.length === 0 && type.columns.length > 0 && (
                   <span style={small}>NOTHING FILLED IN · ✎ TO FILL IT</span>

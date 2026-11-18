@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { typesOf, fits, itemOfLine, lineColumns, gearTables, valueText, withLineValue, newLineOf, LIMITS, type ColumnShown } from '../gearTypes';
+import { typesOf, fits, itemOfLine, lineColumns, gearTables, valueText, withLineValue, newLineOf, countOf, cellWords, LIMITS, type ColumnShown } from '../gearTypes';
 import { normaliseItem, readInventory, type InventoryItem } from '../inventory';
 import type { ItemsShown } from '../gearItems';
 
@@ -90,6 +90,24 @@ describe('a line\'s type and columns, as the server\'s lineColumns', () => {
     expect(damage).toEqual({ column: expect.objectContaining({ id: 'damage' }), given: '2d6 + @might', value: '2d6 + @might' });
     expect(lineColumns(SHOWN, line({ name: 'Mystery' }))!.cells[0]).toEqual({ column: expect.objectContaining({ id: 'damage' }) });
     expect(itemOfLine(SHOWN, line({ name: '' }))).toBeUndefined();
+  });
+
+  it('a COUNT left as the server counts it (8a4b): its own, held to 0 to the most; all of it where unsaid; in words, "4 / 6"', () => {
+    const lines: Partial<InventoryItem>[] = [
+      { name: 'Pistol' }, { name: 'Pistol', counts: { ammo: 4 } }, { name: 'Pistol', counts: { ammo: 0 } }, { name: 'Pistol', counts: { ammo: 9 } },
+      { name: 'Pistol', counts: { ammo: -2 } }, { name: 'Pistol', counts: { ammo: 2.5 } }, { name: 'Pistol', counts: { ammo: 'x' as never } },
+      { name: 'Pistol', values: { ammo: 12 }, counts: { ammo: 8 } }, { name: 'A stick', type: 'weapons', counts: { ammo: 3 } },
+    ];
+    for (const l of lines) {
+      const cell = lineColumns(SHOWN, line(l))!.cells.find((c) => c.column.id === 'ammo')!;
+      const theirs = server.lineColumns(DEFINITION, l, DEFINITION.items.list, { known: () => true, refused: () => '' }).counts.ammo;
+      expect(countOf(line(l), cell), JSON.stringify(l)).toEqual(theirs);
+    }
+    const at = (l: Partial<InventoryItem>) => { const c = lineColumns(SHOWN, line(l))!.cells.find((x) => x.column.id === 'ammo')!; return cellWords(c, line(l)); };
+    expect(at({ name: 'Pistol', counts: { ammo: 4 } })).toBe('4 / 6');
+    expect(at({ name: 'Pistol' })).toBe('6 / 6');
+    // Without its line, a COUNT is the most it holds, as before.
+    expect(cellWords(lineColumns(SHOWN, line({ name: 'Pistol' }))!.cells.find((x) => x.column.id === 'ammo')!)).toBe('6');
   });
 });
 

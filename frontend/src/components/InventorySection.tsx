@@ -8,7 +8,7 @@ import { itemLines, itemsWorkedOn, gearRow, slotCounters, installCounters, itemU
 import { workedOn, type ChoicesAction } from '../sheets/choicesShown';
 import { GearItemLine, GearSlots } from './GearItemLine';
 import { GearTypeTables } from './GearTypeTables';
-import { typesOf } from '../sheets/gearTypes';
+import { typesOf, type GearCount } from '../sheets/gearTypes';
 
 // Everything a character carries that is not a weapon.
 //
@@ -77,9 +77,11 @@ interface Props {
   onGearRoll?: (line: number, column: string) => void;
   /** A line's DAMAGE or DICE read as typed (8a3c2). */
   onReadGearDice?: (text: string) => Promise<import('../sheets/gearDice').GearDiceRead | null>;
+  /** A line's COUNT spent by its button or reloaded (8a4b). */
+  onGearCount?: GearCount;
 }
 
-export function InventorySection({ section, data, readOnly, onFieldChange, rowActions, itemsShown, gm = false, onItem, onChoices, refused, onGearRoll, onReadGearDice }: Props) {
+export function InventorySection({ section, data, readOnly, onFieldChange, rowActions, itemsShown, gm = false, onItem, onChoices, refused, onGearRoll, onReadGearDice, onGearCount }: Props) {
   const items = readInventory(data);
   // A system's items (7e3b): which line draws which, and what the last save worked out.
   const lineItems = itemLines(itemsShown, items);
@@ -129,7 +131,7 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
           time somebody picks up a rope. */}
       <div className="crt-scroll" style={{ maxHeight: typed ? '360px' : '220px', overflowY: 'auto', paddingRight: '4px' }}>
         {typed && itemsShown ? (
-          <GearTypeTables items={items} itemsShown={itemsShown} readOnly={readOnly} write={write} locked={locked} under={(i) => underLine(i)} onRoll={onGearRoll} onReadDice={onReadGearDice} />
+          <GearTypeTables items={items} itemsShown={itemsShown} readOnly={readOnly} write={write} locked={locked} under={(i) => underLine(i)} onRoll={onGearRoll} onReadDice={onReadGearDice} onCount={onGearCount} />
         ) : (
         <div style={{ display: 'grid', gridTemplateColumns: columns, gap: '4px 6px', alignItems: 'center' }}>
           <div style={heading}>ITEM</div>

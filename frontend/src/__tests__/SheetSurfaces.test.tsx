@@ -80,7 +80,7 @@ describe('the tab and the window hand the sheet the same', () => {
     expect(tabKeys).toEqual(windowKeys);
     for (const k of ['onOpenLink', 'onSectionAction', 'onLevelUp']) expect(tabProps[k], k).toBeTypeOf('function');
     // Every play prop is among them, from the oldest rolls to what Phase 7 and 8 added.
-    for (const k of ['onRoll', 'onDeathSave', 'onStabilize', 'onCastSpell', 'onRollAbility', 'onResistDrain', 'onGearRoll',
+    for (const k of ['onRoll', 'onDeathSave', 'onStabilize', 'onCastSpell', 'onRollAbility', 'onResistDrain', 'onGearRoll', 'onGearCount',
       'onChoices', 'onLevel', 'onItem', 'onSpend', 'onImprove', 'onRecoverySpend', 'onRestTake']) expect(tabProps[k], k).toBeTypeOf('function');
     for (const k of ['choicesRefused', 'recoveryOpen', 'allowFumbleShield', 'xpRate', 'encumbranceEnforced', 'hiddenTabs']) expect(tabProps, k).toHaveProperty(k);
   });
@@ -99,6 +99,7 @@ describe('the tab and the window hand the sheet the same', () => {
     p.onRecoverySpend('hit_dice', 2);
     p.onRestTake('long_rest');
     p.onGearRoll(0, 'damage');
+    p.onGearCount(0, 'ammo', 'spend');
     expect(s.sent).toEqual([
       ['choicesAction', { kind: 'pick', list: 'feats', option: 'tough' }],
       ['levelAction', { kind: 'up' }],
@@ -108,6 +109,7 @@ describe('the tab and the window hand the sheet the same', () => {
       ['recoverySpend', { pool: 'hit_dice', count: 2 }],
       ['restTake', { rest: 'long_rest' }],
       ['requestSheetRoll', { gear: { line: 0, column: 'damage' } }],
+      ['countAction', { kind: 'spend', line: 0, column: 'ammo' }],
     ]);
   });
 

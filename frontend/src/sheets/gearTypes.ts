@@ -89,9 +89,31 @@ export const valueText = (v: Value | undefined): string => (v === undefined ? ''
  */
 export const shownCells = (columns: LineColumns): Cell[] => columns.cells.filter((c) => c.value !== undefined);
 
-/** A cell as words on its line: its value, with a NUMBER's unit. */
-export const cellWords = (cell: Cell): string =>
-  `${valueText(cell.value)}${cell.column.kind === 'number' && cell.column.unit ? ` ${cell.column.unit}` : ''}`;
+/**
+ * A COUNT on a line (8a4b): how many are left and the most it holds. Left is the line's own (`counts`, written by the
+ * server's FIRE and RELOAD), held to 0 to the most, as many as it holds where unsaid: the server's lineColumns, mirrored.
+ */
+export const countOf = (line: InventoryItem, cell: Cell): { now: number; most: number } => {
+  const most = typeof cell.value === 'number' ? cell.value : 0;
+  const left = isObject(line.counts) ? line.counts[cell.column.id] : undefined;
+  return { now: Number.isInteger(left) ? Math.max(0, Math.min(most, left as number)) : most, most };
+};
+
+/** A cell as words on its line: its value, with a NUMBER's unit; a COUNT as so many of so many ("4 / 6"). */
+export const cellWords = (cell: Cell, line?: InventoryItem): string => {
+  if (cell.column.kind === 'count' && line) { const { now, most } = countOf(line, cell); return `${now} / ${most}`; }
+  return `${valueText(cell.value)}${cell.column.kind === 'number' && cell.column.unit ? ` ${cell.column.unit}` : ''}`;
+};
+
+/** What the server answers FIRE or RELOAD (sockets countAction): done, the carried lines to ask between, or why not. */
+export type CountAnswer =
+  | { ok: true; now: number; most: number }
+  | { ok: false; ask: { line: number; name: string; qty: number }[] }
+  | { ok: false; error: string };
+/** FIRE (the column's button) or RELOAD, from the line named once asked. */
+export type CountKind = 'spend' | 'reload';
+/** A sheet's way to FIRE or RELOAD a line's COUNT: the server's answer, or null where none came. */
+export type GearCount = (line: number, column: string, kind: CountKind, from?: number) => Promise<CountAnswer | null>;
 
 /**
  * A line with one of its own values as typed: blank takes it away (its item's shows again); a NUMBER a number, a COUNT
