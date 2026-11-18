@@ -146,6 +146,8 @@ export interface SheetRendererProps {
   onItem?: (action: import('../sheets/gearItems').ItemAction) => void;
   /** A line of gear's DAMAGE or DICE rolled into the log (8a3b): the line's place in the inventory, the column's id. */
   onGearRoll?: (line: number, column: string) => void;
+  /** A line's DAMAGE or DICE as typed under ✎, read as ROLL would on this character (8a3c2): the box's words and eˣ. */
+  onReadGearDice?: (text: string) => Promise<import('../sheets/gearDice').GearDiceRead | null>;
   /** SPEND XP's BUY, and the GM's APPROVE, DECLINE and UNDO (7f2c1): asks the server (a spendAction). */
   onSpend?: (action: import('../sheets/spendShown').SpendAction) => void;
   /** IMPROVE BY USE's mark ticked or cleared (7f3b): asks the server (an improveAction). */
@@ -1832,7 +1834,7 @@ function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection 
   return fields.length === 0 ? null : { ...section, fields };
 }
 
-export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onGearRoll, onSpend, onImprove, vitals }: SheetRendererProps) {
+export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onGearRoll, onReadGearDice, onSpend, onImprove, vitals }: SheetRendererProps) {
   // The vitals strip's REST ▾ (8s3c): the sheet's own RESTS, where this character has a rest to take from here or the GM
   // has called one; on the player's own sheet, beside the strip.
   const restView = vitals && !readOnly && onRestTake && template.resting ? restSection(template.resting, data as Record<string, unknown>, gm) : null;
@@ -2074,7 +2076,7 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
                   {section.layout === 'inventory' && <InventorySection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} rowActions={[consumeAction, loadAction].filter(Boolean) as RowAction[]}
-                    itemsShown={template.items} gm={gm} onItem={onItem} onGearRoll={onGearRoll} onChoices={onChoices} refused={choicesRefused} />}
+                    itemsShown={template.items} gm={gm} onItem={onItem} onGearRoll={onGearRoll} onReadGearDice={onReadGearDice} onChoices={onChoices} refused={choicesRefused} />}
                   {section.layout === 'weapon_stash' && <WeaponStashSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} rows={weaponRows} />}
                   {section.layout === 'encumbrance' && <EncumbranceSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} enforced={encumbranceEnforced} />}
                   {section.layout === 'cyberware' && <CyberwareSection section={section} template={template} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}

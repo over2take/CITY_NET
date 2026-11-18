@@ -92,5 +92,19 @@ test('GEAR as a table per type: a stick made by hand and its DAMAGE rolled, the 
   const sideways = await mine.locator('.sheet-scroll').evaluate((root) => [root, ...root.querySelectorAll('*')]
     .filter((el) => ['auto', 'scroll'].includes(getComputedStyle(el).overflowX) && el.scrollWidth > el.clientWidth + 1).length);
   expect(sideways).toBe(0);
+
+  // Its DAMAGE under ✎ (8a3c2): what it reads on this character, as ROLL reads it (Might 12); a name the system hasn't
+  // got, said as typed rather than skipped at the roll.
+  await weapons.getByRole('button', { name: 'Edit item 2' }).click();
+  const reads = weapons.getByRole('status', { name: 'Item 2 DAMAGE on this character' });
+  await expect(reads).toHaveText('ON THIS CHARACTER: 2d6 + Might (12): 14 to 24', { timeout: 15_000 });
+  await weapons.getByLabel('Item 2 DAMAGE', { exact: true }).fill('1d6 + @strength');
+  await expect(reads).toHaveText("@STRENGTH ISN'T ONE OF THIS SYSTEM'S NAMES: IT WON'T ROLL", { timeout: 15_000 });
+  // eˣ: INSERT puts in one of the system's names.
+  await weapons.getByLabel('Item 2 DAMAGE', { exact: true }).fill('1d6');
+  await weapons.getByRole('button', { name: 'Help writing Item 2 DAMAGE' }).click();
+  await weapons.getByRole('group', { name: 'Help writing Item 2 DAMAGE' }).getByRole('button', { name: /^@might/ }).click();
+  await expect(weapons.getByLabel('Item 2 DAMAGE', { exact: true })).toHaveValue('1d6 + @might');
+  await expect(reads).toHaveText('ON THIS CHARACTER: 1d6 + Might (12): 13 to 18', { timeout: 15_000 });
   await context.close();
 });

@@ -75,9 +75,11 @@ interface Props {
   refused?: string | null;
   /** A line of gear's DAMAGE or DICE rolled (8a3b). */
   onGearRoll?: (line: number, column: string) => void;
+  /** A line's DAMAGE or DICE read as typed (8a3c2). */
+  onReadGearDice?: (text: string) => Promise<import('../sheets/gearDice').GearDiceRead | null>;
 }
 
-export function InventorySection({ section, data, readOnly, onFieldChange, rowActions, itemsShown, gm = false, onItem, onChoices, refused, onGearRoll }: Props) {
+export function InventorySection({ section, data, readOnly, onFieldChange, rowActions, itemsShown, gm = false, onItem, onChoices, refused, onGearRoll, onReadGearDice }: Props) {
   const items = readInventory(data);
   // A system's items (7e3b): which line draws which, and what the last save worked out.
   const lineItems = itemLines(itemsShown, items);
@@ -127,7 +129,7 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
           time somebody picks up a rope. */}
       <div className="crt-scroll" style={{ maxHeight: typed ? '360px' : '220px', overflowY: 'auto', paddingRight: '4px' }}>
         {typed && itemsShown ? (
-          <GearTypeTables items={items} itemsShown={itemsShown} readOnly={readOnly} write={write} locked={locked} under={(i) => underLine(i)} onRoll={onGearRoll} />
+          <GearTypeTables items={items} itemsShown={itemsShown} readOnly={readOnly} write={write} locked={locked} under={(i) => underLine(i)} onRoll={onGearRoll} onReadDice={onReadGearDice} />
         ) : (
         <div style={{ display: 'grid', gridTemplateColumns: columns, gap: '4px 6px', alignItems: 'center' }}>
           <div style={heading}>ITEM</div>

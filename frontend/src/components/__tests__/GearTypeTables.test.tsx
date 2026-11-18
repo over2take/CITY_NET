@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, within, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { InventorySection } from '../InventorySection';
 import type { SheetSection } from '../../sheets/types';
 import type { ItemsShown } from '../../sheets/gearItems';
+import type { GearDiceRead } from '../../sheets/gearDice';
 
 /**
  * The GEAR tab by item type (8a3a; approved mockup docs/mockups/item-types.html, 2026-11-14), each thing a compact line
@@ -32,11 +33,12 @@ const ITEMS: ItemsShown = {
 };
 const line = (name: string, more = {}) => ({ name, qty: 1, enc: '', bundled: false, carry: 'stowed', location: '', ...more });
 
-const show = (lines: object[], { readOnly = false, items = ITEMS as ItemsShown | undefined, onGearRoll = undefined as ((line: number, column: string) => void) | undefined } = {}) => {
+const show = (lines: object[], { readOnly = false, items = ITEMS as ItemsShown | undefined, onGearRoll = undefined as ((line: number, column: string) => void) | undefined,
+  onReadGearDice = undefined as ((text: string) => Promise<GearDiceRead | null>) | undefined } = {}) => {
   const writes: object[][] = [];
   const Harness = () => {
     const [data, setData] = useState<Record<string, unknown>>({ inventory: JSON.stringify(lines) });
-    return <InventorySection section={SECTION} data={data as never} readOnly={readOnly} itemsShown={items} onGearRoll={onGearRoll}
+    return <InventorySection section={SECTION} data={data as never} readOnly={readOnly} itemsShown={items} onGearRoll={onGearRoll} onReadGearDice={onReadGearDice}
       onFieldChange={(id, v) => { writes.push(JSON.parse(v as string)); setData((d) => ({ ...d, [id]: v })); }} />;
   };
   render(<Harness />);
@@ -152,5 +154,60 @@ describe('a compact line per thing, by type', () => {
     show([line('Pistol')], { items: { slots: [], list: ITEMS.list } });
     expect(screen.queryByRole('region', { name: /gear$/ })).toBeNull();
     expect(screen.getByRole('button', { name: '+ ITEM' })).toBeTruthy();
+  });
+});
+
+describe('a DAMAGE or DICE under ✎ (8a3c2)', () => {
+  const NAMES = [{ token: '@might', label: 'MIGHT' }, { token: '@might_mod', label: 'MIGHT MOD' }];
+  /** The server, as it reads: 1d8 + @might_mod is 3 to 10 on this character; @strength isn't a name. */
+  const reader = () => {
+    const asked: string[] = [];
+    const read = async (text: string): Promise<GearDiceRead> => {
+      asked.push(text);
+      if (text.includes('@strength')) return { ok: false, error: "@strength isn't one of this system's names", names: NAMES };
+      if (!text.trim()) return { ok: true, blank: true, names: NAMES };
+      return { ok: true, low: 3, high: 10, used: text.includes('@might_mod') ? [{ token: '@might_mod', label: 'Might mod', value: 2 }] : [], names: NAMES };
+    };
+    return { asked, read };
+  };
+
+  it('says what it reads on this character, its item\'s while it has none of its own; a name the system hasn\'t got, flagged', async () => {
+    const { asked, read } = reader();
+    const last = show([line('Pistol', { values: { damage: '1d8 + @might_mod' } })], { onReadGearDice: read });
+    await userEvent.click(table('WEAPONS').getByRole('button', { name: 'Edit item 1' }));
+    const words = () => table('WEAPONS').getByRole('status', { name: 'Item 1 DAMAGE on this character' });
+    await waitFor(() => expect(words().textContent).toBe('ON THIS CHARACTER: 1d8 + Might mod (2): 3 to 10'));
+    fireEvent.change(table('WEAPONS').getByLabelText('Item 1 DAMAGE'), { target: { value: '1d6 + @strength' } });
+    expect(last()[0].values).toMatchObject({ damage: '1d6 + @strength' });
+    // Until it is read, never the old text's words.
+    expect(words().textContent).toBe('READING IT…');
+    await waitFor(() => expect(words().textContent).toBe("@STRENGTH ISN'T ONE OF THIS SYSTEM'S NAMES: IT WON'T ROLL"));
+    expect(table('WEAPONS').getByLabelText('Item 1 DAMAGE').getAttribute('aria-invalid')).toBe('true');
+    // Cleared: its item's again (the Pistol's 2d6), read as that.
+    fireEvent.change(table('WEAPONS').getByLabelText('Item 1 DAMAGE'), { target: { value: '' } });
+    await waitFor(() => expect(asked[asked.length - 1]).toBe('2d6'));
+    expect(asked).not.toContain('1d6 + @');
+  });
+
+  it('eˣ: SHAPE writes one, INSERT puts a name in; a DICE column too; without a reader, the plain box', async () => {
+    const { read } = reader();
+    const last = show([line('Pistol')], { onReadGearDice: read });
+    await userEvent.click(table('WEAPONS').getByRole('button', { name: 'Edit item 1' }));
+    expect(table('WEAPONS').queryByRole('group', { name: 'Help writing Item 1 DAMAGE' })).toBeNull();
+    await userEvent.click(table('WEAPONS').getByRole('button', { name: 'Help writing Item 1 DAMAGE' }));
+    const help = within(table('WEAPONS').getByRole('group', { name: 'Help writing Item 1 DAMAGE' }));
+    // The system's names, once read.
+    await help.findByRole('button', { name: /^@might_mod/ });
+    await userEvent.click(help.getByRole('button', { name: 'DICE AND A STAT' }));
+    await waitFor(() => expect(last()[0].values).toMatchObject({ damage: '1d8 + @might' }));
+    await userEvent.click(help.getByRole('button', { name: 'DICE' }));
+    expect(last()[0].values).toMatchObject({ damage: '1d6' });
+    await userEvent.click(await help.findByRole('button', { name: /^@might_mod/ }));
+    expect(last()[0].values).toMatchObject({ damage: '1d6 + @might_mod' });
+    cleanup();
+    show([line('Pistol')]);
+    await userEvent.click(table('WEAPONS').getByRole('button', { name: 'Edit item 1' }));
+    expect(table('WEAPONS').queryByRole('button', { name: 'Help writing Item 1 DAMAGE' })).toBeNull();
+    expect(table('WEAPONS').getByLabelText('Item 1 DAMAGE')).toBeTruthy();
   });
 });

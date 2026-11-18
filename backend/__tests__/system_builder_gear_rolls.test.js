@@ -10,7 +10,7 @@ import { makeTestDb, run, get } from './helpers/testDb.js';
 import { drain, until } from './helpers/until.js';
 
 const require_ = createRequire(import.meta.url);
-const { rollGear } = require_('../systemBuilder/gearRolls');
+const { rollGear, readGearDice } = require_('../systemBuilder/gearRolls');
 const runtime = require_('../systemBuilder/runtime');
 const socketsFactory = require_('../sockets/index.js');
 
@@ -122,5 +122,63 @@ describe('at the table', () => {
     kes.handlers.requestSheetRoll({ gear: { line: 0, column: 'damage' } });
     await until(() => rolls().length === 1, { label: 'the one that rolls' });
     expect(rolls()).toHaveLength(1);
+  });
+});
+
+describe('reading a line\'s dice as typed, on this character, without rolling (8a3c2)', () => {
+  const data = { might: 14, might_mod: 2 };
+
+  it('the least and most it comes to, each name in it with its label and this character\'s value, and the system\'s names', () => {
+    const r = readGearDice(ARMED, data, '1d8 + @might_mod');
+    expect(r).toMatchObject({ ok: true, low: 3, high: 10, used: [{ token: '@might_mod', label: 'Might mod', value: 2 }] });
+    expect(r.names).toEqual(expect.arrayContaining([{ token: '@might', label: 'MIGHT' }, { token: '@might_mod', label: 'MIGHT MOD' }]));
+    // A die taken away: the least is the most it can take.
+    expect(readGearDice(ARMED, data, '10 - 1d4')).toMatchObject({ low: 6, high: 9, used: [] });
+    // What picks give, as ROLL reads it (a class's level is never stored): a Fighter at level 3.
+    const classed = { ...ARMED, choices: [{ id: 'classes', one: 'Class', many: 'Classes', levelled: true, options: [{ id: 'fighter', label: 'Fighter', features: [] }] }] };
+    expect(readGearDice(classed, { _choices: { classes: [{ option: 'fighter', level: 3 }] } }, '1d6 + @fighter_level'))
+      .toMatchObject({ low: 4, high: 9, used: [{ token: '@fighter_level', label: 'Fighter level', value: 3 }] });
+    // A number alone: the same both ends.
+    expect(readGearDice(ARMED, data, '3')).toMatchObject({ low: 3, high: 3 });
+  });
+
+  it('a name the system hasn\'t got, said as typed; nothing typed, blank; the names either way', () => {
+    const bad = readGearDice(ARMED, data, '1d6 + @strength');
+    expect(bad).toMatchObject({ ok: false, error: "@strength isn't one of this system's names" });
+    expect(bad.names.length).toBeGreaterThan(0);
+    expect(readGearDice(ARMED, data, '  ')).toMatchObject({ ok: true, blank: true });
+    expect(readGearDice(ARMED, data, '1d').ok).toBe(false);
+  });
+
+  it('at the table: the player\'s own sheet read, answered to them alone; nothing to read, said so', async () => {
+    const { join, rolls } = await (async () => {
+      const db = await makeTestDb();
+      const ID = 'sys_armedarmedarmed1';
+      await run(db, 'INSERT INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 1)', [ID, 'Armed', JSON.stringify(ARMED), JSON.stringify(ARMED)]);
+      await new Promise((resolve) => runtime.load(db, resolve));
+      await run(db, 'INSERT INTO global_settings (key, value) VALUES (\'game_system\', ?)', [ID]);
+      await run(db, 'INSERT INTO character_sheets (username, system, data, is_npc) VALUES (\'kes\', ?, ?, 0)', [ID, JSON.stringify({ name: 'Kes', might: 16, might_mod: 3 })]);
+      let connection;
+      const emitted = [];
+      socketsFactory({ on: (e, cb) => { if (e === 'connection') connection = cb; }, emit: (event, d) => emitted.push({ event, data: d }), to: () => ({ emit: () => {} }) },
+        db, { elevatedUsers: new Set(), emitUpdate: vi.fn(), recordAction: vi.fn() });
+      return {
+        rolls: () => emitted.filter((e) => e.event === 'diceRollBroadcast'),
+        join: async (who) => {
+          const handlers = {};
+          connection({ id: `read-${who}-${Math.random()}`, on: (e, fn) => { handlers[e] = fn; }, emit: () => {}, broadcast: { emit: () => {} }, use: () => {}, join: () => {}, disconnect: () => {} });
+          handlers.identify(who);
+          await drain(db);
+          return handlers;
+        },
+      };
+    })();
+    const kes = await join('kes');
+    const answer = await new Promise((resolve) => kes.readGearDice({ text: '1d8 + @might_mod' }, resolve));
+    expect(answer).toMatchObject({ ok: true, low: 4, high: 11, used: [{ token: '@might_mod', value: 3 }] });
+    expect(await new Promise((resolve) => kes.readGearDice({ text: 7 }, resolve))).toEqual({ ok: false, error: 'Nothing to read' });
+    // No reply asked for: nothing done.
+    expect(() => kes.readGearDice({ text: '1d4' })).not.toThrow();
+    expect(rolls()).toHaveLength(0);
   });
 });

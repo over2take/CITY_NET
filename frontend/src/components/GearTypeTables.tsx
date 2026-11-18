@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { CARRY_STATES, type InventoryItem } from '../sheets/inventory';
 import type { ItemsShown } from '../sheets/gearItems';
 import { gearTables, valueText, withLineValue, newLineOf, shownCells, cellWords, type Cell } from '../sheets/gearTypes';
+import { diceWords, SHAPES, shapeText, insertName, type GearDiceRead } from '../sheets/gearDice';
+import { FormulaIcon } from './FormulaIcon';
 
 // A custom system's gear by item type (8a3a; approved mockup docs/mockups/item-types.html, 2026-11-14), each thing one
 // compact line (8a3c1; approved mockup docs/mockups/gear-compact.html, 2026-11-15, after the user saw SHEET.EXE's table
@@ -22,6 +24,8 @@ interface Props {
   under: (index: number) => React.ReactNode;
   /** A DAMAGE or DICE rolled into the log (8a3b), where the viewer may roll: read only or not, as a stat's ROLL. */
   onRoll?: (index: number, column: string) => void;
+  /** A DAMAGE or DICE as typed under ✎, read as ROLL would on this character (8a3c2): its words line and eˣ. */
+  onReadDice?: (text: string) => Promise<GearDiceRead | null>;
 }
 
 const input: React.CSSProperties = {
@@ -52,7 +56,77 @@ function CellBox({ cell, label, readOnly, onType }: { cell: Cell; label: string;
   );
 }
 
-export function GearTypeTables({ items, itemsShown, readOnly, write, locked, under, onRoll }: Props) {
+/**
+ * A DAMAGE or DICE under ✎ (8a3c2; decision 4 of the gear mockup): this line's own dice, which ROLL rolls, its item's
+ * faint until typed over and back when cleared; under it, what it reads on this character, worked out by the server as
+ * ROLL would, or what is wrong with it; and eˣ, as the builder's formula box has it: SHAPE writes a common one, INSERT
+ * puts in one of the system's names.
+ */
+function DiceBox({ cell, label, onType, onRead }: { cell: Cell; label: string; onType: (typed: string) => void; onRead: (text: string) => Promise<GearDiceRead | null> }) {
+  const [open, setOpen] = useState(false);
+  // What the server said, kept with the text it was said of: an answer for older text is never shown.
+  const [read, setRead] = useState<{ text: string; result: GearDiceRead | null } | null>(null);
+  const input = useRef<HTMLInputElement | null>(null);
+  const cursor = useRef(0);
+  // What it rolls: its own, else its item's.
+  const text = valueText(cell.own ?? cell.given);
+  // Asked again only when the text changes, a moment after typing stops: the reader is a new function each render.
+  const ask = useEffectEvent((t: string) => onRead(t));
+  useEffect(() => {
+    let live = true;
+    const timer = setTimeout(() => { void ask(text).then((result) => { if (live) setRead({ text, result }); }); }, 300);
+    return () => { live = false; clearTimeout(timer); };
+  }, [text]);
+  const result = read?.text === text ? read.result : null;
+  const { words, bad } = diceWords(text, result, cell.column.label);
+  const names = result?.names ?? [];
+  const put = (next: string) => onType(next);
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
+      <span style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
+        <input ref={input} aria-label={label} type="text" value={valueText(cell.own)} placeholder={cell.given !== undefined ? valueText(cell.given) : 'none'}
+          aria-invalid={bad || undefined} spellCheck={false}
+          onChange={(e) => { onType(e.target.value); cursor.current = e.target.selectionStart ?? e.target.value.length; }}
+          onSelect={(e) => { cursor.current = (e.target as HTMLInputElement).selectionStart ?? 0; }}
+          style={{ ...input, flex: 1, ...(bad ? { borderColor: 'var(--danger)' } : {}) }} />
+        <button type="button" aria-label={`Help writing ${label}`} aria-expanded={open} title="Help writing it" onClick={() => setOpen((o) => !o)}
+          style={{
+            width: 24, flexShrink: 0, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            border: `1px solid ${open ? 'var(--cyan)' : 'var(--green)'}`, color: open ? 'var(--cyan)' : 'var(--green)',
+            background: open ? 'color-mix(in srgb, var(--cyan) 18%, transparent)' : 'none',
+          }}>
+          <FormulaIcon size={13} />
+        </button>
+      </span>
+      <span role="status" aria-label={`${label} on this character`} style={{ fontSize: '0.6rem', letterSpacing: '1px', color: bad ? 'var(--danger)' : 'var(--cyan)', overflowWrap: 'anywhere' }}>{words}</span>
+      {open && (
+        <span role="group" aria-label={`Help writing ${label}`} style={{ border: '1px solid var(--cyan)', padding: '5px 7px', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.6rem' }}>
+          <span style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={small}>SHAPE</span>
+            {SHAPES.map((s) => (
+              <button key={s} type="button" className="utility-btn" onClick={() => put(shapeText(s, names))} style={{ fontSize: '0.55rem', padding: '1px 6px' }}>{s}</button>
+            ))}
+          </span>
+          {names.length > 0 && (
+            <span style={{ display: 'flex', gap: '2px 10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={small}>INSERT</span>
+              {names.map((n) => (
+                <button key={n.token} type="button" onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => { const next = insertName(text, Math.min(cursor.current || text.length, text.length), n.token); put(next.text); cursor.current = next.cursor; input.current?.focus(); }}
+                  style={{ background: 'none', border: 0, padding: 0, color: 'var(--cyan)', fontFamily: 'inherit', fontSize: '0.6rem', cursor: 'pointer' }}>
+                  {n.token} <span style={{ opacity: 0.6 }}>{n.label}</span>
+                </button>
+              ))}
+            </span>
+          )}
+          <span style={{ ...small, fontSize: '0.5rem' }}>Reads this character&apos;s own numbers. A name the system hasn&apos;t got is said here, never rolled.</span>
+        </span>
+      )}
+    </span>
+  );
+}
+
+export function GearTypeTables({ items, itemsShown, readOnly, write, locked, under, onRoll, onReadDice }: Props) {
   // The one line open under ✎, by its place in the inventory.
   const [open, setOpen] = useState<number | null>(null);
   const tables = gearTables(itemsShown, items);
@@ -131,8 +205,11 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, und
                   <div role="group" aria-label={`Item ${i + 1} columns`} style={{ display: 'grid', gridTemplateColumns: '90px minmax(0, 1fr)', gap: '3px 8px', alignItems: 'center', fontSize: '0.6rem', padding: '3px 0' }}>
                     {lc.cells.map((cell) => (
                       <React.Fragment key={cell.column.id}>
-                        <span style={{ ...small, textAlign: 'right' }}>{cell.column.label.toUpperCase()}{cell.column.kind === 'number' && cell.column.unit ? ` (${cell.column.unit})` : ''}</span>
-                        <CellBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} readOnly={readOnly} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} />
+                        {/* Beside its box's top, not halfway down a DAMAGE with its words and eˣ open under it. */}
+                        <span style={{ ...small, textAlign: 'right', alignSelf: 'start', paddingTop: '4px' }}>{cell.column.label.toUpperCase()}{cell.column.kind === 'number' && cell.column.unit ? ` (${cell.column.unit})` : ''}</span>
+                        {(cell.column.kind === 'damage' || cell.column.kind === 'dice') && onReadDice
+                          ? <DiceBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} onRead={onReadDice} />
+                          : <CellBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} readOnly={readOnly} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} />}
                       </React.Fragment>
                     ))}
                     <span style={{ ...small, textAlign: 'right' }} title="Where a stashed item actually is">LOCATION</span>

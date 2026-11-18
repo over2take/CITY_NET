@@ -44,4 +44,26 @@ const rollGear = (definition, data, index, column, { rng, who, forName = null })
   return { ok: true, line: name, label, kind: col.kind, text: String(text).trim(), value: rolled.value, dice: rolled.dice, add, history };
 };
 
-module.exports = { rollGear };
+/**
+ * A DAMAGE or DICE as typed on a line, read as ROLL would read it on this character, without rolling (8a3c2; approved
+ * mockup docs/mockups/gear-compact.html, decision 4: "worked out on the sheet itself, as the builder's preview is the
+ * GM's"): `{ ok: true, low, high, used, names }` (the least and most it comes to, each name in it with its label and this
+ * character's value), `{ ok: true, blank: true, names }` for an empty box, or `{ ok: false, error, names }` (a name the
+ * system hasn't got, said as typed rather than skipped at the roll). `names` is the system's, for the box's INSERT.
+ */
+const readGearDice = (definition, data, text) => {
+  const labels = namesOf(definition);
+  const names = { known: (n) => labels.has(n), refused: (n) => `@${n} isn't one of this system's names` };
+  const nameList = [...labels].map(([id, label]) => ({ token: `@${id}`, label: String(label).toUpperCase() }));
+  const values = effectiveData(definition, data);
+  // The lowest every die can come up, and the highest; a die taken away (10 - 1d4) swaps which is which.
+  const low = rollAmount(text, values, names, () => 0);
+  if ('blank' in low) return { ok: true, blank: true, names: nameList };
+  if ('error' in low) return { ok: false, error: low.error, names: nameList };
+  const high = rollAmount(text, values, names, () => 1 - 1e-9);
+  const used = [...new Set([...String(text).matchAll(/@([a-z][a-z0-9_]*)/g)].map((m) => m[1]))]
+    .map((id) => { const n = Number(values[id]); return { token: `@${id}`, label: String(labels.get(id) || id), value: Number.isFinite(n) ? n : 0 }; });
+  return { ok: true, low: Math.min(low.value, high.value), high: Math.max(low.value, high.value), used, names: nameList };
+};
+
+module.exports = { rollGear, readGearDice };
