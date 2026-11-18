@@ -12,6 +12,7 @@
 //     ],
 //     installs: [{ id: 'cyberware', label: 'CYBERWARE', against: 'strain', way: 'adds', limit: '@might' }],  // 7e4
 //     types: [...],   // what kind of thing each item is, and its columns (8a1, itemTypes.js); an item's `type` and `values`
+//     encumbrance: {...},   // what is carried counted by a column, against CAN CARRY (8a5a, encumbrance.js)
 //   }
 //
 // An item's features are a class's, checked the same (choices.js checkFeature), but for what only a pick has: a level,
@@ -42,9 +43,9 @@ const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
 
 const LIMITS = { items: 200, slots: 10, count: 20, features: 20, installs: 10, cost: 1000 };
-const ITEMS_KEYS = new Set(['slots', 'installs', 'list', 'types']);
+const ITEMS_KEYS = new Set(['slots', 'installs', 'list', 'types', 'encumbrance']);
 const SLOT_KEYS = new Set(['id', 'label', 'count']);
-const INSTALL_KEYS = new Set(['id', 'label', 'against', 'way', 'limit']);
+const INSTALL_KEYS = new Set(['id', 'label', 'against', 'way', 'limit', 'weighs']);
 const ITEM_KEYS = new Set(['id', 'label', 'description', 'needs', 'cost', 'features', 'type', 'values']);
 /** How an install's cost counts against what it costs (7e4): adding to it up to its limit, or taking from it down to it. */
 const WAYS = ['adds', 'takes'];

@@ -30,6 +30,13 @@ const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
 const NAME = /^[a-z][a-z0-9_]{0,63}$/;
 
+/** The sheet's gear lines, read as the sheet stores them (a JSON string or a list). */
+const linesOf = (data) => {
+  let rows = isPlainObject(data) ? data.inventory : undefined;
+  if (typeof rows === 'string') { try { rows = JSON.parse(rows); } catch { rows = []; } }
+  return list(rows);
+};
+
 /** What a column holds: a number, words, damage dice, any other dice, a count spent and refilled, one word of a few. */
 const KINDS = ['number', 'text', 'damage', 'dice', 'count', 'pick'];
 const LIMITS = { types: 10, columns: 20, options: 20, word: 30, text: 200, count: 1000, reload: 10, number: 1000000000, unit: 12 };
@@ -192,4 +199,4 @@ const lineColumns = (definition, line, items, names) => {
   return { type: type.id, ...(item ? { item: item.id } : {}), values, counts };
 };
 
-module.exports = { KINDS, LIMITS, GEAR, typesOf, ownTypes, typeNamed, valueProblem, checkTypes, checkItemType, typesShown, itemValues, lineColumns };
+module.exports = { KINDS, LIMITS, GEAR, NAME, linesOf, typesOf, ownTypes, typeNamed, valueProblem, checkTypes, checkItemType, typesShown, itemValues, lineColumns };

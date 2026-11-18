@@ -40,6 +40,8 @@
 // are upgraded on read rather than refused.
 
 const { compileSystem } = require('./derived');
+const { derivedOf } = require('./encumbrance');
+const { parse: parseFormula } = require('./expression');
 const { rankedOf, checkRanks } = require('./ranks');
 const { checkSheet } = require('./sheet');
 const { checkNpc } = require('./npc');
@@ -168,7 +170,10 @@ const checkDefinition = (definition) => {
   checkBank(definition.bank, problems);
 
   if (definition.lookups !== undefined || definition.derived !== undefined || definition.ranks !== undefined) {
-    const compiled = compileSystem({ lookups: definition.lookups, derived: definition.derived ?? [], ranked: rankedOf(definition) });
+    // CAN CARRY (8a5a) among the formulas where it reads: one that doesn't is said where it is (choices.js), and with no
+    // formulas of their own it has none to go round.
+    const isTable = (name) => isPlainObject(definition.lookups) && Object.prototype.hasOwnProperty.call(definition.lookups, name);
+    const compiled = compileSystem({ lookups: definition.lookups, derived: derivedOf(definition, (text) => parseFormula(text, isTable)), ranked: rankedOf(definition) });
     if (!compiled.ok) problems.push(...compiled.problems);
   }
   const derivedIds = new Set(Array.isArray(definition.derived)

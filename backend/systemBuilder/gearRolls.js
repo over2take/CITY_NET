@@ -3,19 +3,12 @@
 // server's dice into the log ("Wren rolled Longsword DAMAGE 1d8 + @might_mod [5] + 2 = 7"). Putting damage on a target,
 // its type and resistances, is 8b's. Pure: the socket hands in the sheet and the dice.
 
-const { lineColumns, typesOf } = require('./itemTypes');
+const { lineColumns, typesOf, linesOf } = require('./itemTypes');
 const { rollAmount } = require('./tierRolls');
 const { namesOf, effectiveData } = require('./choices');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
-
-/** The sheet's gear lines, read as the sheet stores them (a JSON string or a list). */
-const linesOf = (data) => {
-  let rows = isPlainObject(data) ? data.inventory : undefined;
-  if (typeof rows === 'string') { try { rows = JSON.parse(rows); } catch { rows = []; } }
-  return list(rows);
-};
 
 /**
  * Line `index`'s column `column` rolled: `{ ok: true, line, label, kind, text, value, dice, add, history }`, or
@@ -66,4 +59,4 @@ const readGearDice = (definition, data, text) => {
   return { ok: true, low: Math.min(low.value, high.value), high: Math.max(low.value, high.value), used, names: nameList };
 };
 
-module.exports = { linesOf, rollGear, readGearDice };
+module.exports = { rollGear, readGearDice };

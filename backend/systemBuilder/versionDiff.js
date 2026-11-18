@@ -33,6 +33,8 @@ const { conditionsOf } = require('./conditions');
 const { currenciesOf } = require('./currencies');
 const { PARTS, partOn } = require('./parts');
 const { houseRulesOf } = require('./houseRules');
+const { derivedOf } = require('./encumbrance');
+const { parse } = require('./expression');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -53,7 +55,12 @@ const labelOf = (f) => (typeof f.label === 'string' && f.label ? f.label : f.id)
 const optionValue = (o) => String(o.value ?? o.label);
 
 const formulaText = (d) => (d.kind === 'condition' ? `if ${d.when} then ${d.then} else ${d.else}` : String(d.formula ?? ''));
-const derivedMap = (definition) => new Map(list(definition && definition.derived)
+/** A version's formulas, CAN CARRY among them where it reads (8a5a): a change to it changes what characters can carry. */
+const formulasOf = (definition) => {
+  const d = definition || {};
+  return list(derivedOf(d, (text) => parse(text, (name) => isPlainObject(d.lookups) && Object.prototype.hasOwnProperty.call(d.lookups, name))));
+};
+const derivedMap = (definition) => new Map(formulasOf(definition)
   .filter((d) => isPlainObject(d) && typeof d.id === 'string')
   .map((d) => [d.id, d]));
 
@@ -159,7 +166,7 @@ const versionChanges = (before, after) => {
 
 /** Every worked-out value a version gives `data`, or null when its formulas can't run. */
 const valuesUnder = (definition, data) => {
-  const compiled = compileSystem({ lookups: (definition || {}).lookups, derived: list((definition || {}).derived), ranked: rankedOf(definition || {}) });
+  const compiled = compileSystem({ lookups: (definition || {}).lookups, derived: formulasOf(definition), ranked: rankedOf(definition || {}) });
   // With what the sheet's picks do under that version (7a1b): a feature changed changes values.
   return compiled.ok ? compiled.system.evaluate(data || {}, overlayOf(definition || {}, data)) : null;
 };

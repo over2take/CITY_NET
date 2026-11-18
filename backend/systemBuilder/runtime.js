@@ -14,6 +14,8 @@
 // section or condition waiting on a rule that is off is hidden from every answer at once.
 
 const { compileSystem } = require('./derived');
+const { derivedOf, carryingOf, encumbranceOf } = require('./encumbrance');
+const { parse: parseFormula } = require('./expression');
 const { rankedOf, withRankFields } = require('./ranks');
 const { overlayOf, choicesOf, workedOf, worksOutPicks, choicesShown, itemsRenderedOf, WORKED_KEY } = require('./choices');
 const { poolsOf, recoveryShown, restingShown } = require('./recovery');
@@ -50,7 +52,9 @@ const metaOf = (definition) => {
   // The NPC layout's fields too: the server keeps one set of rules per system, and an NPC's
   // HP lives on its token just as a player's does (npc.js holds the two layouts to agreeing).
   const both = [...fields, ...fieldsOf(npcSheetOf(definition))];
-  const compiled = compileSystem({ lookups: definition.lookups, derived: definition.derived ?? [], ranked: rankedOf(definition) });
+  // CAN CARRY (8a5a) worked out with the formulas, as @capacity.
+  const isTable = (name) => !!definition.lookups && Object.prototype.hasOwnProperty.call(definition.lookups, name);
+  const compiled = compileSystem({ lookups: definition.lookups, derived: derivedOf(definition, (text) => parseFormula(text, isTable)), ranked: rankedOf(definition) });
   const linkedFields = {};
   const maxPairs = {};
   for (const f of both) {
@@ -86,6 +90,8 @@ const metaOf = (definition) => {
         } else delete data[WORKED_KEY];
         // SPEND XP (7f2a2): XP unspent, and each price on the list for this character now.
         if (spendsXp(definition)) data[WORKED_KEY] = { ...(data[WORKED_KEY] || {}), spend: spendWorked(definition, data) };
+        // Encumbrance (8a5a): what is carried of what can be, with its band, for CARRYING on the sheet (8a6).
+        if (encumbranceOf(definition)) data[WORKED_KEY] = { ...(data[WORKED_KEY] || {}), carrying: carryingOf(definition, data) };
         // MAX HEALTH: PER LEVEL (7d5a): what it comes to, each level, for the sheet and LEVEL_UP.EXE. Loaded here, as it
         // reads the levels this module's own load leads to.
         const byLevel = require('./healthLevels').healthByLevel(definition, data);
