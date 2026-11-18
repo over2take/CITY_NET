@@ -10,6 +10,7 @@ const { registerChoicesHandlers } = require('./choices');
 const sheetTemplates = require('../sheets/templates');
 const { mutateSheet, mutateSheetForUser, patchSheet } = require('../sheets/mutate');
 const cyberware = require('../sheets/cyberware');
+const { ownToken } = require('../sheets/ownToken');
 const sheetRolls = require('../sheets/rolls');
 const { rollGear } = require('../systemBuilder/gearRolls');
 const rollEngine = require('../sheets/rollEngine');
@@ -1274,6 +1275,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const peek = opts?.peek === true;
       const info = userSockets.get(socket.id);
       if (!info || !info.userName) return;
+      // Every answer carries the player's own token (8s3a), for the sheet's vitals strip; null with none on the map.
+      // The rounds a condition has left only to the GM, as on the map.
+      const sendSheet = (payload) => ownToken(db, info.userName, { rounds: !!info.isAdmin },
+        (token) => socket.emit('sheetData', { ...payload, token }));
       getGameSystem((err, system) => {
         if (err) return;
         db.get(
@@ -1283,7 +1288,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             if (err2) return;
             if (row) {
               overlayLinkedData(info.userName, system, JSON.parse(row.data || '{}'), (data) => {
-                if (!vehicleSystems.hasVehicles(system)) return socket.emit('sheetData', { ...row, data });
+                if (!vehicleSystems.hasVehicles(system)) return sendSheet({ ...row, data });
                 // A gunner riding in someone else's car needs its mounts to fire them,
                 // and cannot see the sheet those rows live on. Only the mounts travel.
                 // Mounts are CWN's; Cyberpunk has none, so there is nothing to send.
@@ -1302,7 +1307,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     [system, info.userName],
                     (pErr, pRows) => {
                       const players = pErr || !pRows ? [] : pRows.map(r => r.username);
-                      socket.emit('sheetData', {
+                      sendSheet({
                         ...row, data, ride, players,
                         inVehicle: inVehicle
                           ? { name: inVehicle.name, moving: inVehicle.moving, hp: inVehicle.hp, hpMax: inVehicle.hpMax }
@@ -1333,7 +1338,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                       if (err4) return;
                       const newId = this.lastID;
                       overlayLinkedData(info.userName, system, {}, (data) => {
-                        socket.emit('sheetData', {
+                        sendSheet({
                           id: newId, username: info.userName, system,
                           data, portrait_url: portrait, is_npc: 0,
                         });
@@ -1430,13 +1435,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 if (vehicleSystems.hasVehicles(system) && payload.fieldId.startsWith('vehicle')) {
                   vehicleState.syncAll(db, () => emitUpdate({ isRhombusOnly: true }), system);
                 }
-                // SR6 stun overflow lands on the token's Physical track
+                // SR6 stun overflow lands on the token's Physical track, and the open sheets are told once it has
+                // (8s3a: they showed the HP from before it).
                 if (stunOverflow > 0) {
                   db.run(
                     `UPDATE locations SET hp_current = MAX(0, COALESCE(hp_current, 0) - ?)
                      WHERE shape = 'rhombus' AND owner = ?`,
                     [stunOverflow, info.userName],
-                    () => emitUpdate({ isRhombusOnly: true })
+                    () => { emitUpdate({ isRhombusOnly: true }); io.emit('sheetUpdated', { username: info.userName }); }
                   );
                 }
                 // CWN: armor fields drive the token AC (base + capped DEX
@@ -1956,14 +1962,16 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                   [info.userName, outcome.hits, JSON.stringify(outcome.rolls), '#ffcc00', historyString],
                   () => {
                     io.emit('diceRollBroadcast', withThrow(broadcastData));
-                    io.emit('sheetUpdated', { username: info.userName });
+                    // With overflow, the open sheets are told once the token's HP has changed too, not before it (8s3a).
                     if (stunOverflow > 0) {
                       db.run(
                         `UPDATE locations SET hp_current = MAX(0, COALESCE(hp_current, 0) - ?)
                          WHERE shape = 'rhombus' AND owner = ?`,
                         [stunOverflow, info.userName],
-                        () => io.emit('dataUpdated')
+                        () => { io.emit('dataUpdated'); io.emit('sheetUpdated', { username: info.userName }); }
                       );
+                    } else {
+                      io.emit('sheetUpdated', { username: info.userName });
                     }
                   }
                 );
