@@ -31,6 +31,13 @@ test('DAMAGE in SHEET.EXE and HEAL on the tab move the token and both sheets; th
   // DAMAGE in SHEET.EXE.
   const strip = mine.getByRole('group', { name: 'Vitals' });
   await expect(strip).toBeVisible({ timeout: 15_000 });
+  // HIT POINTS ▾ sits wholly under the numbers (its padding once reached up into them, the user saw).
+  const caption = (await strip.getByRole('button', { name: /^HIT POINTS/ }).boundingBox())!;
+  const current = (await strip.getByLabel('Current HP').boundingBox())!;
+  expect(caption.y).toBeGreaterThanOrEqual(current.y + current.height - 1);
+  // And the slash between CURRENT and MAX is centered over it, the box being symmetric (the user, 2026-11-17).
+  const slash = (await strip.getByText('/', { exact: true }).boundingBox())!;
+  expect(Math.abs((slash.x + slash.width / 2) - (caption.x + caption.width / 2))).toBeLessThanOrEqual(2);
   await strip.getByRole('spinbutton').fill('5');
   await strip.getByRole('button', { name: 'DAMAGE', exact: true }).click();
   await expect.poll(hpOf, { timeout: 15_000 }).toBe(15);
@@ -86,7 +93,11 @@ test('a condition put on under the box shows on the tab and comes off there; RES
   // PRONE put on under the box in SHEET.EXE.
   const chips = mine.getByRole('group', { name: 'Vitals' }).locator('..').getByRole('region', { name: 'Conditions' });
   await chips.getByRole('button', { name: 'Put on a condition' }).click();
-  await chips.getByRole('option', { name: /PRONE/ }).click();
+  // The list opens under the row, as wide as the box and REST's drawer (the user, 2026-11-17).
+  const list = (await mine.getByRole('listbox', { name: 'Put on a condition' }).boundingBox())!;
+  const vitalsBox = (await mine.getByRole('group', { name: 'Vitals' }).boundingBox())!;
+  expect(Math.abs(list.width - vitalsBox.width)).toBeLessThanOrEqual(2);
+  await mine.getByRole('listbox', { name: 'Put on a condition' }).getByRole('option', { name: /PRONE/ }).click();
   await expect.poll(conditionsOn, { timeout: 15_000 }).toEqual(['prone']);
 
   // On the tab, as a chip, and taken off there.

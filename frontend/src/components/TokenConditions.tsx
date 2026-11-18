@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Location } from '../types';
 import { useConditionList, useConditionDetail } from '../hooks/useConditionList';
 import { parseOnToken, shownConditions, withPutOn, withTakenOff, notOnYet, modifierText, roundsText } from '../sheets/tokenConditions';
@@ -26,11 +27,16 @@ interface Props {
    * description and modifiers on hover rather than written out below.
    */
   compact?: boolean;
+  /**
+   * Where the compact form's list of conditions opens: the strip's full-width place under its row, as wide as REST's
+   * drawer (the user, 2026-11-17); in the chips' own row without it.
+   */
+  pickerHost?: HTMLElement | null;
 }
 
 const small: React.CSSProperties = { fontSize: '9px', letterSpacing: '2px', opacity: 0.75 };
 
-export function TokenConditions({ location, gameSystem, socket, canChange, authToken, onChanged, compact = false }: Props) {
+export function TokenConditions({ location, gameSystem, socket, canChange, authToken, onChanged, compact = false, pickerHost }: Props) {
   const raw = location.conditions ?? '[]';
   const game = useConditionList(gameSystem, authToken);
   const detail = useConditionDetail(socket, location.id, raw);
@@ -63,7 +69,7 @@ export function TokenConditions({ location, gameSystem, socket, canChange, authT
   const offered = notOnYet(onToken, game);
 
   const picker = picking && canChange && (
-    <div role="listbox" aria-label="Put on a condition" style={{ border: '1px solid var(--dark-green)', maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', ...(compact ? { flexBasis: '100%' } : {}) }}
+    <div role="listbox" aria-label="Put on a condition" style={{ border: '1px solid var(--dark-green)', maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', ...(compact && !pickerHost ? { flexBasis: '100%' } : {}) }}
       className="cyber-scroll">
       {offered.length === 0
         ? <span style={{ fontSize: '0.7rem', opacity: 0.6, padding: '6px' }}>Every condition is on already.</span>
@@ -105,13 +111,17 @@ export function TokenConditions({ location, gameSystem, socket, canChange, authT
           </span>
         ))}
         {canChange && (
-          <button type="button" aria-label={picking ? 'Done putting on conditions' : 'Put on a condition'} aria-expanded={picking} disabled={busy}
-            title={picking ? 'Done' : 'Put on a condition'} onClick={() => setPicking((p) => !p)}
-            style={{ ...chip, background: 'none', borderStyle: 'dashed', color: 'var(--green)', borderColor: 'var(--green)', cursor: 'pointer', fontFamily: 'inherit' }}>
-            {picking ? 'DONE' : shown.length ? '+' : '+ CONDITION'}
+          // Opened and closed as the strip's REST ▾ and HIT POINTS ▾ are (the user, 2026-11-17): the same name, ▾ / ▴.
+          <button type="button" aria-label="Put on a condition" aria-expanded={picking} disabled={busy}
+            title="Put on a condition" onClick={() => setPicking((p) => !p)}
+            style={{
+              ...chip, cursor: 'pointer', fontFamily: 'inherit', borderStyle: 'solid', borderColor: 'var(--green)',
+              background: picking ? 'var(--green)' : 'none', color: picking ? 'var(--black)' : 'var(--green)',
+            }}>
+            + CONDITION {picking ? '▴' : '▾'}
           </button>
         )}
-        {picker}
+        {picker && pickerHost ? createPortal(picker, pickerHost) : picker}
         {error && <span role="alert" style={{ color: 'var(--danger)', fontSize: '0.7rem', flexBasis: '100%' }}>{error}</span>}
       </section>
     );

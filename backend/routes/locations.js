@@ -577,6 +577,10 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         if (err) return res.status(500).json({ error: err.message });
         recordAction('location_update', { id: req.params.id, old_data: oldRow });
         emitUpdate();
+        // A player's token's armor class changed: their open sheets re-read, the vitals box showing it (8s3c).
+        if (oldRow.shape === 'rhombus' && oldRow.owner && (meleAcVal !== oldRow.melee_ac || rangedAcVal !== oldRow.ranged_ac)) {
+          io.emit('sheetUpdated', { username: oldRow.owner });
+        }
         res.json({ id: req.params.id, ...req.body });
         // Mirror name/description to any linked NPC sheet so the sheet stays
         // in sync with the token label (enemy_rhombus / friendly_rhombus only).

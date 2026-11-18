@@ -8,7 +8,7 @@ import type { SheetVitals } from '../../sheets/vitals';
 import type { SheetToken } from '../../sheets/types';
 import { createRequire } from 'module';
 import { forgetConditionLists } from '../../hooks/useConditionList';
-import { REST_CALL_KEY, type RestingShown } from '../../sheets/choicesShown';
+import { REST_CALL_KEY, WORKED_KEY, type RestingShown } from '../../sheets/choicesShown';
 
 // The game's conditions as the server lists them (as TokenConditions.test.tsx gets them).
 const GAME = createRequire(import.meta.url)('../../../../backend/systemBuilder/conditions.js').conditionsOf({
@@ -233,18 +233,18 @@ describe('conditions under the box (8s3c)', () => {
     await vi.waitFor(() => expect(vitals.reload).toHaveBeenCalled());
   });
 
-  it('+ CONDITION with none on, + beside some: the game\'s list, picking one puts it on', async () => {
+  it('+ CONDITION ▾ opens the game\'s list and ▴ closes it, as REST ▾ does; picking one puts it on', async () => {
     draw();
     const chips = await screen.findByRole('region', { name: 'Conditions' });
-    await userEvent.click(within(chips).getByRole('button', { name: 'Put on a condition' }));
-    expect(within(chips).getByRole('button', { name: 'Done putting on conditions' }).textContent).toBe('DONE');
-    await userEvent.click(await within(chips).findByRole('option', { name: /POISONED/ }));
+    const add = within(chips).getByRole('button', { name: 'Put on a condition' });
+    expect([add.textContent, add.getAttribute('aria-expanded')]).toEqual(['+ CONDITION ▾', 'false']);
+    await userEvent.click(add);
+    expect([add.textContent, add.getAttribute('aria-expanded')]).toEqual(['+ CONDITION ▴', 'true']);
+    await userEvent.click(await screen.findByRole('option', { name: /POISONED/ }));
     expect(conditionCalls().map((c) => c.body.conditions.map((x: { id: string }) => x.id))).toEqual([['poisoned']]);
-    cleanup();
-    draw({ token: { ...TOKEN, conditions: '[{"id":"poisoned"}]' } });
-    const some = await screen.findByRole('region', { name: 'Conditions' });
-    await within(some).findByRole('note', { name: 'Poisoned' });
-    expect(within(some).getByRole('button', { name: 'Put on a condition' }).textContent).toBe('+');
+    await userEvent.click(add);
+    expect(screen.queryByRole('listbox', { name: 'Put on a condition' })).toBeNull();
+    expect(add.textContent).toBe('+ CONDITION ▾');
   });
 
   it('none with no token, as nothing to put them on', () => {
@@ -282,7 +282,8 @@ describe('REST ▾ (8s3c)', () => {
     const called = { [REST_CALL_KEY]: { rest: 'short_rest', name: 'Short rest' } };
     draw({}, { resting: { ...RESTING, finish: 'call' }, onRestTake: vi.fn(), data: called });
     const button = screen.getByRole('button', { name: /^REST · CALLED/ });
-    expect(button.style.color).toBe('var(--warning)');
+    // Open by itself, so filled in the warning color; solid, as the box's other buttons.
+    expect([button.style.background, button.style.border, button.getAttribute('aria-expanded')]).toEqual(['var(--warning)', '1px solid var(--warning)', 'true']);
     expect(screen.getByRole('region', { name: 'Take a rest' })).toBeTruthy();
     cleanup();
     // Open, no call; then the GM calls one.
@@ -310,5 +311,64 @@ describe('REST ▾ (8s3c)', () => {
     draw({ token: null }, { resting: RESTING, onRestTake: vi.fn() });
     await userEvent.click(screen.getByRole('button', { name: /^REST/ }));
     expect(screen.getByRole('region', { name: 'Take a rest' })).toBeTruthy();
+  });
+});
+
+describe('the box stands in for the HEALTH section, and shows the AC (8s3c, the user, 2026-11-17)', () => {
+  const pair = { id: 'health', label: 'HEALTH', layout: 'grid', tab: 'STATS', columns: 2, fields: [
+    { id: 'hp', label: 'HP', type: 'number', source: 'token_hp', maxField: 'hp_max' },
+    { id: 'hp_max', label: 'HP MAX', type: 'number', source: 'token_hp_max' },
+  ] };
+  const vitals = (): SheetVitals => ({ token: TOKEN, owner: 'kes', system: 'generic', authToken: 'tok', socket: socketWith(null), reload: vi.fn() });
+  const withSections = (sections: unknown[]) => ({ ...template, sections: [...template.sections, ...sections] } as unknown as SheetTemplate);
+
+  it('a section of only the token\'s HP and max isn\'t drawn beside the box; one with more is; without the strip it is', () => {
+    render(<SheetRenderer template={withSections([pair])} data={{ name: 'Kes', hp: 14, hp_max: 20 } as never} onFieldChange={() => {}} vitals={vitals()} />);
+    expect(screen.queryByText(/─── HEALTH ───/)).toBeNull();
+    cleanup();
+    const mixed = { ...pair, fields: [...pair.fields, { id: 'stun', label: 'STUN', type: 'number' }] };
+    render(<SheetRenderer template={withSections([mixed])} data={{ name: 'Kes', hp: 14, hp_max: 20 } as never} onFieldChange={() => {}} vitals={vitals()} />);
+    expect(screen.getByText(/─── HEALTH ───/)).toBeTruthy();
+    cleanup();
+    render(<SheetRenderer template={withSections([pair])} data={{ name: 'Kes', hp: 14, hp_max: 20 } as never} onFieldChange={() => {}} />);
+    expect(screen.getByText(/─── HEALTH ───/)).toBeTruthy();
+    cleanup();
+    render(<SheetRenderer template={withSections([pair])} data={{ name: 'Kes', hp: 14, hp_max: 20 } as never} onFieldChange={() => {}} vitals={vitals()} readOnly />);
+    expect(screen.getByText(/─── HEALTH ───/)).toBeTruthy();
+  });
+
+  it('MAX says on hover what made it, in cyan, as the section did; plain with nothing added', () => {
+    draw();
+    expect(screen.getByLabelText('Max HP').getAttribute('title')).toBeNull();
+    cleanup();
+    // A feat adding 6 to the maximum, as SheetRenderer.health.test.tsx carries it; the section itself not drawn.
+    const feats = { ...withSections([pair]), choices: [{ id: 'feats', one: 'Feat', many: 'Feats', options: [] }] } as unknown as SheetTemplate;
+    render(<SheetRenderer template={feats} data={{ name: 'Kes', hp: 14, hp_max: 26, [WORKED_KEY]: { from: { hp_max: [{ feature: 'Tough', amount: 6 }] } } } as never}
+      onFieldChange={() => {}} vitals={vitals()} />);
+    const max = screen.getByLabelText('Max HP');
+    expect(max.getAttribute('title')).toBe('20 → 26 (Tough +6)');
+    expect(max.style.color).toBe('var(--cyan)');
+  });
+
+  it('the token\'s AC, with RANGED only where it differs; none where the game keeps it on the sheet or none is set', () => {
+    draw({ token: { ...TOKEN, melee_ac: 14, ranged_ac: null } });
+    expect(screen.getByRole('note', { name: 'Armor class 14' }).textContent).toBe('AC14');
+    cleanup();
+    draw({ token: { ...TOKEN, melee_ac: 14, ranged_ac: 16 } });
+    expect(screen.getByRole('note', { name: 'Armor class 14, ranged 16' }).textContent).toBe('AC14RANGED16');
+    cleanup();
+    draw({ token: { ...TOKEN, melee_ac: 14, ranged_ac: 14 } });
+    expect(screen.getByRole('note', { name: 'Armor class 14' }).textContent).toBe('AC14');
+    cleanup();
+    draw({ token: { ...TOKEN, melee_ac: null } });
+    expect(screen.queryByRole('note', { name: /^Armor class/ })).toBeNull();
+    cleanup();
+    const onSheet = { ...template, tokenDefense: { editOnToken: false, label: 'SP' } } as SheetTemplate;
+    render(<SheetRenderer template={onSheet} data={{ name: 'Kes' } as never} onFieldChange={() => {}} vitals={{ ...vitals(), token: { ...TOKEN, melee_ac: 14 } }} />);
+    expect(screen.queryByRole('note', { name: /^Armor class/ })).toBeNull();
+    cleanup();
+    const named = { ...template, tokenDefense: { editOnToken: true, label: 'DEF' } } as SheetTemplate;
+    render(<SheetRenderer template={named} data={{ name: 'Kes' } as never} onFieldChange={() => {}} vitals={{ ...vitals(), token: { ...TOKEN, melee_ac: 12 } }} />);
+    expect(screen.getByRole('note', { name: 'Armor class 12' }).textContent).toBe('DEF12');
   });
 });

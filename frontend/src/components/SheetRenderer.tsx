@@ -476,10 +476,12 @@ function FieldInput({ field, data, readOnly: sheetReadOnly, onFieldChange, onFie
   );
 }
 
-function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onFieldsChange, onPharmaChange, pharmaUndo, onUndoPharma, readOnly, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, xpRate, canRoll, vitals, rests, restCalled }: {
+function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onFieldsChange, onPharmaChange, pharmaUndo, onUndoPharma, readOnly, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, xpRate, canRoll, vitals, rests, restCalled, maxNote }: {
   /** The sheet's RESTS, for the strip's REST ▾ (8s3c), and whether the GM has called one. */
   rests?: React.ReactNode;
   restCalled?: boolean;
+  /** What made the maximum, for the box's MAX on hover (8s3c). */
+  maxNote?: string;
   /** The vitals strip under the HP bar (8s3b): only the player's own sheet, where it can be changed. */
   vitals?: SheetVitals;
   onLevelUp?: () => void;
@@ -569,7 +571,9 @@ function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUp
             </div>
           );
         })()}
-        {vitals && <VitalsStrip vitals={vitals} open={healthOpen} onToggle={() => setHealthOpen((o) => !o)} rests={rests} restCalled={restCalled} />}
+        {vitals && <VitalsStrip vitals={vitals} open={healthOpen} onToggle={() => setHealthOpen((o) => !o)} rests={rests} restCalled={restCalled} maxNote={maxNote}
+          // The token's armor class, read-only, where it lives on the token (a game keeping it on the sheet, CP:R's SP, has none here).
+          defense={template.tokenDefense?.editOnToken === false ? undefined : (template.tokenDefense?.label ?? 'AC')} />}
         {template.deathSave && h.hpField && (hpMax ?? 0) > 0 && (hp ?? 1) <= 0 && (() => {
           const ds = template.deathSave!;
           const body = num(data[ds.statField]);
@@ -1848,6 +1852,9 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
   // would otherwise re-read and re-scan for itself.
   // A custom system's picks show on its fields as CWN's chrome does (7a3b2), and its items' (7e3b); the built-in games as before.
   const effects = useMemo(() => (effectsWorked(template) ? choiceEffects(data as Record<string, unknown>, template) : sheetEffects(data, template)), [data, template]);
+  // What made the maximum, for the vitals box's MAX on hover, as the HEALTH section it stands in for said it (8s3c).
+  const maxBonus = template.header?.hpMaxField ? effects.fields[template.header.hpMaxField] : undefined;
+  const maxNote = maxBonus?.delta ? `${maxBonus.base} → ${maxBonus.value} (${describeSources(maxBonus)})` : undefined;
   // How many carried weapon rows this template declares. Counted rather than imported, so
   // the stash cannot disagree with the sheet it is moving weapons into.
   const weaponRows = useMemo(
@@ -1981,6 +1988,8 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
     .filter(s => (s.tab ?? tabs[0]) === activeTab)
     // With the strip's REST ▾, the RESTS section isn't drawn as well: one place to rest (the user, 2026-11-17).
     .filter(s => !(stripRests && s.layout === 'rests'))
+    // Nor a section that is only the token's HP and max, which the box shows (the user, 2026-11-17); one with more stays.
+    .filter(s => !(vitals && !readOnly && s.fields.length > 0 && s.fields.every((f) => f.source === 'token_hp' || f.source === 'token_hp_max')))
     .map(s => dropEmptyRetired(s, data))
     .filter(s => s !== null) as SheetSection[];
   const tabHasRolls = sectionsForTab.some(s => s.fields.some(f => f.roll));
@@ -2005,7 +2014,7 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
         .sheet-input::placeholder { color: var(--green); opacity: 0.3; font-style: italic; }
       `}</style>
 
-      <SheetHeaderBlock onLevelUp={readOnly ? undefined : onLevelUp} template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} onPharmaChange={applyPharma} pharmaUndo={pharmaUndo} onUndoPharma={undoPharma} readOnly={readOnly} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} xpRate={xpRate} canRoll={!!onRoll} vitals={readOnly ? undefined : vitals} rests={stripRests} restCalled={restCalled} />
+      <SheetHeaderBlock onLevelUp={readOnly ? undefined : onLevelUp} template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} onPharmaChange={applyPharma} pharmaUndo={pharmaUndo} onUndoPharma={undoPharma} readOnly={readOnly} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} xpRate={xpRate} canRoll={!!onRoll} vitals={readOnly ? undefined : vitals} rests={stripRests} restCalled={restCalled} maxNote={maxNote} />
 
       {/* The sheet body, and the thing that actually scrolls — not the window's own
           content box, which sits outside it. The right padding is what keeps the

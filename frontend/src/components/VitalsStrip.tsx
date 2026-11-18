@@ -25,12 +25,16 @@ const button = (color: string): React.CSSProperties => ({ ...small, color, borde
 const label: React.CSSProperties = { fontSize: '0.55rem', letterSpacing: '2px', opacity: 0.7 };
 const big: React.CSSProperties = { fontSize: '1.6rem', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' };
 
-export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false }: {
+export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false, maxNote, defense }: {
   vitals: SheetVitals; open: boolean; onToggle: () => void;
   /** The sheet's RESTS section, where there is a rest to take from here (8s3c); none otherwise. */
   rests?: React.ReactNode;
   /** The GM has called a rest that waits on this character. */
   restCalled?: boolean;
+  /** What made the maximum ("20 → 26 (Tough +6)"): MAX in cyan, saying it on hover, as the HEALTH section did. */
+  maxNote?: string;
+  /** What the game calls the token's armor class ('AC'), shown for quick reference; none where it lives on the sheet. */
+  defense?: string;
 }) {
   const { token, system, authToken, socket, reload } = vitals;
   const [amount, setAmount] = useState('');
@@ -39,6 +43,8 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false 
   /** TEMP being typed, after a click on it; null while it shows. */
   const [tempText, setTempText] = useState<string | null>(null);
   const [restsOpen, setRestsOpen] = useState(restCalled);
+  // Where + CONDITION's list opens: under the row, full width, as REST's drawer does.
+  const [pickerHost, setPickerHost] = useState<HTMLDivElement | null>(null);
   // A rest the GM calls opens REST ▾ by itself (8s3c): it is the sheet's only RESTS now. Adjusted while rendering, as
   // React's docs do it for a prop that changed, rather than in an effect.
   const [callSeen, setCallSeen] = useState(restCalled);
@@ -57,7 +63,11 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false 
   const restButton = rests && (
     <button type="button" aria-expanded={restsOpen} onClick={() => setRestsOpen((o) => !o)}
       title={restCalled ? 'The GM has called a rest: open it here' : 'Take a rest here, as on STATS'}
-      style={{ ...button(restCalled ? 'var(--warning)' : 'var(--green)'), borderStyle: restsOpen ? 'solid' : 'dashed', marginLeft: 'auto' }}>
+      style={{
+        ...button(restCalled ? 'var(--warning)' : 'var(--green)'), marginLeft: 'auto',
+        // Solid as the box's other buttons, filled while open (the user, 2026-11-17).
+        ...(restsOpen ? { background: restCalled ? 'var(--warning)' : 'var(--green)', color: 'var(--black)' } : {}),
+      }}>
       {restCalled ? 'REST · CALLED' : 'REST'} {restsOpen ? '▴' : '▾'}
     </button>
   );
@@ -79,14 +89,33 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false 
       </>
     );
   }
-  // The token's conditions as chips, REST ▾ beside them.
+  // The token's armor class for quick reference while playing (the user, 2026-11-17): read only, the GM's EDIT_AC
+  // changes it. Ranged only when it differs; with none set, the melee one stands for both, as the token menu says.
+  const melee = token.melee_ac;
+  const ranged = token.ranged_ac;
+  const ac = defense && melee !== null && melee !== undefined && (
+    <span role="note" aria-label={`Armor class ${melee}${ranged !== null && ranged !== undefined && ranged !== melee ? `, ranged ${ranged}` : ''}`}
+      title={`Your token's ${defense}: what an attack has to reach. The GM sets it (EDIT_AC).`}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid var(--green)', padding: '2px 7px', fontSize: '0.6rem', letterSpacing: '1px', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+      <span style={{ opacity: 0.7 }}>{defense.toUpperCase()}</span>
+      <b style={{ fontSize: '0.8rem' }}>{melee}</b>
+      {ranged !== null && ranged !== undefined && ranged !== melee && (
+        <><span style={{ opacity: 0.7 }}>RANGED</span><b style={{ fontSize: '0.8rem' }}>{ranged}</b></>
+      )}
+    </span>
+  );
+  // The token's conditions as chips, its armor class and REST ▾ beside them.
   const below = (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'flex-start' }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <TokenConditions compact location={token as unknown as Location} gameSystem={system} socket={socket} canChange authToken={authToken || undefined} onChanged={reload} />
+    <>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <TokenConditions compact pickerHost={pickerHost} location={token as unknown as Location} gameSystem={system} socket={socket} canChange authToken={authToken || undefined} onChanged={reload} />
+        </div>
+        {ac}
+        {restButton}
       </div>
-      {restButton}
-    </div>
+      <div ref={setPickerHost} style={{ display: 'contents' }} />
+    </>
   );
   // No health to change: the conditions and rests still.
   if (!hasHealth(view?.model)) return <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>{below}{restPanel}</div>;
@@ -126,7 +155,7 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
         <div role="group" aria-label="Vitals" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <button type="button" aria-expanded={open} onClick={onToggle}
-            style={{ ...button('var(--green)'), borderStyle: open ? 'solid' : 'dashed', background: open ? 'var(--green)' : 'none', color: open ? 'var(--black)' : 'var(--green)' }}>
+            style={{ ...button('var(--green)'), background: open ? 'var(--green)' : 'none', color: open ? 'var(--black)' : 'var(--green)' }}>
             HEALTH {open ? '▴' : '▾'}
           </button>
           {alert}
@@ -167,13 +196,17 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false 
               style={button('var(--warning)')}>STIM +1 STRAIN</button>
           )}
         </div>
-        <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 1fr)', alignItems: 'center', justifyItems: 'center', rowGap: '2px' }}>
+        {/* CURRENT / MAX in the middle column, TEMP in a right column as wide as the buttons' on the left: the box is
+            symmetric, so the slash is centered on it, as HIT POINTS ▾ under it is (the user, 2026-11-17). */}
+        <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)', gridTemplateRows: 'auto auto 1.25rem', alignItems: 'center', justifyItems: 'center', rowGap: '2px' }}>
           <span style={label}>CURRENT</span><span />
           <span style={label}>MAX</span>
-          <span style={label}>TEMP</span>
           <span aria-label={`Current ${hp}`} style={{ ...big, color: hpColor, transition: 'color 0.3s' }}>{cur}</span>
           <span style={{ ...big, opacity: 0.6, padding: '0 2px' }}>/</span>
-          <span aria-label={`Max ${hp}`} style={big}>{max}</span>
+          <span aria-label={`Max ${hp}`} title={maxNote} style={{ ...big, ...(maxNote ? { color: 'var(--cyan)' } : {}) }}>{max}</span>
+        </div>
+        <div style={{ width: '64px', flexShrink: 0, display: 'grid', gridTemplateRows: 'auto auto 1.25rem', alignItems: 'center', justifyItems: 'center', rowGap: '2px' }}>
+          <span style={label}>TEMP</span>
           {tempText === null ? (
             <button type="button" disabled={busy} onClick={() => setTempText(temp ? String(temp) : '')}
               aria-label={`Temp ${hp}: ${temp}. Click to set it`} title={`Click to set temp ${hp}`}
@@ -189,13 +222,13 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false 
               style={{ width: '3.2em', textAlign: 'center', fontSize: '1rem', background: 'color-mix(in srgb, var(--black) 50%, transparent)', color: 'var(--cyan)', border: '1px solid var(--cyan)', fontFamily: 'inherit' }}
             />
           )}
-          {/* Room for the caption, which is centered on the whole box rather than this column (the user, 2026-11-17). */}
-          <span aria-hidden="true" style={{ gridColumn: '1 / -1', height: '1.1rem' }} />
         </div>
+        {/* Its own small padding and line height: with the browser's, its pressed fill reached up into the numbers. */}
         <button type="button" aria-expanded={open} onClick={onToggle} title={`Open HEALTH here: max ${hp}, injuries, conditions`}
           style={{
             position: 'absolute', left: '50%', bottom: '6px', transform: 'translateX(-50%)', whiteSpace: 'nowrap',
             background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold',
+            padding: '2px 8px', lineHeight: 1.2, margin: 0, boxSizing: 'border-box',
           }}>
           {hitPoints} {open ? '▴' : '▾'}
         </button>
