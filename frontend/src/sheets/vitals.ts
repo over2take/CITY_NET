@@ -62,8 +62,8 @@ export const healthBody = (action: VitalsAction, amount: number) =>
 
 /**
  * Whether the strip offers its own amount, DAMAGE, HEAL and TEMP: one pool of hit points, as every built-in game has and a
- * custom system's `pool` model. Another model (tracks, wounds, harm, locations, typed) is changed in HEALTH ▾, its own
- * editor; a system with no health shows no strip at all.
+ * custom system's `pool` model, and two tracks with a picker for which (8s3d1). Another model (wounds, harm, locations,
+ * typed) shows its summary and is changed in HEALTH ▾, its own editor; a system with no health shows no strip at all.
  */
-export const takesAnAmount = (model: string | null | undefined): boolean => !model || model === 'pool';
+export const takesAnAmount = (model: string | null | undefined): boolean => !model || model === 'pool' || model === 'tracks';
 export const hasHealth = (model: string | null | undefined): boolean => model !== 'none';

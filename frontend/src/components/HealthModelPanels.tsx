@@ -67,8 +67,10 @@ function SetRow({ name, value, onSet }: { name: string; value: number; onSet: (n
  * the buttons, and a line saying what happened. `gm` shows the maximum's SET row, as the
  * built-in panel shows MAX_HP only to the GM.
  */
-export function ModelHealthEditor({ view, target, send, gm, words = todaysWords }: {
+export function ModelHealthEditor({ view, target, send, gm, words = todaysWords, underStrip = false }: {
   view: HealthView; target: Location; send: SendHealth; gm: boolean;
+  /** Under the sheet's vitals strip (8s3d1): two tracks leave out their picker, amount, HEAL and DAMAGE, the strip's own. */
+  underStrip?: boolean;
   /** The running system's words (sheets/words.ts); today's text when not given. */
   words?: WordLookup;
 }) {
@@ -114,10 +116,10 @@ export function ModelHealthEditor({ view, target, send, gm, words = todaysWords 
           </div>
           <Meter fill={(s.max ?? 0) > 0 ? (s.current ?? 0) / (s.max ?? 1) : 0} full={secondFull} />
         </div>
-        <Picker name="Track" items={view.tracks} picked={picked} onPick={setPicked} />
+        {!underStrip && <Picker name="Track" items={view.tracks} picked={picked} onPick={setPicked} />}
         {status}
-        {amountInput}
-        {buttons(() => act('heal'), () => act('damage'))}
+        {!underStrip && amountInput}
+        {!underStrip && buttons(() => act('heal'), () => act('damage'))}
         {gm && (
           <SetRow name={`MAX ${picked === second.id ? second.label : first.label}`} value={picked === second.id ? s.max ?? 0 : max}
             onSet={(n) => run('set_max', picked === second.id ? { track: second.id, amount: n } : { hp_max: n }, () => '')} />
