@@ -63,6 +63,22 @@ A run takes under a minute and prints one line per journey. To run one file:
 npx playwright test tests/builder-smoke.spec.ts
 ```
 
+By default the frontend is served by Vite's dev server, which starts fastest for one file. CI runs
+it as CI does with `E2E_BUILT=1`: the frontend built once into `e2e/.built/` (ignored by git) and
+served whole by `vite preview`, so each fresh browser tab loads a handful of files rather than some
+390. Try it before a large run:
+
+```bash
+E2E_BUILT=1 npx playwright test tests/sheet-vitals.spec.ts
+```
+
+(In PowerShell: `$env:E2E_BUILT=1; npx playwright test tests/sheet-vitals.spec.ts`.)
+
+The sign-in helpers (`tests/helpers.ts`) start each tab as one that has already played the app's
+boot sequence (`skipBoot`): a person sees it once a tab, and every journey's fresh tabs used to sit
+through its five seconds or more. A journey that tests the boot itself would open its page without
+them.
+
 To watch it happen in a visible browser window:
 
 ```bash

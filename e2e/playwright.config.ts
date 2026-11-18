@@ -16,6 +16,13 @@ import path from 'path';
 const BACKEND_PORT = 5055;
 const FRONTEND_PORT = 5174;
 
+// The frontend built once and served whole (E2E_BUILT=1; CI sets it), rather than by the dev server: the dev server
+// sends the app as some 390 separate files, which every new browser context fetches afresh (5.5 s a sign-in on a
+// desktop, several times that on CI, and most journeys open two). Built into a folder of the run's own, so a build
+// the developer made is never touched; `vite preview` keeps the dev server's proxy to the test backend.
+const BUILT = process.env.E2E_BUILT === '1';
+const BUILT_DIR = path.join(__dirname, '.built');
+
 /** The throwaway GM: this database only. The tests sign in with it. */
 export const GM = { username: 'e2e_gm', password: 'e2e-only-password' };
 
@@ -33,7 +40,7 @@ export default defineConfig({
   // Two minutes: CI runs about four times slower than a desktop, and tests of 15 s here took past
   // one minute there (builder-dice, the bell, the journey, the clicks sweep; 2026-10-24 to 10-27).
   timeout: 120_000,
-  // A whole CI part, at most 25 minutes (a part takes 9 to 12): a hung run then fails, with its
+  // A whole CI part, at most 25 minutes (a part took 12 to 21 by 2026-11-18, before E2E_BUILT and skipBoot): a hung run then fails, with its
   // report kept, well before the job's own 30-minute limit (ci.yml) cancels it with none. No limit
   // on a developer's machine, where the whole suite takes about 27 minutes.
   globalTimeout: process.env.CI ? 25 * 60_000 : 0,
@@ -65,11 +72,14 @@ export default defineConfig({
       },
     },
     {
-      command: `npx vite --port ${FRONTEND_PORT} --strictPort --host 127.0.0.1`,
+      command: BUILT
+        ? `npx vite build --outDir "${BUILT_DIR}" --emptyOutDir && npx vite preview --outDir "${BUILT_DIR}" --port ${FRONTEND_PORT} --strictPort --host 127.0.0.1`
+        : `npx vite --port ${FRONTEND_PORT} --strictPort --host 127.0.0.1`,
       cwd: path.join(__dirname, '..', 'frontend'),
       url: `http://127.0.0.1:${FRONTEND_PORT}`,
       reuseExistingServer: false,
-      timeout: 120_000,
+      // The build first, when built: a few minutes on CI.
+      timeout: BUILT ? 600_000 : 120_000,
       env: { API_TARGET: `http://127.0.0.1:${BACKEND_PORT}` },
     },
   ],

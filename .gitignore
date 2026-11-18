@@ -75,3 +75,4 @@ frontend/src/*.bak
 # Browser journeys (e2e/): what a run leaves behind
 e2e/test-results/
 e2e/playwright-report/
+e2e/.built/

@@ -240,6 +240,10 @@ jobs:
 
       - name: Run the journeys
         working-directory: ./e2e
+        # The frontend built once and served whole (playwright.config.ts E2E_BUILT), not file by file by the dev
+        # server: with the boot no longer played in every fresh tab (tests/helpers.ts skipBoot), a third of the time.
+        env:
+          E2E_BUILT: '1'
         run: npx playwright test --shard=${{ matrix.part }}/5 --fully-parallel
 
       # What failed and why: screenshots, a trace of every step, and the HTML report, one per part.

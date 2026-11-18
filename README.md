@@ -1443,12 +1443,12 @@ CITY_NET/
 │   ├── COVERAGE.md             # Every option a GM can set in the builder, its server tests, and the browser test proving it at the table (AT THE TABLE / BUILDER ONLY / GAP), with the gaps in the order Phase 7 closes them; updated by every piece that adds or changes an option
 │   ├── README.md               # How to install and run the journeys, read a failure, and write a new one
 │   ├── package.json            # Playwright's test runner, and nothing else
-│   ├── playwright.config.ts    # Starts both servers (Secure Mode on, a temp database, the test GM), one worker, the installed Chrome locally or Playwright's Chromium in CI
+│   ├── playwright.config.ts    # Starts both servers (Secure Mode on, a temp database, the test GM), one worker, the installed Chrome locally or Playwright's Chromium in CI; with E2E_BUILT=1 (CI) the frontend built once into e2e/.built and served by vite preview rather than file by file
 │   ├── fixtures/
 │   │   └── emberline.citysys   # A random system from the test generator, exported as the builder does: the file INSTALL A FILE is given in builder-clicks
 │   ├── cleanup.ts              # Before a run, the throwaway databases earlier runs left in the temp folder
 │   └── tests/
-│       ├── helpers.ts              # Signing in as the GM or a player, the GAME tab, the builder past its tour, a rail button (pointer moved off after), a builder page; a tab of an open character sheet (sheetTab); a running system and an approved player through the API
+│       ├── helpers.ts              # Signing in as the GM or a player, the GAME tab, the builder past its tour, a rail button (pointer moved off after), a builder page; a tab of an open character sheet (sheetTab); a running system and an approved player through the API; skipBoot, each tab started as one that has played the boot sequence
 │       ├── acceleration-notice.spec.ts # HARDWARE ACCELERATION IS OFF: a browser offering only slow drawing is told how to turn acceleration on, and DISMISS keeps it gone after a reload; SYSTEM_INFO's MAP SLOW? holds the steps, and WARN ME, off since DISMISS, brings it back
 │       ├── battle-map-enter.spec.ts # Into a battle map and out again from QUICK_ACCESS, as the GM (ENTER_BATTLE_MAP, BATTLE ADMIN) and as a player (the building's ENTER BATTLE MAP), with no error on the page
 │       ├── builder-map-windows.spec.ts # The map's windows in the builder: the dice tray open on the map is hidden in the builder, untouched by Esc there, and back on leaving
