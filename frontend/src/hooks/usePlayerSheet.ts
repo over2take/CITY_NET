@@ -31,6 +31,8 @@ export interface PlayerSheetActions {
   onResistDrain: (drainValue: number, attr: string, label: string) => void;
   /** A line of gear's DAMAGE or DICE rolled (8a3b): the line by its place in the inventory, the column by id. */
   onGearRoll?: (line: number, column: string) => void;
+  /** A line's DAMAGE or DICE as typed, read as ROLL would on this character (8a3c2). */
+  onReadGearDice?: (text: string) => Promise<import('../sheets/gearDice').GearDiceRead | null>;
   /** Picks, drops and uses on CHOICES (7a3), levels (7d), items (7e), SPEND XP (7f2), marks (7f3), rests and recovery dice. */
   onChoices: NonNullable<SheetRendererProps['onChoices']>;
   onLevel: NonNullable<SheetRendererProps['onLevel']>;
@@ -195,6 +197,12 @@ export function usePlayerSheet(
     onRollAbility: (formula: string, label: string) => { socket?.emit('rollAbility', { formula, label }); rolled(); },
     onResistDrain: (drainValue: number, attr: string, label: string) => { socket?.emit('resistDrain', { drainValue, attr, label }); rolled(); },
     onGearRoll: (line: number, column: string) => { socket?.emit('requestSheetRoll', { gear: { line, column } }); rolled(); },
+    // Answered by the server's reply; no answer in 5 s (the connection down) is none, the box saying it is reading.
+    onReadGearDice: (text: string) => new Promise((resolve) => {
+      if (!socket) { resolve(null); return; }
+      const timer = setTimeout(() => resolve(null), 5000);
+      socket.emit('readGearDice', { text }, (answer: import('../sheets/gearDice').GearDiceRead) => { clearTimeout(timer); resolve(answer ?? null); });
+    }),
     onChoices: (action) => socket?.emit('choicesAction', action),
     onLevel: (action) => socket?.emit('levelAction', action),
     onItem: (action) => socket?.emit('itemAction', action),

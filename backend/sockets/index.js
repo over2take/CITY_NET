@@ -12,7 +12,7 @@ const { mutateSheet, mutateSheetForUser, patchSheet } = require('../sheets/mutat
 const cyberware = require('../sheets/cyberware');
 const { ownToken } = require('../sheets/ownToken');
 const sheetRolls = require('../sheets/rolls');
-const { rollGear } = require('../systemBuilder/gearRolls');
+const { rollGear, readGearDice } = require('../systemBuilder/gearRolls');
 const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
 const cyberEffects = require('../sheets/cyberwareEffects');
@@ -1642,6 +1642,24 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         });
       });
     };
+
+    // A line's DAMAGE or DICE as typed under ✎, read on the sheet it would roll from, without rolling (8a3c2): what the box's
+    // words line says. The same sheet as ROLL (rollSheetOf: one's own, or an NPC one controls), answered to the asker alone.
+    socket.on('readGearDice', (payload, ack) => {
+      if (typeof ack !== 'function') return;
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !payload || typeof payload !== 'object' || typeof payload.text !== 'string') return ack({ ok: false, error: 'Nothing to read' });
+      const text = payload.text.slice(0, 200);
+      getGameSystem((err, system) => {
+        const definition = err ? null : customSystems.definitionOf(system);
+        if (!definition) return ack({ ok: false, error: 'No built system is running' });
+        rollSheetOf(info, payload, system, ({ row }) => {
+          let data = {};
+          try { data = JSON.parse(row.data || '{}'); } catch { /* read against nothing */ }
+          ack(readGearDice(definition, data, text));
+        });
+      });
+    });
 
     socket.on('requestSheetRoll', (payload) => {
       const info = userSockets.get(socket.id);
