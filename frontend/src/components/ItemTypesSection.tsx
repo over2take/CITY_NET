@@ -255,12 +255,12 @@ function ValueField({ definition, edit, api, item, c, id }: Props & { api?: Retu
   const set = (v: string | number | undefined) => edit(withItemValue(definition, item.id, c.id, v));
   if (c.kind === 'damage' || c.kind === 'dice') return <DiceValue definition={definition} edit={edit} api={api} item={item} c={c} id={id} />;
   if (c.kind === 'text') {
-    return <input id={id} type="text" maxLength={LIMITS.text} value={typeof value === 'string' ? value : ''} style={{ ...input, width: 220, justifySelf: 'start' }} onChange={(e) => set(e.target.value)} />;
+    return <input id={id} type="text" maxLength={LIMITS.text} value={typeof value === 'string' ? value : ''} placeholder="empty: it has none" style={{ ...input, width: 220, justifySelf: 'start' }} onChange={(e) => set(e.target.value)} />;
   }
   if (c.kind === 'pick') {
     return (
       <select id={id} value={typeof value === 'string' ? value : ''} style={{ ...input, justifySelf: 'start' }} onChange={(e) => set(e.target.value || undefined)}>
-        <option value="">—</option>
+        <option value="">— (it has none)</option>
         {(c.options ?? []).map((w) => <option key={w} value={w}>{w}</option>)}
       </select>
     );
@@ -268,7 +268,7 @@ function ValueField({ definition, edit, api, item, c, id }: Props & { api?: Retu
   const count = c.kind === 'count';
   return (
     <span style={row}>
-      <input id={id} type="number" min={count ? 0 : undefined} max={count ? LIMITS.count : undefined} step={count ? 1 : 'any'} value={typeof value === 'number' ? value : ''} style={{ ...input, width: 90 }}
+      <input id={id} type="number" min={count ? 0 : undefined} max={count ? LIMITS.count : undefined} step={count ? 1 : 'any'} value={typeof value === 'number' ? value : ''} placeholder="none" style={{ ...input, width: 90 }}
         onChange={(e) => {
           const n = Number(e.target.value);
           if (!e.target.value.trim()) set(undefined);

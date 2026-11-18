@@ -84,6 +84,16 @@ export const gearTables = (shown: ItemsShown | null | undefined, lines: Inventor
 export const valueText = (v: Value | undefined): string => (v === undefined ? '' : String(v));
 
 /**
+ * The cells a compact line shows (8a3c1; approved mockup docs/mockups/gear-compact.html): only those it has, its own value
+ * or its item's. A column with neither is one it doesn't have (no AMMO on a Cutlass), with no separate N/A to set.
+ */
+export const shownCells = (columns: LineColumns): Cell[] => columns.cells.filter((c) => c.value !== undefined);
+
+/** A cell as words on its line: its value, with a NUMBER's unit. */
+export const cellWords = (cell: Cell): string =>
+  `${valueText(cell.value)}${cell.column.kind === 'number' && cell.column.unit ? ` ${cell.column.unit}` : ''}`;
+
+/**
  * A line with one of its own values as typed: blank takes it away (its item's shows again); a NUMBER a number, a COUNT
  * whole from 0 to the most; anything that doesn't read as its kind leaves the line as it was.
  */

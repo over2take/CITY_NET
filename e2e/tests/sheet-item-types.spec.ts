@@ -49,6 +49,9 @@ test('GEAR as a table per type: a stick made by hand and its DAMAGE rolled, the 
 
   // ROLL beside its DAMAGE (8a3b): rolled by the server into the log, said in the tray's history.
   await expect.poll(async () => JSON.parse(String((await sheetOf()).inventory ?? '[]'))[0]?.values?.damage, { timeout: 15_000 }).toBe('1d4');
+  // A line made by hand opens under ✎ (8a3c1); DONE shows it as a compact line, ROLL beside its DAMAGE.
+  await weapons.getByRole('button', { name: 'DONE', exact: true }).click();
+  await expect(weapons.getByRole('note', { name: 'Item 1 DAMAGE: 1d4' })).toBeVisible();
   await weapons.getByRole('button', { name: 'Roll Item 1 DAMAGE' }).click();
   const tray = mine.getByText('DICE_TRAY.EXE', { exact: true });
   await expect(tray).toBeVisible({ timeout: 15_000 });
@@ -83,6 +86,11 @@ test('GEAR as a table per type: a stick made by hand and its DAMAGE rolled, the 
   await sheetTab(mine, 'GEAR');
   await expect(weapons.getByText('WEAPONS · 2')).toBeVisible({ timeout: 15_000 });
   await expect(gear.getByText('GEAR · 1')).toBeVisible();
-  await expect(weapons.getByLabel('Item 2 RANGE', { exact: true })).toHaveValue('50 m');
+  await expect(weapons.getByRole('note', { name: 'Item 2 RANGE: 50 m' })).toBeVisible();
+  // Compact lines (8a3c1): in SHEET.EXE's width, nothing on the GEAR tab scrolls sideways.
+  // The sheet and any box inside it (the old table scrolled in a box of its own).
+  const sideways = await mine.locator('.sheet-scroll').evaluate((root) => [root, ...root.querySelectorAll('*')]
+    .filter((el) => ['auto', 'scroll'].includes(getComputedStyle(el).overflowX) && el.scrollWidth > el.clientWidth + 1).length);
+  expect(sideways).toBe(0);
   await context.close();
 });
