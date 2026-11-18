@@ -44,6 +44,8 @@ test('a player rests from their sheet, asked first, and finishes a long rest the
   // SHORT REST, from RESTS on STATS: asked first, then its panel with the Hit Dice, one spent, then
   // FINISH, asked too.
   await sheetTab(sheet, 'STATS');
+  // Under REST ▾ by the HP box, the sheet's one RESTS since 8s3c.
+  await sheet.getByRole('button', { name: /^REST/ }).click();
   const rests = sheet.getByRole('group', { name: 'Rests' });
   await rests.getByRole('button', { name: 'SHORT REST' }).click();
   await sheet.getByRole('group', { name: 'Take a Short rest?' }).getByRole('button', { name: 'REST' }).click();

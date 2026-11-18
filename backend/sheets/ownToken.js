@@ -12,7 +12,8 @@
 
 const { publicTokenConditions } = require('../tokens/conditions');
 
-const TOKEN_FIELDS = ['id', 'name', 'shape', 'owner', 'hp_current', 'hp_max', 'hp_temp', 'conditions', 'injuries'];
+// The armor class too, shown by the vitals box for quick reference (the user, 2026-11-17).
+const TOKEN_FIELDS = ['id', 'name', 'shape', 'owner', 'hp_current', 'hp_max', 'hp_temp', 'conditions', 'injuries', 'melee_ac', 'ranged_ac'];
 
 const ownToken = (db, username, { rounds = false } = {}, cb) => {
   db.get(

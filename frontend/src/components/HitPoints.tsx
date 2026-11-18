@@ -115,7 +115,8 @@ interface HitPointsPanelProps {
   socket?: any;
   /**
    * Opened under the sheet's vitals strip (8s3b), which has the amount, HEAL, DAMAGE (CWN's STIM too) and TEMP: one
-   * pool's panel leaves those out rather than showing them twice. The map's HEALTH window has it off.
+   * pool's panel leaves those out rather than showing them twice; and, in any model, the conditions, chips on the strip
+   * (8s3c). The map's HEALTH window has it off.
    */
   underStrip?: boolean;
 }
@@ -228,7 +229,7 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
           <InjuryToggle open={injuriesOpen} onClick={() => setInjuriesOpen((o) => !o)} size={18} />
         </div>
         {injuryMap}
-        {conditions}
+        {!underStrip && conditions}
         <ModelHealthEditor key={`${target.id}:${view.model}`} view={view} target={target} send={sendHealth} gm={token !== ''} words={word} />
         {(view.model === 'tracks' || view.model === 'locations') && (
           <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>{tempRow}</div>
@@ -257,7 +258,7 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
       </div>
 
       {injuryMap}
-      {conditions}
+      {!underStrip && conditions}
 
       {!underStrip && <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
         <input type="number" placeholder="0" aria-label="Amount" value={actionAmount || ''} onChange={e => setActionAmount(parseInt(e.target.value) || 0)} style={{ width: '100%', boxSizing: 'border-box' }} />

@@ -371,4 +371,7 @@ export interface SheetToken {
   hp_temp: number | null;
   conditions: string | null;
   injuries: string | null;
+  /** Its armor class, for the vitals box to show: ranged null means the melee one stands for both. */
+  melee_ac?: number | null;
+  ranged_ac?: number | null;
 }

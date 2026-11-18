@@ -4,8 +4,9 @@ import { HitPointsPanel } from './HitPoints';
 import { useHealthView } from '../hooks/useHealthView';
 import { isCustomSystem } from '../sheets';
 import { useWords } from '../sheets/words';
-import { amountOf, healthBody, takesAnAmount, hasHealth, hasStim, type SheetVitals, type VitalsAction } from '../sheets/vitals';
+import { amountOf, healthBody, takesAnAmount, hasHealth, hasStim, type Defense, type SheetVitals, type VitalsAction } from '../sheets/vitals';
 import { createPlayerTokenRow } from './tokenActions';
+import { TokenConditions } from './TokenConditions';
 
 // The vitals strip (8s3b; mockup docs/mockups/vitals-strip.html, approved 2026-11-17), in the sheet header on every tab of
 // SHEET.EXE and the standalone tab alike. For one pool of hit points, a box under the HP bar (the user, 2026-11-17: the bar
@@ -13,6 +14,9 @@ import { createPlayerTokenRow } from './tokenActions';
 // TEMP set by clicking it; the system's word for hit points under them, opening the HEALTH window's own panel right here
 // for everything else. The same route as HEALTH, so the token, the map and every open sheet move together; the map's
 // HEALTH window is unchanged. Another health model has HEALTH ▾ to change it.
+//
+// 8s3c: under the box, the token's conditions as chips (+ puts one on, × takes it off, what each means on hover), and
+// REST ▾ where there is a rest to take here, opening the sheet's own RESTS (asked first, dice spent, FINISH) in place.
 
 const small: React.CSSProperties = {
   background: 'none', fontFamily: 'inherit', fontSize: '0.6rem', letterSpacing: '1px', padding: '2px 6px', cursor: 'pointer', whiteSpace: 'nowrap',
@@ -21,19 +25,55 @@ const button = (color: string): React.CSSProperties => ({ ...small, color, borde
 const label: React.CSSProperties = { fontSize: '0.55rem', letterSpacing: '2px', opacity: 0.7 };
 const big: React.CSSProperties = { fontSize: '1.6rem', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' };
 
-export function VitalsStrip({ vitals, open, onToggle }: { vitals: SheetVitals; open: boolean; onToggle: () => void }) {
+export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false, maxNote, defense }: {
+  vitals: SheetVitals; open: boolean; onToggle: () => void;
+  /** The sheet's RESTS section, where there is a rest to take from here (8s3c); none otherwise. */
+  rests?: React.ReactNode;
+  /** The GM has called a rest that waits on this character. */
+  restCalled?: boolean;
+  /** What made the maximum ("20 → 26 (Tough +6)"): MAX in cyan, saying it on hover, as the HEALTH section did. */
+  maxNote?: string;
+  /** The token's armor class as the game has it (sheets/vitals.ts defenseOf): its name, and a ranged one's; none without. */
+  defense?: Defense;
+}) {
   const { token, system, authToken, socket, reload } = vitals;
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   /** TEMP being typed, after a click on it; null while it shows. */
   const [tempText, setTempText] = useState<string | null>(null);
+  const [restsOpen, setRestsOpen] = useState(restCalled);
+  // Where + CONDITION's list opens: under the row, full width, as REST's drawer does.
+  const [pickerHost, setPickerHost] = useState<HTMLDivElement | null>(null);
+  // A rest the GM calls opens REST ▾ by itself (8s3c): it is the sheet's only RESTS now. Adjusted while rendering, as
+  // React's docs do it for a prop that changed, rather than in an effect.
+  const [callSeen, setCallSeen] = useState(restCalled);
+  if (callSeen !== restCalled) {
+    setCallSeen(restCalled);
+    if (restCalled) setRestsOpen(true);
+  }
   // A custom system's model, as HEALTH reads it: null for the built-in games, which are one pool.
   const view = useHealthView(socket, token?.id, isCustomSystem(system));
   const word = useWords(system);
   const hp = word('hp', 'short', 'HP').toUpperCase();
   const hitPoints = word('hp', 'plural', 'HIT POINTS').toUpperCase();
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` };
+
+  // Under the box (8s3c): the token's conditions, and REST ▾.
+  const restButton = rests && (
+    <button type="button" aria-expanded={restsOpen} onClick={() => setRestsOpen((o) => !o)}
+      title={restCalled ? 'The GM has called a rest: open it here' : 'Take a rest here, as on STATS'}
+      style={{
+        ...button(restCalled ? 'var(--warning)' : 'var(--green)'), marginLeft: 'auto',
+        // Solid as the box's other buttons, filled while open (the user, 2026-11-17).
+        ...(restsOpen ? { background: restCalled ? 'var(--warning)' : 'var(--green)', color: 'var(--black)' } : {}),
+      }}>
+      {restCalled ? 'REST · CALLED' : 'REST'} {restsOpen ? '▴' : '▾'}
+    </button>
+  );
+  const restPanel = rests && restsOpen && (
+    <div role="region" aria-label="Take a rest" style={{ border: '1px solid var(--dark-green)', padding: '8px 10px' }}>{rests}</div>
+  );
 
   if (!token) {
     // As HEALTH's CREATE HEALTH RECORD: the player's token row, then the sheet asked for again with it.
@@ -43,11 +83,46 @@ export function VitalsStrip({ vitals, open, onToggle }: { vitals: SheetVitals; o
         <div role="group" aria-label="Vitals" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', marginTop: '6px', fontSize: '0.6rem', letterSpacing: '1px' }}>
           <span style={{ opacity: 0.7 }}>NO TOKEN ON THE MAP</span>
           <button type="button" onClick={() => { void create(); }} style={button('var(--green)')}>CREATE HEALTH RECORD</button>
+          {restButton}
         </div>
+        {restPanel}
       </>
     );
   }
-  if (!hasHealth(view?.model)) return null;
+  // The token's armor class for quick reference while playing (the user, 2026-11-17), read only, as the game has it:
+  // one, two (CWN's melee and ranged, both always; an unset ranged is the melee one, as the token menu says) or none.
+  // The token's own as its menu reads it: none set is 10 there (App's `melee_ac ?? 10`), so here too.
+  const melee = defense?.rangedWhenSet ? (token.melee_ac ?? 10) : token.melee_ac;
+  const ranged = token.ranged_ac ?? melee;
+  // The token's own ranged one, as its menu: only where it was set apart from the melee one.
+  const rangedShown = defense?.ranged && (!defense.rangedWhenSet || (token.ranged_ac !== null && token.ranged_ac !== undefined && token.ranged_ac !== melee))
+    ? defense.ranged : undefined;
+  const ac = defense && melee !== null && melee !== undefined && (
+    <span role="note" aria-label={`${defense.label} ${melee}${rangedShown ? `, ${rangedShown} ${ranged}` : ''}`}
+      title={`Your token's ${rangedShown ? `${defense.label} and ${rangedShown}` : defense.label}: what an attack has to reach.`}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid var(--green)', padding: '2px 7px', fontSize: '0.6rem', letterSpacing: '1px', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
+      <span style={{ opacity: 0.7 }}>{defense.label}</span>
+      <b style={{ fontSize: '0.8rem' }}>{melee}</b>
+      {rangedShown && <><span style={{ opacity: 0.7 }}>{rangedShown}</span><b style={{ fontSize: '0.8rem' }}>{ranged}</b></>}
+    </span>
+  );
+  // The token's conditions as chips, its armor class and REST ▾ beside them.
+  const below = (
+    <>
+      {/* The conditions left, REST right, and the AC centered in the space between them (the user, 2026-11-17). Too
+          narrow for all three (CWN's two ACs in SHEET.EXE), the AC wraps to a line of its own rather than overlapping. */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'flex-start' }}>
+        <div style={{ flex: '0 1 auto', minWidth: 0 }}>
+          <TokenConditions compact pickerHost={pickerHost} location={token as unknown as Location} gameSystem={system} socket={socket} canChange authToken={authToken || undefined} onChanged={reload} />
+        </div>
+        <div style={{ flex: '1 0 auto', display: 'flex', justifyContent: 'center' }}>{ac}</div>
+        {restButton}
+      </div>
+      <div ref={setPickerHost} style={{ display: 'contents' }} />
+    </>
+  );
+  // No health to change: the conditions and rests still.
+  if (!hasHealth(view?.model)) return <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>{below}{restPanel}</div>;
 
   const send = async (action: VitalsAction, n: number) => {
     if (action !== 'set_temp' && n === 0) return;
@@ -84,12 +159,14 @@ export function VitalsStrip({ vitals, open, onToggle }: { vitals: SheetVitals; o
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
         <div role="group" aria-label="Vitals" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <button type="button" aria-expanded={open} onClick={onToggle}
-            style={{ ...button('var(--green)'), borderStyle: open ? 'solid' : 'dashed', background: open ? 'var(--green)' : 'none', color: open ? 'var(--black)' : 'var(--green)' }}>
+            style={{ ...button('var(--green)'), background: open ? 'var(--green)' : 'none', color: open ? 'var(--black)' : 'var(--green)' }}>
             HEALTH {open ? '▴' : '▾'}
           </button>
           {alert}
         </div>
+        {below}
         {panel}
+        {restPanel}
       </div>
     );
   }
@@ -118,18 +195,23 @@ export function VitalsStrip({ vitals, open, onToggle }: { vitals: SheetVitals; o
           />
           <button type="button" disabled={busy} onClick={() => byAmount('damage')} style={button('var(--danger)')}>DAMAGE</button>
           {hasStim(system) && (
-            <button type="button" disabled={busy} onClick={() => byAmount('stim_heal')}
-              title="Field healing (stims, medkits): heals and adds +1 System Strain. Refused when strain is maxed. HEAL is natural or rest healing."
-              style={button('var(--warning)')}>STIM +1 STRAIN</button>
+            // STIM on the button, as wide as HEAL and DAMAGE: the full name spilled out of the column into HIT POINTS ▾.
+            <button type="button" disabled={busy} onClick={() => byAmount('stim_heal')} aria-label="STIM +1 STRAIN"
+              title="STIM, +1 STRAIN. Field healing (stims, medkits): heals and adds +1 System Strain. Refused when strain is maxed. HEAL is natural or rest healing."
+              style={button('var(--warning)')}>STIM</button>
           )}
         </div>
-        <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr) minmax(0, 1fr)', alignItems: 'center', justifyItems: 'center', rowGap: '2px' }}>
+        {/* CURRENT / MAX in the middle column, TEMP in a right column as wide as the buttons' on the left: the box is
+            symmetric, so the slash is centered on it, as HIT POINTS ▾ under it is (the user, 2026-11-17). */}
+        <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)', gridTemplateRows: 'auto auto 1.25rem', alignItems: 'center', justifyItems: 'center', rowGap: '2px' }}>
           <span style={label}>CURRENT</span><span />
           <span style={label}>MAX</span>
-          <span style={label}>TEMP</span>
           <span aria-label={`Current ${hp}`} style={{ ...big, color: hpColor, transition: 'color 0.3s' }}>{cur}</span>
           <span style={{ ...big, opacity: 0.6, padding: '0 2px' }}>/</span>
-          <span aria-label={`Max ${hp}`} style={big}>{max}</span>
+          <span aria-label={`Max ${hp}`} title={maxNote} style={{ ...big, ...(maxNote ? { color: 'var(--cyan)' } : {}) }}>{max}</span>
+        </div>
+        <div style={{ width: '64px', flexShrink: 0, display: 'grid', gridTemplateRows: 'auto auto 1.25rem', alignItems: 'center', justifyItems: 'center', rowGap: '2px' }}>
+          <span style={label}>TEMP</span>
           {tempText === null ? (
             <button type="button" disabled={busy} onClick={() => setTempText(temp ? String(temp) : '')}
               aria-label={`Temp ${hp}: ${temp}. Click to set it`} title={`Click to set temp ${hp}`}
@@ -145,19 +227,21 @@ export function VitalsStrip({ vitals, open, onToggle }: { vitals: SheetVitals; o
               style={{ width: '3.2em', textAlign: 'center', fontSize: '1rem', background: 'color-mix(in srgb, var(--black) 50%, transparent)', color: 'var(--cyan)', border: '1px solid var(--cyan)', fontFamily: 'inherit' }}
             />
           )}
-          {/* Room for the caption, which is centered on the whole box rather than this column (the user, 2026-11-17). */}
-          <span aria-hidden="true" style={{ gridColumn: '1 / -1', height: '1.1rem' }} />
         </div>
+        {/* Its own small padding and line height: with the browser's, its pressed fill reached up into the numbers. */}
         <button type="button" aria-expanded={open} onClick={onToggle} title={`Open HEALTH here: max ${hp}, injuries, conditions`}
           style={{
             position: 'absolute', left: '50%', bottom: '6px', transform: 'translateX(-50%)', whiteSpace: 'nowrap',
             background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold',
+            padding: '2px 8px', lineHeight: 1.2, margin: 0, boxSizing: 'border-box',
           }}>
           {hitPoints} {open ? '▴' : '▾'}
         </button>
       </div>
       {alert}
+      {below}
       {panel}
+      {restPanel}
     </div>
   );
 }

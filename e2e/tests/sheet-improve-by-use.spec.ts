@@ -45,7 +45,9 @@ test('IMPROVE BY USE: a success marks Lore, a mark ticked by hand, END OF SESSIO
   await mark.click();
   await expect.poll(async () => (await stored())._marks, { timeout: 15_000 }).toEqual({ lore: true });
 
-  // END OF SESSION from RESTS: Lore's d100 is over 0, so it gains 5; the mark clears.
+  // END OF SESSION from RESTS, under REST ▾ by the HP box (8s3c: the sheet's one RESTS): Lore's d100 is over 0, so it
+  // gains 5; the mark clears.
+  await mine.getByRole('button', { name: /^REST/ }).click();
   const rests = mine.getByRole('group', { name: 'Rests' });
   await rests.getByRole('button', { name: 'END OF SESSION' }).click();
   await mine.getByRole('group', { name: /^Take a End of session\?$/ }).getByRole('button', { name: 'REST' }).click();

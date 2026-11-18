@@ -2,7 +2,30 @@
 // player's token through the HEALTH window's own route (PUT /api/locations/:id/health), so the token, the map and every
 // open sheet move together; the component (components/VitalsStrip.tsx) only draws this.
 
-import type { SheetToken } from './types';
+import type { SheetToken, SheetTemplate } from './types';
+import { partOn } from './parts';
+
+/** The armor class the box shows: its name; a ranged one's, shown always or (`rangedWhenSet`) only when it differs. */
+export interface Defense { label: string; ranged?: string; rangedWhenSet?: boolean }
+
+/**
+ * The token's armor class as this game has it, for the vitals box (8s3c; the user, 2026-11-17: "dynamic to the system",
+ * one AC, two, or none), as the token menu has it:
+ * - a sheet field linked to it names it, in the game's own words (Shadowrun's ARMOR, a built system's field), and a
+ *   second linked to the ranged one (CWN's MELEE AC and RANGED AC) shows both, always;
+ * - else none where the game keeps its defense on the sheet (Cyberpunk's SP) or a built system has combat off;
+ * - else the token's own, as its menu shows it (MELEE_AC, RANGED_AC): the game's word for it, AC unless it says, and the
+ *   ranged one only where the GM set it apart from the melee one.
+ */
+export const defenseOf = (template: SheetTemplate): Defense | null => {
+  const fields = template.sections.flatMap((s) => s.fields ?? []);
+  const melee = fields.find((f) => f.source === 'token_ac');
+  const ranged = fields.find((f) => f.source === 'token_ac_ranged');
+  if (melee) return { label: melee.label.toUpperCase(), ...(ranged ? { ranged: ranged.label.toUpperCase() } : {}) };
+  if (template.tokenDefense?.editOnToken === false || !partOn(template.id, 'combat')) return null;
+  const label = (template.tokenDefense?.label ?? 'AC').toUpperCase();
+  return { label, ranged: `RANGED ${label}`, rangedWhenSet: true };
+};
 
 /** What a sheet surface hands the strip, from usePlayerSheet's sheetProps: the same in SHEET.EXE and the tab. */
 export interface SheetVitals {

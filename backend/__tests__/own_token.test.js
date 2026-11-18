@@ -133,3 +133,30 @@ describe('the open sheets re-read when the token\'s conditions or injuries chang
     expect(reread(emitted)).toEqual([]);
   });
 });
+
+describe('its armor class (8s3c)', () => {
+  const GM = jwt.sign({ id: 1, username: 'gm', role: 'admin', isTemporary: false }, 'test-secret');
+  const put = (a, id, body) => request(a).put(`/api/locations/${id}`).set('Authorization', `Bearer ${GM}`)
+    .send({ name: 'KES', x: 0, y: 0, z: 0, width: 1, height: 1, depth: 1, shape: 'rhombus', owner: 'kes', ...body });
+
+  it('sent with the token', async () => {
+    const id = (await token('kes')).lastID;
+    await run(db, 'UPDATE locations SET melee_ac = 14, ranged_ac = 16 WHERE id = ?', [id]);
+    expect(await own('kes')).toMatchObject({ melee_ac: 14, ranged_ac: 16 });
+  });
+
+  it('changed on a player\'s token, their open sheets re-read; anything else changed, or another\'s token, not', async () => {
+    await run(db, `INSERT INTO global_settings (key, value) VALUES ('game_system', 'generic')`);
+    const id = (await token('kes')).lastID;
+    const emitted = [];
+    const a = express();
+    a.use(express.json());
+    a.use('/api/locations', locationsRouteFactory(db, { emit: (event, data) => emitted.push({ event, data }) }, { emitUpdate: () => {}, recordAction: () => {} }));
+    expect((await put(a, id, { melee_ac: 14 })).status).toBe(200);
+    expect((await put(a, id, { melee_ac: 14, x: 5 })).status).toBe(200);
+    expect((await put(a, id, { melee_ac: 14, ranged_ac: 12 })).status).toBe(200);
+    const enemy = (await token('gm', { shape: 'enemy_rhombus' })).lastID;
+    expect((await put(a, enemy, { shape: 'enemy_rhombus', owner: 'gm', melee_ac: 9 })).status).toBe(200);
+    expect(emitted.filter((e) => e.event === 'sheetUpdated').map((e) => e.data.username)).toEqual(['kes', 'kes']);
+  });
+});
