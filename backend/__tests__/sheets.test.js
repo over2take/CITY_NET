@@ -177,6 +177,15 @@ describe('GET /api/sheets/user/:username', () => {
     expect(res.body.data.sp_body).toBe(11);
   });
 
+  it('carries the player\'s token for the vitals box in the GM\'s view, rounds left and all; null with none (8s3d2)', async () => {
+    await setSystem(db, 'generic');
+    await insertSheet(db, { username: 'GHOST', system: 'generic' });
+    const get = () => request(app).get('/api/sheets/user/GHOST').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect((await get()).body.token).toBeNull();
+    await run(db, `INSERT INTO locations (name, x, y, z, shape, owner, hp_current, hp_max, conditions) VALUES ('GHOST', 0, 0, 0, 'rhombus', 'GHOST', 7, 12, '[{"id":"prone","left":2}]')`);
+    expect((await get()).body.token).toMatchObject({ owner: 'GHOST', hp_current: 7, hp_max: 12, conditions: '[{"id":"prone","left":2}]' });
+  });
+
   it('404s when the player has no sheet on the active system', async () => {
     await setSystem(db, 'generic');
     await insertSheet(db, { username: 'GHOST', system: 'cyberpunk_red' });

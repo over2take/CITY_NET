@@ -7,6 +7,7 @@ const multer = require('multer');
 const { authenticate, authenticatePlayer, optionalAuthenticate } = require('../middleware/auth');
 const { canReadNpcSheets, redactTokenCard } = require('../sheets/npcPrivacy');
 const bankAccounts = require('../bank/accounts');
+const { ownToken } = require('../sheets/ownToken');
 const tokenVitals = require('../tokens/vitals');
 const customSystems = require('../systemBuilder/runtime');
 const { syncTokenMax } = require('../systemBuilder/tokenMax');
@@ -151,7 +152,8 @@ module.exports = (db, io) => {
           if (!row) return res.status(404).json({ error: 'No sheet for this player on the active system' });
           const data = JSON.parse(row.data || '{}');
           const linked = getLinkedFields(system);
-          const done = () => res.json({ ...row, data });
+          // The player's token too (8s3d2), for the vitals box in the GM's view of the sheet: the GM's, rounds left and all.
+          const done = () => ownToken(db, req.params.username, { rounds: true }, (token) => res.json({ ...row, data, token }));
           const overlayCash = () => {
             if (!Object.values(linked).includes('bank_balance')) return done();
             bankAccounts.get(db, req.params.username, system, (e3, account) => {

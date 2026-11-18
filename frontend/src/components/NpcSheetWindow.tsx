@@ -321,6 +321,10 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
           } : {})}
           onPortraitUpload={handlePortraitUpload}
           portraitShadow={shadowFilter}
+          // The vitals box on a player's sheet in the GM's view (8s3d2), the GM's sign-in sent; none on an NPC's.
+          vitals={playerUsername && sheet.token !== undefined
+            ? { token: sheet.token, owner: playerUsername, system: sheet.system, authToken: token, socket, reload: () => setReloadKey((k) => k + 1) }
+            : undefined}
           onTogglePortraitShadow={handleTogglePortraitShadow}
           hiddenTabs={hiddenTabsFor(sheet.system, ruleSettings)}
           // A player's picks (7a3b2): the GM picks, drops and changes them for the player named.
