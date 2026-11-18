@@ -61,12 +61,18 @@ describe('DAMAGE, HEAL and TEMP', () => {
     expect((amount() as HTMLInputElement).value).toBe('');
     await userEvent.type(amount(), '3');
     await userEvent.click(screen.getByRole('button', { name: 'HEAL' }));
-    await userEvent.type(amount(), '4');
-    await userEvent.click(screen.getByRole('button', { name: 'Set temp to the amount' }));
+    // TEMP: click it, type, Enter.
+    await userEvent.click(screen.getByRole('button', { name: 'Temp HP: 3. Click to set it' }));
+    const temp = screen.getByRole('spinbutton', { name: 'Temp HP' });
+    expect((temp as HTMLInputElement).value).toBe('3');
+    await userEvent.clear(temp);
+    await userEvent.type(temp, '4{Enter}');
     expect(healthCalls().slice(1).map((c) => c.body)).toEqual([{ action: 'heal', amount: 3 }, { action: 'set_temp', amount: 4, hp_temp: 4 }]);
+    // Back to the number once set.
+    await vi.waitFor(() => expect(screen.queryByRole('spinbutton', { name: 'Temp HP' })).toBeNull());
   });
 
-  it('Enter damages; no amount takes or heals nothing, but SET with none clears TEMP', async () => {
+  it('Enter damages; no amount damages or heals nothing, but TEMP emptied clears it; Escape leaves it', async () => {
     const { socket } = draw();
     await userEvent.type(amount(), '2{Enter}');
     expect(healthCalls().map((c) => c.body)).toEqual([{ action: 'damage', amount: 2 }]);
@@ -74,13 +80,28 @@ describe('DAMAGE, HEAL and TEMP', () => {
     expect((socket as unknown as { emit: ReturnType<typeof vi.fn> }).emit).not.toHaveBeenCalledWith('requestHealthView', expect.anything());
     await userEvent.click(screen.getByRole('button', { name: 'DAMAGE' }));
     await userEvent.click(screen.getByRole('button', { name: 'HEAL' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Set temp to the amount' }));
+    await userEvent.click(screen.getByRole('button', { name: /^Temp HP/ }));
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Temp HP' }), '9{Escape}');
+    expect(screen.queryByRole('spinbutton', { name: 'Temp HP' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /^Temp HP/ }));
+    await userEvent.clear(screen.getByRole('spinbutton', { name: 'Temp HP' }));
+    await userEvent.keyboard('{Enter}');
     expect(healthCalls().map((c) => c.body)).toEqual([{ action: 'damage', amount: 2 }, { action: 'set_temp', amount: 0, hp_temp: 0 }]);
   });
 
-  it('shows the token\'s TEMP, and what the server refused', async () => {
+  it('shows the token\'s CURRENT, MAX and TEMP (-- with none), and what the server refused', async () => {
+    draw({ token: { ...TOKEN, hp_temp: 0 } });
+    expect(screen.getByLabelText('Current HP').textContent).toBe('14');
+    expect(screen.getByLabelText('Max HP').textContent).toBe('20');
+    expect(screen.getByRole('button', { name: 'Temp HP: 0. Click to set it' }).textContent).toBe('--');
+    // CURRENT colored as the bar is: over half, a quarter to half, a quarter or less.
+    for (const [hp, color] of [[14, 'var(--green)'], [8, 'var(--warning)'], [5, 'var(--danger)']] as const) {
+      cleanup();
+      draw({ token: { ...TOKEN, hp_current: hp } });
+      expect(screen.getByLabelText('Current HP').style.color, String(hp)).toBe(color);
+    }
+    cleanup();
     draw();
-    expect(screen.getByLabelText('Temp HP').textContent).toBe('+3');
     answer = { ok: false, body: { error: 'Not your token' } };
     await userEvent.type(amount(), '1');
     await userEvent.click(screen.getByRole('button', { name: 'DAMAGE' }));
@@ -107,11 +128,11 @@ describe('CWN\'s STIM', () => {
 });
 
 describe('HEALTH here', () => {
-  it('HEALTH ▾ and a click on the HP bar open and close HEALTH\'s own panel; the linked window isn\'t asked', async () => {
+  it('HIT POINTS ▾ and a click on the HP bar open and close HEALTH\'s own panel; the linked window isn\'t asked', async () => {
     const onOpenLink = vi.fn();
     draw({}, { onOpenLink });
     expect(screen.queryByRole('region', { name: 'Health' })).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: /^HEALTH/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^HIT POINTS/ }));
     const region = screen.getByRole('region', { name: 'Health' });
     // HEALTH's own panel: its numbers, conditions and MAX; not a second DAMAGE, HEAL, amount or TEMP (the user, 2026-11-17).
     expect(region.textContent).toContain('14 / 20');
