@@ -350,25 +350,27 @@ describe('the box stands in for the HEALTH section, and shows the AC (8s3c, the 
     expect(max.style.color).toBe('var(--cyan)');
   });
 
-  it('the token\'s AC, with RANGED only where it differs; none where the game keeps it on the sheet or none is set', () => {
-    draw({ token: { ...TOKEN, melee_ac: 14, ranged_ac: null } });
-    expect(screen.getByRole('note', { name: 'Armor class 14' }).textContent).toBe('AC14');
-    cleanup();
-    draw({ token: { ...TOKEN, melee_ac: 14, ranged_ac: 16 } });
-    expect(screen.getByRole('note', { name: 'Armor class 14, ranged 16' }).textContent).toBe('AC14RANGED16');
-    cleanup();
-    draw({ token: { ...TOKEN, melee_ac: 14, ranged_ac: 14 } });
-    expect(screen.getByRole('note', { name: 'Armor class 14' }).textContent).toBe('AC14');
-    cleanup();
-    draw({ token: { ...TOKEN, melee_ac: null } });
-    expect(screen.queryByRole('note', { name: /^Armor class/ })).toBeNull();
-    cleanup();
-    const onSheet = { ...template, tokenDefense: { editOnToken: false, label: 'SP' } } as SheetTemplate;
-    render(<SheetRenderer template={onSheet} data={{ name: 'Kes' } as never} onFieldChange={() => {}} vitals={{ ...vitals(), token: { ...TOKEN, melee_ac: 14 } }} />);
-    expect(screen.queryByRole('note', { name: /^Armor class/ })).toBeNull();
-    cleanup();
-    const named = { ...template, tokenDefense: { editOnToken: true, label: 'DEF' } } as SheetTemplate;
-    render(<SheetRenderer template={named} data={{ name: 'Kes' } as never} onFieldChange={() => {}} vitals={{ ...vitals(), token: { ...TOKEN, melee_ac: 12 } }} />);
-    expect(screen.getByRole('note', { name: 'Armor class 12' }).textContent).toBe('DEF12');
+  it("the token's armor class as the game has it: one in its own words, two (both always), or none", () => {
+    const acField = (source: string, label: string, id: string) => ({ id, label, type: 'number', source });
+    const armored = (fields: unknown[], more: Partial<SheetTemplate> = {}) =>
+      ({ ...withSections([{ id: 'defense', label: 'DEFENSE', layout: 'list', tab: 'STATS', fields }]), ...more } as unknown as SheetTemplate);
+    const show = (t: SheetTemplate, token: Partial<SheetToken>) => {
+      cleanup();
+      render(<SheetRenderer template={t} data={{ name: 'Kes' } as never} onFieldChange={() => {}} vitals={{ ...vitals(), token: { ...TOKEN, ...token } }} />);
+      return screen.queryByRole('note', { name: /\d/ });
+    };
+    // One, named by its field: a built system's GUARD.
+    expect(show(armored([acField('token_ac', 'Guard', 'guard')]), { melee_ac: 14, ranged_ac: 16 })?.textContent).toBe('GUARD14');
+    // Two (CWN): both, always, an unset ranged being the melee one.
+    const two = armored([acField('token_ac', 'Melee AC', 'ac'), acField('token_ac_ranged', 'Ranged AC', 'ac_ranged')]);
+    expect(show(two, { melee_ac: 13, ranged_ac: 13 })?.textContent).toBe('MELEE AC13RANGED AC13');
+    expect(show(two, { melee_ac: 13, ranged_ac: null })?.getAttribute('aria-label')).toBe('MELEE AC 13, RANGED AC 13');
+    // None: no field and no defense on the token (a built system without one; Cyberpunk's SP on the sheet).
+    expect(show(armored([]), { melee_ac: 14 })).toBeNull();
+    expect(show(armored([], { tokenDefense: { editOnToken: false, label: 'DV' } }), { melee_ac: 14 })).toBeNull();
+    // No field, a defense kept on the token (generic): its word.
+    expect(show(armored([], { tokenDefense: { editOnToken: true, label: 'AC' } }), { melee_ac: 12 })?.textContent).toBe('AC12');
+    // None set on the token: nothing to show.
+    expect(show(armored([acField('token_ac', 'Guard', 'guard')]), { melee_ac: null })).toBeNull();
   });
 });

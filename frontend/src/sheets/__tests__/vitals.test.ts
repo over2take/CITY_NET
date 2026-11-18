@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { amountOf, healthBody, takesAnAmount, hasHealth } from '../vitals';
+import { amountOf, healthBody, takesAnAmount, hasHealth, defenseOf } from '../vitals';
+import { getTemplate, type SheetTemplate } from '..';
 
 // The vitals strip's rules (8s3b).
 

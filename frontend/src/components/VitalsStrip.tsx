@@ -33,8 +33,8 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
   restCalled?: boolean;
   /** What made the maximum ("20 → 26 (Tough +6)"): MAX in cyan, saying it on hover, as the HEALTH section did. */
   maxNote?: string;
-  /** What the game calls the token's armor class ('AC'), shown for quick reference; none where it lives on the sheet. */
-  defense?: string;
+  /** The token's armor class as the game has it (sheets/vitals.ts defenseOf): its name, and a ranged one's; none without. */
+  defense?: { label: string; ranged?: string };
 }) {
   const { token, system, authToken, socket, reload } = vitals;
   const [amount, setAmount] = useState('');
@@ -89,19 +89,17 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
       </>
     );
   }
-  // The token's armor class for quick reference while playing (the user, 2026-11-17): read only, the GM's EDIT_AC
-  // changes it. Ranged only when it differs; with none set, the melee one stands for both, as the token menu says.
+  // The token's armor class for quick reference while playing (the user, 2026-11-17), read only, as the game has it:
+  // one, two (CWN's melee and ranged, both always; an unset ranged is the melee one, as the token menu says) or none.
   const melee = token.melee_ac;
-  const ranged = token.ranged_ac;
+  const ranged = token.ranged_ac ?? melee;
   const ac = defense && melee !== null && melee !== undefined && (
-    <span role="note" aria-label={`Armor class ${melee}${ranged !== null && ranged !== undefined && ranged !== melee ? `, ranged ${ranged}` : ''}`}
-      title={`Your token's ${defense}: what an attack has to reach. The GM sets it (EDIT_AC).`}
+    <span role="note" aria-label={`${defense.label} ${melee}${defense.ranged ? `, ${defense.ranged} ${ranged}` : ''}`}
+      title={`Your token's ${defense.ranged ? `${defense.label} and ${defense.ranged}` : defense.label}: what an attack has to reach.`}
       style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid var(--green)', padding: '2px 7px', fontSize: '0.6rem', letterSpacing: '1px', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
-      <span style={{ opacity: 0.7 }}>{defense.toUpperCase()}</span>
+      <span style={{ opacity: 0.7 }}>{defense.label}</span>
       <b style={{ fontSize: '0.8rem' }}>{melee}</b>
-      {ranged !== null && ranged !== undefined && ranged !== melee && (
-        <><span style={{ opacity: 0.7 }}>RANGED</span><b style={{ fontSize: '0.8rem' }}>{ranged}</b></>
-      )}
+      {defense.ranged && <><span style={{ opacity: 0.7 }}>{defense.ranged}</span><b style={{ fontSize: '0.8rem' }}>{ranged}</b></>}
     </span>
   );
   // The token's conditions as chips, its armor class and REST ▾ beside them.

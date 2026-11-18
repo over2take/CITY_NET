@@ -33,7 +33,7 @@ import { ImproveMark } from './ImproveMark';
 import { markStates } from '../sheets/improveShown';
 import { withTempHp } from '../sheets/tempHp';
 import { VitalsStrip } from './VitalsStrip';
-import type { SheetVitals } from '../sheets/vitals';
+import { defenseOf, type SheetVitals } from '../sheets/vitals';
 import { choiceEffects, effectsWorked, restSection, type ChoicesAction } from '../sheets/choicesShown';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
@@ -572,8 +572,8 @@ function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUp
           );
         })()}
         {vitals && <VitalsStrip vitals={vitals} open={healthOpen} onToggle={() => setHealthOpen((o) => !o)} rests={rests} restCalled={restCalled} maxNote={maxNote}
-          // The token's armor class, read-only, where it lives on the token (a game keeping it on the sheet, CP:R's SP, has none here).
-          defense={template.tokenDefense?.editOnToken === false ? undefined : (template.tokenDefense?.label ?? 'AC')} />}
+          // The token's armor class, read only, as this game has it: one, two or none (sheets/vitals.ts defenseOf).
+          defense={defenseOf(template) ?? undefined} />}
         {template.deathSave && h.hpField && (hpMax ?? 0) > 0 && (hp ?? 1) <= 0 && (() => {
           const ds = template.deathSave!;
           const body = num(data[ds.statField]);

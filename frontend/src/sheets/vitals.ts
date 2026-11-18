@@ -2,7 +2,23 @@
 // player's token through the HEALTH window's own route (PUT /api/locations/:id/health), so the token, the map and every
 // open sheet move together; the component (components/VitalsStrip.tsx) only draws this.
 
-import type { SheetToken } from './types';
+import type { SheetToken, SheetTemplate } from './types';
+
+/**
+ * The token's armor class as this game has it, for the vitals box (8s3c; the user, 2026-11-17: "dynamic to the system",
+ * one AC, two, or none). A sheet field linked to it names it, in the game's own words (CWN's MELEE AC, Shadowrun's ARMOR,
+ * a built system's field); a second linked to the ranged one (CWN alone) adds that. With no such field, the game's own
+ * token defense where it is kept on the token (generic's AC); otherwise none (Cyberpunk's SP lives on the sheet, and a
+ * built system without one has none).
+ */
+export const defenseOf = (template: SheetTemplate): { label: string; ranged?: string } | null => {
+  const fields = template.sections.flatMap((s) => s.fields ?? []);
+  const melee = fields.find((f) => f.source === 'token_ac');
+  const ranged = fields.find((f) => f.source === 'token_ac_ranged');
+  if (melee) return { label: melee.label.toUpperCase(), ...(ranged ? { ranged: ranged.label.toUpperCase() } : {}) };
+  if (template.tokenDefense?.editOnToken) return { label: template.tokenDefense.label.toUpperCase() };
+  return null;
+};
 
 /** What a sheet surface hands the strip, from usePlayerSheet's sheetProps: the same in SHEET.EXE and the tab. */
 export interface SheetVitals {
