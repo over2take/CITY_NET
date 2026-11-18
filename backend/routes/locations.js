@@ -841,6 +841,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       db.run(query[0], query[1], (err2) => {
         if (err2) return res.status(500).json({ error: err2.message });
         emitUpdate();
+        // A player's open sheets re-read, as on a health change: their vitals strip shows the token (8s3a).
+        if (row.shape === 'rhombus' && row.owner) io.emit('sheetUpdated', { username: row.owner });
         res.json({ id, injuries });
       });
     });
@@ -873,6 +875,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         db.run(query[0], query[1], (err2) => {
           if (err2) return res.status(500).json({ error: err2.message });
           emitUpdate();
+          // A player's open sheets re-read: their vitals strip shows the token's conditions (8s3a).
+          if (row.shape === 'rhombus' && row.owner) io.emit('sheetUpdated', { username: row.owner });
           res.json({ id: Number(id), conditions: checked.value });
         });
       });

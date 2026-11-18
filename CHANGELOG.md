@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Shadowrun: stun overflowing onto the Physical track now shows on the open character sheet.** When stun damage spilled over onto Physical HP, an open sheet could keep showing the HP from before the hit until something else made it reload.
 - **BANK, HEALTH and VEHICLES from the sheet's own tab (8s1d).** On the ⧉ tab, clicking Cash, HP or VEHICLES now opens that window in the main CITY_NET window, as SHEET.EXE does, and the tab says OPENED IN YOUR MAIN WINDOW. If the main window isn't open, the tab says so. The vehicle you are sitting in shows at the top of the tab too, and clicking it gets you out.
 - **Levelling up and making a character from the sheet's own tab (8s1c).** On the ⧉ tab, LEVEL UP READY now opens LEVEL_UP.EXE, and a character still being made shows CREATING · CONTINUE, which opens NEW_CHARACTER.EXE where you left it, the same windows as in the main app.
 - **More of SHEET.EXE on the sheet's own tab (8s1b).** The ⧉ tab now has IMPORT, opening the same IMPORT.EXE as the window, and shows "THE GM GAVE YOU…" when the GM hands you something. A roll made on the tab opens and throws in the dice tray of your main window, as the table sees it.
@@ -873,6 +874,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **The character sheet now knows its own token (8s3a).** Each sheet carries the player's token, its HP, conditions and injuries, ready for the vitals strip coming next, and an open sheet reloads when that token's conditions or injuries change. A condition's rounds left stay the GM's, as on the map.
 - **Uploading items, the server's half (8aL3a).** A file of items is read against a system: a section per item type headed by its own columns, then what an item needs, its cost and words, and the items' features. Items are matched by name and updated or added, never deleted; a row with a mistake is skipped and said by its line. The ITEMS tab's IMPORT and its downloads come next.
 - **Item types, on the server (8a1).** A system can make types of items, WEAPONS or ARMOR, each with its own columns: a number with a unit, words, damage, dice, a count a button spends (refilled by a rest, or reloaded from other items) and a pick of words. Each item names its type and fills its columns; a system that makes none has GEAR, with WEIGHT and PRICE. All of it is checked, shown to the sheet and carried by the system file; the builder and the sheet draw it from 8a2 and 8a3. The ITEMS page now keeps whatever else the items part holds when a slot, an install or an item changes.
 - **The whole-builder browser journey covers Phase 7.** The journey that builds a system through the builder's screens and plays it now also makes a levelled class list with a feature's bonus and turns XP levels on; at the table the player picks the class, its bonus reaches their roll, the GM awards XP, and the player levels up.

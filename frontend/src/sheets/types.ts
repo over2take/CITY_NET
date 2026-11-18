@@ -353,4 +353,22 @@ export interface CharacterSheet {
   /** The vehicle this character is sitting in, if any. Shared state, not sheet data. */
   inVehicle?: { name: string; moving: boolean; hp: number; hpMax: number } | null;
   ride?: { owner: string; vehicleName: string; mounts: { index: number; name: string; dmg: string; skill: string }[] } | null;
+  /**
+   * The player's own token (8s3a, backend sheets/ownToken.js), for the vitals strip: its id to change health through
+   * the HEALTH window's own route, and its health, conditions and injuries (raw, as the map has them). Null with none
+   * on the map; absent on a sheet that isn't the player's own.
+   */
+  token?: SheetToken | null;
+}
+
+export interface SheetToken {
+  id: number;
+  name: string;
+  shape: string;
+  owner: string;
+  hp_current: number | null;
+  hp_max: number | null;
+  hp_temp: number | null;
+  conditions: string | null;
+  injuries: string | null;
 }

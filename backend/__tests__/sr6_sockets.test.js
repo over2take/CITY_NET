@@ -42,7 +42,8 @@ function boot(db) {
     emit: (event, data) => emitted.push({ event, data }),
     to: () => ({ emit: (event, data) => emitted.push({ event, data }) }),
   };
-  socketsFactory(io, db, { elevatedUsers: new Set(), emitUpdate: vi.fn(), recordAction: vi.fn() });
+  // The map's update logged among the rest, so a test can say what came before what (8s3a).
+  socketsFactory(io, db, { elevatedUsers: new Set(), emitUpdate: (data) => emitted.push({ event: 'emitUpdate', data }), recordAction: vi.fn() });
 
   const handlers = {};
   const socket = {
@@ -223,6 +224,19 @@ describe('SR6 stun overflow', () => {
     expect(token.hp_current).toBe(8);
   });
 
+  it('tells the open sheets once the token\'s HP has dropped, not only before (8s3a)', async () => {
+    await seedAttacker();
+    await seedAttackerToken(11);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('GHOST');
+    await flush(50);
+    handlers['updateSheetField']({ fieldId: 'stun_current', value: 13 });
+    await waitFor(() => emitted.some((e) => e.event === 'emitUpdate' && e.data?.isRhombusOnly));
+    const tokenMoved = emitted.findIndex((e) => e.event === 'emitUpdate' && e.data?.isRhombusOnly);
+    await waitFor(() => emitted.slice(tokenMoved).some((e) => e.event === 'sheetUpdated'));
+    expect(emitted.slice(tokenMoved).find((e) => e.event === 'sheetUpdated')?.data).toEqual({ username: 'GHOST' });
+  });
+
   it('stun below the monitor stays on the sheet and leaves HP alone', async () => {
     await seedAttacker();
     await seedAttackerToken(11);
@@ -301,6 +315,22 @@ describe('SR6 resistDrain', () => {
     expect(JSON.parse(sheet.data).stun_current).toBe(10); // clamped at monitor
     const token = await get(db, `SELECT hp_current FROM locations WHERE owner = 'MYSTIC'`);
     expect(token.hp_current).toBeLessThan(10); // overflow hit Physical
+    // The open sheets told after the token moved, not before it, when they would read the old HP (8s3a).
+    await waitFor(() => emitted.some((e) => e.event === 'sheetUpdated'));
+    const told = emitted.map((e) => e.event);
+    expect(told.indexOf('sheetUpdated')).toBeGreaterThan(told.indexOf('dataUpdated'));
+  });
+
+  it('drain without overflow still tells the open sheets', async () => {
+    await seedMage({ willpower: 30, logic: 30, stun_monitor: 10, stun_current: 0 });
+    await seedMageToken(10);
+    const { handlers, emitted } = boot(db);
+    handlers['identify']('MYSTIC');
+    await flush(50);
+    handlers['resistDrain']({ drainValue: 1, attr: 'logic', label: 'Drain' });
+    await waitFor(() => emitted.some((e) => e.event === 'sheetUpdated'));
+    expect(emitted.find((e) => e.event === 'sheetUpdated')?.data).toEqual({ username: 'MYSTIC' });
+    expect(emitted.some((e) => e.event === 'dataUpdated')).toBe(false);
   });
 
   it('ignores resistDrain with missing or invalid payload', async () => {
