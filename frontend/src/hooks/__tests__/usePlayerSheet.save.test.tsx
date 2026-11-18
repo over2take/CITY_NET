@@ -21,8 +21,8 @@ const SHEET = {
 function fakeSocket() {
   const listeners = new Map<string, ((payload: unknown) => void)[]>();
   return {
-    emitted: [] as { event: string; payload: unknown }[],
-    emit(event: string, payload?: unknown) { this.emitted.push({ event, payload }); },
+    emitted: [] as { event: string; payload: unknown; ack?: (answer: unknown) => void }[],
+    emit(event: string, payload?: unknown, ack?: (answer: unknown) => void) { this.emitted.push({ event, payload, ...(ack ? { ack } : {}) }); },
     on(event: string, fn: (payload: unknown) => void) {
       listeners.set(event, [...(listeners.get(event) || []), fn]);
     },
@@ -103,5 +103,35 @@ describe('saving a field', () => {
     const { unmount } = load(socket);
     unmount();
     expect(socket.sent('updateSheetField')).toHaveLength(0);
+  });
+
+  it('FIRE sends a gear edit still waiting first, in order, then never again: it can\'t land after the count (8a4b)', () => {
+    const socket = fakeSocket();
+    const { result } = load(socket);
+    act(() => { result.current.handleFieldChange('inventory', '[{"name":"Pistol"}]'); });
+    act(() => { result.current.handleFieldChange('cool', 5); });
+    act(() => { void result.current.actions.onGearCount!(0, 'ammo', 'spend'); });
+    expect(socket.emitted.map((e) => e.event).filter((e) => e === 'updateSheetField' || e === 'countAction')).toEqual(['updateSheetField', 'countAction']);
+    expect(socket.sent('updateSheetField')[0].payload).toEqual({ fieldId: 'inventory', value: '[{"name":"Pistol"}]' });
+    // Strict: FIRE names no line to take from, not even as undefined.
+    expect(socket.sent('countAction')[0].payload).toStrictEqual({ kind: 'spend', line: 0, column: 'ammo' });
+    // The other field still waits its turn; the gear isn't sent a second time.
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(socket.sent('updateSheetField').map((e) => (e.payload as { fieldId: string }).fieldId)).toEqual(['inventory', 'cool']);
+  });
+
+  it('RELOAD names the line picked; the server\'s answer, or none after 5 s', async () => {
+    const socket = fakeSocket();
+    const { result } = load(socket);
+    let answer: Promise<unknown> = Promise.resolve();
+    act(() => { answer = result.current.actions.onGearCount!(0, 'ammo', 'reload', 2); });
+    const sent = socket.emitted.find((e) => e.event === 'countAction')!;
+    expect(sent.payload).toEqual({ kind: 'reload', line: 0, column: 'ammo', from: 2 });
+    expect(socket.sent('updateSheetField')).toHaveLength(0);
+    sent.ack!({ ok: true, now: 6, most: 6 });
+    expect(await answer).toEqual({ ok: true, now: 6, most: 6 });
+    act(() => { answer = result.current.actions.onGearCount!(0, 'ammo', 'spend'); });
+    act(() => { vi.advanceTimersByTime(5000); });
+    expect(await answer).toBeNull();
   });
 });

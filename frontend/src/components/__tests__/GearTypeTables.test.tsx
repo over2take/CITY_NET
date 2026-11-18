@@ -6,6 +6,7 @@ import { InventorySection } from '../InventorySection';
 import type { SheetSection } from '../../sheets/types';
 import type { ItemsShown } from '../../sheets/gearItems';
 import type { GearDiceRead } from '../../sheets/gearDice';
+import type { CountAnswer, GearCount } from '../../sheets/gearTypes';
 
 /**
  * The GEAR tab by item type (8a3a; approved mockup docs/mockups/item-types.html, 2026-11-14), each thing a compact line
@@ -26,19 +27,19 @@ const ITEMS: ItemsShown = {
   types: [
     { id: 'weapons', label: 'WEAPONS', one: 'Weapon', columns: [
       { id: 'damage', label: 'DAMAGE', kind: 'damage' }, { id: 'range', label: 'RANGE', kind: 'text' },
-      { id: 'ammo', label: 'AMMO', kind: 'count', button: 'FIRE' }, { id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' },
-      { id: 'grade', label: 'GRADE', kind: 'pick', options: ['LIGHT', 'HEAVY'] }] },
+      { id: 'ammo', label: 'AMMO', kind: 'count', button: 'FIRE', reload: ['Pistol Rounds', 'AP Rounds'] }, { id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' },
+      { id: 'charges', label: 'CHARGES', kind: 'count', refill: 'short_rest' }, { id: 'grade', label: 'GRADE', kind: 'pick', options: ['LIGHT', 'HEAVY'] }] },
     { id: 'gear', label: 'GEAR', one: 'Gear', columns: [{ id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' }] },
   ],
 };
 const line = (name: string, more = {}) => ({ name, qty: 1, enc: '', bundled: false, carry: 'stowed', location: '', ...more });
 
 const show = (lines: object[], { readOnly = false, items = ITEMS as ItemsShown | undefined, onGearRoll = undefined as ((line: number, column: string) => void) | undefined,
-  onReadGearDice = undefined as ((text: string) => Promise<GearDiceRead | null>) | undefined } = {}) => {
+  onReadGearDice = undefined as ((text: string) => Promise<GearDiceRead | null>) | undefined, onGearCount = undefined as GearCount | undefined } = {}) => {
   const writes: object[][] = [];
   const Harness = () => {
     const [data, setData] = useState<Record<string, unknown>>({ inventory: JSON.stringify(lines) });
-    return <InventorySection section={SECTION} data={data as never} readOnly={readOnly} itemsShown={items} onGearRoll={onGearRoll} onReadGearDice={onReadGearDice}
+    return <InventorySection section={SECTION} data={data as never} readOnly={readOnly} itemsShown={items} onGearRoll={onGearRoll} onReadGearDice={onReadGearDice} onGearCount={onGearCount}
       onFieldChange={(id, v) => { writes.push(JSON.parse(v as string)); setData((d) => ({ ...d, [id]: v })); }} />;
   };
   render(<Harness />);
@@ -60,7 +61,7 @@ describe('a compact line per thing, by type', () => {
     expect(within(screen.getByTestId('gear-line-0')).getByText('NOTHING FILLED IN · ✎ TO FILL IT')).toBeTruthy();
     // The Pistol: its item's DAMAGE, RANGE, AMMO, WEIGHT with its unit, GRADE.
     expect(within(screen.getByTestId('gear-line-1')).getAllByRole('note').map((n) => n.getAttribute('aria-label')).filter((l) => /^Item [0-9]+ /.test(l ?? '')))
-      .toEqual(['Item 2 DAMAGE: 2d6', 'Item 2 RANGE: 30 m', 'Item 2 AMMO: 6', 'Item 2 WEIGHT: 2 LB', 'Item 2 GRADE: LIGHT']);
+      .toEqual(['Item 2 DAMAGE: 2d6', 'Item 2 RANGE: 30 m', 'Item 2 AMMO: 6 / 6', 'Item 2 WEIGHT: 2 LB', 'Item 2 GRADE: LIGHT']);
     expect(within(note('WEAPONS', 'Item 2 RANGE')!).getByText('30 m').getAttribute('title')).toBe('As the item has it');
     // A stick: its own DAMAGE, and nothing else (doesn't apply).
     expect(within(screen.getByTestId('gear-line-2')).getAllByRole('note').map((n) => n.getAttribute('aria-label')).filter((l) => /^Item [0-9]+ /.test(l ?? ''))).toEqual(['Item 3 DAMAGE: 1d4']);
@@ -209,5 +210,91 @@ describe('a DAMAGE or DICE under ✎ (8a3c2)', () => {
     await userEvent.click(table('WEAPONS').getByRole('button', { name: 'Edit item 1' }));
     expect(table('WEAPONS').queryByRole('button', { name: 'Help writing Item 1 DAMAGE' })).toBeNull();
     expect(table('WEAPONS').getByLabelText('Item 1 DAMAGE')).toBeTruthy();
+  });
+});
+
+describe('a COUNT on its line (8a4b; decision 6 of the gear mockup)', () => {
+  /** onGearCount, each call kept, answered when the test says. */
+  const server = () => {
+    const calls: unknown[][] = [];
+    let reply: (a: CountAnswer | null) => void = () => {};
+    const onGearCount: GearCount = (...args) => { calls.push(args); return new Promise((resolve) => { reply = resolve; }); };
+    return { calls, onGearCount, answer: (a: CountAnswer | null) => reply(a) };
+  };
+  const at = (i: number) => within(screen.getByTestId(`gear-line-${i}`));
+
+  it('"AMMO 4 / 6" with its button and RELOAD beside it; the line and column sent; held while the server answers', async () => {
+    const s = server();
+    show([line('Rope'), line('Pistol', { counts: { ammo: 4 } })], { onGearCount: s.onGearCount });
+    expect(at(1).getByRole('note', { name: 'Item 2 AMMO: 4 / 6' })).toBeTruthy();
+    const fire = at(1).getByRole('button', { name: 'FIRE Item 2 AMMO' }) as HTMLButtonElement;
+    expect(fire.title).toBe('Use one of the AMMO');
+    expect((at(1).getByRole('button', { name: 'Reload Item 2 AMMO' }) as HTMLButtonElement).title).toBe('From Pistol Rounds or AP Rounds you carry');
+    await userEvent.click(fire);
+    expect(s.calls).toEqual([[1, 'ammo', 'spend', undefined]]);
+    // Waiting on the answer: neither again, so a quick second FIRE never spends from a count not yet back.
+    expect(fire.disabled).toBe(true);
+    expect((at(1).getByRole('button', { name: 'Reload Item 2 AMMO' }) as HTMLButtonElement).disabled).toBe(true);
+    s.answer({ ok: true, now: 3, most: 6 });
+    await waitFor(() => expect(fire.disabled).toBe(false));
+    await userEvent.click(at(1).getByRole('button', { name: 'Reload Item 2 AMMO' }));
+    expect(s.calls[1]).toEqual([1, 'ammo', 'reload', undefined]);
+  });
+
+  it('none left: no FIRE; full: no RELOAD; refilled only by a rest: no RELOAD at all; a column with no button, USE', () => {
+    const items: ItemsShown = { ...ITEMS, list: [...ITEMS.list, { id: 'wand', label: 'Wand', needs: 'carried', features: [], type: 'weapons', values: { charges: 3 } }] };
+    show([line('Pistol', { counts: { ammo: 0 } }), line('Pistol'), line('Wand', { counts: { charges: 1 } })], { items, onGearCount: server().onGearCount });
+    const empty = at(0).getByRole('button', { name: 'FIRE Item 1 AMMO' }) as HTMLButtonElement;
+    expect(empty.disabled).toBe(true);
+    expect(empty.title).toBe('No AMMO left');
+    expect((at(0).getByRole('button', { name: 'Reload Item 1 AMMO' }) as HTMLButtonElement).disabled).toBe(false);
+    const full = at(1).getByRole('button', { name: 'Reload Item 2 AMMO' }) as HTMLButtonElement;
+    expect(full.disabled).toBe(true);
+    expect(full.title).toBe('The AMMO is full');
+    expect(at(2).getByRole('note', { name: 'Item 3 CHARGES: 1 / 3' })).toBeTruthy();
+    expect(at(2).getByRole('button', { name: 'USE Item 3 CHARGES' })).toBeTruthy();
+    expect(at(2).queryByRole('button', { name: /^Reload/ })).toBeNull();
+  });
+
+  it('several carried: RELOAD asks which on the line, each with how many; the one picked sent; CANCEL leaves it', async () => {
+    const s = server();
+    const ask: CountAnswer = { ok: false, ask: [{ line: 1, name: 'Pistol Rounds', qty: 10 }, { line: 2, name: 'AP Rounds', qty: 2 }] };
+    show([line('Pistol', { counts: { ammo: 1 } }), line('Pistol Rounds', { qty: 10 }), line('AP Rounds', { qty: 2 })], { onGearCount: s.onGearCount });
+    await userEvent.click(at(0).getByRole('button', { name: 'Reload Item 1 AMMO' }));
+    s.answer(ask);
+    const which = await waitFor(() => at(0).getByRole('group', { name: 'Item 1 reload AMMO from' }));
+    expect(within(which).getByText('RELOAD AMMO FROM')).toBeTruthy();
+    // On the line that asked alone, not under the rounds' lines.
+    expect(screen.getAllByRole('group', { name: /reload/ })).toHaveLength(1);
+    await userEvent.click(within(which).getByRole('button', { name: 'AP Rounds ×2' }));
+    expect(s.calls[1]).toEqual([0, 'ammo', 'reload', 2]);
+    expect(at(0).queryByRole('group', { name: /reload/ })).toBeNull();
+    s.answer({ ok: true, now: 3, most: 6 });
+    const again = at(0).getByRole('button', { name: 'Reload Item 1 AMMO' }) as HTMLButtonElement;
+    await waitFor(() => expect(again.disabled).toBe(false));
+    await userEvent.click(again);
+    s.answer(ask);
+    await userEvent.click(await waitFor(() => at(0).getByRole('button', { name: 'CANCEL' })));
+    expect(at(0).queryByRole('group', { name: /reload/ })).toBeNull();
+    expect(s.calls).toHaveLength(3);
+  });
+
+  it('a refusal said on the line that asked; no answer said so; gone at the next ask', async () => {
+    const s = server();
+    show([line('Rope'), line('Pistol', { counts: { ammo: 2 } })], { onGearCount: s.onGearCount });
+    await userEvent.click(at(1).getByRole('button', { name: 'Reload Item 2 AMMO' }));
+    s.answer({ ok: false, error: 'Nothing carried to reload from: Pistol Rounds or AP Rounds' });
+    expect((await waitFor(() => at(1).getByRole('status'))).textContent).toBe('Nothing carried to reload from: Pistol Rounds or AP Rounds');
+    expect(at(0).queryByRole('status')).toBeNull();
+    await userEvent.click(at(1).getByRole('button', { name: 'FIRE Item 2 AMMO' }));
+    expect(at(1).queryByRole('status')).toBeNull();
+    s.answer(null);
+    expect((await waitFor(() => at(1).getByRole('status'))).textContent).toBe('No answer from the server: try again');
+  });
+
+  it('no FIRE or RELOAD where the sheet can\'t send them; the count still in words', () => {
+    show([line('Pistol', { counts: { ammo: 4 } })]);
+    expect(at(0).getByRole('note', { name: 'Item 1 AMMO: 4 / 6' })).toBeTruthy();
+    expect(at(0).queryByRole('button', { name: /AMMO$/ })).toBeNull();
   });
 });

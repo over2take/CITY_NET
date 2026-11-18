@@ -34,7 +34,8 @@
 // player's own or the GM's for the player they name.
 //
 // `countAction` with { kind: 'spend' | 'reload', line, column, from? } (8a4a): a gear line's COUNT spent one by its button, or
-// filled by RELOAD from a carried line (systemBuilder/gearCounts.js); answered by ack, which lists the lines to ask between.
+// filled by RELOAD from a carried line (systemBuilder/gearCounts.js); answered by ack alone, which lists the lines to ask
+// between or says why not, said on the line that asked.
 //
 // `recoverySpend` with { pool, count } (R2a) spends recovery dice with a roll (sheets/recover.js).
 // In a system leaving spending to the GM, a player spends or ticks them off only while the GM has
@@ -248,7 +249,7 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
     if (!payload || typeof payload !== 'object' || !COUNT_KINDS.has(payload.kind)) return;
     const answer = (a) => { if (typeof ack === 'function') ack(a); };
     const from = Number.isInteger(payload.from) ? payload.from : undefined;
-    withCaller(payload, 'choicesRefused', ({ username, system, definition, refuse }) => {
+    withCaller(payload, 'choicesRefused', ({ username, system, definition }) => {
       let done = null;
       mutateSheetForUser(db, { username, system }, (data) => {
         done = payload.kind === 'spend'
@@ -257,8 +258,9 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
         return done.ok ? done.data : undefined;
       }, (err2, stored) => {
         if (done && done.ask) return answer({ ok: false, ask: done.ask });
-        if (done && !done.ok) { answer({ ok: false, error: done.error }); return refuse(done.error); }
-        if (err2) { answer({ ok: false, error: 'That character has no sheet yet' }); return refuse('That character has no sheet yet'); }
+        // Said on the line that asked (8a4b), not again under the gear's items as choicesRefused would.
+        if (done && !done.ok) return answer({ ok: false, error: done.error });
+        if (err2) return answer({ ok: false, error: 'That character has no sheet yet' });
         if (!stored) return undefined;
         answer({ ok: true, now: done.now, most: done.most });
         return io.emit('sheetUpdated', { username, system });

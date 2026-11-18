@@ -214,12 +214,13 @@ describe('at the table', () => {
     expect((await stored()).map((r) => r.name)).toEqual(['Pistol', 'Pistol Rounds']);
   });
 
-  it('the GM on the player they name; refusals answered and said, in words; what isn\'t one passed over', async () => {
+  it('the GM on the player they name; refusals answered in words, to the line alone; what isn\'t one passed over', async () => {
     const { gm, kes } = await table();
     expect(await gm.act({ kind: 'spend', line: 0, column: 'ammo', username: 'ash' })).toEqual({ ok: true, now: 1, most: 6 });
     expect((await stored('ash'))[0].counts).toEqual({ ammo: 1 });
     expect(await kes.act({ kind: 'spend', line: 2, column: 'charges' })).toEqual({ ok: false, error: 'No CHARGES left in the Wand' });
-    expect(kes.refused()).toEqual(['No CHARGES left in the Wand']);
+    // Said on the line that asked (8a4b), never again under the gear's items as a choicesRefused.
+    expect(kes.refused()).toEqual([]);
     expect(await kes.act({ kind: 'spend', line: '0', column: 'ammo' })).toEqual({ ok: false, error: 'No such line' });
     expect(await kes.act({ kind: 'spend', line: 0, column: { id: 'ammo' } })).toEqual({ ok: false, error: 'Not a COUNT' });
     // A kind it doesn't know, or nothing at all: passed over, nothing answered or thrown.

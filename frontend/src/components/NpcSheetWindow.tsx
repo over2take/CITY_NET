@@ -19,6 +19,7 @@ import { useRecoveryOpen } from '../hooks/useRecoveryOpen';
 import { npcInitiativePortrait } from '../modules/initiative/npcPortrait';
 import { canImport, canImportNpc } from '../sheets/importable';
 import { themeRoot } from '../utils/themeRoot';
+import type { CountAnswer, CountKind } from '../sheets/gearTypes';
 
 // Admin view/edit of an NPC or player sheet. Unlike the player window
 // (socket-based, self-only), this goes through the admin REST routes:
@@ -340,6 +341,11 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
             onImprove: (action: ImproveAction) => socket.emit('improveAction', { ...action, username: playerUsername }),
             onRecoverySpend: (pool: string, count: number) => socket.emit('recoverySpend', { pool, count, username: playerUsername }), recoveryOpen,
             onRestTake: (rest: string) => socket.emit('restTake', { rest, username: playerUsername }),
+            // FIRE and RELOAD (8a4b) on a line of the player named; no answer in 5 s is none.
+            onGearCount: (line: number, column: string, kind: CountKind, from?: number) => new Promise<CountAnswer | null>((resolve) => {
+              const timer = setTimeout(() => resolve(null), 5000);
+              socket.emit('countAction', { kind, line, column, username: playerUsername, ...(from !== undefined ? { from } : {}) }, (answer: CountAnswer) => { clearTimeout(timer); resolve(answer ?? null); });
+            }),
           } : {})}
         />
       ) : (
