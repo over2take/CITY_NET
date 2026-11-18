@@ -880,6 +880,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **Browser journeys in eight parts on CI, not five.** The parts are shared out by count in file order, so the first ones, holding the long builder journeys, still took 13 and 18 minutes while the rest took 7 to 10. Eight shorter parts finish sooner.
 - **Faster browser journeys on CI.** Every journey used to sit through the app's five-second boot sequence in each fresh tab it opened, and load the frontend as some 390 separate files from the dev server. The sign-in helpers now start a tab as one that has already booted, and CI serves the frontend built once. A sample file went from 49 to 17 seconds.
 - **The character sheet now knows its own token (8s3a).** Each sheet carries the player's token, its HP, conditions and injuries, ready for the vitals strip coming next, and an open sheet reloads when that token's conditions or injuries change. A condition's rounds left stay the GM's, as on the map.
 - **Uploading items, the server's half (8aL3a).** A file of items is read against a system: a section per item type headed by its own columns, then what an item needs, its cost and words, and the items' features. Items are matched by name and updated or added, never deleted; a row with a mistake is skipped and said by its line. The ITEMS tab's IMPORT and its downloads come next.
