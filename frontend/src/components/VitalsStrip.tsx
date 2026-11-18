@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import type { Location } from '../types';
 import { HitPointsPanel } from './HitPoints';
+import { ModelHealthDescription } from './HealthModelPanels';
 import { useHealthView } from '../hooks/useHealthView';
 import { isCustomSystem } from '../sheets';
 import { useWords } from '../sheets/words';
@@ -40,6 +41,10 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
+  /** What the server said happened, for a model that says more than the numbers (a track spilling over, 8s3d1). */
+  const [said, setSaid] = useState<string | null>(null);
+  /** Two tracks: the one DAMAGE and HEAL hit, and the box shows (8s3d1); null is the first. */
+  const [track, setTrack] = useState<string | null>(null);
   /** TEMP being typed, after a click on it; null while it shows. */
   const [tempText, setTempText] = useState<string | null>(null);
   const [restsOpen, setRestsOpen] = useState(restCalled);
@@ -124,17 +129,24 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
   // No health to change: the conditions and rests still.
   if (!hasHealth(view?.model)) return <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>{below}{restPanel}</div>;
 
+  // Two tracks (a custom `tracks` model): the picked one, the first unless another was picked.
+  const tracks = view?.model === 'tracks' && view.tracks?.length === 2 && view.second ? view.tracks : null;
+  const picked = tracks ? (tracks.find((t) => t.id === track) ?? tracks[0]) : null;
   const send = async (action: VitalsAction, n: number) => {
     if (action !== 'set_temp' && n === 0) return;
     setBusy(true);
     setRefused(null);
+    setSaid(null);
     try {
-      const res = await fetch(`/api/locations/${token.id}/health`, { method: 'PUT', headers, body: JSON.stringify(healthBody(action, n)) });
+      const body = { ...healthBody(action, n), ...(picked && action !== 'set_temp' ? { track: picked.id } : {}) };
+      const res = await fetch(`/api/locations/${token.id}/health`, { method: 'PUT', headers, body: JSON.stringify(body) });
+      const answer = await res.json().catch(() => null);
       if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        setRefused(body?.error ?? 'NOT CHANGED');
+        setRefused(answer?.error ?? 'NOT CHANGED');
         return;
       }
+      // As HEALTH says it: a full track's damage spilling into the other.
+      if (tracks && answer?.overflow) setSaid(`${tracks[1].label.toUpperCase()} FULL · ${answer.overflow} SPILLED INTO ${tracks[0].label.toUpperCase()}`);
       // The server tells every open sheet (sheetUpdated), this one with them: the numbers follow.
       if (action === 'set_temp') setTempText(null); else setAmount('');
     } catch {
@@ -151,19 +163,25 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
       <HitPointsPanel target={token as unknown as Location} token={authToken} refreshLocations={reload} gameSystem={system} socket={socket} underStrip />
     </div>
   );
-  const alert = refused && <span role="alert" style={{ color: 'var(--danger)', fontSize: '0.6rem', letterSpacing: '1px' }}>{refused}</span>;
+  const alert = refused
+    ? <span role="alert" style={{ color: 'var(--danger)', fontSize: '0.6rem', letterSpacing: '1px' }}>{refused}</span>
+    : said && <span role="status" aria-label="What happened" style={{ color: 'var(--cyan)', fontSize: '0.6rem', letterSpacing: '1px' }}>{said}</span>;
 
-  // Another model: its own editor, in HEALTH ▾.
+  // Another model (wound boxes, harm, locations, typed damage): its own summary, as everyone sees it, and its editor in
+  // HEALTH ▾ (8s3d1, decision 8 of the vitals mockup).
   if (!takesAnAmount(view?.model)) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
-        <div role="group" aria-label="Vitals" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div role="group" aria-label="Vitals" style={{ display: 'flex', gap: '10px', alignItems: 'center', border: '1px solid var(--green)', padding: '6px 8px', background: 'color-mix(in srgb, var(--black) 40%, transparent)' }}>
+          <div aria-label="Health now" style={{ flex: 1, minWidth: 0 }}>
+            {view && <ModelHealthDescription view={view} target={token as unknown as Location} />}
+          </div>
           <button type="button" aria-expanded={open} onClick={onToggle}
-            style={{ ...button('var(--green)'), background: open ? 'var(--green)' : 'none', color: open ? 'var(--black)' : 'var(--green)' }}>
+            style={{ ...button('var(--green)'), flexShrink: 0, background: open ? 'var(--green)' : 'none', color: open ? 'var(--black)' : 'var(--green)' }}>
             HEALTH {open ? '▴' : '▾'}
           </button>
-          {alert}
         </div>
+        {alert}
         {below}
         {panel}
         {restPanel}
@@ -171,16 +189,41 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
     );
   }
 
-  const cur = token.hp_current ?? 0;
-  const max = token.hp_max ?? 0;
+  // The numbers the box shows: the token's, or with two tracks the picked one's (the second kept on the sheet).
+  const onSecond = !!(tracks && picked && picked.id === tracks[1].id);
+  const numbersOf = (second: boolean) => (second
+    ? { cur: view?.second?.current ?? 0, max: view?.second?.max ?? 0 }
+    : { cur: token.hp_current ?? 0, max: token.hp_max ?? 0 });
+  const { cur, max } = numbersOf(onSecond);
   const temp = token.hp_temp ?? 0;
-  const ratio = max > 0 ? Math.max(0, Math.min(cur, max)) / max : 0;
+  // How much is left: the second track counts damage marked, so full is the worst there (STUN 4/4 had shown green).
+  const filled = max > 0 ? Math.max(0, Math.min(cur, max)) / max : 0;
+  const ratio = onSecond ? (max > 0 ? 1 - filled : 1) : filled;
   // As the header's bar colors it.
   const hpColor = ratio > 0.5 ? 'var(--green)' : ratio > 0.25 ? 'var(--warning)' : 'var(--danger)';
   const setTemp = () => { if (tempText !== null) void send('set_temp', amountOf(tempText)); };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+      {/* Two tracks: which one DAMAGE and HEAL hit and the box shows, each with its numbers (8s3d1). */}
+      {tracks && (
+        <div role="group" aria-label="Track" style={{ display: 'flex', border: '1px solid var(--green)' }}>
+          {tracks.map((t, i) => {
+            const on = t.id === picked?.id;
+            const n = numbersOf(i === 1);
+            return (
+              <button key={t.id} type="button" aria-pressed={on} onClick={() => { setTrack(t.id); setSaid(null); }}
+                style={{
+                  flex: 1, border: 0, borderRight: i === 0 ? '1px solid var(--dark-green)' : 0, padding: '3px 6px', fontFamily: 'inherit',
+                  fontSize: '0.6rem', letterSpacing: '1px', cursor: 'pointer',
+                  background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)',
+                }}>
+                {t.label.toUpperCase()} {n.cur}/{n.max}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div role="group" aria-label="Vitals" style={{
         position: 'relative', display: 'flex', gap: '10px', alignItems: 'stretch', border: '1px solid var(--green)', padding: '6px 8px',
         background: 'color-mix(in srgb, var(--black) 40%, transparent)',
@@ -208,7 +251,7 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
           <span style={label}>MAX</span>
           <span aria-label={`Current ${hp}`} style={{ ...big, color: hpColor, transition: 'color 0.3s' }}>{cur}</span>
           <span style={{ ...big, opacity: 0.6, padding: '0 2px' }}>/</span>
-          <span aria-label={`Max ${hp}`} title={maxNote} style={{ ...big, ...(maxNote ? { color: 'var(--cyan)' } : {}) }}>{max}</span>
+          <span aria-label={`Max ${hp}`} title={onSecond ? undefined : maxNote} style={{ ...big, ...(maxNote && !onSecond ? { color: 'var(--cyan)' } : {}) }}>{max}</span>
         </div>
         <div style={{ width: '64px', flexShrink: 0, display: 'grid', gridTemplateRows: 'auto auto 1.25rem', alignItems: 'center', justifyItems: 'center', rowGap: '2px' }}>
           <span style={label}>TEMP</span>
@@ -235,7 +278,7 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
             background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold',
             padding: '2px 8px', lineHeight: 1.2, margin: 0, boxSizing: 'border-box',
           }}>
-          {hitPoints} {open ? '▴' : '▾'}
+          {picked ? picked.label.toUpperCase() : hitPoints} {open ? '▴' : '▾'}
         </button>
       </div>
       {alert}

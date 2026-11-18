@@ -30,7 +30,9 @@ describe('which models the strip changes', () => {
     expect(takesAnAmount(null)).toBe(true);
     expect(takesAnAmount(undefined)).toBe(true);
     expect(takesAnAmount('pool')).toBe(true);
-    for (const m of ['tracks', 'typed', 'harm', 'wounds', 'locations', 'none']) expect(takesAnAmount(m), m).toBe(false);
+    // Two tracks too, with a picker (8s3d1).
+    expect(takesAnAmount('tracks')).toBe(true);
+    for (const m of ['typed', 'harm', 'wounds', 'locations', 'none']) expect(takesAnAmount(m), m).toBe(false);
     expect(hasHealth('none')).toBe(false);
     for (const m of [null, undefined, 'pool', 'wounds']) expect(hasHealth(m), String(m)).toBe(true);
   });

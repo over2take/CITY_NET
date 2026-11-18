@@ -29,11 +29,11 @@ const template = {
 } as unknown as SheetTemplate;
 
 /** A socket that answers a custom system's health view with `model`, as the server does. */
-const socketWith = (model: string | null) => {
+const socketWith = (model: string | null, more: Record<string, unknown> = {}) => {
   const handlers = new Map<string, ((...a: unknown[]) => void)[]>();
   return {
     emit: vi.fn((e: string, p: { location_id: number }) => {
-      if (e === 'requestHealthView' && model) queueMicrotask(() => (handlers.get('healthView') ?? []).forEach((fn) => fn({ location_id: p.location_id, model })));
+      if (e === 'requestHealthView' && model) queueMicrotask(() => (handlers.get('healthView') ?? []).forEach((fn) => fn({ location_id: p.location_id, model, ...more })));
     }),
     on: (e: string, fn: (...a: unknown[]) => void) => { handlers.set(e, [...(handlers.get(e) ?? []), fn]); },
     off: (e: string, fn: (...a: unknown[]) => void) => { handlers.set(e, (handlers.get(e) ?? []).filter((f) => f !== fn)); },
@@ -376,5 +376,67 @@ describe('the box stands in for the HEALTH section, and shows the AC (8s3c, the 
     expect(show(armored([], { tokenDefense: { editOnToken: false, label: 'DV' } }), { melee_ac: 14 })).toBeNull();
     // None set on the token: nothing to show.
     expect(show(armored([acField('token_ac', 'Guard', 'guard')]), { melee_ac: null })).toBeNull();
+  });
+});
+
+describe('other health models in the strip (8s3d1)', () => {
+  const SYS = 'sys_0a1b2c3d4e5f6a7b';
+  const TRACKS = { tracks: [{ id: 'physical', label: 'Physical' }, { id: 'stun', label: 'Stun' }], second: { id: 'stun', label: 'Stun', current: 3, max: 10 }, overflow: true };
+
+  it('two tracks: a picker with each one\'s numbers; DAMAGE and HEAL hit the picked one, the box showing it; a spill said', async () => {
+    draw({ system: SYS, socket: socketWith('tracks', TRACKS) });
+    const picker = await screen.findByRole('group', { name: 'Track' });
+    const [physical, stun] = within(picker).getAllByRole('button');
+    expect([physical.textContent, physical.getAttribute('aria-pressed'), stun.textContent]).toEqual(['PHYSICAL 14/20', 'true', 'STUN 3/10']);
+    await userEvent.type(amount(), '4');
+    await userEvent.click(screen.getByRole('button', { name: 'DAMAGE' }));
+    // The second track: the box shows it, named under the numbers, and DAMAGE hits it; its spill into the first said.
+    await userEvent.click(stun);
+    expect(stun.getAttribute('aria-pressed')).toBe('true');
+    expect([screen.getByLabelText('Current HP').textContent, screen.getByLabelText('Max HP').textContent]).toEqual(['3', '10']);
+    // It counts damage marked: 3 of 10 is mostly clear, so green; full would be the danger color.
+    expect(screen.getByLabelText('Current HP').style.color).toBe('var(--green)');
+    expect(screen.getByRole('button', { name: /^STUN/, expanded: false }).getAttribute('aria-expanded')).toBe('false');
+    answer = { ok: true, body: { overflow: 2 } };
+    await userEvent.type(amount(), '9');
+    await userEvent.click(screen.getByRole('button', { name: 'DAMAGE' }));
+    expect(await screen.findByRole('status', { name: 'What happened' })).toHaveProperty('textContent', 'STUN FULL · 2 SPILLED INTO PHYSICAL');
+    // TEMP is the token's, no track.
+    await userEvent.click(screen.getByRole('button', { name: /^Temp HP/ }));
+    await userEvent.clear(screen.getByRole('spinbutton', { name: 'Temp HP' }));
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Temp HP' }), '2{Enter}');
+    expect(healthCalls().map((c) => c.body)).toEqual([
+      { action: 'damage', amount: 4, track: 'physical' }, { action: 'damage', amount: 9, track: 'stun' }, { action: 'set_temp', amount: 2, hp_temp: 2 },
+    ]);
+  });
+
+  it('two tracks: HEALTH under the strip leaves out its own picker, amount, HEAL, DAMAGE and TEMP', async () => {
+    draw({ system: SYS, socket: socketWith('tracks', TRACKS) });
+    await screen.findByRole('group', { name: 'Track' });
+    await userEvent.click(screen.getByRole('button', { name: /^PHYSICAL/, expanded: false }));
+    const health = screen.getByRole('region', { name: 'Health' });
+    expect(within(health).queryByRole('group', { name: 'Track' })).toBeNull();
+    for (const name of ['DAMAGE', 'HEAL']) expect(within(health).queryByRole('button', { name }), name).toBeNull();
+    for (const name of ['Amount', 'Temp HP']) expect(within(health).queryByRole('spinbutton', { name }), name).toBeNull();
+  });
+
+  it('wound boxes and harm: the summary everyone sees, beside HEALTH ▾', async () => {
+    draw({ system: SYS, socket: socketWith('wounds', { state: 'wounded' }) });
+    await vi.waitFor(() => expect(screen.getByLabelText('Health now').textContent).toBe('WOUNDED'));
+    expect(screen.getByRole('button', { name: /^HEALTH/ })).toBeTruthy();
+    cleanup();
+    draw({ system: SYS, socket: socketWith('harm', { worstLabel: 'LESSER' }) });
+    await vi.waitFor(() => expect(screen.getByLabelText('Health now').textContent).toBe('LESSER HARM'));
+  });
+});
+
+describe('the second track\'s color (8s3d1)', () => {
+  it('full is the danger color, nearly empty green: it counts damage, not what is left', async () => {
+    const SYS = 'sys_0a1b2c3d4e5f6a7b';
+    const full = { tracks: [{ id: 'physical', label: 'Physical' }, { id: 'stun', label: 'Stun' }], second: { id: 'stun', label: 'Stun', current: 10, max: 10 } };
+    draw({ system: SYS, socket: socketWith('tracks', full) });
+    const picker = await screen.findByRole('group', { name: 'Track' });
+    await userEvent.click(within(picker).getAllByRole('button')[1]);
+    expect(screen.getByLabelText('Current HP').style.color).toBe('var(--danger)');
   });
 });

@@ -230,8 +230,8 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
         </div>
         {injuryMap}
         {!underStrip && conditions}
-        <ModelHealthEditor key={`${target.id}:${view.model}`} view={view} target={target} send={sendHealth} gm={token !== ''} words={word} />
-        {(view.model === 'tracks' || view.model === 'locations') && (
+        <ModelHealthEditor key={`${target.id}:${view.model}`} view={view} target={target} send={sendHealth} gm={token !== ''} words={word} underStrip={underStrip} />
+        {(view.model === 'locations' || (view.model === 'tracks' && !underStrip)) && (
           <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>{tempRow}</div>
         )}
       </div>
