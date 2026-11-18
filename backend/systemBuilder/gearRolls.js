@@ -66,4 +66,4 @@ const readGearDice = (definition, data, text) => {
   return { ok: true, low: Math.min(low.value, high.value), high: Math.max(low.value, high.value), used, names: nameList };
 };
 
-module.exports = { rollGear, readGearDice };
+module.exports = { linesOf, rollGear, readGearDice };

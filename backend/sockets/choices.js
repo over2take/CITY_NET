@@ -33,6 +33,9 @@
 // `improveAction` with { kind: 'mark', stat, on } (7f3a1): IMPROVE BY USE's mark on a stat ticked or cleared by hand, the
 // player's own or the GM's for the player they name.
 //
+// `countAction` with { kind: 'spend' | 'reload', line, column, from? } (8a4a): a gear line's COUNT spent one by its button, or
+// filled by RELOAD from a carried line (systemBuilder/gearCounts.js); answered by ack, which lists the lines to ask between.
+//
 // `recoverySpend` with { pool, count } (R2a) spends recovery dice with a roll (sheets/recover.js).
 // In a system leaving spending to the GM, a player spends or ticks them off only while the GM has
 // spending open (recovery.js maySpend); the GM always may.
@@ -48,6 +51,7 @@ const { itemAction } = require('../systemBuilder/items');
 const { spendAction } = require('../systemBuilder/spendXp');
 const { improveAction } = require('../systemBuilder/improveByUse');
 const { valueOn } = require('../systemBuilder/choices');
+const { spendCount, reloadCount } = require('../systemBuilder/gearCounts');
 const { kitPatch, kitTakenBack } = require('../sheets/kitGiving');
 const identity = require('../sheets/identity');
 const { takeRest } = require('../sheets/rests');
@@ -57,6 +61,7 @@ const { mutateSheetForUser } = require('../sheets/mutate');
 const { spendRecovery } = require('../sheets/recover');
 
 const KINDS = new Set(['pick', 'drop', 'clear', 'level', 'use', 'recovery', 'roll']);
+const COUNT_KINDS = new Set(['spend', 'reload']);
 const LOG_COLOR = '#00ff00';
 const cryptoRng = () => crypto.randomInt(0, 2 ** 32) / 2 ** 32;
 /** The most recovery dice one spend rolls from a pool. */
@@ -233,6 +238,30 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
           if (moved) io.emit('dataUpdated', { isRhombusOnly: true });
           io.emit('sheetUpdated', { username, system });
         });
+      });
+    }, 'This game has no items');
+  });
+
+  // A gear line's COUNT (8a4a): FIRE (or the button its column names) spends one, RELOAD fills it from a carried line. With
+  // several to reload from and none named, nothing is written and the ack says which there are, to ask.
+  socket.on('countAction', (payload, ack) => {
+    if (!payload || typeof payload !== 'object' || !COUNT_KINDS.has(payload.kind)) return;
+    const answer = (a) => { if (typeof ack === 'function') ack(a); };
+    const from = Number.isInteger(payload.from) ? payload.from : undefined;
+    withCaller(payload, 'choicesRefused', ({ username, system, definition, refuse }) => {
+      let done = null;
+      mutateSheetForUser(db, { username, system }, (data) => {
+        done = payload.kind === 'spend'
+          ? spendCount(definition, data, payload.line, payload.column)
+          : reloadCount(definition, data, payload.line, payload.column, from);
+        return done.ok ? done.data : undefined;
+      }, (err2, stored) => {
+        if (done && done.ask) return answer({ ok: false, ask: done.ask });
+        if (done && !done.ok) { answer({ ok: false, error: done.error }); return refuse(done.error); }
+        if (err2) { answer({ ok: false, error: 'That character has no sheet yet' }); return refuse('That character has no sheet yet'); }
+        if (!stored) return undefined;
+        answer({ ok: true, now: done.now, most: done.most });
+        return io.emit('sheetUpdated', { username, system });
       });
     }, 'This game has no items');
   });

@@ -880,6 +880,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Under the hood
 
+- **A gear line's COUNT on the server (8a4a).** A COUNT column (ammo, charges) is spent one at a time by the button its column names, filled by RELOAD from a carried line of an item the column names, taking from that line's quantity (and asking which when several are carried), and filled again by a rest the column names or one that counts as it, said in the rest's line. The FIRE and RELOAD buttons on the sheet come next.
 - **Browser journeys in eight parts on CI, not five.** The parts are shared out by count in file order, so the first ones, holding the long builder journeys, still took 13 and 18 minutes while the rest took 7 to 10. Eight shorter parts finish sooner.
 - **Faster browser journeys on CI.** Every journey used to sit through the app's five-second boot sequence in each fresh tab it opened, and load the frontend as some 390 separate files from the dev server. The sign-in helpers now start a tab as one that has already booted, and CI serves the frontend built once. A sample file went from 49 to 17 seconds.
 - **The character sheet now knows its own token (8s3a).** Each sheet carries the player's token, its HP, conditions and injuries, ready for the vitals strip coming next, and an open sheet reloads when that token's conditions or injuries change. A condition's rounds left stay the GM's, as on the map.
