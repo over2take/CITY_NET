@@ -4,8 +4,19 @@ import { GM } from '../playwright.config';
 // What every journey does first: sign in, find the builder. Found the way a person would, by
 // what the buttons and boxes say.
 
+/**
+ * The boot sequence a tab plays on its first visit, skipped (App.tsx shows BootScreen until sessionStorage says
+ * `citynet_booted`). A person sees it once a tab; every journey's fresh tabs sat through it, about 5 s each on a desktop
+ * and several times that on CI, one to three times a test. The app is unchanged: the journeys only start as a tab that
+ * has already booted.
+ */
+export const skipBoot = (page: Page) => page.addInitScript(() => {
+  try { sessionStorage.setItem('citynet_booted', '1'); } catch { /* storage refused: the boot plays, as before */ }
+});
+
 /** Someone signs in on the real sign-in screen (Secure Mode), the GM and players alike. */
 const signIn = async (page: Page, who: { username: string; password: string }) => {
+  await skipBoot(page);
   await page.goto('/');
   await page.getByPlaceholder('OPERATOR_ID').fill(who.username);
   await page.getByPlaceholder('PASSWORD').fill(who.password);
