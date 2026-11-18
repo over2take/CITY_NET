@@ -7,6 +7,7 @@ import { OVERDRAFT_RULE } from '../data/shopRules';
 import { isOpen } from '../sheets/restCalls';
 import { useChoicesRefused } from './useChoicesRefused';
 import type { SheetRendererProps } from '../components/SheetRenderer';
+import type { SheetVitals } from '../sheets/vitals';
 
 // Shared client logic for the player's own character sheet, used by both
 // surfaces that render it: the in-game floating window
@@ -43,7 +44,8 @@ export interface PlayerSheetActions {
 export function usePlayerSheet(
   socket: any,
   userName: string | null,
-  opts: { onRolled?: () => void } = {},
+  /** `authToken`: the sign-in the vitals strip sends with a change to the token's health, as HEALTH does (8s3b). */
+  opts: { onRolled?: () => void; authToken?: string | null } = {},
 ) {
   const [sheet, setSheet] = useState<CharacterSheet | null>(null);
   const [allowFumbleShield, setAllowFumbleShield] = useState(false);
@@ -222,9 +224,14 @@ export function usePlayerSheet(
   // Whether the GM has spending recovery dice open (R2b), read with the house rules.
   const recoveryOpen = isOpen(ruleSettings);
 
+  // The vitals strip (8s3b): the player's own token as the sheet came with it (8s3a), none before it has.
+  const vitals: SheetVitals | undefined = sheet && userName && sheet.token !== undefined
+    ? { token: sheet.token, owner: userName, system: sheet.system, authToken: opts.authToken ?? '', socket, reload: () => socket?.emit('requestMySheet') }
+    : undefined;
+
   /** Every play prop a surface hands SheetRenderer: both spread it whole (8s1a). */
   const sheetProps = {
-    ...actions, choicesRefused, recoveryOpen, allowFumbleShield, xpRate, encumbranceEnforced, hiddenTabs,
+    ...actions, choicesRefused, recoveryOpen, allowFumbleShield, xpRate, encumbranceEnforced, hiddenTabs, vitals,
   } satisfies Partial<SheetRendererProps>;
 
   return {

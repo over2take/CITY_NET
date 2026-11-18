@@ -111,6 +111,25 @@ describe('the tab and the window hand the sheet the same', () => {
     ]);
   });
 
+  it('the vitals strip on both, with the token the sheet came with and each one\'s own sign-in (8s3b)', async () => {
+    const TOKEN = { id: 7, name: 'KES', shape: 'rhombus', owner: 'kes', hp_current: 14, hp_max: 20, hp_temp: 0, conditions: '[]', injuries: '{}' };
+    const win = fakeSocket();
+    render(<CharacterSheetWindow pos={{ x: 0, y: 0 }} setPos={() => {}} onClose={() => {}} socket={win} userName="kes" playerToken="tok" />);
+    await win.serve('sheetData', { ...SHEET, token: TOKEN });
+    expect(last().vitals).toMatchObject({ token: TOKEN, owner: 'kes', system: 'generic', authToken: 'tok' });
+    cleanup();
+    openTab({ userName: 'kes', adminToken: 'gm-tok', theme: 'classic' });
+    await tabSocket.current!.serve('sheetData', { ...SHEET, token: null });
+    expect(last().vitals).toMatchObject({ token: null, owner: 'kes', authToken: 'gm-tok' });
+    // reload asks for the sheet again, the token with it.
+    tabSocket.current!.sent.length = 0;
+    (last().vitals as { reload: () => void }).reload();
+    expect(tabSocket.current!.sent).toEqual([['requestMySheet', undefined]]);
+    // A sheet that came without one (an older server): no strip.
+    await tabSocket.current!.serve('sheetData', SHEET);
+    expect(last().vitals).toBeUndefined();
+  });
+
   it('what the server refused, and whether recovery is open, reach the tab\'s sheet', async () => {
     settings = [{ key: 'recovery_open', value: '1' }];
     openTab();

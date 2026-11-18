@@ -138,7 +138,7 @@ export default function SheetPage() {
   }, [userName, playerToken, adminToken]);
 
   // Every play prop from the shared hook, spread whole, as the window's are (8s1a).
-  const { sheet, template, handleFieldChange, handleFieldsChange, sheetProps } = usePlayerSheet(socket, userName);
+  const { sheet, template, handleFieldChange, handleFieldsChange, sheetProps } = usePlayerSheet(socket, userName, { authToken: adminToken || playerToken });
   // A custom system's sheet is drawn once its template arrives (sheets/customTemplates.ts).
   useCustomTemplates(sheet?.system);
 

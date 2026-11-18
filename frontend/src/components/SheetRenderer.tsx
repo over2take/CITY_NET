@@ -32,6 +32,8 @@ import { SpendSection } from './SpendSection';
 import { ImproveMark } from './ImproveMark';
 import { markStates } from '../sheets/improveShown';
 import { withTempHp } from '../sheets/tempHp';
+import { VitalsStrip } from './VitalsStrip';
+import type { SheetVitals } from '../sheets/vitals';
 import { choiceEffects, effectsWorked, type ChoicesAction } from '../sheets/choicesShown';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
@@ -133,6 +135,11 @@ export interface SheetRendererProps {
   recoveryOpen?: boolean;
   /** Takes one of the game's rests on this character, from its RESTS section (R3b). */
   onRestTake?: (rest: string) => void;
+  /**
+   * The vitals strip under the header's HP bar (8s3b): the player's own token, to DAMAGE, HEAL and set TEMP on it and open
+   * the HEALTH panel here. From usePlayerSheet, so SHEET.EXE and the standalone tab have it alike; none elsewhere.
+   */
+  vitals?: SheetVitals;
   /** Opens LEVEL_UP.EXE (7d3a): the player's own sheet, in the game, offers it. */
   onLevelUp?: () => void;
   /** WEAR and ATTUNE a custom system's items on the GEAR tab (7e3b): asks the server (an itemAction). */
@@ -469,7 +476,9 @@ function FieldInput({ field, data, readOnly: sheetReadOnly, onFieldChange, onFie
   );
 }
 
-function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onFieldsChange, onPharmaChange, pharmaUndo, onUndoPharma, readOnly, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, xpRate, canRoll }: {
+function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onFieldsChange, onPharmaChange, pharmaUndo, onUndoPharma, readOnly, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, xpRate, canRoll, vitals }: {
+  /** The vitals strip under the HP bar (8s3b): only the player's own sheet, where it can be changed. */
+  vitals?: SheetVitals;
   onLevelUp?: () => void;
   template: SheetTemplate; data: SheetData; portraitUrl?: string | null;
   onPortraitUpload?: (file: File) => void;
@@ -496,6 +505,8 @@ function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUp
   xpRate?: 'fast' | 'slow';
   canRoll?: boolean;
 }) {
+  // The strip's HEALTH drawer, opened by HEALTH ▾ or a click on the HP bar (8s3b). Before the early return: a hook.
+  const [healthOpen, setHealthOpen] = useState(false);
   const h = template.header;
   if (!h) return null;
   const name = String(data[h.nameField] ?? '').trim();
@@ -526,12 +537,15 @@ function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUp
           // The system's own words for hit points, if it renamed them; today's text otherwise.
           // The tooltip names the sidebar's button, so the two always read the same.
           const hpButton = asLabel(wordFor(template.id, 'hp', 'plural', 'HIT POINTS'));
+          // With the vitals strip, a click opens its HEALTH drawer here (8s3b, the user's call); else the linked window.
+          const onBar = vitals?.token ? () => setHealthOpen((o) => !o) : onOpenLink ? () => onOpenLink('token_hp') : undefined;
           return (
             <div
-              role={onOpenLink ? 'button' : undefined}
-              title={onOpenLink ? `Synced with your token — click to open ${hpButton}` : 'Synced with your token'}
-              onClick={onOpenLink ? () => onOpenLink('token_hp') : undefined}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', cursor: onOpenLink ? 'pointer' : 'default' }}
+              role={onBar ? 'button' : undefined}
+              title={vitals?.token ? 'Synced with your token: click to open HEALTH here' : onOpenLink ? `Synced with your token — click to open ${hpButton}` : 'Synced with your token'}
+              aria-expanded={vitals?.token ? healthOpen : undefined}
+              onClick={onBar}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '6px', cursor: onBar ? 'pointer' : 'default' }}
             >
               <span style={{ ...barLabel }}>{wordFor(template.id, 'hp', 'short', 'HP').toUpperCase()}</span>
               <div style={{ flex: 1, display: 'flex', gap: max > 40 ? '1px' : '2px', height: '12px', border: `1px solid ${hpColor}`, background: 'color-mix(in srgb, var(--black) 60%, transparent)', padding: '1px', transition: 'border-color 0.3s' }}>
@@ -552,6 +566,7 @@ function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUp
             </div>
           );
         })()}
+        {vitals && <VitalsStrip vitals={vitals} open={healthOpen} onToggle={() => setHealthOpen((o) => !o)} />}
         {template.deathSave && h.hpField && (hpMax ?? 0) > 0 && (hp ?? 1) <= 0 && (() => {
           const ds = template.deathSave!;
           const body = num(data[ds.statField]);
@@ -1810,7 +1825,7 @@ function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection 
   return fields.length === 0 ? null : { ...section, fields };
 }
 
-export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onGearRoll, onSpend, onImprove }: SheetRendererProps) {
+export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onGearRoll, onSpend, onImprove, vitals }: SheetRendererProps) {
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   // The tab it opens on: the one the template names (a built system's starter opens on STATS,
   // with CHARACTER first in the row), else the first.
@@ -1976,7 +1991,7 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
         .sheet-input::placeholder { color: var(--green); opacity: 0.3; font-style: italic; }
       `}</style>
 
-      <SheetHeaderBlock onLevelUp={readOnly ? undefined : onLevelUp} template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} onPharmaChange={applyPharma} pharmaUndo={pharmaUndo} onUndoPharma={undoPharma} readOnly={readOnly} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} xpRate={xpRate} canRoll={!!onRoll} />
+      <SheetHeaderBlock onLevelUp={readOnly ? undefined : onLevelUp} template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} onPharmaChange={applyPharma} pharmaUndo={pharmaUndo} onUndoPharma={undoPharma} readOnly={readOnly} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} xpRate={xpRate} canRoll={!!onRoll} vitals={readOnly ? undefined : vitals} />
 
       {/* The sheet body, and the thing that actually scrolls — not the window's own
           content box, which sits outside it. The right padding is what keeps the
