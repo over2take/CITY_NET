@@ -38,7 +38,7 @@ interface CharacterSheetWindowProps {
 
 export function CharacterSheetWindow({ pos, setPos, onClose, socket, userName, playerToken, adminToken, onOpenLink, onRolled, onOpenVehicles, currentTheme, onContinueCreating, onOpenLevelUp }: CharacterSheetWindowProps) {
   // Every play prop comes from the shared hook, as the standalone tab's do (8s1a): spread whole, never picked.
-  const { sheet, template, handleFieldChange, handleFieldsChange, sheetProps } = usePlayerSheet(socket, userName, { onRolled });
+  const { sheet, template, handleFieldChange, handleFieldsChange, sheetProps } = usePlayerSheet(socket, userName, { onRolled, authToken: adminToken || playerToken });
 
   const handlePortraitUpload = useCallback(
     (file: File) => uploadSheetPortrait(adminToken || playerToken, file),
