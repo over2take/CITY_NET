@@ -21,6 +21,7 @@ const { ownWords } = require('./terms');
 const { rollAmount } = require('./tierRolls');
 const { givenBack, restingOf, RECOVERY_KEY, ALL_POOL } = require('./recovery');
 const { improveAt, MARKS_KEY } = require('./improveByUse');
+const { refillCounts } = require('./gearCounts');
 
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -207,6 +208,12 @@ const restOn = ({ definition, restId, sheet = {}, token = null, conditions = [],
       note(`uses:${u.feature.id}`, `${u.feature.label || u.feature.id} uses`, u.max - u.spent, u.max);
     }
     setField(USES_KEY, spent);
+  }
+  // A gear line's COUNT whose column this rest refills, or one it counts as (8a4a): full again ("Pistol AMMO 2 → 6").
+  const counts = refillCounts(definition, data, ends);
+  if (counts.inventory !== null) {
+    for (const c of counts.refilled) note(`count:${c.index}:${c.column}`, `${c.line} ${c.label}`, c.from, c.to);
+    setField('inventory', counts.inventory);
   }
   // Recovery dice it gives back, or one it counts as gives back (R2a): each pool as left after.
   const back = givenBack(definition, data, ends);
