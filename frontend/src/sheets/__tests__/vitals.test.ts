@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { amountOf, healthBody, takesAnAmount, hasHealth, defenseOf } from '../vitals';
 import { getTemplate, type SheetTemplate } from '..';
+import { registerCustomTemplate, clearCustomTemplates } from '../customTemplates';
 
 // The vitals strip's rules (8s3b).
 
@@ -32,5 +33,25 @@ describe('which models the strip changes', () => {
     for (const m of ['tracks', 'typed', 'harm', 'wounds', 'locations', 'none']) expect(takesAnAmount(m), m).toBe(false);
     expect(hasHealth('none')).toBe(false);
     for (const m of [null, undefined, 'pool', 'wounds']) expect(hasHealth(m), String(m)).toBe(true);
+  });
+});
+
+describe('the armor class the box shows, as each game has it (8s3c)', () => {
+  it('the built-in games: generic\'s on the token; CWN MELEE and RANGED AC; Shadowrun ARMOR; Cyberpunk none (SP on the sheet)', () => {
+    expect(defenseOf(getTemplate('generic'))).toEqual({ label: 'AC', ranged: 'RANGED AC', rangedWhenSet: true });
+    expect(defenseOf(getTemplate('cities_without_number'))).toEqual({ label: 'MELEE AC', ranged: 'RANGED AC' });
+    expect(defenseOf(getTemplate('shadowrun_6e'))).toEqual({ label: 'ARMOR' });
+    expect(defenseOf(getTemplate('cyberpunk_red'))).toBeNull();
+  });
+
+  it('a built system: its field\'s own name; without one, the token\'s as its menu has it; none with combat off', () => {
+    const ID = 'sys_0a1b2c3d4e5f6a7b';
+    const sheet = (fields: object[]) => ({ id: ID, name: 'X', sections: [{ id: 's', label: 'S', layout: 'list', fields }] }) as unknown as SheetTemplate;
+    expect(defenseOf(sheet([{ id: 'guard', label: 'Guard', type: 'number', source: 'token_ac' }]))).toEqual({ label: 'GUARD' });
+    expect(defenseOf(sheet([]))).toEqual({ label: 'AC', ranged: 'RANGED AC', rangedWhenSet: true });
+    registerCustomTemplate({ id: ID, name: 'X', parts: { combat: { on: false } }, derived: [], sheet: { sections: [] }, words: {} } as never);
+    try {
+      expect(defenseOf(sheet([]))).toBeNull();
+    } finally { clearCustomTemplates(); }
   });
 });

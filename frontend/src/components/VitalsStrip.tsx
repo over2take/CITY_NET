@@ -4,7 +4,7 @@ import { HitPointsPanel } from './HitPoints';
 import { useHealthView } from '../hooks/useHealthView';
 import { isCustomSystem } from '../sheets';
 import { useWords } from '../sheets/words';
-import { amountOf, healthBody, takesAnAmount, hasHealth, hasStim, type SheetVitals, type VitalsAction } from '../sheets/vitals';
+import { amountOf, healthBody, takesAnAmount, hasHealth, hasStim, type Defense, type SheetVitals, type VitalsAction } from '../sheets/vitals';
 import { createPlayerTokenRow } from './tokenActions';
 import { TokenConditions } from './TokenConditions';
 
@@ -34,7 +34,7 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
   /** What made the maximum ("20 → 26 (Tough +6)"): MAX in cyan, saying it on hover, as the HEALTH section did. */
   maxNote?: string;
   /** The token's armor class as the game has it (sheets/vitals.ts defenseOf): its name, and a ranged one's; none without. */
-  defense?: { label: string; ranged?: string };
+  defense?: Defense;
 }) {
   const { token, system, authToken, socket, reload } = vitals;
   const [amount, setAmount] = useState('');
@@ -91,25 +91,31 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
   }
   // The token's armor class for quick reference while playing (the user, 2026-11-17), read only, as the game has it:
   // one, two (CWN's melee and ranged, both always; an unset ranged is the melee one, as the token menu says) or none.
-  const melee = token.melee_ac;
+  // The token's own as its menu reads it: none set is 10 there (App's `melee_ac ?? 10`), so here too.
+  const melee = defense?.rangedWhenSet ? (token.melee_ac ?? 10) : token.melee_ac;
   const ranged = token.ranged_ac ?? melee;
+  // The token's own ranged one, as its menu: only where it was set apart from the melee one.
+  const rangedShown = defense?.ranged && (!defense.rangedWhenSet || (token.ranged_ac !== null && token.ranged_ac !== undefined && token.ranged_ac !== melee))
+    ? defense.ranged : undefined;
   const ac = defense && melee !== null && melee !== undefined && (
-    <span role="note" aria-label={`${defense.label} ${melee}${defense.ranged ? `, ${defense.ranged} ${ranged}` : ''}`}
-      title={`Your token's ${defense.ranged ? `${defense.label} and ${defense.ranged}` : defense.label}: what an attack has to reach.`}
+    <span role="note" aria-label={`${defense.label} ${melee}${rangedShown ? `, ${rangedShown} ${ranged}` : ''}`}
+      title={`Your token's ${rangedShown ? `${defense.label} and ${rangedShown}` : defense.label}: what an attack has to reach.`}
       style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid var(--green)', padding: '2px 7px', fontSize: '0.6rem', letterSpacing: '1px', lineHeight: 1.2, whiteSpace: 'nowrap' }}>
       <span style={{ opacity: 0.7 }}>{defense.label}</span>
       <b style={{ fontSize: '0.8rem' }}>{melee}</b>
-      {defense.ranged && <><span style={{ opacity: 0.7 }}>{defense.ranged}</span><b style={{ fontSize: '0.8rem' }}>{ranged}</b></>}
+      {rangedShown && <><span style={{ opacity: 0.7 }}>{rangedShown}</span><b style={{ fontSize: '0.8rem' }}>{ranged}</b></>}
     </span>
   );
   // The token's conditions as chips, its armor class and REST ▾ beside them.
   const below = (
     <>
+      {/* The conditions left, REST right, and the AC centered in the space between them (the user, 2026-11-17). Too
+          narrow for all three (CWN's two ACs in SHEET.EXE), the AC wraps to a line of its own rather than overlapping. */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'flex-start' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: '0 1 auto', minWidth: 0 }}>
           <TokenConditions compact pickerHost={pickerHost} location={token as unknown as Location} gameSystem={system} socket={socket} canChange authToken={authToken || undefined} onChanged={reload} />
         </div>
-        {ac}
+        <div style={{ flex: '1 0 auto', display: 'flex', justifyContent: 'center' }}>{ac}</div>
         {restButton}
       </div>
       <div ref={setPickerHost} style={{ display: 'contents' }} />
@@ -189,9 +195,10 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
           />
           <button type="button" disabled={busy} onClick={() => byAmount('damage')} style={button('var(--danger)')}>DAMAGE</button>
           {hasStim(system) && (
-            <button type="button" disabled={busy} onClick={() => byAmount('stim_heal')}
-              title="Field healing (stims, medkits): heals and adds +1 System Strain. Refused when strain is maxed. HEAL is natural or rest healing."
-              style={button('var(--warning)')}>STIM +1 STRAIN</button>
+            // STIM on the button, as wide as HEAL and DAMAGE: the full name spilled out of the column into HIT POINTS ▾.
+            <button type="button" disabled={busy} onClick={() => byAmount('stim_heal')} aria-label="STIM +1 STRAIN"
+              title="STIM, +1 STRAIN. Field healing (stims, medkits): heals and adds +1 System Strain. Refused when strain is maxed. HEAL is natural or rest healing."
+              style={button('var(--warning)')}>STIM</button>
           )}
         </div>
         {/* CURRENT / MAX in the middle column, TEMP in a right column as wide as the buttons' on the left: the box is

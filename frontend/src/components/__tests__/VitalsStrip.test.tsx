@@ -365,11 +365,15 @@ describe('the box stands in for the HEALTH section, and shows the AC (8s3c, the 
     const two = armored([acField('token_ac', 'Melee AC', 'ac'), acField('token_ac_ranged', 'Ranged AC', 'ac_ranged')]);
     expect(show(two, { melee_ac: 13, ranged_ac: 13 })?.textContent).toBe('MELEE AC13RANGED AC13');
     expect(show(two, { melee_ac: 13, ranged_ac: null })?.getAttribute('aria-label')).toBe('MELEE AC 13, RANGED AC 13');
-    // None: no field and no defense on the token (a built system without one; Cyberpunk's SP on the sheet).
-    expect(show(armored([]), { melee_ac: 14 })).toBeNull();
+    // No field: the token's own, as its menu (Testfall, the user saw none): AC, and RANGED AC only where set apart.
+    expect(show(armored([]), { melee_ac: 14, ranged_ac: null })?.textContent).toBe('AC14');
+    expect(show(armored([]), { melee_ac: 14, ranged_ac: 14 })?.textContent).toBe('AC14');
+    expect(show(armored([]), { melee_ac: 14, ranged_ac: 16 })?.textContent).toBe('AC14RANGED AC16');
+    // None set on the token: its menu's 10.
+    expect(show(armored([]), { melee_ac: null, ranged_ac: null })?.textContent).toBe('AC10');
+    expect(show(armored([], { tokenDefense: { editOnToken: true, label: 'Def' } }), { melee_ac: 12 })?.textContent).toBe('DEF12');
+    // None where the game keeps it on the sheet (Cyberpunk's SP).
     expect(show(armored([], { tokenDefense: { editOnToken: false, label: 'DV' } }), { melee_ac: 14 })).toBeNull();
-    // No field, a defense kept on the token (generic): its word.
-    expect(show(armored([], { tokenDefense: { editOnToken: true, label: 'AC' } }), { melee_ac: 12 })?.textContent).toBe('AC12');
     // None set on the token: nothing to show.
     expect(show(armored([acField('token_ac', 'Guard', 'guard')]), { melee_ac: null })).toBeNull();
   });
