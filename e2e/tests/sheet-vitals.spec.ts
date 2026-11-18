@@ -51,8 +51,58 @@ test('DAMAGE in SHEET.EXE and HEAL on the tab move the token and both sheets; th
   await bar(tab).click();
   const health = tab.getByRole('region', { name: 'Health' });
   await expect(health).toContainText('18 / 20');
-  await expect(health.getByRole('button', { name: '+ CONDITION', exact: true })).toBeVisible();
+  await expect(health.getByRole('spinbutton', { name: 'Max HP' })).toBeVisible();
   // Not a second DAMAGE and HEAL: the strip has them.
   await expect(health.getByRole('button', { name: 'DAMAGE', exact: true })).toHaveCount(0);
+  await context.close();
+});
+
+// 8s3c: under the box, a condition put on in SHEET.EXE shows on the tab as a chip and is taken off there; REST ▾ on the tab
+// opens the sheet's own RESTS, and the rest is taken.
+test('a condition put on under the box shows on the tab and comes off there; REST ▾ takes a rest from the tab (8s3c)', async ({ browser, request }, info) => {
+  test.setTimeout(120_000);
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Vitalrest${again}`, core: { health: { model: 'pool' } },
+    stats: [{ id: 'resources', label: 'RESOURCES', stats: [{ id: 'resolve', label: 'Resolve', min: 0, max: 30 }] }],
+    rests: { long_rest: { refills: [{ what: 'resolve', how: 'to', amount: '5' }] } },
+    resting: { finish: 'sheet' },
+  });
+  const player = { username: `e2e_vitalrest${again}`, password: 'e2e-player-password' };
+  await approvedPlayer(request, gm, player);
+  await asGm(request, gm, 'post', '/api/locations', {
+    name: player.username, description: '', shape: 'rhombus', owner: player.username, x: 0, y: 0, z: 0, width: 1, height: 1, depth: 1,
+    hp_current: 20, hp_max: 20, hp_temp: 0, battle_map_id: -1, floor_index: -1,
+  });
+  const conditionsOn = async () => JSON.parse((await asGm(request, gm, 'get', '/api/locations')).find((l: { owner?: string; shape?: string }) => l.shape === 'rhombus' && l.owner === player.username).conditions || '[]').map((c: { id: string }) => c.id);
+
+  const context = await browser.newContext({ baseURL: info.project.use.baseURL });
+  const mine = await context.newPage();
+  await signInAsPlayer(mine, player);
+  await mine.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
+  await mine.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+
+  // PRONE put on under the box in SHEET.EXE.
+  const chips = mine.getByRole('group', { name: 'Vitals' }).locator('..').getByRole('region', { name: 'Conditions' });
+  await chips.getByRole('button', { name: 'Put on a condition' }).click();
+  await chips.getByRole('option', { name: /PRONE/ }).click();
+  await expect.poll(conditionsOn, { timeout: 15_000 }).toEqual(['prone']);
+
+  // On the tab, as a chip, and taken off there.
+  const [tab] = await Promise.all([context.waitForEvent('page'), mine.getByRole('button', { name: 'Open in new tab' }).click()]);
+  await tab.waitForLoadState();
+  const tabChips = tab.getByRole('group', { name: 'Vitals' }).locator('..').getByRole('region', { name: 'Conditions' });
+  await expect(tabChips.getByRole('note', { name: 'Prone' })).toBeVisible({ timeout: 15_000 });
+  await tabChips.getByRole('button', { name: 'Take Prone off' }).click();
+  await expect.poll(conditionsOn, { timeout: 15_000 }).toEqual([]);
+  await expect(mine.getByRole('group', { name: 'Vitals' }).locator('..').getByRole('note', { name: 'Prone' })).toHaveCount(0, { timeout: 15_000 });
+
+  // REST ▾ on the tab: LONG REST, asked first, then taken.
+  await tab.getByRole('button', { name: /^REST/ }).click();
+  const rest = tab.getByRole('region', { name: 'Take a rest' });
+  await rest.getByRole('button', { name: 'LONG REST' }).click();
+  await rest.getByRole('group', { name: 'Take a Long rest?' }).getByRole('button', { name: 'REST' }).click();
+  await expect.poll(async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data.resolve, { timeout: 15_000 }).toBe(5);
   await context.close();
 });

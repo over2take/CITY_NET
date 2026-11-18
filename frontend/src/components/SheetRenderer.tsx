@@ -34,7 +34,7 @@ import { markStates } from '../sheets/improveShown';
 import { withTempHp } from '../sheets/tempHp';
 import { VitalsStrip } from './VitalsStrip';
 import type { SheetVitals } from '../sheets/vitals';
-import { choiceEffects, effectsWorked, type ChoicesAction } from '../sheets/choicesShown';
+import { choiceEffects, effectsWorked, restSection, type ChoicesAction } from '../sheets/choicesShown';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
   return (
@@ -476,7 +476,10 @@ function FieldInput({ field, data, readOnly: sheetReadOnly, onFieldChange, onFie
   );
 }
 
-function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onFieldsChange, onPharmaChange, pharmaUndo, onUndoPharma, readOnly, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, xpRate, canRoll, vitals }: {
+function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onFieldChange, onFieldsChange, onPharmaChange, pharmaUndo, onUndoPharma, readOnly, onDeathSave, onStabilize, armedLuck, setArmedLuck, armedNegate, setArmedNegate, allowFumbleShield, xpRate, canRoll, vitals, rests, restCalled }: {
+  /** The sheet's RESTS, for the strip's REST ▾ (8s3c), and whether the GM has called one. */
+  rests?: React.ReactNode;
+  restCalled?: boolean;
   /** The vitals strip under the HP bar (8s3b): only the player's own sheet, where it can be changed. */
   vitals?: SheetVitals;
   onLevelUp?: () => void;
@@ -566,7 +569,7 @@ function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUp
             </div>
           );
         })()}
-        {vitals && <VitalsStrip vitals={vitals} open={healthOpen} onToggle={() => setHealthOpen((o) => !o)} />}
+        {vitals && <VitalsStrip vitals={vitals} open={healthOpen} onToggle={() => setHealthOpen((o) => !o)} rests={rests} restCalled={restCalled} />}
         {template.deathSave && h.hpField && (hpMax ?? 0) > 0 && (hp ?? 1) <= 0 && (() => {
           const ds = template.deathSave!;
           const body = num(data[ds.statField]);
@@ -1826,6 +1829,15 @@ function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection 
 }
 
 export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onGearRoll, onSpend, onImprove, vitals }: SheetRendererProps) {
+  // The vitals strip's REST ▾ (8s3c): the sheet's own RESTS, where this character has a rest to take from here or the GM
+  // has called one; on the player's own sheet, beside the strip.
+  const restView = vitals && !readOnly && onRestTake && template.resting ? restSection(template.resting, data as Record<string, unknown>, gm) : null;
+  const restCalled = !!restView?.call;
+  const stripRests = restView && (restView.buttons.length > 0 || restCalled)
+    ? <RestSection resting={template.resting} data={data as Record<string, unknown>} readOnly={readOnly} gm={gm} onChoices={onChoices}
+        onRecoverySpend={onRecoverySpend} recoveryOpen={recoveryOpen} onRestTake={onRestTake}
+        refused={template.sections.some((s) => s.layout === 'choices' || s.layout === 'rests') ? null : choicesRefused} />
+    : undefined;
   const tabs = (template.tabs ?? ['SHEET']).filter(t => !hiddenTabs?.includes(t));
   // The tab it opens on: the one the template names (a built system's starter opens on STATS,
   // with CHARACTER first in the row), else the first.
@@ -1967,6 +1979,8 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
 
   const sectionsForTab = template.sections
     .filter(s => (s.tab ?? tabs[0]) === activeTab)
+    // With the strip's REST ▾, the RESTS section isn't drawn as well: one place to rest (the user, 2026-11-17).
+    .filter(s => !(stripRests && s.layout === 'rests'))
     .map(s => dropEmptyRetired(s, data))
     .filter(s => s !== null) as SheetSection[];
   const tabHasRolls = sectionsForTab.some(s => s.fields.some(f => f.roll));
@@ -1991,7 +2005,7 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
         .sheet-input::placeholder { color: var(--green); opacity: 0.3; font-style: italic; }
       `}</style>
 
-      <SheetHeaderBlock onLevelUp={readOnly ? undefined : onLevelUp} template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} onPharmaChange={applyPharma} pharmaUndo={pharmaUndo} onUndoPharma={undoPharma} readOnly={readOnly} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} xpRate={xpRate} canRoll={!!onRoll} vitals={readOnly ? undefined : vitals} />
+      <SheetHeaderBlock onLevelUp={readOnly ? undefined : onLevelUp} template={template} data={data} portraitUrl={portraitUrl} onPortraitUpload={onPortraitUpload} portraitShadow={portraitShadow} onTogglePortraitShadow={onTogglePortraitShadow} onOpenLink={onOpenLink} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} onPharmaChange={applyPharma} pharmaUndo={pharmaUndo} onUndoPharma={undoPharma} readOnly={readOnly} onDeathSave={onDeathSave} onStabilize={onStabilize} armedLuck={armedLuck} setArmedLuck={setArmedLuck} armedNegate={armedNegate} setArmedNegate={setArmedNegate} allowFumbleShield={effectiveAllowFumbleShield} xpRate={xpRate} canRoll={!!onRoll} vitals={readOnly ? undefined : vitals} rests={stripRests} restCalled={restCalled} />
 
       {/* The sheet body, and the thing that actually scrolls — not the window's own
           content box, which sits outside it. The right padding is what keeps the

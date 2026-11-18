@@ -6,6 +6,14 @@ import { SheetRenderer } from '../SheetRenderer';
 import type { SheetTemplate } from '../../sheets';
 import type { SheetVitals } from '../../sheets/vitals';
 import type { SheetToken } from '../../sheets/types';
+import { createRequire } from 'module';
+import { forgetConditionLists } from '../../hooks/useConditionList';
+import { REST_CALL_KEY, type RestingShown } from '../../sheets/choicesShown';
+
+// The game's conditions as the server lists them (as TokenConditions.test.tsx gets them).
+const GAME = createRequire(import.meta.url)('../../../../backend/systemBuilder/conditions.js').conditionsOf({
+  conditions: { poisoned: { ends: 'rounds', rounds: 3, description: 'Sick.', modifiers: [{ target: 'all_rolls', amount: -1 }] } },
+});
 
 /**
  * The vitals strip (8s3b; mockup vitals-strip.html, approved 2026-11-17): under the sheet header's HP bar, an amount,
@@ -37,16 +45,19 @@ let answer: { ok: boolean; body: unknown };
 beforeEach(() => {
   fetched = [];
   answer = { ok: true, body: {} };
+  forgetConditionLists();
   vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+    if (url.startsWith('/api/systems/conditions/')) return { ok: true, status: 200, json: async () => GAME };
     fetched.push({ url, init });
     return { ok: answer.ok, status: answer.ok ? 200 : 403, json: async () => answer.body };
   }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-const draw = (over: Partial<SheetVitals> = {}, more: { onOpenLink?: () => void; readOnly?: boolean } = {}) => {
+const draw = (over: Partial<SheetVitals> = {}, more: { onOpenLink?: () => void; readOnly?: boolean; onRestTake?: (rest: string) => void; gm?: boolean; resting?: RestingShown; data?: Record<string, unknown> } = {}) => {
   const vitals: SheetVitals = { token: TOKEN, owner: 'kes', system: 'generic', authToken: 'tok', socket: socketWith(null), reload: vi.fn(), ...over };
-  render(<SheetRenderer template={template} data={{ name: 'Kes', hp: 14, hp_max: 20 } as never} onFieldChange={() => {}} vitals={vitals} {...more} />);
+  const { resting, data = {}, ...rest } = more;
+  render(<SheetRenderer template={{ ...template, resting } as SheetTemplate} data={{ name: 'Kes', hp: 14, hp_max: 20, ...data } as never} onFieldChange={() => {}} vitals={vitals} {...rest} />);
   return vitals;
 };
 const healthCalls = () => fetched.filter((f) => f.url === '/api/locations/7/health').map((f) => ({ body: JSON.parse(String(f.init.body)), auth: (f.init.headers as Record<string, string>).Authorization, method: f.init.method }));
@@ -134,9 +145,11 @@ describe('HEALTH here', () => {
     expect(screen.queryByRole('region', { name: 'Health' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: /^HIT POINTS/ }));
     const region = screen.getByRole('region', { name: 'Health' });
-    // HEALTH's own panel: its numbers, conditions and MAX; not a second DAMAGE, HEAL, amount or TEMP (the user, 2026-11-17).
+    // HEALTH's own panel: its numbers and MAX; not a second DAMAGE, HEAL, amount or TEMP (the user, 2026-11-17), nor the
+    // conditions, chips under the box (8s3c).
     expect(region.textContent).toContain('14 / 20');
-    expect(within(region).getByRole('button', { name: '+ CONDITION' })).toBeTruthy();
+    expect(within(region).queryByRole('region', { name: 'Conditions' })).toBeNull();
+    expect(within(region).queryByRole('button', { name: '+ CONDITION' })).toBeNull();
     expect(within(region).getByRole('spinbutton', { name: 'Max HP' })).toBeTruthy();
     for (const name of ['DAMAGE', 'HEAL']) expect(within(region).queryByRole('button', { name }), name).toBeNull();
     for (const name of ['Amount', 'Temp HP']) expect(within(region).queryByRole('spinbutton', { name }), name).toBeNull();
@@ -193,10 +206,109 @@ describe('a custom system\'s other health models', () => {
     await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'DAMAGE' })).toBeNull());
     expect(screen.queryByRole('spinbutton', { name: 'Amount of HP' })).toBeNull();
     expect(screen.getByRole('button', { name: /^HEALTH/ })).toBeTruthy();
+    // Its conditions under it, as chips, and not again in HEALTH (8s3c).
+    expect(screen.getAllByRole('region', { name: 'Conditions' })).toHaveLength(1);
+    await userEvent.click(screen.getByRole('button', { name: /^HEALTH/ }));
+    const health = screen.getByRole('region', { name: 'Health' });
+    expect(within(health).queryByRole('region', { name: 'Conditions' })).toBeNull();
   });
 
-  it('no health at all: no strip', async () => {
+  it('no health at all: no strip, the conditions still (8s3c)', async () => {
     draw({ system: SYS, socket: socketWith('none') });
     await vi.waitFor(() => expect(screen.queryByRole('group', { name: 'Vitals' })).toBeNull());
+    expect(screen.getByRole('region', { name: 'Conditions' })).toBeTruthy();
+  });
+});
+
+describe('conditions under the box (8s3c)', () => {
+  const conditionCalls = () => fetched.filter((f) => f.url === '/api/locations/7/conditions').map((f) => ({ body: JSON.parse(String(f.init.body)), auth: (f.init.headers as Record<string, string>).Authorization }));
+
+  it('the token\'s as chips, what each means on hover; × takes one off with the player\'s sign-in, then the sheet is asked again', async () => {
+    const vitals = draw({ token: { ...TOKEN, conditions: '[{"id":"poisoned"}]' } });
+    const chips = await screen.findByRole('region', { name: 'Conditions' });
+    const chip = await within(chips).findByRole('note', { name: 'Poisoned' });
+    expect(chip.getAttribute('title')).toContain('Sick.');
+    await userEvent.click(within(chips).getByRole('button', { name: 'Take Poisoned off' }));
+    expect(conditionCalls()).toEqual([{ body: { conditions: [] }, auth: 'Bearer tok' }]);
+    await vi.waitFor(() => expect(vitals.reload).toHaveBeenCalled());
+  });
+
+  it('+ CONDITION with none on, + beside some: the game\'s list, picking one puts it on', async () => {
+    draw();
+    const chips = await screen.findByRole('region', { name: 'Conditions' });
+    await userEvent.click(within(chips).getByRole('button', { name: 'Put on a condition' }));
+    expect(within(chips).getByRole('button', { name: 'Done putting on conditions' }).textContent).toBe('DONE');
+    await userEvent.click(await within(chips).findByRole('option', { name: /POISONED/ }));
+    expect(conditionCalls().map((c) => c.body.conditions.map((x: { id: string }) => x.id))).toEqual([['poisoned']]);
+    cleanup();
+    draw({ token: { ...TOKEN, conditions: '[{"id":"poisoned"}]' } });
+    const some = await screen.findByRole('region', { name: 'Conditions' });
+    await within(some).findByRole('note', { name: 'Poisoned' });
+    expect(within(some).getByRole('button', { name: 'Put on a condition' }).textContent).toBe('+');
+  });
+
+  it('none with no token, as nothing to put them on', () => {
+    draw({ token: null });
+    expect(screen.queryByRole('region', { name: 'Conditions' })).toBeNull();
+  });
+});
+
+describe('REST ▾ (8s3c)', () => {
+  const RESTING: RestingShown = { finish: 'sheet', rests: [{ id: 'short_rest', name: 'Short rest', spends: false }, { id: 'long_rest', name: 'Long rest', spends: false }] };
+
+  it('opens the sheet\'s own RESTS in place: asked first, then taken', async () => {
+    const onRestTake = vi.fn();
+    draw({}, { resting: RESTING, onRestTake });
+    expect(screen.queryByRole('region', { name: 'Take a rest' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: /^REST/ }));
+    const rests = screen.getByRole('region', { name: 'Take a rest' });
+    await userEvent.click(within(rests).getByRole('button', { name: 'LONG REST' }));
+    await userEvent.click(within(rests).getByRole('button', { name: 'REST' }));
+    expect(onRestTake).toHaveBeenCalledWith('long_rest');
+  });
+
+  it('none where the game has no rests, nothing can take them, or rests are at the GM\'s call and none is called', () => {
+    draw({}, { onRestTake: vi.fn() });
+    expect(screen.queryByRole('button', { name: /^REST/ })).toBeNull();
+    cleanup();
+    draw({}, { resting: RESTING });
+    expect(screen.queryByRole('button', { name: /^REST/ })).toBeNull();
+    cleanup();
+    draw({}, { resting: { ...RESTING, finish: 'call' }, onRestTake: vi.fn() });
+    expect(screen.queryByRole('button', { name: /^REST/ })).toBeNull();
+  });
+
+  it('a rest the GM called says so, in the warning color, and opens by itself, a call that comes later too', async () => {
+    const called = { [REST_CALL_KEY]: { rest: 'short_rest', name: 'Short rest' } };
+    draw({}, { resting: { ...RESTING, finish: 'call' }, onRestTake: vi.fn(), data: called });
+    const button = screen.getByRole('button', { name: /^REST · CALLED/ });
+    expect(button.style.color).toBe('var(--warning)');
+    expect(screen.getByRole('region', { name: 'Take a rest' })).toBeTruthy();
+    cleanup();
+    // Open, no call; then the GM calls one.
+    const vitals: SheetVitals = { token: TOKEN, owner: 'kes', system: 'generic', authToken: 'tok', socket: socketWith(null), reload: vi.fn() };
+    const t = { ...template, resting: RESTING } as SheetTemplate;
+    const { rerender } = render(<SheetRenderer template={t} data={{ name: 'Kes' } as never} onFieldChange={() => {}} vitals={vitals} onRestTake={vi.fn()} />);
+    expect(screen.queryByRole('region', { name: 'Take a rest' })).toBeNull();
+    rerender(<SheetRenderer template={t} data={{ name: 'Kes', ...called } as never} onFieldChange={() => {}} vitals={vitals} onRestTake={vi.fn()} />);
+    expect(screen.getByRole('region', { name: 'Take a rest' })).toBeTruthy();
+  });
+
+  it("with REST ▾, the tab's RESTS section isn't drawn as well; without the strip it is (the user, 2026-11-17)", () => {
+    const withRests = { ...template, resting: RESTING, sections: [...template.sections, { id: 'rests', label: 'RESTS', layout: 'rests', tab: 'STATS', fields: [] }] } as unknown as SheetTemplate;
+    const vitals: SheetVitals = { token: TOKEN, owner: 'kes', system: 'generic', authToken: 'tok', socket: socketWith(null), reload: vi.fn() };
+    render(<SheetRenderer template={withRests} data={{ name: 'Kes' } as never} onFieldChange={() => {}} vitals={vitals} onRestTake={vi.fn()} />);
+    expect(screen.queryByText(/─── RESTS ───/)).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Rests' })).toBeNull();
+    cleanup();
+    render(<SheetRenderer template={withRests} data={{ name: 'Kes' } as never} onFieldChange={() => {}} onRestTake={vi.fn()} />);
+    expect(screen.getByText(/─── RESTS ───/)).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Rests' })).toBeTruthy();
+  });
+
+  it('with no token too: a rest needs none', async () => {
+    draw({ token: null }, { resting: RESTING, onRestTake: vi.fn() });
+    await userEvent.click(screen.getByRole('button', { name: /^REST/ }));
+    expect(screen.getByRole('region', { name: 'Take a rest' })).toBeTruthy();
   });
 });

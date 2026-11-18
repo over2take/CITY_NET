@@ -6,6 +6,7 @@ import { isCustomSystem } from '../sheets';
 import { useWords } from '../sheets/words';
 import { amountOf, healthBody, takesAnAmount, hasHealth, hasStim, type SheetVitals, type VitalsAction } from '../sheets/vitals';
 import { createPlayerTokenRow } from './tokenActions';
+import { TokenConditions } from './TokenConditions';
 
 // The vitals strip (8s3b; mockup docs/mockups/vitals-strip.html, approved 2026-11-17), in the sheet header on every tab of
 // SHEET.EXE and the standalone tab alike. For one pool of hit points, a box under the HP bar (the user, 2026-11-17: the bar
@@ -13,6 +14,9 @@ import { createPlayerTokenRow } from './tokenActions';
 // TEMP set by clicking it; the system's word for hit points under them, opening the HEALTH window's own panel right here
 // for everything else. The same route as HEALTH, so the token, the map and every open sheet move together; the map's
 // HEALTH window is unchanged. Another health model has HEALTH ▾ to change it.
+//
+// 8s3c: under the box, the token's conditions as chips (+ puts one on, × takes it off, what each means on hover), and
+// REST ▾ where there is a rest to take here, opening the sheet's own RESTS (asked first, dice spent, FINISH) in place.
 
 const small: React.CSSProperties = {
   background: 'none', fontFamily: 'inherit', fontSize: '0.6rem', letterSpacing: '1px', padding: '2px 6px', cursor: 'pointer', whiteSpace: 'nowrap',
@@ -21,19 +25,45 @@ const button = (color: string): React.CSSProperties => ({ ...small, color, borde
 const label: React.CSSProperties = { fontSize: '0.55rem', letterSpacing: '2px', opacity: 0.7 };
 const big: React.CSSProperties = { fontSize: '1.6rem', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' };
 
-export function VitalsStrip({ vitals, open, onToggle }: { vitals: SheetVitals; open: boolean; onToggle: () => void }) {
+export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false }: {
+  vitals: SheetVitals; open: boolean; onToggle: () => void;
+  /** The sheet's RESTS section, where there is a rest to take from here (8s3c); none otherwise. */
+  rests?: React.ReactNode;
+  /** The GM has called a rest that waits on this character. */
+  restCalled?: boolean;
+}) {
   const { token, system, authToken, socket, reload } = vitals;
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   /** TEMP being typed, after a click on it; null while it shows. */
   const [tempText, setTempText] = useState<string | null>(null);
+  const [restsOpen, setRestsOpen] = useState(restCalled);
+  // A rest the GM calls opens REST ▾ by itself (8s3c): it is the sheet's only RESTS now. Adjusted while rendering, as
+  // React's docs do it for a prop that changed, rather than in an effect.
+  const [callSeen, setCallSeen] = useState(restCalled);
+  if (callSeen !== restCalled) {
+    setCallSeen(restCalled);
+    if (restCalled) setRestsOpen(true);
+  }
   // A custom system's model, as HEALTH reads it: null for the built-in games, which are one pool.
   const view = useHealthView(socket, token?.id, isCustomSystem(system));
   const word = useWords(system);
   const hp = word('hp', 'short', 'HP').toUpperCase();
   const hitPoints = word('hp', 'plural', 'HIT POINTS').toUpperCase();
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` };
+
+  // Under the box (8s3c): the token's conditions, and REST ▾.
+  const restButton = rests && (
+    <button type="button" aria-expanded={restsOpen} onClick={() => setRestsOpen((o) => !o)}
+      title={restCalled ? 'The GM has called a rest: open it here' : 'Take a rest here, as on STATS'}
+      style={{ ...button(restCalled ? 'var(--warning)' : 'var(--green)'), borderStyle: restsOpen ? 'solid' : 'dashed', marginLeft: 'auto' }}>
+      {restCalled ? 'REST · CALLED' : 'REST'} {restsOpen ? '▴' : '▾'}
+    </button>
+  );
+  const restPanel = rests && restsOpen && (
+    <div role="region" aria-label="Take a rest" style={{ border: '1px solid var(--dark-green)', padding: '8px 10px' }}>{rests}</div>
+  );
 
   if (!token) {
     // As HEALTH's CREATE HEALTH RECORD: the player's token row, then the sheet asked for again with it.
@@ -43,11 +73,23 @@ export function VitalsStrip({ vitals, open, onToggle }: { vitals: SheetVitals; o
         <div role="group" aria-label="Vitals" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center', marginTop: '6px', fontSize: '0.6rem', letterSpacing: '1px' }}>
           <span style={{ opacity: 0.7 }}>NO TOKEN ON THE MAP</span>
           <button type="button" onClick={() => { void create(); }} style={button('var(--green)')}>CREATE HEALTH RECORD</button>
+          {restButton}
         </div>
+        {restPanel}
       </>
     );
   }
-  if (!hasHealth(view?.model)) return null;
+  // The token's conditions as chips, REST ▾ beside them.
+  const below = (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'flex-start' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <TokenConditions compact location={token as unknown as Location} gameSystem={system} socket={socket} canChange authToken={authToken || undefined} onChanged={reload} />
+      </div>
+      {restButton}
+    </div>
+  );
+  // No health to change: the conditions and rests still.
+  if (!hasHealth(view?.model)) return <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>{below}{restPanel}</div>;
 
   const send = async (action: VitalsAction, n: number) => {
     if (action !== 'set_temp' && n === 0) return;
@@ -89,7 +131,9 @@ export function VitalsStrip({ vitals, open, onToggle }: { vitals: SheetVitals; o
           </button>
           {alert}
         </div>
+        {below}
         {panel}
+        {restPanel}
       </div>
     );
   }
@@ -157,7 +201,9 @@ export function VitalsStrip({ vitals, open, onToggle }: { vitals: SheetVitals; o
         </button>
       </div>
       {alert}
+      {below}
       {panel}
+      {restPanel}
     </div>
   );
 }

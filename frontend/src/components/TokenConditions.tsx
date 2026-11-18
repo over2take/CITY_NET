@@ -21,11 +21,16 @@ interface Props {
   authToken?: string;
   /** Called after a change lands, so the map redraws. */
   onChanged?: () => void;
+  /**
+   * Chips only, for the sheet's vitals strip (8s3c): no heading, nothing said with none, + to put one on; each one's
+   * description and modifiers on hover rather than written out below.
+   */
+  compact?: boolean;
 }
 
 const small: React.CSSProperties = { fontSize: '9px', letterSpacing: '2px', opacity: 0.75 };
 
-export function TokenConditions({ location, gameSystem, socket, canChange, authToken, onChanged }: Props) {
+export function TokenConditions({ location, gameSystem, socket, canChange, authToken, onChanged, compact = false }: Props) {
   const raw = location.conditions ?? '[]';
   const game = useConditionList(gameSystem, authToken);
   const detail = useConditionDetail(socket, location.id, raw);
@@ -57,6 +62,61 @@ export function TokenConditions({ location, gameSystem, socket, canChange, authT
   if (!shown.length && !canChange) return null;
   const offered = notOnYet(onToken, game);
 
+  const picker = picking && canChange && (
+    <div role="listbox" aria-label="Put on a condition" style={{ border: '1px solid var(--dark-green)', maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column', ...(compact ? { flexBasis: '100%' } : {}) }}
+      className="cyber-scroll">
+      {offered.length === 0
+        ? <span style={{ fontSize: '0.7rem', opacity: 0.6, padding: '6px' }}>Every condition is on already.</span>
+        : offered.map((c) => (
+          <button key={c.id} type="button" role="option" aria-selected={false} disabled={busy} onClick={() => send(withPutOn(onToken, detail, c.id))}
+            style={{
+              display: 'grid', gridTemplateColumns: '16px minmax(0, 1fr)', gap: '8px', alignItems: 'center', padding: '4px 8px', textAlign: 'left',
+              background: 'none', border: 0, borderBottom: '1px solid color-mix(in srgb, var(--dark-green) 60%, transparent)',
+              color: 'var(--green)', fontFamily: 'monospace', fontSize: '0.7rem', cursor: 'pointer',
+            }}>
+            <ConditionIcon icon={c.icon} size={15} />
+            <span>{c.name.toUpperCase()}{c.ends === 'rounds' && c.rounds ? <span style={{ opacity: 0.6 }}> · {c.rounds}R</span> : null}</span>
+          </button>
+        ))}
+    </div>
+  );
+  const takeOff = (c: { id: string; name: string }) => canChange && (
+    <button type="button" aria-label={`Take ${c.name} off`} disabled={busy}
+      onClick={() => send(withTakenOff(onToken, detail, c.id))}
+      style={{ background: 'none', border: 0, color: 'var(--danger)', cursor: 'pointer', padding: '0 0 0 2px', fontFamily: 'monospace', fontSize: '12px', lineHeight: 1 }}>×</button>
+  );
+  const chip: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', gap: '5px', border: '1px solid var(--warning)', color: 'var(--warning)',
+    padding: '2px 6px', fontSize: '10px', letterSpacing: '1px', lineHeight: 1.2, boxSizing: 'border-box', minHeight: '20px',
+  };
+
+  // The vitals strip's chips (8s3c): what each means on hover, the + beside them.
+  if (compact) {
+    return (
+      <section aria-label="Conditions" style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center' }}>
+        {shown.map(({ condition: c, left, modifiers }) => (
+          <span key={c.id} role="note" aria-label={c.name}
+            title={[c.name.toUpperCase() + (left !== undefined ? ` · ${roundsText(left)}` : ''), c.description, modifiers.map(modifierText).join(' · ')].filter(Boolean).join('\n')}
+            style={chip}>
+            <ConditionIcon icon={c.icon} size={13} />
+            <span>{c.short}</span>
+            {left !== undefined && <span style={{ opacity: 0.75 }}>{left}R</span>}
+            {takeOff(c)}
+          </span>
+        ))}
+        {canChange && (
+          <button type="button" aria-label={picking ? 'Done putting on conditions' : 'Put on a condition'} aria-expanded={picking} disabled={busy}
+            title={picking ? 'Done' : 'Put on a condition'} onClick={() => setPicking((p) => !p)}
+            style={{ ...chip, background: 'none', borderStyle: 'dashed', color: 'var(--green)', borderColor: 'var(--green)', cursor: 'pointer', fontFamily: 'inherit' }}>
+            {picking ? 'DONE' : shown.length ? '+' : '+ CONDITION'}
+          </button>
+        )}
+        {picker}
+        {error && <span role="alert" style={{ color: 'var(--danger)', fontSize: '0.7rem', flexBasis: '100%' }}>{error}</span>}
+      </section>
+    );
+  }
+
   return (
     <section aria-label="Conditions" style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -73,40 +133,16 @@ export function TokenConditions({ location, gameSystem, socket, canChange, authT
         : (
           <ul aria-label="On this token" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
             {shown.map(({ condition: c, left }) => (
-              <li key={c.id} title={c.description} style={{
-                display: 'inline-flex', alignItems: 'center', gap: '5px', border: '1px solid var(--warning)', color: 'var(--warning)',
-                padding: '2px 6px', fontSize: '10px', letterSpacing: '1px',
-              }}>
+              <li key={c.id} title={c.description} style={chip}>
                 <ConditionIcon icon={c.icon} size={13} />
                 <span>{c.short}</span>
                 {left !== undefined && <span style={{ opacity: 0.75 }}>{left}R</span>}
-                {canChange && (
-                  <button type="button" aria-label={`Take ${c.name} off`} disabled={busy}
-                    onClick={() => send(withTakenOff(onToken, detail, c.id))}
-                    style={{ background: 'none', border: 0, color: 'var(--danger)', cursor: 'pointer', padding: '0 0 0 2px', fontFamily: 'monospace' }}>×</button>
-                )}
+                {takeOff(c)}
               </li>
             ))}
           </ul>
         )}
-      {picking && canChange && (
-        <div role="listbox" aria-label="Put on a condition" style={{ border: '1px solid var(--dark-green)', maxHeight: '160px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}
-          className="cyber-scroll">
-          {offered.length === 0
-            ? <span style={{ fontSize: '0.7rem', opacity: 0.6, padding: '6px' }}>Every condition is on already.</span>
-            : offered.map((c) => (
-              <button key={c.id} type="button" role="option" aria-selected={false} disabled={busy} onClick={() => send(withPutOn(onToken, detail, c.id))}
-                style={{
-                  display: 'grid', gridTemplateColumns: '16px minmax(0, 1fr)', gap: '8px', alignItems: 'center', padding: '4px 8px', textAlign: 'left',
-                  background: 'none', border: 0, borderBottom: '1px solid color-mix(in srgb, var(--dark-green) 60%, transparent)',
-                  color: 'var(--green)', fontFamily: 'monospace', fontSize: '0.7rem', cursor: 'pointer',
-                }}>
-                <ConditionIcon icon={c.icon} size={15} />
-                <span>{c.name.toUpperCase()}{c.ends === 'rounds' && c.rounds ? <span style={{ opacity: 0.6 }}> · {c.rounds}R</span> : null}</span>
-              </button>
-            ))}
-        </div>
-      )}
+      {picker}
       {error && <span role="alert" style={{ color: 'var(--danger)', fontSize: '0.7rem' }}>{error}</span>}
       {shown.map(({ condition: c, left, modifiers }) => (
         <div key={c.id} data-testid={`condition-${c.id}`} style={{ fontSize: '0.7rem', lineHeight: 1.4 }}>
