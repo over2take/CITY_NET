@@ -424,7 +424,7 @@ describe('ITEM TYPES (8a2)', () => {
     expect(last().items!.list![0].values).toEqual({ price: 15, damage: '1d8 + @con', ammo: 1000 });
     fireEvent.change(typeBox(), { target: { value: 'armor' } });
     const grade = ring().getByLabelText('TYPE', { selector: '#item-ring-value-type' }) as HTMLSelectElement;
-    expect([...grade.options].map((o) => o.textContent)).toEqual(['—', 'LIGHT', 'MEDIUM', 'HEAVY']);
+    expect([...grade.options].map((o) => o.textContent)).toEqual(['— (it has none)', 'LIGHT', 'MEDIUM', 'HEAVY']);
     fireEvent.change(grade, { target: { value: 'HEAVY' } });
     expect(last().items!.list![0]).toMatchObject({ type: 'armor', values: { price: 15, type: 'HEAVY' } });
   });
