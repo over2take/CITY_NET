@@ -5,9 +5,8 @@
 // A line's current number is kept on it, `counts: { ammo: 4 }`, unsaid where nothing is spent (itemTypes.js).
 // Pure: the sheet's data in, its next gear out.
 
-const { lineColumns, typesOf } = require('./itemTypes');
+const { lineColumns, typesOf, linesOf } = require('./itemTypes');
 const { namesOf } = require('./choices');
-const { linesOf } = require('./gearRolls');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);

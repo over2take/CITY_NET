@@ -125,6 +125,7 @@ const { currenciesOf } = require('./currencies');
 const { checkItems, itemsOf, slotsOf, installsOf, workingFeatures, itemsOwned, itemsShown } = require('./items');
 const { stepFieldsOf, rankedStatsOf } = require('./ranks');
 const { ownTypes, typeNamed, itemValues, typesShown } = require('./itemTypes');
+const { checkEncumbrance, encumbranceOf, carriedOf, capacityText, CARRIED, CAPACITY } = require('./encumbrance');
 
 /** Where a sheet keeps its picks: starting with _, so no stat, formula or field can be called it. */
 const PICKS_KEY = '_choices';
@@ -503,6 +504,8 @@ const checkChoices = (definition, problems) => {
     // An item's dice read the sheet's names, and a COUNT is refilled by a rest (8a1).
     boxNames: { known: (n) => namesOf(definition).has(n), refused: (n) => `@${n}: no stat or formula is called that` }, restIds: new Set(restIdsOf(definition)),
   });
+  // Encumbrance (8a5a): what it counts, CAN CARRY, its bands, and an install's WEIGHS.
+  checkEncumbrance(definition, problems, { text, keys, formula, targets });
 };
 
 /** The lists each list's features open, other than itself (that is refused on its own). */
@@ -819,6 +822,8 @@ const overlayOf = (definition, data) => {
     }
   }
   const over = { ...levels, ...owned };
+  // What is carried (8a5a), read as @carried: CAN CARRY (@capacity) is a formula among the others.
+  if (encumbranceOf(definition)) over[CARRIED] = carriedOf(definition, sheet);
   const add = {};
   const bonus = {};
   const from = {};
@@ -881,6 +886,11 @@ const namesOf = (definition) => {
     for (const o of optionsOf(c)) names.set(`${o.id}_level`, `${o.label || o.id} level`);
   }
   if (!names.has('level') && levelledOf(definition).length) names.set('level', 'Level');
+  // Encumbrance's (8a5a): what is carried, and CAN CARRY where it says.
+  if (encumbranceOf(definition)) {
+    names.set(CARRIED, 'Carried');
+    if (capacityText(definition)) names.set(CAPACITY, 'Can carry');
+  }
   return names;
 };
 

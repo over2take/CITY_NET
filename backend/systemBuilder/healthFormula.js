@@ -8,6 +8,7 @@ const { rankedOf } = require('./ranks');
 const { parse, evaluate } = require('./expression');
 const { ruleValue } = require('./rules');
 const { overlayOf } = require('./choices');
+const { derivedOf } = require('./encumbrance');
 const { healthOf } = require('./levels');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -17,7 +18,9 @@ const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 /** What `source` comes to for this sheet now, read as a derived value is: unrounded, or null when it can't be worked out. */
 const formulaValueOf = (definition, data, source) => {
   // A system with no formulas of its own has none to work out first.
-  const compiled = compileSystem({ lookups: definition.lookups, derived: Array.isArray(definition.derived) ? definition.derived : [], ranked: rankedOf(definition) });
+  // CAN CARRY (8a5a) among them, so a health formula may read @capacity as any other.
+  const tables0 = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
+  const compiled = compileSystem({ lookups: definition.lookups, derived: derivedOf(definition, (text) => parse(text, (name) => own(tables0, name))), ranked: rankedOf(definition) });
   if (!compiled.ok) return null;
   const tables = tablesOf(isPlainObject(definition.lookups) ? definition.lookups : undefined);
   let tree;
