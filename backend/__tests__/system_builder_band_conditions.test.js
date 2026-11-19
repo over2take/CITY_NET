@@ -65,7 +65,8 @@ describe('the checks', () => {
     expect(bandAt(LADEN, 30, 50)).toEqual({ word: 'ENCUMBERED', says: 'Speed -10 ft.', condition: 'slowed' });
     expect(bandAt(LADEN, 60, 50)).toEqual({ word: 'OVERLOADED', says: 'Speed -20 ft.', condition: 'exhausted' });
     expect(carryingOf(LADEN, { capacity: 50, inventory: JSON.stringify([line('Pack', { qty: 3 })]) }))
-      .toEqual({ carried: 30, capacity: 50, unit: 'LB', band: 'ENCUMBERED', says: 'Speed -10 ft.', condition: 'slowed' });
+      .toEqual({ carried: 30, capacity: 50, unit: 'LB', band: 'ENCUMBERED', says: 'Speed -10 ft.', condition: 'slowed',
+        bands: [{ word: 'LIGHT', upto: 50 }, { word: 'ENCUMBERED', upto: 100 }], past: 'OVERLOADED', conditionName: 'Slowed' });
     // Words of nothing but spaces say nothing.
     const blank = { ...LADEN, items: { ...LADEN.items, encumbrance: { ...LADEN.items.encumbrance, past_says: '  ' } } };
     expect(bandAt(blank, 60, 50).says).toBeNull();

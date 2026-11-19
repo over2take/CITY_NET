@@ -127,7 +127,15 @@ const carryingOf = (definition, data, can = data[CAPACITY]) => {
   // `can`: CAN CARRY as the band reads it, without the band's own condition (8a5e1, runtime.js).
   const capacity = capacityText(definition) && Number.isFinite(Number(can)) ? Number(can) : null;
   const band = capacity === null ? null : bandAt(definition, carried, capacity);
-  return { carried, capacity, unit: typeof e.unit === 'string' ? e.unit : '', band: band ? band.word : null, says: band ? band.says : null, condition: band ? band.condition : null };
+  // For CARRYING on GEAR (8a6a; approved mockup docs/mockups/carrying-on-sheet.html, 2026-11-19): the bands, for the meter's ticks
+  // and the words under it, the word past them, and the condition by its name.
+  const bands = capacity === null ? [] : list(e.bands).filter((b) => isPlainObject(b) && typeof b.word === 'string' && Number.isFinite(b.upto)).map((b) => ({ word: b.word, upto: b.upto }));
+  const condition = band ? band.condition : null;
+  const named = condition ? conditionsOf(definition).find((c) => c.id === condition) : null;
+  return {
+    carried, capacity, unit: typeof e.unit === 'string' ? e.unit : '', band: band ? band.word : null, says: band ? band.says : null, condition,
+    bands, past: bands.length && typeof e.past === 'string' ? e.past : null, conditionName: named ? named.name : null,
+  };
 };
 
 /**
