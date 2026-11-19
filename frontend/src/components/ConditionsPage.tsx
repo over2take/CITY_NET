@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
-  conditionList, conditionCount, withCondition, withNewCondition, withoutCondition, modifierTargets,
-  LIMITS, ALL_ROLLS, STANDARD, type Listed, type ConditionPatch,
+  conditionList, conditionCount, withCondition, withNewCondition, withoutCondition, modifierTargets, withModifier, amountFrom,
+  LIMITS, ALL_ROLLS, STANDARD, type Listed, type ConditionPatch, type Modifier, type ModifierWay,
 } from '../sheets/conditions';
+import { useFormulaBox } from '../hooks/useFormulaBox';
 import { restList } from '../sheets/rests';
 import { ConditionIcon } from './ConditionIcon';
 import { ConditionIconPicker } from './ConditionIconPicker';
@@ -18,6 +19,10 @@ import { ToggleSwitch } from './ToggleSwitch';
 // icon (drawn, or uploaded), description, how it ends (when removed, after rounds, or at a rest,
 // 4f4b), and its modifiers. What it reads and writes
 // is sheets/conditions.ts; every change goes through the builder's `edit`.
+//
+// A modifier's way and a formula amount, and ITS MODIFIERS A REMINDER or APPLIED (8a5e2; approved mockup
+// docs/mockups/condition-modifiers.html, 2026-11-18): ADD, TIMES, SET TO or AT MOST, the amount a formula box with eˣ, ALL
+// ROLLS adding a whole number as before; APPLIED, a character whose token has it sees the number change.
 
 interface Props {
   definition: Definition;
@@ -33,6 +38,8 @@ const input: React.CSSProperties = {
   background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'monospace', fontSize: 12, padding: '4px 6px', minWidth: 0, boxSizing: 'border-box',
 };
 const row: React.CSSProperties = { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' };
+const choice = (on: boolean): React.CSSProperties => ({ ...btn, padding: '3px 10px', border: '1px solid var(--dark-green)', cursor: 'pointer',
+  background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)' });
 
 /**
  * A whole number box that keeps what is typed: a lone minus sign, or a field cleared to type
@@ -82,6 +89,45 @@ function EndsAt({ c, definition, set }: { c: Listed; definition: Definition; set
   );
 }
 
+/** A modifier's ways, as the box says them (8a5e2). */
+const WAY_WORDS: [ModifierWay, string][] = [['add', 'ADD'], ['times', 'TIMES'], ['set', 'SET TO'], ['most', 'AT MOST']];
+
+/**
+ * One modifier (8a5e2): what it changes, its way, its amount and ×. ALL ROLLS only adds a whole number; a stat or formula takes a
+ * formula box, eˣ to help write it, a number kept as a number.
+ */
+function ModifierRow({ m, i, definition, api, targets, put, remove }: {
+  m: Modifier; i: number; definition: Definition; api?: Props['api']; targets: { id: string; label: string }[];
+  put: (next: Modifier) => void; remove: () => void;
+}) {
+  const rolls = m.target === ALL_ROLLS;
+  const amount = useFormulaBox({
+    // Its sample said its way (8a5e2): ×0.5, to 0, at most 10; an ADD signed, as a formula's is.
+    definition, api, kind: m.way && m.way !== 'add' ? m.way : 'formula', value: String(m.amount), onChange: (text) => put(withModifier(m, { amount: amountFrom(text) })),
+    label: `Modifier ${i + 1} amount`, placeholder: '0.5', maxLength: LIMITS.formula, inputStyle: { ...input, width: '100%' },
+  });
+  return (
+    <div role="group" aria-label={`Modifier ${i + 1}`} style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 100px minmax(0, 1fr) auto', gap: 6, alignItems: 'center' }}>
+        <select aria-label={`Modifier ${i + 1} target`} value={m.target} style={input} onChange={(e) => put(withModifier(m, { target: e.target.value }))}>
+          {targets.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+          {!targets.some((t) => t.id === m.target) && <option value={m.target}>{m.target} (GONE)</option>}
+        </select>
+        <select aria-label={`Modifier ${i + 1} way`} value={rolls ? 'add' : m.way ?? 'add'} disabled={rolls} title={rolls ? 'All rolls only take an ADD' : undefined} style={input}
+          onChange={(e) => put(withModifier(m, { way: e.target.value as ModifierWay }))}>
+          {WAY_WORDS.map(([w, word]) => <option key={w} value={w}>{word}</option>)}
+        </select>
+        {rolls
+          ? <WholeBox aria={`Modifier ${i + 1} amount`} value={typeof m.amount === 'number' ? m.amount : -1} min={-LIMITS.amount} max={LIMITS.amount} width={70}
+              onChange={(n) => put(withModifier(m, { amount: n }))} />
+          : amount.field}
+        <button type="button" className="utility-btn danger-btn" style={btn} aria-label={`Remove modifier ${i + 1}`} onClick={remove}>×</button>
+      </div>
+      {!rolls && amount.help}
+    </div>
+  );
+}
+
 function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
   const [confirm, setConfirm] = useState(false);
   const base = STANDARD.find((s) => s.id === c.id);
@@ -104,7 +150,7 @@ function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
               </span>
             : <button type="button" className="utility-btn danger-btn" style={btn} onClick={() => setConfirm(true)}>DELETE</button>}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '110px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '130px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' }}>
         <FieldName beside htmlFor={`cond-name-${c.id}`} style={small}>NAME</FieldName>
         <input id={`cond-name-${c.id}`} type="text" maxLength={LIMITS.name} value={typed('name')} placeholder={base?.name ?? 'Name'} style={input}
           aria-invalid={!base && !c.name.trim() ? true : undefined}
@@ -132,28 +178,27 @@ function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
         </div>
         <OnlyWith definition={definition} value={typeof stored.only_with === 'string' ? stored.only_with : undefined} style={small} beside
           selectStyle={{ ...input, justifySelf: 'start' }} onChange={(rule) => set({ only_with: rule })} />
-        <FieldName beside style={small}>MODIFIERS</FieldName>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+        <FieldName beside hint={HINTS['conditions.applied']} style={small}>ITS MODIFIERS</FieldName>
+        <span role="group" aria-label="Its modifiers" style={{ display: 'inline-flex', justifySelf: 'start' }}>
+          <button type="button" aria-pressed={!c.applied} style={choice(!c.applied)} onClick={() => set({ applied: false })}>A REMINDER</button>
+          <button type="button" aria-pressed={!!c.applied} style={choice(!!c.applied)} onClick={() => set({ applied: true })}>APPLIED</button>
+        </span>
+        <FieldName beside hint={HINTS['conditions.modifiers']} style={small}>MODIFIERS</FieldName>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
           {c.modifiers.map((m, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 70px auto', gap: 6 }}>
-              <select aria-label={`Modifier ${i + 1} target`} value={m.target} style={input}
-                onChange={(e) => set({ modifiers: c.modifiers.map((x, j) => (j === i ? { ...x, target: e.target.value } : x)) })}>
-                {targets.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-                {!targets.some((t) => t.id === m.target) && <option value={m.target}>{m.target} (GONE)</option>}
-              </select>
-              {/* A formula amount (8a5e1) shows as its number here until its box comes in 8a5e2; it is kept unless typed over. */}
-              <WholeBox aria={`Modifier ${i + 1} amount`} value={typeof m.amount === 'number' ? m.amount : Number(m.amount) || 0} min={-LIMITS.amount} max={LIMITS.amount} width={70}
-                onChange={(n) => set({ modifiers: c.modifiers.map((x, j) => (j === i ? { ...x, amount: n } : x)) })} />
-              <button type="button" className="utility-btn danger-btn" style={btn} aria-label={`Remove modifier ${i + 1}`}
-                onClick={() => set({ modifiers: c.modifiers.filter((_, j) => j !== i) })}>×</button>
-            </div>
+            <ModifierRow key={i} m={m} i={i} definition={definition} api={api} targets={targets}
+              put={(next) => set({ modifiers: c.modifiers.map((x, j) => (j === i ? next : x)) })}
+              remove={() => set({ modifiers: c.modifiers.filter((_, j) => j !== i) })} />
           ))}
           <div>
             <button type="button" className="utility-btn" style={btn} disabled={c.modifiers.length >= LIMITS.modifiers}
               onClick={() => set({ modifiers: [...c.modifiers, { target: ALL_ROLLS, amount: -1 }] })}>+ MODIFIER</button>
           </div>
-          <p style={{ ...why, fontSize: 11, borderLeft: '3px solid var(--warning)', paddingLeft: 8 }}>
-            Shown to the GM and the token&apos;s owner as a reminder. They change no number until this system&apos;s rolls are built.
+          <p role="note" aria-label="What its modifiers do" style={{ ...why, fontSize: 11, borderLeft: '3px solid var(--warning)', paddingLeft: 8 }}>
+            {c.applied
+              ? 'APPLIED: a character whose token has it sees these numbers change on their sheet, after every other bonus, and back when it comes off. Conditions don\'t stack: of two changing one number one way, the stronger counts. A table can keep them reminders on the GAME tab.'
+              : 'A REMINDER: shown to the GM and the token\'s owner, changing no number.'}
+            {c.modifiers.some((m) => m.target === ALL_ROLLS) ? ' ALL ROLLS always reaches every roll of this system\'s own.' : ''}
           </p>
         </div>
       </div>

@@ -252,6 +252,16 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await page.getByRole('group', { name: 'How they are set' }).getByRole('button', { name: 'POINT BUY' }).click();
       await expect(page.getByRole('textbox', { name: 'Cost of 15' })).toBeVisible();
     }
+    if (p === 'CONDITIONS') {
+      // ITS MODIFIERS APPLIED, and a second modifier on a stat, its way and formula box with eˣ open (8a5e2).
+      const open = page.getByRole('region', { name: / condition$/ });
+      await open.getByRole('group', { name: 'Its modifiers' }).getByRole('button', { name: 'APPLIED' }).click();
+      await open.getByRole('button', { name: '+ MODIFIER' }).click();
+      await open.getByRole('combobox', { name: 'Modifier 2 target' }).selectOption({ index: 1 });
+      await open.getByRole('combobox', { name: 'Modifier 2 way' }).selectOption('times');
+      await open.getByRole('button', { name: 'Help writing Modifier 2 amount' }).click();
+      await expect(open.getByRole('group', { name: 'Help writing Modifier 2 amount' })).toBeVisible();
+    }
     if (p === 'RESTS') {
       // Recovery dice on, counted by a formula and given back by an amount, so every box is there (R1b).
       const resting = page.getByRole('region', { name: 'Resting' });

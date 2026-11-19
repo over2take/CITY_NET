@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
   STANDARD, LIMITS, conditionList, conditionsOf, conditionCount, withCondition, withNewCondition, withoutCondition,
-  modifierTargets, shortFrom, onAllRolls,
+  modifierTargets, shortFrom, onAllRolls, amountFrom, withModifier,
 } from '../conditions';
 import type { Definition } from '../systemsApi';
 
@@ -164,5 +164,26 @@ describe('what a modifier may name', () => {
       { id: 'move', label: 'MOVE' },
     ]);
     expect(modifierTargets({ format: 1, name: 'Bare' })).toEqual([{ id: 'all_rolls', label: 'ALL ROLLS' }]);
+  });
+});
+
+describe('a modifier as the builder writes it (8a5e2)', () => {
+  it('an amount typed: a number where it reads as one, else formula text', () => {
+    expect([amountFrom('0.5'), amountFrom(' -10 '), amountFrom('3'), amountFrom('@might'), amountFrom('1.'), amountFrom('-'), amountFrom('')]).toEqual([0.5, -10, 3, '@might', '1.', '-', '']);
+  });
+
+  it('ADD says no way; ALL ROLLS only adds a whole number, -1 for anything else', () => {
+    expect(withModifier({ target: 'str', amount: 2, way: 'times' }, { way: 'add' })).toEqual({ target: 'str', amount: 2 });
+    expect(withModifier({ target: 'str', amount: 2 }, { way: 'set' })).toEqual({ target: 'str', amount: 2, way: 'set' });
+    expect(withModifier({ target: 'str', amount: '@str', way: 'most' }, { target: 'all_rolls' })).toEqual({ target: 'all_rolls', amount: -1 });
+    expect(withModifier({ target: 'str', amount: 0.5 }, { target: 'all_rolls' })).toEqual({ target: 'all_rolls', amount: -1 });
+    expect(withModifier({ target: 'str', amount: 0 }, { target: 'all_rolls' })).toEqual({ target: 'all_rolls', amount: -1 });
+    expect(withModifier({ target: 'str', amount: 3 }, { target: 'all_rolls' })).toEqual({ target: 'all_rolls', amount: 3 });
+  });
+
+  it('APPLIED stored only when true', () => {
+    const on = withCondition(H, 'prone', { applied: true });
+    expect((on.conditions as Record<string, object>).prone).toEqual({ applied: true });
+    expect(withCondition(on, 'prone', { applied: false })).toEqual(H);
   });
 });

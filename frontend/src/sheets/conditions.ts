@@ -37,7 +37,7 @@ export interface Condition {
 export type Listed = Condition & { on: boolean };
 /** What the page changes on one condition. */
 /** `only_with`: the house rule it waits on (4j), or null for none. */
-export type ConditionPatch = Partial<Pick<Condition, 'name' | 'short' | 'icon' | 'description' | 'ends' | 'rounds' | 'at' | 'modifiers'>> & { on?: boolean; only_with?: string | null };
+export type ConditionPatch = Partial<Pick<Condition, 'name' | 'short' | 'icon' | 'description' | 'ends' | 'rounds' | 'at' | 'modifiers' | 'applied'>> & { on?: boolean; only_with?: string | null };
 
 /** The standard set every system starts with, as the server has it. */
 export const STANDARD: Omit<Condition, 'ends' | 'modifiers' | 'standard'>[] = [
@@ -143,6 +143,8 @@ export const withCondition = (def: Definition, id: string, patch: ConditionPatch
     delete entry.at;
   }
   if (Array.isArray(entry.modifiers) && entry.modifiers.length === 0) delete entry.modifiers;
+  // A reminder, as every condition was before 8a5e: nothing to store.
+  if (entry.applied !== true) delete entry.applied;
   if (typeof entry.only_with !== 'string' || !entry.only_with) delete entry.only_with;
   if (typeof entry.short === 'string' && !entry.short.trim()) delete entry.short;
   if (typeof entry.description === 'string' && !entry.description && !base) delete entry.description;
@@ -163,6 +165,22 @@ export const withCondition = (def: Definition, id: string, patch: ConditionPatch
   const next = { ...stored };
   if (Object.keys(entry).length || !base) next[id] = entry; else delete next[id];
   return withStored(def, next);
+};
+
+/** What a modifier's amount box holds as it is kept (8a5e2): a number where it reads as one, else formula text. */
+export const amountFrom = (typed: string): number | string => (/^\s*-?\d+(\.\d+)?\s*$/.test(typed) ? Number(typed) : typed);
+
+/**
+ * A modifier changed (8a5e2): an ADD says no way; ALL ROLLS only adds, a whole number (a formula or a fraction there becomes -1,
+ * as + MODIFIER starts one).
+ */
+export const withModifier = (m: Modifier, patch: Partial<Modifier>): Modifier => {
+  const next: Modifier = { ...m, ...patch };
+  if (next.target === ALL_ROLLS) {
+    delete next.way;
+    if (!Number.isInteger(next.amount) || next.amount === 0) next.amount = -1;
+  } else if (!next.way || next.way === 'add') delete next.way;
+  return next;
 };
 
 /** The definition with a new condition of its own, named to be renamed, and its id. Null at the limit. */

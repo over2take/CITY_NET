@@ -230,7 +230,8 @@ describe('the "?"', () => {
     for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
   };
     open();
-    allShown('conditions', 4);
+    // ITS MODIFIERS and MODIFIERS joined them in 8a5e2.
+    allShown('conditions', 6);
     for (const name of ['ON THE CHIP', 'DESCRIPTION']) expect(screen.getByRole('textbox', { name }), name).toBeTruthy();
     expect(screen.getByRole('combobox', { name: 'ENDS' })).toBeTruthy();
   });
@@ -253,5 +254,79 @@ describe('ONLY WITH (4j4a)', () => {
   it('isn\'t there in a system with no house rules', () => {
     open();
     expect(screen.queryByRole('combobox', { name: 'ONLY WITH' })).toBeNull();
+  });
+});
+
+describe('ITS MODIFIERS and a modifier\'s way (8a5e2)', () => {
+  it('A REMINDER to start; APPLIED stored, the words under the modifiers saying what it does; back, nothing stored', async () => {
+    const { last } = open();
+    await userEvent.click(list().getByRole('button', { name: 'POISONED' }));
+    const d = () => detail('Poisoned condition');
+    const its = () => within(d().getByRole('group', { name: 'Its modifiers' }));
+    expect(its().getByRole('button', { name: 'A REMINDER' }).getAttribute('aria-pressed')).toBe('true');
+    expect(d().getByRole('note', { name: 'What its modifiers do' }).textContent).toBe('A REMINDER: shown to the GM and the token\'s owner, changing no number.');
+    await userEvent.click(its().getByRole('button', { name: 'APPLIED' }));
+    expect(stored(last())).toEqual({ poisoned: { applied: true } });
+    expect(its().getByRole('button', { name: 'APPLIED' }).getAttribute('aria-pressed')).toBe('true');
+    expect(d().getByRole('note', { name: 'What its modifiers do' }).textContent).toMatch(/^APPLIED: a character whose token has it sees these numbers change/);
+    expect(checkDefinition(last()).problems).toEqual([]);
+    await userEvent.click(its().getByRole('button', { name: 'A REMINDER' }));
+    expect(last()).toEqual(H);
+  });
+
+  it('a stat\'s modifier: its way, a number kept a number, a formula kept as text, eˣ to help; all held to the server\'s checks', async () => {
+    const { last } = open();
+    await userEvent.click(list().getByRole('button', { name: 'POISONED' }));
+    const d = () => detail('Poisoned condition');
+    await userEvent.click(d().getByRole('button', { name: '+ MODIFIER' }));
+    fireEvent.change(d().getByLabelText('Modifier 1 target'), { target: { value: 'str' } });
+    fireEvent.change(d().getByLabelText('Modifier 1 way'), { target: { value: 'times' } });
+    fireEvent.change(d().getByLabelText('Modifier 1 amount'), { target: { value: '0.5' } });
+    expect(stored(last())).toEqual({ poisoned: { modifiers: [{ target: 'str', way: 'times', amount: 0.5 }] } });
+    expect(checkDefinition(last()).problems).toEqual([]);
+    fireEvent.change(d().getByLabelText('Modifier 1 amount'), { target: { value: '@str / 2' } });
+    expect(stored(last())).toEqual({ poisoned: { modifiers: [{ target: 'str', way: 'times', amount: '@str / 2' }] } });
+    expect(checkDefinition(last()).problems).toEqual([]);
+    expect(d().getByRole('button', { name: 'Help writing Modifier 1 amount' })).toBeTruthy();
+    // ADD says no way; SET TO and AT MOST each stored.
+    for (const [way, kept] of [['set', { way: 'set' }], ['most', { way: 'most' }], ['add', {}]] as const) {
+      fireEvent.change(d().getByLabelText('Modifier 1 way'), { target: { value: way } });
+      expect(stored(last())!.poisoned.modifiers).toEqual([{ target: 'str', amount: '@str / 2', ...kept }]);
+    }
+  });
+
+  it('ALL ROLLS: an ADD of a whole number only, its way held; one changed to it loses a formula and a way', async () => {
+    const { last } = open();
+    await userEvent.click(list().getByRole('button', { name: 'POISONED' }));
+    const d = () => detail('Poisoned condition');
+    await userEvent.click(d().getByRole('button', { name: '+ MODIFIER' }));
+    const way = d().getByLabelText('Modifier 1 way') as HTMLSelectElement;
+    expect([way.value, way.disabled]).toEqual(['add', true]);
+    expect(d().queryByRole('button', { name: 'Help writing Modifier 1 amount' })).toBeNull();
+    // No formula's words under a whole number: -1 is no formula to read.
+    expect(within(d().getByRole('group', { name: 'Modifier 1' })).queryByTestId('formula-words')).toBeNull();
+    expect(d().getByRole('note', { name: 'What its modifiers do' }).textContent).toContain('ALL ROLLS always reaches every roll');
+    fireEvent.change(d().getByLabelText('Modifier 1 target'), { target: { value: 'save' } });
+    fireEvent.change(d().getByLabelText('Modifier 1 way'), { target: { value: 'most' } });
+    fireEvent.change(d().getByLabelText('Modifier 1 amount'), { target: { value: '@str' } });
+    fireEvent.change(d().getByLabelText('Modifier 1 target'), { target: { value: 'all_rolls' } });
+    expect(stored(last())).toEqual({ poisoned: { modifiers: [{ target: 'all_rolls', amount: -1 }] } });
+    expect(checkDefinition(last()).problems).toEqual([]);
+  });
+});
+
+describe('a modifier\'s words, said its way (8a5e2)', () => {
+  it('TIMES 0.5 reads ×0.5 for the sample, the server asked for a formula; an ADD signed', async () => {
+    const asked: string[] = [];
+    const api = { previewFormulas: vi.fn(async (_d: Definition, fs: { text: string; kind: string }[]) => {
+      asked.push(fs[0].kind);
+      return { ok: true, value: { results: [{ ok: true, value: Number(fs[0].text) || 0, reads: [] }], sampleLevel: 3 } };
+    }) };
+    open({ ...H, conditions: { poisoned: { modifiers: [{ target: 'str', way: 'times', amount: 0.5 }, { target: 'str', amount: -2 }] } } } as Definition, api as unknown as Partial<Api>);
+    await userEvent.click(list().getByRole('button', { name: 'POISONED' }));
+    const d = detail('Poisoned condition');
+    expect(await within(d.getByRole('group', { name: 'Modifier 1' })).findByText(/×0\.5/)).toBeTruthy();
+    expect(await within(d.getByRole('group', { name: 'Modifier 2' })).findByText(/-2/)).toBeTruthy();
+    expect(asked.every((k) => k === 'formula')).toBe(true);
   });
 });
