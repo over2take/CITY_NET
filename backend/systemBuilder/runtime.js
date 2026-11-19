@@ -82,7 +82,9 @@ const metaOf = (definition) => {
       try {
         const overlay = overlayOf(definition, data);
         const changed = compiled.system.apply(data, overlay);
-        if (worksOutPicks(definition)) {
+        // A condition APPLIED on the token (8a5e3) is said on the sheet as a pick's bonus is, in a system with no picks too.
+        const conditionsOn = Array.isArray(data[CONDITIONS_KEY]) && data[CONDITIONS_KEY].length > 0 && conditionsOf(definition).some((c) => c.applied);
+        if (worksOutPicks(definition) || conditionsOn) {
           data[WORKED_KEY] = workedOf(definition, data, overlay);
           // The recovery dice (R2a, R2b): in the sheet's words, with each pool's die, how many and how many spent.
           const pools = poolsOf(definition, data);

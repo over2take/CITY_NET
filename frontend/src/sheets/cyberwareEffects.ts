@@ -247,6 +247,11 @@ export interface FieldEffect {
   /** The difference, which is what a badge shows. */
   delta: number;
   sources: ModSource[];
+  /**
+   * The conditions on the token changing it (8a5e3; approved mockup docs/mockups/condition-modifiers.html, 2026-11-18), each
+   * said as the sheet shows it under the number: "SLOWED: Speed ×0.5". Only a custom system's (choicesShown.ts).
+   */
+  conditions?: string[];
 }
 
 export interface SheetEffects {

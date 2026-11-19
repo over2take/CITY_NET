@@ -1199,13 +1199,18 @@ function GridSection({ section, allFields, data, readOnly, onFieldChange, onRoll
               {field.label}
               {marks?.states.has(field.id) && <ImproveMark improve={marks.improve} stat={field.id} label={field.label} marked={marks.states.get(field.id) === true} onImprove={marks.onImprove} />}
               {/* A pair's bonus is named on its maximum below, not as a second number by the name. */}
-              {!maxField && effects.fields[field.id]?.delta ? <ChromeBadge effect={effects.fields[field.id]} /> : null}
+              {/* A number a condition changes shows its changed value as the big number instead (8a5e3). */}
+              {!maxField && effects.fields[field.id]?.delta && !effects.fields[field.id]?.conditions ? <ChromeBadge effect={effects.fields[field.id]} /> : null}
             </div>
             {maxField ? (
               <PairCells field={field} maxField={maxField} data={data} readOnly={readOnly} onFieldChange={onFieldChange} effects={effects} numInput={numInput} />
+            ) : effects.fields[field.id]?.conditions && !field.derived ? (
+              <ConditionedNumber field={field} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={numInput} value={effects.fields[field.id].value} />
             ) : (
               <FieldInput field={field} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={numInput} />
             )}
+            <ConditionNote effect={effects.fields[field.id]} label={field.label} typed={field.derived ? undefined : effects.fields[field.id]?.base} />
+            {maxField && <ConditionNote effect={effects.fields[maxField.id]} label={maxField.label} />}
             {/* The strip ROLL and REFILL sit in, without being a control: a number input
                 fills its cell, so a suffix cannot go beside the value, and MOVE reading a
                 bare "10" says nothing about what it is ten of. Same geometry as those
@@ -1301,6 +1306,50 @@ function PairCells({ field, maxField, data, readOnly, onFieldChange, effects, nu
   );
 }
 
+/**
+ * What the conditions on the token do to a number (8a5e3; approved mockup docs/mockups/condition-modifiers.html, 2026-11-18): "SLOWED:
+ * Speed ×0.5" under it, in the warning color, the number itself already changed. A visual change the GM explains.
+ */
+function ConditionNote({ effect, label, inline = false, typed }: { effect?: FieldEffect; label: string; inline?: boolean; typed?: number }) {
+  if (!effect?.conditions?.length) return null;
+  // What was typed, said where the big number shows the changed value instead (8a5e3, the user's pick, 2026-11-19).
+  const said = [...effect.conditions, ...(typed === undefined ? [] : [`typed ${typed}`])];
+  return (
+    <span role="note" aria-label={`Conditions on ${label}`} title={said.join('\n')}
+      style={{ fontSize: '0.55rem', letterSpacing: '0.5px', lineHeight: 1.3, color: 'var(--warning)', overflowWrap: 'anywhere',
+        ...(inline ? { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '45%' } : { padding: '0 3px 3px' }) }}>
+      {said.join(' · ')}
+    </span>
+  );
+}
+
+/**
+ * A typed stat a condition changes (8a5e3; the user, 2026-11-19: the changed value as the big number): 15 in the warning color
+ * where 30 is typed; clicked, what is typed opens to edit, and back once it loses focus.
+ */
+function ConditionedNumber({ field, data, readOnly, onFieldChange, style, value }: {
+  field: SheetField; data: SheetData; readOnly: boolean; onFieldChange: (fieldId: string, value: SheetFieldValue) => void;
+  style?: React.CSSProperties; value: number;
+}) {
+  const [editing, setEditing] = useState(false);
+  const box = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => { if (editing) box.current?.querySelector('input')?.focus(); }, [editing]);
+  if (editing) {
+    return (
+      <div ref={box} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setEditing(false); }}>
+        <FieldInput field={field} data={data} readOnly={readOnly} onFieldChange={onFieldChange} style={style} />
+      </div>
+    );
+  }
+  return (
+    <button type="button" aria-label={`${field.label} ${value}, changed by a condition${readOnly ? '' : ': edit what is typed'}`} disabled={readOnly}
+      onClick={() => setEditing(true)}
+      style={{ ...inputStyle, ...style, color: 'var(--warning)', background: 'none', border: 'none', cursor: readOnly ? 'default' : 'text', fontFamily: 'inherit' }}>
+      {value}
+    </button>
+  );
+}
+
 function ChromeBadge({ effect }: { effect: FieldEffect }) {
   return (
     <span
@@ -1344,6 +1393,7 @@ function SkillsSection({ section, data, readOnly, onFieldChange, onRoll, effects
               )}
             </span>
             {boost && boost.delta !== 0 && <ChromeBadge effect={boost} />}
+            <ConditionNote effect={boost} label={field.label} inline />
             <input
               aria-label={field.label}
               type="number"
@@ -1855,7 +1905,7 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
   // sheet rather than per field: it reads the cyberware list, which every stat and skill
   // would otherwise re-read and re-scan for itself.
   // A custom system's picks show on its fields as CWN's chrome does (7a3b2), and its items' (7e3b); the built-in games as before.
-  const effects = useMemo(() => (effectsWorked(template) ? choiceEffects(data as Record<string, unknown>, template) : sheetEffects(data, template)), [data, template]);
+  const effects = useMemo(() => (effectsWorked(template, data as Record<string, unknown>) ? choiceEffects(data as Record<string, unknown>, template) : sheetEffects(data, template)), [data, template]);
   // What made the maximum, for the vitals box's MAX on hover, as the HEALTH section it stands in for said it (8s3c).
   const maxBonus = template.header?.hpMaxField ? effects.fields[template.header.hpMaxField] : undefined;
   const maxNote = maxBonus?.delta ? `${maxBonus.base} → ${maxBonus.value} (${describeSources(maxBonus)})` : undefined;

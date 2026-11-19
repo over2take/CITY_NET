@@ -285,3 +285,14 @@ describe('what takes one off works the sheet out again (8a5e1)', () => {
     expect((await sheet()).dash).toBe(10);
   });
 });
+
+describe('said on the sheet in a system with no picks or items (8a5e3)', () => {
+  it('a condition APPLIED on the token: the worked-out lines written; none on it, none written', () => {
+    const plain = { ...SLOW, items: undefined };
+    const on = save({ speed: 30, [CONDITIONS_KEY]: ['slowed'] }, plain);
+    expect(on._worked.from.speed).toEqual([{ feature: 'Slowed', amount: 0.5, got: -15, condition: true, way: 'times' }]);
+    expect(save({ speed: 30 }, plain)).not.toHaveProperty('_worked');
+    // Only a reminder on the token: nothing to say.
+    expect(save({ speed: 30, [CONDITIONS_KEY]: ['hobbled'] }, { ...plain, conditions: { hobbled: SLOW.conditions.hobbled } })).not.toHaveProperty('_worked');
+  });
+});
