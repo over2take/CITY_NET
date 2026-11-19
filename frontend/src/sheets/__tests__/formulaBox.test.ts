@@ -102,6 +102,20 @@ describe('INSERT', () => {
     expect(insertGroups(DEF, 'amount').map((g) => g.title)).toEqual(['LEVELS', 'STATS', 'TABLES', 'CHOICES', 'WORKINGS']);
   });
 
+  it('GEAR (8a5c): @carried and @capacity where encumbrance counts, what is worn by column; never in an amount or a rest\'s refill', () => {
+    const geared = { ...DEF, items: {
+      types: [{ id: 'armor', label: 'ARMOR', one: 'Armor', columns: [{ id: 'defense', label: 'DEFENSE', kind: 'number' }] }],
+      encumbrance: { column: 'defense', capacity: '10' },
+    } } as unknown as Definition;
+    const gear = (kind: Parameters<typeof insertGroups>[1]) => insertGroups(geared, kind).find((g) => g.title === 'GEAR');
+    expect(gear('formula')!.items.map((i) => i.token)).toEqual(['@carried', '@capacity', '@armor_defense']);
+    expect(insertGroups(geared, 'formula').map((g) => g.title).indexOf('GEAR')).toBe(insertGroups(geared, 'formula').map((g) => g.title).indexOf('TABLES') + 1);
+    for (const kind of ['requires', 'uses', 'add', 'against', 'cost', 'improve'] as const) expect(gear(kind), kind).toBeTruthy();
+    for (const kind of ['amount', 'least', 'refill'] as const) expect(gear(kind), kind).toBeUndefined();
+    // Nothing of the gear to read: no GEAR at all.
+    expect(insertGroups(DEF, 'formula').map((g) => g.title)).not.toContain('GEAR');
+  });
+
   it('has no levels without a levelled list, and no @level when a stat is called that', () => {
     expect(levelTokens({ ...DEF, choices: [] } as Definition)).toEqual([]);
     const own = { ...DEF, stats: [{ id: 'g', label: 'G', stats: [{ id: 'level', label: 'Level' }] }] } as unknown as Definition;

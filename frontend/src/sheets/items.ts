@@ -22,7 +22,7 @@ export interface ItemSlot { id: string; label: string; count: number }
 /** An item: its name, words, what its features need (`worn` when it says nothing), and its features. */
 export interface Item { id: string; label: string; description?: string; needs?: string; cost?: number; features?: Feature[]; type?: string; values?: Record<string, unknown> }
 /** An install (7e4): what each costs against, ADDING TO it (`adds`, as when it says nothing) or TAKING FROM it, and its limit, a formula. */
-export interface ItemInstall { id: string; label: string; against: string; way?: 'adds' | 'takes'; limit: string }
+export interface ItemInstall { id: string; label: string; against: string; way?: 'adds' | 'takes'; limit: string; weighs?: boolean }
 
 // An item's words are 1000 characters at most, as the server checks them (it said 2000 here until 8aL3b).
 export const LIMITS = { items: 200, slots: 10, count: 20, features: 20, label: 40, description: 1000, installs: 10, cost: 1000 };
@@ -135,12 +135,16 @@ export const withNewInstall = (def: Definition): { definition: Definition; id: s
   return { definition: withItems(def, itemSlots(def), itemList(def), [...installs, { id, label: 'NEW INSTALL', against: '', limit: '' }]), id };
 };
 
-/** An install's name, what it costs against, which way, or its limit; its id stays. ADDS TO stores nothing. */
-export const withInstall = (def: Definition, id: string, patch: { label?: string; against?: string; way?: 'adds' | 'takes'; limit?: string }): Definition =>
+/**
+ * An install's name, what it costs against, which way, its limit, or whether it WEIGHS WHILE INSTALLED (8a5c); its id
+ * stays. ADDS TO stores nothing, nor does weighing nothing.
+ */
+export const withInstall = (def: Definition, id: string, patch: { label?: string; against?: string; way?: 'adds' | 'takes'; limit?: string; weighs?: boolean }): Definition =>
   withItems(def, itemSlots(def), itemList(def), itemInstalls(def).map((s) => {
     if (s.id !== id) return s;
     const next: ItemInstall = { ...s, ...patch };
     if (next.way !== 'takes') delete next.way;
+    if (next.weighs !== true) delete next.weighs;
     return next;
   }));
 

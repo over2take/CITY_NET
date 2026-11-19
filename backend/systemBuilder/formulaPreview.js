@@ -31,6 +31,7 @@ const { reachOf } = require('./rests');
 const { prepare } = require('./tierRolls');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { improvingStats } = require('./improveByUse');
+const { derivedOf } = require('./encumbrance');
 
 /** What every level name reads for the sample character. */
 const SAMPLE_LEVEL = 3;
@@ -81,7 +82,9 @@ const nearest = (name, known) => {
 /** The sample character as formulas read it: its stats, its formulas worked out, every level at SAMPLE_LEVEL. */
 const sampleOf = (definition) => {
   const samples = isPlainObject(definition.samples) ? definition.samples : {};
-  const { values } = previewDerived({ lookups: definition.lookups, derived: definition.derived }, samples);
+  // CAN CARRY among them (8a5c), so a box reading @capacity shows what the sample can carry; @carried reads 0, a sample
+  // carrying nothing.
+  const { values } = previewDerived({ lookups: definition.lookups, derived: derivedOf(definition) }, samples);
   const levels = Object.fromEntries([...levelNamesOf(definition)].map((n) => [n, SAMPLE_LEVEL]));
   return { ...samples, ...values, ...levels };
 };

@@ -27,7 +27,7 @@ const WORN = {
   },
 } as unknown as Definition;
 
-type ItemsTab = 'TYPES' | 'SLOTS & INSTALLS' | 'ITEMS';
+type ItemsTab = 'TYPES' | 'SLOTS & INSTALLS' | 'ENCUMBRANCE' | 'ITEMS';
 const open = (start: Definition = WORN, tab: ItemsTab = 'TYPES') => {
   const edits: Definition[] = [];
   const Harness = () => {
@@ -65,9 +65,9 @@ describe('SLOTS', () => {
     expect(last().items!.list![0]).not.toHaveProperty('needs');
   });
 
-  it('the page is three tabs in the order a system is set up (8aL1), each with a line saying what it is for', async () => {
+  it('the page is four tabs in the order a system is set up (8aL1, ENCUMBRANCE 8a5c), each with a line saying what it is for', async () => {
     open();
-    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['TYPES', 'SLOTS & INSTALLS', 'ITEMS']);
+    expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['TYPES', 'SLOTS & INSTALLS', 'ENCUMBRANCE', 'ITEMS']);
     expect(screen.getByRole('tab', { name: 'TYPES' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByText(/^What kinds of thing your game has/)).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'Slots' })).toBeNull();
@@ -75,6 +75,9 @@ describe('SLOTS', () => {
     expect(screen.getByText(/^For the few games that need them/)).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Slots' })).toBeTruthy();
     expect(screen.getByRole('region', { name: 'Installs' })).toBeTruthy();
+    await userEvent.click(screen.getByRole('tab', { name: 'ENCUMBRANCE' }));
+    expect(screen.getByText(/^What each character carries against what they can/)).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Encumbrance' })).toBeTruthy();
     await userEvent.click(screen.getByRole('tab', { name: 'ITEMS' }));
     expect(screen.getByText(/^The things a character carries, wears or installs/)).toBeTruthy();
     expect(screen.queryByRole('region', { name: 'Item types' })).toBeNull();
@@ -458,5 +461,122 @@ describe('ITEM TYPES (8a2)', () => {
 
   it('every hint written', () => {
     for (const k of ['items.types', 'items.typeName', 'items.one', 'items.column', 'items.kind', 'items.and', 'items.type']) expect(HINTS[k], k).toBeTruthy();
+  });
+});
+
+describe('ENCUMBRANCE (8a5c)', () => {
+  type Counted = { items?: { encumbrance?: Record<string, unknown>; installs?: Record<string, unknown>[] } };
+  const TYPED = {
+    ...(WORN as unknown as object),
+    items: {
+      types: [
+        { id: 'weapons', label: 'WEAPONS', one: 'Weapon', columns: [{ id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' }] },
+        { id: 'armor', label: 'ARMOR', one: 'Armor', columns: [{ id: 'defense', label: 'DEFENSE', kind: 'number' }, { id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' }] },
+        { id: 'spells', label: 'SPELLS', one: 'Spell', columns: [{ id: 'range', label: 'RANGE', kind: 'text' }] },
+      ],
+      installs: [{ id: 'cyberware', label: 'CYBERWARE', against: 'con', limit: '10' }],
+    },
+  } as unknown as Definition;
+  const COUNTING = { ...TYPED, items: { ...(TYPED as unknown as { items: object }).items,
+    encumbrance: { column: 'weight', unit: 'LB', capacity: '@con * 10', bands: [{ word: 'LIGHT', upto: 50 }, { word: 'ENCUMBERED', upto: 100 }], past: 'OVERLOADED' } } } as unknown as Definition;
+  const panel = () => within(screen.getByRole('region', { name: 'Encumbrance' }));
+  const counted = (last: () => unknown) => (last() as Counted).items!.encumbrance;
+
+  it('not counted, said so; COUNT ENCUMBRANCE starts on WEIGHT in LB, ten times the first stat, LIGHT, ENCUMBERED, OVERLOADED', async () => {
+    const last = open(TYPED, 'ENCUMBRANCE');
+    expect(panel().getByText(/^Not counted: nothing is weighed/)).toBeTruthy();
+    await userEvent.click(panel().getByRole('button', { name: 'COUNT ENCUMBRANCE' }));
+    expect(counted(last)).toEqual({ column: 'weight', unit: 'LB', capacity: '@con * 10', bands: [{ word: 'LIGHT', upto: 50 }, { word: 'ENCUMBERED', upto: 100 }], past: 'OVERLOADED' });
+    expect(panel().getByText('WEAPONS, ARMOR count WEIGHT, one of each times how many; SPELLS weighs nothing.')).toBeTruthy();
+    expect((panel().getByLabelText('Can carry') as HTMLInputElement).value).toBe('@con * 10');
+  });
+
+  it('nothing to count: no COUNT, said why', () => {
+    const words = { ...TYPED, items: { types: [{ id: 'notes', label: 'NOTES', columns: [{ id: 'text', label: 'TEXT', kind: 'text' }] }] } } as unknown as Definition;
+    open(words, 'ENCUMBRANCE');
+    expect((panel().getByRole('button', { name: 'COUNT ENCUMBRANCE' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(panel().getByText('Give a type a NUMBER column first, like WEIGHT, on TYPES.')).toBeTruthy();
+  });
+
+  it('COUNTED BY each NUMBER column once, IN its unit; CAN CARRY typed; a column gone, said', async () => {
+    const last = open(COUNTING, 'ENCUMBRANCE');
+    const by = within(panel().getByRole('group', { name: 'Counted by' }));
+    expect(by.getAllByRole('button').map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([['WEIGHT', 'true'], ['DEFENSE', 'false']]);
+    await userEvent.click(by.getByRole('button', { name: 'DEFENSE' }));
+    expect(counted(last)).toMatchObject({ column: 'defense', unit: 'LB' });
+    expect(panel().getByText('ARMOR counts DEFENSE, one of each times how many; WEAPONS, SPELLS weigh nothing.')).toBeTruthy();
+    fireEvent.change(panel().getByLabelText('IN'), { target: { value: 'PTS' } });
+    expect(counted(last)).toMatchObject({ unit: 'PTS' });
+    fireEvent.change(panel().getByLabelText('IN'), { target: { value: '' } });
+    expect(counted(last)).not.toHaveProperty('unit');
+    fireEvent.change(panel().getByLabelText('Can carry'), { target: { value: '@con * 15' } });
+    expect(counted(last)).toMatchObject({ capacity: '@con * 15' });
+    cleanup();
+    open({ ...COUNTING, items: { ...(COUNTING as unknown as { items: object }).items, encumbrance: { column: 'bulk' } } } as unknown as Definition, 'ENCUMBRANCE');
+    expect(panel().getByRole('alert').textContent).toBe('No type has a NUMBER column called bulk any more: pick what it counts.');
+    // Picking a column brings its unit.
+    cleanup();
+    const pick = open({ ...COUNTING, items: { ...(COUNTING as unknown as { items: object }).items, encumbrance: { column: 'defense', unit: 'PTS' } } } as unknown as Definition, 'ENCUMBRANCE');
+    await userEvent.click(panel().getByRole('button', { name: 'WEIGHT' }));
+    expect(counted(pick)).toEqual({ column: 'weight', unit: 'LB' });
+  });
+
+  it('BANDS: each word and share the GM\'s, + BAND, ×, the word past them; a share out of order said; none, the number alone', async () => {
+    const last = open(COUNTING, 'ENCUMBRANCE');
+    expect(panel().getByText('BANDS · 2 OF 5')).toBeTruthy();
+    fireEvent.change(panel().getByLabelText('Band 1 word'), { target: { value: 'EASY' } });
+    fireEvent.change(panel().getByLabelText('Band 2 up to'), { target: { value: '40' } });
+    expect(counted(last)).toMatchObject({ bands: [{ word: 'EASY', upto: 50 }, { word: 'ENCUMBERED', upto: 40 }] });
+    expect(panel().getByLabelText('Band 2 up to').getAttribute('aria-invalid')).toBe('true');
+    expect(within(panel().getByRole('group', { name: 'Band 2' })).getByText('Each band goes further than the one before')).toBeTruthy();
+    fireEvent.change(panel().getByLabelText('Band 2 up to'), { target: { value: '' } });
+    expect(counted(last)).toMatchObject({ bands: [{ word: 'EASY', upto: 50 }, { word: 'ENCUMBERED', upto: 40 }] });
+    await userEvent.click(panel().getByRole('button', { name: '+ BAND' }));
+    expect(counted(last)).toMatchObject({ bands: [{ word: 'EASY' }, { word: 'ENCUMBERED' }, { word: 'NEW BAND', upto: 80 }] });
+    fireEvent.change(panel().getByLabelText('Past the last band'), { target: { value: 'CRUSHED' } });
+    expect(counted(last)).toMatchObject({ past: 'CRUSHED' });
+    for (let i = 0; i < 3; i += 1) await userEvent.click(panel().getByRole('button', { name: 'Remove band 1' }));
+    expect(counted(last)).toEqual({ column: 'weight', unit: 'LB', capacity: '@con * 10' });
+    expect(panel().getByText(/^None: the sheet says how much is carried/)).toBeTruthy();
+    expect(panel().queryByLabelText('Past the last band')).toBeNull();
+  });
+
+  it('bands with CAN CARRY blank: said to fill it or take them away; at five, no + BAND', () => {
+    open({ ...COUNTING, items: { ...(COUNTING as unknown as { items: object }).items, encumbrance: { column: 'weight', bands: [10, 20, 30, 40, 50].map((upto) => ({ word: 'B', upto })), past: 'X' } } } as unknown as Definition, 'ENCUMBRANCE');
+    expect(panel().getByRole('alert').textContent).toBe('A band is a share of CAN CARRY: say what can be carried, or take the bands away.');
+    expect((panel().getByRole('button', { name: '+ BAND' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('what counts as carried, the names formulas read; STOP COUNTING asks first', async () => {
+    const last = open(COUNTING, 'ENCUMBRANCE');
+    expect(panel().getByText(/^READIED and STOWED count; STASHED is not on them/).textContent).toContain('WEIGHS WHILE INSTALLED');
+    expect(panel().getAllByText(/^@/).map((t) => t.textContent)).toEqual(['@carried', '@capacity', '@weapons_weight', '@armor_defense', '@armor_weight']);
+    await userEvent.click(panel().getByRole('button', { name: 'STOP COUNTING' }));
+    await userEvent.click(panel().getByRole('button', { name: 'KEEP' }));
+    // KEEP changes nothing.
+    expect(last()).toBeUndefined();
+    await userEvent.click(panel().getByRole('button', { name: 'STOP COUNTING' }));
+    await userEvent.click(panel().getByRole('button', { name: 'STOP' }));
+    expect(counted(last)).toBeUndefined();
+    expect((last() as Counted).items).not.toHaveProperty('encumbrance');
+    expect(panel().getByRole('button', { name: 'COUNT ENCUMBRANCE' })).toBeTruthy();
+  });
+
+  it('an install WEIGHS WHILE INSTALLED only while it counts: STILL WEIGHS written, WEIGHS NOTHING unsaid', async () => {
+    open(TYPED, 'SLOTS & INSTALLS');
+    expect(screen.queryByRole('group', { name: 'CYBERWARE: while installed' })).toBeNull();
+    cleanup();
+    forgetBuilderPlaces();
+    const last = open(COUNTING, 'SLOTS & INSTALLS');
+    const weighs = within(screen.getByRole('group', { name: 'CYBERWARE: while installed' }));
+    expect(weighs.getByRole('button', { name: 'WEIGHS NOTHING' }).getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(weighs.getByRole('button', { name: 'STILL WEIGHS' }));
+    expect((last() as Counted).items!.installs![0]).toMatchObject({ weighs: true });
+    await userEvent.click(weighs.getByRole('button', { name: 'WEIGHS NOTHING' }));
+    expect((last() as Counted).items!.installs![0]).not.toHaveProperty('weighs');
+  });
+
+  it('every hint written', () => {
+    for (const k of ['items.encumbrance', 'items.countedBy', 'items.canCarry', 'items.bands', 'items.weighs'] as const) expect(HINTS[k], k).toBeTruthy();
   });
 });
