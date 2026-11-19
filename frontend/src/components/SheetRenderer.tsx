@@ -1,5 +1,6 @@
 import { CyberwareSection } from './CyberwareSection';
 import { InventorySection, type RowAction } from './InventorySection';
+import { CarryingBlock } from './CarryingBlock';
 import { PharmaSection } from './PharmaSection';
 import { consumable, takeDoseFromRow, hasPharma, activeDrugs } from '../sheets/cwnPharma';
 import { readInventory } from '../sheets/inventory';
@@ -2089,6 +2090,8 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
             {onRoll ? <>click <DiceIcon size={11} /> to roll</> : <>rolls land in the dice tray</>}
           </div>
         )}
+        {/* A custom system's CARRYING (8a6a), at the top of the tab its INVENTORY is on, as CWN's count is. */}
+        {sectionsForTab.some((s) => s.layout === 'inventory') && <CarryingBlock data={data} noToken={!!vitals && !readOnly && !vitals.token} />}
         {sectionsForTab.map((section) => {
           const open = !closedSections.has(section.id);
           return (
