@@ -16,7 +16,7 @@ const initiativeOn = (system) => customSystems.partIn(system || 'generic', 'init
 function getSceneState(db, sceneKey, cb) {
   db.get(
     `SELECT s.scene_key, s.combat_id, s.combatants, s.sides, s.turn_index,
-            c.turn_counter, c.pass_counter, c.system, c.mode
+            s.turn_counter, s.pass_counter, c.system, c.mode
      FROM initiative_scene s
      JOIN initiative_combat c ON c.id = s.combat_id
      WHERE s.scene_key = ?`,
@@ -91,11 +91,11 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
 
     // ── List active combats (for the "join existing" prompt) ──────────────────
     socket.on('initiative:list_combats', () => {
-      db.all(`SELECT c.id, c.turn_counter FROM initiative_combat c`, [], (err, combats) => {
+      db.all(`SELECT c.id, c.system FROM initiative_combat c`, [], (err, combats) => {
         if (err) return;
         if (!combats || combats.length === 0) { socket.emit('initiative:combats', []); return; }
 
-        db.all(`SELECT combat_id, scene_key FROM initiative_scene`, [], (err2, scenes) => {
+        db.all(`SELECT combat_id, scene_key, turn_counter, pass_counter FROM initiative_scene`, [], (err2, scenes) => {
           if (err2) return;
 
           const allKeys = (scenes || []).map((s) => s.scene_key);
@@ -112,9 +112,12 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
               if (!scenesByCombat[s.combat_id]) scenesByCombat[s.combat_id] = [];
               scenesByCombat[s.combat_id].push(s.scene_key);
             });
-            return combats.map((c) => ({
+            // Each scene's own count (8a8): its ROUND, or Shadowrun's PASS as its tracker shows it.
+            const counted = Object.fromEntries((scenes || []).map((s) => [s.scene_key, s]));
+            return combats.map(({ system, ...c }) => ({
               ...c,
               scene_keys: scenesByCombat[c.id] || [],
+              scene_counters: Object.fromEntries((scenesByCombat[c.id] || []).map((sk) => [sk, system === 'shadowrun_6e' ? counted[sk].pass_counter : counted[sk].turn_counter])),
               scene_labels: Object.fromEntries(
                 (scenesByCombat[c.id] || []).map((sk) => [sk, labelMap[sk] || sk])
               ),
@@ -345,7 +348,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
       if (!sceneKey) return;
 
       db.get(
-        `SELECT s.combatants, s.sides, s.turn_index, s.combat_id, c.turn_counter, c.pass_counter, c.system, c.mode
+        `SELECT s.combatants, s.sides, s.turn_index, s.combat_id, s.turn_counter, s.pass_counter, c.system, c.mode
          FROM initiative_scene s
          JOIN initiative_combat c ON c.id = s.combat_id
          WHERE s.scene_key = ?`,
@@ -371,8 +374,8 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
                 if (wrapped) {
                   newRound(JSON.parse(row.combatants || '[]'));
                   db.run(
-                    `UPDATE initiative_combat SET turn_counter = turn_counter + 1 WHERE id = ?`,
-                    [row.combat_id],
+                    `UPDATE initiative_scene SET turn_counter = turn_counter + 1 WHERE scene_key = ?`,
+                    [sceneKey],
                     () => broadcastScene(io, db, sceneKey)
                   );
                 } else {
@@ -415,8 +418,8 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
               (err) => {
                 if (err) return;
                 db.run(
-                  `UPDATE initiative_combat SET pass_counter = pass_counter + 1 WHERE id = ?`,
-                  [row.combat_id],
+                  `UPDATE initiative_scene SET pass_counter = pass_counter + 1 WHERE scene_key = ?`,
+                  [sceneKey],
                   () => broadcastScene(io, db, sceneKey, { newRound: startsRound })
                 );
               }
@@ -429,8 +432,8 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
               (err) => {
                 if (err) return;
                 db.run(
-                  `UPDATE initiative_combat SET turn_counter = turn_counter + 1 WHERE id = ?`,
-                  [row.combat_id],
+                  `UPDATE initiative_scene SET turn_counter = turn_counter + 1 WHERE scene_key = ?`,
+                  [sceneKey],
                   () => broadcastScene(io, db, sceneKey)
                 );
               }

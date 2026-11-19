@@ -71,7 +71,6 @@ function InitiativeTracker({
   const word = useWords(activeSystem);
   const INITIATIVE = word('initiative', 'singular', 'INITIATIVE').toUpperCase();
   const INIT = word('initiative', 'short', 'INIT').toUpperCase();
-  const TURN = word('turn', 'singular', 'TURN').toUpperCase();
 
   const content = (
     <>
@@ -112,7 +111,7 @@ function InitiativeTracker({
                   style={{ width: '100%', marginBottom: 4, textAlign: 'left' }}
                   onClick={() => { onStart(c.id); setShowJoin(false); }}
                 >
-                  COMBAT #{c.id} — {TURN} {c.turn_counter}
+                  COMBAT #{c.id}
                   {c.scene_keys?.length ? ` [${c.scene_keys.length} SCENE${c.scene_keys.length > 1 ? 'S' : ''}]` : ''}
                 </button>
               ))}

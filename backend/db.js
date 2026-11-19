@@ -501,7 +501,8 @@ db.serialize(() => {
   db.run(`ALTER TABLE saved_maps ADD COLUMN npc_links_data TEXT`, () => {});
 
   // ── Initiative Tracker ────────────────────────────────────────────────────────
-  // One row per active combat; owns the shared turn / pass counters.
+  // One row per active combat: its system and mode, and the scenes JOINed to it. Its turn / pass counters are no longer read:
+  // each scene counts its own (8a8, below).
   db.run(`CREATE TABLE IF NOT EXISTS initiative_combat (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     turn_counter INTEGER DEFAULT 1,
@@ -525,6 +526,15 @@ db.serialize(() => {
     FOREIGN KEY(combat_id) REFERENCES initiative_combat(id) ON DELETE CASCADE
   )`);
   db.run(`ALTER TABLE initiative_scene ADD COLUMN sides TEXT NOT NULL DEFAULT '[]'`, () => {});
+  // Each scene its own ROUND (and Shadowrun's PASS) (8a8, the user, 2026-11-19: "each initiative should have it's own round
+  // counter"): a scene JOINed to another's combat had added one to the combat's shared counter on each of its own laps. Added
+  // once; a fight running when it is added keeps the count it had.
+  db.run(`ALTER TABLE initiative_scene ADD COLUMN turn_counter INTEGER DEFAULT 1`, (err) => {
+    if (!err) db.run(`UPDATE initiative_scene SET turn_counter = COALESCE((SELECT c.turn_counter FROM initiative_combat c WHERE c.id = initiative_scene.combat_id), 1)`, () => {});
+  });
+  db.run(`ALTER TABLE initiative_scene ADD COLUMN pass_counter INTEGER DEFAULT 1`, (err) => {
+    if (!err) db.run(`UPDATE initiative_scene SET pass_counter = COALESCE((SELECT c.pass_counter FROM initiative_combat c WHERE c.id = initiative_scene.combat_id), 1)`, () => {});
+  });
 
   // Game systems a GM built: a draft the builder edits and the published copy a game runs.
   // See systemBuilder/store.js; published ones are loaded into the game by systemBuilder/runtime.js.

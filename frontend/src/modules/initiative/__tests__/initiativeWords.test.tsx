@@ -40,7 +40,7 @@ const state = (system: string, over = {}): InitiativeState => ({
 describe('the tracker window', () => {
   const read = async (system: string) => {
     const out: Record<string, string | null> = {};
-    let r = render(<InitiativeWindow {...windowProps(system, { activeCombats: [{ id: 4, turn_counter: 7, scene_keys: ['city:0'] }] })} />);
+    let r = render(<InitiativeWindow {...windowProps(system, { activeCombats: [{ id: 4, scene_keys: ['city:0'], scene_counters: { 'city:0': 7 } }] })} />);
     out.start = screen.getByText(/^START /).textContent;
     await userEvent.click(screen.getByText('JOIN EXISTING COMBAT'));
     out.combat = screen.getByText(/^COMBAT #4/).textContent;
@@ -61,7 +61,7 @@ describe('the tracker window', () => {
   it('reads as today under every built-in system, and a custom one that renamed nothing', async () => {
     for (const system of Object.keys(COUNTERS)) {
       expect(await read(system), system).toEqual({
-        start: 'START INITIATIVE', combat: 'COMBAT #4 — TURN 7 [1 SCENE]', none: 'NO ACTIVE INITIATIVE IN THIS SCENE',
+        start: 'START INITIATIVE', combat: 'COMBAT #4 [1 SCENE]', none: 'NO ACTIVE INITIATIVE IN THIS SCENE',
         counter: `${COUNTERS[system]} ${system === 'shadowrun_6e' ? 2 : 3}`, end: 'END INIT', join: 'JOIN INITIATIVE',
       });
     }
@@ -69,7 +69,7 @@ describe('the tracker window', () => {
 
   it('uses a custom system\'s own words', async () => {
     expect(await read(RENAMED)).toEqual({
-      start: 'START ORDER', combat: 'COMBAT #4 — BEAT 7 [1 SCENE]', none: 'NO ACTIVE ORDER IN THIS SCENE',
+      start: 'START ORDER', combat: 'COMBAT #4 [1 SCENE]', none: 'NO ACTIVE ORDER IN THIS SCENE',
       counter: 'BEAT 3', end: 'END ORD', join: 'JOIN ORDER',
     });
   });
@@ -110,8 +110,10 @@ describe('the nav panel', () => {
       hint: screen.getByText(/^NO ACTIVE COMBATS/).textContent,
     };
     r.unmount();
-    r = render(<InitiativeNavPanel initiativeActive activeCombats={[{ id: 4, turn_counter: 7, scene_keys: ['city:0'] }]} locations={[]} onClose={vi.fn()} system={system} />);
+    r = render(<InitiativeNavPanel initiativeActive activeCombats={[{ id: 4, scene_keys: ['city:0'], scene_counters: { 'city:0': 7 } }]} locations={[]} onClose={vi.fn()} system={system} />);
     out.combat = screen.getByText(/^COMBAT #4/).textContent;
+    // Each scene with its own count, named as its tracker names it (8a8).
+    out.scene = screen.getByRole('button', { name: /^▶ / }).textContent;
     cleanup();
     return out;
   };
@@ -121,7 +123,7 @@ describe('the nav panel', () => {
       expect(read(system), String(system)).toEqual({
         heading: 'INITIATIVE',
         hint: 'NO ACTIVE COMBATS. OPEN THE TRACKER AND CLICK START INITIATIVE TO BEGIN. EACH ACTIVE SCENE WILL APPEAR HERE FOR QUICK NAVIGATION.',
-        combat: 'COMBAT #4 — TURN 7',
+        combat: 'COMBAT #4', scene: `▶ CITY MAP · ${system ? COUNTERS[system] : 'TURN'} 7`,
       });
     }
   });
@@ -145,7 +147,7 @@ describe('the nav panel', () => {
     expect(read(RENAMED)).toEqual({
       heading: 'ORDER',
       hint: 'NO ACTIVE COMBATS. OPEN THE TRACKER AND CLICK START ORDER TO BEGIN. EACH ACTIVE SCENE WILL APPEAR HERE FOR QUICK NAVIGATION.',
-      combat: 'COMBAT #4 — BEAT 7',
+      combat: 'COMBAT #4', scene: '▶ CITY MAP · BEAT 7',
     });
   });
 });

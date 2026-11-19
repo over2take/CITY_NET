@@ -31,7 +31,7 @@ function makeDb() {
         combat_id INTEGER NOT NULL,
         combatants TEXT NOT NULL DEFAULT '[]',
         sides TEXT NOT NULL DEFAULT '[]',
-        turn_index INTEGER DEFAULT 0,
+        turn_index INTEGER DEFAULT 0, turn_counter INTEGER DEFAULT 1, pass_counter INTEGER DEFAULT 1,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
       db.run(`CREATE TABLE dice_rolls (
@@ -215,5 +215,79 @@ describe('end_combat', () => {
     handlers['initiative:end_combat']({});
     await settle();
     expect(await all(db, `SELECT scene_key FROM initiative_scene`)).toHaveLength(1);
+  });
+});
+
+// ── each scene its own ROUND (8a8) ────────────────────────────────────────────
+
+describe('a combat JOINed across two scenes: each counts its own ROUND (8a8)', () => {
+  const counters = async (sceneKey) => get(db, `SELECT turn_counter, pass_counter FROM initiative_scene WHERE scene_key = ?`, [sceneKey]);
+  /** NEXT pressed in a scene `times` times, each waited for. */
+  const next = async (sceneKey, times) => {
+    for (let i = 0; i < times; i++) {
+      const before = await get(db, `SELECT turn_index, turn_counter, pass_counter, combatants FROM initiative_scene WHERE scene_key = ?`, [sceneKey]);
+      handlers['initiative:next']({ sceneKey });
+      await waitFor(async () => {
+        const now = await get(db, `SELECT turn_index, turn_counter, pass_counter, combatants FROM initiative_scene WHERE scene_key = ?`, [sceneKey]);
+        return now.turn_index !== before.turn_index || now.turn_counter !== before.turn_counter || now.pass_counter !== before.pass_counter || now.combatants !== before.combatants;
+      });
+    }
+  };
+
+  it('a lap of one scene is a ROUND there and nowhere else; the combat\'s list says each', async () => {
+    await seedScene(db, 'city:0', combatId);
+    await seedScene(db, '5:0', combatId);
+    // Four in each: four NEXTs are a lap. The city goes round twice, the rooftop once.
+    await next('city:0', 8);
+    await next('5:0', 4);
+    expect(await counters('city:0')).toMatchObject({ turn_counter: 3 });
+    expect(await counters('5:0')).toMatchObject({ turn_counter: 2 });
+    // Its state, as the tracker shows it.
+    const viewer = boot(db);
+    viewer.handlers['initiative:join']({ sceneKey: '5:0' });
+    const state = await waitFor(async () => viewer.emitted.find((e) => e.event === 'initiative:state' && e.data.sceneKey === '5:0'));
+    expect(state.data.turnCounter).toBe(2);
+    // The list of combats: each scene's own.
+    const listed = boot(db);
+    listed.handlers['initiative:list_combats']();
+    const combats = await waitFor(async () => listed.emitted.find((e) => e.event === 'initiative:combats'));
+    expect(combats.data).toEqual([expect.objectContaining({ id: combatId, scene_keys: ['city:0', '5:0'], scene_counters: { 'city:0': 3, '5:0': 2 } })]);
+    expect(combats.data[0]).not.toHaveProperty('turn_counter');
+  });
+
+  it('a scene JOINed later starts at ROUND 1', async () => {
+    await seedScene(db, 'city:0', combatId);
+    await next('city:0', 4);
+    // As START joins one to a combat (sockets/initiative.js insertScene): no count of its own given, so ROUND 1.
+    await run(db, `INSERT OR IGNORE INTO initiative_scene (scene_key, combat_id, combatants, sides, turn_index) VALUES ('5:0', ?, '[]', '[]', 0)`, [combatId]);
+    expect(await counters('5:0')).toMatchObject({ turn_counter: 1, pass_counter: 1 });
+    expect(await counters('city:0')).toMatchObject({ turn_counter: 2 });
+  });
+
+  it('group style: a lap of the sides is a ROUND in that scene alone', async () => {
+    await run(db, `UPDATE initiative_combat SET mode = 'side' WHERE id = ?`, [combatId]);
+    const sides = JSON.stringify([{ id: 'pc', name: 'PLAYERS', score: 12, isPlayerSide: true }, { id: 'npc', name: 'NPC', score: 8, isPlayerSide: false }]);
+    for (const sk of ['city:0', '5:0']) {
+      await run(db, `INSERT INTO initiative_scene (scene_key, combat_id, combatants, sides, turn_index) VALUES (?, ?, '[]', ?, 0)`, [sk, combatId, sides]);
+    }
+    // Two sides: two NEXTs are a lap.
+    await next('city:0', 4);
+    await next('5:0', 2);
+    expect(await counters('city:0')).toMatchObject({ turn_counter: 3 });
+    expect(await counters('5:0')).toMatchObject({ turn_counter: 2 });
+  });
+
+  it('Shadowrun: each scene its own PASS', async () => {
+    await run(db, `UPDATE initiative_combat SET system = 'shadowrun_6e' WHERE id = ?`, [combatId]);
+    // Scores 20 down to 17: every pass takes 10 off, so a pass ends at each lap.
+    await seedScene(db, 'city:0', combatId);
+    await seedScene(db, '5:0', combatId);
+    await next('city:0', 4);
+    expect(await counters('city:0')).toMatchObject({ pass_counter: 2 });
+    expect(await counters('5:0')).toMatchObject({ pass_counter: 1 });
+    const listed = boot(db);
+    listed.handlers['initiative:list_combats']();
+    const combats = await waitFor(async () => listed.emitted.find((e) => e.event === 'initiative:combats'));
+    expect(combats.data[0].scene_counters).toEqual({ 'city:0': 2, '5:0': 1 });
   });
 });

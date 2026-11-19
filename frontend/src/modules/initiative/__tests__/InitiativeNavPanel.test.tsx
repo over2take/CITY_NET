@@ -138,8 +138,8 @@ describe('InitiativeNavPanel — empty combats placeholder', () => {
 
 describe('InitiativeNavPanel — active combats list', () => {
   const combats: ActiveCombat[] = [
-    { id: 1, turn_counter: 3, scene_keys: ['city:0', '42:0'], scene_labels: { 'city:0': 'CITY MAP', '42:0': 'NEON PLAZA — GROUND FLOOR' } },
-    { id: 2, turn_counter: 1, scene_keys: ['7:2'], scene_labels: { '7:2': 'WAREHOUSE — LEVEL 2' } },
+    { id: 1, scene_counters: { 'city:0': 3, '42:0': 1 }, scene_keys: ['city:0', '42:0'], scene_labels: { 'city:0': 'CITY MAP', '42:0': 'NEON PLAZA — GROUND FLOOR' } },
+    { id: 2, scene_counters: { '7:2': 1 }, scene_keys: ['7:2'], scene_labels: { '7:2': 'WAREHOUSE — LEVEL 2' } },
   ];
 
   it('does not show placeholder when combats exist', () => {
@@ -147,10 +147,19 @@ describe('InitiativeNavPanel — active combats list', () => {
     expect(screen.queryByText(/NO ACTIVE COMBATS/)).not.toBeInTheDocument();
   });
 
-  it('shows combat ID and turn counter for each combat', () => {
+  it('shows each combat by ID, and each scene with its own count beside it (8a8)', () => {
     render(<InitiativeNavPanel {...baseProps({ activeCombats: combats })} />);
-    expect(screen.getByText(/COMBAT #1 — TURN 3/)).toBeInTheDocument();
-    expect(screen.getByText(/COMBAT #2 — TURN 1/)).toBeInTheDocument();
+    expect(screen.getByText('COMBAT #1')).toBeInTheDocument();
+    expect(screen.getByText('COMBAT #2')).toBeInTheDocument();
+    // Two scenes of one combat, each at its own: the city twice round, the plaza not yet.
+    expect(screen.getByRole('button', { name: '▶ CITY MAP · TURN 3' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '▶ NEON PLAZA — GROUND FLOOR · TURN 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '▶ WAREHOUSE — LEVEL 2 · TURN 1' })).toBeInTheDocument();
+  });
+
+  it('a scene the server gave no count says none (8a8)', () => {
+    render(<InitiativeNavPanel {...baseProps({ activeCombats: [{ id: 3, scene_keys: ['city:0'], scene_labels: { 'city:0': 'CITY MAP' } }] })} />);
+    expect(screen.getByRole('button', { name: '▶ CITY MAP' })).toBeInTheDocument();
   });
 
   it('shows CITY MAP scene button', () => {
@@ -181,8 +190,8 @@ describe('InitiativeNavPanel — active combats list', () => {
 
 describe('ending a combat from the list', () => {
   const combats: ActiveCombat[] = [
-    { id: 1, turn_counter: 3, scene_keys: ['city:0', '42:0'], scene_labels: { 'city:0': 'CITY MAP', '42:0': 'NEON PLAZA — GROUND FLOOR' } },
-    { id: 2, turn_counter: 1, scene_keys: ['7:2'], scene_labels: { '7:2': 'WAREHOUSE — LEVEL 2' } },
+    { id: 1, scene_counters: { 'city:0': 3, '42:0': 1 }, scene_keys: ['city:0', '42:0'], scene_labels: { 'city:0': 'CITY MAP', '42:0': 'NEON PLAZA — GROUND FLOOR' } },
+    { id: 2, scene_counters: { '7:2': 1 }, scene_keys: ['7:2'], scene_labels: { '7:2': 'WAREHOUSE — LEVEL 2' } },
   ];
 
   it('gives every listed combat its own end button', () => {

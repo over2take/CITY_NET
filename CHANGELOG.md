@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **A fight spread over several scenes counted its rounds twice.** When the GM JOINed a second scene to a combat, every scene's lap added one to the one shared ROUND, so two scenes climbed two rounds for each real one. Each scene now counts its own ROUND (and Shadowrun its own PASS), a scene joined later starts at 1, and the initiative menu lists each scene with its own count. A fight running when you update keeps the count it had.
 - **FIRE and RELOAD now update the rest of the sheet.** A reload that used up a box of rounds left what the sheet worked out from the gear (such as what is carried) as it was until the next edit. It is worked out at once now.
 - **Shadowrun: stun overflowing onto the Physical track now shows on the open character sheet.** When stun damage spilled over onto Physical HP, an open sheet could keep showing the HP from before the hit until something else made it reload.
 - **BANK, HEALTH and VEHICLES from the sheet's own tab (8s1d).** On the ⧉ tab, clicking Cash, HP or VEHICLES now opens that window in the main CITY_NET window, as SHEET.EXE does, and the tab says OPENED IN YOUR MAIN WINDOW. If the main window isn't open, the tab says so. The vehicle you are sitting in shows at the top of the tab too, and clicking it gets you out.

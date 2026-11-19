@@ -39,7 +39,8 @@ export interface InitiativeState {
 
 export interface ActiveCombat {
   id: number;
-  turn_counter: number;
+  /** Each scene's own count (8a8): its ROUND, or Shadowrun's PASS, as its tracker shows it. */
+  scene_counters?: Record<string, number>;
   scene_keys: string[];
   scene_labels: Record<string, string>;
 }
