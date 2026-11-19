@@ -9,11 +9,16 @@ import { allStats } from '../sheets/statsRules';
 import { useFormulaBox } from '../hooks/useFormulaBox';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
+import { conditionsOf } from '../sheets/conditions';
 
 // ENCUMBRANCE on the builder's ITEMS page (8a5c; approved mockup docs/mockups/item-types.html, 2026-11-14, decision 7):
 // COUNTED BY a NUMBER column of the types, IN its unit; CAN CARRY a formula; BANDS as words at a share of it, each the
 // GM's to name and place (the user, 2026-11-18), and the word past them. What counts as carried, and the names formulas
 // read, said under it. Shown, never enforced. What it reads and writes is sheets/encumbrance.ts; the server checks it.
+//
+// Under each band, and the word past them (8a5d2; approved mockup docs/mockups/encumbrance-bands.html, 2026-11-18): WHAT IT
+// MEANS, words for the sheet, and a CONDITION, NONE to start, put on the token while in that band (the user: "word +
+// optional (on/off) condition").
 
 interface Props {
   definition: Definition;
@@ -33,6 +38,39 @@ const grid: React.CSSProperties = { display: 'grid', gridTemplateColumns: '170px
 const choice = (on: boolean): React.CSSProperties => ({ ...btn, padding: '3px 10px', border: '1px solid var(--dark-green)', cursor: 'pointer',
   background: on ? 'var(--green)' : 'none', color: on ? 'var(--black)' : 'var(--green)' });
 const token: React.CSSProperties = { fontSize: 11, color: 'var(--cyan)', border: '1px solid color-mix(in srgb, var(--cyan) 45%, transparent)', padding: '1px 6px', whiteSpace: 'nowrap' };
+
+/**
+ * Under a band (8a5d2): WHAT IT MEANS and its CONDITION, NONE first. A condition no longer made on CONDITIONS is said gone,
+ * to be picked again.
+ */
+function Means({ definition, id, label, says, condition, onSays, onCondition }: {
+  definition: Definition; id: string; label: string; says?: string; condition?: string;
+  onSays: (text: string) => void; onCondition: (id: string) => void;
+}) {
+  const conditions = conditionsOf(definition);
+  const gone = !!condition && !conditions.some((c) => c.id === condition);
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '140px minmax(0, 1fr)', gap: '6px 10px', alignItems: 'center', borderLeft: '2px solid var(--dark-green)', paddingLeft: 8, marginLeft: 4 }}>
+      <FieldName beside htmlFor={`${id}-means`} hint={HINTS['items.bandMeans']} style={small}>WHAT IT MEANS</FieldName>
+      <input id={`${id}-means`} type="text" aria-label={`${label} means`} maxLength={LIMITS.says} value={says ?? ''} placeholder="Nothing to say (optional)"
+        style={{ ...input, width: '100%' }} onChange={(ev) => onSays(ev.target.value)} />
+      <FieldName beside htmlFor={`${id}-condition`} hint={HINTS['items.bandCondition']} style={small}>CONDITION</FieldName>
+      <span style={row}>
+        <select id={`${id}-condition`} aria-label={`${label} condition`} value={condition ?? ''} style={input} aria-invalid={gone ? true : undefined}
+          onChange={(ev) => onCondition(ev.target.value)}>
+          <option value="">NONE</option>
+          {gone && <option value={condition}>{condition} · GONE</option>}
+          {conditions.map((c) => <option key={c.id} value={c.id}>{c.name.toUpperCase()}</option>)}
+        </select>
+        {gone
+          ? <span role="alert" style={{ ...why, fontSize: 11, color: 'var(--danger)' }}>No condition is called {condition} any more: pick another, or NONE.</span>
+          : condition
+            ? <span style={{ ...why, fontSize: 11 }}>On the token while in this band, off when lighter.</span>
+            : !conditions.length && <span style={{ ...why, fontSize: 11 }}>Make one on CONDITIONS to pick it here.</span>}
+      </span>
+    </div>
+  );
+}
 
 /** The panel while it counts: COUNTED BY, CAN CARRY, BANDS, and what it means at the table. */
 function Counting({ definition, edit, api, e }: Props & { e: Encumbrance }) {
@@ -85,7 +123,8 @@ function Counting({ definition, edit, api, e }: Props & { e: Encumbrance }) {
         {bands.map((b, i) => {
           const problem = bandProblem(bands, i);
           return (
-            <div key={i} role="group" aria-label={`Band ${i + 1}`} style={row}>
+            <div key={i} role="group" aria-label={`Band ${i + 1}`} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={row}>
               <input type="text" aria-label={`Band ${i + 1} word`} maxLength={LIMITS.word} value={b.word} style={{ ...input, width: 160 }}
                 aria-invalid={!b.word.trim() ? true : undefined} onChange={(ev) => put(withBand(e, i, { word: ev.target.value }))} />
               <span style={small}>UP TO</span>
@@ -97,14 +136,21 @@ function Counting({ definition, edit, api, e }: Props & { e: Encumbrance }) {
                 onClick={() => put(withoutBand(e, i))}>×</button>
               {problem && <span style={{ ...why, fontSize: 11, color: 'var(--danger)' }}>{problem}</span>}
             </div>
+            <Means definition={definition} id={`band-${i}`} label={`Band ${i + 1}`} says={b.says} condition={b.condition}
+              onSays={(text) => put(withBand(e, i, { says: text }))} onCondition={(id) => put(withBand(e, i, { condition: id }))} />
+            </div>
           );
         })}
         {bands.length > 0
           ? (
-            <div style={row}>
-              <input type="text" aria-label="Past the last band" maxLength={LIMITS.word} value={e.past ?? ''} style={{ ...input, width: 160 }}
-                aria-invalid={!(e.past ?? '').trim() ? true : undefined} onChange={(ev) => put({ ...e, past: ev.target.value })} />
-              <span style={small}>PAST THE LAST</span>
+            <div role="group" aria-label="Past the bands" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={row}>
+                <input type="text" aria-label="Past the last band" maxLength={LIMITS.word} value={e.past ?? ''} style={{ ...input, width: 160 }}
+                  aria-invalid={!(e.past ?? '').trim() ? true : undefined} onChange={(ev) => put({ ...e, past: ev.target.value })} />
+                <span style={small}>PAST THE LAST</span>
+              </div>
+              <Means definition={definition} id="band-past" label="Past the last band" says={e.past_says} condition={e.past_condition}
+                onSays={(text) => put({ ...e, past_says: text })} onCondition={(id) => put({ ...e, past_condition: id })} />
             </div>
           )
           : <p style={{ ...why, fontSize: 11 }}>None: the sheet says how much is carried, and of how much, with no word for it.</p>}

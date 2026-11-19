@@ -49,6 +49,12 @@ describe('read and written back', () => {
     expect(e.bands).toEqual([{ word: 'LIGHT', upto: 50, says: 'Free.', condition: 'slowed' }]);
     const moved = encumbranceOf(withEncumbrance(said, withBand(e, 0, { upto: 60 })))!;
     expect(moved).toEqual({ column: 'weight', capacity: '10', bands: [{ word: 'LIGHT', upto: 60, says: 'Free.', condition: 'slowed' }], past: 'OVER', past_says: 'Slow.', past_condition: 'exhausted' });
+    // Blank words and NONE kept as nothing; words cut at 200, as the server takes them.
+    const blank = encumbranceOf(withEncumbrance(said, { ...withBand(e, 0, { says: '  ', condition: '' }), past_says: ' ', past_condition: '' }))!;
+    expect(blank).toEqual({ column: 'weight', capacity: '10', bands: [{ word: 'LIGHT', upto: 50 }], past: 'OVER' });
+    const long = encumbranceOf(withEncumbrance(said, { ...withBand(e, 0, { says: 'x'.repeat(250) }), past_says: 'y'.repeat(250) }))!;
+    expect([long.bands![0].says!.length, long.past_says!.length]).toEqual([200, 200]);
+    expect(checkDefinition(withEncumbrance(TYPED, { ...started(TYPED, 'might')!, past_says: 'Slow.', past_condition: 'exhausted' })).problems).toEqual([]);
     // With the bands gone, nothing past them is kept either.
     expect(encumbranceOf(withEncumbrance(said, withoutBand(e, 0)))).toEqual({ column: 'weight', capacity: '10' });
   });

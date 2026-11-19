@@ -14,7 +14,7 @@ export interface Band { word: string; upto: number; says?: string; condition?: s
 export interface Encumbrance { column: string; unit?: string; capacity?: string; bands?: Band[]; past?: string; past_says?: string; past_condition?: string }
 
 /** As the server's (encumbrance.js). */
-export const LIMITS = { bands: 5, upto: 1000, word: 30, unit: 12 };
+export const LIMITS = { bands: 5, upto: 1000, word: 30, unit: 12, says: 200 };
 /** The bands it starts with (8a5c): the mockup's, each the GM's to change or take away. */
 export const START_BANDS: Band[] = [{ word: 'LIGHT', upto: 50 }, { word: 'ENCUMBERED', upto: 100 }];
 export const START_PAST = 'OVERLOADED';
@@ -48,11 +48,19 @@ const tidy = (e: Encumbrance): Encumbrance => {
   if (e.unit && e.unit.trim()) next.unit = e.unit.slice(0, LIMITS.unit);
   if (e.capacity !== undefined && e.capacity.trim()) next.capacity = e.capacity;
   if (e.bands && e.bands.length) {
-    next.bands = e.bands.slice(0, LIMITS.bands);
+    next.bands = e.bands.slice(0, LIMITS.bands).map(tidyBand);
     next.past = (e.past ?? '').slice(0, LIMITS.word);
-    if (e.past_says !== undefined) next.past_says = e.past_says;
-    if (e.past_condition !== undefined) next.past_condition = e.past_condition;
+    // What it means past them, and its condition (8a5d2): said only where there is something to say.
+    if (e.past_says && e.past_says.trim()) next.past_says = e.past_says.slice(0, LIMITS.says);
+    if (e.past_condition) next.past_condition = e.past_condition;
   }
+  return next;
+};
+/** A band as it is kept: WHAT IT MEANS and its condition only where it has them. */
+const tidyBand = (b: Band): Band => {
+  const next: Band = { ...b };
+  if (next.says && next.says.trim()) next.says = next.says.slice(0, LIMITS.says); else delete next.says;
+  if (!next.condition) delete next.condition;
   return next;
 };
 
