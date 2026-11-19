@@ -35,6 +35,8 @@ const BAND_KEYS = new Set(['word', 'upto', 'says', 'condition']);
 /** What formulas read: what is carried, and what can be. */
 const CARRIED = 'carried';
 const CAPACITY = 'capacity';
+/** What a band put on the token, kept on the sheet (8a5d1, sheets/bandConditions.js). */
+const BAND_KEY = '_band_condition';
 
 /** The system's encumbrance, where it counts one. */
 const encumbranceOf = (definition) => {
@@ -118,11 +120,12 @@ const namesCondition = (definition) => {
 };
 
 /** What the sheet is told (8a6 shows it): carried, what can be (null where it says none), the unit, the band, what it means and its condition. */
-const carryingOf = (definition, data) => {
+const carryingOf = (definition, data, can = data[CAPACITY]) => {
   const e = encumbranceOf(definition);
   if (!e) return null;
   const carried = carriedOf(definition, data);
-  const capacity = capacityText(definition) && Number.isFinite(Number(data[CAPACITY])) ? Number(data[CAPACITY]) : null;
+  // `can`: CAN CARRY as the band reads it, without the band's own condition (8a5e1, runtime.js).
+  const capacity = capacityText(definition) && Number.isFinite(Number(can)) ? Number(can) : null;
   const band = capacity === null ? null : bandAt(definition, carried, capacity);
   return { carried, capacity, unit: typeof e.unit === 'string' ? e.unit : '', band: band ? band.word : null, says: band ? band.says : null, condition: band ? band.condition : null };
 };
@@ -184,4 +187,4 @@ const checkEncumbrance = (definition, problems, { text, keys, formula, targets }
   }
 };
 
-module.exports = { LIMITS, CARRIED, CAPACITY, encumbranceOf, capacityText, derivedOf, carriedOf, bandAt, bandOf, namesCondition, carryingOf, checkEncumbrance };
+module.exports = { LIMITS, CARRIED, CAPACITY, BAND_KEY, encumbranceOf, capacityText, derivedOf, carriedOf, bandAt, bandOf, namesCondition, carryingOf, checkEncumbrance };

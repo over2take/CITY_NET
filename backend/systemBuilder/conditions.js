@@ -21,10 +21,17 @@
 // - modifiers name a stat, a formula or all rolls, and are recorded and shown; one on all rolls
 //   reaches every roll of a system's own (tableRolls.js, 6b3b).
 //
+// A modifier's way (8a5e1; approved mockup docs/mockups/condition-modifiers.html, 2026-11-18): ADD, TIMES, SET TO or AT MOST,
+// its amount a number or a formula (`{ target: 'speed', way: 'times', amount: '0.5' }`); ALL ROLLS adds a whole number only,
+// as before. A condition APPLIED (`applied: true`) changes the numbers on the sheet of a character whose token has it,
+// worked out in choices.js overlayOf; otherwise its modifiers stay a reminder. Conditions don't stack (the user: "they
+// shouldn't stack"): of several changing one number one way, only the strongest counts. A visual change the GM explains;
+// nothing is enforced at the table.
+//
 // Pure: the definition checks and the running game both read it.
 
 const NAME = /^[a-z][a-z0-9_]{0,39}$/;
-const LIMITS = { conditions: 60, name: 30, short: 8, description: 300, rounds: 99, modifiers: 10, amount: 99 };
+const LIMITS = { conditions: 60, name: 30, short: 8, description: 300, rounds: 99, modifiers: 10, amount: 99, number: 9999, times: 100, formula: 200 };
 
 /** The icons drawn for CITY_NET (frontend/src/sheets/conditionIcons.ts holds the drawings). */
 const ICONS = [
@@ -38,6 +45,8 @@ const isIcon = (icon) => typeof icon === 'string' && (ICONS.includes(icon) || UP
 const ENDS = ['removed', 'rounds', 'rest'];
 /** A modifier's target that is no single number: every roll the character makes. */
 const ALL_ROLLS = 'all_rolls';
+/** How a modifier counts (8a5e1): added, times, set to, or no more than. */
+const WAYS = ['add', 'times', 'set', 'most'];
 
 /** The standard set every system starts with, in this order. Names and words are CITY_NET's own. */
 const STANDARD = [
@@ -55,8 +64,8 @@ const STANDARD = [
 const STANDARD_IDS = new Set(STANDARD.map((c) => c.id));
 
 // only_with, the house rule a condition waits on, is houseRules.js's to check.
-const STANDARD_KEYS = new Set(['on', 'name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with']);
-const OWN_KEYS = new Set(['name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with']);
+const STANDARD_KEYS = new Set(['on', 'name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with', 'applied']);
+const OWN_KEYS = new Set(['name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with', 'applied']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -67,28 +76,51 @@ const text = (value, where, max, problems, { required = false } = {}) => {
   if (value.length > max) problems.push({ where, message: `Longer than ${max} characters` });
 };
 
-const checkModifiers = (modifiers, where, targets, problems) => {
+/**
+ * A modifier's amount, as checked: ALL ROLLS adds a whole number; a stat or formula takes a number (TIMES 0 to so many) or
+ * formula text that `parse` reads (8a5e1).
+ */
+const checkAmount = (m, mw, problems, parse) => {
+  const way = m.way === undefined ? 'add' : m.way;
+  if (m.target === ALL_ROLLS) {
+    if (!Number.isInteger(m.amount) || m.amount === 0 || Math.abs(m.amount) > LIMITS.amount) problems.push({ where: `${mw}, amount`, message: `A whole number from -${LIMITS.amount} to ${LIMITS.amount}, not 0` });
+    return;
+  }
+  if (typeof m.amount === 'string') {
+    if (!m.amount.trim()) problems.push({ where: `${mw}, amount`, message: 'A number, or formula text' });
+    else if (m.amount.length > LIMITS.formula) problems.push({ where: `${mw}, amount`, message: `Longer than ${LIMITS.formula} characters` });
+    else if (parse) { try { parse(m.amount); } catch (e) { problems.push({ where: `${mw}, amount`, message: e.message }); } }
+    return;
+  }
+  if (typeof m.amount !== 'number' || !Number.isFinite(m.amount)) { problems.push({ where: `${mw}, amount`, message: 'A number, or formula text' }); return; }
+  if (way === 'times') { if (m.amount < 0 || m.amount > LIMITS.times) problems.push({ where: `${mw}, amount`, message: `Times 0 to ${LIMITS.times}` }); return; }
+  if (Math.abs(m.amount) > LIMITS.number) problems.push({ where: `${mw}, amount`, message: `From -${LIMITS.number} to ${LIMITS.number}` });
+  else if (way === 'add' && m.amount === 0) problems.push({ where: `${mw}, amount`, message: 'Adding 0 changes nothing' });
+};
+
+const checkModifiers = (modifiers, where, targets, problems, parse) => {
   if (modifiers === undefined) return;
   if (!Array.isArray(modifiers)) { problems.push({ where, message: 'Must be a list of modifiers' }); return; }
   if (modifiers.length > LIMITS.modifiers) problems.push({ where, message: `At most ${LIMITS.modifiers} modifiers` });
   modifiers.slice(0, LIMITS.modifiers).forEach((m, i) => {
     const mw = `${where} ${i + 1}`;
     if (!isPlainObject(m)) { problems.push({ where: mw, message: 'Must say a target and an amount' }); return; }
-    for (const key of Object.keys(m)) if (key !== 'target' && key !== 'amount') problems.push({ where: `${mw}, ${key}`, message: 'Only a target and an amount' });
+    for (const key of Object.keys(m)) if (key !== 'target' && key !== 'amount' && key !== 'way') problems.push({ where: `${mw}, ${key}`, message: 'Only a target, a way and an amount' });
     if (m.target !== ALL_ROLLS && !(typeof m.target === 'string' && targets.has(m.target))) {
       problems.push({ where: `${mw}, target`, message: 'Must be all rolls, or one of this system\'s stats or formulas' });
     }
-    if (!Number.isInteger(m.amount) || m.amount === 0 || Math.abs(m.amount) > LIMITS.amount) {
-      problems.push({ where: `${mw}, amount`, message: `A whole number from -${LIMITS.amount} to ${LIMITS.amount}, not 0` });
-    }
+    if (m.way !== undefined && !WAYS.includes(m.way)) problems.push({ where: `${mw}, way`, message: 'ADD, TIMES, SET TO or AT MOST' });
+    else if (m.target === ALL_ROLLS && m.way !== undefined && m.way !== 'add') problems.push({ where: `${mw}, way`, message: 'All rolls only take an ADD' });
+    checkAmount(m, mw, problems, parse);
   });
 };
 
 /**
  * Problems with a definition's `conditions`, pushed onto `problems`. `targets` are the ids a
- * modifier may name: the system's stats and formulas; `rests` the ids a condition may end at.
+ * modifier may name: the system's stats and formulas; `rests` the ids a condition may end at; `parse` reads a modifier's
+ * formula (8a5e1), none checking only that it is text.
  */
-const checkConditions = (conditions, targets, problems, rests = new Set()) => {
+const checkConditions = (conditions, targets, problems, rests = new Set(), parse = null) => {
   if (conditions === undefined) return;
   if (!isPlainObject(conditions)) { problems.push({ where: 'conditions', message: 'Must be a set of conditions' }); return; }
   const own = Object.keys(conditions).filter((id) => !STANDARD_IDS.has(id));
@@ -123,7 +155,8 @@ const checkConditions = (conditions, targets, problems, rests = new Set()) => {
     } else if (c.at !== undefined) {
       problems.push({ where: `${where}, at`, message: 'Only a condition that ends at a rest names rests' });
     }
-    checkModifiers(c.modifiers, `${where}, modifier`, targets, problems);
+    if (has(c, 'applied') && typeof c.applied !== 'boolean') problems.push({ where: `${where}, applied`, message: 'Whether its modifiers are applied: true or false' });
+    checkModifiers(c.modifiers, `${where}, modifier`, targets, problems, parse);
   }
 };
 
@@ -148,7 +181,9 @@ const conditionsOf = (definition) => {
       ends,
       ...(ends === 'rounds' && Number.isInteger(c.rounds) ? { rounds: c.rounds } : {}),
       ...(ends === 'rest' ? { at: Array.isArray(c.at) ? c.at.filter((id) => typeof id === 'string') : [] } : {}),
-      modifiers: Array.isArray(c.modifiers) ? c.modifiers.filter((m) => isPlainObject(m)).map((m) => ({ target: m.target, amount: m.amount })) : [],
+      modifiers: Array.isArray(c.modifiers) ? c.modifiers.filter((m) => isPlainObject(m)).map((m) => ({ target: m.target, amount: m.amount, ...(WAYS.includes(m.way) && m.way !== 'add' ? { way: m.way } : {}) })) : [],
+      // Its modifiers change the sheet's numbers (8a5e1), or are a reminder.
+      ...(c.applied === true ? { applied: true } : {}),
       standard,
     };
   };
@@ -165,4 +200,4 @@ const conditionsOf = (definition) => {
   return out.slice(0, LIMITS.conditions);
 };
 
-module.exports = { STANDARD, ICONS, ENDS, ALL_ROLLS, LIMITS, UPLOADED_ICON, isIcon, checkConditions, conditionsOf };
+module.exports = { STANDARD, ICONS, ENDS, ALL_ROLLS, WAYS, LIMITS, UPLOADED_ICON, isIcon, checkConditions, conditionsOf };

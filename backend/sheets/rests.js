@@ -141,6 +141,8 @@ const restCharacter = async (db, io, { system, definition, rest, c, rng, by = 'g
     const conditions = JSON.stringify(result.conditions);
     if (c.kind === 'player') {
       await run(db, `UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ?, conditions = ? WHERE shape = 'rhombus' AND owner = ?`, [t.current, t.max, t.temp, conditions, c.username]);
+      // A condition APPLIED that wore off takes its change off their numbers (8a5e1). Loaded here: the running systems load this.
+      await require('./conditionsOnSheet').syncConditionsOnSheet(db, { username: c.username, io, runtime: require('../systemBuilder/runtime') });
     } else {
       await run(db, 'UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ?, conditions = ? WHERE id = ?', [t.current, t.max, t.temp, conditions, c.location_id]);
     }

@@ -126,6 +126,13 @@ const { checkItems, itemsOf, slotsOf, installsOf, workingFeatures, itemsOwned, i
 const { stepFieldsOf, rankedStatsOf } = require('./ranks');
 const { ownTypes, typeNamed, itemValues, typesShown } = require('./itemTypes');
 const { checkEncumbrance, encumbranceOf, carriedOf, capacityText, CARRIED, CAPACITY } = require('./encumbrance');
+const { conditionsOf } = require('./conditions');
+
+/** The token's conditions whose modifiers change this sheet's numbers (8a5e1), kept on the sheet by sheets/conditionsOnSheet.js. */
+const CONDITIONS_KEY = '_conditions_applied';
+/** Whether one condition's amount, counted `way`, changes a number more than another's: conditions don't stack (8a5e1). */
+const stronger = (way, a, b) => (way === 'add' ? Math.abs(a) > Math.abs(b)
+  : way === 'times' ? (a <= 0 ? Infinity : Math.abs(Math.log(a))) > (b <= 0 ? Infinity : Math.abs(Math.log(b))) : a < b);
 const { wornNamesOf, wornSumsOf, checkWornSums } = require('./wornSums');
 
 /** Where a sheet keeps its picks: starting with _, so no stat, formula or field can be called it. */
@@ -772,7 +779,9 @@ const checkHasNames = (definition, problems) => {
 };
 
 /** A bonus as the sheet names it: what it gave only where that differs, AT LEAST, and the cap where it cut. */
-const lineShown = (l) => ({ feature: l.feature, amount: l.amount, ...(l.got !== l.amount ? { got: l.got } : {}), ...(l.least ? { least: true } : {}), ...(l.stop !== undefined && l.stop !== null ? { stop: l.stop } : {}) });
+const lineShown = (l) => ({ feature: l.feature, amount: l.amount, ...(l.got !== l.amount ? { got: l.got } : {}), ...(l.least ? { least: true } : {}), ...(l.stop !== undefined && l.stop !== null ? { stop: l.stop } : {}),
+  // A condition's (8a5e1): said as one, with its way where it isn't an ADD.
+  ...(l.condition ? { condition: true } : {}), ...(l.way ? { way: l.way } : {}) });
 
 /**
  * What a character's picks do to their numbers: `{ sheet, add, bonus, levels, from, applied }`, the overlay
@@ -824,6 +833,32 @@ const overlayOf = (definition, data) => {
       added(m.target, amount, feature, m.how === LEAST, m.how === LEAST ? null : stopOf(m.cap), item);
     }
   }
+  // The token's conditions APPLIED (8a5e1; approved mockup docs/mockups/condition-modifiers.html, 2026-11-18): each modifier on a
+  // stat or formula, its amount worked out as a feature's is, and of several changing one number one way only the strongest
+  // (the user: "they shouldn't stack"). A condition names only stats and formulas (conditions.js), never the token's maximum.
+  const appliedIds = new Set(list(sheet[CONDITIONS_KEY]).filter((x) => typeof x === 'string'));
+  if (appliedIds.size) {
+    const strongest = new Map();
+    for (const c of conditionsOf(definition)) {
+      if (!c.applied || !appliedIds.has(c.id)) continue;
+      for (const m of c.modifiers) {
+        // ALL ROLLS is no stat or formula: it reaches the rolls (tableRolls.js), not the sheet.
+        if (!targets.has(m.target)) continue;
+        // A number as checked, or formula text worked out (a division by 0 reads 0, so never more than a number).
+        let amount = m.amount;
+        if (typeof amount === 'string') { try { amount = evaluate(parse(amount, isTable), env); } catch { continue; } }
+        const way = m.way || 'add';
+        const key = `${m.target}|${way}`;
+        if (!strongest.has(key) || stronger(way, amount, strongest.get(key).amount)) strongest.set(key, { target: m.target, way, amount, feature: c.name });
+      }
+    }
+    for (const s of strongest.values()) {
+      const target = steps.get(s.target) || s.target;
+      const b = own(bonuses, target) ? bonuses[target] : (bonuses[target] = { adds: [], least: [] });
+      const line = { feature: s.feature, amount: s.amount, condition: true };
+      if (s.way === 'add') b.adds.push(line); else (b[s.way] || (b[s.way] = [])).push(line);
+    }
+  }
   const over = { ...levels, ...owned };
   // What is carried (8a5a), read as @carried: CAN CARRY (@capacity) is a formula among the others.
   if (encumbranceOf(definition)) over[CARRIED] = carriedOf(definition, sheet);
@@ -844,7 +879,8 @@ const overlayOf = (definition, data) => {
     } else {
       bonus[target] = b;
       add[target] = b.adds.reduce((n, a) => n + a.amount, 0);
-      from[target] = [...b.adds.map(({ feature, amount }) => ({ feature, amount })), ...b.least.map((l) => ({ ...l, least: true }))];
+      from[target] = [...b.adds.map(({ feature, amount, condition }) => ({ feature, amount, ...(condition ? { condition: true } : {}) })), ...b.least.map((l) => ({ ...l, least: true })),
+        ...['times', 'set', 'most'].flatMap((way) => list(b[way]).map((l) => ({ ...l, way })))];
     }
   }
   return { sheet: over, add, bonus, levels, from, applied: {} };
@@ -1093,5 +1129,5 @@ module.exports = {
   LIMITS, PICKED, PLAYERS, PICKS_KEY, USES_KEY, INCREASES_KEY, increaseOf, spentOf, WORKED_KEY, ROLLED_KEY, rolledOn, rolledKey, rolledOf, checkChoices, checkHasNames, ownableOf, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
   tableOf, rollRangeOf, playersOf,
   capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, worksOutPicks, choicesShown, itemsRenderedOf, tokenMaxFieldOf,
-  MAIN_MONEY, moneyCurrencies, giftItemsOf, giftMoneyOf, openCountOf, targetsOf,
+  MAIN_MONEY, moneyCurrencies, giftItemsOf, giftMoneyOf, openCountOf, targetsOf, CONDITIONS_KEY,
 };
