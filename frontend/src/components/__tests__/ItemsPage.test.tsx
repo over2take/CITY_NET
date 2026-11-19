@@ -541,6 +541,45 @@ describe('ENCUMBRANCE (8a5c)', () => {
     expect(panel().queryByLabelText('Past the last band')).toBeNull();
   });
 
+  it('under each band and past them (8a5d2): WHAT IT MEANS, and a CONDITION, NONE first, the game\'s conditions after', async () => {
+    const last = open(COUNTING, 'ENCUMBRANCE');
+    const band2 = within(panel().getByRole('group', { name: 'Band 2' }));
+    fireEvent.change(band2.getByLabelText('Band 2 means'), { target: { value: 'Speed -10 ft.' } });
+    expect(counted(last)).toMatchObject({ bands: [{ word: 'LIGHT', upto: 50 }, { word: 'ENCUMBERED', upto: 100, says: 'Speed -10 ft.' }] });
+    const pick = band2.getByLabelText('Band 2 condition') as HTMLSelectElement;
+    expect(pick.value).toBe('');
+    expect([...pick.options].slice(0, 3).map((o) => o.textContent)).toEqual(['NONE', 'BLINDED', 'BLEEDING']);
+    expect(band2.queryByText('Make one on CONDITIONS to pick it here.')).toBeNull();
+    fireEvent.change(pick, { target: { value: 'exhausted' } });
+    expect((counted(last) as { bands: object[] }).bands[1]).toEqual({ word: 'ENCUMBERED', upto: 100, says: 'Speed -10 ft.', condition: 'exhausted' });
+    expect(band2.getByText('On the token while in this band, off when lighter.')).toBeTruthy();
+    // Back to NONE, and the words wiped: nothing kept of either.
+    fireEvent.change(pick, { target: { value: '' } });
+    fireEvent.change(band2.getByLabelText('Band 2 means'), { target: { value: ' ' } });
+    expect((counted(last) as { bands: object[] }).bands[1]).toEqual({ word: 'ENCUMBERED', upto: 100 });
+    const past = within(panel().getByRole('group', { name: 'Past the bands' }));
+    fireEvent.change(past.getByLabelText('Past the last band means'), { target: { value: 'Speed -20 ft.' } });
+    fireEvent.change(past.getByLabelText('Past the last band condition'), { target: { value: 'exhausted' } });
+    expect(counted(last)).toMatchObject({ past: 'OVERLOADED', past_says: 'Speed -20 ft.', past_condition: 'exhausted' });
+  });
+
+  it('a band\'s condition no longer made: said gone, to pick again; a game with none: said where to make one', () => {
+    const gone = { ...COUNTING, items: { ...(COUNTING as unknown as { items: object }).items,
+      encumbrance: { column: 'weight', capacity: '10', bands: [{ word: 'LIGHT', upto: 50, condition: 'webbed' }], past: 'OVER' } } } as unknown as Definition;
+    open(gone, 'ENCUMBRANCE');
+    const band1 = within(panel().getByRole('group', { name: 'Band 1' }));
+    expect((band1.getByLabelText('Band 1 condition') as HTMLSelectElement).selectedOptions[0].textContent).toBe('webbed · GONE');
+    expect(band1.getByLabelText('Band 1 condition').getAttribute('aria-invalid')).toBe('true');
+    expect(band1.getByRole('alert').textContent).toBe('No condition is called webbed any more: pick another, or NONE.');
+    cleanup();
+    const STANDARD = ['blinded', 'bleeding', 'poisoned', 'prone', 'stunned', 'grappled', 'frightened', 'unconscious', 'restrained', 'exhausted'];
+    const none = { ...gone, conditions: Object.fromEntries(STANDARD.map((id) => [id, { on: false }])) } as unknown as Definition;
+    open({ ...none, items: { ...(gone as unknown as { items: object }).items, encumbrance: { column: 'weight', capacity: '10', bands: [{ word: 'LIGHT', upto: 50 }], past: 'OVER' } } } as unknown as Definition, 'ENCUMBRANCE');
+    const only = within(panel().getByRole('group', { name: 'Band 1' }));
+    expect([...(only.getByLabelText('Band 1 condition') as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(['NONE']);
+    expect(only.getByText('Make one on CONDITIONS to pick it here.')).toBeTruthy();
+  });
+
   it('bands with CAN CARRY blank: said to fill it or take them away; at five, no + BAND', () => {
     open({ ...COUNTING, items: { ...(COUNTING as unknown as { items: object }).items, encumbrance: { column: 'weight', bands: [10, 20, 30, 40, 50].map((upto) => ({ word: 'B', upto })), past: 'X' } } } as unknown as Definition, 'ENCUMBRANCE');
     expect(panel().getByRole('alert').textContent).toBe('A band is a share of CAN CARRY: say what can be carried, or take the bands away.');
@@ -577,6 +616,6 @@ describe('ENCUMBRANCE (8a5c)', () => {
   });
 
   it('every hint written', () => {
-    for (const k of ['items.encumbrance', 'items.countedBy', 'items.canCarry', 'items.bands', 'items.weighs'] as const) expect(HINTS[k], k).toBeTruthy();
+    for (const k of ['items.encumbrance', 'items.countedBy', 'items.canCarry', 'items.bands', 'items.weighs', 'items.bandMeans', 'items.bandCondition'] as const) expect(HINTS[k], k).toBeTruthy();
   });
 });

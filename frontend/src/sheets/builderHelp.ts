@@ -281,6 +281,8 @@ export const HINTS = {
   'items.encumbrance': 'What each character carries against what they can, shown on GEAR as CARRYING 42 / 150 LB · LIGHT. Shown, never enforced: the GM applies a condition by hand if they want one, and formulas can read @carried and @capacity to build your own.',
   'items.countedBy': 'The column it adds up: every type with a NUMBER column of that name counts, one of each times how many. A type without it, like SPELLS, weighs nothing. WEIGHT for pounds or kilos, SLOTS for games that count things.',
   'items.canCarry': 'How much a character can carry: a number, or a formula like @might * 10, worked out as any formula is. Formulas read it as @capacity. Blank: the number carried alone, with no bands.',
+  'items.bandMeans': 'Words for the table: what being in this band means in your game, like Speed -10 ft. Shown on the sheet beside CARRYING. Optional.',
+  'items.bandCondition': 'NONE, or one of your conditions from CONDITIONS, put on the character\'s token while they are in this band and taken off when they are lighter. The band only takes off what it put on, so one the GM put on by hand stays. A table can switch these off on the GAME tab.',
   'items.bands': 'Words for how loaded a character is, each up to a share of CAN CARRY: LIGHT up to 50%, ENCUMBERED up to 100%, and the word past the last. Name and place them as your game has them, or take them all away.',
   'items.cost': 'What installing it costs against its install\'s stat or formula. Fractions are fine: 0.25.',
   'items.types': 'What kinds of thing your game has, each with columns of its own: WEAPONS with a DAMAGE and AMMO, ARMOR with a DEFENSE. Every system starts with GEAR, a WEIGHT and a PRICE; a sheet shows each type as its own table.',
