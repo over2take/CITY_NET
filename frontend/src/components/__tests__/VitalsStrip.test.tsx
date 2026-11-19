@@ -223,14 +223,96 @@ describe('a custom system\'s other health models', () => {
 describe('conditions under the box (8s3c)', () => {
   const conditionCalls = () => fetched.filter((f) => f.url === '/api/locations/7/conditions').map((f) => ({ body: JSON.parse(String(f.init.body)), auth: (f.init.headers as Record<string, string>).Authorization }));
 
-  it('the token\'s as chips, what each means on hover; × takes one off with the player\'s sign-in, then the sheet is asked again', async () => {
+  it('the token\'s as chips, what each means on hover; a click opens it under the row, TAKE OFF takes it off with the player\'s sign-in, then the sheet is asked again (8a6c)', async () => {
     const vitals = draw({ token: { ...TOKEN, conditions: '[{"id":"poisoned"}]' } });
     const chips = await screen.findByRole('region', { name: 'Conditions' });
-    const chip = await within(chips).findByRole('note', { name: 'Poisoned' });
+    const chip = await within(chips).findByRole('button', { name: 'Poisoned' });
     expect(chip.getAttribute('title')).toContain('Sick.');
-    await userEvent.click(within(chips).getByRole('button', { name: 'Take Poisoned off' }));
+    // No × on the chip any more (8a6c).
+    expect(chip.textContent).toBe('POISON');
+    expect(screen.queryByRole('button', { name: 'Take Poisoned off' })).toBeNull();
+    await userEvent.click(chip);
+    expect(chip.getAttribute('aria-expanded')).toBe('true');
+    const open = screen.getByRole('group', { name: 'Poisoned' });
+    expect(open.textContent).toContain('POISONED');
+    expect(open.textContent).toContain('Sick.');
+    // CLOSE and Escape close it; a second click on the chip does too.
+    await userEvent.click(within(open).getByRole('button', { name: 'CLOSE' }));
+    expect(screen.queryByRole('group', { name: 'Poisoned' })).toBeNull();
+    await userEvent.click(chip);
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('group', { name: 'Poisoned' })).toBeNull();
+    await userEvent.click(chip);
+    await userEvent.click(chip);
+    expect(screen.queryByRole('group', { name: 'Poisoned' })).toBeNull();
+    expect(conditionCalls()).toEqual([]);
+    await userEvent.click(chip);
+    await userEvent.click(screen.getByRole('button', { name: 'Take Poisoned off' }));
     expect(conditionCalls()).toEqual([{ body: { conditions: [] }, auth: 'Bearer tok' }]);
     await vi.waitFor(() => expect(vitals.reload).toHaveBeenCalled());
+    expect(screen.queryByRole('group', { name: 'Poisoned' })).toBeNull();
+  });
+
+  it('a row of their own over + CONDITION, AC and REST, there only while one is on (8a6c)', async () => {
+    draw({ token: { ...TOKEN, melee_ac: 12, conditions: '[{"id":"poisoned"},{"id":"prone"}]' } }, { resting: { finish: 'sheet', rests: [{ id: 'short_rest', name: 'Short rest', spends: false }] } as RestingShown, onRestTake: vi.fn() });
+    const chips = await screen.findByRole('region', { name: 'Conditions' });
+    const poisoned = await within(chips).findByRole('button', { name: 'Poisoned' });
+    const add = within(chips).getByRole('button', { name: 'Put on a condition' });
+    // The chips' row first, then + CONDITION's line with the AC and REST ▾ on it; the chips not on that line.
+    const line = add.parentElement!;
+    expect(poisoned.parentElement).not.toBe(line);
+    expect(poisoned.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(line).getByRole('note', { name: /AC 12/ })).toBeTruthy();
+    expect(within(line).getByRole('button', { name: /^REST/ })).toBeTruthy();
+    expect(within(poisoned.parentElement!).getByRole('button', { name: 'Prone' })).toBeTruthy();
+    cleanup();
+    draw({ token: { ...TOKEN, melee_ac: 12 } });
+    const none = await screen.findByRole('region', { name: 'Conditions' });
+    // Nothing on: + CONDITION's line alone, no empty row over it.
+    expect(within(none).getAllByRole('button')).toHaveLength(1);
+    expect(within(none.firstElementChild as HTMLElement).getByRole('button', { name: 'Put on a condition' })).toBeTruthy();
+  });
+
+  it('+ CONDITION closes a chip opened, and a chip opened closes the list (8a6c)', async () => {
+    draw({ token: { ...TOKEN, conditions: '[{"id":"poisoned"}]' } });
+    const chips = await screen.findByRole('region', { name: 'Conditions' });
+    await userEvent.click(await within(chips).findByRole('button', { name: 'Poisoned' }));
+    await userEvent.click(within(chips).getByRole('button', { name: 'Put on a condition' }));
+    expect(screen.queryByRole('group', { name: 'Poisoned' })).toBeNull();
+    expect(screen.getByRole('listbox', { name: 'Put on a condition' })).toBeTruthy();
+    await userEvent.click(within(chips).getByRole('button', { name: 'Poisoned' }));
+    expect(screen.queryByRole('listbox', { name: 'Put on a condition' })).toBeNull();
+    expect(screen.getByRole('group', { name: 'Poisoned' })).toBeTruthy();
+  });
+
+  describe('two lines at most, then +N (8a6c)', () => {
+    // Laid out as a browser would: every chip 60 wide, the row 200, so three to a line (60 + 5 + 60 + 5 + 60).
+    beforeEach(() => {
+      vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(60);
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(200);
+    });
+    afterEach(() => vi.restoreAllMocks());
+    const SEVEN = '[{"id":"poisoned"},{"id":"prone"},{"id":"blinded"},{"id":"stunned"},{"id":"grappled"},{"id":"bleeding"},{"id":"exhausted"}]';
+
+    it('six fit in two lines; seven: five and "+2", whose list opens either', async () => {
+      draw({ token: { ...TOKEN, conditions: SEVEN.replace(',{"id":"exhausted"}', '') } });
+      const chips = await screen.findByRole('region', { name: 'Conditions' });
+      await within(chips).findByRole('button', { name: 'Bleeding' });
+      expect(within(chips).queryByRole('button', { name: /more conditions/ })).toBeNull();
+      cleanup();
+      draw({ token: { ...TOKEN, conditions: SEVEN } });
+      const again = await screen.findByRole('region', { name: 'Conditions' });
+      const more = await within(again).findByRole('button', { name: '2 more conditions' });
+      expect(more.textContent).toBe('+2');
+      expect(within(again).getByRole('button', { name: 'Grappled' })).toBeTruthy();
+      expect(within(again).queryByRole('button', { name: 'Bleeding' })).toBeNull();
+      await userEvent.click(more);
+      const list = screen.getByRole('group', { name: 'More conditions' });
+      expect(within(list).getAllByRole('button').map((b) => b.textContent)).toEqual(['BLEEDING', 'EXHAUSTED']);
+      await userEvent.click(within(list).getByRole('button', { name: 'EXHAUSTED' }));
+      expect(screen.getByRole('group', { name: 'Exhausted' }).textContent).toContain('EXHAUSTED');
+      expect(screen.getByRole('button', { name: 'Take Exhausted off' })).toBeTruthy();
+    });
   });
 
   it('+ CONDITION ▾ opens the game\'s list and ▴ closes it, as REST ▾ does; picking one puts it on', async () => {

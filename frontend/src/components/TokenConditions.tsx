@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Location } from '../types';
 import { useConditionList, useConditionDetail } from '../hooks/useConditionList';
-import { parseOnToken, shownConditions, withPutOn, withTakenOff, notOnYet, modifierText, roundsText } from '../sheets/tokenConditions';
+import { parseOnToken, shownConditions, withPutOn, withTakenOff, notOnYet, modifierText, roundsText, chipsThatFit } from '../sheets/tokenConditions';
 import { ConditionIcon } from './ConditionIcon';
 
 // A token's CONDITIONS in its HEALTH folder (4e2b1; approved mockup docs/mockups/builder-conditions.html,
@@ -32,11 +32,17 @@ interface Props {
    * drawer (the user, 2026-11-17); in the chips' own row without it.
    */
   pickerHost?: HTMLElement | null;
+  /** The compact form: what sits on + CONDITION's line after it (the strip's AC and REST ▾, 8a6c). */
+  beside?: React.ReactNode;
 }
 
 const small: React.CSSProperties = { fontSize: '9px', letterSpacing: '2px', opacity: 0.75 };
+/** The gap between the strip's chips, in pixels: drawn and measured with the same. */
+const GAP = 5;
+/** `opened` while "+N"'s list is open. */
+const MORE = '+more';
 
-export function TokenConditions({ location, gameSystem, socket, canChange, authToken, onChanged, compact = false, pickerHost }: Props) {
+export function TokenConditions({ location, gameSystem, socket, canChange, authToken, onChanged, compact = false, pickerHost, beside }: Props) {
   const raw = location.conditions ?? '[]';
   const game = useConditionList(gameSystem, authToken);
   const detail = useConditionDetail(socket, location.id, raw);
@@ -45,6 +51,28 @@ export function TokenConditions({ location, gameSystem, socket, canChange, authT
   const [busy, setBusy] = useState(false);
   const onToken = parseOnToken(raw);
   const shown = shownConditions(onToken, game, detail);
+  // The strip's row (8a6c): the chip opened under it (or "+N"'s list), and how many fit in two lines, measured.
+  const [opened, setOpened] = useState<string | null>(null);
+  const [keep, setKeep] = useState(Infinity);
+  const rowRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const showing = shown.map((s) => `${s.condition.id}:${s.condition.short}:${s.left ?? ''}`).join(',');
+  useLayoutEffect(() => {
+    if (!compact) return;
+    const fit = () => {
+      const row = rowRef.current;
+      const sizes = measureRef.current ? [...measureRef.current.children].map((el) => (el as HTMLElement).offsetWidth) : [];
+      // Not laid out (hidden, or a test's DOM): all of them.
+      if (!row || !row.clientWidth || !sizes.length) { setKeep(Infinity); return; }
+      const plus = sizes.pop()!;
+      setKeep(chipsThatFit(sizes, row.clientWidth, GAP, () => plus));
+    };
+    fit();
+    if (typeof ResizeObserver === 'undefined' || !rowRef.current) return;
+    const watch = new ResizeObserver(fit);
+    watch.observe(rowRef.current);
+    return () => watch.disconnect();
+  }, [compact, showing]);
 
   const send = async (list: ReturnType<typeof withPutOn>) => {
     setBusy(true);
@@ -97,32 +125,94 @@ export function TokenConditions({ location, gameSystem, socket, canChange, authT
   };
 
   // The vitals strip's chips (8s3c): what each means on hover, the + beside them.
+  // The vitals strip's chips (8a6c; approved mockup docs/mockups/sheet-condition-row.html, A): a row of their own over
+  // + CONDITION and what is `beside` it, there only while one is on; two lines at most, then "+N" (the user: "max 2 rows then
+  // +N"). A click opens one under the row, what it does and TAKE OFF, where the × was (the user: "yes").
   if (compact) {
-    return (
-      <section aria-label="Conditions" style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', alignItems: 'center' }}>
-        {shown.map(({ condition: c, left, modifiers }) => (
-          <span key={c.id} role="note" aria-label={c.name}
-            title={[c.name.toUpperCase() + (left !== undefined ? ` · ${roundsText(left)}` : ''), c.description, modifiers.map(modifierText).join(' · ')].filter(Boolean).join('\n')}
-            style={chip}>
-            <ConditionIcon icon={c.icon} size={13} />
-            <span>{c.short}</span>
-            {left !== undefined && <span style={{ opacity: 0.75 }}>{left}R</span>}
-            {takeOff(c)}
-          </span>
-        ))}
-        {canChange && (
-          // Opened and closed as the strip's REST ▾ and HIT POINTS ▾ are (the user, 2026-11-17): the same name, ▾ / ▴.
-          <button type="button" aria-label="Put on a condition" aria-expanded={picking} disabled={busy}
-            title="Put on a condition" onClick={() => setPicking((p) => !p)}
-            style={{
-              ...chip, cursor: 'pointer', fontFamily: 'inherit', borderStyle: 'solid', borderColor: 'var(--green)',
-              background: picking ? 'var(--green)' : 'none', color: picking ? 'var(--black)' : 'var(--green)',
-            }}>
-            + CONDITION {picking ? '▴' : '▾'}
+    const kept = Math.min(keep, shown.length);
+    const hidden = shown.length - kept;
+    const tinted = (on: boolean): React.CSSProperties => ({ ...chip, flexShrink: 0, cursor: 'pointer', fontFamily: 'inherit', background: on ? 'color-mix(in srgb, var(--warning) 20%, transparent)' : 'none' });
+    const face = ({ condition: c, left }: typeof shown[number]) => (
+      <>
+        <ConditionIcon icon={c.icon} size={13} />
+        <span>{c.short}</span>
+        {left !== undefined && <span style={{ opacity: 0.75 }}>{left}R</span>}
+      </>
+    );
+    const open = opened === MORE ? null : shown.find((s) => s.condition.id === opened);
+    const box: React.CSSProperties = { border: '1px solid var(--warning)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.7rem', lineHeight: 1.4, textAlign: 'left' };
+    // Escape closes what is open, from a chip or from inside it (a portal's keys come up through React too).
+    const closeOnEscape = (e: React.KeyboardEvent) => { if (e.key === 'Escape' && opened !== null) setOpened(null); };
+    const drawer = open ? (
+      <div role="group" aria-label={open.condition.name} style={box}>
+        <span style={{ display: 'flex', gap: '6px', alignItems: 'center', color: 'var(--warning)', letterSpacing: '1px' }}>
+          <ConditionIcon icon={open.condition.icon} size={15} />
+          <b>{open.condition.name.toUpperCase()}</b>
+          {open.left !== undefined && <span style={{ opacity: 0.75 }}>· {roundsText(open.left)}</span>}
+        </span>
+        {open.condition.description && <span>{open.condition.description}</span>}
+        {open.modifiers.length > 0 && <span style={{ color: 'var(--cyan)' }}>{open.modifiers.map(modifierText).join(' · ')}</span>}
+        <span style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+          <button type="button" className="utility-btn" style={{ fontSize: '0.55rem', padding: '1px 8px' }} onClick={() => setOpened(null)}>CLOSE</button>
+          {canChange && (
+            <button type="button" className="utility-btn" aria-label={`Take ${open.condition.name} off`} disabled={busy}
+              onClick={() => { setOpened(null); void send(withTakenOff(onToken, detail, open.condition.id)); }}
+              style={{ fontSize: '0.55rem', padding: '1px 8px', color: 'var(--danger)', borderColor: 'var(--danger)' }}>TAKE OFF</button>
+          )}
+        </span>
+      </div>
+    ) : opened === MORE && hidden > 0 ? (
+      <div role="group" aria-label="More conditions" style={{ ...box, padding: 0, gap: 0 }}>
+        {shown.slice(kept).map((s) => (
+          <button key={s.condition.id} type="button" onClick={() => setOpened(s.condition.id)}
+            style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '4px 8px', background: 'none', border: 0, borderBottom: '1px solid color-mix(in srgb, var(--dark-green) 60%, transparent)', color: 'var(--warning)', fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', cursor: 'pointer', textAlign: 'left' }}>
+            <ConditionIcon icon={s.condition.icon} size={15} />
+            {s.condition.name.toUpperCase()}{s.left !== undefined ? ` · ${s.left}R` : ''}
           </button>
+        ))}
+      </div>
+    ) : null;
+    const under = picker || drawer;
+    return (
+      <section aria-label="Conditions" onKeyDown={closeOnEscape} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        {shown.length > 0 && (
+          <div ref={rowRef} style={{ position: 'relative', display: 'flex', flexWrap: 'wrap', gap: `${GAP}px`, alignItems: 'center', minWidth: 0 }}>
+            {shown.slice(0, kept).map((s) => (
+              <button key={s.condition.id} type="button" aria-label={s.condition.name} aria-expanded={opened === s.condition.id}
+                title={[s.condition.name.toUpperCase() + (s.left !== undefined ? ` · ${roundsText(s.left)}` : ''), s.condition.description, s.modifiers.map(modifierText).join(' · ')].filter(Boolean).join('\n')}
+                onClick={() => { setPicking(false); setOpened((o) => (o === s.condition.id ? null : s.condition.id)); }}
+                style={tinted(opened === s.condition.id)}>
+                {face(s)}
+              </button>
+            ))}
+            {hidden > 0 && (
+              <button type="button" aria-label={`${hidden} more conditions`} aria-expanded={opened === MORE}
+                onClick={() => { setPicking(false); setOpened((o) => (o === MORE ? null : MORE)); }}
+                style={{ ...tinted(opened === MORE), borderStyle: 'dashed' }}>+{hidden}</button>
+            )}
+            {/* Every chip at its own width, unseen, for what fits; and the widest "+N" there could be. */}
+            <div ref={measureRef} aria-hidden="true" style={{ position: 'absolute', top: 0, left: 0, height: 0, overflow: 'hidden', visibility: 'hidden', display: 'flex', gap: `${GAP}px`, width: 'max-content', pointerEvents: 'none' }}>
+              {shown.map((s) => <span key={s.condition.id} style={{ ...chip, flexShrink: 0 }}>{face(s)}</span>)}
+              <span style={{ ...chip, flexShrink: 0 }}>+{shown.length}</span>
+            </div>
+          </div>
         )}
-        {picker && pickerHost ? createPortal(picker, pickerHost) : picker}
-        {error && <span role="alert" style={{ color: 'var(--danger)', fontSize: '0.7rem', flexBasis: '100%' }}>{error}</span>}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+          {canChange && (
+            // Opened and closed as the strip's REST ▾ and HIT POINTS ▾ are (the user, 2026-11-17): the same name, ▾ / ▴.
+            <button type="button" aria-label="Put on a condition" aria-expanded={picking} disabled={busy}
+              title="Put on a condition" onClick={() => { setOpened(null); setPicking((p) => !p); }}
+              style={{
+                ...chip, cursor: 'pointer', fontFamily: 'inherit', borderStyle: 'solid', borderColor: 'var(--green)',
+                background: picking ? 'var(--green)' : 'none', color: picking ? 'var(--black)' : 'var(--green)',
+              }}>
+              + CONDITION {picking ? '▴' : '▾'}
+            </button>
+          )}
+          {beside}
+        </div>
+        {under && pickerHost ? createPortal(under, pickerHost) : under}
+        {error && <span role="alert" style={{ color: 'var(--danger)', fontSize: '0.7rem' }}>{error}</span>}
       </section>
     );
   }

@@ -39,7 +39,8 @@ test('SLOWED APPLIED at the table: Speed halved with "SLOWED: Speed ×0.5" under
   await expect(mine.getByRole('button', { name: /^Speed 15, changed by a condition/ })).toBeVisible();
 
   // Off again: back to as typed, said no more.
-  await chips.getByRole('button', { name: 'Take Slowed off' }).click();
+  await chips.getByRole('button', { name: 'Slowed', exact: true }).click();
+  await mine.getByRole('group', { name: 'Slowed', exact: true }).getByRole('button', { name: 'Take Slowed off' }).click();
   await expect(note).toHaveCount(0, { timeout: 15_000 });
   await expect(mine.getByLabel('Speed', { exact: true })).toHaveValue('30');
   await context.close();

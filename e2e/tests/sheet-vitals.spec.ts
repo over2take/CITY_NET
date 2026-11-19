@@ -114,10 +114,14 @@ test('a condition put on under the box shows on the tab and comes off there; RES
   const [tab] = await Promise.all([context.waitForEvent('page'), mine.getByRole('button', { name: 'Open in new tab' }).click()]);
   await tab.waitForLoadState();
   const tabChips = tab.getByRole('group', { name: 'Vitals' }).locator('..').getByRole('region', { name: 'Conditions' });
-  await expect(tabChips.getByRole('note', { name: 'Prone' })).toBeVisible({ timeout: 15_000 });
-  await tabChips.getByRole('button', { name: 'Take Prone off' }).click();
+  // In a row of their own over + CONDITION (8a6c): a click opens it under the row, as wide as the box, TAKE OFF there.
+  await tabChips.getByRole('button', { name: 'Prone', exact: true }).click({ timeout: 15_000 });
+  const prone = tab.getByRole('group', { name: 'Prone', exact: true });
+  const tabVitals = (await tab.getByRole('group', { name: 'Vitals' }).boundingBox())!;
+  expect(Math.abs((await prone.boundingBox())!.width - tabVitals.width)).toBeLessThanOrEqual(2);
+  await prone.getByRole('button', { name: 'Take Prone off' }).click();
   await expect.poll(conditionsOn, { timeout: 15_000 }).toEqual([]);
-  await expect(mine.getByRole('group', { name: 'Vitals' }).locator('..').getByRole('note', { name: 'Prone' })).toHaveCount(0, { timeout: 15_000 });
+  await expect(mine.getByRole('group', { name: 'Vitals' }).locator('..').getByRole('button', { name: 'Prone', exact: true })).toHaveCount(0, { timeout: 15_000 });
 
   // REST ▾ on the tab: LONG REST, asked first, then taken.
   await tab.getByRole('button', { name: /^REST/ }).click();
