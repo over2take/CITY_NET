@@ -85,7 +85,7 @@ describe('the checks', () => {
     expect(problems({ ...base, bands: [{ upto: 50 }], past: 'OVER' })).toEqual([{ where: 'items, encumbrance, band 1, word', message: 'Required' }]);
     expect(problems({ ...base, bands: [{ word: 'LIGHT', upto: 50, color: 'green' }], past: 'OVER' }).map((p) => p.where)).toEqual(['items, encumbrance, band 1, color']);
     expect(problems({ ...base, bands: [{ word: 'LIGHT', upto: 50 }] })).toEqual([{ where: 'items, encumbrance, past', message: 'Required' }]);
-    expect(problems({ ...base, past: 'OVER' })).toEqual([{ where: 'items, encumbrance, past', message: 'The word past the last band, with bands to be past' }]);
+    expect(problems({ ...base, past: 'OVER' })).toEqual([{ where: 'items, encumbrance, past', message: 'Past the last band, with bands to be past' }]);
     expect(problems({ column: 'weight', bands: [{ word: 'LIGHT', upto: 50 }], past: 'OVER' }))
       .toEqual([{ where: 'items, encumbrance, bands', message: 'A band is a share of CAN CARRY: say what can be carried' }]);
     expect(problems({ ...base, bands: Array.from({ length: 6 }, (_, i) => ({ word: `B${i}`, upto: (i + 1) * 10 })), past: 'OVER' }))
@@ -158,18 +158,18 @@ describe('read by formulas, on every save', () => {
     const light = save({ might: 5, ...gear(line('Longsword')) });
     expect(light.capacity).toBe(50);
     expect(light.speed).toBe(30);
-    expect(light._worked.carrying).toEqual({ carried: 3, capacity: 50, unit: 'LB', band: 'LIGHT' });
+    expect(light._worked.carrying).toEqual({ carried: 3, capacity: 50, unit: 'LB', band: 'LIGHT', says: null, condition: null });
     const over = save({ might: 5, ...gear(line('Tent', { qty: 3 })) });
     expect(over.speed).toBe(20);
-    expect(over._worked.carrying).toEqual({ carried: 60, capacity: 50, unit: 'LB', band: 'OVERLOADED' });
+    expect(over._worked.carrying).toEqual({ carried: 60, capacity: 50, unit: 'LB', band: 'OVERLOADED', says: null, condition: null });
   });
 
   it('CAN CARRY reading a formula; without one, the number alone; with no encumbrance, nothing said', () => {
     const modded = { ...PACKED, items: { ...PACKED.items, encumbrance: { ...PACKED.items.encumbrance, capacity: '50 + @might_mod * 10' } } };
-    expect(save({ might: 14, ...gear(line('Tent')) }, modded)._worked.carrying).toEqual({ carried: 20, capacity: 70, unit: 'LB', band: 'LIGHT' });
+    expect(save({ might: 14, ...gear(line('Tent')) }, modded)._worked.carrying).toEqual({ carried: 20, capacity: 70, unit: 'LB', band: 'LIGHT', says: null, condition: null });
     const bare = { ...PACKED, derived: PACKED.derived.slice(0, 1), items: { ...PACKED.items, encumbrance: { column: 'weight' } } };
     const worked = save({ might: 14, ...gear(line('Tent')) }, bare);
-    expect(worked._worked.carrying).toEqual({ carried: 20, capacity: null, unit: '', band: null });
+    expect(worked._worked.carrying).toEqual({ carried: 20, capacity: null, unit: '', band: null, says: null, condition: null });
     expect(worked).not.toHaveProperty('capacity');
     // A CAN CARRY taken away in a new version: what the sheet kept of it is never said.
     expect(save({ might: 14, capacity: 140, ...gear(line('Tent')) }, bare)._worked.carrying.capacity).toBeNull();

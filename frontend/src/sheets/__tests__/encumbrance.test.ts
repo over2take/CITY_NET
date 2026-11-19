@@ -42,6 +42,16 @@ describe('read and written back', () => {
     expect(withEncumbrance(withEncumbrance({ format: 1, name: 'Bare' } as Definition, { column: 'weight' }), null)).toEqual({ format: 1, name: 'Bare' });
     expect(encumbranceOf({ ...TYPED, items: { encumbrance: { unit: 'LB' } } } as Definition)).toBeNull();
   });
+
+  it('a band\'s words and condition, and past them, kept through every edit (8a5d1: their boxes come in 8a5d2)', () => {
+    const said = withEncumbrance(TYPED, { column: 'weight', capacity: '10', bands: [{ word: 'LIGHT', upto: 50, says: 'Free.', condition: 'slowed' }], past: 'OVER', past_says: 'Slow.', past_condition: 'exhausted' });
+    const e = encumbranceOf(said)!;
+    expect(e.bands).toEqual([{ word: 'LIGHT', upto: 50, says: 'Free.', condition: 'slowed' }]);
+    const moved = encumbranceOf(withEncumbrance(said, withBand(e, 0, { upto: 60 })))!;
+    expect(moved).toEqual({ column: 'weight', capacity: '10', bands: [{ word: 'LIGHT', upto: 60, says: 'Free.', condition: 'slowed' }], past: 'OVER', past_says: 'Slow.', past_condition: 'exhausted' });
+    // With the bands gone, nothing past them is kept either.
+    expect(encumbranceOf(withEncumbrance(said, withoutBand(e, 0)))).toEqual({ column: 'weight', capacity: '10' });
+  });
 });
 
 describe('what it can count', () => {

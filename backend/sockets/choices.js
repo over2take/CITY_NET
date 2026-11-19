@@ -255,7 +255,10 @@ const registerChoicesHandlers = (socket, { io, db, userSockets, isAdminSocket, g
         done = payload.kind === 'spend'
           ? spendCount(definition, data, payload.line, payload.column)
           : reloadCount(definition, data, payload.line, payload.column, from);
-        return done.ok ? done.data : undefined;
+        if (!done.ok) return undefined;
+        // Worked out as any save is (8a5d1): a RELOAD using a line up changes what is carried.
+        sheetTemplates.applyDerived(system, done.data);
+        return done.data;
       }, (err2, stored) => {
         if (done && done.ask) return answer({ ok: false, ask: done.ask });
         // Said on the line that asked (8a4b), not again under the gear's items as choicesRefused would.

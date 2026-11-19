@@ -10,8 +10,8 @@ import { itemTypes, ownTypes } from './itemTypes';
 type Obj = Record<string, unknown>;
 const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 
-export interface Band { word: string; upto: number }
-export interface Encumbrance { column: string; unit?: string; capacity?: string; bands?: Band[]; past?: string }
+export interface Band { word: string; upto: number; says?: string; condition?: string }
+export interface Encumbrance { column: string; unit?: string; capacity?: string; bands?: Band[]; past?: string; past_says?: string; past_condition?: string }
 
 /** As the server's (encumbrance.js). */
 export const LIMITS = { bands: 5, upto: 1000, word: 30, unit: 12 };
@@ -27,7 +27,8 @@ export const encumbranceOf = (def: Definition): Encumbrance | null => {
   if (!isObject(e) || typeof e.column !== 'string') return null;
   return {
     ...(e as Obj), column: e.column,
-    ...(Array.isArray(e.bands) ? { bands: e.bands.filter(isObject).map((b) => ({ word: typeof b.word === 'string' ? b.word : '', upto: Number(b.upto) })) } : {}),
+    // What a band means and its condition (8a5d1) kept as they are: their boxes come in 8a5d2.
+    ...(Array.isArray(e.bands) ? { bands: e.bands.filter(isObject).map((b) => ({ ...b, word: typeof b.word === 'string' ? b.word : '', upto: Number(b.upto) }) as Band) } : {}),
   } as Encumbrance;
 };
 
@@ -49,6 +50,8 @@ const tidy = (e: Encumbrance): Encumbrance => {
   if (e.bands && e.bands.length) {
     next.bands = e.bands.slice(0, LIMITS.bands);
     next.past = (e.past ?? '').slice(0, LIMITS.word);
+    if (e.past_says !== undefined) next.past_says = e.past_says;
+    if (e.past_condition !== undefined) next.past_condition = e.past_condition;
   }
   return next;
 };
