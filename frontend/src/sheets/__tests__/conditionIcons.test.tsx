@@ -23,7 +23,7 @@ const FEATHER = [
 ];
 
 describe('the drawn icons', () => {
-  it('are the server\'s 24, in its order', () => {
+  it('are the server\'s 27, in its order', () => {
     expect(CONDITION_ICON_IDS).toEqual(ICONS);
   });
 

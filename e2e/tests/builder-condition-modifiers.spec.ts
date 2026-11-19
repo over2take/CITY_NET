@@ -25,6 +25,8 @@ test('CONDITIONS: SLOWED APPLIED, Speed TIMES 0.5 and Might by a formula, saved 
   const made = page.getByRole('region', { name: 'New condition condition' });
   await made.getByRole('textbox', { name: 'NAME' }).fill('Slowed');
   const slowed = page.getByRole('region', { name: 'Slowed condition' });
+  // The SNAIL, one of the three drawn icons added in 8a5i (the user's pick, 2026-11-19).
+  await slowed.getByRole('radiogroup', { name: 'Icon' }).getByRole('radio', { name: 'snail' }).click();
   await slowed.getByRole('group', { name: 'Its modifiers' }).getByRole('button', { name: 'APPLIED' }).click();
   await expect(slowed.getByRole('note', { name: 'What its modifiers do' })).toHaveText(/^APPLIED: a character whose token has it/);
 
@@ -41,7 +43,7 @@ test('CONDITIONS: SLOWED APPLIED, Speed TIMES 0.5 and Might by a formula, saved 
   const saved = await asGm(request, token, 'get', `/api/systems/${id}`);
   expect(saved.problems).toEqual([]);
   expect(saved.draft.conditions.new_condition).toEqual({
-    name: 'Slowed', applied: true,
+    name: 'Slowed', icon: 'snail', applied: true,
     modifiers: [{ target: 'speed', way: 'times', amount: 0.5 }, { target: 'might', amount: '@speed / -10' }],
   });
 

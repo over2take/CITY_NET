@@ -43,8 +43,9 @@ describe('the standard set', () => {
       expect(c.short.length, c.id).toBeLessThanOrEqual(LIMITS.short);
       expect(c.description, c.id).toBeTruthy();
     }
-    expect(ICONS).toHaveLength(24);
-    expect(new Set(ICONS).size).toBe(24);
+    // 24, and SNAIL, LADEN and PACK since 8a5i.
+    expect(ICONS).toHaveLength(27);
+    expect(new Set(ICONS).size).toBe(27);
   });
 
   it('is what a system with no conditions section offers, ending when removed, with no modifiers', () => {

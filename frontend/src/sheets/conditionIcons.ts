@@ -1,5 +1,6 @@
-// The 24 condition icons, drawn for CITY_NET (4e1b; approved mockup docs/mockups/builder-conditions.html,
-// 2026-10-09). Ours to use under the project's own license: drawn here rather than taken from an icon
+// The 27 condition icons, drawn for CITY_NET (4e1b; approved mockup docs/mockups/builder-conditions.html,
+// 2026-10-09; the last three 2026-11-19, docs/mockups/condition-icons.html, approved by the user, who may swap any for
+// their own art). Ours to use under the project's own license: drawn here rather than taken from an icon
 // set, and the four whose first sketches came too close to Feather's (the eye, the music note, the bolt
 // and the anchor) redrawn in shapes of their own.
 //
@@ -42,6 +43,12 @@ export const CONDITION_ICONS = {
   // A single eighth note with its flag.
   music: ['M10 17V4l7 3-7 3', circle(7, 17, 3)],
   pill: [rect(3, 8.5, 18, 7, 3.5), 'M12 8.5v7'],
+  // A snail, its shell a spiral on a long foot, two stalks up from its head: SLOWED (8a5i).
+  snail: [circle(10, 12, 6), 'M10 12a2 2 0 1 1 2 2', 'M2 19h15a3 3 0 0 0 3-3v-3', 'M20 13l-1.5-4', 'M20 13l2-3.5'],
+  // A figure bent forward on bent knees under a pile on their back: CAN'T MOVE (8a5i; the user's idea, our own figure).
+  laden: [rect(1.5, 7.5, 8, 5, 1), rect(2.5, 2.5, 7, 5, 1), 'M8 16l6-4', circle(16.5, 10.5, 2), 'M13 12.5l-3.5-2', 'M8 16l3 3-.5 3', 'M8 16l-2 3v3'],
+  // A heavy backpack: flap, front pocket, carry loop (8a5i).
+  pack: [rect(5, 7, 14, 15, 3), 'M9 7V5a3 3 0 0 1 6 0v2', 'M5 12h14', rect(8, 15, 8, 4, 1)],
 } as const satisfies Record<string, readonly string[]>;
 
 export type ConditionIconId = keyof typeof CONDITION_ICONS;
