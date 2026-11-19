@@ -8,7 +8,8 @@ const { withThrow, boardOf } = require('../utils/diceThrow');
 const { registerInitiativeHandlers } = require('./initiative');
 const { registerChoicesHandlers } = require('./choices');
 const sheetTemplates = require('../sheets/templates');
-const { mutateSheet, mutateSheetForUser, patchSheet } = require('../sheets/mutate');
+const { mutateSheet, mutateSheetForUser, patchSheet, setAfterWrite } = require('../sheets/mutate');
+const { bandConditionHook } = require('../sheets/bandConditions');
 const cyberware = require('../sheets/cyberware');
 const { ownToken } = require('../sheets/ownToken');
 const sheetRolls = require('../sheets/rolls');
@@ -94,6 +95,8 @@ const formatMeasurementPayload = (data, userName, socketId) => ({
 
 module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   registerInitiativeHandlers(io, db, { emitUpdate });
+  // A band's condition follows every write to a sheet (8a5d1).
+  setAfterWrite(bandConditionHook({ io, runtime: customSystems }));
 
   /**
    * Bring the running system's uploaded catalogues into memory.

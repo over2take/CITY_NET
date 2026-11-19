@@ -25,6 +25,14 @@
 const chains = new Map();
 
 /**
+ * What runs after each sheet is written (8a5d1): a band's condition put on or taken off (sheets/bandConditions.js), whatever
+ * wrote it. One at a time, set by the sockets; it is handed the database, the sheet's id and what was written, and a
+ * throw from it reaches no writer.
+ */
+let afterWrite = null;
+const setAfterWrite = (fn) => { afterWrite = typeof fn === 'function' ? fn : null; };
+
+/**
  * Read a sheet, change it, write it back, with nothing else touching it in between.
  *
  * `mutate` receives the parsed sheet and returns the version to store. Returning nothing
@@ -59,6 +67,9 @@ function mutateSheet(db, sheetId, mutate, cb = () => {}) {
         (err2) => {
           cb(err2 || null, err2 ? undefined : next);
           settle();
+          if (!err2 && afterWrite) {
+            try { Promise.resolve(afterWrite(db, row.id, next)).catch((e) => console.error('[sheets] after a write:', e.message)); } catch (e) { console.error('[sheets] after a write:', e.message); }
+          }
         }
       );
     });
@@ -125,4 +136,4 @@ const mutateSheetAsync = (db, sheetId, mutate) => new Promise((resolve, reject) 
 /** Tests only: how many sheets currently have a write queued. */
 const pendingSheets = () => chains.size;
 
-module.exports = { mutateSheet, mutateSheetForUser, patchSheet, mutateSheetAsync, pendingSheets };
+module.exports = { mutateSheet, mutateSheetForUser, patchSheet, mutateSheetAsync, pendingSheets, setAfterWrite };
