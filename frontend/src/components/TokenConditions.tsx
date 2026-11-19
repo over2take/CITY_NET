@@ -114,36 +114,35 @@ export function TokenConditions({ location, gameSystem, socket, canChange, authT
         ))}
     </div>
   );
-  const takeOff = (c: { id: string; name: string }) => canChange && (
-    <button type="button" aria-label={`Take ${c.name} off`} disabled={busy}
-      onClick={() => send(withTakenOff(onToken, detail, c.id))}
-      style={{ background: 'none', border: 0, color: 'var(--danger)', cursor: 'pointer', padding: '0 0 0 2px', fontFamily: 'monospace', fontSize: '12px', lineHeight: 1 }}>×</button>
-  );
   const chip: React.CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: '5px', border: '1px solid var(--warning)', color: 'var(--warning)',
     padding: '2px 6px', fontSize: '10px', letterSpacing: '1px', lineHeight: 1.2, boxSizing: 'border-box', minHeight: '20px',
   };
 
-  // The vitals strip's chips (8s3c): what each means on hover, the + beside them.
-  // The vitals strip's chips (8a6c; approved mockup docs/mockups/sheet-condition-row.html, A): a row of their own over
-  // + CONDITION and what is `beside` it, there only while one is on; two lines at most, then "+N" (the user: "max 2 rows then
-  // +N"). A click opens one under the row, what it does and TAKE OFF, where the × was (the user: "yes").
-  if (compact) {
-    const kept = Math.min(keep, shown.length);
-    const hidden = shown.length - kept;
-    const tinted = (on: boolean): React.CSSProperties => ({ ...chip, flexShrink: 0, cursor: 'pointer', fontFamily: 'inherit', background: on ? 'color-mix(in srgb, var(--warning) 20%, transparent)' : 'none' });
-    const face = ({ condition: c, left }: typeof shown[number]) => (
-      <>
-        <ConditionIcon icon={c.icon} size={13} />
-        <span>{c.short}</span>
-        {left !== undefined && <span style={{ opacity: 0.75 }}>{left}R</span>}
-      </>
-    );
-    const open = opened === MORE ? null : shown.find((s) => s.condition.id === opened);
-    const box: React.CSSProperties = { border: '1px solid var(--warning)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.7rem', lineHeight: 1.4, textAlign: 'left' };
-    // Escape closes what is open, from a chip or from inside it (a portal's keys come up through React too).
-    const closeOnEscape = (e: React.KeyboardEvent) => { if (e.key === 'Escape' && opened !== null) setOpened(null); };
-    const drawer = open ? (
+  // A chip that opens (8a6c; approved mockup docs/mockups/sheet-condition-row.html, A): what it is, rounds left, what it does
+  // and changes, and TAKE OFF for whoever may change the token, where its × was. The strip's and HEALTH's alike (8a6d, the
+  // user, 2026-11-19: "A: click a chip").
+  const tinted = (on: boolean): React.CSSProperties => ({ ...chip, flexShrink: 0, cursor: 'pointer', fontFamily: 'inherit', background: on ? 'color-mix(in srgb, var(--warning) 20%, transparent)' : 'none' });
+  const face = ({ condition: c, left }: typeof shown[number]) => (
+    <>
+      <ConditionIcon icon={c.icon} size={13} />
+      <span>{c.short}</span>
+      {left !== undefined && <span style={{ opacity: 0.75 }}>{left}R</span>}
+    </>
+  );
+  const chipButton = (s: typeof shown[number]) => (
+    <button key={s.condition.id} type="button" aria-label={s.condition.name} aria-expanded={opened === s.condition.id}
+      title={[s.condition.name.toUpperCase() + (s.left !== undefined ? ` · ${roundsText(s.left)}` : ''), s.condition.description, s.modifiers.map(modifierText).join(' · ')].filter(Boolean).join('\n')}
+      onClick={() => { setPicking(false); setOpened((o) => (o === s.condition.id ? null : s.condition.id)); }}
+      style={tinted(opened === s.condition.id)}>
+      {face(s)}
+    </button>
+  );
+  const open = opened === MORE ? null : shown.find((s) => s.condition.id === opened);
+  const box: React.CSSProperties = { border: '1px solid var(--warning)', padding: '6px 8px', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.7rem', lineHeight: 1.4, textAlign: 'left' };
+  // Escape closes what is open, from a chip or from inside it (a portal's keys come up through React too).
+  const closeOnEscape = (e: React.KeyboardEvent) => { if (e.key === 'Escape' && opened !== null) setOpened(null); };
+  const openBox = open && (
       <div role="group" aria-label={open.condition.name} style={box}>
         <span style={{ display: 'flex', gap: '6px', alignItems: 'center', color: 'var(--warning)', letterSpacing: '1px' }}>
           <ConditionIcon icon={open.condition.icon} size={15} />
@@ -161,7 +160,14 @@ export function TokenConditions({ location, gameSystem, socket, canChange, authT
           )}
         </span>
       </div>
-    ) : opened === MORE && hidden > 0 ? (
+  );
+
+  // The vitals strip's chips (8a6c): a row of their own over + CONDITION and what is `beside` it, there only while one is on;
+  // two lines at most, then "+N" (the user: "max 2 rows then +N").
+  if (compact) {
+    const kept = Math.min(keep, shown.length);
+    const hidden = shown.length - kept;
+    const drawer = open ? openBox : opened === MORE && hidden > 0 ? (
       <div role="group" aria-label="More conditions" style={{ ...box, padding: 0, gap: 0 }}>
         {shown.slice(kept).map((s) => (
           <button key={s.condition.id} type="button" onClick={() => setOpened(s.condition.id)}
@@ -177,14 +183,7 @@ export function TokenConditions({ location, gameSystem, socket, canChange, authT
       <section aria-label="Conditions" onKeyDown={closeOnEscape} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
         {shown.length > 0 && (
           <div ref={rowRef} style={{ position: 'relative', display: 'flex', flexWrap: 'wrap', gap: `${GAP}px`, alignItems: 'center', minWidth: 0 }}>
-            {shown.slice(0, kept).map((s) => (
-              <button key={s.condition.id} type="button" aria-label={s.condition.name} aria-expanded={opened === s.condition.id}
-                title={[s.condition.name.toUpperCase() + (s.left !== undefined ? ` · ${roundsText(s.left)}` : ''), s.condition.description, s.modifiers.map(modifierText).join(' · ')].filter(Boolean).join('\n')}
-                onClick={() => { setPicking(false); setOpened((o) => (o === s.condition.id ? null : s.condition.id)); }}
-                style={tinted(opened === s.condition.id)}>
-                {face(s)}
-              </button>
-            ))}
+            {shown.slice(0, kept).map(chipButton)}
             {hidden > 0 && (
               <button type="button" aria-label={`${hidden} more conditions`} aria-expanded={opened === MORE}
                 onClick={() => { setPicking(false); setOpened((o) => (o === MORE ? null : MORE)); }}
@@ -218,40 +217,23 @@ export function TokenConditions({ location, gameSystem, socket, canChange, authT
   }
 
   return (
-    <section aria-label="Conditions" style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+    // HEALTH's list (8a6d): the chips wrap, the window has room; one clicked opens under them, its details folded away until then.
+    <section aria-label="Conditions" onKeyDown={closeOnEscape} style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={small}>CONDITIONS</span>
         {canChange && (
           <button type="button" className="utility-btn" style={{ fontSize: '0.6rem', padding: '2px 8px' }} aria-expanded={picking}
-            disabled={busy} onClick={() => setPicking((p) => !p)}>
+            disabled={busy} onClick={() => { setOpened(null); setPicking((p) => !p); }}>
             {picking ? 'DONE' : '+ CONDITION'}
           </button>
         )}
       </div>
       {shown.length === 0
         ? <span style={{ fontSize: '0.7rem', opacity: 0.6 }}>None.</span>
-        : (
-          <ul aria-label="On this token" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-            {shown.map(({ condition: c, left }) => (
-              <li key={c.id} title={c.description} style={chip}>
-                <ConditionIcon icon={c.icon} size={13} />
-                <span>{c.short}</span>
-                {left !== undefined && <span style={{ opacity: 0.75 }}>{left}R</span>}
-                {takeOff(c)}
-              </li>
-            ))}
-          </ul>
-        )}
+        : <div role="group" aria-label="On this token" style={{ display: 'flex', flexWrap: 'wrap', gap: `${GAP}px` }}>{shown.map(chipButton)}</div>}
       {picker}
+      {openBox}
       {error && <span role="alert" style={{ color: 'var(--danger)', fontSize: '0.7rem' }}>{error}</span>}
-      {shown.map(({ condition: c, left, modifiers }) => (
-        <div key={c.id} data-testid={`condition-${c.id}`} style={{ fontSize: '0.7rem', lineHeight: 1.4 }}>
-          <b style={{ color: 'var(--warning)', letterSpacing: '1px' }}>{c.name.toUpperCase()}</b>
-          {left !== undefined && <span style={{ opacity: 0.6 }}> · {roundsText(left)}</span>}
-          {c.description && <div style={{ opacity: 0.85 }}>{c.description}</div>}
-          {modifiers.length > 0 && <div style={{ color: 'var(--cyan)' }}>{modifiers.map(modifierText).join(' · ')}</div>}
-        </div>
-      ))}
     </section>
   );
 }

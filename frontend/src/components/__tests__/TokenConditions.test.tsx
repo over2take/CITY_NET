@@ -79,19 +79,47 @@ describe('for whoever may change the token\'s health', () => {
     render(<TokenConditions location={token('[{"id":"poisoned"},{"id":"glitching"}]')} gameSystem={HEARTH} socket={socket} canChange authToken="gm-token" />);
     // The chips draw at once from the token; the rounds left arrive after, with the server's reply.
     // Waited for, since on a busy machine the reply can land after the chips first appear.
-    await waitFor(() => expect(section().getAllByRole('listitem').map((c) => c.textContent)).toEqual(['POISON2R×', 'GLITCH×']));
-    const chips = section().getAllByRole('listitem');
-    expect(chips[1].getAttribute('title')).toBe('Chrome misfiring.');
-    await waitFor(() => expect(screen.getByTestId('condition-poisoned').textContent).toBe('POISONED · 2 ROUNDS LEFTSickened by a toxin.ALL ROLLS −1'));
+    const chips = () => within(section().getByRole('group', { name: 'On this token' })).getAllByRole('button');
+    await waitFor(() => expect(chips().map((c) => c.textContent)).toEqual(['POISON2R', 'GLITCH']));
+    expect(chips()[1].getAttribute('title')).toBe('GLITCHING\nChrome misfiring.');
+    // The details folded away until a chip is clicked (8a6d), then under the chips: name, rounds, words, modifiers.
+    expect(section().queryByText('Sickened by a toxin.')).toBeNull();
+    await userEvent.click(section().getByRole('button', { name: 'Poisoned' }));
+    expect(section().getByRole('button', { name: 'Poisoned' }).getAttribute('aria-expanded')).toBe('true');
+    const open = section().getByRole('group', { name: 'Poisoned' });
+    expect(open.textContent).toBe('POISONED· 2 ROUNDS LEFTSickened by a toxin.ALL ROLLS −1CLOSETAKE OFF');
+    // One open at a time: another clicked takes its place; clicked again, closed.
+    await userEvent.click(section().getByRole('button', { name: 'Glitching' }));
+    expect(section().queryByRole('group', { name: 'Poisoned' })).toBeNull();
+    expect(section().getByRole('group', { name: 'Glitching' }).textContent).toContain('Chrome misfiring.');
+    await userEvent.click(section().getByRole('button', { name: 'Glitching' }));
+    expect(section().queryByRole('group', { name: 'Glitching' })).toBeNull();
     expect(listAsked[0]).toEqual({ url: `/api/systems/conditions/${HEARTH}`, auth: 'Bearer gm-token' });
     expect(socket.asked).toEqual([{ location_id: 7 }]);
+  });
+
+  it('a chip opened closes with CLOSE, Escape or + CONDITION, and the list closes when one is opened (8a6d)', async () => {
+    render(<TokenConditions location={token('[{"id":"poisoned"}]')} gameSystem={HEARTH} socket={fakeSocket([{ id: 'poisoned', left: 2, modifiers: [] }])} canChange authToken="t" />);
+    const chip = await section().findByRole('button', { name: 'Poisoned' });
+    await userEvent.click(chip);
+    await userEvent.click(section().getByRole('button', { name: 'CLOSE' }));
+    expect(section().queryByRole('group', { name: 'Poisoned' })).toBeNull();
+    await userEvent.click(chip);
+    await userEvent.keyboard('{Escape}');
+    expect(section().queryByRole('group', { name: 'Poisoned' })).toBeNull();
+    await userEvent.click(chip);
+    await userEvent.click(section().getByRole('button', { name: '+ CONDITION' }));
+    expect(section().queryByRole('group', { name: 'Poisoned' })).toBeNull();
+    expect(section().getByRole('listbox', { name: 'Put on a condition' })).toBeTruthy();
+    await userEvent.click(chip);
+    expect(section().queryByRole('listbox', { name: 'Put on a condition' })).toBeNull();
+    expect(section().getByRole('group', { name: 'Poisoned' })).toBeTruthy();
   });
 
   it('puts one on from the game\'s list, sending every other with its rounds left', async () => {
     const changed = vi.fn();
     render(<TokenConditions location={token('[{"id":"poisoned"}]')} gameSystem={HEARTH} socket={fakeSocket([{ id: 'poisoned', left: 2, modifiers: [] }])} canChange authToken="vex-token" onChanged={changed} />);
-    await screen.findByTestId('condition-poisoned');
-    await waitFor(() => expect(screen.getByTestId('condition-poisoned').textContent).toContain('2 ROUNDS LEFT'));
+    await waitFor(() => expect(section().getByRole('button', { name: 'Poisoned' }).textContent).toBe('POISON2R'));
     await userEvent.click(section().getByRole('button', { name: '+ CONDITION' }));
     const picker = within(section().getByRole('listbox', { name: 'Put on a condition' }));
     expect(picker.queryByRole('option', { name: /POISONED/ })).toBeNull();
@@ -104,7 +132,9 @@ describe('for whoever may change the token\'s health', () => {
     putAnswer = { status: 403, body: { error: 'You can only change your own token' } };
     const changed = vi.fn();
     render(<TokenConditions location={token('[{"id":"prone"},{"id":"glitching"}]')} gameSystem={HEARTH} socket={fakeSocket([{ id: 'prone' }, { id: 'glitching' }])} canChange authToken="t" onChanged={changed} />);
-    await userEvent.click(await section().findByRole('button', { name: 'Take Prone off' }));
+    // Opened, then TAKE OFF, where its × was (8a6d).
+    await userEvent.click(await section().findByRole('button', { name: 'Prone' }));
+    await userEvent.click(section().getByRole('button', { name: 'Take Prone off' }));
     expect(puts[0].body).toEqual({ conditions: [{ id: 'glitching' }] });
     expect((await section().findByRole('alert')).textContent).toBe('You can only change your own token');
     expect(changed).not.toHaveBeenCalled();
@@ -122,10 +152,13 @@ describe('for everyone else', () => {
     render(<TokenConditions location={token('[{"id":"poisoned"},{"id":"glitching"}]')} gameSystem={HEARTH} socket={fakeSocket(null)} canChange={false} />);
     // Drawn once the game's list arrives: until then there is nothing to name.
     await screen.findByRole('region', { name: 'Conditions' });
-    const chips = section().getAllByRole('listitem');
+    const chips = within(section().getByRole('group', { name: 'On this token' })).getAllByRole('button');
     expect(chips.map((c) => c.textContent)).toEqual(['POISON', 'GLITCH']);
-    expect(screen.getByTestId('condition-glitching').textContent).toBe('GLITCHINGChrome misfiring.');
-    expect(section().queryByRole('button')).toBeNull();
+    // Opened to read what it means (8a6d): no rounds, no TAKE OFF, no + CONDITION.
+    await userEvent.click(section().getByRole('button', { name: 'Glitching' }));
+    expect(section().getByRole('group', { name: 'Glitching' }).textContent).toBe('GLITCHINGChrome misfiring.CLOSE');
+    expect(section().queryByRole('button', { name: /^Take / })).toBeNull();
+    expect(section().queryByRole('button', { name: '+ CONDITION' })).toBeNull();
     expect(listAsked[0].auth).toBeNull();
   });
 
@@ -137,15 +170,19 @@ describe('for everyone else', () => {
     render(<TokenConditions location={token('[{"id":"poisoned"}]')} gameSystem={HEARTH} socket={socket} canChange={false} />);
     await screen.findByRole('region', { name: 'Conditions' });
     await new Promise((r) => setTimeout(r, 20));
-    expect(section().getAllByRole('listitem').map((c) => c.textContent)).toEqual(['POISON']);
-    expect(screen.getByTestId('condition-poisoned').textContent).toBe('POISONEDSickened by a toxin.');
+    expect(section().getByRole('button', { name: 'Poisoned' }).textContent).toBe('POISON');
+    await userEvent.click(section().getByRole('button', { name: 'Poisoned' }));
+    expect(section().getByRole('group', { name: 'Poisoned' }).textContent).toBe('POISONEDSickened by a toxin.CLOSE');
   });
 
   it('never offers changes in the folder that only watches someone else\'s health', async () => {
     render(<HealthReviewPanel location={{ ...token('[{"id":"prone"}]'), hp_current: 5, hp_max: 10 } as any} gameSystem={HEARTH} socket={fakeSocket(null)} />);
     await screen.findByRole('region', { name: 'Conditions' });
-    expect(section().getAllByRole('listitem').map((c) => c.textContent)).toEqual(['PRONE']);
-    expect(section().queryByRole('button')).toBeNull();
+    expect(within(section().getByRole('group', { name: 'On this token' })).getAllByRole('button').map((c) => c.textContent)).toEqual(['PRONE']);
+    // Only the chip, to read it: no + CONDITION, and opened, no TAKE OFF.
+    expect(section().getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Prone']);
+    await userEvent.click(section().getByRole('button', { name: 'Prone' }));
+    expect(section().queryByRole('button', { name: /^Take / })).toBeNull();
   });
 
   it('draws nothing at all on a token with no conditions', () => {
@@ -156,7 +193,7 @@ describe('for everyone else', () => {
   it('leaves out a condition the game no longer has', async () => {
     render(<TokenConditions location={token('[{"id":"hungry"},{"id":"prone"}]')} gameSystem={HEARTH} canChange={false} />);
     await screen.findByRole('region', { name: 'Conditions' });
-    expect(section().getAllByRole('listitem').map((c) => c.textContent)).toEqual(['PRONE']);
+    expect(within(section().getByRole('group', { name: 'On this token' })).getAllByRole('button').map((c) => c.textContent)).toEqual(['PRONE']);
   });
 });
 
