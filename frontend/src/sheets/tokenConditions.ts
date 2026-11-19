@@ -89,3 +89,25 @@ export const mapIcons = (shown: Shown[], max = MAP_ICONS) => ({
 
 /** Rounds left as the chip says it. */
 export const roundsText = (left: number) => `${left} ROUND${left === 1 ? '' : 'S'} LEFT`;
+
+/**
+ * How many of the sheet's condition chips fit (8a6c; approved mockup docs/mockups/sheet-condition-row.html, 2026-11-19, A, the
+ * user: "max 2 rows then +N"): chips `widths` wide laid left to right in a row `room` wide, `gap` apart, starting a new line
+ * when the next won't fit. All of them where they take `lines` lines or fewer; else as many as fit with a "+N" chip,
+ * `more(n)` wide, in the last place. A chip wider than the row has a line to itself.
+ */
+export const chipsThatFit = (widths: number[], room: number, gap: number, more: (n: number) => number, lines = 2): number => {
+  const linesFor = (ws: number[]) => {
+    let used = 0;
+    let at = 0;
+    for (const w of ws) {
+      if (used === 0 || at + gap + w > room) { used += 1; at = w; } else at += gap + w;
+    }
+    return used;
+  };
+  if (linesFor(widths) <= lines) return widths.length;
+  for (let keep = widths.length - 1; keep > 0; keep--) {
+    if (linesFor([...widths.slice(0, keep), more(widths.length - keep)]) <= lines) return keep;
+  }
+  return 0;
+};

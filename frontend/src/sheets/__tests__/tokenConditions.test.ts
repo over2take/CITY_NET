@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
-  parseOnToken, shownConditions, withPutOn, withTakenOff, notOnYet, modifierText, roundsText, mapIcons, MAP_ICONS, type GameCondition,
+  parseOnToken, shownConditions, withPutOn, withTakenOff, notOnYet, modifierText, roundsText, mapIcons, MAP_ICONS, chipsThatFit, type GameCondition,
 } from '../tokenConditions';
 
 /**
@@ -95,5 +95,42 @@ describe('what it says', () => {
     expect(modifierText({ target: 'dex_mod', amount: 2 })).toBe('DEX MOD +2');
     expect(roundsText(1)).toBe('1 ROUND LEFT');
     expect(roundsText(3)).toBe('3 ROUNDS LEFT');
+  });
+});
+
+describe('chipsThatFit (8a6c): the sheet\'s chips in two lines at most, then "+N"', () => {
+  const plus = () => 20;
+  it('all where they take two lines or fewer', () => {
+    expect(chipsThatFit([], 200, 5, plus)).toBe(0);
+    expect(chipsThatFit([60, 60, 60], 200, 5, plus)).toBe(3);
+    // Three to a line exactly (60 + 5 + 60 + 5 + 60 = 190), six in two.
+    expect(chipsThatFit([60, 60, 60, 60, 60, 60], 200, 5, plus)).toBe(6);
+    expect(chipsThatFit([60, 60, 60, 60, 60, 60], 190, 5, plus)).toBe(6);
+  });
+  it('past two lines: as many as fit with "+N" in the last place', () => {
+    // Seven: five, and "+2" (20 wide) beside them on the second line.
+    expect(chipsThatFit([60, 60, 60, 60, 60, 60, 60], 200, 5, plus)).toBe(5);
+    // "+N" as wide as a chip: still five (60 + 5 + 60 + 5 + 60 on the second line).
+    expect(chipsThatFit([60, 60, 60, 60, 60, 60, 60], 200, 5, () => 60)).toBe(5);
+    // Too wide for the last place beside them: four.
+    expect(chipsThatFit([60, 60, 60, 60, 60, 60, 60], 200, 5, () => 75)).toBe(4);
+    // "+N" exactly filling the line: it fits (60 + 5 + 60 + 5 + 60 = 190).
+    expect(chipsThatFit([60, 60, 60, 60, 60, 60, 60], 190, 5, () => 60)).toBe(5);
+    // "+N" as wide as what it says: "+2" too wide beside five, "+3" beside four.
+    expect(chipsThatFit([60, 60, 60, 60, 60, 60, 60], 200, 5, (n) => (n >= 2 ? 80 : 20))).toBe(4);
+  });
+  it('a new line when the next one won\'t fit, the gap counted', () => {
+    // 100 + 5 + 100 = 205 doesn't fit 200: one to a line, so three take three lines; two, "+1" beside the second.
+    expect(chipsThatFit([100, 100, 100], 200, 5, plus)).toBe(2);
+    expect(chipsThatFit([100, 100, 100], 205, 5, plus)).toBe(3);
+  });
+  it('a chip wider than the row has a line to itself; none at all where even "+N" alone won\'t do', () => {
+    expect(chipsThatFit([300, 300], 200, 5, plus)).toBe(2);
+    expect(chipsThatFit([300, 300, 300], 200, 5, plus)).toBe(1);
+    expect(chipsThatFit([300, 300, 300], 200, 5, plus, 1)).toBe(0);
+  });
+  it('as many lines as asked', () => {
+    expect(chipsThatFit([60, 60, 60, 60], 200, 5, plus, 1)).toBe(2);
+    expect(chipsThatFit([60, 60, 60, 60, 60, 60, 60], 200, 5, plus, 3)).toBe(7);
   });
 });

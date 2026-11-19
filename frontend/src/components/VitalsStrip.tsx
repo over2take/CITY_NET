@@ -16,8 +16,9 @@ import { TokenConditions } from './TokenConditions';
 // for everything else. The same route as HEALTH, so the token, the map and every open sheet move together; the map's
 // HEALTH window is unchanged. Another health model has HEALTH ▾ to change it.
 //
-// 8s3c: under the box, the token's conditions as chips (+ puts one on, × takes it off, what each means on hover), and
-// REST ▾ where there is a rest to take here, opening the sheet's own RESTS (asked first, dice spent, FINISH) in place.
+// 8s3c: under the box, the token's conditions as chips (+ puts one on, what each means on hover), and REST ▾ where there is
+// a rest to take here, opening the sheet's own RESTS (asked first, dice spent, FINISH) in place. 8a6c: the chips in a row of
+// their own over + CONDITION, two lines at most then "+N", each opening under the row with TAKE OFF where its × was.
 
 const small: React.CSSProperties = {
   background: 'none', fontFamily: 'inherit', fontSize: '0.6rem', letterSpacing: '1px', padding: '2px 6px', cursor: 'pointer', whiteSpace: 'nowrap',
@@ -114,15 +115,11 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
   // The token's conditions as chips, its armor class and REST ▾ beside them.
   const below = (
     <>
-      {/* The conditions left, REST right, and the AC centered in the space between them (the user, 2026-11-17). Too
-          narrow for all three (CWN's two ACs in SHEET.EXE), the AC wraps to a line of its own rather than overlapping. */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'flex-start' }}>
-        <div style={{ flex: '0 1 auto', minWidth: 0 }}>
-          <TokenConditions compact pickerHost={pickerHost} location={token as unknown as Location} gameSystem={system} socket={socket} canChange authToken={authToken || undefined} onChanged={reload} />
-        </div>
-        <div style={{ flex: '1 0 auto', display: 'flex', justifyContent: 'center' }}>{ac}</div>
-        {restButton}
-      </div>
+      {/* The conditions in a row of their own over + CONDITION (8a6c), so that line stays put as they come and go; on it
+          REST right, and the AC centered between (the user, 2026-11-17). Too narrow for all three (CWN's two ACs in
+          SHEET.EXE), the AC wraps to a line of its own rather than overlapping. */}
+      <TokenConditions compact pickerHost={pickerHost} location={token as unknown as Location} gameSystem={system} socket={socket} canChange authToken={authToken || undefined} onChanged={reload}
+        beside={<><div style={{ flex: '1 0 auto', display: 'flex', justifyContent: 'center' }}>{ac}</div>{restButton}</>} />
       <div ref={setPickerHost} style={{ display: 'contents' }} />
     </>
   );
