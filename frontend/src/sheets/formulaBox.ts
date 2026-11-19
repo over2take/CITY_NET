@@ -14,6 +14,7 @@
 import type { Definition } from './systemsApi';
 import { allStats, formulaList, tableList, isCondition, partOf, CONDITION_PARTS, FUNCTIONS, type Formula } from './statsRules';
 import { choiceLists, featureList } from './choices';
+import { gearTokens } from './encumbrance';
 
 /**
  * What a box holds: a modifier's amount, an option's requirement, a feature's uses; a roll's ADD and
@@ -164,6 +165,9 @@ export const insertGroups = (def: Definition, kind: FormulaKind): InsertGroup[] 
   { title: 'STATS', items: allStats(def).map((s) => ({ token: `@${s.id}`, label: (s.label || s.id).toUpperCase() })) },
   { title: 'FORMULAS', items: kind === 'amount' || kind === 'least' ? [] : formulaList(def).map((f) => ({ token: `@${f.id}`, label: (f.label || f.id).toUpperCase() })) },
   { title: 'TABLES', items: kind === 'refill' || kind === 'improve' ? [] : tableList(def).map((t) => ({ token: `${t.id}()`, label: 'A TABLE' })) },
+  // What is carried, CAN CARRY and what is worn by column (8a5c): read wherever the sheet is read with its gear; an
+  // amount reads stats as typed, and a rest's refill the sheet's own numbers, so neither offers them.
+  { title: 'GEAR', items: kind === 'amount' || kind === 'least' || kind === 'refill' ? [] : gearTokens(def) },
   { title: 'CHOICES', items: hasTokens(def) },
   { title: 'WORKINGS', items: FUNCTIONS.filter((fn) => fn !== 'has').map((fn) => ({ token: `${fn}()`, label: WORKINGS[fn] ?? '' })) },
 ].filter((g) => g.items.length);

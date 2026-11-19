@@ -35,6 +35,22 @@ const DEF = {
   ],
 };
 
+describe('what a box reads of the gear (8a5c)', () => {
+  it('@capacity worked out for the sample, @carried 0, a worn sum 0; each a name it knows, said in words', () => {
+    const geared = { ...DEF, items: {
+      types: [{ id: 'armor', label: 'ARMOR', one: 'Armor', columns: [{ id: 'weight', label: 'WEIGHT', kind: 'number' }] }],
+      encumbrance: { column: 'weight', capacity: '@str * 10 + @con_mod' },
+    } };
+    const read = previewFormula(geared, '@capacity - @carried + @armor_weight', 'formula');
+    expect(read).toMatchObject({ ok: true, value: 162 });
+    expect(read.reads).toEqual([
+      { id: 'capacity', label: 'Can carry', value: 162 }, { id: 'carried', label: 'Carried', value: 0 }, { id: 'armor_weight', label: 'Armor WEIGHT worn', value: 0 },
+    ]);
+    // Without encumbrance they are no names of the system's.
+    expect(previewFormula(DEF, '@carried', 'formula')).toMatchObject({ ok: false, problem: "@carried isn't one of this system's names" });
+  });
+});
+
 describe('a formula read for the box', () => {
   it('works out a level formula with every level at the sample level, saying each name it reads', () => {
     expect(SAMPLE_LEVEL).toBe(3);

@@ -16,6 +16,8 @@ import { ownTypes, typeOf, itemTypes, withItemType } from '../sheets/itemTypes';
 import { exampleItemsFile, itemsListFile, itemsFileName } from '../sheets/itemsImport';
 import { downloadText } from '../utils/downloadText';
 import { ItemsImport } from './ItemsImport';
+import { EncumbranceSection } from './EncumbranceSection';
+import { encumbranceOf } from '../sheets/encumbrance';
 
 // The builder's ITEMS page (7e2b; approved mockup docs/mockups/items.html, 2026-11-10): SLOTS, what an item may need
 // besides being worn, each character having so many (ATTUNED, 3); and the ITEMS, each with its name, words, what its
@@ -35,6 +37,9 @@ import { ItemsImport } from './ItemsImport';
 //
 // ITEMS beside their list (8aL2, the same mockup): grouped by type, + per type, FIND as it is typed into, the open item
 // with what every item fills first.
+//
+// ENCUMBRANCE (8a5c; approved mockup docs/mockups/item-types.html, 2026-11-14, decision 7): its own tab after SLOTS &
+// INSTALLS, EncumbranceSection.tsx; and while it counts, an install's WEIGHS WHILE INSTALLED.
 
 interface Props {
   definition: Definition;
@@ -257,15 +262,23 @@ function InstallRow({ definition, edit, api, s }: Props & { s: ItemInstall }) {
         </span>
         <FieldName beside hint={HINTS['items.limit']} style={small}>{takes ? 'NEVER BELOW' : 'NEVER PAST'}</FieldName>
         {limit.field}
+        {/* Only while encumbrance counts (8a5c): off, an installed item weighs nothing. */}
+        {encumbranceOf(definition) && <>
+          <FieldName beside hint={HINTS['items.weighs']} style={small}>WHILE INSTALLED</FieldName>
+          <span role="group" aria-label={`${name}: while installed`} style={{ display: 'inline-flex', justifySelf: 'start' }}>
+            <button type="button" aria-pressed={s.weighs !== true} style={choice(s.weighs !== true)} onClick={() => edit(withInstall(definition, s.id, { weighs: false }))}>WEIGHS NOTHING</button>
+            <button type="button" aria-pressed={s.weighs === true} style={choice(s.weighs === true)} onClick={() => edit(withInstall(definition, s.id, { weighs: true }))}>STILL WEIGHS</button>
+          </span>
+        </>}
       </div>
       {limit.help}
     </div>
   );
 }
 
-type ItemsTab = 'types' | 'slots' | 'items';
+type ItemsTab = 'types' | 'slots' | 'encumbrance' | 'items';
 /** The tabs in the order a system is set up (8aL1, the user's call): what an item can be and need, then the items. */
-const TABS: [ItemsTab, string][] = [['types', 'TYPES'], ['slots', 'SLOTS & INSTALLS'], ['items', 'ITEMS']];
+const TABS: [ItemsTab, string][] = [['types', 'TYPES'], ['slots', 'SLOTS & INSTALLS'], ['encumbrance', 'ENCUMBRANCE'], ['items', 'ITEMS']];
 
 export function ItemsPage({ definition, edit, api, place = 'items' }: Props & { place?: string }) {
   const installs = itemInstalls(definition);
@@ -334,6 +347,11 @@ export function ItemsPage({ definition, edit, api, place = 'items' }: Props & { 
               : <p style={{ ...why, fontSize: 11 }}>None: no item can need installing, and the word never shows at the table. Cyberware against System Strain, or bioware against Essence, is an install.</p>}
           </section>
         </div>
+      </>}
+
+      {tab === 'encumbrance' && <>
+        {line('What each character carries against what they can, if your game counts it. Shown at the table, never enforced.')}
+        <EncumbranceSection definition={definition} edit={edit} api={api} />
       </>}
 
       {tab === 'items' && <>

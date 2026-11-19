@@ -156,6 +156,17 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await page.getByRole('button', { name: '+ INSTALL' }).click();
       await expect(page.getByTestId('install-new_install')).toBeVisible();
       missed['ITEMS · SLOTS & INSTALLS'] = await faults(page);
+      // ENCUMBRANCE (8a5c): counted, its bands there, CAN CARRY's help open; then the install again, with its WEIGHS row.
+      await itemsTab('ENCUMBRANCE').click();
+      const encumbrance = page.getByRole('region', { name: 'Encumbrance' });
+      await encumbrance.getByRole('button', { name: 'COUNT ENCUMBRANCE' }).click();
+      await expect(encumbrance.getByRole('group', { name: 'Band 2' })).toBeVisible();
+      await encumbrance.getByRole('button', { name: 'Help writing Can carry' }).click();
+      await expect(encumbrance.getByRole('group', { name: 'Help writing Can carry' })).toBeVisible();
+      missed['ITEMS · ENCUMBRANCE'] = await faults(page);
+      await itemsTab('SLOTS & INSTALLS').click();
+      await expect(page.getByRole('group', { name: 'NEW INSTALL: while installed' })).toBeVisible();
+      missed['ITEMS · SLOTS & INSTALLS, counting'] = await faults(page);
       // An item open needing the install, so its COST box is there, a WEAPON so a field of each kind is, with a feature
       // giving uses and a modifier.
       await itemsTab('ITEMS').click();
