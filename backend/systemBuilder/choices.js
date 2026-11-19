@@ -126,6 +126,7 @@ const { checkItems, itemsOf, slotsOf, installsOf, workingFeatures, itemsOwned, i
 const { stepFieldsOf, rankedStatsOf } = require('./ranks');
 const { ownTypes, typeNamed, itemValues, typesShown } = require('./itemTypes');
 const { checkEncumbrance, encumbranceOf, carriedOf, capacityText, CARRIED, CAPACITY } = require('./encumbrance');
+const { wornNamesOf, wornSumsOf, checkWornSums } = require('./wornSums');
 
 /** Where a sheet keeps its picks: starting with _, so no stat, formula or field can be called it. */
 const PICKS_KEY = '_choices';
@@ -506,6 +507,8 @@ const checkChoices = (definition, problems) => {
   });
   // Encumbrance (8a5a): what it counts, CAN CARRY, its bands, and an install's WEIGHS.
   checkEncumbrance(definition, problems, { text, keys, formula, targets });
+  // What is worn summed by column (8a5b): @armor_defense is no stat's, formula's or level's.
+  checkWornSums(definition, problems, new Set([...targets, ...levelNamesOf(definition)]));
 };
 
 /** The lists each list's features open, other than itself (that is refused on its own). */
@@ -824,6 +827,8 @@ const overlayOf = (definition, data) => {
   const over = { ...levels, ...owned };
   // What is carried (8a5a), read as @carried: CAN CARRY (@capacity) is a formula among the others.
   if (encumbranceOf(definition)) over[CARRIED] = carriedOf(definition, sheet);
+  // What is worn, summed by column (8a5b): @armor_defense.
+  for (const [name, sum] of Object.entries(wornSumsOf(definition, sheet))) if (!own(over, name)) over[name] = sum;
   const add = {};
   const bonus = {};
   const from = {};
@@ -886,6 +891,8 @@ const namesOf = (definition) => {
     for (const o of optionsOf(c)) names.set(`${o.id}_level`, `${o.label || o.id} level`);
   }
   if (!names.has('level') && levelledOf(definition).length) names.set('level', 'Level');
+  // What is worn, summed by column (8a5b).
+  for (const w of wornNamesOf(definition)) if (!names.has(w.name)) names.set(w.name, w.label);
   // Encumbrance's (8a5a): what is carried, and CAN CARRY where it says.
   if (encumbranceOf(definition)) {
     names.set(CARRIED, 'Carried');
