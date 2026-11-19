@@ -3,7 +3,7 @@ import { createRequire } from 'module';
 import { describeSources } from '../cyberwareEffects';
 
 import {
-  pickLabel, workedOn, listShown, spentAfterClick, featureDoes, choiceEffects, effectsWorked, sourceOf, pickedOf, listsOnTheirOwn, underFeature, keptAside, maySpendRecovery, spentAtText, spendCount,
+  pickLabel, workedOn, listShown, spentAfterClick, featureDoes, choiceEffects, effectsWorked, sourceOf, pickedOf, listsOnTheirOwn, underFeature, keptAside, maySpendRecovery, spentAtText, spendCount, conditionWords,
   WORKED_KEY, type ChoiceListShown,
 } from '../choicesShown';
 
@@ -306,5 +306,43 @@ describe('a pick under a feature, at the level of what opened it (7a5d)', () => 
     expect([at(3).level, at(3).unlocked.map((f) => f.id), at(3).next?.id]).toEqual([null, ['improved_critical'], 'remarkable_athlete']);
     expect([at(7).unlocked.map((f) => f.id), at(7).next?.id]).toEqual([['improved_critical', 'remarkable_athlete'], 'superior_critical']);
     expect([at(15).unlocked.length, at(15).next]).toEqual([3, null]);
+  });
+});
+
+describe('the conditions on the token, under the number (8a5e3)', () => {
+  const template = {
+    id: 'sys_x', name: 'Hearth', sections: [{ id: 'stats', label: 'STATS', layout: 'grid', fields: [
+      { id: 'speed', label: 'Speed', type: 'number' }, { id: 'carry', label: 'Carry', type: 'number', derived: true },
+    ] }],
+  } as never;
+
+  it('each condition\'s change in the sheet\'s words, its way said', () => {
+    expect(conditionWords({ feature: 'Slowed', amount: 0.5, way: 'times' }, 'Speed')).toBe('SLOWED: Speed ×0.5');
+    expect(conditionWords({ feature: 'Pinned', amount: 0, way: 'set' }, 'Speed')).toBe('PINNED: Speed to 0');
+    expect(conditionWords({ feature: 'Weary', amount: 40, way: 'most' }, 'Carry')).toBe('WEARY: Carry at most 40');
+    expect(conditionWords({ feature: 'Weak', amount: -2 }, 'Might')).toBe('WEAK: Might −2');
+    expect(conditionWords({ feature: 'Hasted', amount: 1.234 }, 'Speed')).toBe('HASTED: Speed +1.23');
+  });
+
+  it('the number changed by what each really gave, every condition on it said, one changing nothing too', () => {
+    const data = { speed: 30, carry: 40, [WORKED_KEY]: { from: {
+      speed: [{ feature: 'Ring of Striding', amount: 5 }, { feature: 'Slowed', amount: 0.5, got: -18, condition: true, way: 'times' }],
+      carry: [{ feature: 'Weary', amount: 40, got: 0, condition: true, way: 'most' }],
+    } } };
+    const { fields } = choiceEffects(data, template);
+    expect(fields.speed).toMatchObject({ base: 30, value: 17, delta: -13, conditions: ['SLOWED: Speed ×0.5'] });
+    expect(fields.carry).toMatchObject({ delta: 0, conditions: ['WEARY: Carry at most 40'] });
+    // A feature's or item's bonus says no condition.
+    expect(choiceEffects({ speed: 30, [WORKED_KEY]: { from: { speed: [{ feature: 'Ring of Striding', amount: 5 }] } } }, template).fields.speed).not.toHaveProperty('conditions');
+  });
+});
+
+describe('whose bonuses the sheet shows (8a5e3)', () => {
+  it('the server\'s for a system with picks or items, and for any sheet it has worked lines out for', () => {
+    const bare = { id: 'sys_x', name: 'Bare', sections: [] } as never;
+    expect(effectsWorked(bare)).toBe(false);
+    expect(effectsWorked(bare, { [WORKED_KEY]: { from: {} } })).toBe(false);
+    expect(effectsWorked(bare, { [WORKED_KEY]: { from: { speed: [{ feature: 'Slowed', amount: 0.5, condition: true, way: 'times' }] } } })).toBe(true);
+    expect(effectsWorked({ ...(bare as object), items: { list: [] } } as never)).toBe(true);
   });
 });

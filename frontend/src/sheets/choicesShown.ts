@@ -46,7 +46,8 @@ export interface Worked {
   opens: { feature: string; list: string; count: number; used: number; instead?: true }[];
   levels: Record<string, number>;
   /** 7e1: what a bonus really gave (`got`) where a cap (`stop`) cut it, and AT LEAST (`least`). */
-  from: Record<string, { feature: string; amount: number; got?: number; least?: true; stop?: number }[]>;
+  // A condition's line (8a5e1) says so, with its way where it isn't an ADD.
+  from: Record<string, { feature: string; amount: number; got?: number; least?: true; stop?: number; condition?: true; way?: 'times' | 'set' | 'most' }[]>;
   uses: Record<string, { max: number; spent: number }>;
   unmet: string[];
   /** The recovery dice (R2b), in the sheet's words, with the character's pools; null without. */
@@ -332,8 +333,20 @@ export const sourceOf = (s: { feature: string; amount: number; got?: number; lea
   return { name: s.feature, value: s.amount, kind: 'stat' };
 };
 
+/**
+ * A condition's change in the sheet's words (8a5e3; the user, 2026-11-18: "we just need to show the effect SLOWED: Speed ×0.5"):
+ * its name in capitals, the number it changes, and how: +2, −2, ×0.5, to 0, at most 10.
+ */
+export const conditionWords = (line: { feature: string; amount: number; way?: 'times' | 'set' | 'most' }, label: string): string => {
+  const n = Math.round(line.amount * 100) / 100;
+  const how = line.way === 'times' ? `×${n}` : line.way === 'set' ? `to ${n}` : line.way === 'most' ? `at most ${n}` : `${n >= 0 ? '+' : '−'}${Math.abs(n)}`;
+  return `${line.feature.toUpperCase()}: ${label} ${how}`;
+};
+
 /** Whether a sheet's bonuses are the server's (choiceEffects): a custom system with lists to pick from, or items (7e3b). */
-export const effectsWorked = (template: SheetTemplate): boolean => !!template.choices?.length || !!template.items;
+export const effectsWorked = (template: SheetTemplate, data?: Obj | null): boolean => !!template.choices?.length || !!template.items
+  // Or whatever the server has worked out for it (8a5e3): a condition APPLIED, in a system with no picks or items.
+  || Object.keys(workedOn(data).from).length > 0;
 
 export const choiceEffects = (data: Obj | null | undefined, template: SheetTemplate): SheetEffects => {
   const worked = workedOn(data);
@@ -351,7 +364,9 @@ export const choiceEffects = (data: Obj | null | undefined, template: SheetTempl
     const stored = num(isObject(data) ? data[id] : 0);
     // A formula is saved with its bonuses in, the token's maximum holds them; a stat keeps what the player typed.
     const base = field.derived || onToken ? stored - delta : stored;
-    out[id] = { id, base, value: base + delta, delta, sources: from.map(sourceOf) };
+    // The conditions changing it (8a5e3), said under the number.
+    const conditions = from.filter((s) => s.condition).map((s) => conditionWords(s, field.label || id));
+    out[id] = { id, base, value: base + delta, delta, sources: from.map(sourceOf), ...(conditions.length ? { conditions } : {}) };
   }
   return { fields: out, unmatched: [] };
 };
