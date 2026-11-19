@@ -47,7 +47,8 @@ import { parseGrant, describeGrant } from '../utils/tokenControl';
 import { useWords, asLabel, type WordLookup } from '../sheets/words';
 import { useParts, partOn, type PartLookup } from '../sheets/parts';
 import { currenciesFor, isUploadedIcon, BUILT_IN_ICONS, type Currency } from '../sheets/currencies';
-import { useCustomTemplate, refreshCustomTemplate, isCustomSystem } from '../sheets/customTemplates';
+import { useCustomTemplate, refreshCustomTemplate, isCustomSystem, customTemplate } from '../sheets/customTemplates';
+import { switchRules } from '../sheets/tableSwitches';
 import { getTemplate } from '../sheets';
 import { useHouseRules, changedRules } from '../sheets/houseRules';
 import { systemsApi } from '../sheets/systemsApi';
@@ -2460,6 +2461,8 @@ function TTRPGSystemPanel({ token, mainAdmin, onOpenNpcLibrary, onOpenSystems, a
             ...(system === 'cities_without_number' ? CWN_HOUSE_RULES : []),
             ...(system === 'cyberpunk_red' ? CPR_HOUSE_RULES : []),
             ...(system === 'shadowrun_6e' ? SR6_HOUSE_RULES : []),
+            // A custom system's encumbrance and condition switches (8a6b), each only where it has what it switches.
+            ...switchRules(isCustomSystem(system) ? customTemplate(system)?.switches : null),
           ]} />
           {/* A built-in game's own conditions (4e2c2); a custom system's are edited in the builder. */}
           {mainAdmin && !isCustomSystem(system) && <TableConditionsPanel token={token} system={system} />}

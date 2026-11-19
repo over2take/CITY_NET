@@ -59,3 +59,71 @@ test('CARRYING on GEAR: 30 / 50 LB ENCUMBERED with SLOWED on, a Pack stashed and
   await expect(block).not.toContainText('Speed -10 ft.');
   await context.close();
 });
+
+// The GAME tab's switches at the table (8a6b): BAND CONDITIONS off takes SLOWED off the token at once, the band still saying
+// what it means; SHOW ENCUMBRANCE off hides CARRYING, on brings it back. Switched as the GM's APPLY writes them; put back after,
+// as the table's settings are shared by the tests in a part.
+test('the GAME tab\'s BAND CONDITIONS and SHOW ENCUMBRANCE switched off at the table, and on again (8a6b)', async ({ browser, request }, info) => {
+  test.setTimeout(120_000);
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, {
+    format: 1, name: `Switchmule${again}`, core: { health: { model: 'pool' } },
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'might', label: 'Might' }] }],
+    conditions: { slowed: { name: 'Slowed', icon: 'snail' } },
+    items: {
+      types: [{ id: 'gear', label: 'GEAR', one: 'Gear', columns: [{ id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' }] }],
+      list: [{ id: 'pack', label: 'Pack', type: 'gear', values: { weight: 10 } }],
+      encumbrance: {
+        column: 'weight', unit: 'LB', capacity: '@might * 10',
+        bands: [{ word: 'LIGHT', upto: 50 }, { word: 'ENCUMBERED', upto: 100, says: 'Speed -10 ft.', condition: 'slowed' }],
+        past: 'OVERLOADED',
+      },
+    },
+  });
+  const player = { username: `e2e_switchmule${again}`, password: 'e2e-player-password' };
+  await approvedPlayer(request, gm, player);
+  await asGm(request, gm, 'post', '/api/locations', {
+    name: player.username, description: '', shape: 'rhombus', owner: player.username, x: 0, y: 0, z: 0, width: 1, height: 1, depth: 1,
+    hp_current: 10, hp_max: 10, hp_temp: 0, battle_map_id: -1, floor_index: -1,
+  });
+  const line = (name: string) => ({ name, qty: 1, enc: '', bundled: false, carry: 'stowed', location: '' });
+  const conditionsOn = async () => JSON.parse((await asGm(request, gm, 'get', '/api/locations')).find((l: { owner?: string; shape?: string }) => l.shape === 'rhombus' && l.owner === player.username).conditions || '[]').map((c: { id: string }) => c.id);
+  const setting = (key: string, value: string) => asGm(request, gm, 'post', '/api/settings', { key, value });
+
+  const context = await browser.newContext({ baseURL: info.project.use.baseURL, viewport: { width: 1280, height: 800 } });
+  const mine = await context.newPage();
+  try {
+    await signInAsPlayer(mine, player);
+    await mine.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
+    await mine.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+    await mine.getByLabel('Might', { exact: true }).fill('5');
+    await expect.poll(async () => (await asGm(request, gm, 'get', `/api/sheets/user/${player.username}`)).data.might, { timeout: 15_000 }).toBe(5);
+    await asGm(request, gm, 'put', `/api/sheets/user/${player.username}`, { fields: { inventory: JSON.stringify([line('Pack'), line('Pack'), line('Pack')]) } });
+    await sheetTab(mine, 'GEAR');
+    await mine.getByLabel('Item 3 carried').selectOption('readied');
+    const block = mine.getByTestId('sheet-carrying');
+    await expect(block.getByTestId('sheet-carrying-condition')).toHaveText('SLOWED ON WHILE ENCUMBERED', { timeout: 15_000 });
+    await expect.poll(conditionsOn, { timeout: 15_000 }).toEqual(['slowed']);
+
+    // BAND CONDITIONS off: SLOWED off the token at once, no save needed; the band still says what it means.
+    await setting('band_conditions', '0');
+    await expect.poll(conditionsOn, { timeout: 15_000 }).toEqual([]);
+    await expect(block.getByTestId('sheet-carrying-condition')).toHaveCount(0, { timeout: 15_000 });
+    await expect(block).toContainText('Speed -10 ft.');
+    // On again: back on.
+    await setting('band_conditions', '1');
+    await expect.poll(conditionsOn, { timeout: 15_000 }).toEqual(['slowed']);
+
+    // SHOW ENCUMBRANCE off: CARRYING gone from GEAR, the gear still there; on, back.
+    await setting('show_encumbrance', '0');
+    await expect(block).toHaveCount(0, { timeout: 15_000 });
+    await expect(mine.getByLabel('Item 1 carried')).toBeVisible();
+    await setting('show_encumbrance', '1');
+    await expect(block).toContainText('CARRYING 30 / 50 LB', { timeout: 15_000 });
+  } finally {
+    await setting('band_conditions', '1');
+    await setting('show_encumbrance', '1');
+    await context.close();
+  }
+});

@@ -89,6 +89,8 @@ export interface SheetRendererProps {
   /** Whether the cwn_encumbrance house rule is on. Off, what you carry is counted and
    *  shown but costs you nothing; on, it comes off your Move. */
   encumbranceEnforced?: boolean;
+  /** CARRYING at the top of GEAR (8a6a): false where the table switched SHOW ENCUMBRANCE off (8a6b). */
+  carryingShown?: boolean;
   /** A section's header button was pressed. Sections declare the label; what it does is
    *  the surface's business — the renderer has no idea what a window is. */
   onSectionAction?: (sectionId: string) => void;
@@ -1887,7 +1889,7 @@ function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection 
   return fields.length === 0 ? null : { ...section, fields };
 }
 
-export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onGearRoll, onReadGearDice, onGearCount, onSpend, onImprove, vitals }: SheetRendererProps) {
+export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onGearRoll, onReadGearDice, onGearCount, onSpend, onImprove, vitals, carryingShown = true }: SheetRendererProps) {
   // The vitals strip's REST ▾ (8s3c): the sheet's own RESTS, where this character has a rest to take from here or the GM
   // has called one; on the player's own sheet, beside the strip.
   const restView = vitals && !readOnly && onRestTake && template.resting ? restSection(template.resting, data as Record<string, unknown>, gm) : null;
@@ -2091,7 +2093,7 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
           </div>
         )}
         {/* A custom system's CARRYING (8a6a), at the top of the tab its INVENTORY is on, as CWN's count is. */}
-        {sectionsForTab.some((s) => s.layout === 'inventory') && <CarryingBlock data={data} noToken={!!vitals && !readOnly && !vitals.token} />}
+        {carryingShown && sectionsForTab.some((s) => s.layout === 'inventory') && <CarryingBlock data={data} noToken={!!vitals && !readOnly && !vitals.token} />}
         {sectionsForTab.map((section) => {
           const open = !closedSections.has(section.id);
           return (

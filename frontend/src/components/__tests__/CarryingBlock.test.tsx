@@ -67,4 +67,10 @@ describe('CARRYING on GEAR', () => {
     render(<SheetRenderer template={template} onFieldChange={() => {}} data={{ _worked: { carrying } } as never} />);
     expect(screen.queryByTestId('sheet-carrying')).toBeNull();
   });
+
+  it('nothing where the table switched SHOW ENCUMBRANCE off; INVENTORY still there (8a6b)', () => {
+    sheet({ _worked: { carrying } }, { carryingShown: false });
+    expect(screen.queryByTestId('sheet-carrying')).toBeNull();
+    expect(screen.getByRole('button', { name: /INVENTORY/ })).toBeTruthy();
+  });
 });

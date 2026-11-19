@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { getTemplate, getMaxPairs, hiddenTabsFor, type CharacterSheet, type SheetFieldValue } from '../sheets';
 import { SLOW_ADVANCEMENT_RULE } from '../sheets/cwnAdvancement';
 import { ENCUMBRANCE_RULE } from '../sheets/cwnEncumbrance';
+import { carryingShown } from '../sheets/tableSwitches';
 import { OVERDRAFT_RULE } from '../data/shopRules';
 import { isOpen } from '../sheets/restCalls';
 import { INVENTORY_FIELD } from '../sheets/inventory';
@@ -245,6 +246,9 @@ export function usePlayerSheet(
   const overdraftAllowed =
     ruleSettings.find((r) => r.key === OVERDRAFT_RULE)?.value === '1';
 
+  // CARRYING on GEAR, unless the table switched SHOW ENCUMBRANCE off (8a6b).
+  const showCarrying = carryingShown(ruleSettings);
+
   // Whether the GM has spending recovery dice open (R2b), read with the house rules.
   const recoveryOpen = isOpen(ruleSettings);
 
@@ -255,7 +259,7 @@ export function usePlayerSheet(
 
   /** Every play prop a surface hands SheetRenderer: both spread it whole (8s1a). */
   const sheetProps = {
-    ...actions, choicesRefused, recoveryOpen, allowFumbleShield, xpRate, encumbranceEnforced, hiddenTabs, vitals,
+    ...actions, choicesRefused, recoveryOpen, allowFumbleShield, xpRate, encumbranceEnforced, hiddenTabs, vitals, carryingShown: showCarrying,
   } satisfies Partial<SheetRendererProps>;
 
   return {

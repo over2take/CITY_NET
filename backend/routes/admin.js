@@ -3,6 +3,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { authenticate } = require('../middleware/auth');
 const { CONDITIONS_SETTING, syncAllConditionsOnSheets } = require('../sheets/conditionsOnSheet');
+const { BAND_SETTING, syncAllBandConditions } = require('../sheets/bandConditions');
 const { deleteByIds } = require('../bulk');
 const { insertLocations } = require('../buildings/locationRows');
 
@@ -49,6 +50,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       io.emit('settingsUpdated');
       // APPLY CONDITION MODIFIERS (8a5e1): every player's numbers worked out again with it, or without.
       if (key === CONDITIONS_SETTING) syncAllConditionsOnSheets(db, { io, runtime: require('../systemBuilder/runtime') });
+      // BAND CONDITIONS (8a6b): what the bands put on taken off at once, or put back.
+      if (key === BAND_SETTING) syncAllBandConditions(db, { io, runtime: require('../systemBuilder/runtime') });
       res.json({ message: 'Settings updated' });
     });
   });

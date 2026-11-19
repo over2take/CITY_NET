@@ -14,7 +14,7 @@
 // section or condition waiting on a rule that is off is hidden from every answer at once.
 
 const { compileSystem } = require('./derived');
-const { derivedOf, carryingOf, encumbranceOf, BAND_KEY } = require('./encumbrance');
+const { derivedOf, carryingOf, encumbranceOf, namesCondition, BAND_KEY } = require('./encumbrance');
 const { parse: parseFormula } = require('./expression');
 const { rankedOf, withRankFields } = require('./ranks');
 const { overlayOf, choicesOf, workedOf, worksOutPicks, choicesShown, itemsRenderedOf, WORKED_KEY, CONDITIONS_KEY } = require('./choices');
@@ -208,6 +208,9 @@ const renderOf = (id, definition, on = new Set()) => ({
   improve: improvesBy(definition) ? improveShown(definition) : null,
   // Its items and slots (7e3b), for the GEAR tab's WEAR and ATTUNE, or null where it has none.
   items: itemsRenderedOf(definition),
+  // Which of the GAME tab's switches this system has anything for (8a6b): SHOW ENCUMBRANCE where it counts encumbrance,
+  // BAND CONDITIONS where a band (or the word past them) names a condition, APPLY CONDITION MODIFIERS where a condition is APPLIED.
+  switches: { encumbrance: encumbranceOf(definition) !== null, band_conditions: namesCondition(definition), applied_conditions: conditionsOf(definition).some((c) => c.applied) },
 });
 
 /**

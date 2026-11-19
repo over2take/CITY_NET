@@ -5,15 +5,19 @@
  * The band takes off only what it put on, says each in the log, a table can switch it off, and no token means nothing.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createRequire } from 'module';
+import express from 'express';
+import request from 'supertest';
+import jwt from 'jsonwebtoken';
+import adminRouteFactory from '../routes/admin.js';
 import { makeTestDb, get, run } from './helpers/testDb.js';
 import { drain, until } from './helpers/until.js';
 
 const require_ = createRequire(import.meta.url);
 const { bandAt, carryingOf } = require_('../systemBuilder/encumbrance');
 const { checkDefinition } = require_('../systemBuilder/definition');
-const { bandStep, BAND_KEY, BAND_SETTING } = require_('../sheets/bandConditions');
+const { bandStep, BAND_KEY, BAND_SETTING, syncAllBandConditions } = require_('../sheets/bandConditions');
 const runtime = require_('../systemBuilder/runtime');
 const socketsFactory = (await import('../sockets/index.js')).default;
 
@@ -70,6 +74,25 @@ describe('the checks', () => {
     // Words of nothing but spaces say nothing.
     const blank = { ...LADEN, items: { ...LADEN.items, encumbrance: { ...LADEN.items.encumbrance, past_says: '  ' } } };
     expect(bandAt(blank, 60, 50).says).toBeNull();
+  });
+});
+
+describe("the GAME tab's switches a system has (8a6b)", () => {
+  const ID = 'sys_switchswitchswitc';
+  const switchesOf = async (definition) => {
+    const db = await makeTestDb();
+    const def = JSON.stringify(definition);
+    await run(db, 'INSERT INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 1)', [ID, definition.name, def, def]);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    return runtime.render(ID).switches;
+  };
+  it('encumbrance counted, a band naming a condition, a condition APPLIED: each its own', async () => {
+    expect(await switchesOf(LADEN)).toEqual({ encumbrance: true, band_conditions: true, applied_conditions: false });
+    const plain = { ...LADEN, items: { ...LADEN.items, encumbrance: { column: 'weight', capacity: '10' } } };
+    expect(await switchesOf(plain)).toEqual({ encumbrance: true, band_conditions: false, applied_conditions: false });
+    const { encumbrance, ...noCount } = LADEN.items;
+    const applied = { ...LADEN, items: noCount, conditions: { ...LADEN.conditions, slowed: { ...LADEN.conditions.slowed, applied: true, modifiers: [{ target: 'might', amount: -1 }] } } };
+    expect(await switchesOf(applied)).toEqual({ encumbrance: false, band_conditions: false, applied_conditions: true });
   });
 });
 
@@ -167,6 +190,48 @@ describe('at the table', () => {
     await until(async () => (await sheet())._worked?.carrying?.band === 'OVERLOADED', { label: 'overloaded' });
     await drain(db);
     expect(await token()).toEqual(['prone']);
+  });
+
+  describe("the GAME tab's BAND CONDITIONS switched (8a6b)", () => {
+    const GM = jwt.sign({ id: 1, username: 'gm', role: 'admin', isTemporary: false }, 'test-secret');
+    const was = process.env.SECURE_MODE;
+    afterEach(() => { if (was === undefined) delete process.env.SECURE_MODE; else process.env.SECURE_MODE = was; });
+
+    it('off takes what the bands put on off every player at once, said in the log; on puts it back', async () => {
+      const { carry } = await table();
+      carry(line('Pack', { qty: 3 }));
+      await until(async () => (await sheet())[BAND_KEY] === 'slowed', { label: 'slowed' });
+      process.env.SECURE_MODE = 'true';
+      const app = express();
+      app.use(express.json());
+      app.use('/api/admin', adminRouteFactory(db, { emit: vi.fn() }, { emitUpdate: () => {}, recordAction: () => {} }));
+      await request(app).post('/api/admin/settings').set({ Authorization: `Bearer ${GM}` }).send({ key: BAND_SETTING, value: '0' });
+      await until(async () => !(await token()).includes('slowed') && (await sheet())[BAND_KEY] === undefined, { label: 'off at once' });
+      expect(await token()).toEqual(['prone']);
+      await until(async () => (await lines()).length === 2, { label: 'said' });
+      expect((await lines())[1]).toBe('KES · ENCUMBERED: SLOWED OFF');
+      await request(app).post('/api/admin/settings').set({ Authorization: `Bearer ${GM}` }).send({ key: BAND_SETTING, value: '1' });
+      await until(async () => (await token()).includes('slowed') && (await sheet())[BAND_KEY] === 'slowed', { label: 'on again' });
+    });
+
+    it("only the game being played, and never an NPC's sheet; done when every one is", async () => {
+      await run(db, "INSERT INTO global_settings (key, value) VALUES (?, '0')", [BAND_SETTING]);
+      await run(db, "UPDATE character_sheets SET data = ? WHERE username = 'kes'", [JSON.stringify({ name: 'Kes', capacity: 50, [BAND_KEY]: 'slowed', inventory: JSON.stringify([line('Pack', { qty: 3 })]) })]);
+      await run(db, "UPDATE locations SET conditions = '[{\"id\":\"slowed\"}]' WHERE owner = 'kes'");
+      await run(db, "INSERT INTO character_sheets (username, system, data, is_npc, npc_label) VALUES ('kes', ?, ?, 1, 'Kes double')", [ID, JSON.stringify({ [BAND_KEY]: 'slowed' })]);
+      await syncAllBandConditions(db, { io: { emit: vi.fn() }, runtime });
+      expect(await token()).toEqual([]);
+      expect((await sheet())[BAND_KEY]).toBeUndefined();
+      // The NPC's sheet left as it was.
+      expect(JSON.parse((await get(db, 'SELECT data FROM character_sheets WHERE is_npc = 1')).data)[BAND_KEY]).toBe('slowed');
+      // Another game running: this one's sheets aren't touched.
+      await run(db, "UPDATE global_settings SET value = '0' WHERE key = ?", [BAND_SETTING]);
+      await run(db, "UPDATE locations SET conditions = '[{\"id\":\"slowed\"}]' WHERE owner = 'kes'");
+      await run(db, "UPDATE character_sheets SET data = ? WHERE username = 'kes' AND is_npc = 0", [JSON.stringify({ name: 'Kes', capacity: 50, [BAND_KEY]: 'slowed' })]);
+      await run(db, "UPDATE global_settings SET value = 'generic' WHERE key = 'game_system'");
+      await syncAllBandConditions(db, { io: { emit: vi.fn() }, runtime });
+      expect(await token()).toEqual(['slowed']);
+    });
   });
 
   it('no token on the map: nothing put on, nothing kept', async () => {

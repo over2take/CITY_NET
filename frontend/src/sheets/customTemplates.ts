@@ -78,6 +78,8 @@ export interface CustomRender {
   improve?: import('./improveShown').ImproveShown | null;
   /** Its items and slots (7e3b), null where it has none. */
   items?: import('./gearItems').ItemsShown | null;
+  /** Which of the GAME tab's switches it has anything for (8a6b). */
+  switches?: import('./tableSwitches').TableSwitches;
 }
 
 /** Fired on window when a custom template has been loaded, so the app can redraw. */
@@ -158,6 +160,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.creation ? { creation: render.creation } : {}),
     ...(render.levels ? { levels: render.levels } : {}),
     ...(render.items ? { items: render.items } : {}),
+    ...(render.switches ? { switches: render.switches } : {}),
     // SPEND XP's price list (7f2c1), for the sheet's SPEND XP section.
     ...(render.spend ? { spend: render.spend } : {}),
     // IMPROVE BY USE (7f3b), for the marks beside its stats.
