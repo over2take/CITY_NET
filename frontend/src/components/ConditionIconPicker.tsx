@@ -3,7 +3,7 @@ import type { systemsApi } from '../sheets/systemsApi';
 import { CONDITION_ICON_IDS, isUploadedIcon } from '../sheets/conditionIcons';
 import { ConditionIcon } from './ConditionIcon';
 
-// A condition's icon, picked: the 24 drawn ones, which follow the theme, or one uploaded (a small
+// A condition's icon, picked: the 27 drawn ones, which follow the theme, or one uploaded (a small
 // PNG, WebP or SVG kept in its own colors). The builder's CONDITIONS page and the GAME tab's
 // CONDITIONS panel (4e2c2) both pick with it.
 

@@ -37,6 +37,8 @@ const LIMITS = { conditions: 60, name: 30, short: 8, description: 300, rounds: 9
 const ICONS = [
   'blind', 'drop', 'skull', 'down', 'star', 'hand', 'ghost', 'zzz', 'chain', 'battery', 'flame', 'bolt',
   'spiral', 'snow', 'bio', 'closed', 'signal', 'mask', 'anchor', 'target', 'heart', 'shield', 'music', 'pill',
+  // A snail, a figure under too much, a heavy pack (8a5i; approved 2026-11-19).
+  'snail', 'laden', 'pack',
 ];
 const UPLOADED_ICON = /^\/uploads\/condition_icons\/[0-9a-f]{64}\.(png|webp|svg)$/;
 const isIcon = (icon) => typeof icon === 'string' && (ICONS.includes(icon) || UPLOADED_ICON.test(icon));
