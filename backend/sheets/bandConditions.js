@@ -115,4 +115,23 @@ const bandConditionHook = ({ io, runtime }) => (db, sheetId, data) => {
   });
 };
 
-module.exports = { BAND_KEY, BAND_SETTING, bandStep, bandConditionHook };
+/**
+ * The table's BAND CONDITIONS switched (8a6b; approved mockup docs/mockups/carrying-on-sheet.html): every player's sheet of the
+ * game being played run through the hook at once, so switching off takes off what the bands put on, and on puts it back, without
+ * waiting for each one's next save. Resolves when all are done.
+ */
+const syncAllBandConditions = (db, { io, runtime }) => new Promise((ok) => {
+  // Every sheet: the hook passes over an NPC's and another game's itself.
+  db.all('SELECT id, data FROM character_sheets', [], async (err, rows) => {
+    if (err || !rows) return ok();
+    const hook = bandConditionHook({ io, runtime });
+    for (const row of rows) {
+      let data = {};
+      try { data = JSON.parse(row.data || '{}'); } catch { data = {}; }
+      await hook(db, row.id, data);
+    }
+    ok();
+  });
+});
+
+module.exports = { BAND_KEY, BAND_SETTING, bandStep, bandConditionHook, syncAllBandConditions };

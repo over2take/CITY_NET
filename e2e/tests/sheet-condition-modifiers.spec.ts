@@ -38,6 +38,19 @@ test('SLOWED APPLIED at the table: Speed halved with "SLOWED: Speed ×0.5" under
   // The changed number as the big one (the user's pick, 2026-11-19).
   await expect(mine.getByRole('button', { name: /^Speed 15, changed by a condition/ })).toBeVisible();
 
+  // The GAME tab's APPLY CONDITION MODIFIERS off (8a6b): every condition a reminder, Speed as typed; on again, halved. Put back
+  // whatever happens, as the table's settings are shared by the tests in a part.
+  const setting = (value: string) => asGm(request, gm, 'post', '/api/settings', { key: 'apply_condition_modifiers', value });
+  try {
+    await setting('0');
+    await expect(note).toHaveCount(0, { timeout: 15_000 });
+    await expect(mine.getByLabel('Speed', { exact: true })).toHaveValue('30');
+    await setting('1');
+    await expect(note).toHaveText('SLOWED: Speed ×0.5 · typed 30', { timeout: 15_000 });
+  } finally {
+    await setting('1');
+  }
+
   // Off again: back to as typed, said no more.
   await chips.getByRole('button', { name: 'Slowed', exact: true }).click();
   await mine.getByRole('group', { name: 'Slowed', exact: true }).getByRole('button', { name: 'Take Slowed off' }).click();
