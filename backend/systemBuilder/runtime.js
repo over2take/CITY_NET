@@ -14,10 +14,10 @@
 // section or condition waiting on a rule that is off is hidden from every answer at once.
 
 const { compileSystem } = require('./derived');
-const { derivedOf, carryingOf, encumbranceOf } = require('./encumbrance');
+const { derivedOf, carryingOf, encumbranceOf, BAND_KEY } = require('./encumbrance');
 const { parse: parseFormula } = require('./expression');
 const { rankedOf, withRankFields } = require('./ranks');
-const { overlayOf, choicesOf, workedOf, worksOutPicks, choicesShown, itemsRenderedOf, WORKED_KEY } = require('./choices');
+const { overlayOf, choicesOf, workedOf, worksOutPicks, choicesShown, itemsRenderedOf, WORKED_KEY, CONDITIONS_KEY } = require('./choices');
 const { poolsOf, recoveryShown, restingShown } = require('./recovery');
 const { creationShown } = require('./creation');
 const { levelsShown } = require('./levels');
@@ -91,7 +91,16 @@ const metaOf = (definition) => {
         // SPEND XP (7f2a2): XP unspent, and each price on the list for this character now.
         if (spendsXp(definition)) data[WORKED_KEY] = { ...(data[WORKED_KEY] || {}), spend: spendWorked(definition, data) };
         // Encumbrance (8a5a): what is carried of what can be, with its band, for CARRYING on the sheet (8a6).
-        if (encumbranceOf(definition)) data[WORKED_KEY] = { ...(data[WORKED_KEY] || {}), carrying: carryingOf(definition, data) };
+        if (encumbranceOf(definition)) {
+          // CAN CARRY as the band reads it: without the band's own condition (8a5e1, sheets/bandConditions.js).
+          const on = Array.isArray(data[CONDITIONS_KEY]) ? data[CONDITIONS_KEY] : [];
+          let can = data.capacity;
+          if (typeof data[BAND_KEY] === 'string' && on.includes(data[BAND_KEY])) {
+            const bare = { ...data, [CONDITIONS_KEY]: on.filter((id) => id !== data[BAND_KEY]) };
+            can = compiled.system.evaluate(bare, overlayOf(definition, bare)).capacity;
+          }
+          data[WORKED_KEY] = { ...(data[WORKED_KEY] || {}), carrying: carryingOf(definition, data, can) };
+        }
         // MAX HEALTH: PER LEVEL (7d5a): what it comes to, each level, for the sheet and LEVEL_UP.EXE. Loaded here, as it
         // reads the levels this module's own load leads to.
         const byLevel = require('./healthLevels').healthByLevel(definition, data);

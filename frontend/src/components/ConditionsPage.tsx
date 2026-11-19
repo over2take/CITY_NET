@@ -141,7 +141,8 @@ function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
                 {targets.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
                 {!targets.some((t) => t.id === m.target) && <option value={m.target}>{m.target} (GONE)</option>}
               </select>
-              <WholeBox aria={`Modifier ${i + 1} amount`} value={m.amount} min={-LIMITS.amount} max={LIMITS.amount} width={70}
+              {/* A formula amount (8a5e1) shows as its number here until its box comes in 8a5e2; it is kept unless typed over. */}
+              <WholeBox aria={`Modifier ${i + 1} amount`} value={typeof m.amount === 'number' ? m.amount : Number(m.amount) || 0} min={-LIMITS.amount} max={LIMITS.amount} width={70}
                 onChange={(n) => set({ modifiers: c.modifiers.map((x, j) => (j === i ? { ...x, amount: n } : x)) })} />
               <button type="button" className="utility-btn danger-btn" style={btn} aria-label={`Remove modifier ${i + 1}`}
                 onClick={() => set({ modifiers: c.modifiers.filter((_, j) => j !== i) })}>×</button>

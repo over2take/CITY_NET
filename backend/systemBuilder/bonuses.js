@@ -7,16 +7,21 @@
 // listed in never changes what comes out. A value already past a cap is never cut back; that bonus just adds nothing.
 //
 // Each bonus says what it really gave (`got`), for the sheet to name what a cap cut. Pure.
+//
+// A condition APPLIED (8a5e1; approved mockup docs/mockups/condition-modifiers.html, 2026-11-18) adds as any bonus does, and
+// may also count TIMES (rounded down), SET TO or AT MOST, after every ADD and AT LEAST: (30 + 5) × 0.5 = 17. Conditions
+// don't stack, so each of those comes one at a time, the strongest already picked (choices.js overlayOf).
 
 const LEAST = 'least';
 /** STOPS AT on a bonus: a whole number in this range. */
 const STOP_LIMIT = 9999;
 
 /**
- * A value with its bonuses: { value, lines }. `adds` are [{ feature, amount, cap? }], `least` [{ feature, amount }].
- * Lines come in the order given: { feature, amount, got }, with `stop` where a cap cut it and `least: true` for AT LEAST.
+ * A value with its bonuses: { value, lines }. `adds` are [{ feature, amount, cap? }], `least` [{ feature, amount }], and a
+ * condition's `times`, `set` and `most` [{ feature, amount }] (8a5e1). Lines come in the order given: { feature, amount,
+ * got }, with `stop` where a cap cut it, `least: true` for AT LEAST, and `way` for a condition's TIMES, SET TO or AT MOST.
  */
-const applyBonuses = (base, { adds = [], least = [] } = {}) => {
+const applyBonuses = (base, { adds = [], least = [], times = [], set = [], most = [] } = {}) => {
   let value = base;
   const got = new Map();
   const capped = adds.filter((a) => a.cap !== undefined && a.cap !== null);
@@ -32,6 +37,13 @@ const applyBonuses = (base, { adds = [], least = [] } = {}) => {
   for (const l of least) {
     const next = Math.max(value, l.amount);
     lines.push({ ...l, got: next - value, least: true });
+    value = next;
+  }
+  // A condition's TIMES, then SET TO, then AT MOST (8a5e1).
+  const last = [...times.map((t) => [t, 'times']), ...set.map((t) => [t, 'set']), ...most.map((t) => [t, 'most'])];
+  for (const [t, way] of last) {
+    const next = way === 'times' ? Math.floor(value * t.amount) : way === 'set' ? t.amount : Math.min(value, t.amount);
+    lines.push({ ...t, got: next - value, way });
     value = next;
   }
   return { value, lines };

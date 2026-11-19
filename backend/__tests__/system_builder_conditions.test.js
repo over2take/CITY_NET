@@ -158,17 +158,17 @@ describe('the checks', () => {
     expect(messages({ prone: { rounds: 2 } })).toEqual(['condition prone, rounds: Only a condition that ends after rounds has rounds']);
   });
 
-  it('modifies all rolls, or one of the system\'s stats or formulas, by a whole amount that isn\'t 0', () => {
-    expect(messages({ prone: { modifiers: [{ target: 'dex', amount: -1 }, { target: 'str', amount: 0 }, { target: 'all_rolls', amount: 100 }, { target: 'str', amount: 1.5 }] } })).toEqual([
+  it('modifies all rolls by a whole amount that isn\'t 0, or one of the system\'s stats or formulas by any (8a5e1)', () => {
+    expect(messages({ prone: { modifiers: [{ target: 'dex', amount: -1 }, { target: 'str', amount: 0 }, { target: 'all_rolls', amount: 100 }, { target: 'str', amount: 1.5 }, { target: 'all_rolls', amount: 0.5 }] } })).toEqual([
       'condition prone, modifier 1, target: Must be all rolls, or one of this system\'s stats or formulas',
-      'condition prone, modifier 2, amount: A whole number from -99 to 99, not 0',
+      'condition prone, modifier 2, amount: Adding 0 changes nothing',
       'condition prone, modifier 3, amount: A whole number from -99 to 99, not 0',
-      'condition prone, modifier 4, amount: A whole number from -99 to 99, not 0',
+      'condition prone, modifier 5, amount: A whole number from -99 to 99, not 0',
     ]);
     expect(messages({ prone: { modifiers: 'x' } })).toEqual(['condition prone, modifier: Must be a list of modifiers']);
     expect(messages({ prone: { modifiers: ['x', { target: 'str', amount: 1, note: 'n' }] } })).toEqual([
       'condition prone, modifier 1: Must say a target and an amount',
-      'condition prone, modifier 2, note: Only a target and an amount',
+      'condition prone, modifier 2, note: Only a target, a way and an amount',
     ]);
     expect(messages({ prone: { modifiers: Array.from({ length: 11 }, () => ({ target: 'str', amount: 1 })) } })).toEqual([
       'condition prone, modifier: At most 10 modifiers',

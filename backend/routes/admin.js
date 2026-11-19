@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { authenticate } = require('../middleware/auth');
+const { CONDITIONS_SETTING, syncAllConditionsOnSheets } = require('../sheets/conditionsOnSheet');
 const { deleteByIds } = require('../bulk');
 const { insertLocations } = require('../buildings/locationRows');
 
@@ -46,6 +47,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     db.run('INSERT INTO global_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=?', [key, value, value], (err) => {
       if (err) return res.status(500).json({ error: err.message });
       io.emit('settingsUpdated');
+      // APPLY CONDITION MODIFIERS (8a5e1): every player's numbers worked out again with it, or without.
+      if (key === CONDITIONS_SETTING) syncAllConditionsOnSheets(db, { io, runtime: require('../systemBuilder/runtime') });
       res.json({ message: 'Settings updated' });
     });
   });

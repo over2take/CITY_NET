@@ -196,7 +196,9 @@ const checkDefinition = (definition) => {
   checkSheet(definition.sheet, derivedIds, problems);
   checkCore(definition.core, derivedIds, problems);
   checkNpc(definition, derivedIds, problems);
-  checkConditions(definition.conditions, new Set([...statIdsOf(definition), ...derivedIds]), problems, restIdsOf(definition));
+  // A modifier's formula (8a5e1) read as any formula is.
+  checkConditions(definition.conditions, new Set([...statIdsOf(definition), ...derivedIds]), problems, restIdsOf(definition),
+    (text) => parseFormula(text, (name) => isPlainObject(definition.lookups) && Object.prototype.hasOwnProperty.call(definition.lookups, name)));
   checkRests(definition, problems);
   checkHouseRules(definition, problems);
   checkGraph(definition, problems);

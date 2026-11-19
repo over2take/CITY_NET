@@ -12,12 +12,11 @@
 // RELOAD, the token follows. One sheet's runs wait on each other, so two saves close together never put it on twice.
 
 const { mutateSheet } = require('./mutate');
-const { carriedOf, bandAt, namesCondition, encumbranceOf, CAPACITY } = require('../systemBuilder/encumbrance');
+const { carriedOf, bandAt, namesCondition, encumbranceOf, CAPACITY, BAND_KEY } = require('../systemBuilder/encumbrance');
+const { CONDITIONS_KEY } = require('../systemBuilder/choices');
 const { parseTokenConditions } = require('../tokens/conditions');
 const { withThrow } = require('../utils/diceThrow');
 
-/** What the band put on, kept on the sheet: a condition's id, or nothing. */
-const BAND_KEY = '_band_condition';
 /** The table's switch: '0' turns band conditions off; anything else, or nothing, leaves them on. */
 const BAND_SETTING = 'band_conditions';
 const LOG_COLOR = '#00ff00';
@@ -33,6 +32,18 @@ const bandStep = ({ want, had, onToken }) => {
   // Already on, and not the band's: the GM's, left alone and never taken off by the band.
   const add = want && !onToken.has(want) ? want : null;
   return { remove, add, record: add };
+};
+
+/**
+ * CAN CARRY as the band reads it (8a5e1): the sheet's, or, where the band's own condition is APPLIED on it, worked out again
+ * without that one, so a condition raising Might can't lift a character out of the band that put it on and back.
+ */
+const canCarry = (runtime, definition, data, held) => {
+  const on = Array.isArray(data[CONDITIONS_KEY]) ? data[CONDITIONS_KEY] : [];
+  if (!held || !on.includes(held)) return Number(data[CAPACITY]);
+  const bare = { ...data, [CONDITIONS_KEY]: on.filter((id) => id !== held) };
+  runtime.metaOf(definition).recompute(bare);
+  return Number(bare[CAPACITY]);
 };
 
 const chains = new Map();
@@ -68,7 +79,8 @@ const bandConditionHook = ({ io, runtime }) => (db, sheetId, data) => {
     const setting = await get(db, 'SELECT value FROM global_settings WHERE key = ?', [BAND_SETTING]);
     const on = !(setting && setting.value === '0');
     const offered = new Map(runtime.conditionsIn(sheet.system).map((c) => [c.id, c]));
-    const band = encumbranceOf(definition) ? bandAt(definition, carriedOf(definition, now), Number(now[CAPACITY])) : null;
+    // CAN CARRY without the band's own condition (8a5e1): one changing it must never take the band, and so itself, away.
+    const band = encumbranceOf(definition) ? bandAt(definition, carriedOf(definition, now), canCarry(runtime, definition, now, held)) : null;
     const want = on && band && band.condition && offered.has(band.condition) ? band.condition : null;
     if (want === held) return;
     const token = await get(db, "SELECT conditions FROM locations WHERE shape = 'rhombus' AND owner = ? LIMIT 1", [sheet.username]);
@@ -81,11 +93,14 @@ const bandConditionHook = ({ io, runtime }) => (db, sheetId, data) => {
     // No token: nothing to put on; what the band had put on went with its token.
     if (!token) return keep(null);
     const list = parseTokenConditions(token.conditions);
+    let changedToken = false;
     const step = bandStep({ want, had: held, onToken: new Set(list.map((c) => c.id)) });
     if (step.remove || step.add) {
       const c = step.add ? offered.get(step.add) : null;
       const next = [...list.filter((x) => x.id !== step.remove), ...(c ? [c.ends === 'rounds' && Number.isInteger(c.rounds) ? { id: c.id, left: c.rounds } : { id: c.id }] : [])];
       await run(db, "UPDATE locations SET conditions = ? WHERE shape = 'rhombus' AND owner = ?", [JSON.stringify(next), sheet.username]);
+      // A band's condition APPLIED changes their numbers too (8a5e1), worked out after the band is kept.
+      changedToken = true;
       const who = (typeof now.name === 'string' && now.name.trim()) || sheet.username;
       const nameOf = (id) => String((offered.get(id) || {}).name || id).toUpperCase();
       const said = [...(step.remove ? [`${nameOf(step.remove)} OFF`] : []), ...(step.add ? [`${nameOf(step.add)} ON`] : [])].join(', ');
@@ -95,6 +110,7 @@ const bandConditionHook = ({ io, runtime }) => (db, sheetId, data) => {
       io.emit('dataUpdated', { isRhombusOnly: true });
     }
     await keep(step.record);
+    if (changedToken) await require('./conditionsOnSheet').syncConditionsOnSheet(db, { username: sheet.username, io, runtime });
     io.emit('sheetUpdated', { username: sheet.username, system: sheet.system });
   });
 };

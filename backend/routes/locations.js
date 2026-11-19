@@ -14,6 +14,7 @@ const { selectByIds, deleteByIds } = require('../bulk');
 const { canReadNpcSheets, redactLocation } = require('../sheets/npcPrivacy');
 const tokenAccess = require('../tokens/tokenAccess');
 const { checkTokenConditions, publicTokenConditions, parseTokenConditions } = require('../tokens/conditions');
+const { syncConditionsOnSheet } = require('../sheets/conditionsOnSheet');
 
 /** A change to a token refused (tokens/tokenAccess.js): 401 when nobody said who they are. */
 const refuse = (res, caller, message = 'You can only change your own token') =>
@@ -879,8 +880,12 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         db.run(query[0], query[1], (err2) => {
           if (err2) return res.status(500).json({ error: err2.message });
           emitUpdate();
-          // A player's open sheets re-read: their vitals strip shows the token's conditions (8s3a).
-          if (row.shape === 'rhombus' && row.owner) io.emit('sheetUpdated', { username: row.owner });
+          // A player's open sheets re-read: their vitals strip shows the token's conditions (8s3a); and one APPLIED changes
+          // their numbers (8a5e1), worked out again.
+          if (row.shape === 'rhombus' && row.owner) {
+            io.emit('sheetUpdated', { username: row.owner });
+            syncConditionsOnSheet(db, { username: row.owner, io, runtime: customSystems });
+          }
           res.json({ id: Number(id), conditions: checked.value });
         });
       });

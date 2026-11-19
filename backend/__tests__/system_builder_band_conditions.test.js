@@ -209,6 +209,21 @@ describe('at the table', () => {
     await until(async () => (await token()).includes('exhausted'), { label: 'exhausted on' });
   });
 
+  it('a band\'s condition APPLIED changes the numbers (8a5e1), and one raising CAN CARRY never lifts them out of its band and back', async () => {
+    const strong = JSON.stringify({ ...LADEN, conditions: { ...LADEN.conditions, slowed: { ...LADEN.conditions.slowed, applied: true, modifiers: [{ target: 'might', way: 'times', amount: 3 }] } } });
+    await run(db, 'UPDATE custom_systems SET published = ? WHERE id = ?', [strong, ID]);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    const { carry } = await table();
+    carry(line('Pack', { qty: 3 }));
+    await until(async () => (await sheet())._conditions_applied?.includes('slowed'), { label: 'applied on the sheet' });
+    await until(async () => (await sheet()).capacity === 150, { label: 'might tripled' });
+    await drain(db);
+    // Still ENCUMBERED, read without its own condition: one line, no going round.
+    expect(await lines()).toEqual(['KES · ENCUMBERED: SLOWED ON']);
+    expect(await token()).toEqual(['prone', 'slowed']);
+    expect((await sheet())._worked.carrying).toMatchObject({ carried: 30, capacity: 50, band: 'ENCUMBERED' });
+  });
+
   it('RELOAD using a line up works the sheet out again, its band following', async () => {
     const { carry, handlers } = await table();
     carry(line('Pistol', { counts: { ammo: 0 } }), line('Rounds', { qty: 6 }), line('Pack', { qty: 2 }));

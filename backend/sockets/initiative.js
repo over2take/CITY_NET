@@ -1,7 +1,8 @@
 const { cryptoRng } = require('../utils/random');
 const { withThrow, boardOf } = require('../utils/diceThrow');
 const customSystems = require('../systemBuilder/runtime');
-const { tickCombat } = require('../tokens/conditions');
+const { tickCombat, combatTokens } = require('../tokens/conditions');
+const { syncConditionsOnSheet } = require('../sheets/conditionsOnSheet');
 
 /** A custom system's own word for initiative in the dice log; today's text for the rest. */
 const initiativeWord = (system) => customSystems.wordIn(system, 'initiative', 'singular', 'INITIATIVE').toUpperCase();
@@ -71,7 +72,10 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
    */
   const newRound = (combatants) => tickCombat(db, combatants, (err, { tokens }) => {
     if (err) console.error('[initiative] Could not count conditions down:', err.message);
-    if (tokens) emitUpdate();
+    if (!tokens) return;
+    emitUpdate();
+    // A condition APPLIED that ran out takes its change off the player's numbers (8a5e1).
+    for (const username of combatTokens(combatants).players) syncConditionsOnSheet(db, { username, io, runtime: require('../systemBuilder/runtime') });
   });
 
   io.on('connection', (socket) => {

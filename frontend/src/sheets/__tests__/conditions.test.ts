@@ -62,6 +62,8 @@ describe('the standard set and what the game offers', () => {
       { ...H, conditions: { blinded: { on: false }, poisoned: { name: 'Toxed', ends: 'rounds', rounds: 3, modifiers: [{ target: 'str', amount: -1 }] } } },
       { ...H, conditions: { glitch: { name: 'Glitching', icon: `/uploads/condition_icons/${'a'.repeat(64)}.png` }, frozen: { name: 'frozen solid', icon: 'snow' } } },
       { ...H, conditions: { nameless: { icon: 'bolt' }, prone: { name: '  ', short: 'down' }, stunned: { rounds: 2 } } },
+      // A way and APPLIED (8a5e1): ADD said by nothing, a formula amount kept, a way it doesn't know left out.
+      { ...H, conditions: { slowed: { name: 'Slowed', applied: true, modifiers: [{ target: 'str', way: 'times', amount: 0.5 }, { target: 'str', way: 'add', amount: '@str' }, { target: 'str', way: 'halve', amount: 1 }] }, prone: { applied: false } } },
     ];
     for (const def of cases) expect(conditionsOf(def)).toEqual(server.conditionsOf(def));
   });

@@ -8,12 +8,16 @@ import type { Definition } from './systemsApi';
 import { idFor } from './setup';
 import { allStats, formulaList } from './statsRules';
 
-export const LIMITS = { conditions: 60, name: 30, short: 8, description: 300, rounds: 99, modifiers: 10, amount: 99 } as const;
+export const LIMITS = { conditions: 60, name: 30, short: 8, description: 300, rounds: 99, modifiers: 10, amount: 99, number: 9999, times: 100, formula: 200 } as const;
 export const ALL_ROLLS = 'all_rolls';
 
 /** When removed, after a number of rounds, or at any of the rests named in `at` (4f, rests.ts). */
 export type Ends = 'removed' | 'rounds' | 'rest';
-export interface Modifier { target: string; amount: number }
+/** How a modifier counts (8a5e1): added (said by nothing), times, set to, or no more than. */
+export type ModifierWay = 'add' | 'times' | 'set' | 'most';
+export const WAYS: ModifierWay[] = ['add', 'times', 'set', 'most'];
+/** A modifier: its target, and an amount, a number or (8a5e1) formula text, counted its way. */
+export interface Modifier { target: string; amount: number | string; way?: ModifierWay }
 export interface Condition {
   id: string;
   name: string;
@@ -25,6 +29,8 @@ export interface Condition {
   /** The rests it wears off at, when it ends at a rest. */
   at?: string[];
   modifiers: Modifier[];
+  /** Its modifiers change the sheet's numbers (8a5e1), or are a reminder. */
+  applied?: boolean;
   standard: boolean;
 }
 /** A condition as the page lists it: whole, and whether it is on. */
@@ -68,7 +74,10 @@ const whole = (base: { id: string; name: string; short?: string; icon?: string; 
     ends,
     ...(ends === 'rounds' && Number.isInteger(c.rounds) ? { rounds: c.rounds as number } : {}),
     ...(ends === 'rest' ? { at: Array.isArray(c.at) ? c.at.filter((id): id is string => typeof id === 'string') : [] } : {}),
-    modifiers: Array.isArray(c.modifiers) ? (c.modifiers.filter(isObject) as unknown as Modifier[]).map((m) => ({ target: m.target, amount: m.amount })) : [],
+    // A modifier's way and a condition's APPLIED (8a5e1), as the server's conditionsOf: the way said where it isn't an ADD.
+    modifiers: Array.isArray(c.modifiers) ? (c.modifiers.filter(isObject) as unknown as Modifier[])
+      .map((m) => ({ target: m.target, amount: m.amount, ...(m.way && m.way !== 'add' && WAYS.includes(m.way) ? { way: m.way } : {}) })) : [],
+    ...(c.applied === true ? { applied: true } : {}),
     standard,
   };
 };
@@ -98,7 +107,7 @@ export const conditionsOf = (def: Definition): Condition[] => conditionList(def)
  * tableRolls.termsOf reads them: whole numbers, never 0.
  */
 export const onAllRolls = (def: Definition): { id: string; short: string; amount: number }[] => conditionsOf(def).flatMap((c) => {
-  const counted = c.modifiers.filter((m) => m.target === ALL_ROLLS && Number.isInteger(m.amount) && m.amount !== 0);
+  const counted = c.modifiers.filter((m): m is Modifier & { amount: number } => m.target === ALL_ROLLS && Number.isInteger(m.amount) && m.amount !== 0);
   return counted.length ? [{ id: c.id, short: c.short, amount: counted.reduce((n, m) => n + m.amount, 0) }] : [];
 });
 
