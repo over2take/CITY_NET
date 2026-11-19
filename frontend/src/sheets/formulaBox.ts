@@ -21,10 +21,14 @@ import { gearTokens } from './encumbrance';
  * AGAINST; a rest's amount; a formula of STATS & RULES (formula box 3).
  */
 /** `least` (7e1b): a modifier's amount set AT LEAST, read as an amount is, said as "at least". `cost` (7f2b): what raising a stat costs; `price`, what an option costs. `improve` (7f3a2): IMPROVE BY USE's boxes. */
-export type FormulaKind = 'amount' | 'least' | 'requires' | 'uses' | 'add' | 'against' | 'refill' | 'formula' | 'cost' | 'price' | 'improve';
+export type FormulaKind = 'amount' | 'least' | 'requires' | 'uses' | 'add' | 'against' | 'refill' | 'formula' | 'cost' | 'price' | 'improve'
+  // A condition's modifier counted TIMES, SET TO or AT MOST (8a5e2): a formula, its sample said its way.
+  | 'times' | 'set' | 'most';
+/** The ways a condition's modifier counts other than ADD, each a kind of box (8a5e2). */
+const WAY_KINDS = new Set<FormulaKind>(['times', 'set', 'most']);
 
 /** The kind the server reads a box as: an AT LEAST is an amount, and an option's price (7f2b) a formula. */
-export const serverKind = (kind: FormulaKind): FormulaKind => (kind === 'least' ? 'amount' : kind === 'price' ? 'formula' : kind);
+export const serverKind = (kind: FormulaKind): FormulaKind => (kind === 'least' ? 'amount' : kind === 'price' || WAY_KINDS.has(kind) ? 'formula' : kind);
 
 /** One name a formula reads, as the server worked it out for the sample. */
 export interface FormulaReads { id: string; label: string; value: number }
@@ -50,6 +54,8 @@ const word = (id: string, reads: FormulaReads[]) => reads.find((r) => r.id === i
  * needs Strength 13 or more), anything else by what it is worked out from. Empty for an empty box.
  */
 export const wordsOf = (kind: FormulaKind, text: string, reads: FormulaReads[] = []): string => {
+  // A condition's TIMES, SET TO or AT MOST (8a5e2) is said as any formula is; its way is beside it.
+  if (WAY_KINDS.has(kind)) return wordsOf('formula', text, reads);
   const t = text.trim();
   if (!t) return '';
   let m: RegExpMatchArray | null;
@@ -103,6 +109,7 @@ export const sampleLine = (kind: FormulaKind, read: FormulaRead & { ok: true }):
     : kind === 'refill' || kind === 'improve' ? (read.most !== undefined ? `${v} to ${round(read.most)}` : String(v))
     : kind === 'least' ? `at least ${v}`
     : kind === 'cost' || kind === 'price' ? `costs ${v}`
+    : kind === 'times' ? `×${v}` : kind === 'set' ? `to ${v}` : kind === 'most' ? `at most ${v}`
     : signed(v);
   const sample = read.rolling ? `sample, rolling ${read.rolling}${names ? ',' : ''}` : 'sample';
   return names || read.rolling ? `${sample}${names ? ` ${names}` : ''}: ${said}` : said;

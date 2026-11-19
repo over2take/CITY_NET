@@ -258,3 +258,16 @@ describe('IMPROVE BY USE\'s boxes (7f3a2)', () => {
     expect(serverKind('improve')).toBe('improve');
   });
 });
+
+describe('a condition\'s TIMES, SET TO and AT MOST (8a5e2)', () => {
+  it('read by the server as a formula, said as one, the sample its way', () => {
+    for (const kind of ['times', 'set', 'most'] as const) {
+      expect(serverKind(kind)).toBe('formula');
+      expect(wordsOf(kind, '@str / 2', [{ id: 'str', label: 'Strength', value: 14 }])).toBe(wordsOf('formula', '@str / 2', [{ id: 'str', label: 'Strength', value: 14 }]));
+      // A lone name unsigned, as a formula says it: never "+ your Strength".
+      expect(wordsOf(kind, '@str', [{ id: 'str', label: 'Strength', value: 14 }])).toBe(wordsOf('formula', '@str', [{ id: 'str', label: 'Strength', value: 14 }]));
+    }
+    const read = { ok: true as const, value: 0.5, reads: [] };
+    expect([sampleLine('times', read), sampleLine('set', { ...read, value: 0 }), sampleLine('most', { ...read, value: 10 }), sampleLine('formula', read)]).toEqual(['×0.5', 'to 0', 'at most 10', '+0.5']);
+  });
+});

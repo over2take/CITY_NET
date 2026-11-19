@@ -374,7 +374,9 @@ export const HINTS = {
   'conditions.chip': 'The short word on the condition\'s chip in a token\'s HEALTH folder, up to 8 letters.',
   'conditions.icon': 'Drawn on the chip beside its word: one of the drawn icons, or one you upload.',
   'conditions.description': 'What it means at the table, shown under the chips in the token\'s HEALTH folder to everyone who sees them.',
-  'conditions.ends': 'WHEN REMOVED: it stays until someone who may change the token\'s health takes it off. AFTER ROUNDS: it counts down with the initiative rounds. AT A REST: it comes off at the rests you pick.',
+  'conditions.applied': 'A REMINDER: its modifiers are shown with the condition and change no number. APPLIED: a character whose token has it sees the numbers change on their sheet, Speed halved while Slowed, and back when it comes off. A visual change for you to explain; nothing is enforced at the table, and a table can keep them all reminders on the GAME tab.',
+  'conditions.modifiers': 'What it changes, and how: ADD (-10), TIMES (0.5 halves it, rounded down), SET TO (0) or AT MOST (10), by a number or a formula like @might_mod. They count after every other bonus. Conditions don\'t stack: of two changing one number one way, the stronger counts. ALL ROLLS adds a whole number to every roll.',
+  'conditions.ends':'WHEN REMOVED: it stays until someone who may change the token\'s health takes it off. AFTER ROUNDS: it counts down with the initiative rounds. AT A REST: it comes off at the rests you pick.',
   // RESTS
   'rests.refills': 'What the rest puts back, line by line in order: health, a number on the sheet, or a whole section, to its maximum, by an amount or to a number. Rolled for each character. Under an amount, a line says it in words with the least and most it comes to for the sample; the formula button writes DICE or DICE AND A STAT for you.',
   'rests.sample': 'This rest on the sample character, its token hurt to half, worked out the way the game would. Nothing is saved.',
