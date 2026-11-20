@@ -78,7 +78,8 @@ function InitiativeTracker({
         <div style={{ fontSize: '0.65rem', color: 'var(--dark-green)', letterSpacing: '1px' }}>{sceneLabel}</div>
         {state && activeMode === 'individual' && (
           <div style={{ fontSize: '0.8rem', fontWeight: 'bold', letterSpacing: '2px', color: 'var(--green)', textShadow: 'var(--glow)', marginTop: '2px' }}>
-            {`${word('turn', 'singular', systemDef.counterLabel).toUpperCase()} ${activeSystem === 'shadowrun_6e' ? state.passCounter : state.turnCounter}`}
+            {/* The count of laps of the order: a ROUND (8a8, the user's call: "this pr"), the system's own word for one. */}
+            {`${word('round', 'singular', systemDef.counterLabel).toUpperCase()} ${activeSystem === 'shadowrun_6e' ? state.passCounter : state.turnCounter}`}
           </div>
         )}
       </div>

@@ -30,7 +30,7 @@ describe('getInitiativeSystem', () => {
 
 describe('generic system', () => {
   it('has counterLabel TURN', () => {
-    expect(generic.counterLabel).toBe('TURN');
+    expect(generic.counterLabel).toBe('ROUND');
   });
 
   it('passDecay is false', () => {

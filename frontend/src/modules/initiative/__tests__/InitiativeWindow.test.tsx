@@ -80,9 +80,9 @@ describe('InitiativeWindow — no active initiative', () => {
 });
 
 describe('InitiativeWindow — active initiative', () => {
-  it('shows TURN counter in title', () => {
+  it('shows the ROUND counter in title (Generic counted TURNs before 8a8)', () => {
     render(<InitiativeWindow {...baseProps({ state: makeState({ turnCounter: 3 }) })} />);
-    expect(screen.getByText('TURN 3')).toBeInTheDocument();
+    expect(screen.getByText('ROUND 3')).toBeInTheDocument();
   });
 
   it('shows WAITING FOR ROLLS when combatants list is empty', () => {

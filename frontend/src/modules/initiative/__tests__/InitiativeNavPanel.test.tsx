@@ -152,9 +152,9 @@ describe('InitiativeNavPanel — active combats list', () => {
     expect(screen.getByText('COMBAT #1')).toBeInTheDocument();
     expect(screen.getByText('COMBAT #2')).toBeInTheDocument();
     // Two scenes of one combat, each at its own: the city twice round, the plaza not yet.
-    expect(screen.getByRole('button', { name: '▶ CITY MAP · TURN 3' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '▶ NEON PLAZA — GROUND FLOOR · TURN 1' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '▶ WAREHOUSE — LEVEL 2 · TURN 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '▶ CITY MAP · ROUND 3' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '▶ NEON PLAZA — GROUND FLOOR · ROUND 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '▶ WAREHOUSE — LEVEL 2 · ROUND 1' })).toBeInTheDocument();
   });
 
   it('a scene the server gave no count says none (8a8)', () => {

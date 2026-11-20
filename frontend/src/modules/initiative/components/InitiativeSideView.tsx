@@ -65,7 +65,7 @@ export function InitiativeSideView({
     <div>
       {/* Counter */}
       <div style={{ fontSize: '0.8rem', fontWeight: 'bold', letterSpacing: '2px', color: 'var(--green)', textShadow: 'var(--glow)', marginBottom: '8px' }}>
-        {`${word('turn', 'singular', sys.counterLabel).toUpperCase()} ${state.turnCounter}`}
+        {`${word('round', 'singular', sys.counterLabel).toUpperCase()} ${state.turnCounter}`}
       </div>
 
       {/* Sides */}

@@ -1105,13 +1105,13 @@ CITY_NET/
 │   │   │       ├── hooks/
 │   │   │       │   └── useInitiative.ts        # Socket-backed initiative state (start, roll, join, next, remove, reorder, end); Side interface; side mode support; a combat listed with each scene's own count (8a8)
 │   │   │       ├── components/
-│   │   │       │   ├── InitiativeWindow.tsx     # Floating/sidebar tracker UI; branches on mode ('individual'/'side'); SR6 pass counter, new-round banner, extra-dice selector, floor-aware NPC filtering
-│   │   │       │   ├── InitiativeSideView.tsx   # Side-based render path (CWN RAW); side panels with active highlight, sub-ordering, within-side drag-and-drop, player JOIN button
+│   │   │       │   ├── InitiativeWindow.tsx     # Floating/sidebar tracker UI; branches on mode ('individual'/'side'); SR6 pass counter, new-round banner, extra-dice selector, floor-aware NPC filtering; its counter named with the round word, a system's own or ROUND (8a8)
+│   │   │       │   ├── InitiativeSideView.tsx   # Side-based render path (CWN RAW); side panels with active highlight, sub-ordering, within-side drag-and-drop, player JOIN button; its counter named with the round word, a system's own or ROUND (8a8)
 │   │   │       │   ├── InitiativeCombatantRow.tsx # Single combatant row with drag-to-reorder and admin remove
 │   │   │       │   └── InitiativeNavPanel.tsx   # The tracker in the nav panel: the turn order, the scene it is in, and END COMBAT, in a custom system's own words for initiative and the turn; each active combat by ID, each of its scenes with its own count beside it (8a8)
 │   │   │       ├── systems/
 │   │   │       │   ├── index.ts                # InitiativeSystem interface (+ defaultMode) + getInitiativeSystem(key) registry
-│   │   │       │   ├── generic.ts              # 1d20 roll; TURN counter; no pass decay
+│   │   │       │   ├── generic.ts              # 1d20 roll; ROUND counter (TURN before 8a8); no pass decay
 │   │   │       │   ├── sr6.ts                  # REA+INT+Xd6 roll; PASS counter; end-of-pass −10 decay; Wired Reflexes extra dice
 │   │   │       │   ├── cpr.ts                  # REF+1d10 roll; ROUND counter; order held for entire combat; exploding d10 via house rule
 │   │   │       │   ├── cwn.ts                  # 1d8+DEX mod roll; ROUND counter; PCs win ties; defaultMode: 'side'

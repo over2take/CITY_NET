@@ -11,19 +11,21 @@ import { registerCustomTemplate, clearCustomTemplates } from '../../../sheets/cu
 
 /**
  * The glossary in the initiative tracker (3a5a). Every place reads exactly as today under each
- * built-in system - CWN and Cyberpunk RED counting ROUNDs, Shadowrun PASSes, Generic TURNs -
+ * built-in system - CWN, Cyberpunk RED and Generic counting ROUNDs (Generic since 8a8, which counted TURNs), Shadowrun PASSes -
  * and under a custom system that renamed nothing; a custom system that renamed initiative or
  * the turn shows its own words.
  */
 
 const RENAMED = 'sys_aaaaaaaaaaaaaaaa';
 const PLAIN = 'sys_bbbbbbbbbbbbbbbb';
-const COUNTERS: Record<string, string> = { cities_without_number: 'ROUND', cyberpunk_red: 'ROUND', shadowrun_6e: 'PASS', generic: 'TURN', [PLAIN]: 'TURN' };
+const COUNTERS: Record<string, string> = { cities_without_number: 'ROUND', cyberpunk_red: 'ROUND', shadowrun_6e: 'PASS', generic: 'ROUND', [PLAIN]: 'ROUND' };
 
 beforeEach(() => {
   clearCustomTemplates();
   registerCustomTemplate({ id: RENAMED, name: 'Hearth', parts: {}, derived: [], sheet: { sections: [] },
-    words: { initiative: { singular: 'ORDER', plural: 'ORDER', short: 'ORD' }, turn: { singular: 'BEAT', plural: 'BEATS', short: 'BEAT' } } });
+    words: { initiative: { singular: 'ORDER', plural: 'ORDER', short: 'ORD' }, turn: { singular: 'BEAT', plural: 'BEATS', short: 'BEAT' },
+      // The count is of rounds (8a8): its own word, the turn's renamed apart.
+      round: { singular: 'BOUT', plural: 'BOUTS', short: 'BOUT' } } });
   registerCustomTemplate({ id: PLAIN, name: 'Plain', parts: {}, derived: [], sheet: { sections: [] }, words: {} });
 });
 afterEach(() => { cleanup(); clearCustomTemplates(); });
@@ -70,7 +72,7 @@ describe('the tracker window', () => {
   it('uses a custom system\'s own words', async () => {
     expect(await read(RENAMED)).toEqual({
       start: 'START ORDER', combat: 'COMBAT #4 [1 SCENE]', none: 'NO ACTIVE ORDER IN THIS SCENE',
-      counter: 'BEAT 3', end: 'END ORD', join: 'JOIN ORDER',
+      counter: 'BOUT 3', end: 'END ORD', join: 'JOIN ORDER',
     });
   });
 });
@@ -98,7 +100,7 @@ describe('the side view', () => {
   });
 
   it('uses a custom system\'s own words', () => {
-    expect(read(RENAMED)).toEqual({ counter: 'BEAT 3', score: 'ORD 12', end: 'END ORD', join: 'JOIN ORDER' });
+    expect(read(RENAMED)).toEqual({ counter: 'BOUT 3', score: 'ORD 12', end: 'END ORD', join: 'JOIN ORDER' });
   });
 });
 
@@ -123,7 +125,7 @@ describe('the nav panel', () => {
       expect(read(system), String(system)).toEqual({
         heading: 'INITIATIVE',
         hint: 'NO ACTIVE COMBATS. OPEN THE TRACKER AND CLICK START INITIATIVE TO BEGIN. EACH ACTIVE SCENE WILL APPEAR HERE FOR QUICK NAVIGATION.',
-        combat: 'COMBAT #4', scene: `▶ CITY MAP · ${system ? COUNTERS[system] : 'TURN'} 7`,
+        combat: 'COMBAT #4', scene: `▶ CITY MAP · ${system ? COUNTERS[system] : 'ROUND'} 7`,
       });
     }
   });
@@ -147,7 +149,7 @@ describe('the nav panel', () => {
     expect(read(RENAMED)).toEqual({
       heading: 'ORDER',
       hint: 'NO ACTIVE COMBATS. OPEN THE TRACKER AND CLICK START ORDER TO BEGIN. EACH ACTIVE SCENE WILL APPEAR HERE FOR QUICK NAVIGATION.',
-      combat: 'COMBAT #4', scene: '▶ CITY MAP · BEAT 7',
+      combat: 'COMBAT #4', scene: '▶ CITY MAP · BOUT 7',
     });
   });
 });

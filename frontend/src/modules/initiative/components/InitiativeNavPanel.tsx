@@ -37,7 +37,7 @@ export function InitiativeNavPanel({
 }: Props) {
   const word = useWords(system);
   // Each scene's own count beside it (8a8), named as its tracker names it.
-  const COUNTER = word('turn', 'singular', getInitiativeSystem(system ?? 'generic').counterLabel).toUpperCase();
+  const COUNTER = word('round', 'singular', getInitiativeSystem(system ?? 'generic').counterLabel).toUpperCase();
   const INITIATIVE = word('initiative', 'singular', 'INITIATIVE').toUpperCase();
   return (
     <div className="panel sidebar-panel">
