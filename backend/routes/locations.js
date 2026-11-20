@@ -15,6 +15,7 @@ const { canReadNpcSheets, redactLocation } = require('../sheets/npcPrivacy');
 const tokenAccess = require('../tokens/tokenAccess');
 const { checkTokenConditions, publicTokenConditions, parseTokenConditions } = require('../tokens/conditions');
 const { syncConditionsOnSheet } = require('../sheets/conditionsOnSheet');
+const { poolAfter } = require('../tokens/poolHealth');
 
 /** A change to a token refused (tokens/tokenAccess.js): 401 when nobody said who they are. */
 const refuse = (res, caller, message = 'You can only change your own token') =>
@@ -660,19 +661,9 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         newCurrent = newMax;
       }
 
-      // Always clamp current to max — current can never exceed max
-      if (newMax > 0 && newCurrent > newMax) newCurrent = newMax;
-
-      if (effAction === 'damage' && amount > 0) {
-        let remainingDamage = amount;
-        if (newTemp > 0) {
-          if (newTemp >= remainingDamage) { newTemp -= remainingDamage; remainingDamage = 0; }
-          else { remainingDamage -= newTemp; newTemp = 0; }
-        }
-        if (remainingDamage > 0 && newCurrent !== null) newCurrent = Math.max(0, newCurrent - remainingDamage);
-      } else if (effAction === 'heal' && amount > 0 && newCurrent !== null && newMax !== null) {
-        newCurrent = Math.min(newMax, newCurrent + amount);
-      }
+      // Current never over max; damage takes TEMP first, healing stops at MAX (tokens/poolHealth.js, shared with a
+      // condition's EACH TURN, 8a9a).
+      ({ current: newCurrent, max: newMax, temp: newTemp } = poolAfter({ current: newCurrent, max: newMax, temp: newTemp }, effAction, amount));
 
       if (row.shape === 'rhombus' && row.owner) {
         db.run('UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE shape = "rhombus" AND owner = ?', [newCurrent, newMax, newTemp, row.owner], function(err2) {
@@ -871,7 +862,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         const system = (gRow && gRow.value) || DEFAULT_SYSTEM;
         const hidden = customSystems.hiddenConditionsIn(system);
         const kept = parseTokenConditions(row.conditions).filter((c) => hidden.has(c.id));
-        const checked = checkTokenConditions(req.body && req.body.conditions, customSystems.conditionsIn(system), kept);
+        // What it has now, so a condition kept keeps the turn it started (8a9a, AT THE END OF ITS NEXT TURN).
+        const checked = checkTokenConditions(req.body && req.body.conditions, customSystems.conditionsIn(system), kept, parseTokenConditions(row.conditions));
         if (!checked.ok) return res.status(400).json({ error: checked.error });
         const json = JSON.stringify(checked.value);
         const query = row.shape === 'rhombus' && row.owner

@@ -264,7 +264,7 @@ describe('a condition that wears off at a rest', () => {
     expect(conditionProblems({ exhausted: { ends: 'rest', at: [] } })).toEqual(['condition exhausted, at: Name the rests it wears off at']);
     expect(conditionProblems({ exhausted: { ends: 'rest', at: ['nap', 'long_rest'] } })).toEqual(['condition exhausted, at 1: Not one of this system\'s rests']);
     expect(conditionProblems({ exhausted: { ends: 'rounds', rounds: 2, at: ['long_rest'] } })).toEqual(['condition exhausted, at: Only a condition that ends at a rest names rests']);
-    expect(conditionProblems({ exhausted: { ends: 'dawn' } })).toEqual(['condition exhausted, ends: Ends when removed, after rounds, or at a rest']);
+    expect(conditionProblems({ exhausted: { ends: 'dawn' } })).toEqual(['condition exhausted, ends: Ends when removed, after rounds, at a rest, or at the end of its next turn']);
   });
 
   it('is offered with the rests it ends at; one ending otherwise has none', () => {
