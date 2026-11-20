@@ -40,6 +40,9 @@ export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, on
     <div
       ref={rowRef}
       style={rowStyle}
+      // Whose turn it is, said as well as drawn (8i2): what a screen reader announces and the journeys read.
+      data-testid="initiative-row"
+      aria-current={isActive ? 'step' : undefined}
       className={showExplod ? 'initiative-explod-row' : undefined}
       draggable={isAdmin}
       onDragStart={(e) => {
@@ -59,7 +62,7 @@ export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, on
       <div style={{ width: 28, height: 28, borderRadius: 2, overflow: 'hidden', flexShrink: 0, background: 'color-mix(in srgb, var(--black) 60%, transparent)', border: '1px solid var(--dark-green)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {combatant.portraitUrl
           ? <img src={combatant.portraitUrl} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-          : <span style={{ fontSize: '0.6rem', color: 'var(--dark-green)' }}>{combatant.isNpc ? '◆' : '◈'}</span>
+          : <span style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.65 }}>{combatant.isNpc ? '◆' : '◈'}</span>
         }
       </div>
 

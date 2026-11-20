@@ -58,16 +58,16 @@ export function InitiativeNavPanel({
           OPEN TRACKER
         </button>
         <div style={{ marginTop: '6px' }}>
-          <div style={{ fontSize: '0.6rem', color: 'var(--dark-green)', letterSpacing: '1px', marginBottom: '4px' }}>ACTIVE COMBATS</div>
+          <div style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.65, letterSpacing: '1px', marginBottom: '4px' }}>ACTIVE COMBATS</div>
           {activeCombats.length === 0 ? (
-            <div style={{ fontSize: '0.65rem', color: 'var(--dark-green)', opacity: 0.5, padding: '6px 0', lineHeight: '1.5' }}>
+            <div style={{ fontSize: '0.65rem', color: 'var(--green)', opacity: 0.55, padding: '6px 0', lineHeight: '1.5' }}>
               NO ACTIVE COMBATS. OPEN THE TRACKER AND CLICK START {INITIATIVE} TO BEGIN. EACH ACTIVE SCENE WILL APPEAR HERE FOR QUICK NAVIGATION.
             </div>
           ) : activeCombats.map((combat) => (
             <div key={combat.id} style={{ marginBottom: '8px', borderLeft: '2px solid var(--dark-green)', paddingLeft: '8px' }}>
               <div style={{
                 display: 'flex', alignItems: 'center', gap: '6px',
-                fontSize: '0.6rem', color: 'var(--dark-green)', marginBottom: '3px',
+                fontSize: '0.6rem', color: 'var(--green)', opacity: 0.65, marginBottom: '3px',
               }}>
                 <span style={{ flex: 1 }}>COMBAT #{combat.id}</span>
                 {onEndCombat && (

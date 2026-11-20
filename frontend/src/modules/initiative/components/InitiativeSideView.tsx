@@ -70,7 +70,7 @@ export function InitiativeSideView({
 
       {/* Sides */}
       {sortedSides.length === 0 ? (
-        <div style={{ fontSize: '0.65rem', color: 'var(--dark-green)', padding: '6px 0' }}>
+        <div style={{ fontSize: '0.65rem', color: 'var(--green)', opacity: 0.65, padding: '6px 0' }}>
           WAITING FOR ROLLS...
         </div>
       ) : (
@@ -121,7 +121,7 @@ export function InitiativeSideView({
                 }}
               >
                 {members.length === 0 ? (
-                  <div style={{ fontSize: '0.6rem', color: 'var(--dark-green)', padding: '4px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.65, padding: '4px', textAlign: 'center' }}>
                     {side.isPlayerSide ? 'WAITING FOR PLAYER ROLLS...' : 'NO COMBATANTS'}
                   </div>
                 ) : (
@@ -160,7 +160,7 @@ export function InitiativeSideView({
           >
             JOIN {INITIATIVE}
           </button>
-          <div style={{ fontSize: '0.6rem', color: 'var(--dark-green)', textAlign: 'center', marginTop: '4px' }}>
+          <div style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.65, textAlign: 'center', marginTop: '4px' }}>
             ROLL DEX MOD + 1d8 — ADDED TO PLAYERS SIDE
           </div>
         </div>
