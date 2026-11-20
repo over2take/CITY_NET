@@ -88,14 +88,20 @@ const nextTurnStep = (when, onToken, offered) => {
   return { list: onToken, ended: [], changed: false };
 };
 
+/** An effect's name in the log: the condition's, and SAVE for a ROLL TO END. */
+const effectName = (condition, effect) => `${condition.name.toUpperCase()}${effect.does === 'roll_to_end' ? ' SAVE' : ''}`;
+/** When, in the log: START OF ITS TURN, and the scene where the token is in two fights (8a9a2). */
+const whenWords = (effect, where) => `${WHEN_WORDS[effect.when]}${where ? ` in ${where}` : ''}`;
+
 /**
  * An effect rolled and what it did, in words (pure but for the dice): `{ value, dice, hp?, ends?, line }`. `values` are the
- * sheet's, `pool` the token's HP or null where the game has none to change, `who` its name as the log says it.
+ * sheet's, `pool` the token's HP or null where the game has none to change, `who` its name as the log says it, `by` who
+ * rolled it (the table, the player, the GM: 8a9a2), `where` its scene where it is in two fights.
  */
-const rollEffect = ({ condition, effect, values, names, pool, who, rng }) => {
+const rollEffect = ({ condition, effect, values, names, pool, who, rng, by = 'the table', where = null }) => {
   const rolled = rollAmount(effect.roll, values, names, rng);
   if ('error' in rolled || 'blank' in rolled) return { error: rolled.error || 'Nothing to roll' };
-  const head = `${who} · ${condition.name.toUpperCase()}${effect.does === 'roll_to_end' ? ' SAVE' : ''}, ${WHEN_WORDS[effect.when]} · rolled by the table: ${effect.roll} → ${rolled.value}`;
+  const head = `${who} · ${effectName(condition, effect)}, ${whenWords(effect, where)} · rolled by ${by}: ${effect.roll} → ${rolled.value}`;
   const out = { value: rolled.value, dice: rolled.dice };
   if (effect.does === 'damage' || effect.does === 'heal') {
     const word = effect.does === 'damage' ? 'DAMAGE' : 'HEALED';
@@ -112,20 +118,30 @@ const rollEffect = ({ condition, effect, values, names, pool, who, rng }) => {
 };
 
 const get = (db, sql, args = []) => new Promise((ok, no) => db.get(sql, args, (e, row) => (e ? no(e) : ok(row))));
-const run = (db, sql, args = []) => new Promise((ok, no) => db.run(sql, args, (e) => (e ? no(e) : ok())));
+const all = (db, sql, args = []) => new Promise((ok, no) => db.all(sql, args, (e, rows) => (e ? no(e) : ok(rows || []))));
+const run = (db, sql, args = []) => new Promise((ok, no) => db.run(sql, args, function (e) { if (e) no(e); else ok(this); }));
 
+const TOKEN_COLUMNS = 'id, name, shape, owner, hp_current, hp_max, hp_temp, conditions';
 /** A combatant's token and the sheet it reads from, by the tracker's id; null for one with none. */
 const tokenOf = async (db, id) => {
   const m = /^(npc|player):(.+)$/.exec(String(id));
   if (!m) return null;
   if (m[1] === 'player') {
-    const row = await get(db, "SELECT id, name, shape, owner, hp_current, hp_max, hp_temp, conditions FROM locations WHERE shape = 'rhombus' AND owner = ? LIMIT 1", [m[2]]);
+    const row = await get(db, `SELECT ${TOKEN_COLUMNS} FROM locations WHERE shape = 'rhombus' AND owner = ? LIMIT 1`, [m[2]]);
     return row ? { row, player: m[2] } : null;
   }
   if (!/^\d+$/.test(m[2])) return null;
-  const row = await get(db, "SELECT id, name, shape, owner, hp_current, hp_max, hp_temp, conditions FROM locations WHERE id = ? AND shape IN ('enemy_rhombus', 'friendly_rhombus')", [Number(m[2])]);
+  const row = await get(db, `SELECT ${TOKEN_COLUMNS} FROM locations WHERE id = ? AND shape IN ('enemy_rhombus', 'friendly_rhombus')`, [Number(m[2])]);
   return row ? { row, player: null } : null;
 };
+/** A token by its row id (an ask's): a player's or an NPC's, as tokenOf gives it. */
+const tokenById = async (db, locationId) => {
+  const row = await get(db, `SELECT ${TOKEN_COLUMNS} FROM locations WHERE id = ?`, [locationId]);
+  if (!row) return null;
+  if (row.shape === 'rhombus' && row.owner) return { row, player: row.owner };
+  return row.shape === 'enemy_rhombus' || row.shape === 'friendly_rhombus' ? { row, player: null } : null;
+};
+const whoOf = (token) => `${String(token.row.name || token.player || 'TOKEN').toUpperCase()}${token.player ? '' : ' (NPC)'}`;
 
 /** The sheet a token's rolls read: the player's own in this game, or the NPC's linked one. */
 const sheetOf = async (db, token, system) => {
@@ -136,27 +152,115 @@ const sheetOf = async (db, token, system) => {
 };
 
 /**
- * `moments` fired on a scene (8a9a): every combatant's conditions doing what they do, one after another, in the log.
- * `runtime` the running systems (systemBuilder/runtime.js); `emitUpdate` redraws the map. Resolves when all are done.
+ * A scene by name (8a9a2), as the combats list names it: CITY MAP, a building's name, or a building's floor ("NEON PLAZA —
+ * ROOF"); its key where nothing names it.
  */
-const fireTurnMoments = async (db, { io, emitUpdate = () => {}, runtime, system, moments, rng = cryptoRng }) => {
+const sceneName = async (db, key) => {
+  if (key === 'city:0') return 'CITY MAP';
+  const building = /^building:(\d+)$/.exec(key);
+  const floor = /^(\d+):(\d+)$/.exec(key);
+  const id = building ? Number(building[1]) : floor ? Number(floor[1]) : null;
+  if (id === null) return key;
+  const loc = await get(db, 'SELECT name FROM locations WHERE id = ?', [id]).catch(() => null);
+  const name = loc && loc.name ? String(loc.name).toUpperCase() : key;
+  if (building) return name;
+  const maps = await all(db, 'SELECT designation FROM battle_maps WHERE location_id = ? ORDER BY order_index', [id]).catch(() => []);
+  const map = maps[Number(floor[2])];
+  return map && map.designation ? `${name} — ${String(map.designation).toUpperCase()}` : name;
+};
+
+/** The scenes each combatant is in, by the tracker's id (8a9a2): where one is in two fights, the log says which. */
+const scenesOfCombatants = async (db) => {
+  const rows = await all(db, 'SELECT scene_key, combatants FROM initiative_scene').catch(() => []);
+  const out = new Map();
+  for (const r of rows) {
+    let list = [];
+    try { list = JSON.parse(r.combatants || '[]'); } catch { list = []; }
+    for (const id of idsOf(list)) out.set(id, [...(out.get(id) || []), r.scene_key]);
+  }
+  return out;
+};
+
+/** The asks (8a9a2): one waiting per token, condition and effect, a newer one in its place. Made where missing. */
+const ready = new WeakSet();
+const asksTable = async (db) => {
+  if (ready.has(db)) return;
+  await run(db, `CREATE TABLE IF NOT EXISTS turn_asks (id INTEGER PRIMARY KEY AUTOINCREMENT, scene_key TEXT NOT NULL, location_id INTEGER NOT NULL,
+    player TEXT, condition_id TEXT NOT NULL, effect INTEGER NOT NULL, moment TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  ready.add(db);
+};
+
+/**
+ * What a token's turn did, written and told (shared by the table's rolls and an answered ask, 8a9a2): its HP and conditions
+ * stored on every token of a player's, each line in the dice log, the map and the player's sheets told.
+ */
+const settle = async (db, { io, emitUpdate, runtime }, token, { pool, hpChanged, list, listChanged, lines }) => {
+  if (hpChanged) {
+    const sql = token.player
+      ? ["UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE shape = 'rhombus' AND owner = ?", [pool.current, pool.max, pool.temp, token.player]]
+      : ['UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE id = ?', [pool.current, pool.max, pool.temp, token.row.id]];
+    await run(db, sql[0], sql[1]);
+  }
+  if (listChanged) {
+    const json = JSON.stringify(list);
+    const sql = token.player
+      ? ["UPDATE locations SET conditions = ? WHERE shape = 'rhombus' AND owner = ?", [json, token.player]]
+      : ['UPDATE locations SET conditions = ? WHERE id = ?', [json, token.row.id]];
+    await run(db, sql[0], sql[1]);
+  }
+  const who = whoOf(token);
+  for (const l of lines) {
+    const results = {};
+    for (const d of l.dice) results[d.sides] = [...(results[d.sides] || []), ...d.rolls];
+    await run(db, 'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)', [token.player || who, l.value, JSON.stringify(results), LOG_COLOR, l.line]);
+    io.emit('diceRollBroadcast', withThrow({
+      userName: who, account: token.player || who, results, modifiers: [], color: LOG_COLOR, total: l.value, historyString: l.line,
+      ...(l.board ? { board: boardOf(l.board) } : { quiet: true }),
+    }));
+  }
+  if (hpChanged || listChanged) {
+    emitUpdate();
+    if (token.player) {
+      io.emit('sheetUpdated', { username: token.player });
+      if (listChanged) await require('../sheets/conditionsOnSheet').syncConditionsOnSheet(db, { username: token.player, io, runtime });
+    }
+  }
+};
+
+/** What a system's rolls read: its names, its health, its definition. */
+const tableOf = (runtime, system) => {
+  const definition = runtime.definitionOf(system);
+  const labels = definition ? namesOf(definition) : new Map();
+  const health = runtime.health(system);
+  return {
+    definition,
+    names: { known: (n) => labels.has(n), refused: (n) => `@${n} isn't one of this system's names` },
+    pooled: runtime.partIn(system, 'token_health') && (!health || health.model === 'pool'),
+  };
+};
+
+/**
+ * `moments` fired on a scene (8a9a): every combatant's conditions doing what they do, one after another, in the log. Rolled by
+ * the table at once; rolled by the player (the GM for an NPC) asked of them, kept till rolled (8a9a2). `runtime` the running
+ * systems (systemBuilder/runtime.js); `emitUpdate` redraws the map; `sceneKey` the scene the asks belong to. Resolves when
+ * all are done.
+ */
+const fireTurnMoments = async (db, { io, emitUpdate = () => {}, runtime, system, sceneKey = null, moments, rng = cryptoRng }) => {
   if (!system || !Array.isArray(moments) || !moments.length) return;
   const offered = runtime.conditionsIn(system);
   if (!offered.some((c) => c.ends === 'next_turn' || (Array.isArray(c.each_turn) && c.each_turn.length))) return;
   const setting = await get(db, 'SELECT value FROM global_settings WHERE key = ?', [TURN_EFFECTS_SETTING]).catch(() => null);
   const rolls = !(setting && setting.value === '0');
-  const definition = runtime.definitionOf(system);
-  const labels = definition ? namesOf(definition) : new Map();
-  const names = { known: (n) => labels.has(n), refused: (n) => `@${n} isn't one of this system's names` };
-  const health = runtime.health(system);
-  const pooled = runtime.partIn(system, 'token_health') && (!health || health.model === 'pool');
-  const { syncConditionsOnSheet } = require('../sheets/conditionsOnSheet');
+  const { definition, names, pooled } = tableOf(runtime, system);
+  const scenes = await scenesOfCombatants(db);
+  let asked = false;
 
   for (const { when, ids } of moments) {
     for (const id of ids) {
       const token = await tokenOf(db, id);
       if (!token) continue;
-      const who = `${String(token.row.name || token.player || 'TOKEN').toUpperCase()}${token.player ? '' : ' (NPC)'}`;
+      const who = whoOf(token);
+      const where = (scenes.get(id) || []).length > 1 && sceneKey ? await sceneName(db, sceneKey) : null;
       let list = parseTokenConditions(token.row.conditions);
       let pool = pooled ? { current: token.row.hp_current, max: token.row.hp_max, temp: token.row.hp_temp } : null;
       let hpChanged = false;
@@ -166,9 +270,18 @@ const fireTurnMoments = async (db, { io, emitUpdate = () => {}, runtime, system,
       if (rolls) {
         const values = definition ? effectiveData(definition, await sheetOf(db, token, system)) : {};
         for (const { condition, effect } of effectsAt(when, list, offered)) {
-          if (effect.rolled_by !== 'table') continue;
           if (!list.some((t) => t.id === condition.id)) continue;
-          const made = rollEffect({ condition, effect, values, names, pool, who, rng });
+          if (effect.rolled_by === 'player') {
+            // Asked: of the player for their character's, of the GM for an NPC's; a newer ask in an older one's place.
+            await asksTable(db);
+            const index = condition.each_turn.indexOf(effect);
+            await run(db, 'DELETE FROM turn_asks WHERE location_id = ? AND condition_id = ? AND effect = ?', [token.row.id, condition.id, index]);
+            await run(db, 'INSERT INTO turn_asks (scene_key, location_id, player, condition_id, effect, moment) VALUES (?, ?, ?, ?, ?, ?)', [sceneKey, token.row.id, token.player, condition.id, index, when]);
+            asked = true;
+            lines.push({ line: `${who} · ${effectName(condition, effect)}, ${whenWords(effect, where)}: ${token.player ? `asked on ${who}'s sheet` : 'asked of the GM'}`, value: 0, dice: [] });
+            continue;
+          }
+          const made = rollEffect({ condition, effect, values, names, pool, who, rng, where });
           if (made.error) continue;
           if (made.hp) { pool = made.hp; hpChanged = true; }
           if (made.ends) { list = list.filter((t) => t.id !== condition.id); listChanged = true; }
@@ -181,38 +294,83 @@ const fireTurnMoments = async (db, { io, emitUpdate = () => {}, runtime, system,
         const c = offered.find((x) => x.id === ended);
         lines.push({ line: `${who} · ${String(c ? c.name : ended).toUpperCase()}: ENDED (the end of its next turn)`, value: 0, dice: [] });
       }
-
-      if (hpChanged) {
-        const sql = token.player
-          ? ["UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE shape = 'rhombus' AND owner = ?", [pool.current, pool.max, pool.temp, token.player]]
-          : ['UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE id = ?', [pool.current, pool.max, pool.temp, token.row.id]];
-        await run(db, sql[0], sql[1]);
-      }
-      if (listChanged) {
-        const json = JSON.stringify(list);
-        const sql = token.player
-          ? ["UPDATE locations SET conditions = ? WHERE shape = 'rhombus' AND owner = ?", [json, token.player]]
-          : ['UPDATE locations SET conditions = ? WHERE id = ?', [json, token.row.id]];
-        await run(db, sql[0], sql[1]);
-      }
-      for (const l of lines) {
-        const results = {};
-        for (const d of l.dice) results[d.sides] = [...(results[d.sides] || []), ...d.rolls];
-        await run(db, 'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)', [token.player || who, l.value, JSON.stringify(results), LOG_COLOR, l.line]);
-        io.emit('diceRollBroadcast', withThrow({
-          userName: who, account: token.player || who, results, modifiers: [], color: LOG_COLOR, total: l.value, historyString: l.line,
-          ...(l.board ? { board: boardOf(l.board) } : { quiet: true }),
-        }));
-      }
-      if (hpChanged || listChanged) {
-        emitUpdate();
-        if (token.player) {
-          io.emit('sheetUpdated', { username: token.player });
-          if (listChanged) await syncConditionsOnSheet(db, { username: token.player, io, runtime });
-        }
-      }
+      await settle(db, { io, emitUpdate, runtime }, token, { pool, hpChanged, list, listChanged, lines });
     }
   }
+  if (asked) io.emit('turnAsksChanged');
 };
 
-module.exports = { TURN_EFFECTS_SETTING, WHEN_WORDS, momentsOfNext, momentsOfBegin, effectsAt, nextTurnStep, rollEffect, fireTurnMoments };
+/**
+ * The asks waiting (8a9a2), each with what it is: every one for the GM, a player's own for them. One whose token is gone, or
+ * no longer has the condition or its EACH TURN, is let go.
+ */
+const asksFor = async (db, { runtime, system, username = null, gm = false }) => {
+  await asksTable(db);
+  const rows = await all(db, 'SELECT * FROM turn_asks ORDER BY id');
+  const offered = new Map((system ? runtime.conditionsIn(system) : []).map((c) => [c.id, c]));
+  const out = [];
+  for (const a of rows) {
+    const token = await tokenById(db, a.location_id);
+    const condition = offered.get(a.condition_id);
+    const effect = condition && Array.isArray(condition.each_turn) ? condition.each_turn[a.effect] : null;
+    if (!token || !effect || effect.rolled_by !== 'player' || !parseTokenConditions(token.row.conditions).some((t) => t.id === a.condition_id)) {
+      await run(db, 'DELETE FROM turn_asks WHERE id = ?', [a.id]);
+      continue;
+    }
+    if (!gm && a.player !== username) continue;
+    out.push({
+      id: a.id, sceneKey: a.scene_key, locationId: a.location_id, player: a.player, who: whoOf(token),
+      condition: { id: condition.id, name: condition.name, short: condition.short, icon: condition.icon },
+      effect, moment: a.moment, says: `${effectName(condition, effect)}, ${WHEN_WORDS[effect.when]}: ${effect.roll}${effect.does === 'roll_to_end' ? `, ${effect.ends_on} or more ends it` : ''}`,
+    });
+  }
+  return out;
+};
+
+/**
+ * An ask rolled (8a9a2): by the player it was asked of, or the GM (for an NPC's, the GM alone), as the table would have rolled
+ * it, written and said "rolled by KES" or "rolled by the GM". `{ ok: true, line }`, or `{ ok: false, error }` in words.
+ */
+const rollAsk = async (db, { io, emitUpdate = () => {}, runtime, system, id, username, gm = false, rng = cryptoRng }) => {
+  await asksTable(db);
+  const ask = await get(db, 'SELECT * FROM turn_asks WHERE id = ?', [id]);
+  if (!ask) return { ok: false, error: 'That roll isn\'t waiting any more' };
+  const token = await tokenById(db, ask.location_id);
+  if (!gm && (!ask.player || ask.player !== username)) {
+    return { ok: false, error: ask.player ? `Only ${token ? whoOf(token) : ask.player} or the GM rolls that` : 'The GM rolls for an NPC' };
+  }
+  const condition = (system ? runtime.conditionsIn(system) : []).find((c) => c.id === ask.condition_id);
+  const effect = condition && Array.isArray(condition.each_turn) ? condition.each_turn[ask.effect] : null;
+  let list = token ? parseTokenConditions(token.row.conditions) : [];
+  if (!token || !effect || !list.some((t) => t.id === ask.condition_id)) {
+    await run(db, 'DELETE FROM turn_asks WHERE id = ?', [id]);
+    io.emit('turnAsksChanged');
+    return { ok: false, error: token && condition ? `${condition.name.toUpperCase()} is no longer on ${whoOf(token)}` : 'That roll isn\'t waiting any more' };
+  }
+  // Taken first, so two clicks never roll it twice.
+  const taken = await run(db, 'DELETE FROM turn_asks WHERE id = ?', [id]);
+  if (!taken.changes) return { ok: false, error: 'That roll isn\'t waiting any more' };
+  const { definition, names, pooled } = tableOf(runtime, system);
+  const values = definition ? effectiveData(definition, await sheetOf(db, token, system)) : {};
+  let pool = pooled ? { current: token.row.hp_current, max: token.row.hp_max, temp: token.row.hp_temp } : null;
+  const scenes = await scenesOfCombatants(db);
+  const combatant = token.player ? `player:${token.player}` : `npc:${token.row.id}`;
+  const where = (scenes.get(combatant) || []).length > 1 ? await sceneName(db, ask.scene_key) : null;
+  const made = rollEffect({ condition, effect, values, names, pool, who: whoOf(token), rng, by: gm ? 'the GM' : whoOf(token), where });
+  if (made.error) { io.emit('turnAsksChanged'); return { ok: false, error: made.error }; }
+  let hpChanged = false;
+  let listChanged = false;
+  if (made.hp) { pool = made.hp; hpChanged = true; }
+  if (made.ends) { list = list.filter((t) => t.id !== condition.id); listChanged = true; }
+  await settle(db, { io, emitUpdate, runtime }, token, { pool, hpChanged, list, listChanged, lines: [{ line: made.line, value: made.value, dice: made.dice, board: condition.name.toUpperCase() }] });
+  io.emit('turnAsksChanged');
+  return { ok: true, line: made.line };
+};
+
+/** A scene's asks let go when its fight ends (8a9a2). */
+const dropAsks = async (db, sceneKeys) => {
+  await asksTable(db);
+  for (const key of sceneKeys) await run(db, 'DELETE FROM turn_asks WHERE scene_key = ?', [key]);
+};
+
+module.exports = { TURN_EFFECTS_SETTING, WHEN_WORDS, momentsOfNext, momentsOfBegin, effectsAt, nextTurnStep, rollEffect, fireTurnMoments, asksFor, rollAsk, dropAsks, sceneName };
