@@ -407,14 +407,82 @@ describe('rolls landing together (found by 8i2 on CI)', () => {
     expect((await sides()).find((s) => s.id === 'npc').score).toBe(6);
   });
 
-  // A roll that sorts would sort the drag away (today's rule, said to the user); a late join keeps the order as dragged.
-  it('a drag in the order holds nothing up, and a late join straight after keeps it', async () => {
+  it('a drag in the order holds nothing up, and a roll straight after keeps it', async () => {
     await start();
     await roll(npc('Ganger', 18));
     await roll(pc('Vex', 12));
     handlers['initiative:reorder']({ sceneKey: 'city:0', fromIndex: 0, toIndex: 1 });
-    handlers['initiative:roll']({ sceneKey: 'city:0', combatant: pc('Kes', 1), appendToEnd: true });
+    handlers['initiative:roll']({ sceneKey: 'city:0', combatant: pc('Kes', 1) });
     await until(async () => (told('city:0')?.combatants || []).some((c) => c.name === 'Kes'), { label: 'Kes in', timeout: 2500 });
     expect(await order()).toEqual(['Vex', 'Ganger', 'Kes']);
+  });
+});
+
+describe('drags stand (the user, 2026-11-20: "when new users/npcs join the list stands")', () => {
+  /** A drag, waited for until everyone is told the new order. */
+  const drag = async (fromIndex, toIndex, names, more = {}) => {
+    handlers['initiative:reorder']({ sceneKey: 'city:0', fromIndex, toIndex, ...more });
+    await until(async () => JSON.stringify((told('city:0')?.combatants || []).map((c) => c.name)) === JSON.stringify(names), { label: 'dragged' });
+  };
+
+  it('a drag stands when later rolls come in around it, the roll it made still the one shown; a re-roll is a new place', async () => {
+    await start();
+    await roll(npc('Ganger', 18));
+    await roll(pc('Vex', 12));
+    await roll(pc('Kes', 7));
+    await drag(2, 0, ['Kes', 'Ganger', 'Vex']);
+    await roll(npc('Drone', 10));
+    await roll(npc('Boss', 19));
+    // Kes stands just over Ganger, where the drag put it: Drone's 10 falls under them all, Boss's 19 over them all.
+    expect(await order()).toEqual(['Boss', 'Kes', 'Ganger', 'Vex', 'Drone']);
+    expect(told('city:0').combatants.find((c) => c.name === 'Kes').score).toBe(7);
+    // Kes rolls again: placed by the new roll, the drag gone with the old one.
+    await roll(pc('Kes', 5));
+    expect(await order()).toEqual(['Boss', 'Ganger', 'Vex', 'Drone', 'Kes']);
+  });
+
+  it('a late joiner stays at the bottom when a later roll is sorted in', async () => {
+    await start();
+    await roll(pc('Vex', 12));
+    await roll(npc('Ganger', 10));
+    await roll(pc('Kes', 30), { appendToEnd: true });
+    await roll(npc('Drone', 11));
+    expect(await order()).toEqual(['Vex', 'Drone', 'Ganger', 'Kes']);
+  });
+
+  it('group style: a drag within a side stands when its side gets another roll', async () => {
+    await start('city:0', { system: 'cities_without_number', mode: 'side' });
+    await roll(pc('Vex', 6));
+    await roll(pc('Kes', 9));
+    await drag(0, 1, ['Vex', 'Kes'], { sideId: 'pc' });
+    await roll(pc('Ash', 7));
+    expect(await order()).toEqual(['Ash', 'Vex', 'Kes']);
+  });
+
+  it('Shadowrun: a pass takes the place down with the roll, so a roll after it sorts against both', async () => {
+    await start('city:0', { system: 'shadowrun_6e' });
+    await roll(pc('Ace', 25));
+    await roll(pc('Bly', 15));
+    await drag(1, 0, ['Bly', 'Ace']);
+    await next();
+    await next();
+    expect(told('city:0').combatants.map((c) => [c.name, c.score])).toEqual([['Bly', 5], ['Ace', 15]]);
+    // Bly stands at 16 now, not the 26 it was dragged to: Cid's 20 goes over it.
+    await roll(pc('Cid', 20));
+    expect(await order()).toEqual(['Cid', 'Bly', 'Ace']);
+  });
+});
+
+describe('a roll brings no place of its own', () => {
+  it('a roll that comes with a place (an old copy of the order, a doctored screen) is placed by its roll, in either style', async () => {
+    await start();
+    await roll(npc('Ganger', 18));
+    await roll(pc('Vex', 4, { place: 99 }));
+    expect(await order()).toEqual(['Ganger', 'Vex']);
+    expect(JSON.parse((await scene()).combatants).find((c) => c.name === 'Vex')).not.toHaveProperty('place');
+    await start('7:0', { system: 'cities_without_number', mode: 'side' });
+    await roll(pc('Kes', 9), { key: '7:0' });
+    await roll(pc('Ash', 3, { place: 99 }), { key: '7:0' });
+    expect(await order('7:0')).toEqual(['Kes', 'Ash']);
   });
 });

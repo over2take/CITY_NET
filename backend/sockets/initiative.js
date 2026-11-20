@@ -1,4 +1,5 @@
 const { sceneQueue } = require('./sceneQueue');
+const { placeOf, keepDrag, atBottom, lowered } = require('./initiativeOrder');
 const { cryptoRng } = require('../utils/random');
 const { withThrow, boardOf } = require('../utils/diceThrow');
 const customSystems = require('../systemBuilder/runtime');
@@ -256,16 +257,18 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
           const mode = row.mode || 'individual';
           const list = JSON.parse(row.combatants || '[]');
           const filtered = list.filter((c) => c.id !== combatant.id);
+          // A roll, or a re-roll, is a new place: a place a drag gave the old one goes with it (initiativeOrder.js).
+          const { place: _oldPlace, ...rolled } = combatant;
 
           if (mode === 'side') {
             // Slot into the correct side; PCs go to 'pc', NPCs go to 'npc'
             const sideId = (combatant.isNpc && !combatant.isFriendly) ? 'npc' : 'pc';
-            filtered.push({ ...combatant, sideId, insertOrder: Date.now() });
+            filtered.push({ ...rolled, sideId, insertOrder: Date.now() });
 
             // Sort within each side by score desc, then insertOrder
             filtered.sort((a, b) => {
               if (a.sideId !== b.sideId) return 0;
-              return b.score - a.score || a.insertOrder - b.insertOrder;
+              return placeOf(b) - placeOf(a) || a.insertOrder - b.insertOrder;
             });
 
             let sides = JSON.parse(row.sides || '[]');
@@ -297,10 +300,12 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
             );
           } else {
             // ── Individual mode (existing behaviour) ──────────────────────────
-            filtered.push({ ...combatant, insertOrder: Date.now() });
+            // Joining late: the bottom, and kept there when later rolls are sorted in.
+            const joined = { ...rolled, insertOrder: Date.now() };
+            filtered.push(appendToEnd ? atBottom(filtered, joined) : joined);
             if (!appendToEnd) {
               filtered.sort((a, b) => {
-                const scoreDiff = b.score - a.score;
+                const scoreDiff = placeOf(b) - placeOf(a);
                 if (scoreDiff !== 0) return scoreDiff;
                 if (system === 'cities_without_number') {
                   const aNpc = a.isNpc ? 1 : 0;
@@ -443,7 +448,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
 
           // End of rotation
           if (row.system === 'shadowrun_6e') {
-            const decayed = combatants.map((c) => ({ ...c, score: c.score - 10 }));
+            const decayed = combatants.map((c) => lowered(c, 10));
             const survivors = decayed.filter((c) => c.score > 0);
             const startsRound = survivors.length === 0;
             // Every pass spent, no one survives: the order empties for everyone to roll again.
@@ -558,7 +563,8 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
             const [moved] = sideMembers.splice(fromIndex, 1);
             sideMembers.splice(toIndex, 0, moved);
 
-            const newList = [...others, ...sideMembers];
+            // The drag stands when later rolls are sorted in (initiativeOrder.js).
+            const newList = [...others, ...keepDrag(sideMembers, toIndex)];
             db.run(
               `UPDATE initiative_scene SET combatants = ?, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
               [JSON.stringify(newList), sceneKey],
@@ -582,7 +588,8 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
             db.run(
               `UPDATE initiative_scene SET combatants = ?, updated_at = CURRENT_TIMESTAMP
                WHERE scene_key = ?`,
-              [JSON.stringify(list), sceneKey],
+              // The drag stands when later rolls are sorted in (initiativeOrder.js).
+              [JSON.stringify(keepDrag(list, toIndex)), sceneKey],
               (err) => { done(); if (!err) broadcastScene(io, db, sceneKey); }
             );
           }
