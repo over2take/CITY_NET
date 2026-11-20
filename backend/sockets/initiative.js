@@ -3,7 +3,7 @@ const { withThrow, boardOf } = require('../utils/diceThrow');
 const customSystems = require('../systemBuilder/runtime');
 const { tickCombat, combatTokens } = require('../tokens/conditions');
 const { syncConditionsOnSheet } = require('../sheets/conditionsOnSheet');
-const { momentsOfNext, momentsOfBegin, fireTurnMoments } = require('../tokens/turnEffects');
+const { momentsOfNext, momentsOfBegin, fireTurnMoments, dropAsks } = require('../tokens/turnEffects');
 
 /** A custom system's own word for initiative in the dice log; today's text for the rest. */
 const initiativeWord = (system) => customSystems.wordIn(system, 'initiative', 'singular', 'INITIATIVE').toUpperCase();
@@ -87,12 +87,12 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
    * A condition's EACH TURN (8a9a, tokens/turnEffects.js): `moments` fired on the running game's tokens. Those up to END OF
    * ROUND first; the rounds count down (`round`, a new round's combatants) between; then START OF ROUND and the next turn.
    */
-  const fire = (moments, round = null) => {
+  const fire = (sceneKey, moments, round = null) => {
     const before = moments.filter((m) => m.when === 'turn_end' || m.when === 'round_end');
     const after = moments.filter((m) => m.when === 'round_start' || m.when === 'turn_start');
     db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (gErr, gRow) => {
       const system = !gErr && gRow ? gRow.value : null;
-      const go = (list) => fireTurnMoments(db, { io, emitUpdate, runtime: customSystems, system, moments: list })
+      const go = (list) => fireTurnMoments(db, { io, emitUpdate, runtime: customSystems, system, sceneKey, moments: list })
         .catch((e) => console.error('[initiative] Condition turn effects:', e.message));
       go(before).then(() => (round ? new Promise((done) => newRound(round, done)) : null)).then(() => go(after));
     });
@@ -398,7 +398,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
               (err) => {
                 if (err) return;
                 // Its side's turn ending, the next's beginning, and the round's where it came round (8a9a).
-                fire(momentsOfNext({ mode: 'side', before: sideCombatants, sides, from: row.turn_index, to: newTurnIndex, wrapped }), wrapped ? sideCombatants : null);
+                fire(sceneKey, momentsOfNext({ mode: 'side', before: sideCombatants, sides, from: row.turn_index, to: newTurnIndex, wrapped }), wrapped ? sideCombatants : null);
                 if (wrapped) {
                   db.run(
                     `UPDATE initiative_scene SET turn_counter = turn_counter + 1 WHERE scene_key = ?`,
@@ -427,7 +427,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
               [newTurnIndex, sceneKey],
               (err) => {
                 if (err) return;
-                fire(momentsOfNext({ before: combatants, from: row.turn_index, to: newTurnIndex, wrapped: false }));
+                fire(sceneKey, momentsOfNext({ before: combatants, from: row.turn_index, to: newTurnIndex, wrapped: false }));
                 broadcastScene(io, db, sceneKey);
               }
             );
@@ -443,7 +443,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
             const nextCombatants = survivors;
             // Shadowrun's round ends when every pass is spent, not when a pass ends (8a9a: a pass's turns are turns). Then
             // everyone rolls again, so the new round's start waits on BEGIN.
-            fire(momentsOfNext({ before: combatants, after: nextCombatants, from: row.turn_index, to: 0, wrapped: true, roundEnds: startsRound }), startsRound ? combatants : null);
+            fire(sceneKey, momentsOfNext({ before: combatants, after: nextCombatants, from: row.turn_index, to: 0, wrapped: true, roundEnds: startsRound }), startsRound ? combatants : null);
 
             db.run(
               `UPDATE initiative_scene SET combatants = ?, turn_index = 0, begun = ?, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
@@ -458,7 +458,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
               }
             );
           } else {
-            fire(momentsOfNext({ before: combatants, from: row.turn_index, to: 0, wrapped: true }), combatants);
+            fire(sceneKey, momentsOfNext({ before: combatants, from: row.turn_index, to: 0, wrapped: true }), combatants);
             db.run(
               `UPDATE initiative_scene SET turn_index = 0, begun = 1, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
               [sceneKey],
@@ -486,7 +486,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
         db.run(`UPDATE initiative_scene SET begun = 1 WHERE scene_key = ? AND begun = 0`, [sceneKey], function (e) {
           if (e || !this.changes) return;
           const mode = row.mode || 'individual';
-          fire(momentsOfBegin({ mode, combatants: JSON.parse(row.combatants || '[]'), sides: sortSides(JSON.parse(row.sides || '[]')), index: row.turn_index }));
+          fire(sceneKey, momentsOfBegin({ mode, combatants: JSON.parse(row.combatants || '[]'), sides: sortSides(JSON.parse(row.sides || '[]')), index: row.turn_index }));
           broadcastScene(io, db, sceneKey);
         });
       });
@@ -600,6 +600,8 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
           db.run(`DELETE FROM initiative_scene WHERE combat_id = ?`, [combatId], (delErr) => {
             if (delErr) return;
             rows.forEach((r) => io.emit('initiative:ended', { sceneKey: r.scene_key }));
+            // Its rolls asked and not yet rolled go with it (8a9a2).
+            dropAsks(db, rows.map((r) => r.scene_key)).then(() => io.emit('turnAsksChanged'), () => {});
             db.run(`DELETE FROM initiative_combat WHERE id = ?`, [combatId]);
           });
         }
@@ -619,6 +621,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
 
           db.run(`DELETE FROM initiative_scene WHERE scene_key = ?`, [sceneKey], () => {
             io.emit('initiative:ended', { sceneKey });
+            dropAsks(db, [sceneKey]).then(() => io.emit('turnAsksChanged'), () => {});
 
             db.get(
               `SELECT COUNT(*) as cnt FROM initiative_scene WHERE combat_id = ?`,

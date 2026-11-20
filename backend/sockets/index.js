@@ -7,6 +7,7 @@ const { cryptoRng } = require('../utils/random');
 const { withThrow, boardOf } = require('../utils/diceThrow');
 const { registerInitiativeHandlers } = require('./initiative');
 const { registerChoicesHandlers } = require('./choices');
+const { registerTurnAskHandlers } = require('./turnAsks');
 const sheetTemplates = require('../sheets/templates');
 const { mutateSheet, mutateSheetForUser, patchSheet, setAfterWrite } = require('../sheets/mutate');
 const { bandConditionHook } = require('../sheets/bandConditions');
@@ -1358,6 +1359,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
     // Picking on a custom system's sheet (7a3a): who may do what is systemBuilder/picking.js's.
     registerChoicesHandlers(socket, { io, db, userSockets, isAdminSocket, getGameSystem, getShopSystem, withMoney, sendBankUpdate });
+    // A condition's EACH TURN rolled by the player, or the GM for an NPC (8a9a2).
+    registerTurnAskHandlers(socket, { io, db, userSockets, isAdminSocket, getGameSystem, emitUpdate });
 
     socket.on('updateSheetField', (payload) => {
       const info = userSockets.get(socket.id);

@@ -15,7 +15,8 @@ const { checkDefinition } = require_('../systemBuilder/definition');
 const { conditionsOf } = require_('../systemBuilder/conditions');
 const { checkTokenConditions, parseTokenConditions } = require_('../tokens/conditions');
 const { poolAfter } = require_('../tokens/poolHealth');
-const { momentsOfNext, momentsOfBegin, effectsAt, nextTurnStep, rollEffect, TURN_EFFECTS_SETTING } = require_('../tokens/turnEffects');
+const { momentsOfNext, momentsOfBegin, effectsAt, nextTurnStep, rollEffect, TURN_EFFECTS_SETTING, asksFor, rollAsk, sceneName } = require_('../tokens/turnEffects');
+const { registerTurnAskHandlers } = require_('../sockets/turnAsks');
 const runtime = require_('../systemBuilder/runtime');
 const mod = await import('../sockets/initiative.js');
 const registerInitiativeHandlers = mod.registerInitiativeHandlers || mod.default.registerInitiativeHandlers;
@@ -219,14 +220,18 @@ describe('at the table', () => {
     expect(emitted.find((e) => e.event === 'diceRollBroadcast' && /BURNING/.test(e.data.historyString)).data).toMatchObject({ total: 2, board: { label: 'BURNING' } });
   });
 
-  it('ROLL TO END reads the character\'s sheet and takes it off; a player\'s rolled by them waits for 8a9a2', async () => {
+  it('ROLL TO END reads the character\'s sheet and takes it off; one rolled by the player is asked of them (8a9a2)', async () => {
     const kes = await token('KES', 'rhombus', 'kes', [{ id: 'cursed' }, { id: 'poisoned' }]);
     await scene({ combatants: [{ id: 'player:kes' }, { id: 'player:vex' }] });
     handlers['initiative:next']({ sceneKey: 'main' });
-    // The condition comes off, then the line is written: waited for both.
-    await until(async () => !(await on(kes)).includes('cursed') && (await lines()).length === 1, { label: 'cursed off, and said' });
-    expect(await lines()).toEqual(['KES · CURSED SAVE, END OF ITS TURN · rolled by the table: @con_mod → 3 vs 3 · CURSED OFF']);
+    // The condition comes off, then the lines are written: waited for both.
+    await until(async () => !(await on(kes)).includes('cursed') && (await lines()).length === 2, { label: 'cursed off, and said' });
+    expect(await lines()).toEqual([
+      'KES · CURSED SAVE, END OF ITS TURN · rolled by the table: @con_mod → 3 vs 3 · CURSED OFF',
+      'KES · POISONED SAVE, END OF ITS TURN: asked on KES\'s sheet',
+    ]);
     expect(await on(kes)).toEqual(['poisoned']);
+    expect(emitted.some((e) => e.event === 'turnAsksChanged')).toBe(true);
   });
 
   it('the round wrapping: END OF ROUND, the countdown, START OF ROUND, then the first\'s turn', async () => {
@@ -328,5 +333,201 @@ describe('the system file', () => {
     expect(read.fatal).toBeFalsy();
     expect(read.problems).toEqual([]);
     expect(read.file.definition.conditions).toEqual(TURNS.conditions);
+  });
+});
+
+describe('a roll asked of the player, or the GM for an NPC (8a9a2)', () => {
+  const ID = 'sys_asksasksasksasksa';
+  const ASKS = { ...TURNS, name: 'Asks', conditions: { ...TURNS.conditions,
+    poisoned: { each_turn: [{ when: 'turn_end', does: 'roll_to_end', roll: '@con_mod', ends_on: 3, rolled_by: 'player' }] },
+    burning: { name: 'Burning', each_turn: [{ when: 'turn_start', does: 'damage', roll: '2', rolled_by: 'player' }] } } };
+  let db;
+  let emitted;
+  let handlers;
+  const io = { emit: (event, data) => emitted.push({ event, data }), on: () => {}, to: () => ({ emit: () => {} }) };
+  const lines = () => new Promise((ok) => db.all('SELECT historyString FROM dice_rolls ORDER BY id', (e, rows) => ok((rows || []).map((r) => r.historyString))));
+  const on = async (id) => parseTokenConditions((await get(db, 'SELECT conditions FROM locations WHERE id = ?', [id])).conditions).map((c) => c.id);
+  const hp = async (id) => (await get(db, 'SELECT hp_current FROM locations WHERE id = ?', [id])).hp_current;
+  const token = async (name, shape, owner, conditions) => (await run(db,
+    'INSERT INTO locations (name, x, y, z, shape, owner, hp_current, hp_max, hp_temp, conditions) VALUES (?, 0, 0, 0, ?, ?, 10, 12, 0, ?)',
+    [name, shape, owner, JSON.stringify(conditions)])).lastID;
+  const scene = async (key, combatants, turnIndex = 0) => {
+    const combat = (await run(db, "INSERT INTO initiative_combat (system, mode) VALUES (?, 'individual')", [ID])).lastID;
+    await run(db, 'INSERT INTO initiative_scene (scene_key, combat_id, combatants, sides, turn_index, begun) VALUES (?, ?, ?, \'[]\', ?, 1)', [key, combat, JSON.stringify(combatants), turnIndex]);
+  };
+  const asks = (who) => asksFor(db, { runtime, system: ID, ...who });
+  const fired = async (n) => until(async () => (await lines()).length === n, { label: `${n} lines` });
+
+  beforeEach(async () => {
+    db = await makeTestDb();
+    await run(db, `CREATE TABLE IF NOT EXISTS initiative_combat (id INTEGER PRIMARY KEY AUTOINCREMENT, turn_counter INTEGER DEFAULT 1,
+      pass_counter INTEGER DEFAULT 1, system TEXT DEFAULT 'generic', mode TEXT DEFAULT 'individual', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+    await run(db, `CREATE TABLE IF NOT EXISTS initiative_scene (scene_key TEXT PRIMARY KEY, combat_id INTEGER NOT NULL, combatants TEXT NOT NULL DEFAULT '[]',
+      sides TEXT NOT NULL DEFAULT '[]', turn_index INTEGER DEFAULT 0, turn_counter INTEGER DEFAULT 1, pass_counter INTEGER DEFAULT 1, begun INTEGER DEFAULT 0, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+    await run(db, `CREATE TABLE IF NOT EXISTS dice_rolls (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, total INTEGER, results TEXT, color TEXT, historyString TEXT,
+      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+    await run(db, 'CREATE TABLE IF NOT EXISTS battle_maps (id INTEGER PRIMARY KEY AUTOINCREMENT, location_id INTEGER, designation TEXT, order_index INTEGER, image_url TEXT)');
+    const def = JSON.stringify(ASKS);
+    await run(db, 'INSERT INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 1)', [ID, 'Asks', def, def]);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    await run(db, "INSERT INTO global_settings (key, value) VALUES ('game_system', ?)", [ID]);
+    await run(db, "INSERT INTO character_sheets (username, system, data, is_npc) VALUES ('kes', ?, ?, 0)", [ID, JSON.stringify({ name: 'Kes', con_mod: 3 })]);
+    emitted = [];
+    let connect;
+    registerInitiativeHandlers({ ...io, on: (e, cb) => { if (e === 'connection') connect = cb; } }, db, { emitUpdate: () => emitted.push({ event: 'update' }) });
+    handlers = {};
+    connect({ id: 'gm', on: (e, fn) => { handlers[e] = fn; }, emit: () => {}, use: () => {}, join: () => {} });
+  });
+
+  it('asked: one line saying so, the ask kept for that player alone, all of them for the GM', async () => {
+    const kes = await token('KES', 'rhombus', 'kes', [{ id: 'poisoned' }]);
+    const ganger = await token('GANGER', 'enemy_rhombus', 'gm', [{ id: 'poisoned' }]);
+    await scene('main', [{ id: 'player:kes' }, { id: `npc:${ganger}` }, { id: 'player:vex' }]);
+    handlers['initiative:next']({ sceneKey: 'main' });
+    await fired(1);
+    handlers['initiative:next']({ sceneKey: 'main' });
+    await fired(2);
+    expect(await lines()).toEqual(['KES · POISONED SAVE, END OF ITS TURN: asked on KES\'s sheet', 'GANGER (NPC) · POISONED SAVE, END OF ITS TURN: asked of the GM']);
+    const kesAsks = await asks({ username: 'kes' });
+    expect(kesAsks).toEqual([expect.objectContaining({ sceneKey: 'main', locationId: kes, player: 'kes', who: 'KES', moment: 'turn_end',
+      condition: expect.objectContaining({ id: 'poisoned', name: 'Poisoned' }), says: 'POISONED SAVE, END OF ITS TURN: @con_mod, 3 or more ends it' })]);
+    expect(await asks({ username: 'vex' })).toEqual([]);
+    expect((await asks({ gm: true })).map((a) => a.who)).toEqual(['KES', 'GANGER (NPC)']);
+    // Nothing rolled yet: both still on.
+    expect(await on(kes)).toEqual(['poisoned']);
+  });
+
+  it('rolled by the player: as the table would, said "rolled by KES", the ask gone; twice, nothing more', async () => {
+    const kes = await token('KES', 'rhombus', 'kes', [{ id: 'poisoned' }, { id: 'burning' }]);
+    await scene('main', [{ id: 'player:vex' }, { id: 'player:kes' }]);
+    handlers['initiative:next']({ sceneKey: 'main' });
+    await fired(1);
+    const [burn] = await asks({ username: 'kes' });
+    expect(burn.condition.id).toBe('burning');
+    expect(await rollAsk(db, { io, runtime, system: ID, id: burn.id, username: 'kes' }))
+      .toEqual({ ok: true, line: 'KES · BURNING, START OF ITS TURN · rolled by KES: 2 → 2 DAMAGE · HP 10 → 8' });
+    expect(await hp(kes)).toBe(8);
+    expect((await lines())[1]).toBe('KES · BURNING, START OF ITS TURN · rolled by KES: 2 → 2 DAMAGE · HP 10 → 8');
+    expect(await asks({ username: 'kes' })).toEqual([]);
+    expect(await rollAsk(db, { io, runtime, system: ID, id: burn.id, username: 'kes' })).toEqual({ ok: false, error: 'That roll isn\'t waiting any more' });
+    expect(await hp(kes)).toBe(8);
+    expect(emitted.filter((e) => e.event === 'turnAsksChanged').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('two clicks at once roll it once', async () => {
+    const kes = await token('KES', 'rhombus', 'kes', [{ id: 'burning' }]);
+    await scene('main', [{ id: 'player:vex' }, { id: 'player:kes' }]);
+    handlers['initiative:next']({ sceneKey: 'main' });
+    await fired(1);
+    const [burn] = await asks({ username: 'kes' });
+    const both = await Promise.all([1, 2].map(() => rollAsk(db, { io, runtime, system: ID, id: burn.id, username: 'kes' })));
+    expect(both.filter((r) => r.ok)).toHaveLength(1);
+    expect(both.filter((r) => !r.ok)).toEqual([{ ok: false, error: 'That roll isn\'t waiting any more' }]);
+    expect(await hp(kes)).toBe(8);
+  });
+
+  it('who may roll: the player their own, the GM any (said "rolled by the GM"), an NPC\'s the GM alone', async () => {
+    const kes = await token('KES', 'rhombus', 'kes', [{ id: 'poisoned' }]);
+    const ganger = await token('GANGER', 'enemy_rhombus', 'gm', [{ id: 'poisoned' }]);
+    await scene('main', [{ id: 'player:kes' }, { id: `npc:${ganger}` }, { id: 'player:vex' }]);
+    handlers['initiative:next']({ sceneKey: 'main' });
+    await fired(1);
+    handlers['initiative:next']({ sceneKey: 'main' });
+    await fired(2);
+    const [mine, npcs] = await asks({ gm: true });
+    expect(await rollAsk(db, { io, runtime, system: ID, id: mine.id, username: 'vex' })).toEqual({ ok: false, error: 'Only KES or the GM rolls that' });
+    expect(await rollAsk(db, { io, runtime, system: ID, id: npcs.id, username: 'kes' })).toEqual({ ok: false, error: 'The GM rolls for an NPC' });
+    // The GM rolls Kes's for them: CON 3 makes 3, POISONED off.
+    expect(await rollAsk(db, { io, runtime, system: ID, id: mine.id, username: 'gm', gm: true }))
+      .toEqual({ ok: true, line: 'KES · POISONED SAVE, END OF ITS TURN · rolled by the GM: @con_mod → 3 vs 3 · POISONED OFF' });
+    expect(await on(kes)).toEqual([]);
+    // The NPC's: no sheet, 0, stays on.
+    expect((await rollAsk(db, { io, runtime, system: ID, id: npcs.id, username: 'gm', gm: true })).line)
+      .toBe('GANGER (NPC) · POISONED SAVE, END OF ITS TURN · rolled by the GM: @con_mod → 0 vs 3 · stays on');
+    expect(await on(ganger)).toEqual(['poisoned']);
+  });
+
+  it('let go: when the condition comes off first, a newer turn\'s in its place, the fight ended, the switch off', async () => {
+    const kes = await token('KES', 'rhombus', 'kes', [{ id: 'poisoned' }]);
+    await scene('main', [{ id: 'player:kes' }]);
+    handlers['initiative:next']({ sceneKey: 'main' });
+    await fired(1);
+    // Round again: one ask, the newer.
+    handlers['initiative:next']({ sceneKey: 'main' });
+    await fired(2);
+    const waiting = await asks({ gm: true });
+    expect(waiting).toHaveLength(1);
+    // Taken off by hand: let go, and rolling it says why.
+    await run(db, "UPDATE locations SET conditions = '[]' WHERE id = ?", [kes]);
+    expect(await rollAsk(db, { io, runtime, system: ID, id: waiting[0].id, username: 'kes' })).toEqual({ ok: false, error: 'POISONED is no longer on KES' });
+    await run(db, `UPDATE locations SET conditions = '[{"id":"poisoned"}]' WHERE id = ?`, [kes]);
+    handlers['initiative:next']({ sceneKey: 'main' });
+    await fired(3);
+    expect(await asks({ gm: true })).toHaveLength(1);
+    await run(db, "UPDATE locations SET conditions = '[]' WHERE id = ?", [kes]);
+    expect(await asks({ gm: true })).toEqual([]);
+    // The fight ended: its asks with it.
+    await run(db, `UPDATE locations SET conditions = '[{"id":"poisoned"}]' WHERE id = ?`, [kes]);
+    handlers['initiative:next']({ sceneKey: 'main' });
+    await fired(4);
+    expect(await asks({ gm: true })).toHaveLength(1);
+    handlers['initiative:end']({ sceneKey: 'main' });
+    await until(async () => (await asks({ gm: true })).length === 0, { label: 'let go with the fight' });
+    // The table's switch off: nothing asked.
+    await run(db, 'INSERT INTO global_settings (key, value) VALUES (?, \'0\')', [TURN_EFFECTS_SETTING]);
+    await scene('main', [{ id: 'player:kes' }]);
+    handlers['initiative:next']({ sceneKey: 'main' });
+    await until(async () => (await get(db, "SELECT turn_counter FROM initiative_scene WHERE scene_key = 'main'")).turn_counter === 2, { label: 'round on' });
+    await drain(db);
+    expect(await asks({ gm: true })).toEqual([]);
+  });
+
+  it('over the socket: a player asks for theirs and rolls one, answered; the GM sees all', async () => {
+    await token('KES', 'rhombus', 'kes', [{ id: 'poisoned' }]);
+    const ganger = await token('GANGER', 'enemy_rhombus', 'gm', [{ id: 'poisoned' }]);
+    await scene('main', [{ id: 'player:kes' }, { id: `npc:${ganger}` }, { id: 'player:vex' }]);
+    handlers['initiative:next']({ sceneKey: 'main' });
+    await fired(1);
+    handlers['initiative:next']({ sceneKey: 'main' });
+    await fired(2);
+    const users = new Map([['s-kes', { userName: 'kes', isAdmin: false }], ['s-gm', { userName: 'gm', isAdmin: true }]]);
+    const connectAs = (sid) => {
+      const h = {}; const sent = [];
+      registerTurnAskHandlers({ id: sid, on: (e, fn) => { h[e] = fn; }, emit: (e, d) => sent.push({ event: e, data: d }) },
+        { io, db, userSockets: users, isAdminSocket: (s) => !!users.get(s.id)?.isAdmin, getGameSystem: (cb) => cb(null, ID) });
+      return { h, sent };
+    };
+    const kes = connectAs('s-kes');
+    kes.h.requestTurnAsks();
+    await until(async () => kes.sent.some((e) => e.event === 'turnAsks'), { label: 'listed' });
+    // Kes's own, never the NPC's.
+    const listed = kes.sent.find((e) => e.event === 'turnAsks').data;
+    expect(listed.map((a) => a.who)).toEqual(['KES']);
+    const [ask] = listed;
+    const gm = connectAs('s-gm');
+    gm.h.requestTurnAsks();
+    await until(async () => gm.sent.some((e) => e.event === 'turnAsks'), { label: 'GM listed' });
+    expect(gm.sent.find((e) => e.event === 'turnAsks').data).toHaveLength(2);
+    const answer = await new Promise((done) => kes.h.turnRoll({ id: ask.id }, done));
+    expect(answer).toEqual({ ok: true, line: 'KES · POISONED SAVE, END OF ITS TURN · rolled by KES: @con_mod → 3 vs 3 · POISONED OFF' });
+    expect(await new Promise((done) => kes.h.turnRoll({}, done))).toEqual({ ok: false, error: 'Which roll?' });
+    const stranger = { h: {} };
+    registerTurnAskHandlers({ id: 's-none', on: (e, fn) => { stranger.h[e] = fn; }, emit: () => {} }, { io, db, userSockets: users, isAdminSocket: () => false, getGameSystem: (cb) => cb(null, ID) });
+    expect(await new Promise((done) => stranger.h.turnRoll({ id: 1 }, done))).toEqual({ ok: false, error: 'Sign in first' });
+  });
+
+  it('a token in two fights: the log says which scene, by name', async () => {
+    const plaza = (await run(db, "INSERT INTO locations (name, x, y, z, shape) VALUES ('Neon Plaza', 0, 0, 0, 'box')")).lastID;
+    await run(db, "INSERT INTO battle_maps (location_id, designation, order_index) VALUES (?, 'Ground', 0), (?, 'Roof', 1)", [plaza, plaza]);
+    await token('KES', 'rhombus', 'kes', [{ id: 'cursed' }]);
+    await scene('city:0', [{ id: 'player:kes' }, { id: 'player:vex' }]);
+    await scene(`${plaza}:1`, [{ id: 'player:kes' }]);
+    handlers['initiative:next']({ sceneKey: 'city:0' });
+    await fired(1);
+    expect(await lines()).toEqual(['KES · CURSED SAVE, END OF ITS TURN in CITY MAP · rolled by the table: @con_mod → 3 vs 3 · CURSED OFF']);
+    expect(await sceneName(db, `${plaza}:1`)).toBe('NEON PLAZA — ROOF');
+    expect(await sceneName(db, `building:${plaza}`)).toBe('NEON PLAZA');
+    expect(await sceneName(db, `${plaza}:7`)).toBe('NEON PLAZA');
+    expect(await sceneName(db, 'odd')).toBe('odd');
   });
 });
