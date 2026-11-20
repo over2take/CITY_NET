@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
   STANDARD, LIMITS, conditionList, conditionsOf, conditionCount, withCondition, withNewCondition, withoutCondition,
-  modifierTargets, shortFrom, onAllRolls, amountFrom, withModifier,
+  modifierTargets, shortFrom, onAllRolls, amountFrom, withModifier, withEachTurn, eachTurnWords, rollNamed, NEW_EACH_TURN, WHENS, DOES, type EachTurn,
 } from '../conditions';
 import type { Definition } from '../systemsApi';
 
@@ -64,6 +64,11 @@ describe('the standard set and what the game offers', () => {
       { ...H, conditions: { nameless: { icon: 'bolt' }, prone: { name: '  ', short: 'down' }, stunned: { rounds: 2 } } },
       // A way and APPLIED (8a5e1): ADD said by nothing, a formula amount kept, a way it doesn't know left out.
       { ...H, conditions: { slowed: { name: 'Slowed', applied: true, modifiers: [{ target: 'str', way: 'times', amount: 0.5 }, { target: 'str', way: 'add', amount: '@str' }, { target: 'str', way: 'halve', amount: 1 }] }, prone: { applied: false } } },
+      // EACH TURN and AT THE END OF ITS NEXT TURN (8a9a/b): each whole, broken ones left out, as the server reads them.
+      { ...H, conditions: { stunned: { ends: 'next_turn' }, burning: { name: 'Burning', each_turn: [
+        { when: 'turn_start', does: 'damage', roll: ' 1d4 ' }, { when: 'turn_end', does: 'roll_to_end', roll: '@str', ends_on: 12, rolled_by: 'player' },
+        { when: 'round_end', does: 'heal', roll: '2', changes_hp: false }, { when: 'dawn', does: 'damage', roll: '1' } ] },
+        prone: { each_turn: [{ when: 'turn_end', does: 'roll_to_end', roll: '1' }, { when: 'round_start', does: 'just_roll', roll: '' }] } } },
     ];
     for (const def of cases) expect(conditionsOf(def)).toEqual(server.conditionsOf(def));
   });
@@ -194,5 +199,48 @@ describe('a condition the builder doesn\'t draw yet, kept through edits (8a9a)',
     const edited = withCondition(def, 'stunned', { description: 'Seeing stars.' }) as unknown as { conditions: Record<string, Record<string, unknown>> };
     expect(edited.conditions.stunned).toEqual({ ends: 'next_turn', description: 'Seeing stars.', each_turn: [{ when: 'turn_end', does: 'just_roll', roll: '1d6' }] });
     expect(conditionsOf(def).find((c) => c.id === 'stunned')!.ends).toBe('next_turn');
+  });
+});
+
+describe('EACH TURN as the page changes it (8a9b)', () => {
+  it('kept tidy: ENDS ON only for a save (10 to start), CHANGES HP only for damage and healing and only when off, ROLLED BY only the player', () => {
+    const start: EachTurn = { when: 'turn_start', does: 'damage', roll: '1d4' };
+    expect(withEachTurn(start, { does: 'roll_to_end' })).toEqual({ when: 'turn_start', does: 'roll_to_end', roll: '1d4', ends_on: 10 });
+    expect(withEachTurn({ ...start, does: 'roll_to_end', ends_on: 13 }, { roll: '1d20' })).toEqual({ when: 'turn_start', does: 'roll_to_end', roll: '1d20', ends_on: 13 });
+    expect(withEachTurn({ ...start, does: 'roll_to_end', ends_on: 13 }, { does: 'heal' })).toEqual({ when: 'turn_start', does: 'heal', roll: '1d4' });
+    expect(withEachTurn(start, { changes_hp: false })).toEqual({ ...start, changes_hp: false });
+    expect(withEachTurn({ ...start, changes_hp: false }, { changes_hp: true })).toEqual(start);
+    expect(withEachTurn({ ...start, changes_hp: false }, { does: 'just_roll' })).toEqual({ ...start, does: 'just_roll' });
+    expect(withEachTurn(start, { rolled_by: 'player' })).toEqual({ ...start, rolled_by: 'player' });
+    expect(withEachTurn({ ...start, rolled_by: 'player' }, { rolled_by: 'table' })).toEqual(start);
+    expect(NEW_EACH_TURN).toEqual(start);
+  });
+
+  it('in the GM\'s words, each kind and each when', () => {
+    expect(eachTurnWords('Burning', { when: 'turn_start', does: 'damage', roll: '1d4' })).toBe('BURNING: 1d4 DAMAGE at the start of its turn, onto the token');
+    expect(eachTurnWords('Acid', { when: 'round_start', does: 'damage', roll: '2d6', changes_hp: false })).toBe('ACID: 2d6 DAMAGE at the start of the round, for the GM to apply');
+    expect(eachTurnWords('Regen', { when: 'round_end', does: 'heal', roll: '3' })).toBe('REGEN: 3 HEALED at the end of the round, onto the token');
+    expect(eachTurnWords('Poisoned', { when: 'turn_end', does: 'roll_to_end', roll: 'd20', ends_on: 13, rolled_by: 'player' }))
+      .toBe('POISONED: a save, d20, at the end of its turn, the player (the GM for an NPC) asked to roll; off on 13 or more');
+    expect(eachTurnWords('Doom', { when: 'turn_end', does: 'just_roll', roll: '1d6' })).toBe('DOOM: 1d6 rolled at the end of its turn, to the log');
+    expect(eachTurnWords(' ', { when: 'turn_end', does: 'just_roll', roll: ' ' })).toBe('IT: (nothing to roll yet) rolled at the end of its turn, to the log');
+  });
+
+  it('a roll said by the system\'s own names, one it doesn\'t have left as typed', () => {
+    const named = rollNamed(H);
+    expect(named('d20 + @str')).toBe('d20 + Strength');
+    expect(named('@save - @nope')).toBe('Physical save - @nope');
+    expect(eachTurnWords('Poisoned', { when: 'turn_end', does: 'roll_to_end', roll: 'd20 + @str', ends_on: 13 }, named)).toBe('POISONED: a save, d20 + Strength, at the end of its turn; off on 13 or more');
+  });
+
+  it('kept through any other edit, gone when emptied', () => {
+    const def = { ...H, conditions: { burning: { name: 'Burning', each_turn: [{ when: 'turn_start', does: 'damage', roll: '1d4' }] } } } as Definition;
+    expect(stored(withCondition(def, 'burning', { description: 'Hot.' }))!.burning.each_turn).toEqual([{ when: 'turn_start', does: 'damage', roll: '1d4' }]);
+    expect(stored(withCondition(def, 'burning', { each_turn: [] }))!.burning).toEqual({ name: 'Burning' });
+  });
+
+  it('the limits are the server\'s', () => {
+    expect(WHENS.map(([w]) => w)).toEqual(server.WHENS);
+    expect(DOES.map(([d]) => d)).toEqual(server.DOES);
   });
 });

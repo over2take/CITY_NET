@@ -1,3 +1,5 @@
+const { sceneQueue } = require('./sceneQueue');
+const { placeOf, keepDrag, atBottom, lowered } = require('./initiativeOrder');
 const { cryptoRng } = require('../utils/random');
 const { withThrow, boardOf } = require('../utils/diceThrow');
 const customSystems = require('../systemBuilder/runtime');
@@ -82,6 +84,9 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
     }
     then();
   });
+
+  // One scene's changes one after another, so rolls landing together aren't lost (sceneQueue.js).
+  const { inTurn } = sceneQueue();
 
   /**
    * A condition's EACH TURN (8a9a, tokens/turnEffects.js): `moments` fired on the running game's tokens. Those up to END OF
@@ -238,31 +243,32 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
     socket.on('initiative:roll', ({ sceneKey, combatant, appendToEnd }) => {
       if (!sceneKey || !combatant) return;
 
-      db.get(
+      inTurn(sceneKey, (done) => db.get(
         `SELECT s.combatants, s.sides, c.system, c.mode
          FROM initiative_scene s
          JOIN initiative_combat c ON c.id = s.combat_id
          WHERE s.scene_key = ?`,
         [sceneKey],
         (err, row) => {
-          if (err || !row) return;
           // No rolls into a combat whose system has initiative turned off.
-          if (!initiativeOn(row.system)) return;
+          if (err || !row || !initiativeOn(row.system)) return done();
 
           const system = row.system || 'generic';
           const mode = row.mode || 'individual';
           const list = JSON.parse(row.combatants || '[]');
           const filtered = list.filter((c) => c.id !== combatant.id);
+          // A roll, or a re-roll, is a new place: a place a drag gave the old one goes with it (initiativeOrder.js).
+          const { place: _oldPlace, ...rolled } = combatant;
 
           if (mode === 'side') {
             // Slot into the correct side; PCs go to 'pc', NPCs go to 'npc'
             const sideId = (combatant.isNpc && !combatant.isFriendly) ? 'npc' : 'pc';
-            filtered.push({ ...combatant, sideId, insertOrder: Date.now() });
+            filtered.push({ ...rolled, sideId, insertOrder: Date.now() });
 
             // Sort within each side by score desc, then insertOrder
             filtered.sort((a, b) => {
               if (a.sideId !== b.sideId) return 0;
-              return b.score - a.score || a.insertOrder - b.insertOrder;
+              return placeOf(b) - placeOf(a) || a.insertOrder - b.insertOrder;
             });
 
             let sides = JSON.parse(row.sides || '[]');
@@ -286,6 +292,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
                WHERE scene_key = ?`,
               [JSON.stringify(filtered), JSON.stringify(updatedSides), sceneKey],
               (err) => {
+                done();
                 if (err) return;
                 broadcastScene(io, db, sceneKey);
                 logRoll(io, db, combatant, system);
@@ -293,10 +300,12 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
             );
           } else {
             // ── Individual mode (existing behaviour) ──────────────────────────
-            filtered.push({ ...combatant, insertOrder: Date.now() });
+            // Joining late: the bottom, and kept there when later rolls are sorted in.
+            const joined = { ...rolled, insertOrder: Date.now() };
+            filtered.push(appendToEnd ? atBottom(filtered, joined) : joined);
             if (!appendToEnd) {
               filtered.sort((a, b) => {
-                const scoreDiff = b.score - a.score;
+                const scoreDiff = placeOf(b) - placeOf(a);
                 if (scoreDiff !== 0) return scoreDiff;
                 if (system === 'cities_without_number') {
                   const aNpc = a.isNpc ? 1 : 0;
@@ -312,6 +321,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
                WHERE scene_key = ?`,
               [JSON.stringify(filtered), sceneKey],
               (err) => {
+                done();
                 if (err) return;
                 broadcastScene(io, db, sceneKey);
                 logRoll(io, db, combatant, system);
@@ -319,7 +329,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
             );
           }
         }
-      );
+      ));
     });
 
     // ── Roll NPC side (side mode only) ────────────────────────────────────────
@@ -327,13 +337,12 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
     socket.on('initiative:roll_side', ({ sceneKey, score, breakdown, diceResults }) => {
       if (!sceneKey || score === undefined) return;
 
-      db.get(
+      inTurn(sceneKey, (done) => db.get(
         `SELECT s.sides, s.combatants, c.system FROM initiative_scene s
          LEFT JOIN initiative_combat c ON c.id = s.combat_id WHERE s.scene_key = ?`,
         [sceneKey],
         (err, row) => {
-          if (err || !row) return;
-          if (!initiativeOn(row.system)) return;
+          if (err || !row || !initiativeOn(row.system)) return done();
 
           const sides = JSON.parse(row.sides || '[]');
           const npcExists = sides.some((s) => s.id === 'npc');
@@ -345,6 +354,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
             `UPDATE initiative_scene SET sides = ?, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
             [JSON.stringify(updatedSides), sceneKey],
             (err) => {
+              done();
               if (err) return;
               broadcastScene(io, db, sceneKey);
               // Log to dice tray
@@ -365,27 +375,27 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
             }
           );
         }
-      );
+      ));
     });
 
     // ── Next turn ─────────────────────────────────────────────────────────────
     socket.on('initiative:next', ({ sceneKey }) => {
       if (!sceneKey) return;
 
-      db.get(
+      inTurn(sceneKey, (done) => db.get(
         `SELECT s.combatants, s.sides, s.turn_index, s.combat_id, s.turn_counter, s.pass_counter, c.system, c.mode
          FROM initiative_scene s
          JOIN initiative_combat c ON c.id = s.combat_id
          WHERE s.scene_key = ?`,
         [sceneKey],
         (err, row) => {
-          if (err || !row) return;
+          if (err || !row) return done();
 
           const mode = row.mode || 'individual';
 
           if (mode === 'side') {
             const sides = sortSides(JSON.parse(row.sides || '[]'));
-            if (sides.length === 0) return;
+            if (sides.length === 0) return done();
 
             const nextIndex = row.turn_index + 1;
             const wrapped = nextIndex >= sides.length;
@@ -396,16 +406,17 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
               `UPDATE initiative_scene SET turn_index = ?, begun = 1, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
               [newTurnIndex, sceneKey],
               (err) => {
-                if (err) return;
+                if (err) return done();
                 // Its side's turn ending, the next's beginning, and the round's where it came round (8a9a).
                 fire(sceneKey, momentsOfNext({ mode: 'side', before: sideCombatants, sides, from: row.turn_index, to: newTurnIndex, wrapped }), wrapped ? sideCombatants : null);
                 if (wrapped) {
                   db.run(
                     `UPDATE initiative_scene SET turn_counter = turn_counter + 1 WHERE scene_key = ?`,
                     [sceneKey],
-                    () => broadcastScene(io, db, sceneKey)
+                    () => { done(); broadcastScene(io, db, sceneKey); }
                   );
                 } else {
+                  done();
                   broadcastScene(io, db, sceneKey);
                 }
               }
@@ -415,7 +426,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
 
           // ── Individual mode (existing behaviour) ──────────────────────────
           const combatants = JSON.parse(row.combatants || '[]');
-          if (combatants.length === 0) return;
+          if (combatants.length === 0) return done();
 
           const nextIndex = row.turn_index + 1;
           const wrapped = nextIndex >= combatants.length;
@@ -426,6 +437,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
               `UPDATE initiative_scene SET turn_index = ?, begun = 1, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
               [newTurnIndex, sceneKey],
               (err) => {
+                done();
                 if (err) return;
                 fire(sceneKey, momentsOfNext({ before: combatants, from: row.turn_index, to: newTurnIndex, wrapped: false }));
                 broadcastScene(io, db, sceneKey);
@@ -436,7 +448,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
 
           // End of rotation
           if (row.system === 'shadowrun_6e') {
-            const decayed = combatants.map((c) => ({ ...c, score: c.score - 10 }));
+            const decayed = combatants.map((c) => lowered(c, 10));
             const survivors = decayed.filter((c) => c.score > 0);
             const startsRound = survivors.length === 0;
             // Every pass spent, no one survives: the order empties for everyone to roll again.
@@ -449,11 +461,11 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
               `UPDATE initiative_scene SET combatants = ?, turn_index = 0, begun = ?, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
               [JSON.stringify(nextCombatants), startsRound ? 0 : 1, sceneKey],
               (err) => {
-                if (err) return;
+                if (err) return done();
                 db.run(
                   `UPDATE initiative_scene SET pass_counter = pass_counter + 1 WHERE scene_key = ?`,
                   [sceneKey],
-                  () => broadcastScene(io, db, sceneKey, { newRound: startsRound })
+                  () => { done(); broadcastScene(io, db, sceneKey, { newRound: startsRound }); }
                 );
               }
             );
@@ -463,17 +475,17 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
               `UPDATE initiative_scene SET turn_index = 0, begun = 1, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
               [sceneKey],
               (err) => {
-                if (err) return;
+                if (err) return done();
                 db.run(
                   `UPDATE initiative_scene SET turn_counter = turn_counter + 1 WHERE scene_key = ?`,
                   [sceneKey],
-                  () => broadcastScene(io, db, sceneKey)
+                  () => { done(); broadcastScene(io, db, sceneKey); }
                 );
               }
             );
           }
         }
-      );
+      ));
     });
 
     // ── Begin round 1 (8a9a) ──────────────────────────────────────────────────
@@ -496,12 +508,12 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
     socket.on('initiative:remove', ({ sceneKey, combatantId }) => {
       if (!sceneKey) return;
 
-      db.get(
+      inTurn(sceneKey, (done) => db.get(
         `SELECT s.combatants, s.turn_index, c.mode FROM initiative_scene s
          JOIN initiative_combat c ON c.id = s.combat_id WHERE s.scene_key = ?`,
         [sceneKey],
         (err, row) => {
-          if (err || !row) return;
+          if (err || !row) return done();
 
           const list = JSON.parse(row.combatants || '[]');
           const removedIdx = list.findIndex((c) => c.id === combatantId);
@@ -518,12 +530,13 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
              WHERE scene_key = ?`,
             [JSON.stringify(filtered), newTurnIndex, sceneKey],
             (err) => {
+              done();
               if (err) return;
               broadcastScene(io, db, sceneKey);
             }
           );
         }
-      );
+      ));
     });
 
     // ── Reorder (drag) ────────────────────────────────────────────────────────
@@ -532,12 +545,12 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
     socket.on('initiative:reorder', ({ sceneKey, fromIndex, toIndex, sideId }) => {
       if (!sceneKey) return;
 
-      db.get(
+      inTurn(sceneKey, (done) => db.get(
         `SELECT s.combatants, s.turn_index, c.mode FROM initiative_scene s
          JOIN initiative_combat c ON c.id = s.combat_id WHERE s.scene_key = ?`,
         [sceneKey],
         (err, row) => {
-          if (err || !row) return;
+          if (err || !row) return done();
 
           const list = JSON.parse(row.combatants || '[]');
 
@@ -546,19 +559,20 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
             const sideMembers = list.filter((c) => c.sideId === sideId);
             const others = list.filter((c) => c.sideId !== sideId);
 
-            if (fromIndex < 0 || toIndex < 0 || fromIndex >= sideMembers.length || toIndex >= sideMembers.length) return;
+            if (fromIndex < 0 || toIndex < 0 || fromIndex >= sideMembers.length || toIndex >= sideMembers.length) return done();
             const [moved] = sideMembers.splice(fromIndex, 1);
             sideMembers.splice(toIndex, 0, moved);
 
-            const newList = [...others, ...sideMembers];
+            // The drag stands when later rolls are sorted in (initiativeOrder.js).
+            const newList = [...others, ...keepDrag(sideMembers, toIndex)];
             db.run(
               `UPDATE initiative_scene SET combatants = ?, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
               [JSON.stringify(newList), sceneKey],
-              (err) => { if (!err) broadcastScene(io, db, sceneKey); }
+              (err) => { done(); if (!err) broadcastScene(io, db, sceneKey); }
             );
           } else {
             // Individual mode: global reorder
-            if (fromIndex < 0 || toIndex < 0 || fromIndex >= list.length || toIndex >= list.length) return;
+            if (fromIndex < 0 || toIndex < 0 || fromIndex >= list.length || toIndex >= list.length) return done();
 
             const [moved] = list.splice(fromIndex, 1);
             list.splice(toIndex, 0, moved);
@@ -574,12 +588,13 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
             db.run(
               `UPDATE initiative_scene SET combatants = ?, updated_at = CURRENT_TIMESTAMP
                WHERE scene_key = ?`,
-              [JSON.stringify(list), sceneKey],
-              (err) => { if (!err) broadcastScene(io, db, sceneKey); }
+              // The drag stands when later rolls are sorted in (initiativeOrder.js).
+              [JSON.stringify(keepDrag(list, toIndex)), sceneKey],
+              (err) => { done(); if (!err) broadcastScene(io, db, sceneKey); }
             );
           }
         }
-      );
+      ));
     });
 
     // ── End a whole combat, every scene it spans ──────────────────────────────
