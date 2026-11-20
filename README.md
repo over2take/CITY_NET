@@ -734,7 +734,7 @@ CITY_NET/
 │       ├── sockets.deathsave.test.js   # Socket integration: death saves, sheetAttack vs NPC SP, import apply, tiered generation
 │       ├── sockets.editing.test.js     # Socket editing access flow; regression for stale elevatedUsers bug
 │       ├── undo.test.js                # Undo endpoint (all action types, auth, ordering)
-│       └── initiative.test.js          # Initiative tracker (start, roll ordering, next turn, SR6 pass-decay, breakdown/diceResults persistence, CWN PC-wins-ties, side mode)
+│       └── initiative.test.js          # The initiative tracker through its real socket handlers (8i1; it had tested a copy of their logic): START a new combat and a scene JOINed to one, START twice making no second combat, initiative off; rolls sorted, re-rolled, joining late at the bottom, ties and CWN's PCs first, the dice log; group style (PLAYERS' score the best PC roll, the NPC side's own 1d8 once, the GM's side roll, turn order and ties, REMOVE); NEXT in D&D style, Cyberpunk RED and Shadowrun's passes down to everyone rolling again; REMOVE before, at and after the turn; END on one scene of a multi-scene combat; the combats list with the city map, floor and building names and each scene's count; JOIN's reply to one screen
 │
 ├── frontend/
 │   ├── src/
