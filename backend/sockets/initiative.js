@@ -113,7 +113,6 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
     socket.on('initiative:list_combats', () => {
       db.all(`SELECT c.id, c.system FROM initiative_combat c`, [], (err, combats) => {
         if (err) return;
-        if (!combats || combats.length === 0) { socket.emit('initiative:combats', []); return; }
 
         db.all(`SELECT combat_id, scene_key, turn_counter, pass_counter FROM initiative_scene`, [], (err2, scenes) => {
           if (err2) return;
@@ -213,18 +212,24 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
         );
       };
 
-      if (combatId) {
-        insertScene(combatId);
-      } else {
-        db.run(
-          `INSERT INTO initiative_combat (turn_counter, pass_counter, system, mode) VALUES (1, 1, ?, ?)`,
-          [safeSystem, safeMode],
-          function (err) {
-            if (err) return;
-            insertScene(this.lastID);
-          }
-        );
-      }
+      // A scene already running stays as it is, and is told again: START pressed twice (two GM screens, a double click)
+      // had made a second combat that no scene was ever in, listed under JOIN for good (found by 8i1's tests).
+      db.get(`SELECT combat_id FROM initiative_scene WHERE scene_key = ?`, [sceneKey], (gErr, running) => {
+        if (gErr) return;
+        if (running) { broadcastScene(io, db, sceneKey); return; }
+        if (combatId) {
+          insertScene(combatId);
+        } else {
+          db.run(
+            `INSERT INTO initiative_combat (turn_counter, pass_counter, system, mode) VALUES (1, 1, ?, ?)`,
+            [safeSystem, safeMode],
+            function (err) {
+              if (err) return;
+              insertScene(this.lastID);
+            }
+          );
+        }
+      });
     };
 
     // ── Submit roll ───────────────────────────────────────────────────────────
@@ -270,7 +275,7 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
               }
             } else {
               // Update PC side score from best PC roll
-              const pcSideScore = calcPcSideScore(filtered.filter((c) => !c.isNpc));
+              const pcSideScore = calcPcSideScore(filtered);
               sides = sides.map((s) => s.id === 'pc' ? { ...s, score: pcSideScore } : s);
             }
 
@@ -434,7 +439,8 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
             const decayed = combatants.map((c) => ({ ...c, score: c.score - 10 }));
             const survivors = decayed.filter((c) => c.score > 0);
             const startsRound = survivors.length === 0;
-            const nextCombatants = startsRound ? [] : survivors;
+            // Every pass spent, no one survives: the order empties for everyone to roll again.
+            const nextCombatants = survivors;
             // Shadowrun's round ends when every pass is spent, not when a pass ends (8a9a: a pass's turns are turns). Then
             // everyone rolls again, so the new round's start waits on BEGIN.
             fire(momentsOfNext({ before: combatants, after: nextCombatants, from: row.turn_index, to: 0, wrapped: true, roundEnds: startsRound }), startsRound ? combatants : null);
@@ -656,4 +662,4 @@ function logRoll(io, db, combatant, system) {
   );
 }
 
-module.exports = { registerInitiativeHandlers };
+module.exports = { registerInitiativeHandlers, sortSides, calcPcSideScore };
