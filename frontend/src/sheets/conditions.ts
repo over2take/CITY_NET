@@ -11,9 +11,17 @@ import { allStats, formulaList } from './statsRules';
 export const LIMITS = { conditions: 60, name: 30, short: 8, description: 300, rounds: 99, modifiers: 10, amount: 99, number: 9999, times: 100, formula: 200, eachTurn: 3, endsOn: 9999 } as const;
 export const ALL_ROLLS = 'all_rolls';
 
-/** When removed, after a number of rounds, or at any of the rests named in `at` (4f, rests.ts). */
-/** How a condition ends; AT THE END OF ITS NEXT TURN since 8a9a (its choice on the page is 8a9b's). */
+/** How a condition ends: when removed, after a number of rounds, at any of the rests named in `at` (4f, rests.ts), or AT THE END
+ * OF ITS NEXT TURN (8a9a). */
 export type Ends = 'removed' | 'rounds' | 'rest' | 'next_turn';
+
+/** EACH TURN (8a9a; the builder's boxes 8a9b): when it fires, what it does, and who rolls it, as the server's conditions.js. */
+export type EachTurnWhen = 'turn_start' | 'turn_end' | 'round_start' | 'round_end';
+export type EachTurnDoes = 'damage' | 'heal' | 'roll_to_end' | 'just_roll';
+export const WHENS: [EachTurnWhen, string][] = [['turn_start', 'START OF ITS TURN'], ['turn_end', 'END OF ITS TURN'], ['round_start', 'START OF ROUND'], ['round_end', 'END OF ROUND']];
+export const DOES: [EachTurnDoes, string][] = [['damage', 'DAMAGE'], ['heal', 'HEAL'], ['roll_to_end', 'ROLL TO END'], ['just_roll', 'JUST ROLL']];
+/** One thing a condition does each turn. Stored only where it differs: CHANGES HP on and ROLLED BY THE TABLE say nothing. */
+export interface EachTurn { when: EachTurnWhen; does: EachTurnDoes; roll: string; ends_on?: number; changes_hp?: boolean; rolled_by?: 'table' | 'player' }
 /** How a modifier counts (8a5e1): added (said by nothing), times, set to, or no more than. */
 export type ModifierWay = 'add' | 'times' | 'set' | 'most';
 export const WAYS: ModifierWay[] = ['add', 'times', 'set', 'most'];
@@ -32,13 +40,15 @@ export interface Condition {
   modifiers: Modifier[];
   /** Its modifiers change the sheet's numbers (8a5e1), or are a reminder. */
   applied?: boolean;
+  /** What it does on initiative turns (8a9a), each whole as the server reads it: none for most. */
+  each_turn?: EachTurn[];
   standard: boolean;
 }
 /** A condition as the page lists it: whole, and whether it is on. */
 export type Listed = Condition & { on: boolean };
 /** What the page changes on one condition. */
 /** `only_with`: the house rule it waits on (4j), or null for none. */
-export type ConditionPatch = Partial<Pick<Condition, 'name' | 'short' | 'icon' | 'description' | 'ends' | 'rounds' | 'at' | 'modifiers' | 'applied'>> & { on?: boolean; only_with?: string | null };
+export type ConditionPatch = Partial<Pick<Condition, 'name' | 'short' | 'icon' | 'description' | 'ends' | 'rounds' | 'at' | 'modifiers' | 'applied'>> & { on?: boolean; only_with?: string | null; each_turn?: EachTurn[] };
 
 /** The standard set every system starts with, as the server has it. */
 export const STANDARD: Omit<Condition, 'ends' | 'modifiers' | 'standard'>[] = [
@@ -63,6 +73,17 @@ const storedOf = (def: Definition): Stored => (isObject(def.conditions)
 /** A chip label from a name: its first word in capitals, cut to fit. */
 export const shortFrom = (name: string) => name.trim().split(/\s+/)[0].toUpperCase().slice(0, LIMITS.short);
 
+/** A condition's EACH TURN as the game runs it (the server's eachTurnOf): the well-formed ones, each whole. */
+export const eachTurnOf = (c: Record<string, unknown>): EachTurn[] => (Array.isArray(c.each_turn) ? c.each_turn : []).slice(0, LIMITS.eachTurn)
+  .filter((e): e is EachTurn => isObject(e) && WHENS.some(([w]) => w === e.when) && DOES.some(([d]) => d === e.does) && typeof e.roll === 'string' && !!e.roll.trim()
+    && (e.does !== 'roll_to_end' || Number.isInteger(e.ends_on)))
+  .map((e) => ({
+    when: e.when, does: e.does, roll: e.roll.trim(),
+    ...(e.does === 'roll_to_end' ? { ends_on: e.ends_on } : {}),
+    ...(e.does === 'damage' || e.does === 'heal' ? { changes_hp: e.changes_hp !== false } : {}),
+    rolled_by: e.rolled_by === 'player' ? 'player' as const : 'table' as const,
+  }));
+
 const whole = (base: { id: string; name: string; short?: string; icon?: string; description?: string }, c: Record<string, unknown>, standard: boolean): Condition => {
   const text = (v: unknown) => (typeof v === 'string' ? v : undefined);
   const ends: Ends = c.ends === 'rounds' || c.ends === 'rest' || c.ends === 'next_turn' ? c.ends : 'removed';
@@ -79,6 +100,7 @@ const whole = (base: { id: string; name: string; short?: string; icon?: string; 
     modifiers: Array.isArray(c.modifiers) ? (c.modifiers.filter(isObject) as unknown as Modifier[])
       .map((m) => ({ target: m.target, amount: m.amount, ...(m.way && m.way !== 'add' && WAYS.includes(m.way) ? { way: m.way } : {}) })) : [],
     ...(c.applied === true ? { applied: true } : {}),
+    ...(eachTurnOf(c).length ? { each_turn: eachTurnOf(c) } : {}),
     standard,
   };
 };
@@ -148,6 +170,7 @@ export const withCondition = (def: Definition, id: string, patch: ConditionPatch
     delete entry.at;
   }
   if (Array.isArray(entry.modifiers) && entry.modifiers.length === 0) delete entry.modifiers;
+  if (Array.isArray(entry.each_turn) && entry.each_turn.length === 0) delete entry.each_turn;
   // A reminder, as every condition was before 8a5e: nothing to store.
   if (entry.applied !== true) delete entry.applied;
   if (typeof entry.only_with !== 'string' || !entry.only_with) delete entry.only_with;
@@ -186,6 +209,44 @@ export const withModifier = (m: Modifier, patch: Partial<Modifier>): Modifier =>
     if (!Number.isInteger(next.amount) || next.amount === 0) next.amount = -1;
   } else if (!next.way || next.way === 'add') delete next.way;
   return next;
+};
+
+/** What + EACH TURN starts (8a9b): 1d4 damage at the start of its turn, onto the token, rolled by the table. */
+export const NEW_EACH_TURN: EachTurn = { when: 'turn_start', does: 'damage', roll: '1d4' };
+
+/**
+ * One EACH TURN changed (8a9b), kept tidy as the server checks it: ENDS ON only for a ROLL TO END (10 to start), CHANGES HP only
+ * for DAMAGE and HEAL and stored only when off, ROLLED BY stored only when the player rolls.
+ */
+export const withEachTurn = (e: EachTurn, patch: Partial<EachTurn>): EachTurn => {
+  const next: EachTurn = { ...e, ...patch };
+  if (next.does === 'roll_to_end') { if (!Number.isInteger(next.ends_on)) next.ends_on = 10; } else delete next.ends_on;
+  if ((next.does !== 'damage' && next.does !== 'heal') || next.changes_hp !== false) delete next.changes_hp;
+  if (next.rolled_by !== 'player') delete next.rolled_by;
+  return next;
+};
+
+const WHEN_PHRASE: Record<EachTurnWhen, string> = { turn_start: 'at the start of its turn', turn_end: 'at the end of its turn', round_start: 'at the start of the round', round_end: 'at the end of the round' };
+/**
+ * An EACH TURN in the GM's words (8a9b; the mockup's line under each): "BURNING: 1d4 DAMAGE at the start of its turn, onto the
+ * token"; "POISONED: a save, d20 + Con mod, at the end of its turn, the player (the GM for an NPC) asked to roll; off on 13 or
+ * more". `named` says a roll's @names by the system's own names (rollNamed).
+ */
+export const eachTurnWords = (name: string, e: EachTurn, named: (roll: string) => string = (r) => r): string => {
+  const who = e.rolled_by === 'player' ? ', the player (the GM for an NPC) asked to roll' : '';
+  const when = WHEN_PHRASE[e.when];
+  const roll = named(e.roll.trim()) || '(nothing to roll yet)';
+  const head = name.trim().toUpperCase() || 'IT';
+  if (e.does === 'roll_to_end') return `${head}: a save, ${roll}, ${when}${who}; off on ${e.ends_on ?? 10} or more`;
+  if (e.does === 'just_roll') return `${head}: ${roll} rolled ${when}${who}, to the log`;
+  const word = e.does === 'damage' ? 'DAMAGE' : 'HEALED';
+  return `${head}: ${roll} ${word} ${when}${who}, ${e.changes_hp === false ? 'for the GM to apply' : 'onto the token'}`;
+};
+
+/** A roll's @names said by the system's own names (8a9b): "d20 + @con_mod" as "d20 + Con mod"; a name it doesn't have left as typed. */
+export const rollNamed = (def: Definition) => {
+  const labels = new Map(modifierTargets(def).filter((t) => t.id !== ALL_ROLLS).map((t) => [t.id, t.label]));
+  return (roll: string) => roll.replace(/@([a-z][a-z0-9_]*)/g, (m, id: string) => labels.get(id) ?? m);
 };
 
 /** The definition with a new condition of its own, named to be renamed, and its id. Null at the limit. */

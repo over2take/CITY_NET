@@ -261,6 +261,13 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await open.getByRole('combobox', { name: 'Modifier 2 way' }).selectOption('times');
       await open.getByRole('button', { name: 'Help writing Modifier 2 amount' }).click();
       await expect(open.getByRole('group', { name: 'Help writing Modifier 2 amount' })).toBeVisible();
+      // EACH TURN (8a9b): a save rolled by the player, so ENDS ON is there; a second for damage, so CHANGES HP is; ends next turn.
+      await open.getByRole('button', { name: '+ EACH TURN' }).click();
+      await open.getByRole('combobox', { name: 'Each turn 1 does' }).selectOption('roll_to_end');
+      await open.getByRole('group', { name: 'Each turn 1 rolled by' }).getByRole('button', { name: 'THE PLAYER · THE GM FOR AN NPC' }).click();
+      await open.getByRole('button', { name: '+ EACH TURN' }).click();
+      await expect(open.getByRole('group', { name: 'Each turn 2 changes HP' })).toBeVisible();
+      await open.getByRole('combobox', { name: 'ENDS' }).selectOption('next_turn');
     }
     if (p === 'RESTS') {
       // Recovery dice on, counted by a formula and given back by an amount, so every box is there (R1b).

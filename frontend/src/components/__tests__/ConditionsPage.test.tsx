@@ -230,8 +230,8 @@ describe('the "?"', () => {
     for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
   };
     open();
-    // ITS MODIFIERS and MODIFIERS joined them in 8a5e2.
-    allShown('conditions', 6);
+    // ITS MODIFIERS and MODIFIERS joined them in 8a5e2, EACH TURN in 8a9b.
+    allShown('conditions', 7);
     for (const name of ['ON THE CHIP', 'DESCRIPTION']) expect(screen.getByRole('textbox', { name }), name).toBeTruthy();
     expect(screen.getByRole('combobox', { name: 'ENDS' })).toBeTruthy();
   });
@@ -328,5 +328,98 @@ describe('a modifier\'s words, said its way (8a5e2)', () => {
     expect(await within(d.getByRole('group', { name: 'Modifier 1' })).findByText(/×0\.5/)).toBeTruthy();
     expect(await within(d.getByRole('group', { name: 'Modifier 2' })).findByText(/-2/)).toBeTruthy();
     expect(asked.every((k) => k === 'formula')).toBe(true);
+  });
+});
+
+describe('EACH TURN and the new ending (8a9b)', () => {
+  const pick = async (name: string) => userEvent.click(list().getByRole('button', { name }));
+  const row = (i: number) => within(screen.getByRole('group', { name: `Each turn ${i}` }));
+
+  it('none to start; + EACH TURN adds 1d4 damage at the start of its turn, onto the token, rolled by the table, said in words', async () => {
+    const { last } = open();
+    await pick('BLEEDING');
+    expect(screen.queryByRole('group', { name: 'Each turn 1' })).toBeNull();
+    expect(detail('Bleeding condition').getByText('Nothing on turns: a reminder until someone takes it off.')).toBeTruthy();
+    await userEvent.click(detail('Bleeding condition').getByRole('button', { name: '+ EACH TURN' }));
+    expect(stored(last())).toEqual({ bleeding: { each_turn: [{ when: 'turn_start', does: 'damage', roll: '1d4' }] } });
+    expect((row(1).getByRole('combobox', { name: 'Each turn 1 when' }) as HTMLSelectElement).value).toBe('turn_start');
+    expect(row(1).getByRole('button', { name: 'ON ITS OWN' }).getAttribute('aria-pressed')).toBe('true');
+    // Damage has no ENDS ON: only a save does.
+    expect(row(1).queryByRole('textbox', { name: 'Each turn 1 ends on' })).toBeNull();
+    expect(row(1).getByRole('button', { name: 'THE TABLE' }).getAttribute('aria-pressed')).toBe('true');
+    expect(row(1).getByRole('note', { name: 'Each turn 1 in words' }).textContent).toBe('BLEEDING: 1d4 DAMAGE at the start of its turn, onto the token');
+    expect(checkDefinition(last()).problems).toEqual([]);
+  });
+
+  it('a save: ROLL TO END with ENDS ON, rolled by the player, the end of its turn; the words follow; the server agrees', async () => {
+    const { last } = open();
+    await pick('POISONED');
+    await userEvent.click(detail('Poisoned condition').getByRole('button', { name: '+ EACH TURN' }));
+    await userEvent.selectOptions(row(1).getByRole('combobox', { name: 'Each turn 1 when' }), 'turn_end');
+    await userEvent.selectOptions(row(1).getByRole('combobox', { name: 'Each turn 1 does' }), 'roll_to_end');
+    // A save has no CHANGES HP, and starts at 10.
+    expect(row(1).queryByRole('group', { name: 'Each turn 1 changes HP' })).toBeNull();
+    const endsOn = row(1).getByRole('textbox', { name: 'Each turn 1 ends on' });
+    await userEvent.clear(endsOn);
+    await userEvent.type(endsOn, '13');
+    const box = row(1).getByRole('textbox', { name: 'Each turn 1 roll' });
+    await userEvent.clear(box);
+    await userEvent.type(box, 'd20 + @str');
+    await userEvent.click(row(1).getByRole('button', { name: 'THE PLAYER · THE GM FOR AN NPC' }));
+    expect(stored(last())!.poisoned.each_turn).toEqual([{ when: 'turn_end', does: 'roll_to_end', roll: 'd20 + @str', ends_on: 13, rolled_by: 'player' }]);
+    expect(row(1).getByRole('note', { name: 'Each turn 1 in words' }).textContent)
+      .toBe('POISONED: a save, d20 + Strength, at the end of its turn, the player (the GM for an NPC) asked to roll; off on 13 or more');
+    expect(checkDefinition(last()).problems).toEqual([]);
+    // Back to the table: nothing stored for it.
+    await userEvent.click(row(1).getByRole('button', { name: 'THE TABLE' }));
+    expect(stored(last())!.poisoned.each_turn).toEqual([{ when: 'turn_end', does: 'roll_to_end', roll: 'd20 + @str', ends_on: 13 }]);
+  });
+
+  it('HEAL for the GM to apply, JUST ROLL to the log; up to three; × takes one away, the last leaves nothing', async () => {
+    const { last } = open();
+    await pick('PRONE');
+    const add = () => userEvent.click(detail('Prone condition').getByRole('button', { name: '+ EACH TURN' }));
+    await add();
+    await userEvent.selectOptions(row(1).getByRole('combobox', { name: 'Each turn 1 does' }), 'heal');
+    await userEvent.click(row(1).getByRole('button', { name: 'ROLL ONLY, THE GM APPLIES' }));
+    expect(row(1).getByRole('note', { name: 'Each turn 1 in words' }).textContent).toBe('PRONE: 1d4 HEALED at the start of its turn, for the GM to apply');
+    await add();
+    await userEvent.selectOptions(row(2).getByRole('combobox', { name: 'Each turn 2 does' }), 'just_roll');
+    await userEvent.selectOptions(row(2).getByRole('combobox', { name: 'Each turn 2 when' }), 'round_end');
+    expect(row(2).getByRole('note', { name: 'Each turn 2 in words' }).textContent).toBe('PRONE: 1d4 rolled at the end of the round, to the log');
+    await add();
+    expect(detail('Prone condition').getByRole('button', { name: '+ EACH TURN' })).toBeDisabled();
+    expect(stored(last())!.prone.each_turn).toEqual([
+      { when: 'turn_start', does: 'heal', roll: '1d4', changes_hp: false },
+      { when: 'round_end', does: 'just_roll', roll: '1d4' },
+      { when: 'turn_start', does: 'damage', roll: '1d4' },
+    ]);
+    expect(checkDefinition(last()).problems).toEqual([]);
+    await userEvent.click(screen.getByRole('button', { name: 'Remove each turn 2' }));
+    expect(stored(last())!.prone.each_turn.map((e: { does: string }) => e.does)).toEqual(['heal', 'damage']);
+    await userEvent.click(screen.getByRole('button', { name: 'Remove each turn 1' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove each turn 1' }));
+    expect(last()).toEqual(H);
+  });
+
+  it('a roll the system can\'t read is the server\'s to name, and the box says it', async () => {
+    const { last } = open();
+    await pick('BLEEDING');
+    await userEvent.click(detail('Bleeding condition').getByRole('button', { name: '+ EACH TURN' }));
+    const box = row(1).getByRole('textbox', { name: 'Each turn 1 roll' });
+    await userEvent.clear(box);
+    await userEvent.type(box, '1d4 + @nope');
+    expect(checkDefinition(last()).problems).toEqual([{ where: 'condition bleeding, each turn 1, roll', message: '@nope isn\'t one of this system\'s names' }]);
+  });
+
+  it('ENDS AT THE END OF ITS NEXT TURN: stored, said, kept through another edit, the server agrees', async () => {
+    const { last } = open();
+    await pick('STUNNED');
+    await userEvent.selectOptions(detail('Stunned condition').getByRole('combobox', { name: 'ENDS' }), 'next_turn');
+    expect(stored(last())).toEqual({ stunned: { ends: 'next_turn' } });
+    expect(detail('Stunned condition').getByText('comes off on its own when NEXT ends this character\'s next turn')).toBeTruthy();
+    await userEvent.type(detail('Stunned condition').getByRole('textbox', { name: 'DESCRIPTION' }), '!');
+    expect(stored(last())!.stunned.ends).toBe('next_turn');
+    expect(checkDefinition(last()).problems).toEqual([]);
   });
 });

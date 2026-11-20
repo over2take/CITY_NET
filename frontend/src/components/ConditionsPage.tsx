@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   conditionList, conditionCount, withCondition, withNewCondition, withoutCondition, modifierTargets, withModifier, amountFrom,
-  LIMITS, ALL_ROLLS, STANDARD, type Listed, type ConditionPatch, type Modifier, type ModifierWay,
+  withEachTurn, eachTurnWords, rollNamed, NEW_EACH_TURN, WHENS, DOES,
+  LIMITS, ALL_ROLLS, STANDARD, type Listed, type ConditionPatch, type Modifier, type ModifierWay, type EachTurn,
 } from '../sheets/conditions';
 import { useFormulaBox } from '../hooks/useFormulaBox';
 import { restList } from '../sheets/rests';
@@ -23,6 +24,10 @@ import { ToggleSwitch } from './ToggleSwitch';
 // A modifier's way and a formula amount, and ITS MODIFIERS A REMINDER or APPLIED (8a5e2; approved mockup
 // docs/mockups/condition-modifiers.html, 2026-11-18): ADD, TIMES, SET TO or AT MOST, the amount a formula box with eˣ, ALL
 // ROLLS adding a whole number as before; APPLIED, a character whose token has it sees the number change.
+//
+// EACH TURN (8a9b; approved mockup docs/mockups/condition-turn-effects.html, 2026-11-19): up to three things a condition does on
+// initiative turns, none to start: WHEN, DOES, its ROLL (a dice box reading the sheet), ENDS ON for a save, CHANGES HP for
+// damage and healing, ROLLED BY, and the line in the GM's words. And ENDS AT THE END OF ITS NEXT TURN.
 
 interface Props {
   definition: Definition;
@@ -128,6 +133,52 @@ function ModifierRow({ m, i, definition, api, targets, put, remove }: {
   );
 }
 
+/** One EACH TURN (8a9b): WHEN and DOES, the ROLL, what goes with what it does, who rolls it, ×, and the line in words. */
+function EachTurnRow({ e, i, name, definition, api, put, remove }: {
+  e: EachTurn; i: number; name: string; definition: Definition; api?: Props['api'];
+  put: (next: EachTurn) => void; remove: () => void;
+}) {
+  const label = `Each turn ${i + 1}`;
+  const roll = useFormulaBox({
+    definition, api, kind: 'refill', value: e.roll, onChange: (text) => put(withEachTurn(e, { roll: text })),
+    label: `${label} roll`, placeholder: '1d4', maxLength: LIMITS.formula, inputStyle: { ...input, width: '100%' },
+  });
+  const hp = e.does === 'damage' || e.does === 'heal';
+  return (
+    <div role="group" aria-label={label} style={{ borderLeft: '2px solid var(--cyan)', paddingLeft: 10, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr) auto', gap: 6, alignItems: 'center' }}>
+        <select aria-label={`${label} when`} value={e.when} style={input} onChange={(ev) => put(withEachTurn(e, { when: ev.target.value as EachTurn['when'] }))}>
+          {WHENS.map(([w, word]) => <option key={w} value={w}>{word}</option>)}
+        </select>
+        <select aria-label={`${label} does`} value={e.does} style={input} onChange={(ev) => put(withEachTurn(e, { does: ev.target.value as EachTurn['does'] }))}>
+          {DOES.map(([d, word]) => <option key={d} value={d}>{word}</option>)}
+        </select>
+        <button type="button" className="utility-btn danger-btn" style={btn} aria-label={`Remove each turn ${i + 1}`} onClick={remove}>×</button>
+      </div>
+      {roll.field}
+      {roll.help}
+      {e.does === 'roll_to_end' && (
+        <span style={row}>
+          <span style={small}>ENDS ON</span>
+          <WholeBox aria={`${label} ends on`} value={e.ends_on ?? 10} min={-LIMITS.endsOn} max={LIMITS.endsOn} onChange={(n) => put(withEachTurn(e, { ends_on: n }))} />
+          <span style={{ ...why, fontSize: 11 }}>or more takes it off</span>
+        </span>
+      )}
+      {hp && (
+        <span role="group" aria-label={`${label} changes HP`} style={{ display: 'inline-flex', alignSelf: 'flex-start' }}>
+          <button type="button" aria-pressed={e.changes_hp !== false} style={choice(e.changes_hp !== false)} onClick={() => put(withEachTurn(e, { changes_hp: true }))}>ON ITS OWN</button>
+          <button type="button" aria-pressed={e.changes_hp === false} style={choice(e.changes_hp === false)} onClick={() => put(withEachTurn(e, { changes_hp: false }))}>ROLL ONLY, THE GM APPLIES</button>
+        </span>
+      )}
+      <span role="group" aria-label={`${label} rolled by`} style={{ display: 'inline-flex', alignSelf: 'flex-start', flexWrap: 'wrap' }}>
+        <button type="button" aria-pressed={e.rolled_by === 'player'} style={choice(e.rolled_by === 'player')} onClick={() => put(withEachTurn(e, { rolled_by: 'player' }))}>THE PLAYER · THE GM FOR AN NPC</button>
+        <button type="button" aria-pressed={e.rolled_by !== 'player'} style={choice(e.rolled_by !== 'player')} onClick={() => put(withEachTurn(e, { rolled_by: 'table' }))}>THE TABLE</button>
+      </span>
+      <p role="note" aria-label={`${label} in words`} style={{ ...why, fontSize: 11, color: 'var(--cyan)' }}>{eachTurnWords(name, e, rollNamed(definition))}</p>
+    </div>
+  );
+}
+
 function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
   const [confirm, setConfirm] = useState(false);
   const base = STANDARD.find((s) => s.id === c.id);
@@ -135,6 +186,8 @@ function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
   const set = (patch: Parameters<typeof withCondition>[2]) => edit(withCondition(definition, c.id, patch));
   const stored = (definition.conditions as Record<string, Record<string, unknown>> | undefined)?.[c.id] ?? {};
   const typed = (key: 'name' | 'short') => (typeof stored[key] === 'string' ? stored[key] as string : (base ? '' : c[key]));
+  // EACH TURN as stored (8a9b): what the GM typed, a roll not yet typed included, never the server's tidied copy.
+  const eachTurn = (Array.isArray(stored.each_turn) ? stored.each_turn : []) as EachTurn[];
 
   return (
     <section aria-label={`${c.name || c.id} condition`} style={{ border: '1px solid var(--dark-green)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
@@ -169,7 +222,9 @@ function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
             <option value="removed">WHEN REMOVED</option>
             <option value="rounds">AFTER ROUNDS</option>
             <option value="rest">AT A REST</option>
+            <option value="next_turn">AT THE END OF ITS NEXT TURN</option>
           </select>
+          {c.ends === 'next_turn' && <span style={{ ...why, fontSize: 11 }}>comes off on its own when NEXT ends this character&apos;s next turn</span>}
           {c.ends === 'rounds' && <>
             <WholeBox aria="Rounds" value={c.rounds ?? 1} min={1} max={LIMITS.rounds} onChange={(n) => set({ rounds: n })} />
             <span style={{ ...why, fontSize: 11 }}>rounds, unless changed when it&apos;s put on</span>
@@ -200,6 +255,19 @@ function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
               : 'A REMINDER: shown to the GM and the token\'s owner, changing no number.'}
             {c.modifiers.some((m) => m.target === ALL_ROLLS) ? ' ALL ROLLS always reaches every roll of this system\'s own.' : ''}
           </p>
+        </div>
+        <FieldName beside hint={HINTS['conditions.eachTurn']} style={small}>EACH TURN</FieldName>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
+          {eachTurn.map((e, i) => (
+            <EachTurnRow key={i} e={e} i={i} name={c.name || c.id} definition={definition} api={api}
+              put={(next) => set({ each_turn: eachTurn.map((x, j) => (j === i ? next : x)) })}
+              remove={() => set({ each_turn: eachTurn.filter((_, j) => j !== i) })} />
+          ))}
+          <div style={row}>
+            <button type="button" className="utility-btn" style={btn} disabled={eachTurn.length >= LIMITS.eachTurn}
+              onClick={() => set({ each_turn: [...eachTurn, NEW_EACH_TURN] })}>+ EACH TURN</button>
+            {!eachTurn.length && <span style={{ ...why, fontSize: 11 }}>Nothing on turns: a reminder until someone takes it off.</span>}
+          </div>
         </div>
       </div>
     </section>
