@@ -148,3 +148,13 @@ describe('InitiativeWindow — active initiative', () => {
     expect(props.onClose).toHaveBeenCalled();
   });
 });
+
+describe('InitiativeWindow — whose turn it is (8i2)', () => {
+  it('said on that row alone, for a screen reader and the journeys', () => {
+    const combatants = [{ id: 'player:vex', name: 'VEX', score: 18 }, { id: 'npc:1', name: 'GANGER', score: 12 }, { id: 'player:kes', name: 'KES', score: 6 }];
+    render(<InitiativeWindow {...baseProps({ state: makeState({ combatants, turnIndex: 1 }) })} />);
+    const rows = screen.getAllByTestId('initiative-row');
+    expect(rows.map((r) => r.getAttribute('aria-current'))).toEqual([null, 'step', null]);
+    expect(rows[1].textContent).toContain('GANGER');
+  });
+});

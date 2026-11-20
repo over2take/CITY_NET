@@ -1922,14 +1922,15 @@ function App() {
                   fetch(`/api/locations/${locId}/battle_maps`)
                     .then((r) => r.json())
                     .then((maps) => {
-                      if (!Array.isArray(maps) || maps.length === 0) return;
+                      // Said, not a silent click (8i2): a fight whose building lost its battle maps has nowhere to go.
+                      if (!Array.isArray(maps) || maps.length === 0) { setNotification('NO_BATTLE_MAP_FOR_THAT_SCENE'); return; }
                       setActiveBattleMapData({ locationId: locId, maps, currentFloorIndex: floorIndex });
                       setView('battle_map');
                       setSelectedLocation(null);
                       if (socketRef.current) socketRef.current.emit('battle_map_enter', { locationId: locId, floorIndex });
                       if (token) updateDirector({ battleMap: { locationId: locId, floorIndex } });
                     })
-                    .catch(() => {});
+                    .catch(() => setNotification('COULD_NOT_OPEN_THAT_SCENE'));
                 }
               }}
               onRollEnemies={() => {

@@ -48,7 +48,9 @@ function InitiativeTracker({
 }: Props) {
   const activeSystem = state?.system || system;
   const activeMode = state?.mode || 'individual';
-  const [pos, setPos] = useState({ x: 80, y: 120 });
+  // Opens just right of the side panel (rail 48 + panel 320), not on it: at x 80 it sat over the INITIATIVE menu's ACTIVE
+  // COMBATS, so a GM jumping fight to fight had to shut it first (found by 8i2's journeys).
+  const [pos, setPos] = useState({ x: 384, y: 120 });
   const [showJoin, setShowJoin] = useState(false);
   const [extraDice, setExtraDice] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
@@ -75,7 +77,7 @@ function InitiativeTracker({
   const content = (
     <>
       <div style={{ marginBottom: '8px' }}>
-        <div style={{ fontSize: '0.65rem', color: 'var(--dark-green)', letterSpacing: '1px' }}>{sceneLabel}</div>
+        <div style={{ fontSize: '0.65rem', color: 'var(--green)', opacity: 0.65, letterSpacing: '1px' }}>{sceneLabel}</div>
         {state && activeMode === 'individual' && (
           <div style={{ fontSize: '0.8rem', fontWeight: 'bold', letterSpacing: '2px', color: 'var(--green)', textShadow: 'var(--glow)', marginTop: '2px' }}>
             {/* The count of laps of the order: a ROUND (8a8, the user's call: "this pr"), the system's own word for one. */}
@@ -104,7 +106,7 @@ function InitiativeTracker({
             </div>
           ) : (
             <div>
-              <div style={{ fontSize: '0.65rem', marginBottom: '6px', color: 'var(--dark-green)' }}>SELECT COMBAT TO JOIN</div>
+              <div style={{ fontSize: '0.65rem', marginBottom: '6px', color: 'var(--green)', opacity: 0.65 }}>SELECT COMBAT TO JOIN</div>
               {activeCombats.map((c) => (
                 <button
                   key={c.id}
@@ -125,7 +127,7 @@ function InitiativeTracker({
       )}
 
       {!state && !isAdmin && (
-        <div style={{ fontSize: '0.7rem', color: 'var(--dark-green)', padding: '8px 0' }}>
+        <div style={{ fontSize: '0.7rem', color: 'var(--green)', opacity: 0.65, padding: '8px 0' }}>
           NO ACTIVE {INITIATIVE} IN THIS SCENE
         </div>
       )}
@@ -167,7 +169,7 @@ function InitiativeTracker({
                 onDragLeave={() => setDragOverIndex(null)}
               >
                 {visibleCombatants.length === 0 ? (
-                  <div style={{ fontSize: '0.65rem', color: 'var(--dark-green)', padding: '6px 0' }}>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--green)', opacity: 0.65, padding: '6px 0' }}>
                     WAITING FOR ROLLS...
                   </div>
                 ) : (
@@ -219,7 +221,7 @@ function InitiativeTracker({
             <div style={{ marginTop: '8px', borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>
               {activeSystem === 'shadowrun_6e' && (
                 <div style={{ marginBottom: '6px' }}>
-                  <div style={{ fontSize: '0.6rem', color: 'var(--dark-green)', letterSpacing: '1px', marginBottom: '4px' }}>EXTRA DICE (WIRED REFLEXES)</div>
+                  <div style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.65, letterSpacing: '1px', marginBottom: '4px' }}>EXTRA DICE (WIRED REFLEXES)</div>
                   <div style={{ display: 'flex', gap: '4px' }}>
                     {[1, 2, 3].map((n) => (
                       <button
@@ -247,7 +249,7 @@ function InitiativeTracker({
               >
                 JOIN {INITIATIVE}
               </button>
-              <div style={{ fontSize: '0.6rem', color: 'var(--dark-green)', textAlign: 'center', marginTop: '4px' }}>
+              <div style={{ fontSize: '0.6rem', color: 'var(--green)', opacity: 0.65, textAlign: 'center', marginTop: '4px' }}>
                 {activeSystem === 'shadowrun_6e'
                   ? `ROLL REA + INT + ${1 + (extraDice ?? 0)}d6 — ADDED TO BOTTOM`
                   : activeSystem === 'cyberpunk_red'
