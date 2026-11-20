@@ -379,3 +379,42 @@ describe('JOIN, as a screen opening the tracker', () => {
     expect(direct()).toEqual([]);
   });
 });
+
+describe('rolls landing together (found by 8i2 on CI)', () => {
+  it('ROLL ENEMIES with many enemies at once: every roll in the order, none lost', async () => {
+    await start();
+    const many = Array.from({ length: 12 }, (_, i) => npc(`Ganger${i}`, 20 - i));
+    for (const c of many) handlers['initiative:roll']({ sceneKey: 'city:0', combatant: c });
+    await until(async () => (await order()).length === 12, { label: 'all twelve in', timeout: 5000 });
+    expect(await order()).toEqual(many.map((c) => c.name));
+  });
+
+  // Each change lets the next go when it's done (sceneQueue.js), on every way out; one that didn't would hold the scene 5 s.
+  it('a roll into no fight holds nothing up: START and a roll straight after go in at once', async () => {
+    handlers['initiative:roll']({ sceneKey: 'city:0', combatant: pc('Early', 3) });
+    await drain(db);
+    await start();
+    handlers['initiative:roll']({ sceneKey: 'city:0', combatant: pc('Vex', 9) });
+    await until(async () => (told('city:0')?.combatants || []).some((c) => c.name === 'Vex'), { label: 'Vex in', timeout: 2500 });
+    expect(await order()).toEqual(['Vex']);
+  });
+
+  it('the NPC side\'s roll holds nothing up: a roll straight after goes in at once', async () => {
+    await start('city:0', { system: 'cities_without_number', mode: 'side' });
+    handlers['initiative:roll_side']({ sceneKey: 'city:0', score: 6 });
+    handlers['initiative:roll']({ sceneKey: 'city:0', combatant: pc('Vex', 9) });
+    await until(async () => (told('city:0')?.combatants || []).some((c) => c.name === 'Vex'), { label: 'Vex in', timeout: 2500 });
+    expect((await sides()).find((s) => s.id === 'npc').score).toBe(6);
+  });
+
+  // A roll that sorts would sort the drag away (today's rule, said to the user); a late join keeps the order as dragged.
+  it('a drag in the order holds nothing up, and a late join straight after keeps it', async () => {
+    await start();
+    await roll(npc('Ganger', 18));
+    await roll(pc('Vex', 12));
+    handlers['initiative:reorder']({ sceneKey: 'city:0', fromIndex: 0, toIndex: 1 });
+    handlers['initiative:roll']({ sceneKey: 'city:0', combatant: pc('Kes', 1), appendToEnd: true });
+    await until(async () => (told('city:0')?.combatants || []).some((c) => c.name === 'Kes'), { label: 'Kes in', timeout: 2500 });
+    expect(await order()).toEqual(['Vex', 'Ganger', 'Kes']);
+  });
+});
