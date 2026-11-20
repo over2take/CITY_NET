@@ -187,3 +187,12 @@ describe('a modifier as the builder writes it (8a5e2)', () => {
     expect(withCondition(on, 'prone', { applied: false })).toEqual(H);
   });
 });
+
+describe('a condition the builder doesn\'t draw yet, kept through edits (8a9a)', () => {
+  it('AT THE END OF ITS NEXT TURN and EACH TURN stay when another field changes', () => {
+    const def = { conditions: { stunned: { ends: 'next_turn', rounds: 2, each_turn: [{ when: 'turn_end', does: 'just_roll', roll: '1d6' }] } } } as never;
+    const edited = withCondition(def, 'stunned', { description: 'Seeing stars.' }) as unknown as { conditions: Record<string, Record<string, unknown>> };
+    expect(edited.conditions.stunned).toEqual({ ends: 'next_turn', description: 'Seeing stars.', each_turn: [{ when: 'turn_end', does: 'just_roll', roll: '1d6' }] });
+    expect(conditionsOf(def).find((c) => c.id === 'stunned')!.ends).toBe('next_turn');
+  });
+});

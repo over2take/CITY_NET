@@ -532,6 +532,10 @@ db.serialize(() => {
   db.run(`ALTER TABLE initiative_scene ADD COLUMN turn_counter INTEGER DEFAULT 1`, (err) => {
     if (!err) db.run(`UPDATE initiative_scene SET turn_counter = COALESCE((SELECT c.turn_counter FROM initiative_combat c WHERE c.id = initiative_scene.combat_id), 1)`, () => {});
   });
+  // Round 1 begun (8a9a): BEGIN fires its START OF ROUND and first turn. A fight running when it is added has begun.
+  db.run(`ALTER TABLE initiative_scene ADD COLUMN begun INTEGER DEFAULT 0`, (err) => {
+    if (!err) db.run(`UPDATE initiative_scene SET begun = 1`, () => {});
+  });
   db.run(`ALTER TABLE initiative_scene ADD COLUMN pass_counter INTEGER DEFAULT 1`, (err) => {
     if (!err) db.run(`UPDATE initiative_scene SET pass_counter = COALESCE((SELECT c.pass_counter FROM initiative_combat c WHERE c.id = initiative_scene.combat_id), 1)`, () => {});
   });

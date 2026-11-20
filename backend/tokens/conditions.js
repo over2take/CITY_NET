@@ -16,14 +16,17 @@ const LIMITS = { conditions: 60, rounds: 99 };
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 
-/** A token's stored conditions, whatever the column holds: a list of { id, left? }, never a throw. */
+/**
+ * A token's stored conditions, whatever the column holds: a list of { id, left?, started? }, never a throw. `started` marks
+ * one that ends AT THE END OF ITS NEXT TURN once that turn has begun (8a9a, tokens/turnEffects.js).
+ */
 const parseTokenConditions = (text) => {
   let list;
   try { list = typeof text === 'string' ? JSON.parse(text) : text; } catch { return []; }
   if (!Array.isArray(list)) return [];
   return list
     .filter((c) => isPlainObject(c) && typeof c.id === 'string')
-    .map((c) => (Number.isInteger(c.left) && c.left > 0 ? { id: c.id, left: c.left } : { id: c.id }));
+    .map((c) => ({ id: c.id, ...(Number.isInteger(c.left) && c.left > 0 ? { left: c.left } : {}), ...(c.started === true ? { started: true } : {}) }));
 };
 
 /**
@@ -34,12 +37,15 @@ const parseTokenConditions = (text) => {
  *
  * `kept` are the token's own conditions a house rule switched off hides (4j2b): they stay as
  * stored, out of sight, whether or not they were asked for, and none can be put on while hidden.
+ *
+ * `now` is what the token has: a condition kept keeps its `started` (8a9a), whatever is sent; one put on starts fresh.
  */
-const checkTokenConditions = (asked, offered, kept = []) => {
+const checkTokenConditions = (asked, offered, kept = [], now = []) => {
   if (!Array.isArray(asked)) return { ok: false, error: 'Conditions must be a list' };
   if (asked.length > LIMITS.conditions) return { ok: false, error: `At most ${LIMITS.conditions} conditions on a token` };
   const byId = new Map(offered.map((c) => [c.id, c]));
   const keptIds = new Set(kept.map((c) => c.id));
+  const started = new Set(now.filter((c) => c.started === true).map((c) => c.id));
   const seen = new Set();
   const value = [];
   for (const entry of asked) {
@@ -54,9 +60,10 @@ const checkTokenConditions = (asked, offered, kept = []) => {
     if (entry.left !== undefined && entry.left !== null && (!Number.isInteger(entry.left) || entry.left < 1 || entry.left > LIMITS.rounds)) {
       return { ok: false, error: `Rounds left on ${c.name} must be a whole number from 1 to ${LIMITS.rounds}` };
     }
-    if (c.ends === 'rounds') value.push({ id: c.id, left: Number.isInteger(entry.left) ? entry.left : c.rounds });
-    else if (Number.isInteger(entry.left)) value.push({ id: c.id, left: entry.left });
-    else value.push({ id: c.id });
+    const turn = started.has(c.id) ? { started: true } : {};
+    if (c.ends === 'rounds') value.push({ id: c.id, left: Number.isInteger(entry.left) ? entry.left : c.rounds, ...turn });
+    else if (Number.isInteger(entry.left)) value.push({ id: c.id, left: entry.left, ...turn });
+    else value.push({ id: c.id, ...turn });
   }
   return { ok: true, value: [...value, ...kept] };
 };

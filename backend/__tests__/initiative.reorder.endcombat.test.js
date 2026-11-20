@@ -31,7 +31,7 @@ function makeDb() {
         combat_id INTEGER NOT NULL,
         combatants TEXT NOT NULL DEFAULT '[]',
         sides TEXT NOT NULL DEFAULT '[]',
-        turn_index INTEGER DEFAULT 0, turn_counter INTEGER DEFAULT 1, pass_counter INTEGER DEFAULT 1,
+        turn_index INTEGER DEFAULT 0, turn_counter INTEGER DEFAULT 1, pass_counter INTEGER DEFAULT 1, begun INTEGER DEFAULT 0,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
       db.run(`CREATE TABLE dice_rolls (

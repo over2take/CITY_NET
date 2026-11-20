@@ -8,11 +8,12 @@ import type { Definition } from './systemsApi';
 import { idFor } from './setup';
 import { allStats, formulaList } from './statsRules';
 
-export const LIMITS = { conditions: 60, name: 30, short: 8, description: 300, rounds: 99, modifiers: 10, amount: 99, number: 9999, times: 100, formula: 200 } as const;
+export const LIMITS = { conditions: 60, name: 30, short: 8, description: 300, rounds: 99, modifiers: 10, amount: 99, number: 9999, times: 100, formula: 200, eachTurn: 3, endsOn: 9999 } as const;
 export const ALL_ROLLS = 'all_rolls';
 
 /** When removed, after a number of rounds, or at any of the rests named in `at` (4f, rests.ts). */
-export type Ends = 'removed' | 'rounds' | 'rest';
+/** How a condition ends; AT THE END OF ITS NEXT TURN since 8a9a (its choice on the page is 8a9b's). */
+export type Ends = 'removed' | 'rounds' | 'rest' | 'next_turn';
 /** How a modifier counts (8a5e1): added (said by nothing), times, set to, or no more than. */
 export type ModifierWay = 'add' | 'times' | 'set' | 'most';
 export const WAYS: ModifierWay[] = ['add', 'times', 'set', 'most'];
@@ -64,7 +65,7 @@ export const shortFrom = (name: string) => name.trim().split(/\s+/)[0].toUpperCa
 
 const whole = (base: { id: string; name: string; short?: string; icon?: string; description?: string }, c: Record<string, unknown>, standard: boolean): Condition => {
   const text = (v: unknown) => (typeof v === 'string' ? v : undefined);
-  const ends: Ends = c.ends === 'rounds' || c.ends === 'rest' ? c.ends : 'removed';
+  const ends: Ends = c.ends === 'rounds' || c.ends === 'rest' || c.ends === 'next_turn' ? c.ends : 'removed';
   return {
     id: base.id,
     name: text(c.name)?.trim() || base.name,
@@ -137,6 +138,10 @@ export const withCondition = (def: Definition, id: string, patch: ConditionPatch
   } else if (entry.ends === 'rest') {
     entry.at = Array.isArray(entry.at) ? entry.at.filter((id): id is string => typeof id === 'string') : [];
     delete entry.rounds;
+  } else if (entry.ends === 'next_turn') {
+    // Kept through any other edit (8a9a); it has no rounds or rests.
+    delete entry.rounds;
+    delete entry.at;
   } else {
     delete entry.ends;
     delete entry.rounds;

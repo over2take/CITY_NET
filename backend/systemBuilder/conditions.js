@@ -28,10 +28,22 @@
 // shouldn't stack"): of several changing one number one way, only the strongest counts. A visual change the GM explains;
 // nothing is enforced at the table.
 //
+// EACH TURN (8a9a; approved mockup docs/mockups/condition-turn-effects.html, 2026-11-19): a condition may do something on
+// initiative turns, up to three things, none to start ("this needs to be optional"):
+//
+//   each_turn: [{ when: 'turn_start', does: 'damage', roll: '1d4', changes_hp: true, rolled_by: 'table' },
+//               { when: 'turn_end', does: 'roll_to_end', roll: 'd20 + @con_mod', ends_on: 13, rolled_by: 'player' }]
+//
+// WHEN the start or end of its turn, or of the round (the turn and round as agreed, written in the mockup); DOES damage,
+// heal, a roll that takes it off on ENDS ON or more, or a roll for the log alone; DAMAGE and HEAL change the token's HP on
+// their own unless changes_hp is false, the GM applying it by hand; ROLLED BY the table at once, or the player asked for
+// their character's and the GM for an NPC's. And a condition may end AT THE END OF ITS NEXT TURN (ends: 'next_turn').
+// Fired by tokens/turnEffects.js.
+//
 // Pure: the definition checks and the running game both read it.
 
 const NAME = /^[a-z][a-z0-9_]{0,39}$/;
-const LIMITS = { conditions: 60, name: 30, short: 8, description: 300, rounds: 99, modifiers: 10, amount: 99, number: 9999, times: 100, formula: 200 };
+const LIMITS = { conditions: 60, name: 30, short: 8, description: 300, rounds: 99, modifiers: 10, amount: 99, number: 9999, times: 100, formula: 200, eachTurn: 3, endsOn: 9999 };
 
 /** The icons drawn for CITY_NET (frontend/src/sheets/conditionIcons.ts holds the drawings). */
 const ICONS = [
@@ -43,8 +55,12 @@ const ICONS = [
 const UPLOADED_ICON = /^\/uploads\/condition_icons\/[0-9a-f]{64}\.(png|webp|svg)$/;
 const isIcon = (icon) => typeof icon === 'string' && (ICONS.includes(icon) || UPLOADED_ICON.test(icon));
 
-/** How a condition ends: when someone takes it off, after a number of rounds, or at a rest. */
-const ENDS = ['removed', 'rounds', 'rest'];
+/** How a condition ends: when someone takes it off, after a number of rounds, at a rest, or at the end of its next turn (8a9a). */
+const ENDS = ['removed', 'rounds', 'rest', 'next_turn'];
+/** EACH TURN (8a9a): when it fires, what it does, and who rolls it. */
+const WHENS = ['turn_start', 'turn_end', 'round_start', 'round_end'];
+const DOES = ['damage', 'heal', 'roll_to_end', 'just_roll'];
+const ROLLED_BY = ['table', 'player'];
 /** A modifier's target that is no single number: every roll the character makes. */
 const ALL_ROLLS = 'all_rolls';
 /** How a modifier counts (8a5e1): added, times, set to, or no more than. */
@@ -66,8 +82,8 @@ const STANDARD = [
 const STANDARD_IDS = new Set(STANDARD.map((c) => c.id));
 
 // only_with, the house rule a condition waits on, is houseRules.js's to check.
-const STANDARD_KEYS = new Set(['on', 'name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with', 'applied']);
-const OWN_KEYS = new Set(['name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with', 'applied']);
+const STANDARD_KEYS = new Set(['on', 'name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with', 'applied', 'each_turn']);
+const OWN_KEYS = new Set(['name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with', 'applied', 'each_turn']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -117,12 +133,37 @@ const checkModifiers = (modifiers, where, targets, problems, parse) => {
   });
 };
 
+/** A condition's EACH TURN, as checked (8a9a): `readRoll` reads a ROLL, answering why it can't or null; none checks it is text. */
+const checkEachTurn = (list, where, problems, readRoll) => {
+  if (list === undefined) return;
+  if (!Array.isArray(list)) { problems.push({ where, message: 'Must be a list of what it does each turn' }); return; }
+  if (list.length > LIMITS.eachTurn) problems.push({ where, message: `At most ${LIMITS.eachTurn}` });
+  list.slice(0, LIMITS.eachTurn).forEach((e, i) => {
+    const ew = `${where} ${i + 1}`;
+    if (!isPlainObject(e)) { problems.push({ where: ew, message: 'Must say when, what it does and its roll' }); return; }
+    for (const key of Object.keys(e)) if (!['when', 'does', 'roll', 'ends_on', 'changes_hp', 'rolled_by'].includes(key)) problems.push({ where: `${ew}, ${key}`, message: 'Not part of what a condition does each turn' });
+    if (!WHENS.includes(e.when)) problems.push({ where: `${ew}, when`, message: 'The start or end of its turn, or of the round' });
+    if (!DOES.includes(e.does)) problems.push({ where: `${ew}, does`, message: 'DAMAGE, HEAL, ROLL TO END or JUST ROLL' });
+    if (typeof e.roll !== 'string' || !e.roll.trim()) problems.push({ where: `${ew}, roll`, message: 'Dice to roll, like 1d4' });
+    else if (e.roll.length > LIMITS.formula) problems.push({ where: `${ew}, roll`, message: `Longer than ${LIMITS.formula} characters` });
+    else if (readRoll) { const why = readRoll(e.roll); if (why) problems.push({ where: `${ew}, roll`, message: why }); }
+    if (e.does === 'roll_to_end') {
+      if (!Number.isInteger(e.ends_on) || Math.abs(e.ends_on) > LIMITS.endsOn) problems.push({ where: `${ew}, ends_on`, message: `The whole number it ends on or more, up to ${LIMITS.endsOn}` });
+    } else if (e.ends_on !== undefined) problems.push({ where: `${ew}, ends_on`, message: 'Only a ROLL TO END ends on a number' });
+    if (e.changes_hp !== undefined) {
+      if (e.does !== 'damage' && e.does !== 'heal') problems.push({ where: `${ew}, changes_hp`, message: 'Only DAMAGE and HEAL change HP' });
+      else if (typeof e.changes_hp !== 'boolean') problems.push({ where: `${ew}, changes_hp`, message: 'Whether it changes HP on its own: true or false' });
+    }
+    if (e.rolled_by !== undefined && !ROLLED_BY.includes(e.rolled_by)) problems.push({ where: `${ew}, rolled_by`, message: 'The table, or the player (the GM for an NPC)' });
+  });
+};
+
 /**
  * Problems with a definition's `conditions`, pushed onto `problems`. `targets` are the ids a
  * modifier may name: the system's stats and formulas; `rests` the ids a condition may end at; `parse` reads a modifier's
  * formula (8a5e1), none checking only that it is text.
  */
-const checkConditions = (conditions, targets, problems, rests = new Set(), parse = null) => {
+const checkConditions = (conditions, targets, problems, rests = new Set(), parse = null, readRoll = null) => {
   if (conditions === undefined) return;
   if (!isPlainObject(conditions)) { problems.push({ where: 'conditions', message: 'Must be a set of conditions' }); return; }
   const own = Object.keys(conditions).filter((id) => !STANDARD_IDS.has(id));
@@ -143,7 +184,7 @@ const checkConditions = (conditions, targets, problems, rests = new Set(), parse
     text(c.short, `${where}, short`, LIMITS.short, problems);
     text(c.description, `${where}, description`, LIMITS.description, problems);
     if (c.icon !== undefined && !isIcon(c.icon)) problems.push({ where: `${where}, icon`, message: 'Must be one of the drawn icons or an uploaded one' });
-    if (c.ends !== undefined && !ENDS.includes(c.ends)) problems.push({ where: `${where}, ends`, message: 'Ends when removed, after rounds, or at a rest' });
+    if (c.ends !== undefined && !ENDS.includes(c.ends)) problems.push({ where: `${where}, ends`, message: 'Ends when removed, after rounds, at a rest, or at the end of its next turn' });
     if (c.ends === 'rounds') {
       if (!Number.isInteger(c.rounds) || c.rounds < 1 || c.rounds > LIMITS.rounds) {
         problems.push({ where: `${where}, rounds`, message: `A whole number from 1 to ${LIMITS.rounds}` });
@@ -159,8 +200,19 @@ const checkConditions = (conditions, targets, problems, rests = new Set(), parse
     }
     if (has(c, 'applied') && typeof c.applied !== 'boolean') problems.push({ where: `${where}, applied`, message: 'Whether its modifiers are applied: true or false' });
     checkModifiers(c.modifiers, `${where}, modifier`, targets, problems, parse);
+    checkEachTurn(c.each_turn, `${where}, each turn`, problems, readRoll);
   }
 };
+
+/** A condition's EACH TURN as the game runs it (8a9a): the well-formed ones, each whole. */
+const eachTurnOf = (c) => (Array.isArray(c.each_turn) ? c.each_turn : []).slice(0, LIMITS.eachTurn)
+  .filter((e) => isPlainObject(e) && WHENS.includes(e.when) && DOES.includes(e.does) && typeof e.roll === 'string' && e.roll.trim() && (e.does !== 'roll_to_end' || Number.isInteger(e.ends_on)))
+  .map((e) => ({
+    when: e.when, does: e.does, roll: e.roll.trim(),
+    ...(e.does === 'roll_to_end' ? { ends_on: e.ends_on } : {}),
+    ...(e.does === 'damage' || e.does === 'heal' ? { changes_hp: e.changes_hp !== false } : {}),
+    rolled_by: e.rolled_by === 'player' ? 'player' : 'table',
+  }));
 
 /** A label for a chip from a name: its first word in capitals, cut to fit. */
 const shortFrom = (name) => String(name).trim().split(/\s+/)[0].toUpperCase().slice(0, LIMITS.short);
@@ -186,6 +238,8 @@ const conditionsOf = (definition) => {
       modifiers: Array.isArray(c.modifiers) ? c.modifiers.filter((m) => isPlainObject(m)).map((m) => ({ target: m.target, amount: m.amount, ...(WAYS.includes(m.way) && m.way !== 'add' ? { way: m.way } : {}) })) : [],
       // Its modifiers change the sheet's numbers (8a5e1), or are a reminder.
       ...(c.applied === true ? { applied: true } : {}),
+      // What it does on initiative turns (8a9a), each whole: changes_hp on and rolled by the table unless said otherwise.
+      ...(eachTurnOf(c).length ? { each_turn: eachTurnOf(c) } : {}),
       standard,
     };
   };
@@ -202,4 +256,4 @@ const conditionsOf = (definition) => {
   return out.slice(0, LIMITS.conditions);
 };
 
-module.exports = { STANDARD, ICONS, ENDS, ALL_ROLLS, WAYS, LIMITS, UPLOADED_ICON, isIcon, checkConditions, conditionsOf };
+module.exports = { STANDARD, ICONS, ENDS, ALL_ROLLS, WAYS, WHENS, DOES, ROLLED_BY, LIMITS, UPLOADED_ICON, isIcon, checkConditions, conditionsOf, eachTurnOf };

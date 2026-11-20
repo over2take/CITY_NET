@@ -202,7 +202,7 @@ describe('saves, checks and the rest of the table\'s rolls (6c4d3)', () => {
     await run(db, `CREATE TABLE initiative_combat (id INTEGER PRIMARY KEY AUTOINCREMENT, turn_counter INTEGER DEFAULT 1, pass_counter INTEGER DEFAULT 1,
       system TEXT DEFAULT 'generic', mode TEXT DEFAULT 'individual', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
     await run(db, `CREATE TABLE initiative_scene (scene_key TEXT PRIMARY KEY, combat_id INTEGER NOT NULL, combatants TEXT NOT NULL DEFAULT '[]',
-      sides TEXT NOT NULL DEFAULT '[]', turn_index INTEGER DEFAULT 0, turn_counter INTEGER DEFAULT 1, pass_counter INTEGER DEFAULT 1, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+      sides TEXT NOT NULL DEFAULT '[]', turn_index INTEGER DEFAULT 0, turn_counter INTEGER DEFAULT 1, pass_counter INTEGER DEFAULT 1, begun INTEGER DEFAULT 0, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
     const t = await join();
     t.handlers['initiative:start']({ sceneKey: 'city:0', system: 'generic', mode: 'side' });
     await until(async () => (await new Promise((r) => db.get('SELECT 1 AS n FROM initiative_scene', (e, row) => r(row)))), { label: 'the combat' });

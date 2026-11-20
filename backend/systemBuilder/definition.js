@@ -61,7 +61,8 @@ const { checkHouseRules } = require('./houseRules');
 const { checkGraph } = require('./graph');
 const { checkRolls, SEEN } = require('./rollStyles');
 const { checkDice } = require('./diceFaces');
-const { checkChoices, checkHasNames } = require('./choices');
+const { checkChoices, checkHasNames, namesOf } = require('./choices');
+const { rollAmount } = require('./tierRolls');
 const { checkCreation, checkGifts } = require('./creation');
 const { checkLevels } = require('./levels');
 const { checkSpend } = require('./spendXp');
@@ -198,7 +199,13 @@ const checkDefinition = (definition) => {
   checkNpc(definition, derivedIds, problems);
   // A modifier's formula (8a5e1) read as any formula is.
   checkConditions(definition.conditions, new Set([...statIdsOf(definition), ...derivedIds]), problems, restIdsOf(definition),
-    (text) => parseFormula(text, (name) => isPlainObject(definition.lookups) && Object.prototype.hasOwnProperty.call(definition.lookups, name)));
+    (text) => parseFormula(text, (name) => isPlainObject(definition.lookups) && Object.prototype.hasOwnProperty.call(definition.lookups, name)),
+    // EACH TURN's roll (8a9a), read as a gear line's dice are: dice, numbers and the system's names.
+    (text) => {
+      const names = namesOf(definition);
+      const read = rollAmount(text, {}, { known: (n) => names.has(n), refused: (n) => `@${n} isn't one of this system's names` }, () => 0);
+      return 'error' in read ? read.error : null;
+    });
   checkRests(definition, problems);
   checkHouseRules(definition, problems);
   checkGraph(definition, problems);

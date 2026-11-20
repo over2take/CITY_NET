@@ -3,6 +3,7 @@ const { withThrow, boardOf } = require('../utils/diceThrow');
 const customSystems = require('../systemBuilder/runtime');
 const { tickCombat, combatTokens } = require('../tokens/conditions');
 const { syncConditionsOnSheet } = require('../sheets/conditionsOnSheet');
+const { momentsOfNext, momentsOfBegin, fireTurnMoments } = require('../tokens/turnEffects');
 
 /** A custom system's own word for initiative in the dice log; today's text for the rest. */
 const initiativeWord = (system) => customSystems.wordIn(system, 'initiative', 'singular', 'INITIATIVE').toUpperCase();
@@ -16,7 +17,7 @@ const initiativeOn = (system) => customSystems.partIn(system || 'generic', 'init
 function getSceneState(db, sceneKey, cb) {
   db.get(
     `SELECT s.scene_key, s.combat_id, s.combatants, s.sides, s.turn_index,
-            s.turn_counter, s.pass_counter, c.system, c.mode
+            s.turn_counter, s.pass_counter, s.begun, c.system, c.mode
      FROM initiative_scene s
      JOIN initiative_combat c ON c.id = s.combat_id
      WHERE s.scene_key = ?`,
@@ -36,6 +37,8 @@ function buildStatePayload(row, sceneKey, extra = {}) {
     passCounter: row.pass_counter,
     system: row.system || 'generic',
     mode: row.mode || 'individual',
+    // Round 1 begun with BEGIN (8a9a), or by a NEXT; until then the tracker offers BEGIN.
+    begun: !!row.begun,
     ...extra,
   };
 }
@@ -70,13 +73,30 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
    * A new round: conditions with rounds left on the combat's tokens lose one, and those at none
    * come off (tokens/conditions.js, 4e2a2). Every screen redraws the map when any token changed.
    */
-  const newRound = (combatants) => tickCombat(db, combatants, (err, { tokens }) => {
+  const newRound = (combatants, then = () => {}) => tickCombat(db, combatants, (err, { tokens }) => {
     if (err) console.error('[initiative] Could not count conditions down:', err.message);
-    if (!tokens) return;
-    emitUpdate();
-    // A condition APPLIED that ran out takes its change off the player's numbers (8a5e1).
-    for (const username of combatTokens(combatants).players) syncConditionsOnSheet(db, { username, io, runtime: require('../systemBuilder/runtime') });
+    if (tokens) {
+      emitUpdate();
+      // A condition APPLIED that ran out takes its change off the player's numbers (8a5e1).
+      for (const username of combatTokens(combatants).players) syncConditionsOnSheet(db, { username, io, runtime: require('../systemBuilder/runtime') });
+    }
+    then();
   });
+
+  /**
+   * A condition's EACH TURN (8a9a, tokens/turnEffects.js): `moments` fired on the running game's tokens. Those up to END OF
+   * ROUND first; the rounds count down (`round`, a new round's combatants) between; then START OF ROUND and the next turn.
+   */
+  const fire = (moments, round = null) => {
+    const before = moments.filter((m) => m.when === 'turn_end' || m.when === 'round_end');
+    const after = moments.filter((m) => m.when === 'round_start' || m.when === 'turn_start');
+    db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (gErr, gRow) => {
+      const system = !gErr && gRow ? gRow.value : null;
+      const go = (list) => fireTurnMoments(db, { io, emitUpdate, runtime: customSystems, system, moments: list })
+        .catch((e) => console.error('[initiative] Condition turn effects:', e.message));
+      go(before).then(() => (round ? new Promise((done) => newRound(round, done)) : null)).then(() => go(after));
+    });
+  };
 
   io.on('connection', (socket) => {
 
@@ -366,13 +386,15 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
             const wrapped = nextIndex >= sides.length;
             const newTurnIndex = wrapped ? 0 : nextIndex;
 
+            const sideCombatants = JSON.parse(row.combatants || '[]');
             db.run(
-              `UPDATE initiative_scene SET turn_index = ?, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
+              `UPDATE initiative_scene SET turn_index = ?, begun = 1, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
               [newTurnIndex, sceneKey],
               (err) => {
                 if (err) return;
+                // Its side's turn ending, the next's beginning, and the round's where it came round (8a9a).
+                fire(momentsOfNext({ mode: 'side', before: sideCombatants, sides, from: row.turn_index, to: newTurnIndex, wrapped }), wrapped ? sideCombatants : null);
                 if (wrapped) {
-                  newRound(JSON.parse(row.combatants || '[]'));
                   db.run(
                     `UPDATE initiative_scene SET turn_counter = turn_counter + 1 WHERE scene_key = ?`,
                     [sceneKey],
@@ -396,9 +418,13 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
 
           if (!wrapped) {
             db.run(
-              `UPDATE initiative_scene SET turn_index = ?, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
+              `UPDATE initiative_scene SET turn_index = ?, begun = 1, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
               [newTurnIndex, sceneKey],
-              (err) => { if (!err) broadcastScene(io, db, sceneKey); }
+              (err) => {
+                if (err) return;
+                fire(momentsOfNext({ before: combatants, from: row.turn_index, to: newTurnIndex, wrapped: false }));
+                broadcastScene(io, db, sceneKey);
+              }
             );
             return;
           }
@@ -409,12 +435,13 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
             const survivors = decayed.filter((c) => c.score > 0);
             const startsRound = survivors.length === 0;
             const nextCombatants = startsRound ? [] : survivors;
-            // Shadowrun's round ends when every pass is spent, not when a pass ends.
-            if (startsRound) newRound(combatants);
+            // Shadowrun's round ends when every pass is spent, not when a pass ends (8a9a: a pass's turns are turns). Then
+            // everyone rolls again, so the new round's start waits on BEGIN.
+            fire(momentsOfNext({ before: combatants, after: nextCombatants, from: row.turn_index, to: 0, wrapped: true, roundEnds: startsRound }), startsRound ? combatants : null);
 
             db.run(
-              `UPDATE initiative_scene SET combatants = ?, turn_index = 0, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
-              [JSON.stringify(nextCombatants), sceneKey],
+              `UPDATE initiative_scene SET combatants = ?, turn_index = 0, begun = ?, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
+              [JSON.stringify(nextCombatants), startsRound ? 0 : 1, sceneKey],
               (err) => {
                 if (err) return;
                 db.run(
@@ -425,9 +452,9 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
               }
             );
           } else {
-            newRound(combatants);
+            fire(momentsOfNext({ before: combatants, from: row.turn_index, to: 0, wrapped: true }), combatants);
             db.run(
-              `UPDATE initiative_scene SET turn_index = 0, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
+              `UPDATE initiative_scene SET turn_index = 0, begun = 1, updated_at = CURRENT_TIMESTAMP WHERE scene_key = ?`,
               [sceneKey],
               (err) => {
                 if (err) return;
@@ -441,6 +468,22 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
           }
         }
       );
+    });
+
+    // ── Begin round 1 (8a9a) ──────────────────────────────────────────────────
+    // Once everyone has rolled: START OF ROUND, then the first one's START OF TURN; the tracker's NEXT from then on. Once a
+    // round: a scene already begun (by BEGIN or a NEXT) starts nothing.
+    socket.on('initiative:begin', ({ sceneKey } = {}) => {
+      if (!sceneKey) return;
+      getSceneState(db, sceneKey, (err, row) => {
+        if (err || !row) return;
+        db.run(`UPDATE initiative_scene SET begun = 1 WHERE scene_key = ? AND begun = 0`, [sceneKey], function (e) {
+          if (e || !this.changes) return;
+          const mode = row.mode || 'individual';
+          fire(momentsOfBegin({ mode, combatants: JSON.parse(row.combatants || '[]'), sides: sortSides(JSON.parse(row.sides || '[]')), index: row.turn_index }));
+          broadcastScene(io, db, sceneKey);
+        });
+      });
     });
 
     // ── Remove a combatant ────────────────────────────────────────────────────
