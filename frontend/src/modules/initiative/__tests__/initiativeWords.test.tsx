@@ -3,7 +3,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { InitiativeWindow } from '../components/InitiativeWindow';
-import { InitiativeSideView } from '../components/InitiativeSideView';
 import { InitiativeNavPanel } from '../components/InitiativeNavPanel';
 import { Sidebar } from '../../../components/Sidebar';
 import type { InitiativeState } from '../hooks/useInitiative';
@@ -77,17 +76,18 @@ describe('the tracker window', () => {
   });
 });
 
+// Group style drawn in the tracker window, as at the table: its counter and END are the window's (8a9c, InitiativeControls).
 describe('the side view', () => {
   const read = (system: string) => {
     const s = state(system, { mode: 'side', sides: [{ id: 'pc', name: 'PLAYERS', score: 12, isPlayerSide: true }, { id: 'npc', name: 'NPC', score: 0, isPlayerSide: false }] });
-    let r = render(<InitiativeSideView state={s} isAdmin onNext={vi.fn()} onEnd={vi.fn()} onRemove={vi.fn()} onReorder={vi.fn()} />);
+    let r = render(<InitiativeWindow {...windowProps(system, { state: s })} />);
     const out: Record<string, string | null> = {
       counter: screen.getByText(/ 3$/).textContent,
       score: screen.getByText(/ 12$/).textContent,
       end: screen.getByText(/^END /).textContent,
     };
     r.unmount();
-    r = render(<InitiativeSideView state={s} isAdmin={false} onNext={vi.fn()} onEnd={vi.fn()} onRemove={vi.fn()} onReorder={vi.fn()} onJoin={vi.fn()} playerCombatantId="player:jade" />);
+    r = render(<InitiativeWindow {...windowProps(system, { state: s, isAdmin: false, onJoin: vi.fn(), playerCombatantId: 'player:jade' })} />);
     out.join = screen.getByText(/^JOIN /).textContent;
     cleanup();
     return out;

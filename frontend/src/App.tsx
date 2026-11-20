@@ -109,7 +109,7 @@ import { GlobalCameraCapture, CursorPivotControls, CameraController, KeyboardPan
 import { AdminPanel } from './components/AdminPanel';
 import MapExportController, { type MapExportApi } from './components/MapExportController';
 import type { MapExportOptions } from './hooks/useMapExport';
-import { InitiativeWindow, useInitiative, npcInitiativePortrait } from './modules/initiative';
+import { InitiativeWindow, useInitiative, useTurnAsks, npcInitiativePortrait } from './modules/initiative';
 import { getInitiativeSystem } from './modules/initiative/systems';
 import { SpectatorCameraRig, AdminCameraBroadcaster, SpectatorBattleMapRig, AdminBattleMapBroadcaster, computeBroadcastFraming } from './components/Streamer';
 import { AttackAnimations } from './components/AttackAnimations';
@@ -1136,6 +1136,8 @@ function App() {
     else setIsSheetOpen(open);
   };
   const initiative = useInitiative(socketRef, initiativeSceneKey, initiativeSystem);
+  // The EACH TURN rolls waiting (8a9c): the GM's, for the tracker's NPC rows and its WAITING ON line.
+  const turnAsks = useTurnAsks(socketRef, isAdmin);
   // Held here, not in the window: the buttons that open it need to know whether this
   // table owns any vehicles at all.
   const mapLevel = {
@@ -2404,11 +2406,16 @@ function App() {
                 onStart={(combatId) => { initiative.startInitiative(combatId, combatId ? undefined : initiativeMode); initiative.listCombats(); }}
                 onListCombats={initiative.listCombats}
                 onNext={initiative.nextTurn}
+                onBegin={initiative.beginRound}
                 onEnd={initiative.endInitiative}
                 onRemove={initiative.removeCombatant}
                 onReorder={initiative.reorder}
                 currentFloorIndex={sharedBuildingInit ? activeBattleMapData?.currentFloorIndex : undefined}
                 system={initiativeSystem}
+                asks={turnAsks.asks}
+                rolling={turnAsks.rolling}
+                onRollAsk={turnAsks.roll}
+                askError={turnAsks.error}
               />
             )}
 

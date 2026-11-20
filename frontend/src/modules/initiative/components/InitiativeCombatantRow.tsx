@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import type { Combatant } from '../hooks/useInitiative';
+import type { TurnAsk } from '../../../sheets/turnAsks';
 
 interface Props {
   combatant: Combatant;
@@ -10,9 +11,14 @@ interface Props {
   onDragStart: (index: number) => void;
   onDragOver: (index: number) => void;
   onDrop: () => void;
+  /** The GM's: this NPC's EACH TURN rolls waiting (8a9c), each a ROLL on its row; the window gives a player none. */
+  asks?: TurnAsk[];
+  /** The asks being rolled, waiting for the answer. */
+  rolling?: number[];
+  onRollAsk?: (id: number) => void;
 }
 
-export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, onRemove, onDragStart, onDragOver, onDrop }: Props) {
+export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, onRemove, onDragStart, onDragOver, onDrop, asks = [], rolling = [], onRollAsk }: Props) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [showExplod, setShowExplod] = useState(combatant.exploded ?? false);
 
@@ -55,7 +61,7 @@ export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, on
         setTimeout(() => document.body.removeChild(ghost), 0);
         onDragStart(index);
       }}
-      onDragOver={(e) => { e.preventDefault(); isAdmin && onDragOver(index); }}
+      onDragOver={(e) => { e.preventDefault(); if (isAdmin) onDragOver(index); }}
       onDrop={() => isAdmin && onDrop()}
     >
       {/* Portrait */}
@@ -71,6 +77,20 @@ export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, on
         {isActive && '▶ '}{combatant.name.toUpperCase()}
       </span>
 
+      {/* An NPC's roll asked of the GM (8a9c): ROLL · POISONED SAVE, until rolled; NEXT never waits on it. */}
+      {asks.map((a) => (
+        <button
+          key={a.id}
+          className="utility-btn"
+          title={a.says}
+          disabled={rolling.includes(a.id)}
+          onClick={() => onRollAsk?.(a.id)}
+          style={{ flexShrink: 0, fontSize: '0.55rem', letterSpacing: '1px', padding: '2px 6px', color: 'var(--warning)', borderColor: 'var(--warning)' }}
+        >
+          ROLL · {a.named}
+        </button>
+      ))}
+
       {/* Score */}
       <span style={{ fontSize: '0.8rem', fontWeight: 'bold', color: isActive ? 'var(--green)' : 'inherit', minWidth: 24, textAlign: 'right' }}>
         {combatant.score}
@@ -79,7 +99,7 @@ export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, on
 
       {/* EXPLOD badge */}
       {showExplod && (
-        <span style={{ fontSize: '0.55rem', letterSpacing: '1px', color: '#ffffff', background: 'var(--green)', padding: '1px 4px', borderRadius: 2, fontWeight: 'bold', flexShrink: 0 }}>
+        <span style={{ fontSize: '0.55rem', letterSpacing: '1px', color: 'var(--black)', background: 'var(--green)', padding: '1px 4px', borderRadius: 2, fontWeight: 'bold', flexShrink: 0 }}>
           EXPLOD
         </span>
       )}
@@ -89,9 +109,9 @@ export function InitiativeCombatantRow({ combatant, index, isActive, isAdmin, on
         <button
           onClick={() => onRemove(combatant.id)}
           title="REMOVE"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#555', fontSize: '0.7rem', padding: '0 2px', lineHeight: 1 }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = '#ff4444')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = '#555')}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--green)', opacity: 0.5, fontSize: '0.7rem', padding: '0 2px', lineHeight: 1 }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--danger)'; e.currentTarget.style.opacity = '1'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--green)'; e.currentTarget.style.opacity = '0.5'; }}
         >
           ✕
         </button>

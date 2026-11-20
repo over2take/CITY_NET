@@ -84,7 +84,7 @@ describe('START', () => {
     expect(await scene()).toMatchObject({ combat_id: id, combatants: '[]', turn_index: 0, turn_counter: 1, pass_counter: 1, begun: 0 });
     await until(async () => !!told('city:0'), { label: 'state' });
     expect(emitted.find((e) => e.event === 'initiative:started').data).toEqual({ sceneKey: 'city:0', combatId: id });
-    expect(lastState()).toMatchObject({ sceneKey: 'city:0', combatId: id, combatants: [], turnIndex: 0, turnCounter: 1, passCounter: 1, system: 'cyberpunk_red', mode: 'individual', begun: false });
+    expect(lastState()).toMatchObject({ sceneKey: 'city:0', combatId: id, combatants: [], turnIndex: 0, turnCounter: 1, passCounter: 1, system: 'cyberpunk_red', mode: 'individual', begun: false, turnEffects: false });
   });
 
   it('a scene JOINed to a combat shares it, at its own ROUND 1; pressed again, nothing more', async () => {

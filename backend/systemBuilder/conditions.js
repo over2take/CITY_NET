@@ -214,6 +214,12 @@ const eachTurnOf = (c) => (Array.isArray(c.each_turn) ? c.each_turn : []).slice(
     rolled_by: e.rolled_by === 'player' ? 'player' : 'table',
   }));
 
+/**
+ * Whether any of `conditions` (as conditionsOf gives them) does anything on initiative turns (8a9c): an EACH TURN, or an
+ * ending AT THE END OF ITS NEXT TURN. Where none does, round 1 needs no BEGIN.
+ */
+const onTurns = (conditions) => conditions.some((c) => c.ends === 'next_turn' || (Array.isArray(c.each_turn) && c.each_turn.length > 0));
+
 /** A label for a chip from a name: its first word in capitals, cut to fit. */
 const shortFrom = (name) => String(name).trim().split(/\s+/)[0].toUpperCase().slice(0, LIMITS.short);
 
@@ -256,4 +262,4 @@ const conditionsOf = (definition) => {
   return out.slice(0, LIMITS.conditions);
 };
 
-module.exports = { STANDARD, ICONS, ENDS, ALL_ROLLS, WAYS, WHENS, DOES, ROLLED_BY, LIMITS, UPLOADED_ICON, isIcon, checkConditions, conditionsOf, eachTurnOf };
+module.exports = { STANDARD, ICONS, ENDS, ALL_ROLLS, WAYS, WHENS, DOES, ROLLED_BY, LIMITS, UPLOADED_ICON, isIcon, checkConditions, conditionsOf, eachTurnOf, onTurns };

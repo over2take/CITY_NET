@@ -2,6 +2,8 @@ import React, { useRef, useState } from 'react';
 import { DraggableWindow } from '../../../components/DraggableWindow';
 import { InitiativeCombatantRow } from './InitiativeCombatantRow';
 import { InitiativeSideView } from './InitiativeSideView';
+import { InitiativeControls } from './InitiativeControls';
+import { beginOffered, npcAsksOn, waitingLine, type TurnAsk } from '../../../sheets/turnAsks';
 import type { InitiativeState, ActiveCombat } from '../hooks/useInitiative';
 import { getInitiativeSystem } from '../systems';
 import { useWords } from '../../../sheets/words';
@@ -28,6 +30,14 @@ interface Props {
   currentFloorIndex?: number;
   /** TTRPG system key — controls counter label and SR6-specific UI */
   system?: string;
+  /** BEGIN ROUND 1 (8a9c), the GM's, where the game's conditions act on turns. */
+  onBegin?: () => void;
+  /** The GM's: EACH TURN rolls waiting (sheets/turnAsks.ts); an NPC's on its row, a player's said beside NEXT. */
+  asks?: TurnAsk[];
+  rolling?: number[];
+  onRollAsk?: (id: number) => void;
+  /** A roll the tracker asked for and was refused, in words. */
+  askError?: string | null;
 }
 
 /**
@@ -45,6 +55,11 @@ function InitiativeTracker({
   inSidebar = false,
   currentFloorIndex,
   system = 'generic',
+  onBegin = () => {},
+  asks = [],
+  rolling = [],
+  onRollAsk,
+  askError = null,
 }: Props) {
   const activeSystem = state?.system || system;
   const activeMode = state?.mode || 'individual';
@@ -73,6 +88,27 @@ function InitiativeTracker({
   const word = useWords(activeSystem);
   const INITIATIVE = word('initiative', 'singular', 'INITIATIVE').toUpperCase();
   const INIT = word('initiative', 'short', 'INIT').toUpperCase();
+  const ROUND = word('round', 'singular', systemDef.counterLabel).toUpperCase();
+  const count = state ? (activeSystem === 'shadowrun_6e' ? state.passCounter : state.turnCounter) : 1;
+  // BEGIN ROUND 1 until the round has begun, where it does anything (8a9c); the GM's alone.
+  const begin = isAdmin && beginOffered(state);
+  /** The GM's buttons under the order, in either style. */
+  const controls = (disabled: boolean, nextLabel: string) => (
+    <InitiativeControls
+      begin={begin}
+      beginLabel={`BEGIN ${ROUND} ${count}`}
+      nextLabel={nextLabel}
+      disabled={disabled}
+      endLabel={`END ${INIT}`}
+      onNext={onNext}
+      onBegin={onBegin}
+      onEnd={onEnd}
+      waiting={waitingLine(asks, sceneKey)}
+      error={askError}
+    />
+  );
+  /** This NPC's rolls waiting on the GM, on its row. */
+  const rowAsks = (id: string) => (isAdmin ? npcAsksOn(asks, id, sceneKey) : []);
 
   const content = (
     <>
@@ -81,7 +117,7 @@ function InitiativeTracker({
         {state && activeMode === 'individual' && (
           <div style={{ fontSize: '0.8rem', fontWeight: 'bold', letterSpacing: '2px', color: 'var(--green)', textShadow: 'var(--glow)', marginTop: '2px' }}>
             {/* The count of laps of the order: a ROUND (8a8, the user's call: "this pr"), the system's own word for one. */}
-            {`${word('round', 'singular', systemDef.counterLabel).toUpperCase()} ${activeSystem === 'shadowrun_6e' ? state.passCounter : state.turnCounter}`}
+            {`${ROUND} ${count}${begin ? ' · NOT BEGUN' : ''}`}
           </div>
         )}
       </div>
@@ -137,13 +173,16 @@ function InitiativeTracker({
         <InitiativeSideView
           state={state}
           isAdmin={isAdmin}
-          onNext={onNext}
-          onEnd={onEnd}
           onRemove={onRemove}
           onReorder={onReorder}
           currentFloorIndex={currentFloorIndex}
           playerCombatantId={playerCombatantId}
           onJoin={onJoin}
+          counter={`${ROUND} ${state.turnCounter}${begin ? ' · NOT BEGUN' : ''}`}
+          controls={controls}
+          rowAsks={rowAsks}
+          rolling={rolling}
+          onRollAsk={isAdmin ? onRollAsk : undefined}
         />
       )}
 
@@ -187,6 +226,9 @@ function InitiativeTracker({
                         onDragStart={handleDragStart}
                         onDragOver={handleDragOver}
                         onDrop={() => handleDrop(i)}
+                        asks={rowAsks(c.id)}
+                        rolling={rolling}
+                        onRollAsk={isAdmin ? onRollAsk : undefined}
                       />
                     </div>
                   ))
@@ -196,25 +238,7 @@ function InitiativeTracker({
           })()}
 
           {/* Admin controls */}
-          {isAdmin && (
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button
-                className="upload-btn"
-                style={{ flex: 1, width: 'auto' }}
-                onClick={onNext}
-                disabled={state.combatants.length === 0 && !state.newRound}
-              >
-                {state.newRound ? 'CLEAR' : 'NEXT'}
-              </button>
-              <button
-                className="upload-btn"
-                style={{ flex: 1, width: 'auto', background: 'transparent', color: '#ff4444', borderColor: '#ff4444' }}
-                onClick={onEnd}
-              >
-                END {INIT}
-              </button>
-            </div>
-          )}
+          {isAdmin && controls(state.combatants.length === 0 && !state.newRound, state.newRound ? 'CLEAR' : 'NEXT')}
 
           {/* Player late-join button */}
           {!isAdmin && onJoin && playerCombatantId && !state.combatants.some(c => c.id === playerCombatantId) && (

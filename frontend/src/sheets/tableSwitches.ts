@@ -1,6 +1,7 @@
-// The GAME tab's three switches for a custom system's encumbrance and conditions (8a6b; approved mockup
+// The GAME tab's switches for a custom system's encumbrance and conditions (8a6b; approved mockup
 // docs/mockups/carrying-on-sheet.html, 2026-11-19, the user: "yes to all"): SHOW ENCUMBRANCE, BAND CONDITIONS and APPLY
-// CONDITION MODIFIERS, all on to start, each offered only where the system has what it switches (the render copy's
+// CONDITION MODIFIERS; and CONDITION TURN EFFECTS (8a9c; approved mockup docs/mockups/condition-turn-effects.html, "I love
+// it"). All on to start, each offered only where the system has what it switches (the render copy's
 // `switches`, backend systemBuilder/runtime.js). Kept in the table's settings as the other house rules are; the last two the
 // server reads (sheets/bandConditions.js, sheets/conditionsOnSheet.js), the first the sheet.
 
@@ -10,9 +11,11 @@ export const SHOW_ENCUMBRANCE = 'show_encumbrance';
 export const BAND_CONDITIONS = 'band_conditions';
 /** A condition APPLIED changing the sheet's numbers (backend CONDITIONS_SETTING): '0' keeps them all reminders. */
 export const APPLY_CONDITION_MODIFIERS = 'apply_condition_modifiers';
+/** A condition's EACH TURN rolled on NEXT and BEGIN (backend TURN_EFFECTS_SETTING): '0' leaves them to the GM. */
+export const CONDITION_TURN_EFFECTS = 'condition_turn_effects';
 
 /** What a system has for each switch to switch. */
-export interface TableSwitches { encumbrance: boolean; band_conditions: boolean; applied_conditions: boolean }
+export interface TableSwitches { encumbrance: boolean; band_conditions: boolean; applied_conditions: boolean; turn_effects?: boolean }
 
 export interface SwitchRule { settingKey: string; label: string; title: string; defaultOn: true }
 
@@ -29,6 +32,10 @@ export const switchRules = (has: TableSwitches | null | undefined): SwitchRule[]
   ...(has?.applied_conditions ? [{
     settingKey: APPLY_CONDITION_MODIFIERS, label: 'APPLY CONDITION MODIFIERS', defaultOn: true as const,
     title: 'A condition marked APPLIED changes the numbers on the sheet while it is on the token, like SLOWED: Speed ×0.5. Off: every condition is a reminder, its change said but not made.',
+  }] : []),
+  ...(has?.turn_effects ? [{
+    settingKey: CONDITION_TURN_EFFECTS, label: 'CONDITION TURN EFFECTS', defaultOn: true as const,
+    title: 'Each condition\'s EACH TURN is rolled on NEXT and BEGIN, burning, healing or a save, said in the log. Off: nothing is rolled on turns; the conditions stay on the tokens as reminders and the GM rolls by hand. One that ends at the end of its next turn still comes off.',
   }] : []),
 ];
 

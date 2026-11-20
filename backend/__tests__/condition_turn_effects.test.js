@@ -12,7 +12,7 @@ import { until, drain } from './helpers/until.js';
 
 const require_ = createRequire(import.meta.url);
 const { checkDefinition } = require_('../systemBuilder/definition');
-const { conditionsOf } = require_('../systemBuilder/conditions');
+const { conditionsOf, onTurns } = require_('../systemBuilder/conditions');
 const { checkTokenConditions, parseTokenConditions } = require_('../tokens/conditions');
 const { poolAfter } = require_('../tokens/poolHealth');
 const { momentsOfNext, momentsOfBegin, effectsAt, nextTurnStep, rollEffect, TURN_EFFECTS_SETTING, asksFor, rollAsk, sceneName } = require_('../tokens/turnEffects');
@@ -59,6 +59,14 @@ describe('the checks', () => {
     expect(problems({ burning: { name: 'Burning', each_turn: four } })).toEqual([{ where: 'condition burning, each turn', message: 'At most 3' }]);
     // A standard one may have it too, and AT THE END OF ITS NEXT TURN is a way to end.
     expect(problems({ prone: { ends: 'next_turn', each_turn: [{ when: 'turn_end', does: 'just_roll', roll: '1d6' }] } })).toEqual([]);
+  });
+
+  it('acting on turns (8a9c): an EACH TURN, or ending at the end of its next turn; neither, or none, nothing', () => {
+    expect(onTurns(conditionsOf({ conditions: { burning: TURNS.conditions.burning } }))).toBe(true);
+    expect(onTurns(conditionsOf({ conditions: { stunned: { ends: 'next_turn' } } }))).toBe(true);
+    expect(onTurns(conditionsOf({ conditions: { stunned: { ends: 'rounds' }, dazed: { name: 'Dazed' } } }))).toBe(false);
+    expect(onTurns([{ id: 'x', each_turn: [] }])).toBe(false);
+    expect(onTurns([])).toBe(false);
   });
 
   it('as the game runs it: each whole, changing HP and rolled by the table unless said otherwise; broken ones left out', () => {
@@ -248,10 +256,10 @@ describe('at the table', () => {
   it('BEGIN: START OF ROUND and the first one\'s turn, once; NEXT before it begins the round too', async () => {
     const kes = await token('KES', 'rhombus', 'kes', [{ id: 'burning' }, { id: 'regenerating' }], 5);
     await scene({ combatants: [{ id: 'player:kes' }, { id: 'player:vex' }], begun: 0 });
-    // Not begun: the tracker is told, to offer BEGIN.
+    // Not begun: the tracker is told, to offer BEGIN, and that this game's conditions act on turns (8a9c).
     handlers['initiative:join']({ sceneKey: 'main' });
     await until(async () => emitted.some((e) => e.event === 'initiative:state'), { label: 'joined' });
-    expect(emitted.find((e) => e.event === 'initiative:state').data.begun).toBe(false);
+    expect(emitted.find((e) => e.event === 'initiative:state').data).toMatchObject({ begun: false, turnEffects: true });
     emitted.length = 0;
     handlers['initiative:begin']({ sceneKey: 'main' });
     await until(async () => (await lines()).length === 2, { label: 'begun' });
@@ -390,7 +398,7 @@ describe('a roll asked of the player, or the GM for an NPC (8a9a2)', () => {
     expect(await lines()).toEqual(['KES · POISONED SAVE, END OF ITS TURN: asked on KES\'s sheet', 'GANGER (NPC) · POISONED SAVE, END OF ITS TURN: asked of the GM']);
     const kesAsks = await asks({ username: 'kes' });
     expect(kesAsks).toEqual([expect.objectContaining({ sceneKey: 'main', locationId: kes, player: 'kes', who: 'KES', moment: 'turn_end',
-      condition: expect.objectContaining({ id: 'poisoned', name: 'Poisoned' }), says: 'POISONED SAVE, END OF ITS TURN: @con_mod, 3 or more ends it' })]);
+      condition: expect.objectContaining({ id: 'poisoned', name: 'Poisoned' }), named: 'POISONED SAVE', says: 'POISONED SAVE, END OF ITS TURN: @con_mod, 3 or more ends it' })]);
     expect(await asks({ username: 'vex' })).toEqual([]);
     expect((await asks({ gm: true })).map((a) => a.who)).toEqual(['KES', 'GANGER (NPC)']);
     // Nothing rolled yet: both still on.

@@ -22,6 +22,7 @@ const { cryptoRng } = require('../utils/random');
 const { withThrow, boardOf } = require('../utils/diceThrow');
 const { parseTokenConditions } = require('./conditions');
 const { poolAfter } = require('./poolHealth');
+const { onTurns } = require('../systemBuilder/conditions');
 const { rollAmount } = require('../systemBuilder/tierRolls');
 const { namesOf, effectiveData } = require('../systemBuilder/choices');
 
@@ -248,7 +249,7 @@ const tableOf = (runtime, system) => {
 const fireTurnMoments = async (db, { io, emitUpdate = () => {}, runtime, system, sceneKey = null, moments, rng = cryptoRng }) => {
   if (!system || !Array.isArray(moments) || !moments.length) return;
   const offered = runtime.conditionsIn(system);
-  if (!offered.some((c) => c.ends === 'next_turn' || (Array.isArray(c.each_turn) && c.each_turn.length))) return;
+  if (!onTurns(offered)) return;
   const setting = await get(db, 'SELECT value FROM global_settings WHERE key = ?', [TURN_EFFECTS_SETTING]).catch(() => null);
   const rolls = !(setting && setting.value === '0');
   const { definition, names, pooled } = tableOf(runtime, system);
@@ -321,6 +322,8 @@ const asksFor = async (db, { runtime, system, username = null, gm = false }) => 
     out.push({
       id: a.id, sceneKey: a.scene_key, locationId: a.location_id, player: a.player, who: whoOf(token),
       condition: { id: condition.id, name: condition.name, short: condition.short, icon: condition.icon },
+      // Its name as the log says it (POISONED SAVE): the tracker's ROLL and WAITING ON say it too (8a9c).
+      named: effectName(condition, effect),
       effect, moment: a.moment, says: `${effectName(condition, effect)}, ${WHEN_WORDS[effect.when]}: ${effect.roll}${effect.does === 'roll_to_end' ? `, ${effect.ends_on} or more ends it` : ''}`,
     });
   }

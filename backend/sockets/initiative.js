@@ -3,6 +3,7 @@ const { placeOf, keepDrag, atBottom, lowered } = require('./initiativeOrder');
 const { cryptoRng } = require('../utils/random');
 const { withThrow, boardOf } = require('../utils/diceThrow');
 const customSystems = require('../systemBuilder/runtime');
+const { onTurns } = require('../systemBuilder/conditions');
 const { tickCombat, combatTokens } = require('../tokens/conditions');
 const { syncConditionsOnSheet } = require('../sheets/conditionsOnSheet');
 const { momentsOfNext, momentsOfBegin, fireTurnMoments, dropAsks } = require('../tokens/turnEffects');
@@ -39,8 +40,10 @@ function buildStatePayload(row, sceneKey, extra = {}) {
     passCounter: row.pass_counter,
     system: row.system || 'generic',
     mode: row.mode || 'individual',
-    // Round 1 begun with BEGIN (8a9a), or by a NEXT; until then the tracker offers BEGIN.
+    // Round 1 begun with BEGIN (8a9a), or by a NEXT; until then the tracker offers BEGIN, where it does anything: where a
+    // condition of the game acts on turns (8a9c). Elsewhere NEXT starts the round as it always has.
     begun: !!row.begun,
+    turnEffects: onTurns(customSystems.conditionsIn(row.system || 'generic')),
     ...extra,
   };
 }
