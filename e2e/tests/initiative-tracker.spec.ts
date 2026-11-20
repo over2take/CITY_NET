@@ -1,5 +1,6 @@
 import { test, expect, type Page, type APIRequestContext, type Browser, type TestInfo } from '@playwright/test';
 import { signInAsGm, signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer } from './helpers';
+import { tracker, rows, up, nav, gmTracker, startFight, nextUntil } from './initiative';
 
 // The initiative tracker in a real browser (8i2; the user, 2026-11-19: tests "for the initiative tracker, and multi
 // initiatives", and "what about the GM jumping fight to fight?"): one fight from START to END with two players joining and
@@ -27,23 +28,6 @@ const building = async (request: APIRequestContext, gm: string, name: string, fl
   return id;
 };
 
-const tracker = (page: Page) => page.locator('.win95-window').filter({ has: page.locator('.win95-title-text', { hasText: 'INITIATIVE.EXE' }) });
-const rows = (page: Page) => tracker(page).getByTestId('initiative-row');
-const up = (page: Page) => tracker(page).locator('[data-testid="initiative-row"][aria-current="step"]');
-const nav = (page: Page) => page.locator('.sidebar-panel').filter({ has: page.getByRole('heading', { name: 'INITIATIVE', level: 3 }) });
-
-/** The GM's INITIATIVE menu and tracker open; a fight another test left in this scene ended first. */
-const gmTracker = async (page: Page) => {
-  if (!(await nav(page).isVisible())) await page.getByRole('button', { name: 'INITIATIVE_TRACKER', exact: true }).click();
-  if (!(await tracker(page).isVisible())) await nav(page).getByRole('button', { name: 'OPEN TRACKER' }).click();
-  await expect(tracker(page)).toBeVisible();
-  const end = tracker(page).getByRole('button', { name: /^END / });
-  if (await end.isVisible()) {
-    await end.click();
-    await expect(tracker(page).getByRole('button', { name: /^START / })).toBeVisible({ timeout: 15_000 });
-  }
-};
-
 /** A player signed in in their own window, the tracker opened once initiative runs in their scene. */
 const playerWindow = async (browser: Browser, info: TestInfo, player: { username: string; password: string }) => {
   const context = await browser.newContext({ baseURL: info.project.use.baseURL, viewport: { width: 1280, height: 800 } });
@@ -64,22 +48,6 @@ const jump = async (page: Page, label: string) => {
   await expect(tracker(page)).toBeVisible();
   await nav(page).getByRole('button', { name: label }).click({ timeout: 15_000 });
   await expect(tracker(page)).toBeVisible();
-};
-
-/** START, waited for until the tracker shows the fight (ROLL ENEMIES is off till then). */
-const startFight = async (page: Page) => {
-  await tracker(page).getByRole('button', { name: 'START INITIATIVE' }).click();
-  await expect(tracker(page).getByText('ROUND 1', { exact: true })).toBeVisible({ timeout: 15_000 });
-};
-
-/** NEXT until the tracker says `round`, at most `max` presses. */
-const nextUntil = async (page: Page, round: string, max = 12) => {
-  for (let i = 0; i < max && !(await tracker(page).getByText(round, { exact: true }).isVisible()); i++) {
-    const before = await up(page).textContent();
-    await tracker(page).getByRole('button', { name: 'NEXT', exact: true }).click();
-    await expect.poll(async () => (await up(page).textContent()) !== before || (await tracker(page).getByText(round, { exact: true }).isVisible()), { timeout: 15_000 }).toBe(true);
-  }
-  await expect(tracker(page).getByText(round, { exact: true })).toBeVisible();
 };
 
 test('one fight: the GM starts it, rolls the enemies, two players join; NEXT goes round to ROUND 2 on every screen; END (8i2)', async ({ page, browser, request }, info) => {

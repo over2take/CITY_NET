@@ -35,6 +35,10 @@ export interface InitiativeState {
   mode: 'individual' | 'side';
   /** SR6: true when end-of-pass decay eliminated everyone — everyone must reroll */
   newRound?: boolean;
+  /** Round 1 begun, by BEGIN or a NEXT (8a9a); until then the tracker may offer BEGIN. */
+  begun?: boolean;
+  /** Whether the game's conditions act on turns (8a9c): only then is BEGIN offered. */
+  turnEffects?: boolean;
 }
 
 export interface ActiveCombat {
@@ -136,6 +140,12 @@ export function useInitiative(
     socketRef.current?.emit('initiative:next', { sceneKey });
   }, [socketRef, sceneKey]);
 
+  /** BEGIN ROUND 1 (8a9a): the round's start, then the first one's turn; once. */
+  const beginRound = useCallback(() => {
+    if (!sceneKey) return;
+    socketRef.current?.emit('initiative:begin', { sceneKey });
+  }, [socketRef, sceneKey]);
+
   const removeCombatant = useCallback((combatantId: string) => {
     if (!sceneKey) return;
     socketRef.current?.emit('initiative:remove', { sceneKey, combatantId });
@@ -172,6 +182,7 @@ export function useInitiative(
     submitJoin,
     rollNpcSide,
     nextTurn,
+    beginRound,
     removeCombatant,
     reorder,
     endInitiative,

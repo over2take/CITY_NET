@@ -87,12 +87,16 @@ describe("the GAME tab's switches a system has (8a6b)", () => {
     return runtime.render(ID).switches;
   };
   it('encumbrance counted, a band naming a condition, a condition APPLIED: each its own', async () => {
-    expect(await switchesOf(LADEN)).toEqual({ encumbrance: true, band_conditions: true, applied_conditions: false });
+    expect(await switchesOf(LADEN)).toEqual({ encumbrance: true, band_conditions: true, applied_conditions: false, turn_effects: false });
     const plain = { ...LADEN, items: { ...LADEN.items, encumbrance: { column: 'weight', capacity: '10' } } };
-    expect(await switchesOf(plain)).toEqual({ encumbrance: true, band_conditions: false, applied_conditions: false });
+    expect(await switchesOf(plain)).toEqual({ encumbrance: true, band_conditions: false, applied_conditions: false, turn_effects: false });
     const { encumbrance, ...noCount } = LADEN.items;
     const applied = { ...LADEN, items: noCount, conditions: { ...LADEN.conditions, slowed: { ...LADEN.conditions.slowed, applied: true, modifiers: [{ target: 'might', amount: -1 }] } } };
-    expect(await switchesOf(applied)).toEqual({ encumbrance: false, band_conditions: false, applied_conditions: true });
+    expect(await switchesOf(applied)).toEqual({ encumbrance: false, band_conditions: false, applied_conditions: true, turn_effects: false });
+    // CONDITION TURN EFFECTS (8a9c): where a condition has an EACH TURN; ending at the end of its next turn alone switches nothing.
+    const burning = { burning: { name: 'Burning', each_turn: [{ when: 'turn_start', does: 'damage', roll: '1' }] } };
+    expect((await switchesOf({ ...LADEN, items: noCount, conditions: { ...LADEN.conditions, ...burning } })).turn_effects).toBe(true);
+    expect((await switchesOf({ ...LADEN, items: noCount, conditions: { ...LADEN.conditions, dazed: { name: 'Dazed', ends: 'next_turn' } } })).turn_effects).toBe(false);
   });
 });
 

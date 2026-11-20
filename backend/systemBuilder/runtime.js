@@ -209,8 +209,12 @@ const renderOf = (id, definition, on = new Set()) => ({
   // Its items and slots (7e3b), for the GEAR tab's WEAR and ATTUNE, or null where it has none.
   items: itemsRenderedOf(definition),
   // Which of the GAME tab's switches this system has anything for (8a6b): SHOW ENCUMBRANCE where it counts encumbrance,
-  // BAND CONDITIONS where a band (or the word past them) names a condition, APPLY CONDITION MODIFIERS where a condition is APPLIED.
-  switches: { encumbrance: encumbranceOf(definition) !== null, band_conditions: namesCondition(definition), applied_conditions: conditionsOf(definition).some((c) => c.applied) },
+  // BAND CONDITIONS where a band (or the word past them) names a condition, APPLY CONDITION MODIFIERS where a condition is APPLIED,
+  // CONDITION TURN EFFECTS where a condition has an EACH TURN (8a9c).
+  switches: {
+    encumbrance: encumbranceOf(definition) !== null, band_conditions: namesCondition(definition), applied_conditions: conditionsOf(definition).some((c) => c.applied),
+    turn_effects: conditionsOf(definition).some((c) => Array.isArray(c.each_turn) && c.each_turn.length > 0),
+  },
 });
 
 /**

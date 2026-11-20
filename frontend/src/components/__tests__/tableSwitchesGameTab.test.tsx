@@ -100,4 +100,21 @@ describe('the GAME tab\'s encumbrance and condition switches', () => {
       { key: 'apply_condition_modifiers', value: '1', auth: 'Bearer admintoken' },
     ]);
   });
+
+  it('CONDITION TURN EFFECTS (8a9c): where a condition has an EACH TURN, on to start; switched off and APPLY, written', async () => {
+    packs({ encumbrance: false, band_conditions: false, applied_conditions: false, turn_effects: true });
+    await openRules();
+    const turns = await screen.findByRole('checkbox', { name: /^CONDITION TURN EFFECTS/ });
+    expect((turns as HTMLInputElement).checked).toBe(true);
+    expect(turns.closest('label')!.getAttribute('title')).toMatch(/rolled on NEXT and BEGIN/);
+    await userEvent.click(turns);
+    await userEvent.click(screen.getByRole('button', { name: 'APPLY' }));
+    await screen.findByText('HOUSE RULES APPLIED');
+    expect(posted.filter((p) => p.key === 'condition_turn_effects')).toEqual([{ key: 'condition_turn_effects', value: '0', auth: 'Bearer admintoken' }]);
+    cleanup();
+    packs({ encumbrance: true, band_conditions: false, applied_conditions: false, turn_effects: false });
+    await openRules();
+    await screen.findByRole('checkbox', { name: /^SHOW ENCUMBRANCE/ });
+    expect(box(/^CONDITION TURN EFFECTS/)).toBeNull();
+  });
 });

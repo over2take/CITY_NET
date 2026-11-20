@@ -1,24 +1,30 @@
 import React, { useRef, useState } from 'react';
 import { InitiativeCombatantRow } from './InitiativeCombatantRow';
 import type { InitiativeState, Side } from '../hooks/useInitiative';
-import { getInitiativeSystem } from '../systems';
+import type { TurnAsk } from '../../../sheets/turnAsks';
 import { useWords } from '../../../sheets/words';
 
 interface Props {
   state: InitiativeState;
   isAdmin: boolean;
-  onNext: () => void;
-  onEnd: () => void;
   onRemove: (id: string) => void;
   onReorder: (from: number, to: number, sideId?: string) => void;
   currentFloorIndex?: number;
   playerCombatantId?: string;
   onJoin?: (score: number | null, system: string) => void;
+  /** ROUND 2, or ROUND 1 · NOT BEGUN, as the tracker says it (InitiativeWindow). */
+  counter: string;
+  /** The GM's buttons under the order, shared with D&D style (InitiativeControls). */
+  controls: (disabled: boolean, nextLabel: string) => React.ReactNode;
+  /** An NPC's EACH TURN rolls waiting on the GM, for its row (8a9c). */
+  rowAsks?: (id: string) => TurnAsk[];
+  rolling?: number[];
+  onRollAsk?: (id: number) => void;
 }
 
 export function InitiativeSideView({
-  state, isAdmin, onNext, onEnd, onRemove, onReorder, currentFloorIndex,
-  playerCombatantId, onJoin,
+  state, isAdmin, onRemove, onReorder, currentFloorIndex,
+  playerCombatantId, onJoin, counter, controls, rowAsks = () => [], rolling = [], onRollAsk,
 }: Props) {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [dragOverSideId, setDragOverSideId] = useState<string | null>(null);
@@ -36,7 +42,6 @@ export function InitiativeSideView({
   });
 
   const activeSide = sortedSides[state.turnIndex] ?? null;
-  const sys = getInitiativeSystem(state.system);
   const playerAlreadyIn = playerCombatantId
     ? state.combatants.some((c) => c.id === playerCombatantId)
     : true;
@@ -65,7 +70,7 @@ export function InitiativeSideView({
     <div>
       {/* Counter */}
       <div style={{ fontSize: '0.8rem', fontWeight: 'bold', letterSpacing: '2px', color: 'var(--green)', textShadow: 'var(--glow)', marginBottom: '8px' }}>
-        {`${word('round', 'singular', sys.counterLabel).toUpperCase()} ${state.turnCounter}`}
+        {counter}
       </div>
 
       {/* Sides */}
@@ -139,6 +144,9 @@ export function InitiativeSideView({
                         onDragStart={(idx) => handleDragStart(side.id, idx)}
                         onDragOver={(idx) => handleDragOver(side.id, idx)}
                         onDrop={() => handleDrop(side.id, i)}
+                        asks={rowAsks(c.id)}
+                        rolling={rolling}
+                        onRollAsk={onRollAsk}
                       />
                     </div>
                   ))
@@ -167,25 +175,7 @@ export function InitiativeSideView({
       )}
 
       {/* Admin controls */}
-      {isAdmin && (
-        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-          <button
-            className="upload-btn"
-            style={{ flex: 1, width: 'auto' }}
-            onClick={onNext}
-            disabled={sortedSides.length === 0}
-          >
-            NEXT
-          </button>
-          <button
-            className="upload-btn"
-            style={{ flex: 1, width: 'auto', background: 'transparent', color: '#ff4444', borderColor: '#ff4444' }}
-            onClick={onEnd}
-          >
-            END {INIT}
-          </button>
-        </div>
-      )}
+      {isAdmin && <div style={{ marginTop: '4px' }}>{controls(sortedSides.length === 0, 'NEXT')}</div>}
     </div>
   );
 }
