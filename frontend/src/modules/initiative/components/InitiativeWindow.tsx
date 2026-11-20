@@ -71,7 +71,6 @@ function InitiativeTracker({
   const word = useWords(activeSystem);
   const INITIATIVE = word('initiative', 'singular', 'INITIATIVE').toUpperCase();
   const INIT = word('initiative', 'short', 'INIT').toUpperCase();
-  const TURN = word('turn', 'singular', 'TURN').toUpperCase();
 
   const content = (
     <>
@@ -79,7 +78,8 @@ function InitiativeTracker({
         <div style={{ fontSize: '0.65rem', color: 'var(--dark-green)', letterSpacing: '1px' }}>{sceneLabel}</div>
         {state && activeMode === 'individual' && (
           <div style={{ fontSize: '0.8rem', fontWeight: 'bold', letterSpacing: '2px', color: 'var(--green)', textShadow: 'var(--glow)', marginTop: '2px' }}>
-            {`${word('turn', 'singular', systemDef.counterLabel).toUpperCase()} ${activeSystem === 'shadowrun_6e' ? state.passCounter : state.turnCounter}`}
+            {/* The count of laps of the order: a ROUND (8a8, the user's call: "this pr"), the system's own word for one. */}
+            {`${word('round', 'singular', systemDef.counterLabel).toUpperCase()} ${activeSystem === 'shadowrun_6e' ? state.passCounter : state.turnCounter}`}
           </div>
         )}
       </div>
@@ -112,7 +112,7 @@ function InitiativeTracker({
                   style={{ width: '100%', marginBottom: 4, textAlign: 'left' }}
                   onClick={() => { onStart(c.id); setShowJoin(false); }}
                 >
-                  COMBAT #{c.id} — {TURN} {c.turn_counter}
+                  COMBAT #{c.id}
                   {c.scene_keys?.length ? ` [${c.scene_keys.length} SCENE${c.scene_keys.length > 1 ? 'S' : ''}]` : ''}
                 </button>
               ))}

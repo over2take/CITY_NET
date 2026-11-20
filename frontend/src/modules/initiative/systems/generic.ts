@@ -8,7 +8,8 @@ function rollD20() {
 
 export const generic: InitiativeSystem = {
   key: 'generic',
-  counterLabel: 'TURN',
+  // It counts laps of the order: rounds (8a8, by the turn and round agreed 2026-11-19).
+  counterLabel: 'ROUND',
   passDecay: false,
   rollNpc: rollD20,
   rollPlayer: rollD20,

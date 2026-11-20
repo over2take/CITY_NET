@@ -57,21 +57,21 @@ describe('InitiativeWindow — no active initiative', () => {
   });
 
   it('shows JOIN EXISTING COMBAT when activeCombats available', () => {
-    const combats: ActiveCombat[] = [{ id: 1, turn_counter: 3, pass_counter: 1, scene_keys: 'map:1:0' }];
+    const combats: ActiveCombat[] = [{ id: 1, scene_keys: ['map:1:0'], scene_counters: { 'map:1:0': 3 } }];
     render(<InitiativeWindow {...baseProps({ activeCombats: combats })} />);
     expect(screen.getByText('JOIN EXISTING COMBAT')).toBeInTheDocument();
   });
 
   it('shows combat list after clicking JOIN EXISTING COMBAT', async () => {
-    const combats: ActiveCombat[] = [{ id: 1, turn_counter: 3, pass_counter: 1, scene_keys: 'map:1:0' }];
+    const combats: ActiveCombat[] = [{ id: 1, scene_keys: ['map:1:0'], scene_counters: { 'map:1:0': 3 } }];
     render(<InitiativeWindow {...baseProps({ activeCombats: combats })} />);
     await userEvent.click(screen.getByText('JOIN EXISTING COMBAT'));
-    expect(screen.getByText(/COMBAT #1/)).toBeInTheDocument();
-    expect(screen.getByText(/TURN 3/)).toBeInTheDocument();
+    // Joined at its own ROUND 1 (8a8): the combat by ID and its scenes, no count of its own.
+    expect(screen.getByText('COMBAT #1 [1 SCENE]')).toBeInTheDocument();
   });
 
   it('calls onStart with combatId when joining existing combat', async () => {
-    const props = baseProps({ activeCombats: [{ id: 2, turn_counter: 5, pass_counter: 1, scene_keys: '' }] });
+    const props = baseProps({ activeCombats: [{ id: 2, scene_keys: [] }] });
     render(<InitiativeWindow {...props} />);
     await userEvent.click(screen.getByText('JOIN EXISTING COMBAT'));
     await userEvent.click(screen.getByText(/COMBAT #2/));
@@ -80,9 +80,9 @@ describe('InitiativeWindow — no active initiative', () => {
 });
 
 describe('InitiativeWindow — active initiative', () => {
-  it('shows TURN counter in title', () => {
+  it('shows the ROUND counter in title (Generic counted TURNs before 8a8)', () => {
     render(<InitiativeWindow {...baseProps({ state: makeState({ turnCounter: 3 }) })} />);
-    expect(screen.getByText('TURN 3')).toBeInTheDocument();
+    expect(screen.getByText('ROUND 3')).toBeInTheDocument();
   });
 
   it('shows WAITING FOR ROLLS when combatants list is empty', () => {

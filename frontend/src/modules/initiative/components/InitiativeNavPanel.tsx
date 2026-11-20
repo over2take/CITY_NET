@@ -1,6 +1,7 @@
 import React from 'react';
 import type { ActiveCombat } from '../hooks/useInitiative';
 import { useWords } from '../../../sheets/words';
+import { getInitiativeSystem } from '../systems';
 
 interface Props {
   initiativeActive: boolean;
@@ -35,6 +36,8 @@ export function InitiativeNavPanel({
   onRollEnemies, onRollFriendlies, onToggleTracker, onJumpToScene, onEndCombat, onClose, system,
 }: Props) {
   const word = useWords(system);
+  // Each scene's own count beside it (8a8), named as its tracker names it.
+  const COUNTER = word('round', 'singular', getInitiativeSystem(system ?? 'generic').counterLabel).toUpperCase();
   const INITIATIVE = word('initiative', 'singular', 'INITIATIVE').toUpperCase();
   return (
     <div className="panel sidebar-panel">
@@ -66,7 +69,7 @@ export function InitiativeNavPanel({
                 display: 'flex', alignItems: 'center', gap: '6px',
                 fontSize: '0.6rem', color: 'var(--dark-green)', marginBottom: '3px',
               }}>
-                <span style={{ flex: 1 }}>COMBAT #{combat.id} — {word('turn', 'singular', 'TURN').toUpperCase()} {combat.turn_counter}</span>
+                <span style={{ flex: 1 }}>COMBAT #{combat.id}</span>
                 {onEndCombat && (
                   <button
                     className="utility-btn"
@@ -90,6 +93,7 @@ export function InitiativeNavPanel({
                   onClick={() => onJumpToScene?.(sk)}
                 >
                   ▶ {combat.scene_labels?.[sk] || sceneLabel(sk, locations)}
+                  {combat.scene_counters?.[sk] !== undefined ? ` · ${COUNTER} ${combat.scene_counters[sk]}` : ''}
                 </button>
               ))}
             </div>
