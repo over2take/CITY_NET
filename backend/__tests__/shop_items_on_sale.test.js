@@ -17,7 +17,9 @@ const require_ = createRequire(import.meta.url);
 const { itemPrice, inShops } = require_('../systemBuilder/itemTypes');
 const { checkDefinition } = require_('../systemBuilder/definition');
 const citysys = require_('../systemBuilder/citysys');
-const { ownStock } = require_('../shops/ownItems');
+const { ownStock, againstItems } = require_('../shops/ownItems');
+const { parseCatalogue } = require_('../shops/catalogueParse');
+const { typesOf } = require_('../systemBuilder/itemTypes');
 const store = require_('../shops/catalogueStore');
 const give = require_('../shops/give');
 const runtime = require_('../systemBuilder/runtime');
@@ -143,6 +145,30 @@ describe('in the store, under the uploads', () => {
   });
 });
 
+describe('a catalogue file held against them (8a7a3c1)', () => {
+  const parse = (text) => parseCatalogue(text, { types: typesOf(DEF), names: { known: () => true, refused: (n) => n } }).sections;
+  const FILE = '[WEAPONS]\nname, price, damage, description\nPistol, 200, 2d6, Snub.\nHand Cannon, 900, 3d6\n[ARMOR]\nname, price, defense\nRing of Might, 10, \nLeather Jacket, 75, 2\n';
+
+  it('an exact copy of an item left out; one kept out of the shops left out; one of an item\'s name otherwise overrules it', () => {
+    const held = againstItems(parse(FILE), DEF);
+    expect(Object.fromEntries(Object.entries(held.sections).map(([c, list]) => [c, list.map((e) => e.name)]))).toEqual({ 'type:weapons': ['Hand Cannon'], 'type:armor': ['Leather Jacket'] });
+    expect(held.leftOut).toEqual([
+      { line: 3, catalogue: 'type:weapons', name: 'Pistol', message: 'already on ITEMS at 200, the same in every column: left out, as it sells itself' },
+      { line: 7, catalogue: 'type:armor', name: 'Ring of Might', message: 'kept out of the shops on ITEMS (IN SHOPS is off), so never sold: left out' },
+    ]);
+    expect(held.overrules).toEqual([{ line: 8, catalogue: 'type:armor', name: 'Leather Jacket', from: 50, to: 75 }]);
+    expect(held.onSale).toBe(2);
+  });
+
+  it('a column apart, the price the same: it overrules the item\'s columns; a game without types of its own, nothing held', () => {
+    const held = againstItems(parse('[WEAPONS]\nname, price, damage, description\nPistol, 200, 2d8, Snub.\n'), DEF);
+    expect(held.overrules).toEqual([{ line: 3, catalogue: 'type:weapons', name: 'Pistol', from: 200, to: 200 }]);
+    expect(held.leftOut).toEqual([]);
+    const sections = { gear: [{ id: 'rope', name: 'Rope', price: 1, fields: {} }] };
+    expect(againstItems(sections, { ...DEF, items: { list: DEF.items.list } })).toEqual({ sections, leftOut: [], overrules: [], onSale: 0 });
+  });
+});
+
 describe('at the table', () => {
   const ID = 'sys_pricedpricedpric';
   let db;
@@ -215,6 +241,26 @@ describe('at the table', () => {
     expect(await checkout(kes, goods, { buys: [{ catalogue: 'type:weapons', itemId: 'item:pistol', qty: 1 }] })).toMatchObject({ ok: false });
     kes.emitted.length = 0;
     expect(await checkout(kes, goods, { buys: [{ catalogue: 'type:weapons', itemId: 'pistol', qty: 1 }] })).toMatchObject({ ok: true, buys: [{ price: 260 }] });
+  });
+
+  it('the catalogue preview says what the file does to the items, and the save leaves out what it said (8a7a3c1)', async () => {
+    const gm = await boot('gm', true);
+    const text = '[WEAPONS]\nname, price, damage, description\nPistol, 200, 2d6, Snub.\nHand Cannon, 900, 3d6\n[ARMOR]\nname, price, defense\nRing of Might, 10, \nLeather Jacket, 75, 2\n';
+    gm.handlers.previewCatalogue({ text });
+    const preview = (await last(gm.emitted, 'cataloguePreview')).data;
+    expect(preview.summary.map((x) => [x.label, x.count])).toEqual([['WEAPONS', 1], ['ARMOR', 1]]);
+    expect(preview.items).toEqual({
+      onSale: 2,
+      overrules: [{ line: 8, catalogue: 'type:armor', name: 'Leather Jacket', from: 50, to: 75 }],
+      leftOut: [
+        { line: 3, catalogue: 'type:weapons', name: 'Pistol', message: 'already on ITEMS at 200, the same in every column: left out, as it sells itself' },
+        { line: 7, catalogue: 'type:armor', name: 'Ring of Might', message: 'kept out of the shops on ITEMS (IN SHOPS is off), so never sold: left out' },
+      ],
+    });
+    gm.handlers.saveCatalogue({ text });
+    expect((await last(gm.emitted, 'catalogueSaved')).data).toMatchObject({ ok: true, saved: [{ catalogue: 'type:weapons', count: 1 }, { catalogue: 'type:armor', count: 1 }] });
+    const rows = await new Promise((resolve, reject) => db.all('SELECT catalogue, name, price FROM shop_catalogues WHERE system = ? ORDER BY catalogue, name', [ID], (e, r) => (e ? reject(e) : resolve(r))));
+    expect(rows).toEqual([{ catalogue: 'type:armor', name: 'Leather Jacket', price: 75 }, { catalogue: 'type:weapons', name: 'Hand Cannon', price: 900 }]);
   });
 
   it('GIVE: the game\'s items in its own ITEMS folder, not again under their type', async () => {

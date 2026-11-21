@@ -44,4 +44,41 @@ const ownStock = (definition) => {
   return out;
 };
 
-module.exports = { ITEM_PREFIX, ownStock };
+/** Two lines' fields alike, whatever order their keys came in. */
+const sameFields = (a, b) => {
+  const pairs = (o) => Object.keys(o || {}).sort().map((k) => [k, o[k]]);
+  return JSON.stringify(pairs(a)) === JSON.stringify(pairs(b));
+};
+
+/**
+ * A catalogue file's lines held against the game's own items (8a7a3c1; decided 2026-11-21, mockup types-in-shops.html,
+ * questions 9 and 15): a line that is exactly an item IN SHOPS (its name, price and every column) is left out, the item
+ * selling itself, so nothing is kept twice; a line naming an item turned off is left out, the shops never selling it; a line
+ * of an item's name otherwise overrules it, said. { sections to save, leftOut, overrules, onSale: the items on sale besides }.
+ */
+const againstItems = (sections, definition) => {
+  const stock = ownStock(definition);
+  const leftOut = [];
+  const overrules = [];
+  const kept = {};
+  for (const [catalogue, entries] of Object.entries(sections || {})) {
+    const items = stock.catalogues[catalogue] || [];
+    kept[catalogue] = (entries || []).filter((e) => {
+      const name = normaliseName(e && e.name);
+      const at = { line: (e && e.line) || 0, catalogue, name: e && e.name };
+      if (stock.off.has(name)) { leftOut.push({ ...at, message: 'kept out of the shops on ITEMS (IN SHOPS is off), so never sold: left out' }); return false; }
+      const item = items.find((i) => normaliseName(i.name) === name);
+      if (!item) return true;
+      if (item.price === e.price && sameFields(item.fields, e.fields)) {
+        leftOut.push({ ...at, message: `already on ITEMS at ${item.price}, the same in every column: left out, as it sells itself` });
+        return false;
+      }
+      overrules.push({ ...at, from: item.price, to: e.price });
+      return true;
+    });
+  }
+  const onSale = Object.values(stock.catalogues).reduce((n, list) => n + list.length, 0);
+  return { sections: kept, leftOut, overrules, onSale };
+};
+
+module.exports = { ITEM_PREFIX, ownStock, againstItems };
