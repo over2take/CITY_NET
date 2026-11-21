@@ -9,6 +9,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **The bank's windows now follow the theme.** BANK.EXE, PAYROLL.EXE and the GM's BANK_ADMIN.EXE drew in the classic green and grey whatever theme was picked; their boxes, numbers, chart and celebrations now take the theme's colors.
+- **The bank's boxes have names a screen reader can say.** PAYROLL.EXE's amount and each player's tick box, BANK_ADMIN.EXE's Balance and Debt, and the amount you withdraw or borrow are now named, and clicking a player's name in PAYROLL.EXE ticks them.
 - **Players' shops in a custom system now show the GM's stock.** A player could open a shop and find nothing on its shelves, even after the GM had saved a catalogue, until they reloaded the page, and sometimes not even then. The stock now reaches every player as soon as they sign in, and again the moment the GM saves a catalogue or changes the game. Found by new browser tests of buying and selling, written before the next change to shops.
 - **Battle map start positions: two fixes.** Loading a floor's start positions no longer makes a second token for a player saved in two places. A broken save from the map is now refused instead of risking an error on the server, and it leaves the positions already saved as they were.
 - **The initiative tracker's END INIT button and remove ✕ now follow the theme.** They were a fixed red and grey in every theme.

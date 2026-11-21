@@ -1,5 +1,6 @@
-import { test, expect, type APIRequestContext } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import { signInAsGm, signInAsPlayer, gmToken, asGm, approvedPlayer } from './helpers';
+import { playerToken, sheetOf, payPlayer } from './shops';
 
 // The shop at the table, a safety net before 8a7 changes what shops and GIVE carry (8n1; the user, 2026-11-19: tests for the
 // thin places, the shops among them). Cities Without Number's Gun Shop from the book: the GM pays a player from PAY_PLAYERS,
@@ -11,9 +12,6 @@ const PISTOL = 'Light Pistol';
 const PRICE = 200;
 const cr = (n: number) => `${n.toLocaleString('en-US')}cr`;
 
-/** The player's sheet as the server keeps it. */
-const sheetOf = async (request: APIRequestContext, gm: string, username: string) =>
-  ((await asGm(request, gm, 'get', `/api/sheets/user/${username}`).catch(() => null))?.data ?? {}) as Record<string, unknown>;
 /** The weapons on a CWN sheet, by name. */
 const weaponsOf = (data: Record<string, unknown>) => Object.entries(data).filter(([k, v]) => /^weapon\d+_name$/.test(k) && v).map(([, v]) => String(v));
 
@@ -24,10 +22,7 @@ test('a CWN Gun Shop: paid by the GM, a Light Pistol bought through the cart ont
   await asGm(request, gm, 'put', '/api/sheets/system', { system: 'cities_without_number' });
   const player = { username: `e2e_shopper${again}`, password: 'e2e-player-password' };
   await approvedPlayer(request, gm, player);
-  await asGm(request, gm, 'post', '/api/locations', {
-    name: player.username, description: '', shape: 'rhombus', owner: player.username, x: 0, y: 0, z: 0, width: 1, height: 1, depth: 1,
-    hp_current: 10, hp_max: 10, hp_temp: 0, battle_map_id: -1, floor_index: -1,
-  });
+  await playerToken(request, gm, player.username);
   const shop = `VIC_ARMS${again}`;
   const made = await asGm(request, gm, 'post', '/api/locations', { name: shop, description: '', shape: 'box', x: 8, y: 0, z: 8, width: 2, height: 2, depth: 2 });
   const typed = await request.patch(`/api/locations/${made.data[0].id}/building-type`, { data: { building_type: 'gun_shop' }, headers: { Authorization: `Bearer ${gm}` } });
@@ -41,15 +36,7 @@ test('a CWN Gun Shop: paid by the GM, a Light Pistol bought through the cart ont
   // PAY_PLAYERS, in the GAME tab's BANK: 1000 to the player alone.
   await page.setViewportSize({ width: 1280, height: 800 });
   await signInAsGm(page);
-  await page.getByRole('button', { name: 'GAME', exact: true }).click();
-  const bankFolder = page.getByRole('button', { name: /^[▸▾] BANK$/ });
-  if (!(await bankFolder.textContent())?.startsWith('▾')) await bankFolder.click();
-  await page.getByRole('button', { name: 'PAY_PLAYERS', exact: true }).click();
-  // PAYROLL.EXE, its amount box the one that isn't a player's tick box (it has no name of its own yet: 8n2).
-  const pay = page.locator('.win95-window', { has: page.getByText('PAYROLL.EXE', { exact: true }) });
-  await pay.locator('input:not([type=checkbox])').first().fill('1000');
-  await pay.locator('div', { hasText: new RegExp(`^${player.username}$`) }).getByRole('checkbox').check();
-  await pay.getByRole('button', { name: 'PAY_SELECTED' }).click();
+  await payPlayer(page, player.username, 1000);
 
   // The shop, from QUICK_ACCESS: the building, then SHOP. Its header says what the player has: the GM's 1,000.
   await mine.getByRole('button', { name: 'QUICK_ACCESS', exact: true }).click();
