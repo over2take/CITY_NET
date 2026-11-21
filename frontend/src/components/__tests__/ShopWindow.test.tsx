@@ -2258,3 +2258,74 @@ describe('a shelf of an item type (8a7a2)', () => {
     expect(JSON.parse(written![1])).toEqual([expect.objectContaining({ name: 'Pistol', qty: 1, type: 'guns', values: { dmg: '2d6', ammo: 6 } })]);
   });
 });
+
+// ─── Under load (8n3) ───────────────────────────────────────────────────────────
+describe('a shelf of 1000 lines and a long gear list (8n3)', () => {
+  const SYS = 'sys_ssssssssssssssss';
+  const GUNS = { id: 'guns', label: 'GUNS', one: 'Gun', sold_at: ['general_store'], columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }, { id: 'ammo', label: 'AMMO', kind: 'count' }] };
+  const LINES = Array.from({ length: 1000 }, (_, i) => ({ id: `gun_${i}`, name: `Gun ${i}`, price: 10 + i, fields: { damage: `1d${4 + (i % 3) * 2}`, ammo: i % 12 } }));
+  const timed = async (work: () => unknown) => { const t = performance.now(); await work(); return performance.now() - t; };
+  const took: Record<string, number> = {};
+
+  beforeEach(() => {
+    clearCustomTemplates();
+    clearUploaded();
+    registerCustomTemplate({ id: SYS, name: 'Stress', parts: {}, derived: [], sheet: { sections: [] }, words: {}, items: { slots: [], list: [], types: [GUNS] } } as never);
+    loadUploaded({ 'type:guns': LINES } as never);
+    sheetState.sheet = { system: SYS, data: { inventory: '[]' } };
+  });
+  afterEach(() => { clearCustomTemplates(); clearUploaded(); });
+
+  it('drawn a page at a time, filtered as typed and sorted by a column across all of it, each in time', async () => {
+    took.open = await timed(async () => { show('general_store', 'Goods', SYS); await userEvent.click(screen.getByRole('tab', { name: 'GUNS' })); });
+    const rows = () => screen.getAllByRole('button', { name: /^Add Gun \d+ to the cart$/ });
+    console.log('shop window stress, open (ms):', Math.round(took.open));
+    // The first 200, the rest said and a button away.
+    expect(rows()).toHaveLength(200);
+    expect(screen.getByText('SHOWING 200 OF 1000 · SCROLL OR FILTER FOR THE REST')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'SHOW 200 MORE' }));
+    expect(rows()).toHaveLength(400);
+    expect(screen.getByText('SHOWING 400 OF 1000 · SCROLL OR FILTER FOR THE REST')).toBeInTheDocument();
+    // Typed a letter at a time, as a player does: "Gun 99" leaves Gun 99 and Gun 990 to 999, found past the first page.
+    took.filter = await timed(() => userEvent.type(screen.getByLabelText('Filter stock'), 'Gun 99'));
+    console.log('shop window stress, filter (ms):', Math.round(took.filter));
+    expect(rows()).toHaveLength(11);
+    expect(screen.queryByText(/^SHOWING /)).toBeNull();
+    await userEvent.clear(screen.getByLabelText('Filter stock'));
+    // A page afresh.
+    expect(rows()).toHaveLength(200);
+    // Sorted by PRICE, then the other way: the cheapest and the dearest of all 1000 at the top in turn; a sort starts
+    // at the first page again.
+    await userEvent.click(screen.getByRole('button', { name: 'SHOW 200 MORE' }));
+    expect(rows()).toHaveLength(400);
+    took.sort = await timed(() => userEvent.click(screen.getByLabelText('Sort by PRICE')));
+    expect(rows()).toHaveLength(200);
+    const first = rows()[0].getAttribute('aria-label');
+    took.reverse = await timed(() => userEvent.click(screen.getByLabelText('Sort by PRICE')));
+    expect([first, rows()[0].getAttribute('aria-label')].sort()).toEqual(['Add Gun 0 to the cart', 'Add Gun 999 to the cart']);
+    console.log('shop window stress (ms):', JSON.stringify(Object.fromEntries(Object.entries(took).map(([k, v]) => [k, Math.round(v)]))));
+    // In a test page (jsdom, slower than a browser); the browser's own times are shop-stress.spec.ts's.
+    expect(took.open).toBeLessThan(10_000);
+    expect(took.filter).toBeLessThan(10_000);
+    expect(took.sort).toBeLessThan(10_000);
+  }, 120_000);
+
+  it('the last page says how many are left; all of them, and the count goes', async () => {
+    loadUploaded({ 'type:guns': LINES.slice(0, 250) } as never);
+    show('general_store', 'Goods', SYS);
+    await userEvent.click(screen.getByRole('tab', { name: 'GUNS' }));
+    expect(screen.getByText('SHOWING 200 OF 250 · SCROLL OR FILTER FOR THE REST')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'SHOW 50 MORE' }));
+    expect(screen.getAllByRole('button', { name: /^Add Gun \d+ to the cart$/ })).toHaveLength(250);
+    expect(screen.queryByText(/^SHOWING /)).toBeNull();
+  });
+
+  it('300 lines of gear on the SELL tab: listed in time, each priced as the shop buys it back', async () => {
+    sheetState.sheet = { system: SYS, data: { inventory: JSON.stringify(LINES.slice(0, 300).map((l) => ({ name: l.name, qty: 1, carry: 'stowed', type: 'guns', values: l.fields }))) } };
+    show('general_store', 'Goods', SYS);
+    const ms = await timed(() => openFolder('SELL'));
+    expect(screen.getAllByRole('button', { name: /^Add Gun \d+ to the cart$/ })).toHaveLength(300);
+    console.log('shop window stress, SELL (ms):', Math.round(ms));
+    expect(ms).toBeLessThan(10_000);
+  }, 120_000);
+});

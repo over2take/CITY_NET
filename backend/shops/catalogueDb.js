@@ -58,6 +58,9 @@ const refresh = (db, system, cb = () => {}) => {
   });
 };
 
+/** Rows written a statement when a catalogue is saved (8n3). */
+const INSERT_BATCH = 100;
+
 const q = (db, sql, params = []) => new Promise((resolve, reject) => {
   db.run(sql, params, (err) => (err ? reject(err) : resolve()));
 });
@@ -81,13 +84,16 @@ const replaceCatalogues = (db, system, sections, cb) => {
     try {
       for (const [catalogue, entries] of Object.entries(sections || {})) {
         await q(db, 'DELETE FROM shop_catalogues WHERE system = ? AND catalogue = ?', [system, catalogue]);
-        for (const entry of entries || []) {
-          if (!entry || !entry.id) continue;
+        // A hundred rows a statement (8n3): the shop stress test found a 1500-line file took one round trip a row, its
+        // save as slow as the database's answers times 1500. Six values a row keeps each well under SQLite's 999.
+        const rows = (entries || []).filter((entry) => entry && entry.id);
+        for (let at = 0; at < rows.length; at += INSERT_BATCH) {
+          const batch = rows.slice(at, at + INSERT_BATCH);
           await q(db,
             `INSERT INTO shop_catalogues (system, catalogue, id, name, price, fields)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [system, catalogue, entry.id, String(entry.name || ''),
-              Number(entry.price) || 0, JSON.stringify(entry.fields || {})]);
+             VALUES ${batch.map(() => '(?, ?, ?, ?, ?, ?)').join(', ')}`,
+            batch.flatMap((entry) => [system, catalogue, entry.id, String(entry.name || ''),
+              Number(entry.price) || 0, JSON.stringify(entry.fields || {})]));
         }
       }
       await q(db, 'COMMIT');

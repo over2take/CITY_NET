@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useDeferredValue, useEffect, useState } from 'react';
 import { TerminalWindow } from './TerminalWindow';
 import {
   buildingTypeById, shelvedIn, catalogueById, typeLabel, catalogueLabel, itemTypeOfShelf, type ShopStock,
@@ -123,6 +123,9 @@ const cell: React.CSSProperties = {
 const credits = (n: number): string => (n === 0 ? 'N/A' : `${n.toLocaleString()}cr`);
 
 /** How long a checkout waits for the server before saying it got no answer. */
+/** How many of a shelf's rows are drawn at a time (8n3): every built-in shelf is shorter, a GM's long catalogue a page at a time. */
+export const SHELF_PAGE = 200;
+
 export const CHECKOUT_TIMEOUT_MS = 15_000;
 
 /** Credits with a sign, for the cart: a total can be nothing, or the shop paying you. */
@@ -1383,9 +1386,11 @@ export function ShopWindow({
   })();
 
   /** The open shelf, filtered and sorted. Small lists, so done plainly on each render. */
+  // What the shelf is filtered by: a step behind what is typed (8n3), so a long shelf never holds up the box being typed in.
+  const shownFilter = useDeferredValue(filter);
   const rows: any[] = (() => {
     if (!shelf) return [];
-    const q = filter.trim().toLowerCase();
+    const q = shownFilter.trim().toLowerCase();
     let list = shelf.rows;
     // The weapon shelf's own narrowing. Both on, or both off, means no opinion.
     if (shelf.id === 'weapons' && kinds.ranged !== kinds.melee) {
@@ -1395,6 +1400,19 @@ export function ShopWindow({
     if (q) list = list.filter((row) => shelf.matches(row, q));
     return applySort(list, sort, shelf.columns);
   })();
+
+  /**
+   * A long shelf drawn a page at a time (8n3; the shop stress test found a 1000-line shelf took 400 ms to sort and up to
+   * 360 ms a key to filter in Chromium): the first SHELF_PAGE rows, SHELF_PAGE more on scrolling near the end or SHOW MORE.
+   * Every row is still there to scroll to or filter for. Back to the first page on another shelf, filter or sort.
+   */
+  const [shownCount, setShownCount] = useState(SHELF_PAGE);
+  const firstPage = () => setShownCount(SHELF_PAGE);
+  const showMore = () => setShownCount((n) => n + SHELF_PAGE);
+  const nearEnd = (e: React.UIEvent<HTMLDivElement>) => {
+    const box = e.currentTarget;
+    if (shownCount < rows.length && box.scrollTop + box.clientHeight >= box.scrollHeight - 120) showMore();
+  };
 
   /**
    * Switching shelves clears the sort and the filter.
@@ -1407,6 +1425,7 @@ export function ShopWindow({
     setPicked(id);
     setSort({ key: '', dir: null });
     setFilter('');
+    firstPage();
     setRefused(null);
   };
 
@@ -1747,7 +1766,7 @@ export function ShopWindow({
               <>
                 <input
                   value={filter}
-                  onChange={(e) => setFilter(e.target.value)}
+                  onChange={(e) => { setFilter(e.target.value); firstPage(); }}
                   placeholder={shelf.filterHint}
                   aria-label="Filter stock"
                   style={{
@@ -1768,14 +1787,14 @@ export function ShopWindow({
                   </div>
                 )}
 
-                <div className="cyber-scroll" style={{ flex: rows.length === 0 ? '0 0 auto' : 1, minHeight: 0, overflowY: 'auto' }}>
+                <div className="cyber-scroll" onScroll={nearEnd} style={{ flex: rows.length === 0 ? '0 0 auto' : 1, minHeight: 0, overflowY: 'auto' }}>
                   <table style={{ ...mono(10), width: '100%', borderCollapse: 'collapse', letterSpacing: 0 }}>
                     <thead>
                       <tr style={{ color: 'var(--grid-section)' }}>
                         {Object.entries(shelf.columns).map(([key, col]) => (
                           <th
                             key={key}
-                            onClick={() => setSort((st) => nextSort(st, key, col.first))}
+                            onClick={() => { setSort((st) => nextSort(st, key, col.first)); firstPage(); }}
                             aria-label={`Sort by ${col.label}`}
                             title="Click to sort — again to reverse, again for the book's own order"
                             style={{
@@ -1789,7 +1808,7 @@ export function ShopWindow({
                       </tr>
                     </thead>
                     <tbody>
-                      {rows.map((row) => {
+                      {rows.slice(0, shownCount).map((row) => {
                         const key = shelf.rowKey(row);
                         const inCart = cartBuys.find((l) => l.key === cartKey(shelf.id, key))?.qty ?? 0;
                         const canBuy = shelf.buyable ? shelf.buyable(row) : true;
@@ -1838,6 +1857,13 @@ export function ShopWindow({
                       })}
                     </tbody>
                   </table>
+                  {/* Where the page ends (8n3): how many are drawn, and a button for the rest. */}
+                  {shownCount < rows.length && (
+                    <div style={{ ...mono(9), color: 'var(--grid-section)', padding: '6px 0', letterSpacing: 0, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+                      <span role="status">SHOWING {shownCount} OF {rows.length} · SCROLL OR FILTER FOR THE REST</span>
+                      <button type="button" className="utility-btn" onClick={showMore} style={{ padding: '1px 6px', fontSize: 9 }}>SHOW {Math.min(SHELF_PAGE, rows.length - shownCount)} MORE</button>
+                    </div>
+                  )}
                 </div>
                 {rows.length === 0 && (
                   <div data-testid="shelf-empty" style={{ ...mono(11), color: 'var(--green)', padding: '10px 0', letterSpacing: 0 }}>
