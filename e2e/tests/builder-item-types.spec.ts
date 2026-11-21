@@ -55,6 +55,8 @@ test('ITEM TYPES: WEAPONS from its preset with AMMO and a GRADE, and a Pistol fi
   await expect(pistol.getByText('IT HOLDS · FIRE SPENDS ONE')).toBeVisible();
   await pistol.getByRole('spinbutton', { name: 'WEIGHT' }).fill('2');
   await pistol.getByRole('combobox', { name: 'GRADE' }).selectOption('LIGHT');
+  // Made IN SHOPS (8a7a3b1), so priced: in WEAPONS' own PRICE column, shown under TYPE.
+  await pistol.getByRole('spinbutton', { name: 'PRICE' }).fill('200');
   // FIND, as it is typed into: only the Pistol and its rounds left of "pis", and only GEAR of "rounds".
   const find = list.getByRole('searchbox', { name: 'Find an item' });
   await find.fill('rounds');
@@ -77,7 +79,7 @@ test('ITEM TYPES: WEAPONS from its preset with AMMO and a GRADE, and a Pistol fi
     ],
     list: [
       { id: 'rounds', label: 'Pistol Rounds' },
-      { id: 'new_item', label: 'Pistol', type: 'weapons', values: { damage: '2d6 + @might', range: '30 m', ammo: 6, weight: 2, new_column: 'LIGHT' } },
+      { id: 'new_item', label: 'Pistol', type: 'weapons', values: { damage: '2d6 + @might', range: '30 m', ammo: 6, weight: 2, new_column: 'LIGHT', price: 200 }, in_shops: true },
     ],
   });
 
