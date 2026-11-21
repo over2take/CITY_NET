@@ -34,7 +34,9 @@ interface Props {
 interface Problem { line: number; catalogue?: string; name?: string; message: string }
 interface Summary { catalogue: string; count: number; overrides: string[]; label?: string }
 /** `notes` (8a7a1): what a type's line left blank, nothing wrong. */
-interface Preview { problems: Problem[]; notes?: Problem[]; summary: Summary[]; format: string | null; sections?: Record<string, PreviewRow[]> }
+/** The file held against the game's own items (8a7a3c1): how many sell themselves, lines overruling one, lines left out. */
+interface AgainstItems { onSale: number; overrules: (Omit<Problem, 'message'> & { from: number; to: number })[]; leftOut: Problem[] }
+interface Preview { problems: Problem[]; notes?: Problem[]; summary: Summary[]; format: string | null; sections?: Record<string, PreviewRow[]>; items?: AgainstItems }
 
 /**
  * Socket.io refuses a message over a megabyte by default, and says nothing useful when it
@@ -306,6 +308,28 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
                 {n.line ? `LINE ${n.line}` : 'FILE'} [{sectionName(n.catalogue)}] {n.name}: nearly the item {n.item}. Name it exactly to sell that item
               </div>
             ))}
+
+            {/* The game's own items (8a7a3c1; mockup types-in-shops.html): what sells itself besides, and lines it overrules
+                or leaves out, so a GM sees why a Pistol is 260 and not 200. */}
+            {preview.items && (() => {
+              const where = (p: Omit<Problem, 'message'>) => `${p.line > 0 ? `LINE ${p.line}` : 'FILE'}${p.catalogue ? ` [${sectionName(p.catalogue)}]` : ''}${p.name ? ` ${p.name}` : ''}`;
+              const own = preview.items;
+              return <>
+                {own.onSale > 0 && (
+                  <div data-testid="catalogue-on-sale" style={{ color: 'var(--cyan)' }}>
+                    ALSO ON SALE FROM ITEMS: {own.onSale}{own.overrules.length > 0 ? ` (${own.overrules.length} overruled by this file)` : ''}
+                  </div>
+                )}
+                {own.overrules.map((p, i) => (
+                  <div key={`over-${i}`} data-testid="catalogue-overrules" style={{ color: 'var(--cyan)' }}>
+                    {where(p)}: overrules the item, {p.from === p.to ? 'its columns' : `${p.from} → ${p.to}`} in the shops
+                  </div>
+                ))}
+                {own.leftOut.map((p, i) => (
+                  <div key={`out-${i}`} data-testid="catalogue-left-out" style={{ color: 'var(--warning)' }}>{where(p)}: {p.message}</div>
+                ))}
+              </>;
+            })()}
 
             {preview.problems.map((p, i) => (
               <div key={i} style={{ color: 'var(--warning)' }}>

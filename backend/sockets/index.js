@@ -51,7 +51,7 @@ const { typesOf, ownTypes, typeShelvesAt } = require('../systemBuilder/itemTypes
 const { namesOf } = require('../systemBuilder/choices');
 // The merged catalogue: what the app ships with, plus whatever a GM uploaded.
 const shopPrices = require('../shops/catalogueStore');
-const { ownStock } = require('../shops/ownItems');
+const { ownStock, againstItems } = require('../shops/ownItems');
 // And the running game's own items, priced and IN SHOPS (8a7a3a), under the uploaded lines.
 shopPrices.setOwnSource((system) => ownStock(customSystems.definitionOf(system)));
 const catalogueDb = require('../shops/catalogueDb');
@@ -2488,11 +2488,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('previewCatalogue', (data) => {
       const info = userSockets.get(socket.id);
       if (!info || !info.isAdmin) return;
-      getGameSystem((sysErr, system) => previewCatalogue(data, sysErr ? {} : catalogueOptions(system)));
+      getGameSystem((sysErr, system) => previewCatalogue(data, sysErr ? {} : catalogueOptions(system), sysErr ? null : customSystems.definitionOf(system)));
     });
 
-    const previewCatalogue = (data, options) => {
-      const parsed = catalogueParse.parseCatalogue(data && data.text, options);
+    const previewCatalogue = (data, options, definition) => {
+      const read = catalogueParse.parseCatalogue(data && data.text, options);
+      // Held against the game's own items (8a7a3c1): exact copies and items kept out of the shops left out, as the save does.
+      const held = againstItems(read.sections, definition);
+      const parsed = { ...read, sections: held.sections };
 
       // An id that already exists in the book is an override rather than an addition, and
       // the GM should be told before they save rather than after.
@@ -2511,6 +2514,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         problems: parsed.problems,
         notes: parsed.notes,
         summary,
+        ...(held.onSale || held.leftOut.length || held.overrules.length ? { items: { onSale: held.onSale, overrules: held.overrules, leftOut: held.leftOut } } : {}),
       });
     };
 
@@ -2528,7 +2532,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
       getGameSystem((sysErr, system) => {
         if (sysErr) return refuse('no_system');
-        const parsed = catalogueParse.parseCatalogue(data && data.text, catalogueOptions(system));
+        const read = catalogueParse.parseCatalogue(data && data.text, catalogueOptions(system));
+        // As the preview said (8a7a3c1): a line that is exactly one of the game's items, or one kept out of the shops, isn't saved.
+        const parsed = { ...read, sections: againstItems(read.sections, customSystems.definitionOf(system)).sections };
         const wanted = Object.keys(parsed.sections);
         if (!wanted.length) return refuse('empty');
 

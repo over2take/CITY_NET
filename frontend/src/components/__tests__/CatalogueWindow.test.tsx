@@ -322,3 +322,38 @@ describe("a type's section (8a7a1)", () => {
     expect(screen.getByText('Saved: GUNS ×2. The shops have it now.')).toBeInTheDocument();
   });
 });
+
+describe('the file held against the game\'s own items (8a7a3c1)', () => {
+  const ITEMS = {
+    onSale: 9,
+    overrules: [{ line: 4, catalogue: 'type:guns', name: 'Pistol', from: 200, to: 260 }, { line: 5, catalogue: 'type:guns', name: 'Derringer', from: 90, to: 90 }],
+    leftOut: [{ line: 6, catalogue: 'type:guns', name: 'Cutlass', message: 'already on ITEMS at 120, the same in every column: left out, as it sells itself' }],
+  };
+  const preview = (items?: object) => reply('cataloguePreview', {
+    format: 'delimited', summary: [{ catalogue: 'type:guns', count: 2, overrides: [], label: 'GUNS' }], problems: [], ...(items ? { items } : {}),
+  });
+
+  it('how many sell themselves besides, each line overruling one and how, each left out and why', async () => {
+    show();
+    type('[GUNS]\nname, price\nPistol, 260');
+    await userEvent.click(button('PREVIEW'));
+    preview(ITEMS);
+    expect(screen.getByTestId('catalogue-on-sale')).toHaveTextContent('ALSO ON SALE FROM ITEMS: 9 (2 overruled by this file)');
+    expect(screen.getAllByTestId('catalogue-overrules').map((n) => n.textContent)).toEqual([
+      'LINE 4 [GUNS] Pistol: overrules the item, 200 → 260 in the shops',
+      'LINE 5 [GUNS] Derringer: overrules the item, its columns in the shops',
+    ]);
+    expect(screen.getByTestId('catalogue-left-out')).toHaveTextContent('LINE 6 [GUNS] Cutlass: already on ITEMS at 120, the same in every column: left out, as it sells itself');
+  });
+
+  it('none overruled: the count alone; a game with no items of its own: nothing said', async () => {
+    show();
+    type('[GUNS]\nname, price\nPistol, 260');
+    await userEvent.click(button('PREVIEW'));
+    preview({ onSale: 3, overrules: [], leftOut: [] });
+    expect(screen.getByTestId('catalogue-on-sale')).toHaveTextContent(/^ALSO ON SALE FROM ITEMS: 3$/);
+    preview();
+    expect(screen.queryByTestId('catalogue-on-sale')).toBeNull();
+    expect(screen.queryByTestId('catalogue-overrules')).toBeNull();
+  });
+});
