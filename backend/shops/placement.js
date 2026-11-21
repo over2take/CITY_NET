@@ -91,6 +91,25 @@ const addToInventory = (data, name, enc, same = (item) => item.name === name) =>
   return { [INVENTORY_FIELD]: writeInventory(next) };
 };
 
+/**
+ * A line of one of the system's item types (8a7a2; decided 2026-11-20): onto the gear as a line of `type`, its values the
+ * type's own columns out of the catalogue's fields (`columns`, their ids), a COUNT full (nothing spent). Stacked only onto a
+ * carried line that is the same thing untouched: the same name, type and values and nothing spent, so a line made UNIQUE or
+ * half fired keeps its own.
+ */
+const addTypedLine = (data, entry, type, columns) => {
+  const fields = entry.fields || {};
+  const values = Object.fromEntries(columns.filter((id) => fields[id] !== undefined && fields[id] !== '').map((id) => [id, fields[id]]));
+  const same = (item) => item.carry !== 'stash' && item.name === entry.name && item.type === type && !item.counts
+    && JSON.stringify(item.values || {}) === JSON.stringify(values);
+  const items = readInventory(data);
+  const i = items.findIndex(same);
+  const next = i >= 0
+    ? items.map((item, n) => (n === i ? { ...item, qty: item.qty + 1 } : item))
+    : [...items, { ...blankItem(), name: entry.name, qty: 1, type, ...(Object.keys(values).length ? { values } : {}) }];
+  return { [INVENTORY_FIELD]: writeInventory(next) };
+};
+
 // ─── Uploaded catalogues (frontend shopPlacement.ts) ──────────────────────────
 
 /** How a catalogue's items land under a system: numbered rows, the cyberware table, or the inventory. */
@@ -113,9 +132,11 @@ const firstFreeSlot = (data, group, rows) => {
  * One uploaded catalogue entry ({ name, price, fields }) onto a sheet: { ok: true, patch }, or
  * { ok: false, reason } when it has nowhere to go.
  */
-const placeUploaded = (system, catalogue, entry, data) => {
+const placeUploaded = (system, catalogue, entry, data, typeColumns = []) => {
   const sheet = data && typeof data === 'object' ? data : {};
   const fields = (entry && entry.fields) || {};
+  // A line of one of the system's item types (8a7a2): `typeColumns` its columns' ids, as the caller reads them from the game.
+  if (String(catalogue).startsWith('type:')) return { ok: true, patch: addTypedLine(sheet, entry || {}, String(catalogue).slice(5), typeColumns) };
   const shape = shapeOf(system, catalogue);
 
   if (shape === 'slots') {

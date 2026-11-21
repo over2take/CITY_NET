@@ -146,7 +146,8 @@ describe('item types, checked', () => {
 describe('the sheet is told them', () => {
   it('each type\'s columns by name and kind, a COUNT\'s button and the items it reloads from by name; each item\'s type and values', () => {
     const shown = itemsRenderedOf(TYPED);
-    expect(shown.types[0]).toEqual({ id: 'weapons', label: 'WEAPONS', one: 'Weapon', columns: [
+    // Sold at the General Store where the GM said nowhere (8a7a2).
+    expect(shown.types[0]).toEqual({ id: 'weapons', label: 'WEAPONS', one: 'Weapon', sold_at: ['general_store'], columns: [
       { id: 'damage', label: 'DAMAGE', kind: 'damage' },
       { id: 'heals', label: 'HEALS', kind: 'dice' },
       { id: 'range', label: 'RANGE', kind: 'text' },
@@ -162,7 +163,7 @@ describe('the sheet is told them', () => {
     ]);
     // A COUNT with nothing said: USE, no rest, no reload; a type with no singular: its name.
     const plain = itemsRenderedOf(withTypes([{ id: 'w', label: 'WANDS', columns: [{ id: 'charges', label: 'CHARGES', kind: 'count' }] }], []));
-    expect(plain.types).toEqual([{ id: 'w', label: 'WANDS', one: 'WANDS', columns: [{ id: 'charges', label: 'CHARGES', kind: 'count', button: 'USE' }] }]);
+    expect(plain.types).toEqual([{ id: 'w', label: 'WANDS', one: 'WANDS', sold_at: ['general_store'], columns: [{ id: 'charges', label: 'CHARGES', kind: 'count', button: 'USE' }] }]);
     // Types alone are enough to tell; nothing at all, nothing to tell. A system making none tells no types (8a3a): its
     // sheet keeps the one list, its items still GEAR with their values.
     const none = itemsRenderedOf({ ...TYPED, items: { list: [{ id: 'rope', label: 'Rope', values: { weight: 10 } }] } });

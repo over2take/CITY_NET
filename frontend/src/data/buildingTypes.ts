@@ -181,8 +181,19 @@ export const isShopIn = (system: string | null | undefined, id: string | null | 
   isShop(id) && typeOn(system, id);
 
 /** The catalogues a shop of this type puts on its shelves in this game. */
-export const shelvedIn = (id: string | null | undefined, system: string | null | undefined): ShopStock[] =>
-  shelvedCatalogues(id).filter((c) => catalogueOn(system, c));
+export const shelvedIn = (id: string | null | undefined, system: string | null | undefined): ShopStock[] => [
+  ...shelvedCatalogues(id).filter((c) => catalogueOn(system, c)),
+  // And a shelf for each of a custom system's own item types sold at this kind of building (8a7a2, SOLD AT): `type:<id>`.
+  ...ownItemTypes(system).filter((t) => (t.sold_at ?? []).includes(String(id ?? ''))).map((t) => `type:${t.id}` as ShopStock),
+];
+
+/** A custom system's own item types, as its render copy says them (8a7a2); none for a built-in game. */
+export const ownItemTypes = (system: string | null | undefined) =>
+  customTemplate(String(system ?? ''))?.items?.types ?? [];
+
+/** The item type a `type:<id>` shelf is (8a7a2), or undefined for any other shelf. */
+export const itemTypeOfShelf = (system: string | null | undefined, id: string) =>
+  (id.startsWith('type:') ? ownItemTypes(system).find((t) => `type:${t.id}` === id) : undefined);
 
 /** A building type's name in this game. Blank for an id that is not on the list. */
 export const typeLabel = (id: string | null | undefined, system: string | null | undefined): string =>
@@ -190,6 +201,9 @@ export const typeLabel = (id: string | null | undefined, system: string | null |
 
 /** A catalogue's name in this game, for a shelf tab or a section of the catalogue file. */
 export const catalogueLabel = (id: ShopStock, system: string | null | undefined): string => {
+  // A type's shelf by the type's own name (8a7a2): GUNS.
+  const itemType = itemTypeOfShelf(system, id);
+  if (itemType) return itemType.label;
   const own = customSetting(system, 'catalogues', id)?.name;
   if (own) return own;
   const label = catalogueById(id)?.label ?? id;

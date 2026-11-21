@@ -26,6 +26,7 @@ import {
   INVENTORY_FIELD, readInventory, writeInventory, blankItem,
 } from './inventory';
 import type { UploadedEntry } from './uploadedCatalogues';
+import { itemTypeOfShelf } from '../data/buildingTypes';
 
 export type Placement =
   | { ok: true; patch: Record<string, unknown> }
@@ -52,8 +53,28 @@ export const firstFreeSlot = (
   return null;
 };
 
+/**
+ * A line of one of the system's item types (8a7a2; backend shops/placement.js addTypedLine, held to it by
+ * serverPlacement.test.ts): onto the gear as a line of `type`, its values the type's own columns out of the entry's fields
+ * (`columns`, their ids), a COUNT full. Stacked only onto a carried line that is the same thing untouched.
+ */
+const addTypedLine = (data: Record<string, unknown>, entry: UploadedEntry, type: string, columns: string[]): Record<string, unknown> => {
+  const fields = entry.fields ?? {};
+  const values = Object.fromEntries(columns.filter((id) => fields[id] !== undefined && fields[id] !== '').map((id) => [id, fields[id]]));
+  const items = readInventory(data);
+  const i = items.findIndex((item) => item.carry !== 'stash' && item.name === entry.name && item.type === type && !item.counts
+    && JSON.stringify(item.values ?? {}) === JSON.stringify(values));
+  const next = i >= 0
+    ? items.map((item, n) => (n === i ? { ...item, qty: item.qty + 1 } : item))
+    : [...items, { ...blankItem(), name: entry.name, qty: 1, type, ...(Object.keys(values).length ? { values: values as Record<string, string | number> } : {}) }];
+  return { [INVENTORY_FIELD]: writeInventory(next) };
+};
+
 /** Where this catalogue's items go on this system's sheet, for the shelf's notice line. */
 export const destinationOf = (system: string, catalogue: ShopStock): string => {
+  // A type's line (8a7a2): into the gear, as one of it.
+  const itemType = itemTypeOfShelf(system, catalogue);
+  if (itemType) return `GOES INTO YOUR GEAR AS A ${itemType.one.toUpperCase()}`;
   const spec = columnsFor(system, catalogue);
   const group = GROUP_OF[catalogue];
   if (spec.shape === 'slots' && group) {
@@ -69,8 +90,11 @@ export const placeUploaded = (
   catalogue: ShopStock,
   entry: UploadedEntry,
   data: Record<string, unknown> | null | undefined,
+  typeColumns: string[] = [],
 ): Placement => {
   const sheet = data && typeof data === 'object' ? data : {};
+  // A line of one of the system's item types (8a7a2): `typeColumns` its columns' ids, as the caller reads them from the game.
+  if (String(catalogue).startsWith('type:')) return { ok: true, patch: addTypedLine(sheet, entry, String(catalogue).slice(5), typeColumns) };
   const spec = columnsFor(system, catalogue);
   const fields = entry.fields ?? {};
 
