@@ -29,6 +29,8 @@ const asked = () => fakeSocket.emit.mock.calls.filter((c) => c[0] === 'requestCa
 
 const ROPE = { id: 'rope', name: 'Rope', price: 5, fields: {}, source: 'uploaded' };
 const BOOK = { id: 'light_pistol', name: 'Light Pistol', price: 200, fields: {}, source: 'book' };
+// One of the game's own items on a type's shelf (8a7a3a).
+const PISTOL = { id: 'item:pistol', name: 'Pistol', price: 200, fields: { damage: '2d6' }, source: 'items' };
 
 describe('the shops\' catalogues', () => {
   it('kept as soon as the server sends them, the uploaded only; the shops redrawn', () => {
@@ -55,17 +57,20 @@ describe('the shops\' catalogues', () => {
     expect(renders).toBeGreaterThan(before);
   });
 
-  it('asked for again when a GM saves one or the game changes', () => {
+  it('asked for again when a GM saves one, the game changes, or a system is published (its items sell themselves)', () => {
     mount();
     send('cataloguesChanged', { system: 'sys_aaaaaaaaaaaaaaaa' });
     send('gameSystemChanged', { system: 'generic' });
-    expect(asked()).toBe(2);
+    send('customSystemChanged', { id: 'sys_aaaaaaaaaaaaaaaa' });
+    expect(asked()).toBe(3);
   });
 });
 
 describe('uploadedOf', () => {
   it('the uploaded entries of each catalogue, the book\'s left out; nothing sent, nothing kept', () => {
     expect(uploadedOf({ entries: { gear: [ROPE, BOOK], weapons: null } })).toEqual({ gear: [ROPE], weapons: [] });
+    // And the game's own items on a type's shelf, which the window has no copy of (8a7a3a).
+    expect(uploadedOf({ entries: { 'type:guns': [PISTOL, ROPE] } })).toEqual({ 'type:guns': [PISTOL, ROPE] });
     expect(uploadedOf(null)).toEqual({});
     expect(uploadedOf({})).toEqual({});
   });

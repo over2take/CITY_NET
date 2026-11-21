@@ -40,6 +40,21 @@ let loadedSystem = BOOK_SYSTEM;
 const bookApplies = () => loadedSystem === BOOK_SYSTEM;
 
 /**
+ * The running game's own items on the shelves (8a7a3a, shops/ownItems.js): { catalogues, off }, asked of whoever knows the
+ * systems (the sockets set it), so this file still requires nothing and a frontend test can load it. Asked on every read,
+ * so a published change sells at once. Under the uploaded lines, as they are over the book: a line uploaded with an item's
+ * name is the GM's latest word and wins; an item turned off keeps a line of its name off the shelves.
+ */
+const NO_OWN = { catalogues: {}, off: new Set() };
+let ownSource = () => NO_OWN;
+const setOwnSource = (fn) => { ownSource = typeof fn === 'function' ? fn : () => NO_OWN; };
+/** Whatever is set, so a test that sets its own can put it back. */
+const ownSourceNow = () => ownSource;
+const own = () => { const got = ownSource(loadedSystem); return got && got.catalogues && got.off ? got : NO_OWN; };
+/** Whether a name is an item the game turned off for the shops. */
+const isOff = (name) => own().off.has(builtIn.normaliseName(name));
+
+/**
  * Replace everything uploaded for the running system.
  *
  * Wholesale rather than merged, because "here is my weapon list" is how a GM thinks about
@@ -72,6 +87,22 @@ const systemLoaded = () => loadedSystem;
 /** The uploaded entries for one catalogue, as a list. */
 const uploadedIn = (catalogue) => Object.values(uploaded[String(catalogue || '')] || {});
 
+/** The uploaded entries a shop sells: without those named as an item turned off. */
+const sellableIn = (catalogue) => uploadedIn(catalogue).filter((e) => !isOff(e.name));
+/** The game's own items a shop sells from a catalogue: without those an uploaded line of the same name stands in for. */
+const ownIn = (catalogue) => {
+  const named = new Set(sellableIn(catalogue).map((e) => builtIn.normaliseName(e.name)));
+  return (own().catalogues[String(catalogue || '')] || []).filter((e) => !named.has(builtIn.normaliseName(e.name)));
+};
+
+/** One entry a shop sells, uploaded or the game's own, by id; undefined for neither (the book is asked apart). */
+const sold = (catalogue, itemId) => {
+  const mine = (uploaded[String(catalogue || '')] || {})[String(itemId || '')];
+  if (mine) return isOff(mine.name) ? { off: true } : { entry: mine };
+  const item = ownIn(catalogue).find((e) => e.id === String(itemId || ''));
+  return item ? { entry: item } : undefined;
+};
+
 /** Whether anything has been uploaded for a catalogue at all. */
 const hasUploads = (catalogue) => uploadedIn(catalogue).length > 0;
 
@@ -83,22 +114,22 @@ const hasUploads = (catalogue) => uploadedIn(catalogue).length > 0;
  * nothing when `Number(null)` was read as zero.
  */
 const priceOf = (catalogue, itemId) => {
-  const mine = (uploaded[String(catalogue || '')] || {})[String(itemId || '')];
-  if (mine) return Number.isFinite(mine.price) ? mine.price : null;
+  const mine = sold(catalogue, itemId);
+  if (mine) return mine.entry && Number.isFinite(mine.entry.price) ? mine.entry.price : null;
   return bookApplies() ? builtIn.priceOf(catalogue, itemId) : null;
 };
 
 /** What a catalogue entry is called. Uploaded first, then the book. */
 const labelOf = (catalogue, itemId) => {
-  const mine = (uploaded[String(catalogue || '')] || {})[String(itemId || '')];
-  if (mine) return mine.name;
+  const mine = sold(catalogue, itemId);
+  if (mine) return mine.entry ? mine.entry.name : null;
   return bookApplies() ? builtIn.labelOf(catalogue, itemId) : null;
 };
 
 /** The sheet fields an uploaded entry fills when bought. Empty for a built-in one. */
 const fieldsOf = (catalogue, itemId) => {
-  const mine = (uploaded[String(catalogue || '')] || {})[String(itemId || '')];
-  return mine ? { ...mine.fields } : {};
+  const mine = sold(catalogue, itemId);
+  return mine && mine.entry ? { ...mine.entry.fields } : {};
 };
 
 /**
@@ -117,8 +148,14 @@ const findByName = (name) => {
   if (hit) return hit;
   const wanted = builtIn.normaliseName(name);
   if (!wanted) return null;
-  for (const [catalogue, table] of Object.entries(uploaded)) {
-    for (const entry of Object.values(table)) {
+  for (const catalogue of Object.keys(uploaded)) {
+    for (const entry of sellableIn(catalogue)) {
+      if (builtIn.normaliseName(entry.name) === wanted) return { catalogue, id: entry.id };
+    }
+  }
+  // The game's own items (8a7a3a), so one bought from a shop sells back at the shop's rate.
+  for (const catalogue of Object.keys(own().catalogues)) {
+    for (const entry of ownIn(catalogue)) {
       if (builtIn.normaliseName(entry.name) === wanted) return { catalogue, id: entry.id };
     }
   }
@@ -136,7 +173,9 @@ const entriesIn = (catalogue) => {
   for (const [id, [name, price]] of Object.entries(book)) {
     out.set(id, { id, name, price, fields: {}, source: 'book' });
   }
-  for (const entry of uploadedIn(catalogue)) {
+  // The game's own items (8a7a3a), then the uploaded lines over them.
+  for (const entry of ownIn(catalogue)) out.set(entry.id, { ...entry, fields: { ...entry.fields }, source: 'items' });
+  for (const entry of sellableIn(catalogue)) {
     out.set(entry.id, { ...entry, source: 'uploaded' });
   }
   return [...out.values()];
@@ -150,7 +189,7 @@ const overridesIn = (catalogue, entries) => {
 };
 
 module.exports = {
-  BOOK_SYSTEM, bookApplies,
+  BOOK_SYSTEM, bookApplies, setOwnSource, ownSourceNow,
   load, clear, systemLoaded, uploadedIn, hasUploads, entriesIn, overridesIn,
   priceOf, labelOf, fieldsOf, findByName,
   normaliseName: builtIn.normaliseName,

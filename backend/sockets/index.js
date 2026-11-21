@@ -51,6 +51,9 @@ const { typesOf, ownTypes, typeShelvesAt } = require('../systemBuilder/itemTypes
 const { namesOf } = require('../systemBuilder/choices');
 // The merged catalogue: what the app ships with, plus whatever a GM uploaded.
 const shopPrices = require('../shops/catalogueStore');
+const { ownStock } = require('../shops/ownItems');
+// And the running game's own items, priced and IN SHOPS (8a7a3a), under the uploaded lines.
+shopPrices.setOwnSource((system) => ownStock(customSystems.definitionOf(system)));
 const catalogueDb = require('../shops/catalogueDb');
 const catalogueParse = require('../shops/catalogueParse');
 const shopPurchase = require('../shops/purchase');
