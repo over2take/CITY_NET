@@ -358,13 +358,13 @@ export const exampleFor = (system: string, catalogues?: ShopStock[]): string =>
     }],
   );
 
-/** One entry as the server describes it, book or uploaded. */
+/** One entry as the server describes it: the book's, uploaded, or one of the game's own items (8a7a3a). */
 export interface StoredEntry {
   id: string;
   name: string;
   price: number;
   fields?: Record<string, string | number>;
-  source: 'book' | 'uploaded';
+  source: 'book' | 'uploaded' | 'items';
 }
 
 /** An entry's values as a file writes them: every field as text. */
@@ -397,6 +397,7 @@ export const currentFor = (
       'file leaves them exactly as they are. To change one, delete its # and edit it -',
       'that is what tells CITY_NET you meant to override it.',
     ],
-    // Each type's lines on sale (8a7a1), every column as it was saved.
-    (type) => (entries[`type:${type.id}`] ?? []).map((e) => ({ values: asCells(e) })),
+    // Each type's lines on sale (8a7a1), every column as it was saved; the game's own items behind a # (8a7a3a), as the
+    // book's are: on sale by themselves, so uploading the file back repeats none of them.
+    (type) => (entries[`type:${type.id}`] ?? []).map((e) => ({ commented: e.source === 'items', values: asCells(e) })),
   );

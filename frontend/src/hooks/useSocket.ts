@@ -124,6 +124,8 @@ export function useSocket({
     });
     newSocket.on('cataloguesChanged', askCatalogues);
     newSocket.on('gameSystemChanged', askCatalogues);
+    // A system published: its own items, priced and IN SHOPS, sell themselves (8a7a3a), so the shelves are asked for again.
+    newSocket.on('customSystemChanged', askCatalogues);
 
     newSocket.on('authError', (data: { message: string }) => {
       onNotification(data.message || 'SESSION_INVALID // PLEASE_LOG_IN_AGAIN');

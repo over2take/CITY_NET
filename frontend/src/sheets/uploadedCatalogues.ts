@@ -72,12 +72,13 @@ export const anyUploaded = (): boolean =>
 
 /**
  * The server's catalogues as a shop keeps them (moved here from App, 8n1): only the uploaded entries, since the built-in
- * tables are already compiled in and taking the server's copy of those would mean two sources for the same shelf.
+ * tables are already compiled in and taking the server's copy of those would mean two sources for the same shelf; and the
+ * game's own items the server puts on a type's shelf (8a7a3a, source 'items'), which the window has no copy of.
  */
 export const uploadedOf = (payload: { entries?: Record<string, ({ source?: string } & Record<string, unknown>)[] | null | undefined> } | null | undefined) => {
   const out: Record<string, UploadedEntry[]> = {};
   for (const [catalogue, entries] of Object.entries(payload?.entries ?? {})) {
-    out[catalogue] = (entries ?? []).filter((e) => e?.source === 'uploaded') as unknown as UploadedEntry[];
+    out[catalogue] = (entries ?? []).filter((e) => e?.source === 'uploaded' || e?.source === 'items') as unknown as UploadedEntry[];
   }
   return out as Partial<Record<ShopStock, UploadedEntry[]>>;
 };

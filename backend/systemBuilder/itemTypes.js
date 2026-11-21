@@ -195,6 +195,30 @@ const itemValues = (definition, item, names) => {
   return Object.fromEntries(type.columns.filter((c) => Object.prototype.hasOwnProperty.call(values, c.id) && !valueProblem(c, values[c.id], names)).map((c) => [c.id, values[c.id]]));
 };
 
+/** A type's own column read as an item's price (8a7a3a): a NUMBER column called `price`. */
+const PRICE_COLUMN = 'price';
+/** The most an item can cost, as a catalogue line can. */
+const MOST_PRICE = 1000000000;
+/** Whether a value is a price: a number, 0 up to the most. */
+const isPrice = (v) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= MOST_PRICE;
+
+/**
+ * An item's price (8a7a3a; decided 2026-11-21, mockup docs/mockups/types-in-shops.html): its own PRICE, else its type's own
+ * `price` NUMBER column's value, read as it, so a GM who made a PRICE column keeps every price they typed. Undefined with neither.
+ */
+const itemPrice = (definition, item) => {
+  if (!isPlainObject(item)) return undefined;
+  if (item.price !== undefined) return item.price;
+  const value = isPlainObject(item.values) ? item.values[PRICE_COLUMN] : undefined;
+  return typeNamed(definition, item.type).columns.some((c) => c.id === PRICE_COLUMN && c.kind === 'number') && isPrice(value) ? value : undefined;
+};
+
+/**
+ * Whether an item is IN SHOPS (8a7a3a): as its switch says; an item saved before the switch was, by whether it has a price,
+ * so a system made before this neither sells its unpriced items nor fills up with problems.
+ */
+const inShops = (definition, item) => (isPlainObject(item) && typeof item.in_shops === 'boolean' ? item.in_shops : itemPrice(definition, item) !== undefined);
+
 /**
  * A line of gear's columns (8a1): its type (its own, an item's of its name, or the first), each column's value (the
  * line's own where it fills one, else the item's), and each COUNT as { now, most }, `now` the line's own, held to 0 to
@@ -222,4 +246,4 @@ const lineColumns = (definition, line, items, names) => {
   return { type: type.id, ...(item ? { item: item.id } : {}), values, counts };
 };
 
-module.exports = { KINDS, LIMITS, GEAR, NAME, SHOP_TYPES, DEFAULT_SOLD_AT, soldAt, typeShelvesAt, linesOf, typesOf, ownTypes, typeNamed, valueProblem, checkTypes, checkItemType, typesShown, itemValues, lineColumns };
+module.exports = { PRICE_COLUMN, MOST_PRICE, isPrice, itemPrice, inShops, KINDS, LIMITS, GEAR, NAME, SHOP_TYPES, DEFAULT_SOLD_AT, soldAt, typeShelvesAt, linesOf, typesOf, ownTypes, typeNamed, valueProblem, checkTypes, checkItemType, typesShown, itemValues, lineColumns };

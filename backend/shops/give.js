@@ -35,13 +35,14 @@ const offers = (system, catalogue) => (SHELVED.includes(catalogue)
  */
 const givable = (system) => [...SHELVED, ...ownTypesOf(system).map((t) => `type:${t.id}`)]
   .filter((catalogue) => offers(system, catalogue))
-  .map((catalogue) => ({ catalogue, items: store.entriesIn(catalogue).map(({ id, name, price }) => ({ id, name, price })) }))
+  // The game's own items aren't listed again under their type (8a7a3a): GIVE.EXE has them all in ITEMS, sold or not.
+  .map((catalogue) => ({ catalogue, items: store.entriesIn(catalogue).filter((e) => e.source !== 'items').map(({ id, name, price }) => ({ id, name, price })) }))
   .filter((c) => c.items.length);
 
 /** One item `system` can give, as the shop has it ({ id, name, price, fields }), or null. */
 const itemOf = (system, catalogue, id) => {
   if (!offers(system, catalogue)) return null;
-  const entry = store.entriesIn(catalogue).find((e) => e.id === String(id ?? ''));
+  const entry = store.entriesIn(catalogue).find((e) => e.source !== 'items' && e.id === String(id ?? ''));
   return entry ? { id: entry.id, name: entry.name, price: entry.price, fields: entry.fields } : null;
 };
 

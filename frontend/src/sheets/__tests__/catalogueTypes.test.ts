@@ -76,6 +76,13 @@ describe('DOWNLOAD CURRENT', () => {
     expect(out.problems).toEqual([]);
     expect(out.sections['type:guns']).toEqual([expect.objectContaining({ name: 'Pistol', price: 250, fields: stored[0].fields })]);
   });
+
+  it('the game\'s own items behind a #, on sale by themselves: uploading the file back repeats none of them (8a7a3a)', () => {
+    const item = { id: 'item:derringer', name: 'Derringer', price: 90, source: 'items' as const, fields: { damage: '1d4', ammo: 2 } };
+    const file = currentFor(SYS, { 'type:guns': [item] });
+    expect(file).toMatch(/^# Derringer\s*, 90\s*, 1d4/m);
+    expect(read(file).sections['type:guns']).toEqual([]);
+  });
 });
 
 describe('DOWNLOAD ITEMS', () => {

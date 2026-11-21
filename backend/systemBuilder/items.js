@@ -37,7 +37,7 @@
 //
 // Pure: checks, reads and the changes asked for.
 
-const { checkTypes, checkItemType } = require('./itemTypes');
+const { checkTypes, checkItemType, isPrice, itemPrice, MOST_PRICE } = require('./itemTypes');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
@@ -46,7 +46,7 @@ const LIMITS = { items: 200, slots: 10, count: 20, features: 20, installs: 10, c
 const ITEMS_KEYS = new Set(['slots', 'installs', 'list', 'types', 'encumbrance']);
 const SLOT_KEYS = new Set(['id', 'label', 'count']);
 const INSTALL_KEYS = new Set(['id', 'label', 'against', 'way', 'limit', 'weighs']);
-const ITEM_KEYS = new Set(['id', 'label', 'description', 'needs', 'cost', 'features', 'type', 'values']);
+const ITEM_KEYS = new Set(['id', 'label', 'description', 'needs', 'cost', 'features', 'type', 'values', 'price', 'in_shops']);
 /** How an install's cost counts against what it costs (7e4): adding to it up to its limit, or taking from it down to it. */
 const WAYS = ['adds', 'takes'];
 /** What an item's features need, other than a slot. */
@@ -138,6 +138,11 @@ const checkItems = (definition, problems, { id, text, keys, named, checkFeature,
     } else if (item.cost !== undefined) problems.push({ where: `${where}, cost`, message: 'Only an item needing an install has a cost' });
     // Its type and its columns' values (8a1).
     checkItemType(definition, item, where, problems, boxNames);
+    // Its price and whether the shops sell it (8a7a3a; decided 2026-11-21): one IN SHOPS needs a price, its own or its type's
+    // PRICE column's; off, it is only given.
+    if (item.price !== undefined && !isPrice(item.price)) problems.push({ where: `${where}, price`, message: `What it costs: 0 to ${MOST_PRICE}` });
+    if (item.in_shops !== undefined && typeof item.in_shops !== 'boolean') problems.push({ where: `${where}, in_shops`, message: 'On or off' });
+    else if (item.in_shops === true && itemPrice(definition, item) === undefined) problems.push({ where: `${where}, price`, message: 'A price, to be sold in the shops; or turn IN SHOPS off' });
     if (item.features === undefined) return;
     if (!Array.isArray(item.features)) { problems.push({ where: `${where}, features`, message: 'Must be a list of features' }); return; }
     if (item.features.length > LIMITS.features) problems.push({ where: `${where}, features`, message: `At most ${LIMITS.features} features` });
