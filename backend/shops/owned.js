@@ -89,7 +89,7 @@ const tally = (into, name, source, extra) => {
     id: hit ? hit.id : null,
     label: hit ? prices.labelOf(hit.catalogue, hit.id) : label,
     // What one is worth on a shelf. Null for anything no catalogue carries.
-    unitPrice: hit ? prices.priceOf(hit.catalogue, hit.id) : null,
+    unitPrice: hit ? prices.sellPriceOf(hit.catalogue, hit.id) : null,
     qty: 0,
     /** Every place one of these is sitting, so a sale knows what to empty. */
     at: [],

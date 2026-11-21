@@ -2569,7 +2569,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         for (const c of buildingTypes.CATALOGUES) out[c.id] = shopPrices.entriesIn(c.id);
         // Each of the game's own item types too (8a7a1), its lines with their columns, for DOWNLOAD CURRENT and the shops.
         for (const t of ownTypesIn(system)) out[`type:${t.id}`] = shopPrices.entriesIn(`type:${t.id}`);
-        socket.emit('catalogues', { entries: out });
+        // And the game's items kept out of the shops, which no shelf shows but a shop of their type buys back (8a7a3c2).
+        socket.emit('catalogues', { entries: out, buyback: ownStock(customSystems.definitionOf(system)).buyback });
       });
     };
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { loadUploaded, uploadedOf } from '../sheets/uploadedCatalogues';
+import { loadUploaded, uploadedOf, loadBuyback } from '../sheets/uploadedCatalogues';
 import { io } from 'socket.io-client';
 import type {
   ActiveUser, ChatMessage, BattleMapSessionData, BattleMapPosition,
@@ -117,8 +117,10 @@ export function useSocket({
     // they were missed, and a player found every custom system's shop empty). Listened for from the socket's first moment:
     // the server sends them on identify, and again whenever asked, as a GM's save or a new game says to.
     const askCatalogues = () => newSocket.emit('requestCatalogues');
-    newSocket.on('catalogues', (payload: Parameters<typeof uploadedOf>[0]) => {
+    newSocket.on('catalogues', (payload: Parameters<typeof uploadedOf>[0] & { buyback?: Parameters<typeof loadBuyback>[0] }) => {
       loadUploaded(uploadedOf(payload));
+      // What a shop buys back of the game's items kept out of the shops (8a7a3c2).
+      loadBuyback(payload?.buyback);
       // The shops redraw with them: App, which draws them, re-renders on this.
       setCatalogueRevision((n) => n + 1);
     });

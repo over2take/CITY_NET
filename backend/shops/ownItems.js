@@ -13,33 +13,41 @@ const { normaliseName } = require('./prices');
 
 /** An item's line id: apart from an uploaded line's (a slug of its name), so the two never share one. */
 const ITEM_PREFIX = 'item:';
-const NONE = Object.freeze({ catalogues: Object.freeze({}), off: new Set() });
+const NONE = Object.freeze({ catalogues: Object.freeze({}), off: new Set(), buyback: Object.freeze({}) });
 /** Dice read whatever names they read: the builder checked them. */
 const ANY_NAME = { known: () => true, refused: (n) => `@${n}` };
 
 const cache = new WeakMap();
 
 /**
- * { catalogues: { 'type:<id>': [{ id, name, price, fields }] }, off: Set of names }: each item IN SHOPS with a price, a line
- * of its type, its columns' values and its words as its fields, as an uploaded typed line has them; and the names of those
- * turned off. Nothing for a system without types of its own, whose shops have no type shelves.
+ * { catalogues: { 'type:<id>': [{ id, name, price, fields }] }, off: Set of names, buyback: { 'type:<id>': [...] } }: each item
+ * IN SHOPS with a price, a line of its type, its columns' values and its words as its fields, as an uploaded typed line has
+ * them; the names of those turned off; and those turned off with a price, which no shelf shows but a shop of their type buys
+ * back at its rate (8a7a3c2; the user: "a unique item should still be sellable for its set price"). Nothing for a system
+ * without types of its own, whose shops have no type shelves.
  */
 const ownStock = (definition) => {
   if (!definition || typeof definition !== 'object' || !ownTypes(definition)) return NONE;
   if (cache.has(definition)) return cache.get(definition);
   const catalogues = {};
   const off = new Set();
+  const buyback = {};
   for (const item of itemsOf(definition)) {
     const name = typeof item.label === 'string' ? item.label.trim() : '';
     if (!name || typeof item.id !== 'string') continue;
-    if (!inShops(definition, item)) { off.add(normaliseName(name)); continue; }
     const price = itemPrice(definition, item);
+    const shelf = `type:${typeNamed(definition, item.type).id}`;
+    if (!inShops(definition, item)) {
+      off.add(normaliseName(name));
+      if (isPrice(price)) (buyback[shelf] ||= []).push({ id: ITEM_PREFIX + item.id, name, price });
+      continue;
+    }
     if (!isPrice(price)) continue;
     const description = typeof item.description === 'string' ? item.description.trim() : '';
     const fields = { ...itemValues(definition, item, ANY_NAME), ...(description ? { description } : {}) };
-    (catalogues[`type:${typeNamed(definition, item.type).id}`] ||= []).push({ id: ITEM_PREFIX + item.id, name, price, fields });
+    (catalogues[shelf] ||= []).push({ id: ITEM_PREFIX + item.id, name, price, fields });
   }
-  const out = { catalogues, off };
+  const out = { catalogues, off, buyback };
   cache.set(definition, out);
   return out;
 };

@@ -177,7 +177,9 @@ describe('at the table', () => {
     const out = await checkout(kes, store_, { buys: [], sells: [{ catalogue: 'type:guns', id: 'pistol', qty: 1 }] });
     expect(out).toMatchObject({ ok: true });
     expect(await inventoryOf('kes')).toEqual([]);
-    expect((await get(db, 'SELECT balance FROM bank_accounts WHERE username = ?', ['kes'])).balance).toBeGreaterThan(1000);
+    // Exactly the app's 45% of its 250 (8a7a3c2; it said only "more than 1000").
+    expect(out).toMatchObject({ payout: 112 });
+    expect((await get(db, 'SELECT balance FROM bank_accounts WHERE username = ?', ['kes'])).balance).toBe(1112);
   });
 
   it('GIVE: every type offered, sold anywhere or not; given, a line of its type with its values', async () => {

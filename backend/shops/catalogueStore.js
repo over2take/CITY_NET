@@ -45,7 +45,7 @@ const bookApplies = () => loadedSystem === BOOK_SYSTEM;
  * so a published change sells at once. Under the uploaded lines, as they are over the book: a line uploaded with an item's
  * name is the GM's latest word and wins; an item turned off keeps a line of its name off the shelves.
  */
-const NO_OWN = { catalogues: {}, off: new Set() };
+const NO_OWN = { catalogues: {}, off: new Set(), buyback: {} };
 let ownSource = () => NO_OWN;
 const setOwnSource = (fn) => { ownSource = typeof fn === 'function' ? fn : () => NO_OWN; };
 /** Whatever is set, so a test that sets its own can put it back. */
@@ -95,6 +95,9 @@ const ownIn = (catalogue) => {
   return (own().catalogues[String(catalogue || '')] || []).filter((e) => !named.has(builtIn.normaliseName(e.name)));
 };
 
+/** The game's items kept out of the shops, by id, that a shop of their type buys back (8a7a3c2): never sold, never priced to buy. */
+const buybackOf = (catalogue, itemId) => ((own().buyback || {})[String(catalogue || '')] || []).find((e) => e.id === String(itemId || ''));
+
 /** One entry a shop sells, uploaded or the game's own, by id; undefined for neither (the book is asked apart). */
 const sold = (catalogue, itemId) => {
   const mine = (uploaded[String(catalogue || '')] || {})[String(itemId || '')];
@@ -119,10 +122,23 @@ const priceOf = (catalogue, itemId) => {
   return bookApplies() ? builtIn.priceOf(catalogue, itemId) : null;
 };
 
-/** What a catalogue entry is called. Uploaded first, then the book. */
+/**
+ * What a shop pays for one, before its rate (8a7a3c2): what it sells it for, else an item kept out of the shops at its own
+ * price, as one-of-a-kind things still sell back. Null for neither.
+ */
+const sellPriceOf = (catalogue, itemId) => {
+  const price = priceOf(catalogue, itemId);
+  if (price !== null) return price;
+  const kept = buybackOf(catalogue, itemId);
+  return kept ? kept.price : null;
+};
+
+/** What a catalogue entry is called. Uploaded first, then the book; an item kept out of the shops by its own name. */
 const labelOf = (catalogue, itemId) => {
   const mine = sold(catalogue, itemId);
   if (mine) return mine.entry ? mine.entry.name : null;
+  const kept = buybackOf(catalogue, itemId);
+  if (kept) return kept.name;
   return bookApplies() ? builtIn.labelOf(catalogue, itemId) : null;
 };
 
@@ -159,6 +175,12 @@ const findByName = (name) => {
       if (builtIn.normaliseName(entry.name) === wanted) return { catalogue, id: entry.id };
     }
   }
+  // And one kept out of the shops (8a7a3c2), to sell back where its type is sold.
+  for (const [catalogue, entries] of Object.entries(own().buyback || {})) {
+    for (const entry of entries) {
+      if (builtIn.normaliseName(entry.name) === wanted) return { catalogue, id: entry.id };
+    }
+  }
   return null;
 };
 
@@ -191,6 +213,6 @@ const overridesIn = (catalogue, entries) => {
 module.exports = {
   BOOK_SYSTEM, bookApplies, setOwnSource, ownSourceNow,
   load, clear, systemLoaded, uploadedIn, hasUploads, entriesIn, overridesIn,
-  priceOf, labelOf, fieldsOf, findByName,
+  priceOf, sellPriceOf, labelOf, fieldsOf, findByName,
   normaliseName: builtIn.normaliseName,
 };

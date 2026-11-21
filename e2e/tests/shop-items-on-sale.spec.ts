@@ -5,7 +5,8 @@ import { playerToken, sheetOf, payPlayer } from './shops';
 // The game's own items on the shelves (8a7a3a; mockup docs/mockups/types-in-shops.html, decided 2026-11-21). Found by the user
 // testing 8a7a2: a Pistol priced on the ITEMS page never reached a shop. A game whose WEAPONS type has a PRICE column, its
 // Pistol priced 200 and a Ring of Might kept out of the shops; no catalogue saved at all. The player's General Store sells the
-// Pistol on its WEAPONS shelf, never the ring; bought, it lands on the gear as a Weapon with its damage.
+// Pistol on its WEAPONS shelf, never the ring; bought, it lands on the gear as a Weapon with its damage; sold back from the
+// window at the store's own 50% (8a7a3c2: the window never found a typed line to sell), 100 back and off the sheet.
 
 const SYSTEM = (name: string) => ({
   format: 1, name, core: { health: { model: 'pool' } },
@@ -32,7 +33,8 @@ test('a Pistol priced on ITEMS sells itself at the General Store, no catalogue s
   await playerToken(request, gm, player.username);
   const shop = `ITEMSALE_GOODS${again}`;
   const made = await asGm(request, gm, 'post', '/api/locations', { name: shop, description: '', shape: 'box', x: 10, y: 0, z: 10, width: 2, height: 2, depth: 2 });
-  const typed = await request.patch(`/api/locations/${made.data[0].id}/building-type`, { data: { building_type: 'general_store' }, headers: { Authorization: `Bearer ${gm}` } });
+  // A store that buys back at 50%, so the sale is a round 100.
+  const typed = await request.patch(`/api/locations/${made.data[0].id}/building-type`, { data: { building_type: 'general_store', buyback_pct: 50 }, headers: { Authorization: `Bearer ${gm}` } });
   expect(typed.ok(), await typed.text()).toBe(true);
 
   // The player, with a sheet opened once.
@@ -73,5 +75,16 @@ test('a Pistol priced on ITEMS sells itself at the General Store, no catalogue s
     return (JSON.parse(typeof inventory === 'string' ? inventory : '[]') as { name: string; qty: number; type?: string; values?: Record<string, unknown> }[])
       .map(({ name, qty, type, values }) => ({ name, qty, type, damage: values?.damage }));
   }, { timeout: 15_000 }).toEqual([{ name: 'Pistol', qty: 1, type: 'weapons', damage: '2d6' }]);
+
+  // Sold back from the window: the store's 50% of 200, and off the sheet.
+  await window.getByRole('tab', { name: 'SELL' }).click();
+  await window.getByRole('button', { name: 'Add Pistol to the cart' }).click();
+  await window.getByRole('tab', { name: 'CART' }).click();
+  await window.getByRole('button', { name: 'CHECK OUT' }).click();
+  await expect(window.getByRole('tabpanel')).toContainText('BALANCE 900cr', { timeout: 15_000 });
+  await expect.poll(async () => {
+    const inventory = (await sheetOf(request, gm, player.username)).inventory;
+    return (JSON.parse(typeof inventory === 'string' ? inventory : '[]') as { name: string }[]).map((l) => l.name);
+  }, { timeout: 15_000 }).toEqual([]);
   await context.close();
 });
