@@ -25,6 +25,7 @@
 // Pure: checks and reads. Nothing here loads the CHOICES module: the sheet's names and the rests come in as tools.
 
 const { boxProblem } = require('./tierRolls');
+const { BUILDING_TYPES } = require('../buildingTypes');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
@@ -40,7 +41,7 @@ const linesOf = (data) => {
 /** What a column holds: a number, words, damage dice, any other dice, a count spent and refilled, one word of a few. */
 const KINDS = ['number', 'text', 'damage', 'dice', 'count', 'pick'];
 const LIMITS = { types: 10, columns: 20, options: 20, word: 30, text: 200, count: 1000, reload: 10, number: 1000000000, unit: 12 };
-const TYPE_KEYS = new Set(['id', 'label', 'one', 'columns']);
+const TYPE_KEYS = new Set(['id', 'label', 'one', 'columns', 'sold_at']);
 const BASE = ['id', 'label', 'kind'];
 const COLUMN_KEYS = {
   number: new Set([...BASE, 'unit']), text: new Set(BASE), damage: new Set(BASE), dice: new Set(BASE),
@@ -58,6 +59,18 @@ const typesOf = (definition) => {
 };
 /** Whether the system makes types of its own. */
 const ownTypes = (definition) => list(isPlainObject(definition && definition.items) ? definition.items.types : undefined).some((t) => isPlainObject(t) && typeof t.id === 'string');
+
+/** The kinds of building that are shops: what a type can be SOLD AT (8a7a2). */
+const SHOP_TYPES = BUILDING_TYPES.filter((t) => t.shop).map((t) => t.id);
+/** Where a type is sold where the GM hasn't said (8a7a2): the General Store, so its lines are on sale somewhere from the start. */
+const DEFAULT_SOLD_AT = ['general_store'];
+
+/** The kinds of shop a type's lines are sold at (8a7a2; decided 2026-11-20): what it says, else the General Store. */
+const soldAt = (type) => (Array.isArray(type && type.sold_at) ? type.sold_at.filter((id) => SHOP_TYPES.includes(id)) : DEFAULT_SOLD_AT);
+
+/** The shelves of the system's own types a kind of building sells (8a7a2): `type:<id>` for each sold at it. None without types of its own. */
+const typeShelvesAt = (definition, buildingType) => (ownTypes(definition)
+  ? typesOf(definition).filter((t) => soldAt(t).includes(buildingType)).map((t) => `type:${t.id}`) : []);
 
 /** The type an item or a line is: the one it names, or the first. */
 const typeNamed = (definition, id) => { const types = typesOf(definition); return types.find((t) => t.id === id) || types[0]; };
@@ -97,6 +110,14 @@ const checkTypes = (definition, problems, { text, keys, labelMost, itemIds = new
     else ids.add(t.id);
     text(t.label, `${where}, label`, labelMost, { required: true });
     text(t.one, `${where}, one`, labelMost);
+    // Where its lines are sold (8a7a2): a list of the kinds of shop, each once.
+    if (t.sold_at !== undefined) {
+      if (!Array.isArray(t.sold_at)) problems.push({ where: `${where}, sold_at`, message: 'A list of the kinds of shop that sell it' });
+      else t.sold_at.forEach((id, n) => {
+        if (!SHOP_TYPES.includes(id)) problems.push({ where: `${where}, sold_at ${n + 1}`, message: `No kind of shop is called ${String(id)}` });
+        else if (t.sold_at.indexOf(id) !== n) problems.push({ where: `${where}, sold_at ${n + 1}`, message: 'Said twice' });
+      });
+    }
     if (t.columns === undefined) return;
     if (!Array.isArray(t.columns)) { problems.push({ where: `${where}, columns`, message: 'Must be a list of columns' }); return; }
     if (t.columns.length > LIMITS.columns) problems.push({ where: `${where}, columns`, message: `At most ${LIMITS.columns} columns` });
@@ -152,6 +173,8 @@ const typesShown = (definition, items = []) => {
   const labels = new Map(items.map((i) => [i.id, i.label || i.id]));
   return typesOf(definition).map((t) => ({
     id: t.id, label: t.label || t.id, one: t.one || t.label || t.id,
+    // The kinds of shop that sell it, the General Store where unsaid (8a7a2): the shop window's shelves follow it.
+    sold_at: soldAt(t),
     columns: t.columns.map((c) => ({
       id: c.id, label: c.label || c.id, kind: c.kind,
       ...(c.kind === 'number' && typeof c.unit === 'string' && c.unit.trim() ? { unit: c.unit } : {}),
@@ -199,4 +222,4 @@ const lineColumns = (definition, line, items, names) => {
   return { type: type.id, ...(item ? { item: item.id } : {}), values, counts };
 };
 
-module.exports = { KINDS, LIMITS, GEAR, NAME, linesOf, typesOf, ownTypes, typeNamed, valueProblem, checkTypes, checkItemType, typesShown, itemValues, lineColumns };
+module.exports = { KINDS, LIMITS, GEAR, NAME, SHOP_TYPES, DEFAULT_SOLD_AT, soldAt, typeShelvesAt, linesOf, typesOf, ownTypes, typeNamed, valueProblem, checkTypes, checkItemType, typesShown, itemValues, lineColumns };

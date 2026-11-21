@@ -14,20 +14,26 @@ const { knowsSheet } = require('./availability');
 const customSystems = require('../systemBuilder/runtime');
 const { placeUploaded, placeTimes } = require('./placement');
 const { BOOK_CATALOGUES, asBookRow, bookRow, placeBook } = require('./bookPlacement');
+const { typesOf, ownTypes } = require('../systemBuilder/itemTypes');
 
 /** The catalogues a shop can put on a shelf: the only ones anything can be bought from, or given. */
 const SHELVED = CATALOGUES.filter((c) => c.shelved).map((c) => c.id);
 
-/** Whether `system` offers a catalogue's items to give: a shelf it has on, on a sheet the shops know. */
-const offers = (system, catalogue) => SHELVED.includes(catalogue)
-  && knowsSheet(system) && customSystems.buildingIn(system, 'catalogues', catalogue);
+/** The system's own item types (8a7a2): each a catalogue of its own, `type:<id>`, given wherever or not it is sold. */
+const ownTypesOf = (system) => { const def = customSystems.definitionOf(system); return def && ownTypes(def) ? typesOf(def) : []; };
+/** One of them by its catalogue, or undefined. */
+const typeOfCatalogue = (system, catalogue) => ownTypesOf(system).find((t) => `type:${t.id}` === catalogue);
+
+/** Whether `system` offers a catalogue's items to give: a shelf it has on, on a sheet the shops know; or one of its item types. */
+const offers = (system, catalogue) => (SHELVED.includes(catalogue)
+  && knowsSheet(system) && customSystems.buildingIn(system, 'catalogues', catalogue)) || !!typeOfCatalogue(system, catalogue);
 
 /**
  * Everything `system` can give, by catalogue: [{ catalogue, items: [{ id, name, price }] }], the
  * book's items first and then the uploads (one replacing a book item of the same id), catalogues
  * with nothing in them left out. A price is what it is worth, never charged.
  */
-const givable = (system) => SHELVED
+const givable = (system) => [...SHELVED, ...ownTypesOf(system).map((t) => `type:${t.id}`)]
   .filter((catalogue) => offers(system, catalogue))
   .map((catalogue) => ({ catalogue, items: store.entriesIn(catalogue).map(({ id, name, price }) => ({ id, name, price })) }))
   .filter((c) => c.items.length);
@@ -52,10 +58,11 @@ const placeGift = (system, catalogue, id, data, qty = 1) => {
     const row = upload ? asBookRow(upload) : bookRow(catalogue, item.id);
     place = (sheet) => placeBook(catalogue, row, sheet);
   } else {
-    place = (sheet) => placeUploaded(system, catalogue, item, sheet);
+    const type = typeOfCatalogue(system, catalogue);
+    place = (sheet) => placeUploaded(system, catalogue, item, sheet, type ? type.columns.map((c) => c.id) : []);
   }
   const placed = placeTimes(place, data, qty);
   return placed.ok ? { ok: true, item, patch: placed.patch } : placed;
 };
 
-module.exports = { SHELVED, offers, givable, itemOf, placeGift };
+module.exports = { SHELVED, offers, givable, itemOf, placeGift, ownTypesOf };

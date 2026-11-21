@@ -180,9 +180,36 @@ export const catalogueOn = (system: string | null | undefined, id: ShopStock): b
 export const isShopIn = (system: string | null | undefined, id: string | null | undefined): boolean =>
   isShop(id) && typeOn(system, id);
 
-/** The catalogues a shop of this type puts on its shelves in this game. */
-export const shelvedIn = (id: string | null | undefined, system: string | null | undefined): ShopStock[] =>
-  shelvedCatalogues(id).filter((c) => catalogueOn(system, c));
+/**
+ * The catalogues a shop of this type puts on its shelves in this game. A shelf one of the game's own item types is named
+ * like (a GEAR type, the gear shelf) is left off while nothing is on it (8a7a2): a [gear] section fills the type now
+ * (backend shops/catalogueParse.js resolveSection), so the shelf would only be a second, empty GEAR tab. `stocked` says
+ * which shelves have lines on them, which keep selling.
+ */
+export const shelvedIn = (
+  id: string | null | undefined, system: string | null | undefined, stocked: (c: ShopStock) => boolean = () => false,
+): ShopStock[] => [
+  ...shelvedCatalogues(id).filter((c) => catalogueOn(system, c) && (!typeNamedLike(system, c) || stocked(c))),
+  // And a shelf for each of a custom system's own item types sold at this kind of building (8a7a2, SOLD AT): `type:<id>`.
+  ...ownItemTypes(system).filter((t) => (t.sold_at ?? []).includes(String(id ?? ''))).map((t) => `type:${t.id}` as ShopStock),
+];
+
+/** A custom system's own item types, as its render copy says them (8a7a2); none for a built-in game. */
+export const ownItemTypes = (system: string | null | undefined) =>
+  customTemplate(String(system ?? ''))?.items?.types ?? [];
+
+/** A name as catalogue sections are matched (backend catalogueParse.js plain): any case, spaces and underscores alike. */
+const plainName = (text: string) => text.trim().toLowerCase().replace(/[\s_]+/g, ' ');
+
+/** The game's own item type a shelf is named like (8a7a2), by its id or its name here, as a section finds it; or undefined. */
+export const typeNamedLike = (system: string | null | undefined, shelf: ShopStock) => {
+  const names = [shelf, catalogueLabel(shelf, system)].map(plainName);
+  return ownItemTypes(system).find((t) => [t.id, t.label, t.one].some((n) => n && names.includes(plainName(n))));
+};
+
+/** The item type a `type:<id>` shelf is (8a7a2), or undefined for any other shelf. */
+export const itemTypeOfShelf = (system: string | null | undefined, id: string) =>
+  (id.startsWith('type:') ? ownItemTypes(system).find((t) => `type:${t.id}` === id) : undefined);
 
 /** A building type's name in this game. Blank for an id that is not on the list. */
 export const typeLabel = (id: string | null | undefined, system: string | null | undefined): string =>
@@ -190,6 +217,9 @@ export const typeLabel = (id: string | null | undefined, system: string | null |
 
 /** A catalogue's name in this game, for a shelf tab or a section of the catalogue file. */
 export const catalogueLabel = (id: ShopStock, system: string | null | undefined): string => {
+  // A type's shelf by the type's own name (8a7a2): GUNS.
+  const itemType = itemTypeOfShelf(system, id);
+  if (itemType) return itemType.label;
   const own = customSetting(system, 'catalogues', id)?.name;
   if (own) return own;
   const label = catalogueById(id)?.label ?? id;

@@ -11,7 +11,11 @@ export type ColumnKind = 'number' | 'text' | 'damage' | 'dice' | 'count' | 'pick
 /** A column as the render copy says it: its name and kind, with a NUMBER's unit, PICK ONE's words, a COUNT's button. */
 export interface ColumnShown { id: string; label: string; kind: ColumnKind; unit?: string; options?: string[]; button?: string; refill?: string; reload?: string[] }
 /** A type as the render copy says it: its name, what one is called, its columns. */
-export interface TypeShown { id: string; label: string; one: string; columns: ColumnShown[] }
+export interface TypeShown {
+  id: string; label: string; one: string; columns: ColumnShown[];
+  /** The kinds of shop that sell its lines (8a7a2), as the server works them out: the General Store where the GM said none. */
+  sold_at?: string[];
+}
 export type Value = string | number;
 
 type Obj = Record<string, unknown>;

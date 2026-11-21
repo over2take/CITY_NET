@@ -47,7 +47,7 @@ const vehicleSystems = require('../sheets/vehicleSystems');
 const ram = require('../sheets/ram');
 const enemyVehicles = require('../sheets/enemyVehicles');
 const buildingTypes = require('../buildingTypes');
-const { typesOf, ownTypes } = require('../systemBuilder/itemTypes');
+const { typesOf, ownTypes, typeShelvesAt } = require('../systemBuilder/itemTypes');
 const { namesOf } = require('../systemBuilder/choices');
 // The merged catalogue: what the app ships with, plus whatever a GM uploaded.
 const shopPrices = require('../shops/catalogueStore');
@@ -2356,8 +2356,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             // A building whose type this game turned off is not a shop here (it keeps the type,
             // for when the type comes back), and a catalogue it turned off is on no shelf.
             if (err || !loc || !customSystems.buildingIn(system, 'types', loc.building_type)) return refuse('no_shop');
-            const catalogues = buildingTypes.shelvedCatalogues(loc.building_type)
-              .filter((c) => customSystems.buildingIn(system, 'catalogues', c));
+            // And the shelf of each of the game's own item types sold at this kind of building (8a7a2, SOLD AT).
+            const definition = customSystems.definitionOf(system);
+            const catalogues = [
+              ...buildingTypes.shelvedCatalogues(loc.building_type).filter((c) => customSystems.buildingIn(system, 'catalogues', c)),
+              ...(definition ? typeShelvesAt(definition, loc.building_type) : []),
+            ];
             if (!catalogues.length) return refuse('not_sold');
 
             db.all(

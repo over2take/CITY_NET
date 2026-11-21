@@ -1,10 +1,10 @@
 import React from 'react';
 import {
-  shelvedIn, typeLabel, catalogueLabel, type ShopStock,
+  shelvedIn, typeLabel, catalogueLabel, itemTypeOfShelf, type ShopStock,
 } from '../data/buildingTypes';
 import { uploadedIn } from '../sheets/uploadedCatalogues';
 import { BOOK_SYSTEM } from '../sheets/ownedItems';
-import { columnsFor } from '../sheets/catalogueSchema';
+import { columnsFor, typeColumns, typeSection } from '../sheets/catalogueSchema';
 import { useWords, asLabel } from '../sheets/words';
 
 // What a GM is told when a shop has nothing to sell.
@@ -24,7 +24,7 @@ import { useWords, asLabel } from '../sheets/words';
 export const emptyShelves = (
   buildingType: string | null | undefined, system: string,
 ): ShopStock[] => {
-  const shelves = shelvedIn(buildingType, system);
+  const shelves = shelvedIn(buildingType, system, (c) => uploadedIn(c).length > 0);
   if (!shelves.length || system === BOOK_SYSTEM) return [];
   return shelves.every((c) => uploadedIn(c).length === 0) ? shelves : [];
 };
@@ -49,13 +49,16 @@ export function EmptyShopSteps({ buildingType, system, onOpenCatalogues }: Props
   if (!shelves.length) return null;
 
   const shop = typeLabel(buildingType, system);
-  const sections = shelves.map((c) => `[${c}]`).join(' and ');
+  // A section as the file heads it: one of the game's own item types by its name, as the GM wrote it (8a7a2); a shelf by its id.
+  const sectionOf = (c: ShopStock) => { const t = itemTypeOfShelf(system, c); return t ? typeSection(t) : c; };
+  const columnsOf = (c: ShopStock) => { const t = itemTypeOfShelf(system, c); return t ? typeColumns(t) : columnsFor(system, c).columns; };
+  const sections = shelves.map((c) => `[${sectionOf(c)}]`).join(' and ');
   // What typing one in by hand looks like for this game: the section, the header this
   // system's file has, and one line. Columns after the price can be left off.
   const first = shelves[0];
   const sample = [
-    `[${first}]`,
-    columnsFor(system, first).columns.join(', '),
+    `[${sectionOf(first)}]`,
+    columnsOf(first).join(', '),
     'Street Special, 100',
   ].join('\n');
 

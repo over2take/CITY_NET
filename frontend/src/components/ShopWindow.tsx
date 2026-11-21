@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { TerminalWindow } from './TerminalWindow';
 import {
-  buildingTypeById, shelvedIn, catalogueById, typeLabel, catalogueLabel, type ShopStock,
+  buildingTypeById, shelvedIn, catalogueById, typeLabel, catalogueLabel, itemTypeOfShelf, type ShopStock,
 } from '../data/buildingTypes';
 import {
   SETTLE_BALANCE, SETTLE_DEBT, refusalText, buybackValue,
@@ -417,7 +417,8 @@ export function ShopWindow({
 
   const type = buildingTypeById(buildingType);
   // Without the catalogues this game turned off.
-  const catalogues = shelvedIn(buildingType, system);
+  // A shelf a type is named like only while lines are on it (8a7a2).
+  const catalogues = shelvedIn(buildingType, system, (c) => uploadedIn(c).length > 0);
   /** The tab somebody pressed, if they have pressed one. Not necessarily the open shelf. */
   const [picked, setPicked] = useState<ShopStock | null>(null);
 
@@ -1274,7 +1275,11 @@ export function ShopWindow({
    * read from the system's own sheet template.
    */
   const uploadedShelf = (id: ShopStock): Shelf<UploadedEntry> => {
-    const extra = columnsFor(system, id).columns.slice(2);
+    // A type's shelf (8a7a2): the type's own columns, by their names, then the words.
+    const itemType = itemTypeOfShelf(system, id);
+    const typeColumns = itemType ? itemType.columns.map((c) => c.id) : [];
+    const labelOf = (col: string) => itemType?.columns.find((c) => c.id === col)?.label ?? col.replace(/_/g, ' ').toUpperCase();
+    const extra = itemType ? [...typeColumns, 'description'] : columnsFor(system, id).columns.slice(2);
     const rows = uploadedIn(id);
     const ownedOf = (e: UploadedEntry) => owned.find((l) => l.key === `${id}/${e.id}`)?.qty ?? 0;
     const columns: Record<string, ShelfColumn<UploadedEntry>> = {
@@ -1287,7 +1292,7 @@ export function ShopWindow({
       // Sorted as numbers only when every filled cell is one - "3d6" is not.
       const numeric = cells.length > 0 && cells.every((v) => Number.isFinite(Number(v)));
       columns[col] = {
-        label: col.replace(/_/g, ' ').toUpperCase(),
+        label: labelOf(col).toUpperCase(),
         value: (e) => (numeric ? Number(e.fields[col]) || 0 : String(e.fields[col] ?? '')),
         render: (e) => String(e.fields[col] ?? '') || '—',
         numeric,
@@ -1310,11 +1315,11 @@ export function ShopWindow({
       buy: (e) => {
         if (!sheet) { setRefused('No character sheet loaded.'); return; }
         // Checked before the money moves: a full weapon rack is a reason not to sell.
-        const first = placeUploaded(system, id, e, sheet.data as Record<string, unknown>);
+        const first = placeUploaded(system, id, e, sheet.data as Record<string, unknown>, typeColumns);
         if (!first.ok) { setRefused(first.reason); return; }
         purchase(id, e.id, e.name, e.price, () => {
           const placed = placeUploaded(
-            system, id, e, (sheetNow.current?.data ?? {}) as Record<string, unknown>,
+            system, id, e, (sheetNow.current?.data ?? {}) as Record<string, unknown>, typeColumns,
           );
           if (placed.ok) applyPatch(placed.patch);
           else setRefused(`${placed.reason} It was paid for — ask your GM to add it by hand.`);

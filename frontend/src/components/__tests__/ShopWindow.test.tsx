@@ -2214,3 +2214,47 @@ describe('the shop\'s refusals', () => {
     for (const reason of ['price', 'no_account', 'write', 'empty', 'not_owned', 'no_system'] as const) expect(theirs[reason]).toBe(today[reason]);
   });
 });
+
+// ─── A shelf of an item type (8a7a2) ────────────────────────────────────────────
+describe('a shelf of an item type (8a7a2)', () => {
+  const TYPED = 'sys_dddddddddddddddd';
+  const GUNS = {
+    id: 'guns', label: 'GUNS', one: 'Gun', sold_at: ['general_store'],
+    // An id that isn't the column's name: the head is the name.
+    columns: [{ id: 'dmg', label: 'DAMAGE', kind: 'damage' }, { id: 'ammo', label: 'AMMO', kind: 'count', button: 'FIRE' }],
+  };
+  const PISTOL = { id: 'pistol', name: 'Pistol', price: 250, fields: { dmg: '2d6', ammo: 6, description: 'Snub.' } };
+
+  beforeEach(() => {
+    clearCustomTemplates();
+    clearUploaded();
+    registerCustomTemplate({ id: TYPED, name: 'Typed', parts: {}, derived: [], sheet: { sections: [] }, words: {}, items: { slots: [], list: [], types: [GUNS] } } as never);
+    loadUploaded({ 'type:guns': [PISTOL] } as never);
+    sheetState.sheet = { system: TYPED, data: { inventory: '[]' } };
+  });
+  afterEach(() => { clearCustomTemplates(); clearUploaded(); });
+
+  it('at the kind of shop it is sold at: its own tab, its columns by name, where it lands; not at another', async () => {
+    const { unmount } = show('general_store', 'Goods', TYPED);
+    // Beside the store's own GEAR shelf.
+    expect(screen.getByRole('tab', { name: 'GEAR' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('tab', { name: 'GUNS' }));
+    const row = screen.getByText('Pistol').closest('tr')!;
+    expect(within(row).getByText('2d6')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Sort by DAMAGE' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Sort by AMMO' })).toBeInTheDocument();
+    expect(screen.getByText('GOES INTO YOUR GEAR AS A GUN')).toBeInTheDocument();
+    unmount();
+    show('gun_shop', 'Arms', TYPED);
+    expect(screen.queryByText('Pistol')).toBeNull();
+  });
+
+  it('bought: asked of the server by its shelf; on the gear as a Gun, its columns its values', async () => {
+    show('general_store', 'Goods', TYPED);
+    await userEvent.click(screen.getByRole('tab', { name: 'GUNS' }));
+    await buyNow('Pistol');
+    expect(sent[0]).toMatchObject({ catalogue: 'type:guns', itemId: 'pistol' });
+    const written = handleFieldChange.mock.calls.find((c) => c[0] === 'inventory');
+    expect(JSON.parse(written![1])).toEqual([expect.objectContaining({ name: 'Pistol', qty: 1, type: 'guns', values: { dmg: '2d6', ammo: 6 } })]);
+  });
+});
