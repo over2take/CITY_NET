@@ -12,7 +12,7 @@ import { ColumnHead, FieldName } from './HelpHint';
 import { ItemFeaturesEditor } from './FeaturesEditor';
 import { ItemTypesSection, ItemValues } from './ItemTypesSection';
 import { useBuilderPlace } from '../hooks/useBuilderPlace';
-import { ownTypes, typeOf, itemTypes, withItemType } from '../sheets/itemTypes';
+import { ownTypes, typeOf, itemTypes, withItemType, withInShops, inShopsOf } from '../sheets/itemTypes';
 import { exampleItemsFile, itemsListFile, itemsFileName } from '../sheets/itemsImport';
 import { downloadText } from '../utils/downloadText';
 import { ItemsImport } from './ItemsImport';
@@ -152,7 +152,8 @@ function ItemsTab({ definition, edit, api, open, setOpen }: Props & { open: stri
     const made = withNewItem(definition);
     if (!made) return;
     let next = withItem(made.definition, made.id, { label: `NEW ${one.toUpperCase()}` });
-    if (ownTypes(definition)) next = withItemType(next, made.id, typeId);
+    // Its type, and IN SHOPS (8a7a3b1, decided 2026-11-21): the GM gives a new item its price as it is made.
+    if (ownTypes(definition)) next = withInShops(withItemType(next, made.id, typeId), made.id, true);
     edit(next);
     setOpen(made.id);
     setFresh(made.id);
@@ -184,6 +185,8 @@ function ItemsTab({ definition, edit, api, open, setOpen }: Props & { open: stri
                 {mine.map((i) => {
                   const on = current?.id === i.id;
                   const needs = needsTag(definition, i);
+                  // Kept out of the shops (8a7a3b1): only where the shops sell a game's items, one with types of its own.
+                  const notSold = ownTypes(definition) && !inShopsOf(definition, i);
                   return (
                     <button key={i.id} type="button" aria-current={on ? 'true' : undefined} title={needsWords(definition, i)}
                       onClick={() => { setOpen(i.id); setFresh(null); setImporting(false); }}
@@ -191,7 +194,10 @@ function ItemsTab({ definition, edit, api, open, setOpen }: Props & { open: stri
                         border: 0, borderLeft: `2px solid ${on ? 'var(--green)' : 'transparent'}`, color: i.label.trim() ? 'var(--green)' : 'var(--danger)',
                         fontFamily: 'monospace', fontSize: 12, padding: '4px 8px 4px 14px', cursor: 'pointer', textAlign: 'left' }}>
                       <span style={{ overflowWrap: 'anywhere' }}>{i.label.trim() || 'NEEDS A NAME'}</span>
-                      {needs && <span style={tag}>{needs}</span>}
+                      {(needs || notSold) && <span style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        {needs && <span style={tag}>{needs}</span>}
+                        {notSold && <span style={{ ...tag, color: 'var(--warning)' }}>NOT SOLD</span>}
+                      </span>}
                     </button>
                   );
                 })}
