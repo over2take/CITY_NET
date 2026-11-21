@@ -52,6 +52,9 @@ const { namesOf } = require('../systemBuilder/choices');
 // The merged catalogue: what the app ships with, plus whatever a GM uploaded.
 const shopPrices = require('../shops/catalogueStore');
 const { ownStock, againstItems } = require('../shops/ownItems');
+const { itemsFromLines } = require('../systemBuilder/itemsFromCatalogue');
+const systemsStore = require('../systemBuilder/store');
+const { itemsOf, LIMITS: ITEM_LIMITS } = require('../systemBuilder/items');
 // And the running game's own items, priced and IN SHOPS (8a7a3a), under the uploaded lines.
 shopPrices.setOwnSource((system) => ownStock(customSystems.definitionOf(system)));
 const catalogueDb = require('../shops/catalogueDb');
@@ -2488,10 +2491,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('previewCatalogue', (data) => {
       const info = userSockets.get(socket.id);
       if (!info || !info.isAdmin) return;
-      getGameSystem((sysErr, system) => previewCatalogue(data, sysErr ? {} : catalogueOptions(system), sysErr ? null : customSystems.definitionOf(system)));
+      getGameSystem((sysErr, system) => {
+        if (sysErr) return previewCatalogue(data, {}, null, null);
+        // The draft, where ADD NEW LINES TO ITEMS would put them (8a7a4a); none for a built-in game.
+        systemsStore.getSystem(db, system, (dErr, sys) => previewCatalogue(data, catalogueOptions(system), customSystems.definitionOf(system), dErr || !sys ? null : sys.draft));
+      });
     });
 
-    const previewCatalogue = (data, options, definition) => {
+    const previewCatalogue = (data, options, definition, draft) => {
       const read = catalogueParse.parseCatalogue(data && data.text, options);
       // Held against the game's own items (8a7a3c1): exact copies and items kept out of the shops left out, as the save does.
       const held = againstItems(read.sections, definition);
@@ -2515,6 +2522,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         notes: parsed.notes,
         summary,
         ...(held.onSale || held.leftOut.length || held.overrules.length ? { items: { onSale: held.onSale, overrules: held.overrules, leftOut: held.leftOut } } : {}),
+        // What ADD NEW LINES TO ITEMS would add to the draft (8a7a4a), and how many it holds.
+        ...(() => {
+          const into = itemsFromLines(draft, held.sections);
+          return into.added.length || into.skipped.length
+            ? { toItems: { added: into.added.map(({ line, catalogue, name, type }) => ({ line, catalogue, name, type, price: (held.sections[catalogue] || []).find((e) => e.name === name)?.price })), skipped: into.skipped, have: itemsOf(draft).length, most: ITEM_LIMITS.items } }
+            : {};
+        })(),
       });
     };
 
@@ -2545,10 +2559,23 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           catalogueDb.refresh(db, system, () => {
             io.emit('cataloguesChanged', { system });
             const typeLabel = new Map(ownTypesIn(system).map((t) => [`type:${t.id}`, String(t.label || t.id).toUpperCase()]));
-            socket.emit('catalogueSaved', {
+            const answer = (toItems) => socket.emit('catalogueSaved', {
               ok: true,
               saved: wanted.map((c) => ({ catalogue: c, count: parsed.sections[c].length, ...(typeLabel.has(c) ? { label: typeLabel.get(c) } : {}) })),
               problems: parsed.problems,
+              ...(toItems ? { toItems } : {}),
+            });
+            // ADD NEW LINES TO ITEMS (8a7a4a): the new lines made items in the builder's draft, live once published.
+            if (!(data && data.toItems === true)) return answer(null);
+            systemsStore.getSystem(db, system, (dErr, sys) => {
+              if (dErr || !sys) return answer({ ok: false, reason: 'no_draft', added: [], items: [] });
+              const into = itemsFromLines(sys.draft, parsed.sections);
+              if (!into.items.length) return answer({ ok: true, added: [], skipped: into.skipped, items: [] });
+              const items = { ...(sys.draft.items || {}) };
+              items.list = [...(Array.isArray(items.list) ? items.list : []), ...into.items];
+              systemsStore.saveDraft(db, system, { ...sys.draft, items }, (sErr) => answer(sErr
+                ? { ok: false, reason: 'write', added: [], items: [] }
+                : { ok: true, added: into.added, skipped: into.skipped, items: into.items }));
             });
           });
         });

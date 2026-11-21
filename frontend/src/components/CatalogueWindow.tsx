@@ -4,7 +4,8 @@ import { exampleFor, currentFor, type StoredEntry } from '../sheets/catalogueSch
 import { catalogueLabel, type ShopStock } from '../data/buildingTypes';
 import { downloadText } from '../utils/downloadText';
 import { customTemplate } from '../sheets/customTemplates';
-import { itemsInPreview, itemsCatalogue, type PreviewRow } from '../sheets/catalogueItems';
+import { itemsInPreview, itemsCatalogue, ITEMS_ADDED_EVENT, type PreviewRow, type ItemsAdded } from '../sheets/catalogueItems';
+import { ToggleSwitch } from './ToggleSwitch';
 
 // Where a GM adds to what the shops sell.
 //
@@ -36,7 +37,9 @@ interface Summary { catalogue: string; count: number; overrides: string[]; label
 /** `notes` (8a7a1): what a type's line left blank, nothing wrong. */
 /** The file held against the game's own items (8a7a3c1): how many sell themselves, lines overruling one, lines left out. */
 interface AgainstItems { onSale: number; overrules: (Omit<Problem, 'message'> & { from: number; to: number })[]; leftOut: Problem[] }
-interface Preview { problems: Problem[]; notes?: Problem[]; summary: Summary[]; format: string | null; sections?: Record<string, PreviewRow[]>; items?: AgainstItems }
+/** What ADD NEW LINES TO ITEMS would add to the draft (8a7a4a), and how many items it holds. */
+interface ToItems { added: (Omit<Problem, 'message'> & { type: string; price?: number })[]; skipped: Problem[]; have: number; most: number }
+interface Preview { problems: Problem[]; notes?: Problem[]; summary: Summary[]; format: string | null; sections?: Record<string, PreviewRow[]>; items?: AgainstItems; toItems?: ToItems }
 
 /**
  * Socket.io refuses a message over a megabyte by default, and says nothing useful when it
@@ -57,6 +60,8 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
   const [previewedText, setPreviewedText] = useState<string | null>(null);
   const [busy, setBusy] = useState<'preview' | 'save' | 'current' | null>(null);
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
+  /** ADD NEW LINES TO ITEMS (8a7a4a): off to start, afresh with each preview. */
+  const [toItems, setToItems] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   /** Set when this window asked for the current catalogues, so their arrival means "download". */
   const awaitingCurrent = useRef(false);
@@ -67,16 +72,24 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
     const onPreview = (res: Preview) => {
       setBusy(null);
       setPreview(res);
+      setToItems(false);
     };
 
-    const onSaved = (res: { ok: boolean; reason?: string; saved?: { catalogue: string; count: number; label?: string }[] }) => {
+    const onSaved = (res: { ok: boolean; reason?: string; saved?: { catalogue: string; count: number; label?: string }[]; toItems?: { ok: boolean; added: { name: string }[]; items: Record<string, unknown>[] } }) => {
       setBusy(null);
       if (!res.ok) {
         setMessage({ tone: 'bad', text: res.reason === 'empty' ? 'Nothing in that could be saved.' : 'The save did not go through. Nothing was changed.' });
         return;
       }
       const parts = (res.saved ?? []).map((s) => `${s.label ?? catalogueLabel(s.catalogue as ShopStock, system)} ×${s.count}`);
-      setMessage({ tone: 'ok', text: `Saved: ${parts.join(', ')}. The shops have it now.` });
+      // The lines made items in the draft (8a7a4a): said, and handed to a builder open on this system.
+      const into = res.toItems;
+      const added = into?.ok ? into.added.length : 0;
+      const items = !into ? '' : !into.ok ? ' The new lines could not be added to ITEMS.'
+        : added === 1 ? ` ${into.added[0].name} added to ITEMS in the builder's draft: PUBLISH the system to keep it.`
+          : added ? ` ${added} lines added to ITEMS in the builder's draft: PUBLISH the system to keep them.` : '';
+      if (into?.ok && into.items.length) window.dispatchEvent(new CustomEvent<ItemsAdded>(ITEMS_ADDED_EVENT, { detail: { systemId: system, items: into.items } }));
+      setMessage({ tone: into && !into.ok ? 'bad' : 'ok', text: `Saved: ${parts.join(', ')}. The shops have it now.${items}` });
       setPreview(null);
       setPreviewedText(null);
     };
@@ -128,7 +141,7 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
     if (!canSave) return;
     setMessage(null);
     setBusy('save');
-    socket.emit('saveCatalogue', { text });
+    socket.emit('saveCatalogue', { text, ...(toItems && preview?.toItems?.added.length ? { toItems: true } : {}) });
   };
 
   const pickFile = (file: File | undefined) => {
@@ -354,6 +367,31 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
             )}
           </div>
         )}
+        {/* ADD NEW LINES TO ITEMS (8a7a4a; mockup types-in-shops.html, section 7): off to start; on, what it adds. Under the
+        scrolling preview, so the switch that changes what SAVE does is always in sight. */}
+        {preview && preview.toItems && preview.toItems.added.length > 0 && (() => {
+          const into = preview.toItems;
+          const shown = into.added.slice(0, 8);
+          return (
+            <div data-testid="catalogue-to-items" style={{ ...mono(10), border: '1px dashed var(--dark-green)', padding: '6px 8px', marginTop: 6, textAlign: 'left', lineHeight: 1.5, maxHeight: 140, overflowY: 'auto' }} className="cyber-scroll">
+              <ToggleSwitch on={toItems} onChange={setToItems} label="ADD NEW LINES TO ITEMS" />
+              {toItems && <>
+                {shown.map((a, i) => (
+                  <div key={`add-${i}`} style={{ color: 'var(--cyan)' }}>
+                    {a.name} becomes an item of {a.type}{a.price !== undefined ? `, ${a.price}` : ''}
+                  </div>
+                ))}
+                {into.added.length > shown.length && <div style={{ color: 'var(--cyan)' }}>and {into.added.length - shown.length} more</div>}
+                <div style={{ color: 'var(--grid-section)' }}>
+                  ITEMS · {into.have} OF {into.most} → {into.have + into.added.length} OF {into.most} · in the builder&apos;s draft, live once you PUBLISH
+                </div>
+              </>}
+              {toItems && into.skipped.map((p, i) => (
+                <div key={`skip-${i}`} style={{ color: 'var(--warning)' }}>{p.line > 0 ? `LINE ${p.line}` : 'FILE'} {p.name}: {p.message}</div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
     </DraggableWindow>
   );

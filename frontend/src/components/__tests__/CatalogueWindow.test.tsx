@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, act, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CatalogueWindow } from '../CatalogueWindow';
 import { registerCustomTemplate, clearCustomTemplates } from '../../sheets/customTemplates';
@@ -355,5 +355,66 @@ describe('the file held against the game\'s own items (8a7a3c1)', () => {
     preview();
     expect(screen.queryByTestId('catalogue-on-sale')).toBeNull();
     expect(screen.queryByTestId('catalogue-overrules')).toBeNull();
+  });
+});
+
+describe('ADD NEW LINES TO ITEMS (8a7a4a)', () => {
+  const TO_ITEMS = {
+    added: [{ line: 4, catalogue: 'type:guns', name: 'Hand Cannon', type: 'GUNS', price: 900 }, { line: 5, catalogue: 'type:guns', name: 'Derringer', type: 'GUNS', price: 90 }],
+    skipped: [{ line: 6, catalogue: 'type:guns', name: 'Overflow', message: 'ITEMS holds 200, the most a system can: not added' }],
+    have: 12, most: 200,
+  };
+  const previewWith = (toItems?: object) => reply('cataloguePreview', {
+    format: 'delimited', summary: [{ catalogue: 'type:guns', count: 3, overrides: [], label: 'GUNS' }], problems: [], ...(toItems ? { toItems } : {}),
+  });
+
+  it('off to start; on, what it adds and how many ITEMS will hold; saved with it said, and handed to an open builder', async () => {
+    show();
+    type('[GUNS]\nname, price\nHand Cannon, 900');
+    await userEvent.click(button('PREVIEW'));
+    previewWith(TO_ITEMS);
+    const panel = within(screen.getByTestId('catalogue-to-items'));
+    const toggle = panel.getByRole('switch', { name: /ADD NEW LINES TO ITEMS/ });
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(panel.queryByText(/becomes an item/)).toBeNull();
+    await userEvent.click(toggle);
+    expect(panel.getByText('Hand Cannon becomes an item of GUNS, 900')).toBeInTheDocument();
+    expect(panel.getByText('Derringer becomes an item of GUNS, 90')).toBeInTheDocument();
+    expect(panel.getByText(/^ITEMS · 12 OF 200 → 14 OF 200/)).toBeInTheDocument();
+    expect(panel.getByText('LINE 6 Overflow: ITEMS holds 200, the most a system can: not added')).toBeInTheDocument();
+    const heard = vi.fn();
+    window.addEventListener('city:catalogue-items-added', heard);
+    await userEvent.click(button('SAVE'));
+    expect(sent.at(-1)).toEqual({ event: 'saveCatalogue', data: { text: '[GUNS]\nname, price\nHand Cannon, 900', toItems: true } });
+    reply('catalogueSaved', { ok: true, saved: [{ catalogue: 'type:guns', count: 3, label: 'GUNS' }], toItems: { ok: true, added: [{ name: 'Hand Cannon' }, { name: 'Derringer' }], items: [{ id: 'hand_cannon' }, { id: 'derringer' }] } });
+    expect(screen.getByText("Saved: GUNS ×3. The shops have it now. 2 lines added to ITEMS in the builder's draft: PUBLISH the system to keep them.")).toBeInTheDocument();
+    expect(heard).toHaveBeenCalledOnce();
+    expect((heard.mock.calls[0][0] as CustomEvent).detail).toEqual({ systemId: 'cities_without_number', items: [{ id: 'hand_cannon' }, { id: 'derringer' }] });
+    window.removeEventListener('city:catalogue-items-added', heard);
+  });
+
+  it('left off, saved without it; nothing new to add, no switch; one added, said by name', async () => {
+    show();
+    type('[GUNS]\nname, price\nHand Cannon, 900');
+    await userEvent.click(button('PREVIEW'));
+    previewWith(TO_ITEMS);
+    await userEvent.click(button('SAVE'));
+    expect(sent.at(-1)).toEqual({ event: 'saveCatalogue', data: { text: '[GUNS]\nname, price\nHand Cannon, 900' } });
+    reply('catalogueSaved', { ok: true, saved: [{ catalogue: 'type:guns', count: 1, label: 'GUNS' }], toItems: { ok: true, added: [{ name: 'Hand Cannon' }], items: [{ id: 'hand_cannon' }] } });
+    expect(screen.getByText("Saved: GUNS ×1. The shops have it now. Hand Cannon added to ITEMS in the builder's draft: PUBLISH the system to keep it.")).toBeInTheDocument();
+    await userEvent.click(button('PREVIEW'));
+    previewWith();
+    expect(screen.queryByTestId('catalogue-to-items')).toBeNull();
+  });
+
+  it('off again with each fresh preview, whatever it was before', async () => {
+    show();
+    type('[GUNS]\nname, price\nHand Cannon, 900');
+    await userEvent.click(button('PREVIEW'));
+    previewWith(TO_ITEMS);
+    await userEvent.click(within(screen.getByTestId('catalogue-to-items')).getByRole('switch', { name: /ADD NEW LINES TO ITEMS/ }));
+    await userEvent.click(button('PREVIEW'));
+    previewWith(TO_ITEMS);
+    expect(within(screen.getByTestId('catalogue-to-items')).getByRole('switch', { name: /ADD NEW LINES TO ITEMS/ }).getAttribute('aria-checked')).toBe('false');
   });
 });
