@@ -1,11 +1,12 @@
 import { test, expect } from '@playwright/test';
-import { signInAsGm, gmToken, asGm, runningSystem } from './helpers';
+import { signInAsGm, signInAsPlayer, gmToken, asGm, runningSystem, approvedPlayer } from './helpers';
 import { tracker, rows, nav, gmTracker, startFight, nextUntil } from './initiative';
 
 // A condition's EACH TURN at the table (8a9c; approved mockup docs/mockups/condition-turn-effects.html, 2026-11-19): in a game
 // whose conditions act on turns, round 1 waits on BEGIN ROUND 1; BURNING burns on its own; an NPC's save is asked of the GM
 // on its row and rolled from there; and the GAME tab's CONDITION TURN EFFECTS switched off, nothing more is rolled. Set up
-// through the API. city:0's fight is everyone's, so this ends what it starts, and puts the switch back.
+// through the API. city:0's fight is everyone's, so this ends what it starts, and puts the switch back. And a save asked
+// of a player (8a9c2): said beside the GM's NEXT, and rolled from under the HP box on the player's sheet.
 
 const SYSTEM = (name: string) => ({
   format: 1, name, core: { health: { model: 'pool' } }, stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'might', label: 'Might' }] }],
@@ -59,6 +60,55 @@ test('EACH TURN at the table: BEGIN ROUND 1, BURNING burns, an NPC\'s save rolle
     expect(await hp()).toBe(left);
   } finally {
     await setting('1');
+    await gmTracker(page);
+  }
+});
+
+test('a save asked of a player: WAITING ON beside the GM\'s NEXT, YOUR SAVE under their HP box, rolled from there (8a9c2)', async ({ page, browser, request }, info) => {
+  test.setTimeout(180_000);
+  const again = info.retry ? `_${info.retry + 1}` : '';
+  const gm = await gmToken(request);
+  await runningSystem(request, gm, SYSTEM(`Turnask${again}`));
+  const player = { username: `e2e_turnask${again}`, password: 'e2e-player-password' };
+  await approvedPlayer(request, gm, player);
+  const made = await asGm(request, gm, 'post', '/api/locations', {
+    name: player.username, description: '', shape: 'rhombus', owner: player.username, x: 0, y: 0, z: 0, width: 1, height: 1, depth: 1,
+    hp_current: 10, hp_max: 10, hp_temp: 0, battle_map_id: -1, floor_index: -1,
+  });
+  await asGm(request, gm, 'put', `/api/locations/${made.data[0].id}/conditions`, { conditions: [{ id: 'venom' }] });
+
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await signInAsGm(page);
+  await gmTracker(page);
+  const context = await browser.newContext({ baseURL: info.project.use.baseURL, viewport: { width: 1280, height: 800 } });
+  try {
+    await startFight(page);
+    // The player joins from their own tracker, and opens their sheet.
+    const mine = await context.newPage();
+    await signInAsPlayer(mine, player);
+    await expect(tracker(mine)).toBeVisible({ timeout: 15_000 });
+    await tracker(mine).getByRole('button', { name: 'JOIN INITIATIVE' }).click();
+    await expect(rows(page).filter({ hasText: player.username.toUpperCase() })).toHaveCount(1, { timeout: 15_000 });
+    await mine.getByRole('button', { name: 'CHARACTER_CONTROLS', exact: true }).click();
+    await mine.getByRole('button', { name: 'CHARACTER_SHEET', exact: true }).click();
+    await expect(mine.getByRole('group', { name: 'Vitals' })).toBeVisible({ timeout: 15_000 });
+
+    // Begun, and round the order: the player's turn ended, their VENOM save asked of them.
+    await tracker(page).getByRole('button', { name: 'BEGIN ROUND 1' }).click();
+    await expect(tracker(page).getByRole('button', { name: 'NEXT', exact: true })).toBeVisible({ timeout: 15_000 });
+    await nextUntil(page, 'ROUND 2');
+    const waiting = tracker(page).getByTestId('initiative-waiting');
+    await expect(waiting).toHaveText(`WAITING ON ${player.username.toUpperCase()}'S VENOM SAVE`, { timeout: 15_000 });
+    const asked = mine.getByRole('region', { name: 'Rolls asked' });
+    await expect(asked).toContainText('VENOM · YOUR SAVE', { timeout: 15_000 });
+    await expect(asked).toContainText('End of your turn: 1d20, 999 or more ends it.');
+
+    // Rolled from the sheet: gone there, and from beside the GM's NEXT.
+    await asked.getByRole('button', { name: 'ROLL SAVE' }).click();
+    await expect(asked).toHaveCount(0, { timeout: 15_000 });
+    await expect(waiting).toHaveCount(0, { timeout: 15_000 });
+  } finally {
+    await context.close();
     await gmTracker(page);
   }
 });

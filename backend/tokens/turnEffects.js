@@ -30,6 +30,20 @@ const { namesOf, effectiveData } = require('../systemBuilder/choices');
 const TURN_EFFECTS_SETTING = 'condition_turn_effects';
 const LOG_COLOR = '#00ff00';
 const WHEN_WORDS = { turn_start: 'START OF ITS TURN', turn_end: 'END OF ITS TURN', round_start: 'START OF ROUND', round_end: 'END OF ROUND' };
+/** When, to the one asked to roll (8a9c2). */
+const YOUR_WHEN = { turn_start: 'Start of your turn', turn_end: 'End of your turn', round_start: 'Start of the round', round_end: 'End of the round' };
+
+/**
+ * What an ask rolls, in the words of the one asked (8a9c2; the mockup's "End of your turn: d20 + Con mod, 13 or more ends
+ * it."): its @names said by the system's own names (`labels`, choices.js namesOf), one it doesn't have left as typed.
+ */
+const yourWords = (effect, labels) => {
+  const roll = effect.roll.replace(/@([a-z][a-z0-9_]*)/g, (m, id) => labels.get(id) || m);
+  const what = effect.does === 'roll_to_end' ? `${roll}, ${effect.ends_on} or more ends it`
+    : effect.does === 'just_roll' ? `${roll}, to the log`
+      : `${roll} ${effect.does === 'damage' ? 'damage' : 'healed'}${effect.changes_hp === false ? ', for the GM to apply' : ''}`;
+  return `${YOUR_WHEN[effect.when]}: ${what}.`;
+};
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const idsOf = (list) => (Array.isArray(list) ? list : []).filter((c) => isPlainObject(c) && typeof c.id === 'string').map((c) => c.id);
@@ -309,6 +323,8 @@ const asksFor = async (db, { runtime, system, username = null, gm = false }) => 
   await asksTable(db);
   const rows = await all(db, 'SELECT * FROM turn_asks ORDER BY id');
   const offered = new Map((system ? runtime.conditionsIn(system) : []).map((c) => [c.id, c]));
+  const definition = system ? runtime.definitionOf(system) : null;
+  const labels = definition ? namesOf(definition) : new Map();
   const out = [];
   for (const a of rows) {
     const token = await tokenById(db, a.location_id);
@@ -324,6 +340,10 @@ const asksFor = async (db, { runtime, system, username = null, gm = false }) => 
       condition: { id: condition.id, name: condition.name, short: condition.short, icon: condition.icon },
       // Its name as the log says it (POISONED SAVE): the tracker's ROLL and WAITING ON say it too (8a9c).
       named: effectName(condition, effect),
+      // On the sheet (8a9c2): what it rolls in the asked one's words, and whether it is the asker's own (YOUR SAVE) or, for
+      // the GM looking at a player's sheet, theirs (KES'S SAVE).
+      yours: yourWords(effect, labels),
+      mine: !!username && a.player === username,
       effect, moment: a.moment, says: `${effectName(condition, effect)}, ${WHEN_WORDS[effect.when]}: ${effect.roll}${effect.does === 'roll_to_end' ? `, ${effect.ends_on} or more ends it` : ''}`,
     });
   }
@@ -376,4 +396,4 @@ const dropAsks = async (db, sceneKeys) => {
   for (const key of sceneKeys) await run(db, 'DELETE FROM turn_asks WHERE scene_key = ?', [key]);
 };
 
-module.exports = { TURN_EFFECTS_SETTING, WHEN_WORDS, momentsOfNext, momentsOfBegin, effectsAt, nextTurnStep, rollEffect, fireTurnMoments, asksFor, rollAsk, dropAsks, sceneName };
+module.exports = { TURN_EFFECTS_SETTING, WHEN_WORDS, yourWords, momentsOfNext, momentsOfBegin, effectsAt, nextTurnStep, rollEffect, fireTurnMoments, asksFor, rollAsk, dropAsks, sceneName };

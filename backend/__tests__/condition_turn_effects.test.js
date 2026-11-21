@@ -15,7 +15,7 @@ const { checkDefinition } = require_('../systemBuilder/definition');
 const { conditionsOf, onTurns } = require_('../systemBuilder/conditions');
 const { checkTokenConditions, parseTokenConditions } = require_('../tokens/conditions');
 const { poolAfter } = require_('../tokens/poolHealth');
-const { momentsOfNext, momentsOfBegin, effectsAt, nextTurnStep, rollEffect, TURN_EFFECTS_SETTING, asksFor, rollAsk, sceneName } = require_('../tokens/turnEffects');
+const { momentsOfNext, momentsOfBegin, effectsAt, nextTurnStep, rollEffect, TURN_EFFECTS_SETTING, asksFor, rollAsk, sceneName, yourWords } = require_('../tokens/turnEffects');
 const { registerTurnAskHandlers } = require_('../sockets/turnAsks');
 const runtime = require_('../systemBuilder/runtime');
 const mod = await import('../sockets/initiative.js');
@@ -232,8 +232,10 @@ describe('at the table', () => {
     const kes = await token('KES', 'rhombus', 'kes', [{ id: 'cursed' }, { id: 'poisoned' }]);
     await scene({ combatants: [{ id: 'player:kes' }, { id: 'player:vex' }] });
     handlers['initiative:next']({ sceneKey: 'main' });
-    // The condition comes off, then the lines are written: waited for both.
-    await until(async () => !(await on(kes)).includes('cursed') && (await lines()).length === 2, { label: 'cursed off, and said' });
+    // The condition comes off, then the lines are written, then everyone is told the asks changed: waited for all three
+    // (the last raced on a slow database, found by 8a9c2).
+    await until(async () => !(await on(kes)).includes('cursed') && (await lines()).length === 2 && emitted.some((e) => e.event === 'turnAsksChanged'),
+      { label: 'cursed off, said, and the asks told' });
     expect(await lines()).toEqual([
       'KES · CURSED SAVE, END OF ITS TURN · rolled by the table: @con_mod → 3 vs 3 · CURSED OFF',
       'KES · POISONED SAVE, END OF ITS TURN: asked on KES\'s sheet',
@@ -344,6 +346,17 @@ describe('the system file', () => {
   });
 });
 
+describe('an ask in the words of the one asked (8a9c2)', () => {
+  const labels = new Map([['con_mod', 'Con mod']]);
+  it('when, what it rolls by the system\'s names, and what it does; a name it doesn\'t have left as typed', () => {
+    expect(yourWords({ when: 'turn_end', does: 'roll_to_end', roll: 'd20 + @con_mod', ends_on: 13 }, labels)).toBe('End of your turn: d20 + Con mod, 13 or more ends it.');
+    expect(yourWords({ when: 'turn_start', does: 'damage', roll: '1d4' }, labels)).toBe('Start of your turn: 1d4 damage.');
+    expect(yourWords({ when: 'turn_start', does: 'damage', roll: '1d4', changes_hp: false }, labels)).toBe('Start of your turn: 1d4 damage, for the GM to apply.');
+    expect(yourWords({ when: 'round_start', does: 'heal', roll: '2', changes_hp: true }, labels)).toBe('Start of the round: 2 healed.');
+    expect(yourWords({ when: 'round_end', does: 'just_roll', roll: '@luck + @con_mod' }, labels)).toBe('End of the round: @luck + Con mod, to the log.');
+  });
+});
+
 describe('a roll asked of the player, or the GM for an NPC (8a9a2)', () => {
   const ID = 'sys_asksasksasksasksa';
   const ASKS = { ...TURNS, name: 'Asks', conditions: { ...TURNS.conditions,
@@ -398,9 +411,15 @@ describe('a roll asked of the player, or the GM for an NPC (8a9a2)', () => {
     expect(await lines()).toEqual(['KES · POISONED SAVE, END OF ITS TURN: asked on KES\'s sheet', 'GANGER (NPC) · POISONED SAVE, END OF ITS TURN: asked of the GM']);
     const kesAsks = await asks({ username: 'kes' });
     expect(kesAsks).toEqual([expect.objectContaining({ sceneKey: 'main', locationId: kes, player: 'kes', who: 'KES', moment: 'turn_end',
-      condition: expect.objectContaining({ id: 'poisoned', name: 'Poisoned' }), named: 'POISONED SAVE', says: 'POISONED SAVE, END OF ITS TURN: @con_mod, 3 or more ends it' })]);
+      condition: expect.objectContaining({ id: 'poisoned', name: 'Poisoned' }), named: 'POISONED SAVE', says: 'POISONED SAVE, END OF ITS TURN: @con_mod, 3 or more ends it',
+      // On the sheet (8a9c2): in Kes's words, the system's name for @con_mod, and Kes's own.
+      yours: 'End of your turn: Con mod, 3 or more ends it.', mine: true })]);
     expect(await asks({ username: 'vex' })).toEqual([]);
     expect((await asks({ gm: true })).map((a) => a.who)).toEqual(['KES', 'GANGER (NPC)']);
+    // The GM's: none of them the GM's own, Kes's said as Kes's on Kes's sheet.
+    expect((await asks({ gm: true, username: 'gm' })).map((a) => a.mine)).toEqual([false, false]);
+    // Asked with no name: an NPC's (no player) is still nobody's own.
+    expect((await asks({ gm: true })).map((a) => a.mine)).toEqual([false, false]);
     // Nothing rolled yet: both still on.
     expect(await on(kes)).toEqual(['poisoned']);
   });

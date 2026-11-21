@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useCallback, useReducer } from 'react';
+import { useState, useEffect, useCallback, useReducer } from 'react';
 import type { TurnAsk } from '../../../sheets/turnAsks';
 
-/** What the hook needs of the socket. */
+/** What the hook needs of the socket: the shape the sheet's HP box has it in (sheets/vitals.ts SheetVitals), App's fits too. */
 export interface AskSocket {
-  on: (event: string, fn: (data: unknown) => void) => void;
-  off: (event: string, fn: (data: unknown) => void) => void;
-  emit: (event: string, ...args: unknown[]) => void;
+  on: (event: string, fn: (...args: never[]) => void) => unknown;
+  off: (event: string, fn: (...args: never[]) => void) => unknown;
+  emit: (event: string, ...args: unknown[]) => unknown;
 }
 
 const NONE: TurnAsk[] = [];
@@ -17,7 +17,7 @@ const NONE: TurnAsk[] = [];
  *
  * Takes the ref rather than the socket, as useInitiative does: a ref's `.current` is not reactive, so it waits for the socket.
  */
-export function useTurnAsks(socketRef: React.MutableRefObject<AskSocket | null>, enabled = true) {
+export function useTurnAsks(socketRef: { readonly current: unknown }, enabled = true) {
   const [asks, setAsks] = useState<TurnAsk[]>(NONE);
   const [error, setError] = useState<string | null>(null);
   const [rolling, setRolling] = useState<number[]>([]);
@@ -25,7 +25,7 @@ export function useTurnAsks(socketRef: React.MutableRefObject<AskSocket | null>,
 
   useEffect(() => {
     if (!enabled) return;
-    const s = socketRef.current;
+    const s = socketRef.current as AskSocket | null;
     if (!s) {
       const interval = setInterval(() => { if (socketRef.current) { clearInterval(interval); forceReady(); } }, 200);
       return () => clearInterval(interval);
@@ -44,7 +44,7 @@ export function useTurnAsks(socketRef: React.MutableRefObject<AskSocket | null>,
   }, [socketRef, enabled, socketReadyCount]);
 
   const roll = useCallback((id: number) => {
-    const s = socketRef.current;
+    const s = socketRef.current as AskSocket | null;
     if (!s) return;
     // Pressed once: the button waits for the answer, so a double click asks once.
     setRolling((now) => (now.includes(id) ? now : [...now, id]));
