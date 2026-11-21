@@ -31,7 +31,7 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 | Parts switched off | bank, shops, initiative, combat, token health, sheet import, GIVE ITEM | `parts`, `parts_*` | `parts-off` (each shown, hidden in a version with it off, back when on: the player's BANK and HIT_POINTS, MAX HEALTH, ARMOR and SAVE_STATS, IMPORT on the sheet; the GM's INITIATIVE_TRACKER, PAY_PLAYERS, GIVE_ITEM, the buy-back rate), `builder-journey` (VEHICLES off, in the builder) | **AT THE TABLE** |
 | Parts only built-in games have | vehicles, cyberware, death saves, luck, XP awards | `parts` | | Nothing to hide at a custom table: shown off and greyed in PARTS |
 | NPC tiers off | | `parts_tiers` | | **GAP**, with family 8 (NPC tiers): the tier picker is on an NPC token in the 3D map |
-| GIVE ITEM and shop catalogues | a catalogue typed in, an item given with a note | `shops_give`, `shop_catalogue_*` | `player-journey` | **AT THE TABLE** |
+| GIVE ITEM and shop catalogues | a catalogue typed in, an item given with a note | `shops_give`, `shop_catalogue_*` | `player-journey`, `shop-cart-items` (a catalogue saved while a player is online, bought by them through the cart, 8n1), `shop-cart` (CWN's book: bought and sold back, 8n1) | **AT THE TABLE** |
 | Building types and catalogues renamed or off | | `buildings` | | **GAP** |
 | Currencies | several, decimals, a catalogue's currency, the cart per currency, PAYROLL | `currencies`, `currency_icons`, `catalogue_currency`, `bank_currencies`, `shop_checkout_currencies` | | **GAP** |
 | The bank's celebrations | on / off | `bank` | | **GAP** |

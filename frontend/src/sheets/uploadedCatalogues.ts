@@ -69,3 +69,15 @@ export const uploadedEntry = (
 /** Whether anything at all has been uploaded, for deciding whether to say so. */
 export const anyUploaded = (): boolean =>
   Object.values(uploaded).some((table) => Object.keys(table ?? {}).length > 0);
+
+/**
+ * The server's catalogues as a shop keeps them (moved here from App, 8n1): only the uploaded entries, since the built-in
+ * tables are already compiled in and taking the server's copy of those would mean two sources for the same shelf.
+ */
+export const uploadedOf = (payload: { entries?: Record<string, ({ source?: string } & Record<string, unknown>)[] | null | undefined> } | null | undefined) => {
+  const out: Record<string, UploadedEntry[]> = {};
+  for (const [catalogue, entries] of Object.entries(payload?.entries ?? {})) {
+    out[catalogue] = (entries ?? []).filter((e) => e?.source === 'uploaded') as unknown as UploadedEntry[];
+  }
+  return out as Partial<Record<ShopStock, UploadedEntry[]>>;
+};

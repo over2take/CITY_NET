@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { loadUploaded, uploadedOf } from '../sheets/uploadedCatalogues';
 import { io } from 'socket.io-client';
 import type {
   ActiveUser, ChatMessage, BattleMapSessionData, BattleMapPosition,
@@ -86,6 +87,8 @@ export function useSocket({
   const [activeBattleMapData, setActiveBattleMapData] = useState<BattleMapSessionData | null>(null);
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [isSomeoneEditing, setIsSomeoneEditing] = useState(false);
+  // Bumped when the shops' catalogues arrive, so App redraws the shops with them (8n1).
+  const [, setCatalogueRevision] = useState(0);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [activeEditLocation, setActiveEditLocation] = useState<Location | null>(null);
 
@@ -109,6 +112,18 @@ export function useSocket({
       }
       newSocket.emit('identify', { userName: userNameRef.current, isAdmin: !!tokenRef.current, token: tokenRef.current, playerToken: playerTokenRef.current });
     });
+
+    // The shops' uploaded catalogues (8n1, found by the shop journey: kept by an effect in App keyed on socketRef.current,
+    // they were missed, and a player found every custom system's shop empty). Listened for from the socket's first moment:
+    // the server sends them on identify, and again whenever asked, as a GM's save or a new game says to.
+    const askCatalogues = () => newSocket.emit('requestCatalogues');
+    newSocket.on('catalogues', (payload: Parameters<typeof uploadedOf>[0]) => {
+      loadUploaded(uploadedOf(payload));
+      // The shops redraw with them: App, which draws them, re-renders on this.
+      setCatalogueRevision((n) => n + 1);
+    });
+    newSocket.on('cataloguesChanged', askCatalogues);
+    newSocket.on('gameSystemChanged', askCatalogues);
 
     newSocket.on('authError', (data: { message: string }) => {
       onNotification(data.message || 'SESSION_INVALID // PLEASE_LOG_IN_AGAIN');

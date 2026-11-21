@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Players' shops in a custom system now show the GM's stock.** A player could open a shop and find nothing on its shelves, even after the GM had saved a catalogue, until they reloaded the page, and sometimes not even then. The stock now reaches every player as soon as they sign in, and again the moment the GM saves a catalogue or changes the game. Found by new browser tests of buying and selling, written before the next change to shops.
 - **Battle map start positions: two fixes.** Loading a floor's start positions no longer makes a second token for a player saved in two places. A broken save from the map is now refused instead of risking an error on the server, and it leaves the positions already saved as they were.
 - **The initiative tracker's END INIT button and remove ✕ now follow the theme.** They were a fixed red and grey in every theme.
 - **A dragged initiative order now stands.** Dragging someone in the tracker used to last only until the next roll, which sorted everyone by their roll again. A drag now holds: people who roll later slot in around the order as you left it, and someone who joins late stays at the bottom. The tracker still shows the roll each person made. Dragging someone back to where their roll puts them leaves them exactly as they were, however many times they were moved, and rolling again places them by the new roll.
