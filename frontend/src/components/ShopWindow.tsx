@@ -417,7 +417,8 @@ export function ShopWindow({
 
   const type = buildingTypeById(buildingType);
   // Without the catalogues this game turned off.
-  const catalogues = shelvedIn(buildingType, system);
+  // A shelf a type is named like only while lines are on it (8a7a2).
+  const catalogues = shelvedIn(buildingType, system, (c) => uploadedIn(c).length > 0);
   /** The tab somebody pressed, if they have pressed one. Not necessarily the open shelf. */
   const [picked, setPicked] = useState<ShopStock | null>(null);
 

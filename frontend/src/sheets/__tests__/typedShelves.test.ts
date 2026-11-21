@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
-import { shelvedIn, catalogueLabel, itemTypeOfShelf, ownItemTypes, type ShopStock } from '../../data/buildingTypes';
+import { shelvedIn, catalogueLabel, itemTypeOfShelf, ownItemTypes, typeNamedLike, type ShopStock } from '../../data/buildingTypes';
 import { placeUploaded, destinationOf } from '../shopPlacement';
 import { registerCustomTemplate, clearCustomTemplates } from '../customTemplates';
 import type { UploadedEntry } from '../uploadedCatalogues';
@@ -38,6 +38,27 @@ describe('a type\'s shelf', () => {
     expect(itemTypeOfShelf(SYS, 'gear')).toBeUndefined();
     expect(itemTypeOfShelf(SYS, 'type:wands')).toBeUndefined();
     expect(ownItemTypes('cities_without_number')).toEqual([]);
+  });
+
+  it('a shelf a type is named like: off while nothing is on it, as a [gear] section fills the type; on while lines sit there', () => {
+    const NAMED = 'sys_ffffffffffffffff';
+    registerCustomTemplate({ id: NAMED, name: 'Named', parts: {}, derived: [], sheet: { sections: [] }, words: {}, buildings: { catalogues: { cyberware: { name: 'Relics' } } }, items: { slots: [], list: [], types: [
+      { id: 'gear', label: 'GEAR', one: 'Gear', sold_at: ['general_store'], columns: [] },
+      { id: 'holy', label: 'RELICS', one: 'Relic', sold_at: [], columns: [] },
+      { id: 'blades', label: 'WEAPONS', one: 'Blade', sold_at: ['gun_shop'], columns: [] },
+    ] } } as never);
+    expect(typeNamedLike(NAMED, 'gear' as ShopStock)?.id).toBe('gear');
+    // By the shelf's name here, not only its id.
+    expect(typeNamedLike(NAMED, 'weapons' as ShopStock)?.id).toBe('blades');
+    expect(typeNamedLike(NAMED, 'weapon_mods' as ShopStock)).toBeUndefined();
+    // A shelf the GM renamed: by that name.
+    expect(typeNamedLike(NAMED, 'cyberware' as ShopStock)?.id).toBe('holy');
+    expect(shelvedIn('ripperdoc', NAMED)).toEqual([]);
+    expect(shelvedIn('general_store', NAMED)).toEqual(['type:gear']);
+    expect(shelvedIn('gun_shop', NAMED)).toEqual(['weapon_mods', 'type:blades']);
+    expect(shelvedIn('general_store', NAMED, (c) => c === 'gear')).toEqual(['gear', 'type:gear']);
+    // A game with no types of its own: every shelf, as ever.
+    expect(shelvedIn('general_store', 'cyberpunk_red')).toEqual(['gear']);
   });
 
   it('says where a line lands: into the gear, as one of the type', () => {

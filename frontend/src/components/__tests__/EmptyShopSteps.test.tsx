@@ -12,8 +12,9 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EmptyShopSteps, emptyShelves } from '../EmptyShopSteps';
 import { loadUploaded, clearUploaded } from '../../sheets/uploadedCatalogues';
+import { registerCustomTemplate, clearCustomTemplates } from '../../sheets/customTemplates';
 
-afterEach(() => clearUploaded());
+afterEach(() => { clearUploaded(); clearCustomTemplates(); });
 
 const GUN = { id: 'unity', name: 'Militech Unity', price: 100, fields: {} };
 
@@ -76,6 +77,20 @@ describe('the steps', () => {
     loadUploaded({ weapons: [GUN] });
     const { container } = render(<EmptyShopSteps buildingType="gun_shop" system="cyberpunk_red" />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('a game with item types of its own: each type\'s section by its name, in its own columns; no second GEAR (8a7a2)', () => {
+    const TYPED = 'sys_cccccccccccccccc';
+    registerCustomTemplate({ id: TYPED, name: 'Typed', parts: {}, derived: [], sheet: { sections: [] }, words: {}, items: { slots: [], list: [], types: [
+      { id: 'gear', label: 'GEAR', one: 'Gear', sold_at: ['general_store'], columns: [] },
+      { id: 'weapons', label: 'WEAPONS', one: 'Weapon', sold_at: ['general_store'], columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }, { id: 'ammo', label: 'AMMO', kind: 'count' }] },
+    ] } } as never);
+    render(<EmptyShopSteps buildingType="general_store" system={TYPED} />);
+    const text = screen.getByRole('note', { name: 'How to stock this shop' }).textContent ?? '';
+    expect(text).toContain('It sells GEAR and WEAPONS.');
+    expect(text).toContain('Fill in the [GEAR] and [WEAPONS] sections');
+    expect(text).not.toContain('type:');
+    expect(screen.getByText(/\[GEAR\]\s+name, price, description\s+Street Special, 100/)).toBeInTheDocument();
   });
 
   it('is not there on CWN', () => {
