@@ -293,6 +293,8 @@ export const HINTS = {
   'items.and': 'What the kind needs besides: a NUMBER\'s unit (LB), a COUNT\'s button (FIRE), the rest that refills it and the items it reloads from (Pistol Rounds), PICK ONE\'s words with commas between.',
   'items.import': 'Fill the items from a file: a section per type, headed by its own columns, then needs, cost and words, and their features below. DOWNLOAD EXAMPLE gives one made from this system; DOWNLOAD THIS LIST gives the items as they are, to keep or edit and import back.',
   'items.type': 'Which type this item is: it fills that type\'s columns. Made another type, it keeps only the values of columns both types have. A column left empty is one this item doesn\'t have (no AMMO on a sword): its line on the sheet shows none.',
+  'items.price': 'What it costs in the shops: priced and IN SHOPS, it is on sale by itself at the shops its type is sold at, no catalogue needed. A type with a PRICE column of its own keeps it there. A catalogue line of the same name sells it at the line\'s price instead.',
+  'items.inShops': 'Whether the shops sell it. On, it needs a price. Off, it is never sold, not even from a catalogue that names it, and is only given, from GIVE.EXE: for a one-of-a-kind ring or a quest item.',
   'choices.features': 'What this pick gives a character, each unlocking at a level in a levelled list. One feature can do several things at once, or be words for the table.',
   'choices.featureName': 'What players see for this feature on their sheet: GUARD STANCE, RALLY.',
   'choices.at': 'The pick\'s level this feature unlocks at: a SOLDIER 3 has every feature at 1, 2 and 3. In a list a feature opens, like a subclass, it is the level of the pick that opened it: CHAMPION\'s features by the FIGHTER\'s level.',

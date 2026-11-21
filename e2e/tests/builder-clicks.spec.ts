@@ -177,6 +177,9 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await expect(item.getByRole('spinbutton', { name: 'COST' })).toBeVisible();
       await item.getByRole('combobox', { name: 'TYPE' }).selectOption('weapons');
       await expect(item.getByRole('textbox', { name: 'NEW GEAR DAMAGE' })).toBeVisible();
+      // PRICE and IN SHOPS under TYPE (8a7a3b1), a new item asking for its price, each name in line.
+      await expect(item.getByRole('spinbutton', { name: 'PRICE' })).toBeVisible();
+      await expect(item.getByRole('switch', { name: 'NEW GEAR in shops' })).toBeVisible();
       // IMPORT (8aL3b) open beside the list, swept as it is, then closed again.
       await page.getByRole('group', { name: 'Items from a file' }).getByRole('button', { name: 'IMPORT' }).click();
       await expect(page.getByRole('region', { name: 'Import items' })).toBeVisible();

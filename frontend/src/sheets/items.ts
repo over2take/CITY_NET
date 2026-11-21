@@ -20,7 +20,11 @@ const text = (v: unknown) => (typeof v === 'string' ? v : '');
 /** A slot: what an item may need besides being worn, and how many each character has. */
 export interface ItemSlot { id: string; label: string; count: number }
 /** An item: its name, words, what its features need (`worn` when it says nothing), and its features. */
-export interface Item { id: string; label: string; description?: string; needs?: string; cost?: number; features?: Feature[]; type?: string; values?: Record<string, unknown> }
+export interface Item {
+  id: string; label: string; description?: string; needs?: string; cost?: number; features?: Feature[]; type?: string; values?: Record<string, unknown>;
+  /** Its own price (8a7a3b1), where its type has no PRICE column of its own; and whether the shops sell it. */
+  price?: number; in_shops?: boolean;
+}
 /** An install (7e4): what each costs against, ADDING TO it (`adds`, as when it says nothing) or TAKING FROM it, and its limit, a formula. */
 export interface ItemInstall { id: string; label: string; against: string; way?: 'adds' | 'takes'; limit: string; weighs?: boolean }
 

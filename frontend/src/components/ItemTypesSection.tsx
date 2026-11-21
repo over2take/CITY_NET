@@ -3,7 +3,9 @@ import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   itemTypes, ownTypes, typeOf, itemValues, withNewType, withType, withoutType, withDefaultType, withNewColumn, withColumn, withoutColumn,
   withItemType, withItemValue, wordsFrom, KINDS, PRESETS, LIMITS, type ItemColumn, type ItemType, type ColumnKind,
+  priceColumnOf, itemPriceOf, inShopsOf, priceNeeded, withItemPrice, withInShops, MOST_PRICE,
 } from '../sheets/itemTypes';
+import { ToggleSwitch } from './ToggleSwitch';
 import { itemList, type Item } from '../sheets/items';
 import { restsOf } from '../sheets/rests';
 import { useFormulaBox } from '../hooks/useFormulaBox';
@@ -290,12 +292,42 @@ export function ItemValues({ definition, edit, api, item }: Props & { api?: Retu
       <select id={id('type')} value={type.id} style={{ ...input, justifySelf: 'start' }} onChange={(e) => edit(withItemType(definition, item.id, e.target.value))}>
         {types.map((t) => <option key={t.id} value={t.id}>{nameOf(t).toUpperCase()}</option>)}
       </select>
-      {type.columns.map((c) => (
+      {ownTypes(definition) && <ItemPrice definition={definition} edit={edit} item={item} id={id} />}
+      {/* Its type's PRICE column is the PRICE above (8a7a3b1), so it isn't listed again. */}
+      {type.columns.filter((c) => !ownTypes(definition) || c.id !== priceColumnOf(definition, item)?.id).map((c) => (
         <React.Fragment key={c.id}>
           <FieldName beside htmlFor={id(`value-${c.id}`)} style={small}>{columnName(c).toUpperCase()}</FieldName>
           <ValueField definition={definition} edit={edit} api={api} item={item} c={c} id={id(`value-${c.id}`)} />
         </React.Fragment>
       ))}
+    </>
+  );
+}
+
+/**
+ * An item's PRICE and IN SHOPS (8a7a3b1; decided 2026-11-21, mockup docs/mockups/types-in-shops.html), under TYPE, in a game
+ * with types of its own, whose shops sell its items by themselves: the price kept in its type's PRICE column where it has
+ * one, else its own; IN SHOPS on, it needs one, and says so here as the server lists it with the problems.
+ */
+function ItemPrice({ definition, edit, item, id }: Props & { item: Item; id: (part: string) => string }) {
+  const price = itemPriceOf(definition, item);
+  const on = inShopsOf(definition, item);
+  const needed = priceNeeded(definition, item);
+  return (
+    <>
+      <FieldName beside htmlFor={id('price')} hint={HINTS['items.price']} style={small}>PRICE</FieldName>
+      <input id={id('price')} type="number" min={0} max={MOST_PRICE} step="any" value={price ?? ''} style={{ ...input, width: 80, justifySelf: 'start', ...(needed ? { borderColor: 'var(--warning)' } : {}) }}
+        aria-invalid={needed ? true : undefined} aria-describedby={needed ? id('price-needed') : undefined}
+        onChange={(e) => { const n = Number(e.target.value); if (!e.target.value.trim()) edit(withItemPrice(definition, item.id, undefined)); else if (Number.isFinite(n) && n >= 0 && n <= MOST_PRICE) edit(withItemPrice(definition, item.id, n)); }} />
+      <FieldName beside hint={HINTS['items.inShops']} style={small}>IN SHOPS</FieldName>
+      <span style={row}>
+        <ToggleSwitch on={on} name={`${item.label.trim() || item.id} in shops`} onChange={(next) => edit(withInShops(definition, item.id, next))} />
+        <span style={{ ...why, fontSize: 11 }}>{on ? 'Sold at its price, in the shops its type is sold at' : 'Never sold in any shop; only given, from GIVE.EXE'}</span>
+      </span>
+      {needed && <>
+        <span />
+        <span id={id('price-needed')} style={{ ...why, fontSize: 11, color: 'var(--warning)' }}>A PRICE IS NEEDED: it&apos;s IN SHOPS. Give it a price, or turn IN SHOPS off.</span>
+      </>}
     </>
   );
 }

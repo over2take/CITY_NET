@@ -192,7 +192,8 @@ describe('ITEMS (beside their list since 8aL2)', () => {
     const TYPED = { ...WORN, items: { types: [{ id: 'gear', label: 'GEAR', columns: [] }, { id: 'arms', label: 'ARMS', one: 'Arm', columns: [] }], list: [{ id: 'ring', label: 'Ring' }] } } as unknown as Definition;
     const last = open(TYPED, 'ITEMS');
     await userEvent.click(screen.getByRole('button', { name: 'Add a Arm' }));
-    expect(last().items!.list![1]).toEqual({ id: 'new_item', label: 'NEW ARM', type: 'arms' });
+    // IN SHOPS from the start (8a7a3b1): the GM gives it a price as it is made.
+    expect(last().items!.list![1]).toEqual({ id: 'new_item', label: 'NEW ARM', type: 'arms', in_shops: true });
     expect(within(screen.getByRole('group', { name: 'ARMS items' })).getByText('ARMS · 1')).toBeTruthy();
     await userEvent.click(listed('Ring'));
     expect(document.activeElement).not.toBe(ring().getByLabelText('NAME'));
@@ -208,7 +209,8 @@ describe('ITEMS (beside their list since 8aL2)', () => {
     const find = screen.getByRole('searchbox', { name: 'Find an item' });
     await userEvent.type(find, 'pis');
     const items = within(screen.getByRole('region', { name: 'Items' }));
-    expect(items.getAllByRole('button').filter((b) => !b.textContent!.startsWith('+')).map((b) => b.textContent)).toEqual(['Pistol Rounds', 'Pistol']);
+    // Each by its name (unpriced, each says NOT SOLD beside it since 8a7a3b1).
+    expect(items.getAllByRole('button').filter((b) => !b.textContent!.startsWith('+')).map((b) => b.firstElementChild?.textContent)).toEqual(['Pistol Rounds', 'Pistol']);
     expect(items.getByRole('status').textContent).toBe('2 OF 3');
     await userEvent.clear(find);
     await userEvent.type(find, 'rounds');
@@ -617,5 +619,84 @@ describe('ENCUMBRANCE (8a5c)', () => {
 
   it('every hint written', () => {
     for (const k of ['items.encumbrance', 'items.countedBy', 'items.canCarry', 'items.bands', 'items.weighs', 'items.bandMeans', 'items.bandCondition'] as const) expect(HINTS[k], k).toBeTruthy();
+  });
+});
+
+describe('an item\'s PRICE and IN SHOPS (8a7a3b1)', () => {
+  const PRICED = {
+    ...WORN,
+    items: {
+      types: [
+        { id: 'weapons', label: 'WEAPONS', one: 'Weapon', columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }, { id: 'price', label: 'PRICE', kind: 'number' }] },
+        { id: 'armor', label: 'ARMOR', one: 'Armor', columns: [{ id: 'defense', label: 'DEFENSE', kind: 'number' }] },
+      ],
+      list: [
+        { id: 'pistol', label: 'Pistol', type: 'weapons', values: { damage: '2d6', price: 200 } },
+        { id: 'ring', label: 'Ring of Might', type: 'armor', price: 5000, in_shops: false },
+        { id: 'rope', label: 'Rope', type: 'armor' },
+      ],
+    },
+  } as unknown as Definition;
+  const panel = (name: string) => within(screen.getByRole('region', { name: `${name} item` }));
+  const listOf = (last: ReturnType<typeof open>) => last().items!.list as Record<string, unknown>[];
+
+  it('under TYPE: the PRICE, its type\'s PRICE column shown there once, kept in it', () => {
+    const last = open(PRICED, 'ITEMS');
+    const names = panel('Pistol').getAllByText(/^[A-Z ]+$/).map((n) => n.textContent).filter((t) => ['NAME', 'TYPE', 'PRICE', 'IN SHOPS', 'DAMAGE'].includes(t ?? ''));
+    expect(names).toEqual(['NAME', 'TYPE', 'PRICE', 'IN SHOPS', 'DAMAGE']);
+    const price = panel('Pistol').getByLabelText('PRICE') as HTMLInputElement;
+    expect(price.value).toBe('200');
+    fireEvent.change(price, { target: { value: '180' } });
+    expect(listOf(last)[0]).toEqual({ id: 'pistol', label: 'Pistol', type: 'weapons', values: { damage: '2d6', price: 180 } });
+    // Not a price: kept as it was.
+    fireEvent.change(price, { target: { value: '-3' } });
+    expect(listOf(last)[0].values).toEqual({ damage: '2d6', price: 180 });
+  });
+
+  it('a type without a PRICE column: the item\'s own; blank, none', async () => {
+    const last = open(PRICED, 'ITEMS');
+    await userEvent.click(listed('Rope'));
+    fireEvent.change(panel('Rope').getByLabelText('PRICE'), { target: { value: '3' } });
+    expect(listOf(last)[2]).toEqual({ id: 'rope', label: 'Rope', type: 'armor', price: 3 });
+    fireEvent.change(panel('Rope').getByLabelText('PRICE'), { target: { value: '' } });
+    expect(listOf(last)[2]).toEqual({ id: 'rope', label: 'Rope', type: 'armor' });
+  });
+
+  it('IN SHOPS: as switched, said what it means; off, NOT SOLD in the list', async () => {
+    const last = open(PRICED, 'ITEMS');
+    const on = panel('Pistol').getByRole('switch', { name: 'Pistol in shops' });
+    expect(on.getAttribute('aria-checked')).toBe('true');
+    expect(panel('Pistol').getByText('Sold at its price, in the shops its type is sold at')).toBeTruthy();
+    expect(within(listed('Pistol')).queryByText('NOT SOLD')).toBeNull();
+    expect(within(listed('Ring of Might')).getByText('NOT SOLD')).toBeTruthy();
+    // Saved before IN SHOPS was, and unpriced: not sold.
+    expect(within(listed('Rope')).getByText('NOT SOLD')).toBeTruthy();
+    await userEvent.click(on);
+    expect(listOf(last)[0].in_shops).toBe(false);
+    expect(panel('Pistol').getByText('Never sold in any shop; only given, from GIVE.EXE')).toBeTruthy();
+    expect(within(listed('Pistol')).getByText('NOT SOLD')).toBeTruthy();
+  });
+
+  it('a new item: IN SHOPS, its price asked for until it has one', async () => {
+    const last = open(PRICED, 'ITEMS');
+    await userEvent.click(screen.getByRole('button', { name: 'Add a Armor' }));
+    expect(listOf(last)[3]).toMatchObject({ label: 'NEW ARMOR', type: 'armor', in_shops: true });
+    const box = panel('NEW ARMOR').getByLabelText('PRICE');
+    expect(box.getAttribute('aria-invalid')).toBe('true');
+    expect(panel('NEW ARMOR').getByText(/A PRICE IS NEEDED: it.s IN SHOPS/)).toBeTruthy();
+    fireEvent.change(box, { target: { value: '40' } });
+    expect(panel('NEW ARMOR').queryByText(/A PRICE IS NEEDED/)).toBeNull();
+    expect(listOf(last)[3]).toMatchObject({ price: 40, in_shops: true });
+  });
+
+  it('a game without types of its own, whose shops have no type shelves: no IN SHOPS, no NOT SOLD; GEAR\'s PRICE column as ever', () => {
+    open(TWO_ITEMS, 'ITEMS');
+    expect(ring().queryByRole('switch', { name: /in shops/ })).toBeNull();
+    expect(screen.queryByText('NOT SOLD')).toBeNull();
+    expect(ring().getByLabelText('PRICE').id).toBe('item-ring-value-price');
+  });
+
+  it('every hint written', () => {
+    for (const k of ['items.price', 'items.inShops'] as const) expect(HINTS[k], k).toBeTruthy();
   });
 });

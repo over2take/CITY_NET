@@ -7,6 +7,7 @@
 // none keeps GEAR beside it. A column's id is made from its name when it is added and stays, as an item's does.
 
 import type { Definition } from './systemsApi';
+import type { Item } from './items';
 import { idFor } from './setup';
 
 type Obj = Record<string, unknown>;
@@ -199,7 +200,13 @@ export const withItemType = (def: Definition, itemId: string, typeId: string): D
     if (i.id !== itemId) return i;
     const from = typeOf(def, i.type);
     const same = (c: string) => { const a = from.columns.find((x) => x.id === c); const b = to.columns.find((x) => x.id === c); return !!a && !!b && a.kind === b.kind; };
-    return itemWith(i, typeId, Object.fromEntries(Object.entries(valuesOf(i)).filter(([c]) => same(c))));
+    const moved = itemWith(i, typeId, Object.fromEntries(Object.entries(valuesOf(i)).filter(([c]) => same(c))));
+    // Its price goes with it (8a7a3b1): into the new type's PRICE column, or its own where the new type has none.
+    const price = rawPrice(def, i);
+    if (!isPrice(price)) return moved;
+    delete moved.price;
+    if (to.columns.some(isPriceColumn)) return itemWith(moved, typeId, { ...valuesOf(moved), [PRICE_COLUMN]: price });
+    return { ...moved, price };
   }));
 };
 
@@ -217,6 +224,53 @@ export const itemValues = (def: Definition, item: { type?: unknown; values?: unk
   const values = isObject(item.values) ? item.values : {};
   return Object.fromEntries(typeOf(def, item.type).columns.filter((c) => Object.prototype.hasOwnProperty.call(values, c.id)).map((c) => [c.id, values[c.id]]));
 };
+
+// ─── AN ITEM'S PRICE AND IN SHOPS (8a7a3b1) ─────────────────────────────────
+
+/** A type's own column read as an item's price (backend itemTypes.js, 8a7a3a): a NUMBER column called `price`. */
+export const PRICE_COLUMN = 'price';
+/** The most an item can cost, as the server checks it. */
+export const MOST_PRICE = 1000000000;
+const isPrice = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= MOST_PRICE;
+const isPriceColumn = (c: ItemColumn) => c.id === PRICE_COLUMN && c.kind === 'number';
+
+/** The type's PRICE column an item's price is kept in, or undefined: then the item keeps its own `price`. */
+export const priceColumnOf = (def: Definition, item: { type?: unknown }): ItemColumn | undefined => typeOf(def, item.type).columns.find(isPriceColumn);
+
+/** An item's price as the server reads it (itemPrice): its own, else its type's PRICE column's value; undefined with neither. */
+const rawPrice = (def: Definition, item: Obj): unknown => {
+  if (item.price !== undefined) return item.price;
+  const value = valuesOf(item)[PRICE_COLUMN];
+  return priceColumnOf(def, item) && isPrice(value) ? value : undefined;
+};
+
+/** An item's price, for its PRICE box: undefined where it has none (or one the server would refuse). */
+export const itemPriceOf = (def: Definition, item: Item): number | undefined => { const p = rawPrice(def, item as unknown as Obj); return isPrice(p) ? p : undefined; };
+
+/** Whether the shops sell it (backend inShops): as its switch says; one saved before the switch was, by whether it has a price. */
+export const inShopsOf = (def: Definition, item: Item): boolean =>
+  (typeof item.in_shops === 'boolean' ? item.in_shops : rawPrice(def, item as unknown as Obj) !== undefined);
+
+/** Whether it is IN SHOPS with no price: a problem until it has one or is turned off, as the server lists it. */
+export const priceNeeded = (def: Definition, item: Item): boolean => item.in_shops === true && rawPrice(def, item as unknown as Obj) === undefined;
+
+/** An item's price: in its type's PRICE column where it has one, else its own; undefined takes it away. */
+export const withItemPrice = (def: Definition, itemId: string, price: number | undefined): Definition =>
+  withPart(def, ownTypes(def) ? itemTypes(def) : [], storedItems(def).map((i) => {
+    if (i.id !== itemId) return i;
+    const next: Obj = { ...i };
+    delete next.price;
+    if (priceColumnOf(def, i)) {
+      const values = { ...valuesOf(i) };
+      if (price === undefined) delete values[PRICE_COLUMN]; else values[PRICE_COLUMN] = price;
+      return itemWith(next, i.type as string | undefined, values);
+    }
+    return price === undefined ? next : { ...next, price };
+  }));
+
+/** Whether the shops sell an item, as it is switched. */
+export const withInShops = (def: Definition, itemId: string, on: boolean): Definition =>
+  withPart(def, ownTypes(def) ? itemTypes(def) : [], storedItems(def).map((i) => (i.id === itemId ? { ...i, in_shops: on } : i)));
 
 // ─── WHAT ELSE GOES WITH A REST OR AN ITEM ──────────────────────────────────
 
