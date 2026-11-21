@@ -22,6 +22,7 @@ import { getTemplate } from './index';
 import { customTemplate, isCustomSystem } from './customTemplates';
 import type { ShopStock } from '../data/buildingTypes';
 import { BUILDING_TYPES, CATALOGUES, typeLabel, catalogueLabel, typeOn, catalogueOn } from '../data/buildingTypes';
+import type { TypeShown, ColumnShown } from './gearTypes';
 
 /** Columns every catalogue carries, whatever its shape. */
 const NAME = 'name';
@@ -238,9 +239,29 @@ export interface OutRow {
   commented?: boolean;
 }
 
+/** A custom system's own item types (8a7a1): a section each in its files. None for a built-in game or one without types of its own. */
+export const ownTypesOf = (system: string): TypeShown[] => (isCustomSystem(system) ? customTemplate(system)?.items?.types ?? [] : []);
+
+/** A type's columns in a file (8a7a1): its name and price, then its own columns by id, then a description. */
+export const typeColumns = (type: TypeShown): string[] => [NAME, PRICE, ...type.columns.map((c) => c.id), 'description'];
+
+/**
+ * A type's section heading: its own name, as the GM wrote it, where it reads back as one (letters, digits, spaces, _ ' -);
+ * else its id, which always does. Either way the server finds the type (backend shops/catalogueParse.js resolveSection).
+ */
+export const typeSection = (type: TypeShown): string => (/^[a-z0-9_][a-z0-9_ '-]*$/i.test(type.label.trim()) ? type.label.trim() : type.id);
+
+/** A value to show a column's shape in the example, by what it holds. */
+const sampleOf = (c: ColumnShown): string =>
+  c.kind === 'number' ? '1' : c.kind === 'count' ? '6' : c.kind === 'damage' ? '1d6' : c.kind === 'dice' ? '1d4' : c.kind === 'pick' ? (c.options?.[0] ?? '') : 'words';
+
+/** The rows of one type, on their way into a file. */
+export type TypedRows = (type: TypeShown) => OutRow[];
+
 /**
  * Write a catalogue file: every catalogue as its own section, in the columns this system
- * actually has.
+ * actually has. A custom system with item types of its own (8a7a1) gets a section per type first,
+ * its rows from `typedRows`, each line of that type with its columns filled.
  *
  * Sections are marked `[catalogue_id]` and headed with a comment naming the storefronts
  * that sell them, so somebody stocking a gun shop can find the part they care about
@@ -252,6 +273,7 @@ export const writeCatalogueFile = (
   rowsFor: (catalogue: ShopStock) => OutRow[],
   catalogues?: ShopStock[],
   preamble: string[] = [],
+  typedRows?: TypedRows,
 ): string => {
   // Not the catalogues this game turned off: nothing would sell them.
   const wanted = (catalogues ?? CATALOGUES.map((c) => c.id)).filter((c) => catalogueOn(system, c));
@@ -267,6 +289,25 @@ export const writeCatalogueFile = (
     '# the item is bought, and the columns are the ones this system actually has.',
     '',
   ];
+
+  // A section per item type (8a7a1), before the shelves: each line of it is a line of that type, every column filled.
+  const types = typedRows ? ownTypesOf(system) : [];
+  for (const type of types) {
+    const columns = typeColumns(type);
+    const rows = typedRows!(type);
+    out.push(`# ${'─'.repeat(70)}`);
+    out.push(`# ${type.label.toUpperCase()} · each line a ${type.one.toUpperCase()}, its columns filled when it is bought or given`);
+    out.push(`# ${type.columns.map((c) => `${c.id}: ${c.kind === 'pick' ? `one of ${(c.options ?? []).join(', ')}` : c.kind === 'count' ? 'the most it holds, a whole number' : c.kind === 'damage' || c.kind === 'dice' ? 'dice' : c.kind === 'number' ? 'a number' : 'words'}`).join(' · ') || 'no columns of its own'}`);
+    out.push(`[${typeSection(type)}]`);
+    const widths = columns.map((col) => Math.max(col.length, ...rows.map((r) => csvCell(r.values[col] ?? '').length)));
+    const line = (cells: string[]) => cells.map((c, i) => pad(c, widths[i])).join(', ').replace(/\s+$/, '');
+    out.push(line(columns));
+    for (const row of rows) {
+      const text = line(columns.map((c) => csvCell(row.values[c] ?? '')));
+      out.push(row.commented ? `# ${text}` : text);
+    }
+    out.push('');
+  }
 
   for (const catalogue of wanted) {
     const spec = columnsFor(system, catalogue);
@@ -309,6 +350,12 @@ export const exampleFor = (system: string, catalogues?: ShopStock[]): string =>
     system,
     (catalogue) => (DEMOS[catalogue] ?? []).map((values) => ({ values })),
     catalogues,
+    [],
+    // A type's shape, behind a # to copy (8a7a1): nothing is sold until a GM writes a line of their own.
+    (type) => [{
+      commented: true,
+      values: { name: `Example ${type.one}`, price: '10', ...Object.fromEntries(type.columns.map((c) => [c.id, sampleOf(c)])), description: 'Copy this line' },
+    }],
   );
 
 /** One entry as the server describes it, book or uploaded. */
@@ -316,9 +363,13 @@ export interface StoredEntry {
   id: string;
   name: string;
   price: number;
-  fields?: Record<string, string>;
+  fields?: Record<string, string | number>;
   source: 'book' | 'uploaded';
 }
+
+/** An entry's values as a file writes them: every field as text. */
+const asCells = (e: StoredEntry): Record<string, string> =>
+  ({ name: e.name, price: String(e.price), ...Object.fromEntries(Object.entries(e.fields ?? {}).map(([k, v]) => [k, String(v)])) });
 
 /**
  * Everything a system currently sells, as a file to edit and send back.
@@ -329,18 +380,14 @@ export interface StoredEntry {
  */
 export const currentFor = (
   system: string,
-  entries: Partial<Record<ShopStock, StoredEntry[]>>,
+  entries: Partial<Record<string, StoredEntry[]>>,
   catalogues?: ShopStock[],
 ): string =>
   writeCatalogueFile(
     system,
     (catalogue) => (entries[catalogue] ?? []).map((e) => ({
       commented: e.source === 'book',
-      values: {
-        name: e.name,
-        price: String(e.price),
-        ...(e.fields ?? {}),
-      },
+      values: asCells(e),
     })),
     catalogues,
     [
@@ -350,4 +397,6 @@ export const currentFor = (
       'file leaves them exactly as they are. To change one, delete its # and edit it -',
       'that is what tells CITY_NET you meant to override it.',
     ],
+    // Each type's lines on sale (8a7a1), every column as it was saved.
+    (type) => (entries[`type:${type.id}`] ?? []).map((e) => ({ values: asCells(e) })),
   );

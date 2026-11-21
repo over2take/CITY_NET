@@ -32,6 +32,7 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 | Parts only built-in games have | vehicles, cyberware, death saves, luck, XP awards | `parts` | | Nothing to hide at a custom table: shown off and greyed in PARTS |
 | NPC tiers off | | `parts_tiers` | | **GAP**, with family 8 (NPC tiers): the tier picker is on an NPC token in the 3D map |
 | GIVE ITEM and shop catalogues | a catalogue typed in, an item given with a note | `shops_give`, `shop_catalogue_*` | `player-journey`, `shop-cart-items` (a catalogue saved while a player is online, bought by them through the cart, 8n1), `shop-cart` (CWN's book: bought and sold back, 8n1), `give-item` (a ring and two ropes given, on the sheet as bought ones are, in GIVEN, 8n2) | **AT THE TABLE** |
+| Shop catalogues by item type | a section per item type (8a7a1), its columns checked, blanks kept | `shop_catalogue_types`, `catalogueTypes` | `catalogue-types` | **AT THE TABLE** for the catalogue; sold and landing typed is 8a7a2's |
 | Building types and catalogues renamed or off | | `buildings` | | **GAP** |
 | Currencies | several, decimals, a catalogue's currency, the cart per currency, PAYROLL | `currencies`, `currency_icons`, `catalogue_currency`, `bank_currencies`, `shop_checkout_currencies` | | **GAP** |
 | The bank's celebrations | on / off | `bank` | | **GAP** |

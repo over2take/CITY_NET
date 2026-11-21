@@ -32,8 +32,9 @@ interface Props {
 }
 
 interface Problem { line: number; catalogue?: string; name?: string; message: string }
-interface Summary { catalogue: string; count: number; overrides: string[] }
-interface Preview { problems: Problem[]; summary: Summary[]; format: string | null; sections?: Record<string, PreviewRow[]> }
+interface Summary { catalogue: string; count: number; overrides: string[]; label?: string }
+/** `notes` (8a7a1): what a type's line left blank, nothing wrong. */
+interface Preview { problems: Problem[]; notes?: Problem[]; summary: Summary[]; format: string | null; sections?: Record<string, PreviewRow[]> }
 
 /**
  * Socket.io refuses a message over a megabyte by default, and says nothing useful when it
@@ -66,13 +67,13 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
       setPreview(res);
     };
 
-    const onSaved = (res: { ok: boolean; reason?: string; saved?: { catalogue: string; count: number }[] }) => {
+    const onSaved = (res: { ok: boolean; reason?: string; saved?: { catalogue: string; count: number; label?: string }[] }) => {
       setBusy(null);
       if (!res.ok) {
         setMessage({ tone: 'bad', text: res.reason === 'empty' ? 'Nothing in that could be saved.' : 'The save did not go through. Nothing was changed.' });
         return;
       }
-      const parts = (res.saved ?? []).map((s) => `${catalogueLabel(s.catalogue as ShopStock, system)} ×${s.count}`);
+      const parts = (res.saved ?? []).map((s) => `${s.label ?? catalogueLabel(s.catalogue as ShopStock, system)} ×${s.count}`);
       setMessage({ tone: 'ok', text: `Saved: ${parts.join(', ')}. The shops have it now.` });
       setPreview(null);
       setPreviewedText(null);
@@ -105,6 +106,8 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
   const tooBig = new Blob([text]).size > MAX_BYTES;
   const stale = previewedText !== null && previewedText !== text;
   const rows = preview?.summary.reduce((n, s) => n + s.count, 0) ?? 0;
+  /** A section as the GM wrote it: a type's by its name (8a7a1), a shelf's as before. */
+  const sectionName = (catalogue: string) => preview?.summary.find((s) => s.catalogue === catalogue)?.label ?? catalogue;
   const canSave = !!preview && !stale && previewedText === text && rows > 0 && !busy;
   // The running game's items (7e3c), from its render copy: none on a built-in system.
   const items = customTemplate(system)?.items;
@@ -274,7 +277,7 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
 
             {preview.summary.map((s) => (
               <div key={s.catalogue}>
-                {catalogueLabel(s.catalogue as ShopStock, system).toUpperCase()} ×{s.count}
+                {(s.label ?? catalogueLabel(s.catalogue as ShopStock, system)).toUpperCase()} ×{s.count}
                 {/* Overriding a book price is allowed - a GM house-ruling it means it -
                     but it should be a thing they chose, not a thing that happened. */}
                 {s.overrides.length > 0 && (
@@ -295,20 +298,28 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
             )}
             {itemRows.matched.filter((m) => !m.lands).map((m, i) => (
               <div key={`away-${i}`} style={{ color: 'var(--warning)' }}>
-                {m.line ? `LINE ${m.line}` : 'FILE'} [{m.catalogue}] {m.name}: lands in its own rows, not the gear, so it is never worn as the item
+                {m.line ? `LINE ${m.line}` : 'FILE'} [{sectionName(m.catalogue)}] {m.name}: lands in its own rows, not the gear, so it is never worn as the item
               </div>
             ))}
             {itemRows.near.map((n, i) => (
               <div key={`near-${i}`} style={{ color: 'var(--warning)' }}>
-                {n.line ? `LINE ${n.line}` : 'FILE'} [{n.catalogue}] {n.name}: nearly the item {n.item}. Name it exactly to sell that item
+                {n.line ? `LINE ${n.line}` : 'FILE'} [{sectionName(n.catalogue)}] {n.name}: nearly the item {n.item}. Name it exactly to sell that item
               </div>
             ))}
 
             {preview.problems.map((p, i) => (
               <div key={i} style={{ color: 'var(--warning)' }}>
                 {p.line > 0 ? `LINE ${p.line}` : 'FILE'}
-                {p.catalogue ? ` [${p.catalogue}]` : ''}
+                {p.catalogue ? ` [${sectionName(p.catalogue)}]` : ''}
                 {p.name ? ` ${p.name}` : ''}: {p.message}
+              </div>
+            ))}
+            {/* A type's line with a column left blank (8a7a1): kept, and said, for the GM to fill in or leave to the player. */}
+            {(preview.notes ?? []).map((p, i) => (
+              <div key={`note-${i}`} data-testid="catalogue-note" style={{ color: 'var(--cyan)' }}>
+                {p.line > 0 ? `LINE ${p.line}` : 'FILE'}
+                {p.catalogue ? ` [${sectionName(p.catalogue)}]` : ''}
+                {p.name ? ` ${p.name}` : ''}: {p.message}, kept; the player can fill it in
               </div>
             ))}
 

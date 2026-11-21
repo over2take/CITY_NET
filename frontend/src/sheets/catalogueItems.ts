@@ -8,7 +8,7 @@
 
 import type { ShopStock } from '../data/buildingTypes';
 import { CATALOGUES, catalogueOn } from '../data/buildingTypes';
-import { columnsFor, writeCatalogueFile } from './catalogueSchema';
+import { columnsFor, writeCatalogueFile, ownTypesOf } from './catalogueSchema';
 import type { ItemsShown } from './gearItems';
 
 /** A row as the preview sends it back (backend shops/catalogueParse.js). */
@@ -44,6 +44,7 @@ const near = (name: string, label: string) => {
 };
 
 /** Whether a catalogue's lines land as gear lines (an inventory line), where an item is worn from. */
+// A type's section (8a7a1, type:<id>) reads as an inventory shelf here, its lines gear: nothing more to say.
 export const landsAsGear = (system: string, catalogue: string) => columnsFor(system, catalogue as ShopStock).shape === 'inventory';
 
 /**
@@ -80,6 +81,27 @@ export const itemsShelf = (system: string): ShopStock | null => {
 /** A starter catalogue of the system's items: each a row of its name and words, its price left to fill in. Null with none. */
 export const itemsCatalogue = (system: string, items: ItemsShown | undefined): string | null => {
   const list = (items?.list ?? []).filter((i) => i.label.trim());
+  // A system with item types of its own (8a7a1): each item in its type's section, its columns as the builder has them.
+  if (list.length && ownTypesOf(system).length) {
+    return writeCatalogueFile(
+      system,
+      () => [],
+      [],
+      [
+        "Your system's items, each in its type's section, to sell in its shops. Fill in each price, then upload this.",
+        'A row without a price is left out, so nothing is sold free by mistake.',
+        '',
+        "Keep each name as it is: a line named as an item is that item once bought, ready to WEAR and ATTUNE.",
+      ],
+      (type) => list.filter((i) => i.type === type.id).map((i) => ({
+        values: {
+          name: i.label.trim(), price: '',
+          ...Object.fromEntries(Object.entries(i.values ?? {}).map(([k, v]) => [k, String(v)])),
+          ...(i.description ? { description: i.description } : {}),
+        },
+      })),
+    );
+  }
   const shelf = itemsShelf(system);
   if (!list.length || !shelf) return null;
   return writeCatalogueFile(
