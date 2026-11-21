@@ -18,11 +18,14 @@
 // cell leaves that part as it is; `-` clears it. A row with a mistake is skipped and said, by its line, and the rest
 // goes in. What a feature does beyond words, uses and a rest stays as the builder has it.
 //
+// In a game with types of its own (8a7a3b2; decided 2026-11-21), each section also reads PRICE, an item's own (only for a
+// type with no column of that name, which holds it otherwise), and IN SHOPS, yes or no.
+//
 // The rows are read with the catalogue import's own splitter (quotes, tabs, Excel's semicolons), as CHOICES' are.
 
 const { LIMITS: CHOICE_LIMITS, choicesOf, namesOf } = require('./choices');
 const { LIMITS, slotsOf, installsOf } = require('./items');
-const { typesOf, ownTypes, typeNamed, valueProblem } = require('./itemTypes');
+const { typesOf, ownTypes, typeNamed, valueProblem, MOST_PRICE } = require('./itemTypes');
 const { idFrom, same, sameWords, refillsOf, formulaProblem, CLEAR, MAX_BYTES } = require('./choicesImport');
 const { tablesOf } = require('./derived');
 const { splitRow, delimiterOf, stripBom } = require('../shops/catalogueParse');
@@ -31,8 +34,14 @@ const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
 const FEATURE_COLUMNS = ['item', 'feature', 'words', 'uses', 'refill'];
 
+/** Whether a type has a column called price, by name or id: then it holds the price, and no own PRICE is read (8a7a3b2). */
+const pricedByColumn = (type) => type.columns.some((c) => same(c.id, 'price') || same(c.label || '', 'price'));
+/** What an item section reads for the shops (8a7a3b2), in a game with types of its own: its own price, IN SHOPS. */
+const shopColumnsOf = (type, own) => (own ? [...(pricedByColumn(type) ? [] : ['price']), 'in shops'] : []);
 /** The columns an item section reads: its type's, then what every item has (COST only where an install is). */
-const itemColumnsOf = (type, installs) => [...type.columns.map((c) => (c.label || c.id).toLowerCase()), 'needs', ...(installs ? ['cost'] : []), 'words'];
+const itemColumnsOf = (type, installs, own) => [...type.columns.map((c) => (c.label || c.id).toLowerCase()), ...shopColumnsOf(type, own), 'needs', ...(installs ? ['cost'] : []), 'words'];
+/** IN SHOPS from a cell: yes or no, as a GM might say them. */
+const SHOPS_WORDS = { yes: true, on: true, true: true, no: false, off: false, false: false };
 
 /**
  * The rows of a file by section, each with its line and its cells by column; problems with whole sections (a missing
@@ -79,7 +88,7 @@ const rowsOf = (text, definition) => {
         if (missing.length) { skipped.push({ line, message: `[features] needs ${missing.map((c) => `a ${c} column`).join(' and ')}: its first line names the columns (${FEATURE_COLUMNS.join(', ')})` }); ignoring = true; return; }
         for (const c of named.filter((x) => x && !FEATURE_COLUMNS.includes(x))) notes.push({ line, message: `The ${c} column isn't read in [features]: only ${FEATURE_COLUMNS.join(', ')}` });
       } else {
-        const read = itemColumnsOf(at.type, installs);
+        const read = itemColumnsOf(at.type, installs, ownTypes(definition));
         if (!named.includes('name')) { skipped.push({ line, message: `[${(at.type.label || at.type.id).toLowerCase()}] needs a name column: its first line names the columns (name, ${read.join(', ')})` }); ignoring = true; return; }
         // A column by its name or its id.
         const ids = new Map(at.type.columns.map((c) => [c.id.toLowerCase(), (c.label || c.id).toLowerCase()]));
@@ -182,6 +191,14 @@ const readItemsFile = (definition, input) => {
       if (costText && !clearing(costText) && (!/^\d+(\.\d+)?$/.test(costText) || cost > LIMITS.cost)) { skip(row.line, `${name}: cost is a number from 0 to ${LIMITS.cost}, not ${costText}`); continue; }
       const words = row.get('words');
       if (words.length > CHOICE_LIMITS.description) { skip(row.line, `${name}: the words are longer than ${CHOICE_LIMITS.description} characters`); continue; }
+      // Its own price and IN SHOPS (8a7a3b2): null clears, undefined leaves as it is.
+      const priceText = own && !pricedByColumn(type) ? row.get('price') : '';
+      const price = !priceText ? undefined : clearing(priceText) ? null : Number(priceText);
+      if (priceText && !clearing(priceText) && (!/^\d+(\.\d+)?$/.test(priceText) || price > MOST_PRICE)) { skip(row.line, `${name}: price is a number from 0 to ${MOST_PRICE}, not ${priceText}`); continue; }
+      const shopsText = own ? row.get('in shops') : '';
+      const shopsWord = shopsText.toLowerCase();
+      const shops = !shopsText ? undefined : clearing(shopsText) ? null : SHOPS_WORDS[shopsWord];
+      if (shops === undefined && shopsText) { skip(row.line, `${name}: in shops is yes or no, not ${shopsText}`); continue; }
 
       let item = matches[0];
       const typeWas = item ? typeNamed(definition, item.type).id : null;
@@ -197,6 +214,8 @@ const readItemsFile = (definition, input) => {
         if (needsTo !== 'worn') item.needs = needsTo;
         if (isInstall(needsTo)) item.cost = cost ?? 1;
         if (words && !clearing(words)) item.description = words;
+        if (typeof price === 'number') item.price = price;
+        if (typeof shops === 'boolean') item.in_shops = shops;
         part.list.push(item);
         added.items.push({ line: row.line, item: name, type: (type.one || type.label || type.id) });
         continue;
@@ -231,6 +250,15 @@ const readItemsFile = (definition, input) => {
         const from = typeof item.description === 'string' ? item.description : '';
         const to = clearing(words) ? '' : words;
         if (!sameWords(from, to)) { parts.push({ part: 'words', from, to }); if (to) item.description = to; else delete item.description; }
+      }
+      if (price !== undefined && (price === null ? item.price !== undefined : item.price !== price)) {
+        parts.push({ part: 'price', from: item.price === undefined ? '' : String(item.price), to: price === null ? '' : String(price) });
+        if (price === null) delete item.price; else item.price = price;
+      }
+      const yesNo = (v) => (v === true ? 'yes' : v === false ? 'no' : '');
+      if (shops !== undefined && (shops === null ? item.in_shops !== undefined : item.in_shops !== shops)) {
+        parts.push({ part: 'in shops', from: yesNo(item.in_shops), to: yesNo(shops) });
+        if (shops === null) delete item.in_shops; else item.in_shops = shops;
       }
       if (parts.length) changed.items.push({ line: row.line, item: item.label, parts });
       else unchanged += 1;

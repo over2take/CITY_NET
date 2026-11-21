@@ -56,11 +56,20 @@ const sectionOf = (types: ItemType[], t: ItemType) => {
 /** A column's head: its name, or its id where the name is taken (by another column or what every item has). */
 const headOf = (t: ItemType, c: ItemColumn) => {
   const name = (c.label.trim() || c.id).toLowerCase();
-  const clash = ['name', 'needs', 'cost', 'words'].includes(name) || t.columns.filter((x) => (x.label.trim() || x.id).toLowerCase() === name).length > 1;
+  const clash = ['name', 'needs', 'cost', 'words', 'in shops'].includes(name) || t.columns.filter((x) => (x.label.trim() || x.id).toLowerCase() === name).length > 1;
   return clash ? c.id : name;
 };
 const hasInstalls = (def: Definition) => itemInstalls(def).length > 0;
 const tail = (def: Definition) => ['needs', ...(hasInstalls(def) ? ['cost'] : []), 'words'];
+
+/** Whether a type has a column called price, by name or id: it holds the price (backend itemsImport.js pricedByColumn). */
+const pricedByColumn = (t: ItemType) => t.columns.some((c) => c.id.toLowerCase() === 'price' || c.label.trim().toLowerCase() === 'price');
+/** The shops' columns a section has (8a7a3b2), in a game with types of its own: an item's own price, where its type has no
+ *  column holding it, and IN SHOPS. */
+const shopHeads = (def: Definition, t: ItemType) => (ownTypes(def) ? [...(pricedByColumn(t) ? [] : ['price']), 'in shops'] : []);
+/** An item's cells for them: its own price, and IN SHOPS only where it says so, so a file read back changes nothing. */
+const shopCells = (def: Definition, t: ItemType, i: { price?: number; in_shops?: boolean }) => (ownTypes(def)
+  ? [...(pricedByColumn(t) ? [] : [typeof i.price === 'number' ? i.price : '']), i.in_shops === true ? 'yes' : i.in_shops === false ? 'no' : ''] : []);
 
 /** What an item needs, in the words a file says it: worn, carried, or a slot's or install's name. */
 const needsWord = (def: Definition, needs: string | undefined) => {
@@ -115,6 +124,8 @@ const head = (def: Definition, intro: string[]): string[] => {
     ...(picks.length ? [`# PICK ONE is one of its words: ${picks.join('; ')}.`] : []),
     `# needs is when its features count: ${needs.join(', ')}.`,
     ...(hasInstalls(def) ? ['# cost is what installing it costs, for an item that needs an install: fractions are fine, 0.25.'] : []),
+    ...(ownTypes(def) ? ['# price is what it costs in the shops, a number (a type with a PRICE column of its own has it there). in shops is yes or no:',
+      '# no keeps it out of every shop, only given; yes needs a price.'] : []),
     `# [features]: refill is one of this system's rests, by name: ${rests.length ? rests.join(', ') : 'none (it has none on)'}. It needs uses.`,
     '# Modifiers, rolls and roll changes are set in the builder; an import never changes them.',
   ];
@@ -138,9 +149,10 @@ export const exampleItemsFile = (def: Definition): string => {
   const secondCost = installs.some((s) => s.id === other?.id) ? 1 : '';
   types.forEach((t) => {
     const one = t.one?.trim() || t.label.trim() || t.id;
-    lines.push('', `[${sectionOf(types, t)}]`, ['name', ...t.columns.map((c) => headOf(t, c)), ...tail(def)].join(', '));
-    lines.push(row(`Sample ${one}`, ...t.columns.map((c) => sampleOf(def, c, false)), 'worn', ...(installs.length ? [''] : []), 'What the table reads about it.'));
-    lines.push(row(`Sample ${one} 2`, ...t.columns.map((c) => sampleOf(def, c, true)), secondNeeds, ...(installs.length ? [secondCost] : []), ''));
+    lines.push('', `[${sectionOf(types, t)}]`, ['name', ...t.columns.map((c) => headOf(t, c)), ...shopHeads(def, t), ...tail(def)].join(', '));
+    // The first sold at a price, the second kept out of the shops (8a7a3b2).
+    lines.push(row(`Sample ${one}`, ...t.columns.map((c) => sampleOf(def, c, false)), ...shopCells(def, t, { price: 25, in_shops: true }), 'worn', ...(installs.length ? [''] : []), 'What the table reads about it.'));
+    lines.push(row(`Sample ${one} 2`, ...t.columns.map((c) => sampleOf(def, c, true)), ...shopCells(def, t, { in_shops: false }), secondNeeds, ...(installs.length ? [secondCost] : []), ''));
   });
   const first = types[0];
   lines.push('', '[features]', 'item, feature, words, uses, refill',
@@ -160,10 +172,10 @@ export const itemsListFile = (def: Definition): string => {
   for (const t of types) {
     const mine = items.filter((i) => typeOf(def, i.type).id === t.id);
     if (!mine.length && ownTypes(def)) continue;
-    lines.push('', `[${sectionOf(types, t)}]`, ['name', ...t.columns.map((c) => headOf(t, c)), ...tail(def)].join(', '));
+    lines.push('', `[${sectionOf(types, t)}]`, ['name', ...t.columns.map((c) => headOf(t, c)), ...shopHeads(def, t), ...tail(def)].join(', '));
     for (const i of mine) {
       const values = itemValues(def, i);
-      lines.push(row(i.label, ...t.columns.map((c) => values[c.id] ?? ''), needsWord(def, i.needs),
+      lines.push(row(i.label, ...t.columns.map((c) => values[c.id] ?? ''), ...shopCells(def, t, i), needsWord(def, i.needs),
         ...(hasInstalls(def) ? [typeof i.cost === 'number' ? i.cost : ''] : []), i.description ?? ''));
     }
   }

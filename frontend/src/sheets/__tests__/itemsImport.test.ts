@@ -42,9 +42,11 @@ const PLAIN = { format: 1, name: 'Marshford', stats: [{ id: 'abilities', label: 
 describe('DOWNLOAD EXAMPLE: made from the system it comes from', () => {
   it('a section per type with its own columns; needs in its words; cost because it has an install; read back without a mistake', () => {
     const file = exampleItemsFile(TESTFALL);
-    expect(file).toContain('\n[gear]\nname, weight, price, needs, cost, words\nSample Gear, 2, 25, worn, , What the table reads about it.\nSample Gear 2, 1, 5, attuned, , \n');
-    expect(file).toContain('\n[weapons]\nname, damage, heals, range, ammo, grade, needs, cost, words\nSample Weapon, 1d8 + @might_mod, 2d4 + 2, 30 m, 6, LIGHT, worn, , What the table reads about it.\nSample Weapon 2, 1d6, 1d4, melee, 1, HEAVY, attuned, , \n');
-    expect(file).toContain('\n[empty]\nname, needs, cost, words\n');
+    // In shops (8a7a3b2): the first sold, the second kept out; a type without a PRICE column has its own price column.
+    expect(file).toContain('\n[gear]\nname, weight, price, in shops, needs, cost, words\nSample Gear, 2, 25, yes, worn, , What the table reads about it.\nSample Gear 2, 1, 5, no, attuned, , \n');
+    expect(file).toContain('\n[weapons]\nname, damage, heals, range, ammo, grade, price, in shops, needs, cost, words\nSample Weapon, 1d8 + @might_mod, 2d4 + 2, 30 m, 6, LIGHT, 25, yes, worn, , What the table reads about it.\nSample Weapon 2, 1d6, 1d4, melee, 1, HEAVY, , no, attuned, , \n');
+    expect(file).toContain('\n[empty]\nname, price, in shops, needs, cost, words\n');
+    expect(file).toContain('# price is what it costs in the shops, a number (a type with a PRICE column of its own has it there). in shops is yes or no:');
     expect(file).toContain('[features]\nitem, feature, words, uses, refill\nSample Gear, A feature, "What it does, in words.", 1, Short rest');
     expect(file).toContain('# needs is when its features count: worn, carried, attuned (a slot), cyberware (an install).');
     expect(file).toContain('# PICK ONE is one of its words: WEAPONS GRADE: LIGHT, HEAVY.');
@@ -65,7 +67,7 @@ describe('DOWNLOAD EXAMPLE: made from the system it comes from', () => {
 
   it('an install and no slot: the second row installed, at a cost of 1', () => {
     const wired = { ...TESTFALL, items: { ...(TESTFALL.items as object), slots: [] } } as unknown as Definition;
-    expect(exampleItemsFile(wired)).toContain('Sample Gear 2, 1, 5, cyberware, 1, \n');
+    expect(exampleItemsFile(wired)).toContain('Sample Gear 2, 1, 5, no, cyberware, 1, \n');
     expect(readItemsFile(wired, exampleItemsFile(wired)).skipped).toEqual([]);
   });
 });
@@ -73,8 +75,8 @@ describe('DOWNLOAD EXAMPLE: made from the system it comes from', () => {
 describe('DOWNLOAD THIS LIST: the items as they are, back unchanged', () => {
   it('each type\'s items under its own columns, features below, notes for what a file never carries', () => {
     const file = itemsListFile(TESTFALL);
-    expect(file).toContain('\n[weapons]\nname, damage, heals, range, ammo, grade, needs, cost, words\nPistol, 2d6 + @might_mod, , "30 m, more or less", 6, LIGHT, worn, , "A snub revolver; loud."\n');
-    expect(file).toContain('\n[gear]\nname, weight, price, needs, cost, words\nPistol Rounds, 0.05, 1, worn, , \nCranial Jack, , , cyberware, 0.25, \nBoots of Quiet, , , carried, , \nRing of Might, , , attuned, , \n');
+    expect(file).toContain('\n[weapons]\nname, damage, heals, range, ammo, grade, price, in shops, needs, cost, words\nPistol, 2d6 + @might_mod, , "30 m, more or less", 6, LIGHT, , , worn, , "A snub revolver; loud."\n');
+    expect(file).toContain('\n[gear]\nname, weight, price, in shops, needs, cost, words\nPistol Rounds, 0.05, 1, , worn, , \nCranial Jack, , , , cyberware, 0.25, \nBoots of Quiet, , , , carried, , \nRing of Might, , , , attuned, , \n');
     // A type with no items has no section.
     expect(file).not.toContain('[empty]');
     expect(file).toContain('Boots of Quiet, Quiet Step, "Hush, now.", 1, Long rest');
@@ -88,7 +90,7 @@ describe('DOWNLOAD THIS LIST: the items as they are, back unchanged', () => {
     const odd = { ...TESTFALL, items: { ...(TESTFALL.items as object), slots: [{ id: 'attuned', label: 'Bonded', count: 1 }],
       list: [{ id: 'pick', label: '#1 Pick', type: 'gear', needs: 'attuned' }] } } as unknown as Definition;
     const file = itemsListFile(odd);
-    expect(file).toContain('"#1 Pick", , , bonded, , ');
+    expect(file).toContain('"#1 Pick", , , , bonded, , ');
     const read = readItemsFile(odd, file);
     expect(read).toMatchObject({ changes: 0, skipped: [] });
     expect(read.items).toEqual(odd.items);
@@ -104,8 +106,37 @@ describe('DOWNLOAD THIS LIST: the items as they are, back unchanged', () => {
     const odd = { ...PLAIN, items: { types: [{ id: 'a', label: 'KIT', columns: [{ id: 'w1', label: 'WEIGHT', kind: 'number' }, { id: 'w2', label: 'WEIGHT', kind: 'number' }, { id: 'n', label: 'NAME', kind: 'text' }] }, { id: 'b', label: 'KIT', columns: [] }],
       list: [{ id: 'x', label: 'X', type: 'a', values: { w1: 1, w2: 2, n: 'n' } }, { id: 'y', label: 'Y', type: 'b' }] } } as unknown as Definition;
     const file = itemsListFile(odd);
-    expect(file).toContain('[a]\nname, w1, w2, n, needs, words');
-    expect(file).toContain('[b]\nname, needs, words');
+    expect(file).toContain('[a]\nname, w1, w2, n, price, in shops, needs, words');
+    expect(file).toContain('[b]\nname, price, in shops, needs, words');
+  });
+});
+
+describe('PRICE and IN SHOPS (8a7a3b2)', () => {
+  const SHOPPED = { ...TESTFALL, items: { ...(TESTFALL.items as object), list: [
+    { id: 'pistol', label: 'Pistol', type: 'weapons', values: { damage: '2d6', ammo: 6 }, price: 200, in_shops: true },
+    { id: 'rounds', label: 'Pistol Rounds', type: 'gear', values: { weight: 0.05, price: 1 }, in_shops: true },
+    { id: 'ring', label: 'Ring of Might', type: 'gear', price: 5000, in_shops: false },
+    { id: 'rope', label: 'Rope', type: 'gear' },
+  ] } } as unknown as Definition;
+
+  it('written as each item has them: its own price where its type has no PRICE column; IN SHOPS only where it says; back unchanged', () => {
+    const file = itemsListFile(SHOPPED);
+    expect(file).toContain('\nPistol, 2d6, , , 6, , 200, yes, worn, , \n');
+    expect(file).toContain('\nPistol Rounds, 0.05, 1, yes, worn, , \nRing of Might, , , no, worn, , \nRope, , , , worn, , \n');
+    const read = readItemsFile(SHOPPED, file);
+    expect(read).toMatchObject({ changes: 0, skipped: [] });
+    expect(read.items).toEqual(SHOPPED.items);
+    expect(checkDefinition(withImportedItems(SHOPPED, read.items)).problems).toEqual([]);
+  });
+
+  it('a column named PRICE under another id holds the price too: no own price column beside it', () => {
+    const named = { ...PLAIN, items: { types: [{ id: 'kit', label: 'KIT', columns: [{ id: 'cost', label: 'PRICE', kind: 'number' }] }], list: [{ id: 'x', label: 'X', type: 'kit', values: { cost: 4 } }] } } as unknown as Definition;
+    expect(itemsListFile(named)).toContain('[kit]\nname, price, in shops, needs, words\nX, 4, , worn, \n');
+  });
+
+  it('a game without types of its own: neither column, as before', () => {
+    expect(itemsListFile(PLAIN)).not.toContain('in shops');
+    expect(exampleItemsFile(PLAIN)).not.toContain('in shops');
   });
 });
 

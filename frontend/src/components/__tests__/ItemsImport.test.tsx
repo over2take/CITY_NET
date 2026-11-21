@@ -73,9 +73,9 @@ describe('under the list', () => {
   it('DOWNLOAD EXAMPLE and DOWNLOAD THIS LIST hand out the files made from the system', async () => {
     open();
     await userEvent.click(files().getByRole('button', { name: 'DOWNLOAD EXAMPLE' }));
-    expect(downloadText).toHaveBeenLastCalledWith('armory-items-example.csv', expect.stringContaining('[weapons]\nname, damage, grade, needs, words\nSample Weapon, 1d8 + @might, LIGHT, worn,'));
+    expect(downloadText).toHaveBeenLastCalledWith('armory-items-example.csv', expect.stringContaining('[weapons]\nname, damage, grade, price, in shops, needs, words\nSample Weapon, 1d8 + @might, LIGHT, 25, yes, worn,'));
     await userEvent.click(files().getByRole('button', { name: 'DOWNLOAD THIS LIST' }));
-    expect(downloadText).toHaveBeenLastCalledWith('armory-items.csv', expect.stringContaining('Pistol, 2d6, LIGHT, worn, '));
+    expect(downloadText).toHaveBeenLastCalledWith('armory-items.csv', expect.stringContaining('Pistol, 2d6, LIGHT, , , worn, '));
   });
 
   it('IMPORT opens beside the list in place of the open item; CLOSE, or picking an item, puts it back', async () => {

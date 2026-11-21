@@ -66,10 +66,10 @@ describe('a section per type', () => {
   it('a section by its type\'s name or id, a column by its name or id; what isn\'t read said', () => {
     const r = read(FILE('[Weapons]', 'NAME, Damage, grade, colour', 'Club, 1d6, LIGHT, red', '[spells]', 'name', 'Fireball', '[gear]', 'weight', 'Rope'));
     expect(byId(r, 'club')).toMatchObject({ type: 'weapons', values: { damage: '1d6', grade: 'LIGHT' } });
-    expect(r.notes).toEqual([{ line: 2, message: 'The colour column isn\'t one of WEAPONS\'s: only name, damage, range, ammo, weight, price, grade, needs, cost, words' }]);
+    expect(r.notes).toEqual([{ line: 2, message: 'The colour column isn\'t one of WEAPONS\'s: only name, damage, range, ammo, weight, price, grade, in shops, needs, cost, words' }]);
     expect(r.skipped).toEqual([
       { line: 4, message: '[spells] is no type of this system\'s (GEAR, WEAPONS): make it on TYPES first, or name the section after one' },
-      { line: 8, message: '[gear] needs a name column: its first line names the columns (name, weight, price, needs, cost, words)' },
+      { line: 8, message: '[gear] needs a name column: its first line names the columns (name, weight, price, in shops, needs, cost, words)' },
     ]);
     const byIdColumn = read(FILE('[weapons]', 'name, ammo', 'Sling, 3'));
     expect(byId(byIdColumn, 'sling').values).toEqual({ ammo: 3 });
@@ -148,6 +148,48 @@ describe('a section per type', () => {
     expect(read(FILE('[gear]', 'name, words', `Rope, ${'w'.repeat(1001)}`)).skipped).toEqual([{ line: 3, message: 'Rope: the words are longer than 1000 characters' }]);
     const full = { ...ARMORY, items: { ...ARMORY.items, list: Array.from({ length: 200 }, (_, i) => ({ id: `i${i}`, label: `I${i}` })) } };
     expect(read(FILE('[gear]', 'name', 'More'), full).skipped).toEqual([{ line: 3, message: 'More: there are 200 items, the most a system holds' }]);
+  });
+});
+
+describe('PRICE and IN SHOPS (8a7a3b2)', () => {
+  // A type with no PRICE column, so its items' own price is read.
+  const KITTED = { ...ARMORY, items: { ...ARMORY.items, types: [...ARMORY.items.types, { id: 'armor', label: 'ARMOR', one: 'Armor', columns: [{ id: 'defense', label: 'DEFENSE', kind: 'number' }] }],
+    list: [...ARMORY.items.list, { id: 'jacket', label: 'Leather Jacket', type: 'armor', values: { defense: 2 }, price: 50, in_shops: true }] } };
+
+  it('an own price where the type has no PRICE column; IN SHOPS yes or no; new and changed, each said', () => {
+    const r = read(FILE('[armor]', 'name, defense, price, in shops', 'Leather Jacket, 2, 60, no', 'Breastplate, 5, 400, YES', 'Shield, 1, , '), KITTED);
+    expect(r.skipped).toEqual([]);
+    // Both columns read: no note about either.
+    expect(r.notes).toEqual([]);
+    expect(byId(r, 'jacket')).toEqual({ id: 'jacket', label: 'Leather Jacket', type: 'armor', values: { defense: 2 }, price: 60, in_shops: false });
+    expect(r.changed.items).toEqual([{ line: 3, item: 'Leather Jacket', parts: [{ part: 'price', from: '50', to: '60' }, { part: 'in shops', from: 'yes', to: 'no' }] }]);
+    expect(byId(r, 'breastplate')).toEqual({ id: 'breastplate', label: 'Breastplate', type: 'armor', values: { defense: 5 }, price: 400, in_shops: true });
+    // Blank leaves both unsaid.
+    expect(byId(r, 'shield')).toEqual({ id: 'shield', label: 'Shield', type: 'armor', values: { defense: 1 } });
+    sound(r, KITTED);
+  });
+
+  it('- clears each; a price or a yes/no that isn\'t one skips the row, said by its line', () => {
+    const r = read(FILE('[armor]', 'name, price, in shops', 'Leather Jacket, -, -', 'Cloak, cheap, yes', 'Hat, 5, maybe', 'Boots, 2000000000, '), KITTED);
+    expect(byId(r, 'jacket')).toEqual({ id: 'jacket', label: 'Leather Jacket', type: 'armor', values: { defense: 2 } });
+    expect(r.skipped).toEqual([
+      { line: 4, message: 'Cloak: price is a number from 0 to 1000000000, not cheap' },
+      { line: 5, message: 'Hat: in shops is yes or no, not maybe' },
+      { line: 6, message: 'Boots: price is a number from 0 to 1000000000, not 2000000000' },
+    ]);
+  });
+
+  it('a type with a PRICE column has it there: no own price read, as before', () => {
+    const r = read(FILE('[weapons]', 'name, price, in shops', 'Pistol, 180, yes'));
+    expect(byId(r, 'pistol')).toMatchObject({ values: expect.objectContaining({ price: 180 }), in_shops: true });
+    expect(byId(r, 'pistol')).not.toHaveProperty('price');
+  });
+
+  it('a game without types of its own reads neither: in shops said not read', () => {
+    const PLAIN = { format: 1, name: 'Plain', stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'str', label: 'Str' }] }], items: { list: [{ id: 'rope', label: 'Rope' }] } };
+    const r = read(FILE('[gear]', 'name, in shops', 'Rope, no'), PLAIN);
+    expect(byId(r, 'rope')).toEqual({ id: 'rope', label: 'Rope' });
+    expect(r.notes.map((n) => n.message)).toEqual(["The in shops column isn't one of GEAR's: only name, weight, price, needs, words"]);
   });
 });
 
