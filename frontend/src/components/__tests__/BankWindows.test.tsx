@@ -225,3 +225,45 @@ describe('the chart follows the balance without being thrown by it', () => {
     }
   });
 });
+
+// ─── Names and colors (8n2) ──────────────────────────────────────────────────
+// Found by 8n1's shop journey: PAYROLL.EXE's amount and its players had no names, BANK_ADMIN.EXE's boxes no labels tied to
+// them, and every bank window drew in Classic green whatever the theme.
+
+describe('every box and player has a name', () => {
+  const activeUsers = [{ userName: 'GHOST', isNPC: false, isAdmin: false, isTemporaryAdmin: false }];
+
+  it('PAYROLL.EXE: the amount by TOTAL_AMOUNT, each player by their name', async () => {
+    const socket = makeSocket();
+    render(<AdminPayWindow pos={basePos} setPos={setPos} onClose={onClose} socket={socket} token="tok" activeUsers={activeUsers} />);
+    await userEvent.type(screen.getByLabelText('Total amount'), '30');
+    expect(screen.getByLabelText('TOTAL_AMOUNT')).toBe(screen.getByLabelText('Total amount'));
+    // The name ticks the box, as a label does.
+    await userEvent.click(screen.getByText('GHOST'));
+    expect(screen.getByRole('checkbox', { name: 'GHOST' })).toBeChecked();
+    await userEvent.click(screen.getByText('PAY_SELECTED'));
+    expect(socket.emit).toHaveBeenCalledWith('adminPayPlayers', expect.objectContaining({ usernames: ['GHOST'], totalAmount: 30 }));
+  });
+
+  it('BANK_ADMIN.EXE: Balance and Debt tied to their boxes', () => {
+    render(<AdminBankWindow pos={basePos} setPos={setPos} onClose={onClose} targetUser="GHOST" socket={makeSocket()} token="tok" />);
+    expect(screen.getByLabelText('Balance')).toHaveAttribute('type', 'number');
+    expect(screen.getByLabelText('Debt')).toHaveAttribute('type', 'number');
+  });
+
+  it('BANK.EXE: the amount to withdraw has a name', async () => {
+    render(<BankWindow pos={basePos} setPos={setPos} onClose={onClose} bankData={{ balance: 10, debt: 0 }} socket={makeSocket()} userName="GHOST" isBankOpen={true} />);
+    await userEvent.click(screen.getByText('WITHDRAW'));
+    expect(screen.getByRole('spinbutton', { name: 'Amount' })).toBeInTheDocument();
+  });
+});
+
+describe('the bank windows draw in the theme', () => {
+  it('no color of their own: every one a theme variable', async () => {
+    const { readFileSync } = await import('fs');
+    const { resolve } = await import('path');
+    const source = readFileSync(resolve(__dirname, '../BankWindows.tsx'), 'utf8');
+    expect(source.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).toEqual([]);
+    expect(source.match(/rgba?\(/g) ?? []).toEqual([]);
+  });
+});

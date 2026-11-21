@@ -81,12 +81,12 @@ function AdminBankMoney({ pos, setPos, onClose, targetUser, socket, token }: Adm
     <DraggableWindow title={`BANK_ADMIN.EXE · ${targetUser}`} pos={pos} setPos={setPos} onClose={onClose} windowStyle={{ width: '300px' }}>
       <div style={{ padding: '10px' }}>
         <div style={{ marginBottom: '10px' }}>
-          <label style={{ color: '#00ff66', display: 'block', marginBottom: '5px' }}>Balance</label>
-          <input type="number" step="1" value={balInput} onChange={e => setBalInput(e.target.value)} style={{ width: '100%', padding: '5px', background: '#000', color: '#fff', border: '1px solid #333' }} />
+          <label htmlFor="bank-admin-balance" style={{ color: 'var(--green)', display: 'block', marginBottom: '5px' }}>Balance</label>
+          <input id="bank-admin-balance" type="number" step="1" value={balInput} onChange={e => setBalInput(e.target.value)} style={{ width: '100%', padding: '5px', background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--dark-green)' }} />
         </div>
         <div style={{ marginBottom: '15px' }}>
-          <label style={{ color: '#ff0044', display: 'block', marginBottom: '5px' }}>Debt</label>
-          <input type="number" step="1" value={debtInput} onChange={e => setDebtInput(e.target.value)} style={{ width: '100%', padding: '5px', background: '#000', color: '#fff', border: '1px solid #333' }} />
+          <label htmlFor="bank-admin-debt" style={{ color: 'var(--danger)', display: 'block', marginBottom: '5px' }}>Debt</label>
+          <input id="bank-admin-debt" type="number" step="1" value={debtInput} onChange={e => setDebtInput(e.target.value)} style={{ width: '100%', padding: '5px', background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--dark-green)' }} />
         </div>
         <button className="panel-btn" style={{ width: '100%' }} onClick={handleSave}>SAVE CHANGES</button>
       </div>
@@ -230,18 +230,18 @@ function AdminPay({ pos, setPos, onClose, socket, token, activeUsers, system }: 
       <div style={{ padding: '10px' }}>
         {currencies.length > 1 && (
           <>
-            <label htmlFor="payroll-currency" style={{ display: 'block', marginBottom: '5px', color: '#00ff66' }}>CURRENCY</label>
+            <label htmlFor="payroll-currency" style={{ display: 'block', marginBottom: '5px', color: 'var(--green)' }}>CURRENCY</label>
             <select id="payroll-currency" value={currency?.id} onChange={(e) => { setCurrencyId(e.target.value); setAmount(''); }}
               style={{ width: '100%', padding: '5px', marginBottom: '10px', background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--dark-green)' }}>
               {currencies.map((c) => <option key={c.id} value={c.id}>{c.name.toUpperCase()}</option>)}
             </select>
           </>
         )}
-        <label style={{ display: 'block', marginBottom: '5px', color: '#00ff66' }}>TOTAL_AMOUNT</label>
+        <label htmlFor="payroll-amount" style={{ display: 'block', marginBottom: '5px', color: 'var(--green)' }}>TOTAL_AMOUNT</label>
         {currency ? (
           <>
-            <input type="text" aria-label="Total amount" autoComplete="off" value={amount} onChange={e => setAmount(e.target.value)}
-              style={{ width: '100%', padding: '5px', marginBottom: '4px', background: '#000', color: '#fff', border: '1px solid #333', boxSizing: 'border-box' }} />
+            <input id="payroll-amount" type="text" aria-label="Total amount" autoComplete="off" value={amount} onChange={e => setAmount(e.target.value)}
+              style={{ width: '100%', padding: '5px', marginBottom: '4px', background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--dark-green)', boxSizing: 'border-box' }} />
             <div data-testid="payroll-share" style={{ fontSize: '10px', minHeight: '2.4em', marginBottom: '8px', lineHeight: 1.4,
               color: problem ? 'var(--danger)' : 'var(--cyan)', opacity: amount.trim() ? 1 : 0.6 }}>
               {problem ?? (!isNaN(total) && payees
@@ -250,17 +250,17 @@ function AdminPay({ pos, setPos, onClose, socket, token, activeUsers, system }: 
             </div>
           </>
         ) : (
-          <input type="number" step="1" min="1" value={amount} onChange={e => setAmount(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '15px', background: '#000', color: '#fff', border: '1px solid #333' }} />
+          <input id="payroll-amount" type="number" step="1" min="1" aria-label="Total amount" value={amount} onChange={e => setAmount(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '15px', background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--dark-green)' }} />
         )}
 
-        <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid #333', padding: '5px', marginBottom: '10px', background: 'rgba(0,0,0,0.5)' }}>
+        <div style={{ maxHeight: '150px', overflowY: 'auto', border: '1px solid var(--dark-green)', padding: '5px', marginBottom: '10px', background: 'color-mix(in srgb, var(--black) 50%, transparent)' }}>
           {allUsers.length === 0 ? (
-            <div style={{ color: '#888', fontSize: '12px' }}>No users online.</div>
+            <div style={{ color: 'color-mix(in srgb, var(--green) 65%, transparent)', fontSize: '12px' }}>No users online.</div>
           ) : allUsers.map((u: string) => (
-            <div key={u} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
+            <label key={u} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px', cursor: 'pointer' }}>
               <input type="checkbox" checked={selectedUsers.includes(u)} onChange={() => toggleUser(u)} />
-              <span style={{ color: '#fff' }}>{u}</span>
-            </div>
+              <span>{u}</span>
+            </label>
           ))}
         </div>
 
@@ -500,7 +500,8 @@ const accountIn = (bankData: BankWindowProps['bankData'], currencies: Currency[]
 /** An amount that wraps between coins, never between a number and its coin or symbol. */
 const unbroken = (text: string) => text.replace(/(\d) (\S)/g, '$1\u00a0$2');
 
-const CONFETTI_COLORS =['#ff0066', '#00ff66', 'var(--warning)', '#00ccff', '#ff6600', '#cc00ff', '#ffffff'];
+// Festive, in the theme's own colors.
+const CONFETTI_COLORS = ['var(--green)', 'var(--cyan)', 'var(--warning)', 'var(--danger)', 'var(--green)', 'var(--cyan)', 'var(--warning)'];
 
 const CELEBRATION_CSS = `
 @keyframes confetti-fall {
@@ -523,7 +524,7 @@ const CELEBRATION_CSS = `
 }
 @keyframes star-glow {
   0%, 100% { text-shadow: 0 0 8px var(--warning), 0 0 20px var(--warning); }
-  50%       { text-shadow: 0 0 20px var(--warning), 0 0 50px #ff8800, 0 0 80px var(--warning); }
+  50%       { text-shadow: 0 0 20px var(--warning), 0 0 50px var(--danger), 0 0 80px var(--warning); }
 }
 @keyframes debt-free-shimmer {
   0%   { background-position: -200% center; }
@@ -717,8 +718,8 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
   const shown = picked ? accountIn(bankData, currencies, picked) : bankData;
   const roundedBalance = Math.round(shown.balance * 100) / 100;
   const roundedDebt = Math.round(shown.debt * 100) / 100;
-  const balanceColor = roundedBalance > 0 ? '#00ff66' : roundedBalance < 0 ? '#ff0044' : '#fff';
-  const debtColor = roundedDebt > 0 ? '#ff0044' : '#fff';
+  const balanceColor = roundedBalance > 0 ? 'var(--green)' : roundedBalance < 0 ? 'var(--danger)' : 'var(--green)';
+  const debtColor = roundedDebt > 0 ? 'var(--danger)' : 'var(--green)';
   const pickedName = picked ? picked.name.toUpperCase() : '';
   /** A figure in a box: the currency's own writing, or today's icon and two decimals. */
   // A currency's own icon, where it has one, goes before its amount as today's does (3c2c3).
@@ -758,8 +759,8 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
       )}
 
       <div style={{ display: 'flex', gap: '20px', padding: '10px' }}>
-        <div style={{ flex: 1, minWidth: 0, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
-          <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>{picked ? `BALANCE · ${pickedName}` : 'BALANCE'}</div>
+        <div style={{ flex: 1, minWidth: 0, border: '1px solid var(--dark-green)', padding: '10px', background: 'color-mix(in srgb, var(--black) 50%, transparent)' }}>
+          <div style={{ textAlign: 'center', fontSize: '12px', color: 'color-mix(in srgb, var(--green) 65%, transparent)', marginBottom: '5px', textTransform: 'uppercase' }}>{picked ? `BALANCE · ${pickedName}` : 'BALANCE'}</div>
           <div data-testid="bank-balance" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: balanceColor, marginBottom: '15px' }}>
             {figure(shown.balance, balanceColor)}
           </div>
@@ -767,8 +768,8 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
         </div>
 
         {showDebt && (
-          <div style={{ flex: 1, minWidth: 0, border: '1px solid #333', padding: '10px', background: 'rgba(0,0,0,0.5)' }}>
-            <div style={{ textAlign: 'center', fontSize: '12px', color: '#888', marginBottom: '5px', textTransform: 'uppercase' }}>{picked ? `DEBT · ${pickedName}` : 'DEBT'}</div>
+          <div style={{ flex: 1, minWidth: 0, border: '1px solid var(--dark-green)', padding: '10px', background: 'color-mix(in srgb, var(--black) 50%, transparent)' }}>
+            <div style={{ textAlign: 'center', fontSize: '12px', color: 'color-mix(in srgb, var(--green) 65%, transparent)', marginBottom: '5px', textTransform: 'uppercase' }}>{picked ? `DEBT · ${pickedName}` : 'DEBT'}</div>
             <div data-testid="bank-debt" style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: '5px', fontSize: '24px', color: debtColor, marginBottom: '15px' }}>
               {figure(shown.debt, debtColor)}
             </div>
@@ -793,9 +794,9 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
       <CandleChart key={picked ? picked.id : 'money'} balance={shown.balance} />
 
       {activePrompt && (
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10 }}>
-          <div style={{ background: '#111', border: '1px solid #444', padding: '20px', width: '200px' }}>
-            <div style={{ color: '#00ff66', marginBottom: '10px', textTransform: 'uppercase', textAlign: 'center' }}>
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'color-mix(in srgb, var(--black) 80%, transparent)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10 }}>
+          <div style={{ background: 'var(--black)', border: '1px solid var(--dark-green)', padding: '20px', width: '200px' }}>
+            <div style={{ color: 'var(--green)', marginBottom: '10px', textTransform: 'uppercase', textAlign: 'center' }}>
               AMOUNT TO {activePrompt === 'pay' ? 'PAY OFF' : activePrompt.toUpperCase()}?
               {picked && <div style={{ fontSize: '10px', opacity: 0.7 }}>IN {pickedName}</div>}
             </div>
@@ -804,14 +805,14 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
                 <input type="text" aria-label="Amount" autoComplete="off" value={promptAmount}
                   onChange={(e) => setPromptAmount(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') handleAction(); }}
-                  style={{ width: '100%', padding: '5px', marginBottom: '6px', background: '#000', color: '#fff', border: '1px solid #333', outline: 'none', textAlign: 'center' }} autoFocus />
+                  style={{ width: '100%', padding: '5px', marginBottom: '6px', background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--dark-green)', outline: 'none', textAlign: 'center' }} autoFocus />
                 <div data-testid="bank-amount-read" style={{ minHeight: '2.4em', fontSize: '10px', textAlign: 'center', marginBottom: '6px', lineHeight: 1.4,
                   color: promptProblem ? 'var(--danger)' : promptAmount.trim() ? 'var(--cyan)' : 'var(--text)', opacity: promptAmount.trim() ? 1 : 0.6 }}>
                   {promptProblem ?? (promptAmount.trim() && promptRead?.ok ? `READS AS ${formatAmount(picked, promptRead.amount)}` : `Write it like ${amountExample(picked)}`)}
                 </div>
               </>
             ) : (
-              <input type="number" step="1" min="1" value={promptAmount} onChange={(e) => setPromptAmount(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '10px', background: '#000', color: '#fff', border: '1px solid #333', outline: 'none', textAlign: 'center' }} autoFocus />
+              <input type="number" step="1" min="1" aria-label="Amount" value={promptAmount} onChange={(e) => setPromptAmount(e.target.value)} style={{ width: '100%', padding: '5px', marginBottom: '10px', background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--dark-green)', outline: 'none', textAlign: 'center' }} autoFocus />
             )}
             <div style={{ display: 'flex', gap: '10px' }}>
               <button className="panel-btn" style={{ flex: 1 }} onClick={handleAction} disabled={!promptReady}>CONFIRM</button>
@@ -841,11 +842,11 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
           ))}
 
           {/* Dark backing so text is readable */}
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.72)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '16px' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'color-mix(in srgb, var(--black) 72%, transparent)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', padding: '16px' }}>
 
             <div style={{
               fontSize: '26px', fontWeight: 'bold', fontFamily: 'monospace', textAlign: 'center',
-              background: 'linear-gradient(90deg, #00ff66, #00ccff, #00ff66)',
+              background: 'linear-gradient(90deg, var(--green), var(--cyan), var(--green))',
               backgroundSize: '200% auto',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
@@ -855,7 +856,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
             </div>
 
             <div style={{
-              fontSize: '13px', color: '#aaa', fontFamily: 'monospace', textAlign: 'center',
+              fontSize: '13px', color: 'color-mix(in srgb, var(--green) 65%, transparent)', fontFamily: 'monospace', textAlign: 'center',
               animation: 'congrats-pop 0.6s 0.15s cubic-bezier(0.34,1.56,0.64,1) both',
             }}>
               DEBT CLEARED — YOU ARE FREE
@@ -900,12 +901,12 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
             }}>₡</div>
           ))}
 
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.78)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', padding: '20px' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'color-mix(in srgb, var(--black) 78%, transparent)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', padding: '20px' }}>
             <div style={{ fontSize: '52px', animation: 'whale-pop 0.65s cubic-bezier(0.34,1.56,0.64,1) both' }}>🐋</div>
 
             <div style={{
               fontSize: '22px', fontWeight: 'bold', fontFamily: 'monospace', textAlign: 'center',
-              background: 'linear-gradient(90deg, var(--warning), #ff8800, var(--warning))',
+              background: 'linear-gradient(90deg, var(--warning), var(--danger), var(--warning))',
               backgroundSize: '200% auto',
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
               animation: 'whale-pop 0.65s 0.1s cubic-bezier(0.34,1.56,0.64,1) both, gold-shimmer 2s linear 0.75s infinite',
@@ -916,7 +917,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
             <div style={{ fontSize: '13px', color: 'var(--warning)', fontFamily: 'monospace', textAlign: 'center', opacity: 0.8, animation: 'whale-pop 0.5s 0.3s both' }}>
               BALANCE EXCEEDED {currencies.length ? formatAmount(currencies[0], party.whale ?? 0) : `₡${(party.whale ?? 0).toLocaleString()}`}
             </div>
-            <div style={{ fontSize: '12px', color: '#888', fontFamily: 'monospace', textAlign: 'center', animation: 'whale-pop 0.5s 0.45s both' }}>
+            <div style={{ fontSize: '12px', color: 'color-mix(in srgb, var(--green) 65%, transparent)', fontFamily: 'monospace', textAlign: 'center', animation: 'whale-pop 0.5s 0.45s both' }}>
               The city knows your name now.
             </div>
 
@@ -932,12 +933,12 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', zIndex: 20, borderRadius: 'inherit' }}>
           <style>{FIRST_PAY_CSS}</style>
 
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.78)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', padding: '20px' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'color-mix(in srgb, var(--black) 78%, transparent)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '14px', padding: '20px' }}>
             <div style={{ fontSize: '52px', animation: 'coin-bounce 0.7s cubic-bezier(0.34,1.56,0.64,1) both' }}>🎊</div>
 
             <div style={{
               fontSize: '20px', fontWeight: 'bold', fontFamily: 'monospace', textAlign: 'center',
-              background: 'linear-gradient(90deg, #00ff66, #00ccff, #00ff66)',
+              background: 'linear-gradient(90deg, var(--green), var(--cyan), var(--green))',
               backgroundSize: '200% auto',
               WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
               animation: 'coin-bounce 0.7s 0.12s cubic-bezier(0.34,1.56,0.64,1) both, pay-shimmer 2s linear 0.82s infinite',
@@ -945,10 +946,10 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
               FIRST PAYDAY
             </div>
 
-            <div style={{ fontSize: '13px', color: '#00ff66', fontFamily: 'monospace', textAlign: 'center', animation: 'coin-bounce 0.5s 0.3s both' }}>
+            <div style={{ fontSize: '13px', color: 'var(--green)', fontFamily: 'monospace', textAlign: 'center', animation: 'coin-bounce 0.5s 0.3s both' }}>
               Welcome to the economy, choom.
             </div>
-            <div style={{ fontSize: '12px', color: '#888', fontFamily: 'monospace', textAlign: 'center', animation: 'coin-bounce 0.5s 0.45s both' }}>
+            <div style={{ fontSize: '12px', color: 'color-mix(in srgb, var(--green) 65%, transparent)', fontFamily: 'monospace', textAlign: 'center', animation: 'coin-bounce 0.5s 0.45s both' }}>
               Try not to spend it all at once.
             </div>
 
@@ -964,7 +965,7 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', zIndex: 20, borderRadius: 'inherit' }}>
           <style>{OVERDRAFT_CSS}</style>
 
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.82)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '16px' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'color-mix(in srgb, var(--black) 82%, transparent)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '16px' }}>
 
             {/* Row of drooping sad faces */}
             <div style={{ display: 'flex', gap: '8px' }}>
@@ -978,26 +979,26 @@ export function BankWindow({ pos, setPos, onClose, bankData, socket, userName, i
             </div>
 
             <div style={{
-              fontSize: '18px', fontWeight: 'bold', fontFamily: 'monospace', color: '#ff4444', textAlign: 'center',
+              fontSize: '18px', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--danger)', textAlign: 'center',
               animation: 'overdraft-flicker 2s 0.5s ease-in-out infinite',
             }}>
               BALANCE NEGATIVE
             </div>
 
             <div style={{
-              fontSize: '13px', color: '#ff8888', fontFamily: 'monospace', textAlign: 'center', maxWidth: '280px',
+              fontSize: '13px', color: 'color-mix(in srgb, var(--danger) 75%, transparent)', fontFamily: 'monospace', textAlign: 'center', maxWidth: '280px',
               animation: 'fine-print-slide 0.5s 0.6s both',
             }}>
               We'll overlook the overdraft fee.
             </div>
             <div style={{
-              fontSize: '11px', color: '#888', fontFamily: 'monospace', textAlign: 'center', fontStyle: 'italic',
+              fontSize: '11px', color: 'color-mix(in srgb, var(--green) 65%, transparent)', fontFamily: 'monospace', textAlign: 'center', fontStyle: 'italic',
               animation: 'fine-print-slide 0.5s 0.85s both',
             }}>
               This time...
             </div>
 
-            <button className="panel-btn" onClick={() => setShowOverdraft(false)} style={{ marginTop: '8px', borderColor: '#ff4444', color: '#ff4444', animation: 'fine-print-slide 0.4s 1.1s both' }}>
+            <button className="panel-btn" onClick={() => setShowOverdraft(false)} style={{ marginTop: '8px', borderColor: 'var(--danger)', color: 'var(--danger)', animation: 'fine-print-slide 0.4s 1.1s both' }}>
               I'M SORRY 😔
             </button>
           </div>
@@ -1110,21 +1111,21 @@ function CandleChart({ balance }: { balance: number }) {
   const lastPrice = lastCandle.close;
   const firstPrice = candles[0].open;
   const sessionUp = lastPrice >= firstPrice;
-  const upColor = '#00ff66';
+  const upColor = 'var(--green)';
   const downColor = 'var(--danger)';
   const priceColor = sessionUp ? upColor : downColor;
 
   return (
     <div style={{ padding: '0 10px 10px', userSelect: 'none' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '4px' }}>
-        <span style={{ fontSize: '9px', color: '#444', fontFamily: 'monospace', letterSpacing: '1px' }}>{ticker.name} &nbsp; {ticker.ticker}</span>
+        <span style={{ fontSize: '9px', color: 'color-mix(in srgb, var(--green) 65%, transparent)', fontFamily: 'monospace', letterSpacing: '1px' }}>{ticker.name} &nbsp; {ticker.ticker}</span>
         <span style={{ fontSize: '10px', fontFamily: 'monospace', color: priceColor, textShadow: `0 0 6px ${priceColor}` }}>
           {sessionUp ? '▲' : '▼'} {Math.abs(lastPrice - firstPrice).toFixed(2)}
         </span>
       </div>
-      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', background: 'rgba(0,0,0,0.4)', border: '1px solid #1a1a1a' }}>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', background: 'color-mix(in srgb, var(--black) 40%, transparent)', border: '1px solid var(--dark-green)' }}>
         {[0.25, 0.5, 0.75].map(t => (
-          <line key={t} x1={PAD.left} x2={W - PAD.right} y1={PAD.top + chartH * t} y2={PAD.top + chartH * t} stroke="#0d200d" strokeWidth="1" />
+          <line key={t} x1={PAD.left} x2={W - PAD.right} y1={PAD.top + chartH * t} y2={PAD.top + chartH * t} style={{ stroke: 'var(--dark-green)' }} strokeWidth="1" />
         ))}
 
         {candles.map((c, i) => {
@@ -1136,29 +1137,29 @@ function CandleChart({ balance }: { balance: number }) {
           const bodyH = Math.max(1, bodyBot - bodyTop);
           return (
             <g key={i}>
-              <line x1={x} x2={x} y1={toY(c.high)} y2={toY(c.low)} stroke={color} strokeWidth="1" opacity="0.6" />
+              <line x1={x} x2={x} y1={toY(c.high)} y2={toY(c.low)} style={{ stroke: color }} strokeWidth="1" opacity="0.6" />
               <rect
                 x={x - bodyW / 2} y={bodyTop} width={bodyW} height={bodyH}
-                fill={bull ? color : 'none'} stroke={color} strokeWidth="1"
+                style={{ fill: bull ? color : 'none', stroke: color }} strokeWidth="1"
               />
             </g>
           );
         })}
 
         <line x1={PAD.left} x2={W - PAD.right} y1={toY(lastPrice)} y2={toY(lastPrice)}
-          stroke={priceColor} strokeWidth="1" strokeDasharray="3 3" opacity="0.6" />
+          style={{ stroke: priceColor }} strokeWidth="1" strokeDasharray="3 3" opacity="0.6" />
 
         <text x={W - PAD.right + 4} y={toY(lastPrice) + 3} textAnchor="start"
-          fill={priceColor} fontSize="8" fontFamily="monospace">
+          style={{ fill: priceColor }} fontSize="8" fontFamily="monospace">
           {lastPrice.toFixed(1)}
         </text>
 
         <text x={W - PAD.right + 4} y={PAD.top + 4} textAnchor="start"
-          fill="#333" fontSize="7" fontFamily="monospace">
+          style={{ fill: 'color-mix(in srgb, var(--green) 45%, transparent)' }} fontSize="7" fontFamily="monospace">
           {maxP.toFixed(0)}
         </text>
         <text x={W - PAD.right + 4} y={H - PAD.bottom} textAnchor="start"
-          fill="#333" fontSize="7" fontFamily="monospace">
+          style={{ fill: 'color-mix(in srgb, var(--green) 45%, transparent)' }} fontSize="7" fontFamily="monospace">
           {minP.toFixed(0)}
         </text>
       </svg>
