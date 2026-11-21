@@ -522,3 +522,71 @@ describe('the second track\'s color (8s3d1)', () => {
     expect(screen.getByLabelText('Current HP').style.color).toBe('var(--danger)');
   });
 });
+
+describe('a roll asked of this token (8a9c2)', () => {
+  // As the server sends them (backend tokens/turnEffects.js asksFor): Kes's own save, and another token's.
+  const ASKS = [
+    { id: 21, sceneKey: 'city:0', locationId: 7, player: 'kes', who: 'KES', condition: { id: 'poisoned', name: 'Poisoned' }, named: 'POISONED SAVE',
+      says: 'POISONED SAVE, END OF ITS TURN: d20 + @con_mod, 13 or more ends it', moment: 'turn_end',
+      effect: { when: 'turn_end', does: 'roll_to_end', roll: 'd20 + @con_mod', ends_on: 13, rolled_by: 'player' }, yours: 'End of your turn: d20 + Con mod, 13 or more ends it.', mine: true },
+    { id: 22, sceneKey: 'city:0', locationId: 8, player: 'vex', who: 'VEX', condition: { id: 'burning', name: 'Burning' }, named: 'BURNING',
+      says: 'BURNING, START OF ITS TURN: 1d4', moment: 'turn_start', effect: { when: 'turn_start', does: 'damage', roll: '1d4', rolled_by: 'player' }, yours: 'Start of your turn: 1d4 damage.', mine: false },
+  ];
+  /** A socket answering the asks, and a health view of `model` where one is given. */
+  const asking = (asks: unknown[], model: string | null = null) => {
+    const base = socketWith(model);
+    const handlers = new Map<string, ((...a: unknown[]) => void)[]>();
+    const emit = vi.fn((e: string, ...rest: unknown[]) => {
+      if (e === 'requestTurnAsks') queueMicrotask(() => (handlers.get('turnAsks') ?? []).forEach((fn) => fn(asks)));
+      else (base.emit as (e: string, ...r: unknown[]) => void)(e, ...rest);
+    });
+    return {
+      emit,
+      on: (e: string, fn: (...a: unknown[]) => void) => { handlers.set(e, [...(handlers.get(e) ?? []), fn]); base.on(e, fn); },
+      off: (e: string, fn: (...a: unknown[]) => void) => { handlers.set(e, (handlers.get(e) ?? []).filter((f) => f !== fn)); base.off(e, fn); },
+    };
+  };
+
+  it('under the box: whose and what, in the player\'s words, ROLL SAVE sent by id; another token\'s, not here', async () => {
+    const socket = asking(ASKS);
+    draw({ socket });
+    const asked = await screen.findByRole('region', { name: 'Rolls asked' });
+    expect(within(asked).getByText('POISONED · YOUR SAVE')).toBeInTheDocument();
+    expect(within(asked).getByText('End of your turn: d20 + Con mod, 13 or more ends it.')).toBeInTheDocument();
+    expect(within(asked).queryByText(/BURNING/)).toBeNull();
+    // Under the box, before the conditions' row.
+    const box = screen.getByRole('group', { name: 'Vitals' });
+    expect(box.compareDocumentPosition(asked) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await userEvent.click(within(asked).getByRole('button', { name: 'ROLL SAVE' }));
+    expect(socket.emit).toHaveBeenCalledWith('turnRoll', { id: 21 }, expect.any(Function));
+    expect(within(asked).getByRole('button', { name: 'ROLL SAVE' })).toBeDisabled();
+  });
+
+  it('a refusal said in words; the button back', async () => {
+    const socket = asking(ASKS);
+    draw({ socket });
+    const asked = await screen.findByRole('region', { name: 'Rolls asked' });
+    await userEvent.click(within(asked).getByRole('button', { name: 'ROLL SAVE' }));
+    const ack = socket.emit.mock.calls.find((c) => c[0] === 'turnRoll')![2] as (r: unknown) => void;
+    act(() => ack({ ok: false, error: 'POISONED is no longer on KES' }));
+    expect(within(asked).getByRole('alert')).toHaveTextContent('POISONED is no longer on KES');
+    expect(within(asked).getByRole('button', { name: 'ROLL SAVE' })).toBeEnabled();
+  });
+
+  it('as the GM sees a player\'s sheet: KES\'S SAVE; with none waiting, nothing', async () => {
+    draw({ socket: asking([{ ...ASKS[0], mine: false }]) });
+    expect(await screen.findByText("POISONED · KES'S SAVE")).toBeInTheDocument();
+    cleanup();
+    const quiet = asking([]);
+    draw({ socket: quiet });
+    await act(async () => { await Promise.resolve(); });
+    expect(quiet.emit).toHaveBeenCalledWith('requestTurnAsks');
+    expect(screen.queryByRole('region', { name: 'Rolls asked' })).toBeNull();
+  });
+
+  it('under the box in another health model too', async () => {
+    draw({ system: 'sys_0a1b2c3d4e5f6a7b', socket: asking(ASKS, 'wounds') });
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'DAMAGE' })).toBeNull());
+    expect(await screen.findByText('POISONED · YOUR SAVE')).toBeInTheDocument();
+  });
+});

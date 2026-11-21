@@ -8,6 +8,7 @@ import { useWords } from '../sheets/words';
 import { amountOf, healthBody, takesAnAmount, hasHealth, hasStim, type Defense, type SheetVitals, type VitalsAction } from '../sheets/vitals';
 import { createPlayerTokenRow } from './tokenActions';
 import { TokenConditions } from './TokenConditions';
+import { TurnAskRolls } from './TurnAskRolls';
 
 // The vitals strip (8s3b; mockup docs/mockups/vitals-strip.html, approved 2026-11-17), in the sheet header on every tab of
 // SHEET.EXE and the standalone tab alike. For one pool of hit points, a box under the HP bar (the user, 2026-11-17: the bar
@@ -19,6 +20,7 @@ import { TokenConditions } from './TokenConditions';
 // 8s3c: under the box, the token's conditions as chips (+ puts one on, what each means on hover), and REST ▾ where there is
 // a rest to take here, opening the sheet's own RESTS (asked first, dice spent, FINISH) in place. 8a6c: the chips in a row of
 // their own over + CONDITION, two lines at most then "+N", each opening under the row with TAKE OFF where its × was.
+// 8a9c2: right under the box, a roll a condition's EACH TURN asks of this token, POISONED · YOUR SAVE and ROLL SAVE, until rolled.
 
 const small: React.CSSProperties = {
   background: 'none', fontFamily: 'inherit', fontSize: '0.6rem', letterSpacing: '1px', padding: '2px 6px', cursor: 'pointer', whiteSpace: 'nowrap',
@@ -115,6 +117,7 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
   // The token's conditions as chips, its armor class and REST ▾ beside them.
   const below = (
     <>
+      <TurnAskRolls socket={socket} tokenId={token.id} />
       {/* The conditions in a row of their own over + CONDITION (8a6c), so that line stays put as they come and go; on it
           REST right, and the AC centered between (the user, 2026-11-17). Too narrow for all three (CWN's two ACs in
           SHEET.EXE), the AC wraps to a line of its own rather than overlapping. */}

@@ -682,48 +682,53 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       }
     });
 
+    // A battle map floor's start positions (the GM's SAVE and LOAD on the map), tested and mended by 8a9c2: a save with no list
+    // of positions threw inside the handler, and a player saved in two places got two tokens made.
     socket.on('save_battle_map_default', (data) => {
       const info = userSockets.get(socket.id);
-      if (info && info.isAdmin) {
-        db.serialize(() => {
-          db.run('DELETE FROM battle_map_defaults WHERE location_id = ? AND floor_index = ?', [data.locationId, data.floorIndex]);
-          const stmt = db.prepare('INSERT INTO battle_map_defaults (location_id, floor_index, rhombus_id, rhombus_owner, is_enemy, x, z) VALUES (?, ?, ?, ?, ?, ?, ?)');
-          data.positions.forEach(pos => {
-            let enemyVal = 0;
-            if (pos.isEnemy) enemyVal = 1;
-            else if (pos.isFriendly) enemyVal = 2;
-            stmt.run([data.locationId, data.floorIndex, pos.id || null, pos.userName || null, enemyVal, pos.x, pos.z]);
-          });
-          stmt.finalize();
+      if (!info || !info.isAdmin || !data || !Array.isArray(data.positions)) return;
+      const positions = data.positions.filter((pos) => pos && Number.isFinite(pos.x) && Number.isFinite(pos.z));
+      db.serialize(() => {
+        db.run('DELETE FROM battle_map_defaults WHERE location_id = ? AND floor_index = ?', [data.locationId, data.floorIndex]);
+        const stmt = db.prepare('INSERT INTO battle_map_defaults (location_id, floor_index, rhombus_id, rhombus_owner, is_enemy, x, z) VALUES (?, ?, ?, ?, ?, ?, ?)');
+        positions.forEach(pos => {
+          let enemyVal = 0;
+          if (pos.isEnemy) enemyVal = 1;
+          else if (pos.isFriendly) enemyVal = 2;
+          stmt.run([data.locationId, data.floorIndex, pos.id || null, pos.userName || null, enemyVal, pos.x, pos.z]);
         });
-      }
+        stmt.finalize();
+      });
     });
 
     socket.on('load_battle_map_default', (data) => {
       const info = userSockets.get(socket.id);
-      if (info && info.isAdmin) {
-        db.all('SELECT * FROM battle_map_defaults WHERE location_id = ? AND floor_index = ?', [data.locationId, data.floorIndex], (err, rows) => {
-          if (err || !rows) return;
+      if (!info || !info.isAdmin || !data) return;
+      db.all('SELECT * FROM battle_map_defaults WHERE location_id = ? AND floor_index = ?', [data.locationId, data.floorIndex], (err, rows) => {
+        if (err || !rows) return;
+        // The players' tokens looked up first, then every move written in order, then everyone told.
+        db.all("SELECT id, owner FROM locations WHERE shape = 'rhombus'", [], (pErr, players) => {
+          if (pErr) return;
+          const playerIdOf = new Map((players || []).map((p) => [p.owner, p.id]));
+          const made = new Set();
           const updates = [];
           db.serialize(() => {
             rows.forEach(row => {
-              if (row.is_enemy === 1) {
+              if (row.is_enemy === 1 || row.is_enemy === 2) {
                 db.run('UPDATE locations SET x = ?, z = ? WHERE id = ?', [row.x, row.z, row.rhombus_id]);
-                updates.push({ id: row.rhombus_id, x: row.x, z: row.z, isEnemy: true, isFriendly: false });
-              } else if (row.is_enemy === 2) {
-                db.run('UPDATE locations SET x = ?, z = ? WHERE id = ?', [row.x, row.z, row.rhombus_id]);
-                updates.push({ id: row.rhombus_id, x: row.x, z: row.z, isEnemy: false, isFriendly: true });
-              } else {
-                db.get('SELECT id FROM locations WHERE shape = "rhombus" AND owner = ?', [row.rhombus_owner], (err, pRow) => {
-                  if (pRow) {
-                    db.run('UPDATE locations SET x = ?, z = ? WHERE id = ?', [row.x, row.z, pRow.id]);
-                  } else {
-                    db.run('INSERT INTO locations (name, x, y, z, shape, owner, color, width, height, depth) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                      [row.rhombus_owner, row.x, 0.1, row.z, 'rhombus', row.rhombus_owner, '#00ff00', 3.75, 3.75, 3.75]);
-                  }
-                });
-                updates.push({ userName: row.rhombus_owner, x: row.x, z: row.z, isEnemy: false, isFriendly: false });
+                updates.push({ id: row.rhombus_id, x: row.x, z: row.z, isEnemy: row.is_enemy === 1, isFriendly: row.is_enemy === 2 });
+                return;
               }
+              const id = playerIdOf.get(row.rhombus_owner);
+              if (id !== undefined) {
+                db.run('UPDATE locations SET x = ?, z = ? WHERE id = ?', [row.x, row.z, id]);
+              } else if (!made.has(row.rhombus_owner)) {
+                // A player with no token yet: one made where they start, once.
+                made.add(row.rhombus_owner);
+                db.run('INSERT INTO locations (name, x, y, z, shape, owner, color, width, height, depth) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                  [row.rhombus_owner, row.x, 0.1, row.z, 'rhombus', row.rhombus_owner, '#00ff00', 3.75, 3.75, 3.75]);
+              }
+              updates.push({ userName: row.rhombus_owner, x: row.x, z: row.z, isEnemy: false, isFriendly: false });
             });
             db.run('SELECT 1', () => {
               io.emit('default_loaded', { locationId: data.locationId, floorIndex: data.floorIndex, updates });
@@ -731,7 +736,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             });
           });
         });
-      }
+      });
     });
 
     socket.on('battle_map_move', (data) => {
