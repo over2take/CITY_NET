@@ -1142,7 +1142,7 @@ CITY_NET/
 │   │   │   └── StreamerVisibilityContext.ts # React context for audience-layer visibility flags
 │   │   ├── hooks/
 │   │   │   ├── useVideoMapTexture.ts  # A looping battle map as a texture. All browser policy rather than rendering: muted because no browser autoplays sound, playsInline because iOS would otherwise take it full-screen, paused on a hidden tab because decoding for nobody is real battery, and the source released on unmount because pausing alone keeps the buffers
-│   │   │   ├── useSocket.ts        # Socket.IO connection and all event listeners
+│   │   │   ├── useSocket.ts        # Socket.IO connection and all event listeners; the shops' uploaded catalogues kept from the socket's first moment, asked again when a GM saves one or the game changes (8n1: an effect in App missed them, and a player's custom-system shops opened empty)
 │   │   │   ├── useApi.ts           # Fetch helpers
 │   │   │   ├── useMapExport.ts     # PNG/WebM city export — one cached off-screen renderer for the session, shared ortho camera, GPU size clamp, per-frame render loop for video, MediaRecorder with codec fallback; never touches the live camera
 │   │   │   ├── useCustomTemplates.ts # Redraws when a custom system's sheet template arrives, and fetches the running system's ahead of need
@@ -1185,6 +1185,7 @@ CITY_NET/
 │   │   │       ├── useVideoMapTexture.test.ts            # Every assertion is a silent failure: an unmuted video never starts, a hidden tab keeps decoding, a released map keeps its buffers, and a browser that refuses autoplay leaves a still frame with no explanation
 │   │   │       ├── usePlayerSheet.save.test.tsx          # Edits held 400ms so typing is one save, and anything still waiting sent rather than dropped when the sheet goes away; FIRE sending a waiting gear edit first, in order, and RELOAD naming its line, answered or none after 5 s (8a4b)
 │   │   │       ├── usePlayerSheet.xprate.test.tsx        # The slow-advancement house rule reaching the XP bar, so the bar and the server level people on the same column
+│   │   │       ├── useSocket.catalogues.test.ts          # The shops' catalogues kept as soon as the server sends them, the uploaded only, the shops redrawn; asked again on a GM's save or a new game; uploadedOf (8n1)
 │   │   │       ├── useSocket.conditions.test.ts          # The server saying conditions changed (a built-in game's own, or a published system) telling every window that shows them
 │   │   │       └── useSocket.pendingRequests.test.ts     # Pending edit-request state; regression for stale requests on newly-promoted temp admins
 │   │   ├── data/
@@ -1217,7 +1218,7 @@ CITY_NET/
 │   │   │   ├── cwnGearPresets.ts   # Common Operator Gear (p50), 27 items. The Enc column's ~ and * are kept as a note beside a numeric Enc, so the encumbrance sum never has to parse a symbol
 │   │   │   ├── ownedItems.ts       # What a character owns, from inventory rows, weapon slots and stash, cyberware and vehicle slots, reading the rows that system's sheet has. Consults the CWN book only on CWN. Mirrored from backend/shops/owned.js and run against it on every system. Boxed chrome is listed before installed, so selling one of two sells the spare
 │   │   │   ├── catalogueSchema.ts  # The shape of an uploaded catalogue, read out of each system's own sheet template rather than written down - so the example a GM downloads cannot drift. Also writes the 'download current' file, with the built-in rows behind a #
-│   │   │   ├── uploadedCatalogues.ts # What the GM uploaded, as the window sees it, so shelves and the SELL tab can show what the server would sell
+│   │   │   ├── uploadedCatalogues.ts # What the GM uploaded, as the window sees it, so shelves and the SELL tab can show what the server would sell; uploadedOf, the server's catalogues as a shop keeps them, the uploaded entries only (8n1)
 │   │   │   ├── sheetSlots.ts       # Where each system's sheet keeps weapons and vehicles, read out of the templates: rows are the highest numbered name field, fields are everything row 1 declares. The source the server's copy is checked against
 │   │   │   ├── quickRolls.ts       # What QUICK ACTIONS can roll, read off the sheet template: fields with a roll outside a skills section as buttons, skills grouped for the picker, house-rule-hidden tabs left out
 │   │   │   ├── shopPlacement.ts    # Where a bought uploaded item lands on any system's sheet: the first free row of its group with only the fields that row has, a new unplaced cyberware row where the sheet draws that table, or an inventory line. Pure, and run twice - to refuse before paying, and again when the receipt arrives
@@ -1540,6 +1541,8 @@ CITY_NET/
 │       ├── sheet-installed-items.spec.ts # Items installed (7e4c): INSTALL on GEAR, Strain counted and named on the stat, the line locked, past Might a player refused and the GM's INSTALL ANYWAY, REMOVE giving the cost back
 │       ├── sheet-spend-xp.spec.ts # SPEND XP at the table (7f2c1): on CHARACTER, BUY BODY and a feat waiting for the GM, XP held; the GM APPROVES Body, DECLINES the feat, UNDOES Body, the XP back; AWARD XP in a game that only spends it, no level buttons, there to spend (7f2c2)
 │       ├── sheet-improve-by-use.spec.ts # IMPROVE BY USE at the table (7f3b): a successful roll marks Lore, the mark cleared and ticked by hand, END OF SESSION from RESTS improving it 3 to 8 and clearing the mark
+│       ├── shop-cart.spec.ts       # A CWN Gun Shop at the table (8n1, a safety net before 8a7): the GM pays a player from PAYROLL.EXE, the player opens the shop from QUICK_ACCESS, a Light Pistol bought through the cart (what they have down 200, the pistol on the sheet), then sold back for 45% (up 90, the pistol gone)
+│       ├── shop-cart-items.spec.ts # A custom system's General Store at the table (8n1): the GM's catalogue saved from DOWNLOAD ITEMS with a ring and a rope while the player is online, both on the player's shelf, bought through the cart (505 paid, 495 left), both in the inventory, the ring known as the item it is
 │       ├── shop-items-catalogue.spec.ts # Items in the shops (7e3c): DOWNLOAD ITEMS, a price filled in, the preview naming the ring and a near miss, saved, on sale in GIVE.EXE's catalogue
 │       ├── sheet-level-up.spec.ts # Going up a level (7d2b): XP reaches it and the player goes up, one class of two, the rest carrying over; milestone's level given by the GM and taken by the player; LEVEL_DOWN; an uploaded sheet bringing its XP (7d2c); LEVEL_UP.EXE: which class, left and come back to, what it unlocks, FINISH (7d3a); a pick the new level opens, then a new class (7d3b)
 │       ├── sheet-level-record.spec.ts # What each level gained (7d7b2): the GM clears a past roll, the player rolls it again, the maximum follows; the GM sets one; an uploaded HP MAX the base, one line, cleared by the GM (7d7c)
