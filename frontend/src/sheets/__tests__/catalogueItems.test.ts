@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { distance, itemsInPreview, itemsShelf, itemsCatalogue, landsAsGear } from '../catalogueItems';
+import { distance, itemsInPreview, itemsShelf, itemsCatalogue, landsAsGear, withAddedItems } from '../catalogueItems';
 import { registerCustomTemplate, clearCustomTemplates } from '../customTemplates';
 import type { ItemsShown } from '../gearItems';
 
@@ -93,5 +93,16 @@ describe('a starter catalogue of the items', () => {
     expect(itemsCatalogue(HEARTH, ITEMS)).toContain(`[${itemsShelf(HEARTH)}]`);
     expect(itemsCatalogue(HEARTH, undefined)).toBeNull();
     expect(itemsCatalogue(HEARTH, { slots: [], list: [{ id: 'b', label: ' ', needs: 'worn', features: [] }] })).toBeNull();
+  });
+});
+
+describe('a catalogue\'s new items merged into a draft (8a7a4a)', () => {
+  const DRAFT = { format: 1, name: 'X', items: { types: [{ id: 'gear', label: 'GEAR' }], list: [{ id: 'rope', label: 'Rope' }] } } as never;
+  it('each one whose id it hasn\'t, at the end; the rest of the draft as it was; none new, the same draft', () => {
+    const next = withAddedItems(DRAFT, [{ id: 'rope', label: 'Other Rope' }, { id: 'scope', label: 'Scope' }]) as { items: { types: unknown[]; list: unknown[] } };
+    expect(next.items.list).toEqual([{ id: 'rope', label: 'Rope' }, { id: 'scope', label: 'Scope' }]);
+    expect(next.items.types).toEqual([{ id: 'gear', label: 'GEAR' }]);
+    expect(withAddedItems(DRAFT, [{ id: 'rope', label: 'Rope' }])).toBe(DRAFT);
+    expect((withAddedItems({ format: 1, name: 'Y' } as never, [{ id: 'a', label: 'A' }]) as { items: { list: unknown[] } }).items.list).toEqual([{ id: 'a', label: 'A' }]);
   });
 });

@@ -10,6 +10,7 @@ import type { ShopStock } from '../data/buildingTypes';
 import { CATALOGUES, catalogueOn } from '../data/buildingTypes';
 import { columnsFor, writeCatalogueFile, ownTypesOf } from './catalogueSchema';
 import type { ItemsShown } from './gearItems';
+import type { Definition } from './systemsApi';
 
 /** A row as the preview sends it back (backend shops/catalogueParse.js). */
 export interface PreviewRow { name: string; line?: number }
@@ -115,4 +116,20 @@ export const itemsCatalogue = (system: string, items: ItemsShown | undefined): s
       "Keep each name as it is: a line named as an item is that item once bought, ready to WEAR and ATTUNE.",
     ],
   );
+};
+
+/**
+ * Said in the page when a catalogue's new lines were made items in a system's draft (8a7a4a, ADD NEW LINES TO ITEMS), so a
+ * builder open on that system takes them in before its next autosave, rather than saving over them.
+ */
+export const ITEMS_ADDED_EVENT = 'city:catalogue-items-added';
+export interface ItemsAdded { systemId: string; items: Record<string, unknown>[] }
+
+/** A draft with a catalogue's new items at the end of its list: each one whose id it hasn't already, the rest as they are. */
+export const withAddedItems = (def: Definition, items: Record<string, unknown>[]): Definition => {
+  const part = (def.items && typeof def.items === 'object' && !Array.isArray(def.items) ? def.items : {}) as Record<string, unknown>;
+  const list = Array.isArray(part.list) ? part.list as Record<string, unknown>[] : [];
+  const have = new Set(list.map((i) => i && i.id));
+  const fresh = (items ?? []).filter((i) => i && typeof i.id === 'string' && !have.has(i.id));
+  return fresh.length ? { ...def, items: { ...part, list: [...list, ...fresh] } } : def;
 };

@@ -1057,3 +1057,14 @@ describe('HOUSE RULES (4j3b)', () => {
     await waitFor(() => expect(drafts.at(-1)).toMatchObject({ house_rules: [{ id: 'magic', name: 'MAGIC' }, { id: 'new_rule', name: 'NEW RULE' }] }));
   });
 });
+
+describe('a catalogue\'s new items, while the builder is open (8a7a4a)', () => {
+  it('taken into the draft as edited here, so the next save keeps them; another system\'s left alone', async () => {
+    open({ startPage: 'setup' });
+    await ready();
+    act(() => { window.dispatchEvent(new CustomEvent('city:catalogue-items-added', { detail: { systemId: 'sys_ffffffffffffffff', items: [{ id: 'nope', label: 'Nope' }] } })); });
+    act(() => { window.dispatchEvent(new CustomEvent('city:catalogue-items-added', { detail: { systemId: HEARTH, items: [{ id: 'hand_cannon', label: 'Hand Cannon' }] } })); });
+    await userEvent.click(within(sidebar()).getByLabelText('SAVE'));
+    await waitFor(() => expect(drafts.at(-1)).toEqual({ format: 1, name: 'Hearth', items: { list: [{ id: 'hand_cannon', label: 'Hand Cannon' }] } }));
+  });
+});

@@ -6,6 +6,7 @@ import {
   BUILDER_PAGES, type Autosave, type BuilderPage,
 } from '../sheets/builderSession';
 import { SYSTEMS_CHANGED_EVENT } from '../sheets/systemsLibrary';
+import { ITEMS_ADDED_EVENT, withAddedItems, type ItemsAdded } from '../sheets/catalogueItems';
 import { MySystemsPage } from './MySystemsPage';
 import { SetupPage } from './SetupPage';
 import { WordsPage } from './WordsPage';
@@ -292,6 +293,26 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
     });
     return () => { live = false; };
   }, [api, looking, example]);
+
+  // A catalogue's new lines made items in this system's draft (8a7a4a): taken into the draft as edited here, so the next
+  // autosave keeps them rather than saving over them. Only items it hasn't already, by id; nothing else it has changes.
+  const draftNow = useRef<Definition | null>(null);
+  useEffect(() => { draftNow.current = definition; }, [definition]);
+  useEffect(() => {
+    if (!systemId) return undefined;
+    const takeIn = (e: Event) => {
+      const said = (e as CustomEvent<ItemsAdded>).detail;
+      const now = draftNow.current;
+      if (!said || said.systemId !== systemId || !now) return;
+      const next = withAddedItems(now, said.items);
+      if (next === now) return;
+      draftNow.current = next;
+      setDefinition(next);
+      autosave.current?.edit(next);
+    };
+    window.addEventListener(ITEMS_ADDED_EVENT, takeIn);
+    return () => window.removeEventListener(ITEMS_ADDED_EVENT, takeIn);
+  }, [systemId]);
 
   /** A page changed the system: shown at once, saved once editing pauses (builderSession). */
   const edit = (next: Definition) => {
