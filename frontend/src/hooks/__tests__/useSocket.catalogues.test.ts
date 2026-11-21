@@ -15,7 +15,7 @@ const fakeSocket = {
 vi.mock('socket.io-client', () => ({ io: () => fakeSocket }));
 
 const { useSocket } = await import('../useSocket');
-const { uploadedIn, uploadedRevision, clearUploaded, uploadedOf } = await import('../../sheets/uploadedCatalogues');
+const { uploadedIn, uploadedRevision, clearUploaded, uploadedOf, buybackIn } = await import('../../sheets/uploadedCatalogues');
 
 afterEach(() => { cleanup(); clearUploaded(); fakeSocket.emit.mockClear(); for (const k of Object.keys(listeners)) delete listeners[k]; });
 
@@ -40,6 +40,14 @@ describe('the shops\' catalogues', () => {
     expect(uploadedIn('gear').map((e) => e.name)).toEqual(['Rope']);
     expect(uploadedIn('weapons')).toEqual([]);
     expect(uploadedRevision()).toBeGreaterThan(before);
+  });
+
+  it('with what a shop buys back of the game\'s items kept out of the shops (8a7a3c2)', () => {
+    mount();
+    send('catalogues', { entries: {}, buyback: { 'type:guns': [{ id: 'item:ring', name: 'Ring of Might', price: 5000 }] } });
+    expect(buybackIn('type:guns')).toEqual([{ id: 'item:ring', name: 'Ring of Might', price: 5000, fields: {} }]);
+    send('catalogues', { entries: {} });
+    expect(buybackIn('type:guns')).toEqual([]);
   });
 
   it('what draws the shops draws again when they come', () => {

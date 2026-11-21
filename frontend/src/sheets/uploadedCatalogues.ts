@@ -53,7 +53,7 @@ export const loadUploaded = (
   revision += 1;
 };
 
-export const clearUploaded = (): void => { uploaded = {}; revision += 1; };
+export const clearUploaded = (): void => { uploaded = {}; buyback = {}; revision += 1; };
 
 /** Changes whenever the catalogues do, so a component can depend on it. */
 export const uploadedRevision = (): number => revision;
@@ -65,6 +65,24 @@ export const uploadedIn = (catalogue: ShopStock): UploadedEntry[] =>
 export const uploadedEntry = (
   catalogue: ShopStock, id: string,
 ): UploadedEntry | undefined => uploaded[catalogue]?.[id];
+
+/** Every catalogue holding uploaded lines or the game's own items, the type shelves (`type:<id>`) among them (8a7a3c2). */
+export const uploadedCatalogues = (): string[] => Object.keys(uploaded);
+
+/**
+ * The game's items kept out of the shops (8a7a3c2), as the server sends them: on no shelf, but a shop of their type buys one
+ * back at its own price. catalogue -> id -> entry.
+ */
+let buyback: Record<string, Record<string, UploadedEntry>> = {};
+/** What the server says a shop buys back, replacing what was held. */
+export const loadBuyback = (sections: Record<string, { id: string; name: string; price: number }[]> | null | undefined): void => {
+  buyback = Object.fromEntries(Object.entries(sections ?? {}).map(([catalogue, entries]) => [catalogue,
+    Object.fromEntries((entries ?? []).filter((e) => e && e.id).map((e) => [e.id, { id: e.id, name: String(e.name ?? ''), price: Number(e.price) || 0, fields: {} }]))]));
+  revision += 1;
+};
+export const buybackIn = (catalogue: string): UploadedEntry[] => Object.values(buyback[catalogue] ?? {});
+export const buybackEntry = (catalogue: string, id: string): UploadedEntry | undefined => buyback[catalogue]?.[id];
+export const buybackCatalogues = (): string[] => Object.keys(buyback);
 
 /** Whether anything at all has been uploaded, for deciding whether to say so. */
 export const anyUploaded = (): boolean =>

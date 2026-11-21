@@ -155,7 +155,8 @@ const planSale = ({ data, items, catalogues, locationPct, globalPct, system }) =
     takenSoFar.set(key, already + want);
 
     // Priced from the book table on this side, never from anything the client sent.
-    const unit = catalogue && id ? prices.priceOf(catalogue, id) : null;
+    // One-of-a-kind items too (8a7a3c2): kept out of the shops, bought back at their own price.
+    const unit = catalogue && id ? prices.sellPriceOf(catalogue, id) : null;
     const each = buyback.buybackValue(unit, pct);
     payout += each * want;
     sold.push({ catalogue, id, label: line.label, qty: want, each });

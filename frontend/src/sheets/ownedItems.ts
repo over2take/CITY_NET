@@ -24,7 +24,7 @@ import { VEHICLE_WEAPONS } from './vehicleWeapons';
 import { slotsOf } from './sheetSlots';
 import type { ShopStock } from '../data/buildingTypes';
 import { CATALOGUES as CATALOGUE_LIST } from '../data/buildingTypes';
-import { uploadedIn, uploadedEntry } from './uploadedCatalogues';
+import { uploadedIn, uploadedEntry, uploadedCatalogues, buybackIn, buybackEntry, buybackCatalogues } from './uploadedCatalogues';
 
 /**
  * The system the built-in book belongs to, and the one a caller gets by not saying.
@@ -127,9 +127,18 @@ export const findByName = (
 
   const wanted = normaliseName(name);
   if (!wanted) return null;
-  for (const { id: catalogue } of CATALOGUE_LIST) {
-    for (const entry of uploadedIn(catalogue)) {
-      if (normaliseName(entry.name) === wanted) return { catalogue, id: entry.id };
+  // The shelves, then the game's type shelves (8a7a3c2: they were never looked in, so a typed line or an item bought from
+  // one couldn't be sold back from the window), as the server finds them.
+  const shelves = [...CATALOGUE_LIST.map((c) => c.id as string), ...uploadedCatalogues().filter((c) => c.startsWith('type:'))];
+  for (const catalogue of shelves) {
+    for (const entry of uploadedIn(catalogue as ShopStock)) {
+      if (normaliseName(entry.name) === wanted) return { catalogue: catalogue as ShopStock, id: entry.id };
+    }
+  }
+  // And one kept out of the shops, which a shop of its type buys back.
+  for (const catalogue of buybackCatalogues()) {
+    for (const entry of buybackIn(catalogue)) {
+      if (normaliseName(entry.name) === wanted) return { catalogue: catalogue as ShopStock, id: entry.id };
     }
   }
   return null;
@@ -143,7 +152,7 @@ export const findByName = (
 export const priceOf = (
   catalogue: ShopStock, id: string, system: string = BOOK_SYSTEM,
 ): number | null => {
-  const mine = uploadedEntry(catalogue, id);
+  const mine = uploadedEntry(catalogue, id) ?? buybackEntry(catalogue, id);
   if (mine) return Number.isFinite(mine.price) ? mine.price : null;
   return system === BOOK_SYSTEM ? (BY_ID.get(`${catalogue}/${id}`)?.price ?? null) : null;
 };
@@ -151,7 +160,7 @@ export const priceOf = (
 export const labelOf = (
   catalogue: ShopStock, id: string, system: string = BOOK_SYSTEM,
 ): string | null => {
-  const mine = uploadedEntry(catalogue, id);
+  const mine = uploadedEntry(catalogue, id) ?? buybackEntry(catalogue, id);
   if (mine) return mine.name;
   return system === BOOK_SYSTEM ? (BY_ID.get(`${catalogue}/${id}`)?.label ?? null) : null;
 };

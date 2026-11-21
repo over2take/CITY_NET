@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Selling back typed gear from the shop window.** A line of one of your item types, or one of your own items, could be bought but not sold back: the shop window didn't recognize it, and the sale was refused. It now sells back at the shop's buyback rate, and a new browser test sells one and checks the money.
 - **A catalogue section that names nothing is now said.** A section like `[rocks]`, which is neither a shelf nor one of your item types, used to be saved quietly where no shop would ever sell it. The preview now says so, listing your types, and its lines are not saved.
 - **The bank's windows now follow the theme.** BANK.EXE, PAYROLL.EXE and the GM's BANK_ADMIN.EXE drew in the classic green and grey whatever theme was picked; their boxes, numbers, chart and celebrations now take the theme's colors.
 - **The bank's boxes have names a screen reader can say.** PAYROLL.EXE's amount and each player's tick box, BANK_ADMIN.EXE's Balance and Debt, and the amount you withdraw or borrow are now named, and clicking a player's name in PAYROLL.EXE ticks them.
@@ -104,6 +105,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **One-of-a-kind items sell back.** An item kept out of the shops is never on a shelf, but a player can still sell one to a shop that sells its type, at the item's own price times that shop's buyback rate. A ring sells at an Armorer, never at a Gun Shop.
 - **The shop catalogue knows your items.** In a game whose items sell themselves, PREVIEW in SHOP_CATALOGUES now says how many of your items are also on sale, and which lines in your file overrule one ("Pistol: overrules the item, 200 → 260 in the shops"). A line that's exactly one of your items, same price and columns, is left out, since the item already sells itself. So is a line naming an item kept out of the shops. The preview says why for each line, and SAVE leaves out the same lines.
 - **PRICE and IN SHOPS in the ITEMS page's files.** In a game with item types of its own, DOWNLOAD EXAMPLE and DOWNLOAD THIS LIST have a price column (for a type without a PRICE column of its own) and an in shops column, yes or no. IMPORT reads them: write - to clear one, and a price or a yes/no that isn't one is skipped and named by its line. A list downloaded and imported back changes nothing.
 - **PRICE and IN SHOPS on the ITEMS page.** In a game with item types of its own, every item has a PRICE under its TYPE. If the type has a PRICE column, that column is shown there, once. Beside it, IN SHOPS says whether the shops sell the item: switched off, it's never sold and is tagged NOT SOLD in the list, for a one-of-a-kind ring or a quest item. A new item starts IN SHOPS and asks for its price until it has one. Moving an item to another type keeps its price. A PRICE column in the ITEMS import and downloads comes next.

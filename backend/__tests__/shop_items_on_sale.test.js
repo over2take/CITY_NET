@@ -92,6 +92,8 @@ describe('the lines they make', () => {
       'type:armor': [{ id: 'item:jacket', name: 'Leather Jacket', price: 50, fields: { defense: 2 } }],
     });
     expect([...stock.off]).toEqual(['ring of might', 'rope']);
+    // Turned off with a price: bought back by a shop of its type, never on a shelf (8a7a3c2); the Rope, with none, not.
+    expect(stock.buyback).toEqual({ 'type:armor': [{ id: 'item:ring', name: 'Ring of Might', price: 5000 }] });
     // Worked out once for a definition.
     expect(ownStock(DEF)).toBe(stock);
   });
@@ -139,7 +141,13 @@ describe('in the store, under the uploads', () => {
     expect(store.priceOf('type:armor', 'ring_of_might')).toBeNull();
     expect(store.labelOf('type:armor', 'ring_of_might')).toBeNull();
     expect(store.fieldsOf('type:armor', 'ring_of_might')).toEqual({});
-    expect(store.findByName('Ring of Might')).toBeNull();
+    // Found by name only as the item it is, to sell back at its own price, never to buy (8a7a3c2).
+    expect(store.findByName('Ring of Might')).toEqual({ catalogue: 'type:armor', id: 'item:ring' });
+    expect(store.priceOf('type:armor', 'item:ring')).toBeNull();
+    expect(store.sellPriceOf('type:armor', 'item:ring')).toBe(5000);
+    expect(store.labelOf('type:armor', 'item:ring')).toBe('Ring of Might');
+    expect(store.sellPriceOf('type:armor', 'ring_of_might')).toBeNull();
+    expect(store.sellPriceOf('type:armor', 'item:jacket')).toBe(50);
     // Still uploaded, for the GM's file.
     expect(store.uploadedIn('type:armor').map((e) => e.name)).toEqual(['Ring of Might']);
   });
@@ -231,6 +239,26 @@ describe('at the table', () => {
     const kes = await boot('kes', false);
     expect(await checkout(kes, goods, { buys: [], sells: [{ catalogue: 'type:weapons', id: 'item:pistol', qty: 1 }] })).toMatchObject({ ok: true, payout: 100 });
     expect(await balance()).toBe(1100);
+  });
+
+  it('a one-of-a-kind item kept out of the shops: sold back where its type is sold, at its price and the shop\'s rate; never at another (8a7a3c2)', async () => {
+    await run(db, 'UPDATE character_sheets SET data = ? WHERE username = ?', [JSON.stringify({ inventory: JSON.stringify([{ name: 'Ring of Might', qty: 1, enc: '', bundled: false, carry: 'stowed', location: '', type: 'armor' }]) }), 'kes']);
+    const kes = await boot('kes', false);
+    // Not at the General Store, which sells no ARMOR: no ring at a gun shop.
+    expect(await checkout(kes, goods, { buys: [], sells: [{ catalogue: 'type:armor', id: 'item:ring', qty: 1 }] })).toMatchObject({ ok: false, reason: 'not_sold' });
+    kes.emitted.length = 0;
+    // Nor bought, anywhere.
+    expect(await checkout(kes, arms, { buys: [{ catalogue: 'type:armor', itemId: 'item:ring', qty: 1 }] })).toMatchObject({ ok: false });
+    kes.emitted.length = 0;
+    // At the Armorer, at the app's 45%: 5000 → 2250.
+    expect(await checkout(kes, arms, { buys: [], sells: [{ catalogue: 'type:armor', id: 'item:ring', qty: 1 }] })).toMatchObject({ ok: true, payout: 2250 });
+    expect(await balance()).toBe(3250);
+  });
+
+  it('the window is told what a shop buys back with the catalogues (8a7a3c2)', async () => {
+    const kes = await boot('kes', false);
+    kes.handlers.requestCatalogues();
+    expect((await last(kes.emitted, 'catalogues')).data.buyback).toEqual({ 'type:armor': [{ id: 'item:ring', name: 'Ring of Might', price: 5000 }] });
   });
 
   it('a line uploaded with its name wins: one Pistol, at the file\'s price', async () => {

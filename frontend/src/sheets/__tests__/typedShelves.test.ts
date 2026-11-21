@@ -3,7 +3,8 @@ import { createRequire } from 'module';
 import { shelvedIn, catalogueLabel, itemTypeOfShelf, ownItemTypes, typeNamedLike, type ShopStock } from '../../data/buildingTypes';
 import { placeUploaded, destinationOf } from '../shopPlacement';
 import { registerCustomTemplate, clearCustomTemplates } from '../customTemplates';
-import type { UploadedEntry } from '../uploadedCatalogues';
+import { loadUploaded, loadBuyback, clearUploaded, type UploadedEntry } from '../uploadedCatalogues';
+import { ownedItems, sellableAt } from '../ownedItems';
 
 // A shelf of an item type (8a7a2; mockup docs/mockups/item-types-in-shops.html): sold at the kinds of shop its SOLD AT says
 // (the server's, in the render copy), named as the type, and a line bought from it a line of the type with its columns as
@@ -21,7 +22,7 @@ beforeEach(() => {
   clearCustomTemplates();
   registerCustomTemplate({ id: SYS, name: 'Typed', parts: {}, derived: [], sheet: { sections: [] }, words: {}, items: { slots: [], list: [], types: [GUNS, POTIONS] } } as never);
 });
-afterEach(() => clearCustomTemplates());
+afterEach(() => { clearCustomTemplates(); clearUploaded(); });
 
 describe('a type\'s shelf', () => {
   it('at each kind of shop it is sold at, after the shop\'s own; at none for a type sold nowhere', () => {
@@ -96,5 +97,31 @@ describe('a line bought from it', () => {
       expect(mine.ok, name).toBe(theirs.ok);
       if (mine.ok && theirs.ok) expect(JSON.parse(String(mine.patch.inventory)), name).toEqual(JSON.parse(String(theirs.patch.inventory)));
     }
+  });
+});
+
+describe('sold back from the window (8a7a3c2)', () => {
+  // A line of the type, bought from its shelf or one of the game's items; and the game's ring kept out of the shops.
+  const sheet = { inventory: JSON.stringify([
+    { name: 'Pistol', qty: 1, carry: 'stowed', type: 'guns', values: { damage: '2d6', ammo: 6 } },
+    { name: 'Ring of Might', qty: 1, carry: 'stowed', type: 'guns' },
+    { name: 'Lucky Rock', qty: 1, carry: 'stowed' },
+  ]) };
+  const line = (lines: ReturnType<typeof ownedItems>, label: string) => lines.find((l) => l.label === label);
+
+  it('a typed line found on its type\'s shelf, priced as the shop sells it, sellable where the type is sold', () => {
+    loadUploaded({ 'type:guns': [{ ...PISTOL, id: 'item:pistol' }] } as never);
+    const lines = ownedItems(sheet, SYS);
+    expect(line(lines, 'Pistol')).toMatchObject({ catalogue: 'type:guns', id: 'item:pistol', unitPrice: 250 });
+    expect(sellableAt(lines, ['type:guns' as ShopStock]).map((l) => l.label)).toContain('Pistol');
+    expect(sellableAt(lines, ['gear' as ShopStock]).map((l) => l.label)).not.toContain('Pistol');
+  });
+
+  it('one kept out of the shops: priced at its own to sell back, only where its type is sold; something unknown, none', () => {
+    loadBuyback({ 'type:guns': [{ id: 'item:ring', name: 'Ring of Might', price: 5000 }] });
+    const lines = ownedItems(sheet, SYS);
+    expect(line(lines, 'Ring of Might')).toMatchObject({ catalogue: 'type:guns', id: 'item:ring', unitPrice: 5000 });
+    expect(sellableAt(lines, ['weapons' as ShopStock]).map((l) => l.label)).not.toContain('Ring of Might');
+    expect(line(lines, 'Lucky Rock')).toMatchObject({ catalogue: null, unitPrice: null });
   });
 });
