@@ -6,6 +6,7 @@
 // database, and it is the only piece a frontend test must never reach.
 
 const store = require('./catalogueStore');
+const { againstItems } = require('./ownItems');
 
 /** Rows out of the table, as the store wants them: catalogue -> entries. */
 const shape = (rows) => {
@@ -113,4 +114,29 @@ const clearCatalogue = (db, system, catalogue, cb) =>
     (err) => cb(err || null),
   );
 
-module.exports = { read, refresh, replaceCatalogues, clearCatalogue, shape };
+/**
+ * A system's catalogue lines that are now exactly one of its items taken out of the file (8a7a4b; decided 2026-11-21, mockup
+ * types-in-shops.html, question 12): called when the system is published, so a line ADD NEW LINES TO ITEMS made an item, or
+ * any line the GM's items now match in name, price and every column, isn't kept twice. Lines naming an item kept out of the
+ * shops stay: turned back on, it is sold from them again. cb(err, how many were taken out).
+ */
+const dropItemCopies = (db, system, definition, cb) => {
+  read(db, system, (err, sections) => {
+    if (err) return cb(err);
+    const { copies } = againstItems(sections, definition);
+    if (!copies.length) return cb(null, 0);
+    const drop = async () => {
+      await q(db, 'BEGIN IMMEDIATE');
+      try {
+        for (const { catalogue, id } of copies) await q(db, 'DELETE FROM shop_catalogues WHERE system = ? AND catalogue = ? AND id = ?', [system, catalogue, id]);
+        await q(db, 'COMMIT');
+      } catch (e) {
+        await q(db, 'ROLLBACK').catch(() => {});
+        throw e;
+      }
+    };
+    drop().then(() => cb(null, copies.length), cb);
+  });
+};
+
+module.exports = { read, refresh, replaceCatalogues, clearCatalogue, shape, dropItemCopies };

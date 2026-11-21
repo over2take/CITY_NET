@@ -62,12 +62,14 @@ const sameFields = (a, b) => {
  * A catalogue file's lines held against the game's own items (8a7a3c1; decided 2026-11-21, mockup types-in-shops.html,
  * questions 9 and 15): a line that is exactly an item IN SHOPS (its name, price and every column) is left out, the item
  * selling itself, so nothing is kept twice; a line naming an item turned off is left out, the shops never selling it; a line
- * of an item's name otherwise overrules it, said. { sections to save, leftOut, overrules, onSale: the items on sale besides }.
+ * of an item's name otherwise overrules it, said. { sections to save, leftOut, overrules, onSale: the items on sale besides,
+ * copies: each exact copy's { catalogue, id }, which a publish takes out of the file (8a7a4b) }.
  */
 const againstItems = (sections, definition) => {
   const stock = ownStock(definition);
   const leftOut = [];
   const overrules = [];
+  const copies = [];
   const kept = {};
   for (const [catalogue, entries] of Object.entries(sections || {})) {
     const items = stock.catalogues[catalogue] || [];
@@ -79,6 +81,7 @@ const againstItems = (sections, definition) => {
       if (!item) return true;
       if (item.price === e.price && sameFields(item.fields, e.fields)) {
         leftOut.push({ ...at, message: `already on ITEMS at ${item.price}, the same in every column: left out, as it sells itself` });
+        copies.push({ catalogue, id: e.id });
         return false;
       }
       overrules.push({ ...at, from: item.price, to: e.price });
@@ -86,7 +89,7 @@ const againstItems = (sections, definition) => {
     });
   }
   const onSale = Object.values(stock.catalogues).reduce((n, list) => n + list.length, 0);
-  return { sections: kept, leftOut, overrules, onSale };
+  return { sections: kept, leftOut, overrules, onSale, copies };
 };
 
 module.exports = { ITEM_PREFIX, ownStock, againstItems };

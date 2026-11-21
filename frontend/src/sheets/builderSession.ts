@@ -134,8 +134,10 @@ export const publishBlocked = (problems: Problem[]): string | null =>
   (problems.length === 0 ? null : `Fix ${problems.length === 1 ? 'this problem' : `these ${problems.length} problems`} before publishing.`);
 
 /** The line after PUBLISH. `running` says whether the game runs this system now. */
-export const publishedMessage = (version: number, running: boolean): string =>
-  (running ? `Published v${version}. The game runs it from now on.` : `Published v${version}. It's ready to pick in the game-system picker.`);
+export const publishedMessage = (version: number, running: boolean, dropped = 0): string =>
+  (running ? `Published v${version}. The game runs it from now on.` : `Published v${version}. It's ready to pick in the game-system picker.`)
+  // Catalogue lines now exactly one of its items taken out of the file (8a7a4b).
+  + (dropped === 1 ? " 1 catalogue line taken out: it's an item now and sells itself." : dropped > 1 ? ` ${dropped} catalogue lines taken out: they're items now and sell themselves.` : '');
 
 // ─── The sidebar ────────────────────────────────────────────────────────────
 

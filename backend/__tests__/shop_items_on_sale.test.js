@@ -166,6 +166,8 @@ describe('a catalogue file held against them (8a7a3c1)', () => {
     ]);
     expect(held.overrules).toEqual([{ line: 8, catalogue: 'type:armor', name: 'Leather Jacket', from: 50, to: 75 }]);
     expect(held.onSale).toBe(2);
+    // The exact copy, by its line's id, for a publish to take out (8a7a4b).
+    expect(held.copies).toEqual([{ catalogue: 'type:weapons', id: 'pistol' }]);
   });
 
   it('a column apart, the price the same: it overrules the item\'s columns; a game without types of its own, nothing held', () => {
@@ -173,7 +175,7 @@ describe('a catalogue file held against them (8a7a3c1)', () => {
     expect(held.overrules).toEqual([{ line: 3, catalogue: 'type:weapons', name: 'Pistol', from: 200, to: 200 }]);
     expect(held.leftOut).toEqual([]);
     const sections = { gear: [{ id: 'rope', name: 'Rope', price: 1, fields: {} }] };
-    expect(againstItems(sections, { ...DEF, items: { list: DEF.items.list } })).toEqual({ sections, leftOut: [], overrules: [], onSale: 0 });
+    expect(againstItems(sections, { ...DEF, items: { list: DEF.items.list } })).toEqual({ sections, leftOut: [], overrules: [], onSale: 0, copies: [] });
   });
 });
 
