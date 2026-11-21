@@ -47,6 +47,8 @@ const vehicleSystems = require('../sheets/vehicleSystems');
 const ram = require('../sheets/ram');
 const enemyVehicles = require('../sheets/enemyVehicles');
 const buildingTypes = require('../buildingTypes');
+const { typesOf, ownTypes } = require('../systemBuilder/itemTypes');
+const { namesOf } = require('../systemBuilder/choices');
 // The merged catalogue: what the app ships with, plus whatever a GM uploaded.
 const shopPrices = require('../shops/catalogueStore');
 const catalogueDb = require('../shops/catalogueDb');
@@ -2460,8 +2462,21 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
      * How a catalogue's prices are read under `system`: in each catalogue's currency for a
      * custom system with currencies of its own (3c2a4d), as they always were otherwise.
      */
-    const catalogueOptions = (system) => (customSystems.currenciesIn(system).length
-      ? { currencyOf: (catalogue) => customSystems.catalogueCurrencyIn(system, catalogue) } : {});
+    /**
+     * How a catalogue is read in this game: its currencies' prices; a section per item type where it makes its own (8a7a1),
+     * their dice read with its names; and every section known, so one that is neither a shelf nor a type is said.
+     */
+    const ownTypesIn = (system) => { const def = customSystems.definitionOf(system); return def && ownTypes(def) ? typesOf(def) : []; };
+    const catalogueOptions = (system) => {
+      const def = customSystems.definitionOf(system);
+      const names = def ? namesOf(def) : new Map();
+      return {
+        ...(customSystems.currenciesIn(system).length ? { currencyOf: (catalogue) => customSystems.catalogueCurrencyIn(system, catalogue) } : {}),
+        types: ownTypesIn(system),
+        names: { known: (n) => names.has(n), refused: (n) => `@${n} isn't one of this system's names` },
+        shelves: buildingTypes.CATALOGUES.map((c) => c.id),
+      };
+    };
 
     socket.on('previewCatalogue', (data) => {
       const info = userSockets.get(socket.id);
@@ -2474,16 +2489,20 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
       // An id that already exists in the book is an override rather than an addition, and
       // the GM should be told before they save rather than after.
+      // A type's section by its name (8a7a1): GUNS, not type:guns.
+      const typeLabel = new Map((options.types || []).map((t) => [`type:${t.id}`, String(t.label || t.id).toUpperCase()]));
       const summary = Object.entries(parsed.sections).map(([catalogue, entries]) => ({
         catalogue,
         count: entries.length,
         overrides: shopPrices.overridesIn(catalogue, entries),
+        ...(typeLabel.has(catalogue) ? { label: typeLabel.get(catalogue) } : {}),
       }));
 
       socket.emit('cataloguePreview', {
         format: parsed.format,
         sections: parsed.sections,
         problems: parsed.problems,
+        notes: parsed.notes,
         summary,
       });
     };
@@ -2512,9 +2531,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           // shelves from this and would otherwise show yesterday's catalogue.
           catalogueDb.refresh(db, system, () => {
             io.emit('cataloguesChanged', { system });
+            const typeLabel = new Map(ownTypesIn(system).map((t) => [`type:${t.id}`, String(t.label || t.id).toUpperCase()]));
             socket.emit('catalogueSaved', {
               ok: true,
-              saved: wanted.map((c) => ({ catalogue: c, count: parsed.sections[c].length })),
+              saved: wanted.map((c) => ({ catalogue: c, count: parsed.sections[c].length, ...(typeLabel.has(c) ? { label: typeLabel.get(c) } : {}) })),
               problems: parsed.problems,
             });
           });
@@ -2530,10 +2550,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
      * the same check a purchase makes, for the same reason.
      */
     const sendCatalogues = () => {
-      getShopSystem((err) => {
+      getShopSystem((err, system) => {
         if (err) return;
         const out = {};
         for (const c of buildingTypes.CATALOGUES) out[c.id] = shopPrices.entriesIn(c.id);
+        // Each of the game's own item types too (8a7a1), its lines with their columns, for DOWNLOAD CURRENT and the shops.
+        for (const t of ownTypesIn(system)) out[`type:${t.id}`] = shopPrices.entriesIn(`type:${t.id}`);
         socket.emit('catalogues', { entries: out });
       });
     };

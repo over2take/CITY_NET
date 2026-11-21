@@ -301,3 +301,24 @@ describe('uploading a file', () => {
     expect(box().value).toBe('');
   });
 });
+
+describe("a type's section (8a7a1)", () => {
+  it('by its name: counted, its problems and blanks said by it; a blank noted, not a problem; the save said by it too', async () => {
+    show();
+    type('[GUNS]\nname, price, damage\nPistol, 250, 2d6');
+    await userEvent.click(button('PREVIEW'));
+    reply('cataloguePreview', {
+      format: 'delimited',
+      summary: [{ catalogue: 'type:guns', count: 2, overrides: [], label: 'GUNS' }],
+      problems: [{ line: 5, catalogue: 'type:guns', name: 'Bad Gun', message: 'AMMO "six": How many it holds: 0 to 1000' }],
+      notes: [{ line: 4, catalogue: 'type:guns', name: 'Blank Gun', message: 'RANGE, AMMO left blank' }],
+    });
+    expect(screen.getByText(/^GUNS ×2/)).toBeInTheDocument();
+    expect(screen.getByText(/1 PROBLEM/)).toBeInTheDocument();
+    expect(screen.getByText(/LINE 5 \[GUNS\] Bad Gun: AMMO "six"/)).toBeInTheDocument();
+    expect(screen.getByTestId('catalogue-note')).toHaveTextContent('LINE 4 [GUNS] Blank Gun: RANGE, AMMO left blank, kept; the player can fill it in');
+    await userEvent.click(button('SAVE'));
+    reply('catalogueSaved', { ok: true, saved: [{ catalogue: 'type:guns', count: 2, label: 'GUNS' }] });
+    expect(screen.getByText('Saved: GUNS ×2. The shops have it now.')).toBeInTheDocument();
+  });
+});

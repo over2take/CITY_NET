@@ -26,6 +26,7 @@
 
 /** A byte-order mark at the front of a file Excel saved. Invisible, and breaks the first header. */
 const { parseAmount, formatAmount } = require('../systemBuilder/currencies');
+const { valueProblem } = require('../systemBuilder/itemTypes');
 const stripBom = (text) => (text.charCodeAt(0) === 0xfeff ? text.slice(1) : text);
 
 /**
@@ -46,10 +47,33 @@ const looksLikeJson = (text) => {
 /** Lines that carry no data: blank, or a comment the example itself is full of. */
 const isSkippable = (line) => !line.trim() || line.trim().startsWith('#');
 
-/** `[weapons]` opens a section. Anything else is data. */
+/** `[weapons]` opens a section, as does `[MELEE WEAPONS]`, a type's name (8a7a1). Anything else is data. */
 const sectionOf = (line) => {
-  const m = /^\s*\[\s*([a-z0-9_]+)\s*\]\s*$/i.exec(line);
+  const m = /^\s*\[\s*([a-z0-9_][a-z0-9_ '-]*?)\s*\]\s*$/i.exec(line);
   return m ? m[1].toLowerCase() : null;
+};
+
+/** A name as sections and headers are matched: any case, spaces and underscores alike. */
+const plain = (text) => String(text || '').trim().toLowerCase().replace(/[\s_]+/g, ' ');
+
+/**
+ * What a section is (8a7a1; decided 2026-11-20, mockup item-types-in-shops.html): one of the system's own item types, by its
+ * id, its name or what one is called (GUNS, GUN, guns), whose rows are lines of that type; or a shelf, as always. A type
+ * wins where a shelf has its name too (a type called WEAPONS), so the GM's own types are always reachable; rows already saved
+ * under a shelf keep selling. With `options.shelves`, a section that is neither is said rather than saved where nothing sells.
+ */
+const resolveSection = (name, options) => {
+  const type = (options.types || []).find((t) => [t.id, t.label, t.one].some((n) => n && plain(n) === plain(name)));
+  if (type) return { key: `type:${type.id}`, type };
+  if (options.shelves && !options.shelves.includes(name)) return { unknown: true };
+  return { key: name };
+};
+
+/** A cell read as its column holds it: a number for a NUMBER or a COUNT, one of the words for PICK ONE, else the text. */
+const cellValue = (column, text) => {
+  if (column.kind === 'number' || column.kind === 'count') { const n = Number(text.replace(/,/g, '')); return text && Number.isFinite(n) ? n : text; }
+  if (column.kind === 'pick') return (column.options || []).find((w) => plain(w) === plain(text)) ?? text;
+  return text;
 };
 
 /**
@@ -169,6 +193,33 @@ const readRow = (catalogue, columns, cells, line, problems, options = {}) => {
     }
   }
 
+  // A line of an item type (8a7a1): each of the type's columns by its id or its name, its value read as the column holds
+  // it and checked as the builder checks an item's; one that doesn't fit leaves the row out, said. A blank is kept blank
+  // and noted, for the GM to fill in or leave. The rest of the columns (a description) ride along as words.
+  const type = options.type;
+  if (type) {
+    const fields = {};
+    const blank = [];
+    const byHeader = new Map(columns.map((col) => [plain(col), col]));
+    for (const column of type.columns) {
+      const header = byHeader.get(plain(column.id)) ?? byHeader.get(plain(column.label));
+      const text = header ? values[header] : '';
+      const label = String(column.label || column.id).toUpperCase();
+      if (!text) { blank.push(label); continue; }
+      const value = cellValue(column, text);
+      const problem = valueProblem(column, value, options.names || { known: () => true, refused: (n) => `@${n}` });
+      if (problem) {
+        problems.push({ line, catalogue, name, message: `${label} "${text}": ${problem}` });
+        return null;
+      }
+      fields[column.id] = value;
+    }
+    const known = new Set(type.columns.flatMap((c) => [plain(c.id), plain(c.label)]));
+    for (const col of columns) if (col !== 'name' && col !== 'price' && !known.has(plain(col)) && values[col]) fields[col] = values[col];
+    if (blank.length) (options.notes || []).push({ line, catalogue, name, message: `${blank.join(', ')} left blank` });
+    return { id: slug(name), name, price, fields, type: type.id, line, ...(read ? { read } : {}) };
+  }
+
   // Everything that is not name or price fills the sheet when the item is bought. Blank
   // cells are dropped rather than stored, so an empty column never overwrites anything.
   const fields = {};
@@ -178,6 +229,12 @@ const readRow = (catalogue, columns, cells, line, problems, options = {}) => {
   }
 
   return { id: slug(name), name, price, fields, line, ...(read ? { read } : {}) };
+};
+
+/** A section that is neither a shelf nor one of the system's types, said with what there is to choose from. */
+const unknownSection = (named, options) => {
+  const types = (options.types || []).map((t) => String(t.label || t.id).toUpperCase());
+  return { line: 0, catalogue: named, message: `no ${types.length ? 'item type or shelf' : 'shelf'} is called ${String(named).toUpperCase()}${types.length ? ` (types: ${types.join(', ')})` : ''}` };
 };
 
 /** JSON in, in either of the two shapes somebody would reasonably write. */
@@ -191,7 +248,10 @@ const parseJson = (text, problems, options) => {
   }
 
   const sections = {};
-  const take = (catalogue, rows) => {
+  const take = (named, rows) => {
+    const section = resolveSection(plain(named), options);
+    if (section.unknown) { problems.push(unknownSection(named, options)); return; }
+    const catalogue = section.key;
     if (!Array.isArray(rows)) {
       problems.push({ line: 0, catalogue, message: 'expected a list of items' });
       return;
@@ -202,9 +262,9 @@ const parseJson = (text, problems, options) => {
         problems.push({ line: i + 1, catalogue, message: 'not an item' });
         return;
       }
-      const columns = Object.keys(row);
+      const columns = Object.keys(row).filter((c) => c !== 'catalogue');
       const cells = columns.map((c) => (row[c] == null ? '' : String(row[c])));
-      const entry = readRow(catalogue, columns, cells, i + 1, problems, options);
+      const entry = readRow(catalogue, columns.map((c) => c.toLowerCase()), cells, i + 1, problems, { ...options, type: section.type });
       if (entry) out.push(entry);
     });
     sections[catalogue] = out;
@@ -238,6 +298,8 @@ const parseDelimited = (text, problems, options) => {
 
   let catalogue = null;
   let columns = null;
+  let type = null;
+  let skipping = false;
 
   lines.forEach((raw, i) => {
     const line = i + 1;
@@ -245,11 +307,16 @@ const parseDelimited = (text, problems, options) => {
 
     const opened = sectionOf(raw);
     if (opened) {
-      catalogue = opened;
+      const section = resolveSection(opened, options);
       columns = null;
+      skipping = !!section.unknown;
+      if (skipping) { problems.push({ ...unknownSection(opened, options), line }); catalogue = null; return; }
+      catalogue = section.key;
+      type = section.type || null;
       sections[catalogue] ||= [];
       return;
     }
+    if (skipping) return;
 
     const { cells, closed } = splitRow(raw, delimiter);
     if (!closed) {
@@ -275,7 +342,7 @@ const parseDelimited = (text, problems, options) => {
       return;
     }
 
-    const entry = readRow(catalogue, columns, cells, line, problems, options);
+    const entry = readRow(catalogue, columns, cells, line, problems, { ...options, type });
     if (entry) sections[catalogue].push(entry);
   });
 
@@ -285,17 +352,24 @@ const parseDelimited = (text, problems, options) => {
 /**
  * Read a catalogue, whatever the GM gave us.
  *
- * Returns `{ sections, problems, format }`. `sections` is catalogue id -> entries, and is
+ * Returns `{ sections, problems, notes, format }`. `sections` is catalogue id -> entries, and is
  * whatever could be read - a file with problems still yields the rows that were fine, so a
- * preview can show both at once.
+ * preview can show both at once. A section of an item type (8a7a1) is `type:<id>`, its rows
+ * with `type` and their columns in `fields`; `notes` says what was left blank, nothing wrong.
+ *
+ * `options`: `currencyOf(catalogue)` for a custom system's money; `types`, the system's own item
+ * types, and `names`, its names for dice; `shelves`, the shelf ids, so a section that is none of
+ * them is said.
  */
 const parseCatalogue = (input, options = {}) => {
   const problems = [];
+  const notes = [];
   const text = stripBom(String(input == null ? '' : input)).trim();
-  if (!text) return { sections: {}, problems: [{ line: 0, message: 'nothing to read' }], format: null };
+  if (!text) return { sections: {}, problems: [{ line: 0, message: 'nothing to read' }], notes, format: null };
 
   const json = looksLikeJson(text);
-  const sections = json ? parseJson(text, problems, options) : parseDelimited(text, problems, options);
+  const withNotes = { ...options, notes };
+  const sections = json ? parseJson(text, problems, withNotes) : parseDelimited(text, problems, withNotes);
 
   // Two rows of one thing is a GM editing in a hurry, not a catalogue with two prices for
   // a pistol. Later wins, and they are told.
@@ -313,9 +387,9 @@ const parseCatalogue = (input, options = {}) => {
     sections[catalogue] = [...seen.values()];
   }
 
-  return { sections, problems, format: json ? 'json' : 'delimited' };
+  return { sections, problems, notes, format: json ? 'json' : 'delimited' };
 };
 
 module.exports = {
-  parseCatalogue, splitRow, delimiterOf, readPrice, slug, stripBom, looksLikeJson,
+  parseCatalogue, splitRow, delimiterOf, readPrice, slug, stripBom, looksLikeJson, sectionOf, resolveSection,
 };
