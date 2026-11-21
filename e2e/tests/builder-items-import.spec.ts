@@ -23,16 +23,16 @@ test('IMPORT on ITEMS: the example made from the system, edited and imported, a 
   await builderPage(page, 'ITEMS');
   await page.getByRole('tablist', { name: 'Items' }).getByRole('tab', { name: 'ITEMS', exact: true }).click();
 
-  // DOWNLOAD EXAMPLE: made from this system, WEAPONS with its DAMAGE and GRADE.
+  // DOWNLOAD EXAMPLE: made from this system, WEAPONS with its DAMAGE and GRADE, and its PRICE and IN SHOPS (8a7a3b2).
   const files = page.getByRole('group', { name: 'Items from a file' });
   const [download] = await Promise.all([page.waitForEvent('download'), files.getByRole('button', { name: 'DOWNLOAD EXAMPLE' }).click()]);
   expect(download.suggestedFilename()).toBe(`crateford-${info.retry + 1}-items-example.csv`);
   const example = await readFile((await download.path())!, 'utf8');
-  expect(example).toContain('[weapons]\nname, damage, grade, needs, words\nSample Weapon, 1d8 + @might, LIGHT, worn,');
+  expect(example).toContain('[weapons]\nname, damage, grade, price, in shops, needs, words\nSample Weapon, 1d8 + @might, LIGHT, 25, yes, worn,');
 
   // Edited: the sample weapon named, and a row with a GRADE the column hasn't.
   const edited = example.replace('Sample Weapon, 1d8 + @might', 'Hand Crossbow, 1d6 + @might')
-    .replace('\n[features]\n', '\nBad Bow, 1d4, MEDIUM, worn,\n\n[features]\n');
+    .replace('\n[features]\n', '\nBad Bow, 1d4, MEDIUM, , , worn,\n\n[features]\n');
   await files.getByRole('button', { name: 'IMPORT' }).click();
   const panel = page.getByRole('region', { name: 'Import items' });
   await panel.getByRole('textbox', { name: 'Text to import' }).fill(edited);
@@ -48,6 +48,6 @@ test('IMPORT on ITEMS: the example made from the system, edited and imported, a 
   const saved = await asGm(request, token, 'get', `/api/systems/${id}`);
   expect(saved.problems).toEqual([]);
   const list = saved.draft.items.list as { label: string; type?: string; values?: Record<string, unknown> }[];
-  expect(list.find((i) => i.label === 'Hand Crossbow')).toMatchObject({ type: 'weapons', values: { damage: '1d6 + @might', grade: 'LIGHT' } });
+  expect(list.find((i) => i.label === 'Hand Crossbow')).toMatchObject({ type: 'weapons', values: { damage: '1d6 + @might', grade: 'LIGHT' }, price: 25, in_shops: true });
   expect(list.some((i) => i.label === 'Bad Bow')).toBe(false);
 });
