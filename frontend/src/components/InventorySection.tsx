@@ -130,7 +130,8 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
   ].join(' ');
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+    // Typed GEAR keeps 8px between its parts, as inside it: the counters, then FIND (G4; the user found them too close).
+    <div style={{ display: 'flex', flexDirection: 'column', gap: typed ? '8px' : '5px' }}>
       <GearSlots counters={counters} installs={installs} gm={gm && !readOnly} onItem={onItem} />
       {/* Scrollable: an inventory grows, and the tab strip below should not move every
           time somebody picks up a rope. */}
