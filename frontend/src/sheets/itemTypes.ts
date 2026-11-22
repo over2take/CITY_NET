@@ -17,7 +17,21 @@ const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 export type ColumnKind = 'number' | 'text' | 'damage' | 'dice' | 'count' | 'pick';
 /** A column: its name and kind, with what its kind has (a NUMBER's unit, a COUNT's button, rest and reloads, PICK ONE's words). */
 export interface ItemColumn { id: string; label: string; kind: ColumnKind; unit?: string; button?: string; refill?: string; reload?: string[]; options?: string[] }
-export interface ItemType { id: string; label: string; one?: string; columns: ItemColumn[] }
+export interface ItemType {
+  id: string; label: string; one?: string; columns: ItemColumn[];
+  /** Its band on the sheet's GEAR tab (G1): unsaid is PACK. */
+  on_sheet?: Band;
+}
+
+/** Where a type's lines sit on the sheet's GEAR tab (G1; approved mockup sheet-gear-layout.html), as the server checks them. */
+export type Band = 'equipped' | 'usable' | 'pack';
+export const BANDS: { id: Band; label: string; why: string }[] = [
+  { id: 'equipped', label: 'EQUIPPED', why: 'EQUIPPED: worn or wielded, at the top of GEAR.' },
+  { id: 'usable', label: 'USABLE', why: 'USABLE: used up or used often, like potions, ammo and kits.' },
+  { id: 'pack', label: 'PACK', why: 'PACK: everything else that is carried.' },
+];
+/** A type's band: what it says, else PACK. */
+export const bandOf = (type: { on_sheet?: unknown }): Band => (BANDS.some((b) => b.id === type.on_sheet) ? type.on_sheet as Band : 'pack');
 
 export const KINDS: { id: ColumnKind; label: string; why: string }[] = [
   { id: 'number', label: 'NUMBER', why: 'NUMBER: a value, like a WEIGHT or an armor\'s DEFENSE, with a unit if you want one (LB).' },
@@ -40,15 +54,15 @@ export const GEAR: ItemType = { id: 'gear', label: 'GEAR', one: 'Gear', columns:
 export const PRESETS: { id: string; label: string; type: ItemType }[] = [
   { id: 'weapon', label: 'WEAPON', type: { id: 'weapons', label: 'WEAPONS', one: 'Weapon', columns: [
     { id: 'damage', label: 'DAMAGE', kind: 'damage' }, { id: 'range', label: 'RANGE', kind: 'text' },
-    { id: 'ammo', label: 'AMMO', kind: 'count', button: 'FIRE' }, weight, price] } },
+    { id: 'ammo', label: 'AMMO', kind: 'count', button: 'FIRE' }, weight, price], on_sheet: 'equipped' } },
   { id: 'armor', label: 'ARMOR', type: { id: 'armor', label: 'ARMOR', one: 'Armor', columns: [
-    { id: 'defense', label: 'DEFENSE', kind: 'number' }, { id: 'type', label: 'TYPE', kind: 'pick', options: ['LIGHT', 'MEDIUM', 'HEAVY'] }, weight, price] } },
+    { id: 'defense', label: 'DEFENSE', kind: 'number' }, { id: 'type', label: 'TYPE', kind: 'pick', options: ['LIGHT', 'MEDIUM', 'HEAVY'] }, weight, price], on_sheet: 'equipped' } },
   { id: 'gear', label: 'GEAR', type: GEAR },
   { id: 'consumable', label: 'CONSUMABLE', type: { id: 'consumables', label: 'CONSUMABLES', one: 'Consumable', columns: [
-    { id: 'uses', label: 'USES', kind: 'count', button: 'USE' }, { id: 'effect', label: 'EFFECT', kind: 'dice' }, weight, price] } },
+    { id: 'uses', label: 'USES', kind: 'count', button: 'USE' }, { id: 'effect', label: 'EFFECT', kind: 'dice' }, weight, price], on_sheet: 'usable' } },
   { id: 'spell', label: 'SPELL', type: { id: 'spells', label: 'SPELLS', one: 'Spell', columns: [
     { id: 'level', label: 'LEVEL', kind: 'number' }, { id: 'range', label: 'RANGE', kind: 'text' }, { id: 'damage', label: 'DAMAGE', kind: 'damage' },
-    { id: 'charges', label: 'CHARGES', kind: 'count', button: 'CAST', refill: 'long_rest' }] } },
+    { id: 'charges', label: 'CHARGES', kind: 'count', button: 'CAST', refill: 'long_rest' }], on_sheet: 'usable' } },
 ];
 
 const copy = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
@@ -110,11 +124,13 @@ export const withNewType = (def: Definition, preset?: string): { definition: Def
 };
 
 /** A type's name or what one of it is called; its id stays. A blank ONE stores nothing. */
-export const withType = (def: Definition, id: string, patch: { label?: string; one?: string }): Definition =>
+export const withType = (def: Definition, id: string, patch: { label?: string; one?: string; on_sheet?: Band }): Definition =>
   withPart(def, itemTypes(def).map((t) => {
     if (t.id !== id) return t;
     const next: ItemType = { ...t, ...patch };
     if (typeof next.one === 'string' && !next.one.trim()) delete next.one;
+    // PACK, as unsaid, stores nothing (G1).
+    if (next.on_sheet === 'pack') delete next.on_sheet;
     return next;
   }));
 

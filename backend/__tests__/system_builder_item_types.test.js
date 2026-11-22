@@ -10,7 +10,7 @@ import { createRequire } from 'module';
 
 const require_ = createRequire(import.meta.url);
 const { checkDefinition } = require_('../systemBuilder/definition');
-const { GEAR, typesOf, ownTypes, typeNamed, valueProblem, lineColumns, itemValues } = require_('../systemBuilder/itemTypes');
+const { GEAR, typesOf, ownTypes, typeNamed, valueProblem, lineColumns, itemValues, bandOf, BANDS } = require_('../systemBuilder/itemTypes');
 const { itemsRenderedOf, namesOf } = require_('../systemBuilder/choices');
 const { buildFile, readFile } = require_('../systemBuilder/citysys');
 
@@ -147,7 +147,7 @@ describe('the sheet is told them', () => {
   it('each type\'s columns by name and kind, a COUNT\'s button and the items it reloads from by name; each item\'s type and values', () => {
     const shown = itemsRenderedOf(TYPED);
     // Sold at the General Store where the GM said nowhere (8a7a2).
-    expect(shown.types[0]).toEqual({ id: 'weapons', label: 'WEAPONS', one: 'Weapon', sold_at: ['general_store'], columns: [
+    expect(shown.types[0]).toEqual({ id: 'weapons', label: 'WEAPONS', one: 'Weapon', sold_at: ['general_store'], on_sheet: 'pack', columns: [
       { id: 'damage', label: 'DAMAGE', kind: 'damage' },
       { id: 'heals', label: 'HEALS', kind: 'dice' },
       { id: 'range', label: 'RANGE', kind: 'text' },
@@ -163,7 +163,7 @@ describe('the sheet is told them', () => {
     ]);
     // A COUNT with nothing said: USE, no rest, no reload; a type with no singular: its name.
     const plain = itemsRenderedOf(withTypes([{ id: 'w', label: 'WANDS', columns: [{ id: 'charges', label: 'CHARGES', kind: 'count' }] }], []));
-    expect(plain.types).toEqual([{ id: 'w', label: 'WANDS', one: 'WANDS', sold_at: ['general_store'], columns: [{ id: 'charges', label: 'CHARGES', kind: 'count', button: 'USE' }] }]);
+    expect(plain.types).toEqual([{ id: 'w', label: 'WANDS', one: 'WANDS', sold_at: ['general_store'], on_sheet: 'pack', columns: [{ id: 'charges', label: 'CHARGES', kind: 'count', button: 'USE' }] }]);
     // Types alone are enough to tell; nothing at all, nothing to tell. A system making none tells no types (8a3a): its
     // sheet keeps the one list, its items still GEAR with their values.
     const none = itemsRenderedOf({ ...TYPED, items: { list: [{ id: 'rope', label: 'Rope', values: { weight: 10 } }] } });
@@ -216,5 +216,34 @@ describe('the system file', () => {
     const read = readFile(JSON.stringify(file));
     expect(read.problems).toEqual([]);
     expect(read.file.definition.items).toEqual(TYPED.items);
+  });
+});
+
+describe('a type\'s band on the sheet (G1)', () => {
+  const TYPED = (onSheet) => ({ format: 1, name: 'Banded', core: { health: { model: 'pool' } }, stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'might', label: 'Might' }] }],
+    items: { types: [{ id: 'kit', label: 'KIT', columns: [], ...(onSheet === undefined ? {} : { on_sheet: onSheet }) }], list: [] } });
+
+  it('EQUIPPED, USABLE or PACK; PACK where unsaid or not one of them', () => {
+    expect(BANDS).toEqual(['equipped', 'usable', 'pack']);
+    expect(bandOf({ on_sheet: 'equipped' })).toBe('equipped');
+    expect(bandOf({ on_sheet: 'usable' })).toBe('usable');
+    expect(bandOf({})).toBe('pack');
+    expect(bandOf({ on_sheet: 'belt' })).toBe('pack');
+    expect(bandOf(null)).toBe('pack');
+  });
+
+  it('checked: one of the three', () => {
+    const problems = (v) => checkDefinition(TYPED(v)).problems.filter((p) => /on_sheet/.test(p.where));
+    for (const v of ['equipped', 'usable', 'pack', undefined]) expect(problems(v), String(v)).toEqual([]);
+    expect(problems('belt')).toEqual([{ where: 'type kit, on_sheet', message: 'EQUIPPED, USABLE or PACK' }]);
+  });
+
+  it('told to the sheet, and carried by the system file unchanged', () => {
+    const def = TYPED('usable');
+    expect(itemsRenderedOf(def).types[0].on_sheet).toBe('usable');
+    expect(itemsRenderedOf(TYPED(undefined)).types[0].on_sheet).toBe('pack');
+    const read = readFile(JSON.stringify(buildFile({ definition: def, version: 1, origin: 'sys_bandbandbandband' })));
+    expect(read.problems).toEqual([]);
+    expect(read.file.definition.items.types[0].on_sheet).toBe('usable');
   });
 });

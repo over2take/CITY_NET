@@ -3,7 +3,7 @@ import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   itemTypes, ownTypes, typeOf, itemValues, withNewType, withType, withoutType, withDefaultType, withNewColumn, withColumn, withoutColumn,
   withItemType, withItemValue, wordsFrom, KINDS, PRESETS, LIMITS, type ItemColumn, type ItemType, type ColumnKind,
-  priceColumnOf, itemPriceOf, inShopsOf, priceNeeded, withItemPrice, withInShops, MOST_PRICE,
+  priceColumnOf, itemPriceOf, inShopsOf, priceNeeded, withItemPrice, withInShops, MOST_PRICE, BANDS, bandOf,
 } from '../sheets/itemTypes';
 import { ToggleSwitch } from './ToggleSwitch';
 import { itemList, type Item } from '../sheets/items';
@@ -183,6 +183,17 @@ export function ItemTypesSection({ definition, edit, place = 'items' }: Props & 
           <FieldName beside htmlFor={`type-${type.id}-one`} hint={HINTS['items.one']} style={small}>ONE</FieldName>
           <input id={`type-${type.id}-one`} type="text" maxLength={LIMITS.label} value={type.one ?? ''} placeholder={type.label} style={{ ...input, width: 200, justifySelf: 'start' }}
             onChange={(e) => edit(withType(definition, type.id, { one: e.target.value }))} />
+          {/* Its band on the sheet's GEAR tab (G1; approved mockup sheet-gear-layout.html, 2026-11-20). */}
+          <FieldName beside hint={HINTS['items.onSheet']} style={small}>ON THE SHEET</FieldName>
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+            <span role="group" aria-label={`${nameOf(type)} band`} style={row}>
+              {BANDS.map((b) => (
+                <button key={b.id} type="button" className={`utility-btn${bandOf(type) === b.id ? ' active' : ''}`} style={{ ...btn, padding: '3px 9px' }} aria-pressed={bandOf(type) === b.id}
+                  onClick={() => edit(withType(definition, type.id, { on_sheet: b.id }))}>{b.label}</button>
+              ))}
+            </span>
+            <span style={{ ...why, fontSize: 11 }}>{BANDS.find((b) => b.id === bandOf(type))!.why}</span>
+          </span>
         </div>
         <div className="crt-scroll" style={{ overflowX: 'auto' }}>
           <table style={{ borderCollapse: 'collapse', fontSize: 12 }}>

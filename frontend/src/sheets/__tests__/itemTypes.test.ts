@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
   GEAR, PRESETS, LIMITS, itemTypes, ownTypes, typeOf, itemValues, withNewType, withType, withoutType, withNewColumn, withColumn,
-  withoutColumn, withItemType, withItemValue, wordsFrom, withoutRefillBy, withoutReloadFrom, withDefaultType, type ItemType,
+  withoutColumn, withItemType, withItemValue, wordsFrom, withoutRefillBy, withoutReloadFrom, withDefaultType, BANDS, bandOf, type ItemType,
 } from '../itemTypes';
 import { withoutItem } from '../items';
 import { withNewRest, withoutRest } from '../rests';
@@ -249,5 +249,24 @@ describe('what goes with a rest or an item', () => {
     const armed = weapons();
     expect(withoutRefillBy(armed, 'x')).toBe(armed);
     expect(withoutReloadFrom(armed, 'x')).toBe(armed);
+  });
+});
+
+describe('a type\'s band on the sheet (G1)', () => {
+  it('the three bands as the server has them; each preset\'s, GEAR in PACK; unsaid, PACK', () => {
+    expect(BANDS.map((b) => b.id)).toEqual(server.BANDS);
+    expect(PRESETS.map((p) => `${p.id}:${bandOf(p.type)}`)).toEqual(['weapon:equipped', 'armor:equipped', 'gear:pack', 'consumable:usable', 'spell:usable']);
+    expect(bandOf({})).toBe('pack');
+    expect(bandOf({ on_sheet: 'belt' })).toBe('pack');
+    for (const t of [{}, { on_sheet: 'usable' }, { on_sheet: 'belt' }]) expect(bandOf(t), JSON.stringify(t)).toBe(server.bandOf(t));
+  });
+
+  it('changed; PACK, as unsaid, stores nothing; sound each way', () => {
+    let def = withType(weapons(), 'weapons', { on_sheet: 'usable' });
+    expect(typesIn(def)![1].on_sheet).toBe('usable');
+    sound(def);
+    def = withType(def, 'weapons', { on_sheet: 'pack' });
+    expect(typesIn(def)![1]).not.toHaveProperty('on_sheet');
+    sound(def);
   });
 });

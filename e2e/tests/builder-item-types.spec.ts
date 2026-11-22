@@ -27,6 +27,8 @@ test('ITEM TYPES: WEAPONS from its preset with AMMO and a GRADE, and a Pistol fi
   await types.getByRole('group', { name: 'Add an item type' }).getByRole('button', { name: 'WEAPON', exact: true }).click();
   const weapons = page.getByRole('region', { name: 'WEAPONS type' });
   await expect(types.getByRole('group', { name: 'The item types' }).getByRole('button', { name: 'WEAPONS' })).toHaveAttribute('aria-pressed', 'true');
+  // ON THE SHEET (G1): the WEAPON preset starts EQUIPPED, worn or wielded.
+  await expect(weapons.getByRole('group', { name: 'WEAPONS band' }).getByRole('button', { name: 'EQUIPPED' })).toHaveAttribute('aria-pressed', 'true');
 
   // AMMO: refilled by a long rest, reloaded from Pistol Rounds.
   await weapons.getByRole('combobox', { name: 'AMMO refilled by' }).selectOption({ label: 'LONG REST' });
@@ -70,7 +72,7 @@ test('ITEM TYPES: WEAPONS from its preset with AMMO and a GRADE, and a Pistol fi
   expect(saved.draft.items).toEqual({
     types: [
       { id: 'gear', label: 'GEAR', one: 'Gear', columns: [{ id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' }, { id: 'price', label: 'PRICE', kind: 'number' }] },
-      { id: 'weapons', label: 'WEAPONS', one: 'Weapon', columns: [
+      { id: 'weapons', label: 'WEAPONS', one: 'Weapon', on_sheet: 'equipped', columns: [
         { id: 'damage', label: 'DAMAGE', kind: 'damage' }, { id: 'range', label: 'RANGE', kind: 'text' },
         { id: 'ammo', label: 'AMMO', kind: 'count', button: 'FIRE', refill: 'long_rest', reload: ['rounds'] },
         { id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' }, { id: 'price', label: 'PRICE', kind: 'number' },
