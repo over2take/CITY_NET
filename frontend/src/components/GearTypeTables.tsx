@@ -1,7 +1,7 @@
 import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { CARRY_STATES, type InventoryItem } from '../sheets/inventory';
 import type { ItemsShown } from '../sheets/gearItems';
-import { gearTables, gearBands, valueText, withLineValue, newLineOf, shownCells, cellWords, countOf, type Cell, type CountAnswer, type CountKind, type TableRow, type TypeShown } from '../sheets/gearTypes';
+import { gearTables, gearBands, foundIn, valueText, withLineValue, newLineOf, shownCells, cellWords, countOf, type Cell, type CountAnswer, type CountKind, type TableRow, type TypeShown } from '../sheets/gearTypes';
 import { useGearBands } from '../hooks/useGearBands';
 import { diceWords, SHAPES, shapeText, insertName, type GearDiceRead } from '../sheets/gearDice';
 import { FormulaIcon } from './FormulaIcon';
@@ -17,7 +17,8 @@ import { FormulaIcon } from './FormulaIcon';
 // docs/mockups/sheet-gear-layout.html, layout A): EQUIPPED, USABLE and PACK by each type's ON THE SHEET, a group per type,
 // in hand first; STASH, closed to start, whatever the type; a band's head closes it and the sheet remembers. A thing is
 // made by hand from the row of + buttons at the top; a closed band something lands in pulses, then stays bright until
-// opened; a thing worn, attuned or installed is in EQUIPPED whatever its type. One line a thing (G3; the same mockup, decision 3): its name, how many,
+// opened; FIND at the top, always shown, keeps only the lines it matches, every band open while it has words (G4);
+// a thing worn, attuned or installed is in EQUIPPED whatever its type. One line a thing (G3; the same mockup, decision 3): its name, how many,
 // the columns it has as words with ROLL, FIRE and RELOAD, where it is carried; a click on it opens the card, every column a
 // box with NAME, HOW MANY, LOCATION and REMOVE, one card at a time; ✎ at the end of every line opens it too. A line with
 // nothing filled in at all, on it or its item, says FILL IN, which opens the card at its first box: a column blank beside
@@ -177,7 +178,13 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on,
     });
   };
   const bands = gearBands(itemsShown, items, on);
+  // The counts of everything, not of what FIND shows: clearing it is nothing landing anywhere.
   const { shut, toggle, openBand, news } = useGearBands(Object.fromEntries(bands.map((b) => [b.band, b.count])));
+  // FIND (G4): as typed, not kept; while it has words every band is open and shows only its matches.
+  const [find, setFind] = useState('');
+  const finding = find.trim() !== '';
+  const shown = foundIn(bands, find);
+  const found = shown.reduce((n, b) => n + b.count, 0);
   const bandOfType = (type: TypeShown) => (type.on_sheet === 'equipped' || type.on_sheet === 'usable' ? type.on_sheet : 'pack');
   /** One line a thing (G3), by its place; a click opens its card. `tagged`, in the STASH, says its type. */
   const lineView = ({ index: i, line, columns: lc }: TableRow, type: TypeShown, tagged = false) => {
@@ -307,6 +314,17 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on,
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {/* The box, and its own × in the theme (the browser's is blue in every theme): Esc clears it too. */}
+      <span style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+        <input type="search" className="gear-find" aria-label="Find in your gear" placeholder="Find on your sheet: a name, a type, 2d6, AMMO…" value={find}
+          onChange={(e) => setFind(e.target.value)} onKeyDown={(e) => { if (e.key === 'Escape') setFind(''); }} style={{ ...input, flex: 1 }} />
+        {find !== '' && (
+          <button type="button" className="utility-btn" aria-label="Clear FIND" title="Clear" onClick={() => setFind('')} style={{ fontSize: '0.7rem', padding: '0 6px', lineHeight: 1.2 }}>×</button>
+        )}
+      </span>
+      {finding && found === 0 && (
+        <span role="status" aria-label="What FIND found" style={small}>Nothing on this sheet matches &ldquo;{find.trim()}&rdquo;.</span>
+      )}
       {/* A thing made by hand, of any type (G2): it opens under ✎ in its type's band, opened if closed. */}
       {!readOnly && (
         <div role="group" aria-label="Add by hand" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -316,20 +334,24 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on,
           ))}
         </div>
       )}
-      {bands.map((b) => {
-        const closed = shut.has(b.band);
+      {!(finding && found === 0) && shown.map((b) => {
+        // While FIND has words, every band open to show what it matched; as left once cleared.
+        const closed = !finding && shut.has(b.band);
         // Something landed in it while closed (G3): a short pulse, then bright until opened (opening clears it).
         const fresh = news.has(b.band);
         return (
           <section key={b.band} aria-label={`${b.label} band`} style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
-            <button type="button" aria-expanded={!closed} onClick={() => toggle(b.band)} title={fresh ? 'Something new landed here: open to see' : closed ? 'Open' : 'Close'}
+            {/* Not disabled while FIND shows what it found: a disabled button is drawn faint, and the counts must read. */}
+            <button type="button" aria-expanded={!closed} onClick={() => { if (!finding) toggle(b.band); }} aria-disabled={finding || undefined}
+              title={finding ? 'Showing what FIND matched: clear it to open or close bands' : fresh ? 'Something new landed here: open to see' : closed ? 'Open' : 'Close'}
               className={fresh ? 'gear-band-news' : undefined}
               // Lit in the theme's own color, a tint behind it: cyan is grey in some themes, and would read dimmer.
-              style={{ background: fresh ? 'color-mix(in srgb, var(--green) 20%, transparent)' : 'none', border: 0, borderBottom: '1px solid var(--dark-green)', color: 'var(--green)', fontFamily: 'monospace', fontSize: '0.6rem', letterSpacing: '1px', textAlign: 'left', padding: '2px 0', cursor: 'pointer' }}>
+              style={{ background: fresh ? 'color-mix(in srgb, var(--green) 20%, transparent)' : 'none', border: 0, borderBottom: '1px solid var(--dark-green)', color: 'var(--green)', fontFamily: 'monospace', fontSize: '0.6rem', letterSpacing: '1px', textAlign: 'left', padding: '2px 0', cursor: finding ? 'default' : 'pointer' }}>
               {closed ? '▸' : '▾'} {b.label} · {b.count}
             </button>
             {!closed && (b.count === 0
-              ? <span style={small}>Nothing here.</span>
+              // While finding, a band with no match says so by its · 0 alone.
+              ? (finding ? null : <span style={small}>Nothing here.</span>)
               : <>
                 {b.groups.map(({ type, rows }) => (
                   <section key={type.id} aria-label={`${type.label} gear`} style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>

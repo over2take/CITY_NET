@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { typesOf, fits, itemOfLine, lineColumns, gearTables, valueText, withLineValue, newLineOf, countOf, cellWords, LIMITS, type ColumnShown , gearBands, landedIn } from '../gearTypes';
+import { typesOf, fits, itemOfLine, lineColumns, gearTables, valueText, withLineValue, newLineOf, countOf, cellWords, LIMITS, type ColumnShown , gearBands, landedIn, foundIn } from '../gearTypes';
 import { normaliseItem, readInventory, type InventoryItem } from '../inventory';
 import type { ItemsShown } from '../gearItems';
 
@@ -222,5 +222,39 @@ describe('what landed in a closed band (G3)', () => {
     expect(landedIn({ equipped: 0, usable: 1, pack: 2, stash: 0 }, { equipped: 1, usable: 1, pack: 3, stash: 1 }, shut as never)).toEqual(['equipped', 'stash']);
     expect(landedIn({ equipped: 2, usable: 1, pack: 0, stash: 0 }, { equipped: 1, usable: 0, pack: 0, stash: 0 }, shut as never)).toEqual([]);
     expect(landedIn(null, { equipped: 1, usable: 1, pack: 1, stash: 1 }, shut as never)).toEqual([]);
+  });
+});
+
+describe('FIND on GEAR (G4)', () => {
+  const SHOWN = {
+    slots: [], list: [{ id: 'pistol', label: 'Pistol', needs: 'carried', features: [], type: 'guns', values: { damage: '2d6', ammo: 6 } }],
+    types: [
+      { id: 'guns', label: 'GUNS', one: 'Gun', on_sheet: 'equipped', columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }, { id: 'ammo', label: 'AMMO', kind: 'count' }] },
+      { id: 'gear', label: 'GEAR', one: 'Gear', columns: [{ id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' }] },
+    ],
+  } as never;
+  const at = (name: string, type: string, more = {}) => ({ name, qty: 1, enc: '', bundled: false, carry: 'stowed', location: '', type, ...more }) as never;
+  const lines = [at('Pistol', 'guns'), at('Rope', 'gear', { values: { weight: 5 } }), at('Old Rifle', 'guns', { carry: 'stash', location: 'the van', values: { damage: '2d8' } })];
+  const names = (text: string) => foundIn(gearBands(SHOWN, lines), text).map((b) => [b.band, b.count, [...b.groups.flatMap((g) => g.rows), ...b.loose.map((l) => l.row)].map((r) => r.line.name)]);
+
+  it('by name, type, band, where it is, a column and its words, in any case; every word somewhere on the line', () => {
+    expect(names('pistol')).toEqual([['equipped', 1, ['Pistol']], ['usable', 0, []], ['pack', 0, []], ['stash', 0, []]]);
+    expect(names('GUNS').map(([, n]) => n)).toEqual([1, 0, 0, 1]);
+    expect(names('2d6').map(([, n]) => n)).toEqual([1, 0, 0, 0]);
+    expect(names('ammo 6 / 6')).toEqual(names('pistol'));
+    expect(names('weight 5').map(([, n]) => n)).toEqual([0, 0, 1, 0]);
+    expect(names('pack').map(([, n]) => n)).toEqual([0, 0, 1, 0]);
+    expect(names('van').map(([, n]) => n)).toEqual([0, 0, 0, 1]);
+    expect(names('stash 2d8').map(([, n]) => n)).toEqual([0, 0, 0, 1]);
+    // Both words, not either.
+    expect(names('pistol rope').map(([, n]) => n)).toEqual([0, 0, 0, 0]);
+    // A type with nothing found has no group.
+    expect(foundIn(gearBands(SHOWN, lines), 'rope')[0].groups).toEqual([]);
+  });
+
+  it('blank or spaces: the bands as they are', () => {
+    const bands = gearBands(SHOWN, lines);
+    expect(foundIn(bands, '')).toBe(bands);
+    expect(foundIn(bands, '   ')).toBe(bands);
   });
 });

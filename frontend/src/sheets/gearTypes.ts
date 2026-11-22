@@ -128,6 +128,27 @@ export const gearBands = (shown: ItemsShown | null | undefined, lines: Inventory
 export const landedIn = (before: Partial<Record<GearBand, number>> | null, after: Partial<Record<GearBand, number>>, shut: Set<GearBand>): GearBand[] =>
   before ? GEAR_BANDS.map((b) => b.id).filter((id) => shut.has(id) && (after[id] ?? 0) > (before[id] ?? 0)) : [];
 
+/**
+ * FIND on the GEAR tab (G4; approved mockup docs/mockups/sheet-gear-layout.html, decision 4, "as you type"; always shown,
+ * the user 2026-11-22). A line is found by its name, its type, its band, where it is carried and where it is, and each
+ * column it has with its words ("AMMO 4 / 6", "DAMAGE 2d6"), in any case; every word typed must be somewhere on it.
+ */
+export const lineWords = (row: TableRow, type: TypeShown, band: string): string =>
+  [row.line.name, type.label, type.one, band, row.line.carry === 'stash' ? 'stash' : row.line.carry, row.line.location,
+    ...shownCells(row.columns).map((c) => `${c.column.label} ${cellWords(c, row.line)}`)].join(' ').toLowerCase();
+
+/** The bands showing only what FIND matches, each counted by its matches; blank, the bands as they are. */
+export const foundIn = (bands: BandShown[], text: string): BandShown[] => {
+  const words = text.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return bands;
+  const hit = (row: TableRow, type: TypeShown, band: string) => { const on = lineWords(row, type, band); return words.every((w) => on.includes(w)); };
+  return bands.map((b) => {
+    const groups = b.groups.map((g) => ({ type: g.type, rows: g.rows.filter((r) => hit(r, g.type, b.label)) })).filter((g) => g.rows.length > 0);
+    const loose = b.loose.filter(({ type, row }) => hit(row, type, b.label));
+    return { ...b, groups, loose, count: groups.reduce((n, g) => n + g.rows.length, 0) + loose.length };
+  });
+};
+
 /** A value as a box shows it. */
 export const valueText = (v: Value | undefined): string => (v === undefined ? '' : String(v));
 
