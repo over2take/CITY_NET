@@ -15,6 +15,8 @@ export interface TypeShown {
   id: string; label: string; one: string; columns: ColumnShown[];
   /** The kinds of shop that sell its lines (8a7a2), as the server works them out: the General Store where the GM said none. */
   sold_at?: string[];
+  /** Its band on the GEAR tab (G1), as the server works it out: PACK where unsaid. */
+  on_sheet?: 'equipped' | 'usable' | 'pack';
 }
 export type Value = string | number;
 

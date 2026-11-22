@@ -462,7 +462,7 @@ describe('ITEM TYPES (8a2)', () => {
   });
 
   it('every hint written', () => {
-    for (const k of ['items.types', 'items.typeName', 'items.one', 'items.column', 'items.kind', 'items.and', 'items.type']) expect(HINTS[k], k).toBeTruthy();
+    for (const k of ['items.types', 'items.typeName', 'items.one', 'items.column', 'items.kind', 'items.and', 'items.type', 'items.onSheet']) expect(HINTS[k], k).toBeTruthy();
   });
 });
 
@@ -698,5 +698,22 @@ describe('an item\'s PRICE and IN SHOPS (8a7a3b1)', () => {
 
   it('every hint written', () => {
     for (const k of ['items.price', 'items.inShops'] as const) expect(HINTS[k], k).toBeTruthy();
+  });
+});
+
+describe('ON THE SHEET on a type (G1)', () => {
+  it('its band pressed, said what it means; another picked, stored; PACK stores nothing', async () => {
+    const TYPED = { ...WORN, items: { types: [{ id: 'gear', label: 'GEAR', columns: [] }, { id: 'arms', label: 'ARMS', one: 'Arm', columns: [], on_sheet: 'equipped' }], list: [] } } as unknown as Definition;
+    const last = open(TYPED, 'TYPES');
+    const group = () => within(screen.getByRole('group', { name: 'GEAR band' }));
+    expect(group().getByRole('button', { name: 'PACK' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('PACK: everything else that is carried.')).toBeTruthy();
+    await userEvent.click(group().getByRole('button', { name: 'USABLE' }));
+    expect((last().items as unknown as { types: { on_sheet?: string }[] }).types[0].on_sheet).toBe('usable');
+    expect(screen.getByText('USABLE: used up or used often, like potions, ammo and kits.')).toBeTruthy();
+    expect(group().getByRole('button', { name: 'USABLE' }).getAttribute('aria-pressed')).toBe('true');
+    expect(group().getByRole('button', { name: 'PACK' }).getAttribute('aria-pressed')).toBe('false');
+    await userEvent.click(group().getByRole('button', { name: 'PACK' }));
+    expect((last().items as unknown as { types: object[] }).types[0]).not.toHaveProperty('on_sheet');
   });
 });

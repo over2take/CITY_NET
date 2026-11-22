@@ -41,7 +41,15 @@ const linesOf = (data) => {
 /** What a column holds: a number, words, damage dice, any other dice, a count spent and refilled, one word of a few. */
 const KINDS = ['number', 'text', 'damage', 'dice', 'count', 'pick'];
 const LIMITS = { types: 10, columns: 20, options: 20, word: 30, text: 200, count: 1000, reload: 10, number: 1000000000, unit: 12 };
-const TYPE_KEYS = new Set(['id', 'label', 'one', 'columns', 'sold_at']);
+const TYPE_KEYS = new Set(['id', 'label', 'one', 'columns', 'sold_at', 'on_sheet']);
+/**
+ * Where a type's lines sit on the sheet's GEAR tab (G1; approved mockup docs/mockups/sheet-gear-layout.html, 2026-11-20):
+ * EQUIPPED (worn or wielded), USABLE (used up or used often: potions, ammo, kits) or PACK. Unsaid, PACK, as GEAR starts.
+ */
+const BANDS = ['equipped', 'usable', 'pack'];
+const DEFAULT_BAND = 'pack';
+/** A type's band: what it says, else PACK. */
+const bandOf = (type) => (type && BANDS.includes(type.on_sheet) ? type.on_sheet : DEFAULT_BAND);
 const BASE = ['id', 'label', 'kind'];
 const COLUMN_KEYS = {
   number: new Set([...BASE, 'unit']), text: new Set(BASE), damage: new Set(BASE), dice: new Set(BASE),
@@ -111,6 +119,8 @@ const checkTypes = (definition, problems, { text, keys, labelMost, itemIds = new
     text(t.label, `${where}, label`, labelMost, { required: true });
     text(t.one, `${where}, one`, labelMost);
     // Where its lines are sold (8a7a2): a list of the kinds of shop, each once.
+    // Its band on the sheet (G1): one of the three.
+    if (t.on_sheet !== undefined && !BANDS.includes(t.on_sheet)) problems.push({ where: `${where}, on_sheet`, message: 'EQUIPPED, USABLE or PACK' });
     if (t.sold_at !== undefined) {
       if (!Array.isArray(t.sold_at)) problems.push({ where: `${where}, sold_at`, message: 'A list of the kinds of shop that sell it' });
       else t.sold_at.forEach((id, n) => {
@@ -175,6 +185,8 @@ const typesShown = (definition, items = []) => {
     id: t.id, label: t.label || t.id, one: t.one || t.label || t.id,
     // The kinds of shop that sell it, the General Store where unsaid (8a7a2): the shop window's shelves follow it.
     sold_at: soldAt(t),
+    // Its band on the GEAR tab (G1), PACK where unsaid.
+    on_sheet: bandOf(t),
     columns: t.columns.map((c) => ({
       id: c.id, label: c.label || c.id, kind: c.kind,
       ...(c.kind === 'number' && typeof c.unit === 'string' && c.unit.trim() ? { unit: c.unit } : {}),
@@ -246,4 +258,4 @@ const lineColumns = (definition, line, items, names) => {
   return { type: type.id, ...(item ? { item: item.id } : {}), values, counts };
 };
 
-module.exports = { PRICE_COLUMN, MOST_PRICE, isPrice, itemPrice, inShops, KINDS, LIMITS, GEAR, NAME, SHOP_TYPES, DEFAULT_SOLD_AT, soldAt, typeShelvesAt, linesOf, typesOf, ownTypes, typeNamed, valueProblem, checkTypes, checkItemType, typesShown, itemValues, lineColumns };
+module.exports = { BANDS, DEFAULT_BAND, bandOf, PRICE_COLUMN, MOST_PRICE, isPrice, itemPrice, inShops, KINDS, LIMITS, GEAR, NAME, SHOP_TYPES, DEFAULT_SOLD_AT, soldAt, typeShelvesAt, linesOf, typesOf, ownTypes, typeNamed, valueProblem, checkTypes, checkItemType, typesShown, itemValues, lineColumns };
