@@ -112,9 +112,9 @@ describe('the buildings section', () => {
   it('refuses a kind it does not have, whatever it is called', () => {
     const def = JSON.parse('{"format":1,"name":"X","buildings":{"constructor":{},"__proto__":{"a":1},"toString":{}}}');
     expect(problemsOf(def)).toEqual([
-      'buildings constructor: Only "types" and "catalogues" are set here',
-      'buildings __proto__: Only "types" and "catalogues" are set here',
-      'buildings toString: Only "types" and "catalogues" are set here',
+      'buildings constructor: Only "types", "catalogues" and "shops" are set here',
+      'buildings __proto__: Only "types", "catalogues" and "shops" are set here',
+      'buildings toString: Only "types", "catalogues" and "shops" are set here',
     ]);
   });
 });

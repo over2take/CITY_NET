@@ -8,6 +8,7 @@ const { DEFAULT_SYSTEM, applyDerived } = require('../sheets/templates');
 const customSystems = require('../systemBuilder/runtime');
 const { applyHealthAction } = require('../systemBuilder/health');
 const { BUILDING_TYPES, isValidType } = require('../buildingTypes');
+const { ownShops, ownShopOf } = require('../systemBuilder/buildings');
 const { readPct } = require('../shops/buyback');
 const { shopsOpen } = require('../shops/availability');
 const { selectByIds, deleteByIds } = require('../bulk');
@@ -159,9 +160,13 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
    * game has, by its own names (a custom system can rename and turn off types, buildings.js).
    */
   router.get('/building-types', (req, res) =>
-    withShopSystem(res, (system) => res.json(BUILDING_TYPES
-      .filter((t) => customSystems.buildingIn(system, 'types', t.id))
-      .map((t) => ({ ...t, label: customSystems.buildingNameIn(system, 'types', t.id) || t.label })))));
+    withShopSystem(res, (system) => res.json([
+      ...BUILDING_TYPES
+        .filter((t) => customSystems.buildingIn(system, 'types', t.id))
+        .map((t) => ({ ...t, label: customSystems.buildingNameIn(system, 'types', t.id) || t.label })),
+      // The game's own shops (8a7b), after the app's, marked as its own; selling only the types that tick them.
+      ...ownShops(customSystems.definitionOf(system)).filter((s) => s.on).map((s) => ({ id: s.id, label: s.name, shop: true, sells: [], own: true })),
+    ])));
 
   /**
    * What a building is for.
@@ -174,7 +179,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     const { building_type, buyback_pct } = req.body;
     // A value nobody recognises would put a SHOP button on a building that cannot sell
     // anything, so it is refused rather than stored and puzzled over later.
-    if (!isValidType(building_type)) return res.status(400).json({ error: 'Unknown building type' });
+    // The app's types, or one of the running game's own shops (8a7b).
+    if (!isValidType(building_type) && !ownShopOf(customSystems.definitionOf(system), building_type)) return res.status(400).json({ error: 'Unknown building type' });
 
     const next = building_type === '' || building_type === undefined ? null : building_type;
 
