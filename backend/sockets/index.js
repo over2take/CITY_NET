@@ -15,7 +15,7 @@ const cyberware = require('../sheets/cyberware');
 const { ownToken } = require('../sheets/ownToken');
 const sheetRolls = require('../sheets/rolls');
 const { rollGear, readGearDice } = require('../systemBuilder/gearRolls');
-const { withChanges } = require('../systemBuilder/uniqueLines');
+const { withChanges, keepColumns, PLAYERS_GEAR_SETTING } = require('../systemBuilder/uniqueLines');
 const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
 const cyberEffects = require('../sheets/cyberwareEffects');
@@ -1406,6 +1406,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           return;
         }
         if (linkSource) return;
+        // PLAYERS CHANGE GEAR (G6a): a player's inventory, with the switch off, is asked of the table first; the GM always may.
+        const gearOff = payload.fieldId === 'inventory' && !isAdminSocket(socket)
+          ? (done) => db.get('SELECT value FROM global_settings WHERE key = ?', [PLAYERS_GEAR_SETTING], (e, row) => done(!e && !!row && row.value === '0'))
+          : (done) => done(false);
+        gearOff((keepGear) => {
         // Through the queue rather than a bare read-then-write: a GM applying damage to
         // this same sheet while the player types would otherwise build its new blob from
         // data this edit had already replaced, and one of the two changes would vanish
@@ -1421,8 +1426,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             // A rank past where a new character may start (7f1c2): the GM's to give.
             if (!isAdminSocket(socket) && pastStart(customSystems.definitionOf(system), data, payload.fieldId, payload.value)) return undefined;
             // The inventory: which lines are their item made unique, and by whom and when (G5a), from what was stored.
+            // With PLAYERS CHANGE GEAR off, a player's lines keep their columns as stored (G6a).
+            const sent = keepGear && customSystems.definitionOf(system) ? keepColumns(data.inventory, payload.value) : payload.value;
             data[payload.fieldId] = payload.fieldId === 'inventory'
-              ? withChanges(customSystems.definitionOf(system), data.inventory, payload.value, { by: info.userName, gm: isAdminSocket(socket) })
+              ? withChanges(customSystems.definitionOf(system), data.inventory, sent, { by: info.userName, gm: isAdminSocket(socket) })
               : payload.value;
             // If the changed field is a max, clamp the paired current field.
             const curField = sheetTemplates.getMaxPairs(system)[payload.fieldId];
@@ -1491,6 +1498,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 }
           }
         );
+        });
       });
     });
 

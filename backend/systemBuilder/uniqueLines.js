@@ -10,6 +10,13 @@
 // is still unique, with no one named.
 //
 // Pure; the sheet writes call it (sockets updateSheetField, the GM's PUT /api/sheets/user/:username and /npcs/:id).
+//
+// PLAYERS CHANGE GEAR (G6a; decided 2026-11-20, all A: a GAME tab switch, on to start; off, only the GM changes columns,
+// players still name, count and move their things; the user: "the GM can still open, view and change things"). Off, a
+// player's write keeps every line's column values as stored, and a line they add comes without any: keepColumns.
+
+/** The table's setting (global_settings): '0' switches PLAYERS CHANGE GEAR off. */
+const PLAYERS_GEAR_SETTING = 'players_change_gear';
 
 const { typesOf, typeNamed } = require('./itemTypes');
 
@@ -47,6 +54,37 @@ const uniqueColumns = (definition, line) => {
 };
 
 /**
+ * The line each of `next` was in `prev`, or null for one that is new: the one in its place where it has the same name, else
+ * the first unclaimed of its name. Its type needn't match: a line made another type than its item's is no longer the item.
+ */
+const pairLines = (prev, next) => {
+  const claimed = new Set();
+  const fits = (p, line) => isPlainObject(p) && isPlainObject(line) && key(p.name) === key(line.name);
+  return next.map((line, i) => {
+    const j = !claimed.has(i) && fits(prev[i], line) ? i : prev.findIndex((p, n) => !claimed.has(n) && fits(p, line));
+    if (j < 0) return null;
+    claimed.add(j);
+    return prev[j];
+  });
+};
+
+/**
+ * A player's lines with PLAYERS CHANGE GEAR off (G6a): each line's column values as stored for the line it was, none on a
+ * line that is new; its name, how many, where it is and the rest as sent. In the form given; as given where unreadable.
+ */
+const keepColumns = (before, after) => {
+  const next = parse(after);
+  if (!next) return after;
+  const was = pairLines(parse(before) || [], next);
+  const out = next.map((line, i) => {
+    if (!isPlainObject(line)) return line;
+    const { values: _typed, ...rest } = line;
+    return was[i] && isPlainObject(was[i].values) ? { ...rest, values: { ...was[i].values } } : rest;
+  });
+  return typeof after === 'string' ? JSON.stringify(out) : out;
+};
+
+/**
  * The lines `after` as they are to be stored, each with `changed` worked out against `before` (what was stored): `who` is
  * { by: username, gm }. In the form given (a JSON string stays one); as given where the system has no definition or the
  * lines can't be read.
@@ -57,21 +95,12 @@ const withChanges = (definition, before, after, who, at = new Date().toISOString
   if (!next) return after;
   const prev = parse(before) || [];
   const stamp = { by: who && typeof who.by === 'string' ? who.by : '', ...(who && who.gm ? { gm: true } : {}), at };
-  // The line each was before: the one in its place where it has the same name, else the first unclaimed of its name. Its
-  // type needn't match: a line made another type than its item's is no longer the item, so has no unique columns anyway.
-  const claimed = new Set();
-  const fits = (p, line) => isPlainObject(p) && key(p.name) === key(line.name);
-  const wasOf = (line, i) => {
-    const j = !claimed.has(i) && fits(prev[i], line) ? i : prev.findIndex((p, n) => !claimed.has(n) && fits(p, line));
-    if (j < 0) return null;
-    claimed.add(j);
-    return prev[j];
-  };
+  const wasLines = pairLines(prev, next);
   const out = next.map((line, i) => {
     if (!isPlainObject(line)) return line;
     // What the sheet says was changed is never taken: worked out here alone.
     const { changed: _sent, ...rest } = line;
-    const was = wasOf(rest, i);
+    const was = wasLines[i];
     const kept = was && isPlainObject(was.changed) ? was.changed : {};
     const wasOwn = was && isPlainObject(was.values) ? was.values : {};
     const changed = {};
@@ -83,4 +112,4 @@ const withChanges = (definition, before, after, who, at = new Date().toISOString
   return typeof after === 'string' ? JSON.stringify(out) : out;
 };
 
-module.exports = { withChanges, uniqueColumns, itemOf };
+module.exports = { PLAYERS_GEAR_SETTING, withChanges, keepColumns, pairLines, uniqueColumns, itemOf };

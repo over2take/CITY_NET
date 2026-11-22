@@ -15,7 +15,7 @@ import { drain, until } from './helpers/until.js';
 
 process.env.JWT_SECRET = 'test-secret';
 const require_ = createRequire(import.meta.url);
-const { withChanges, uniqueColumns } = require_('../systemBuilder/uniqueLines');
+const { withChanges, uniqueColumns, keepColumns, PLAYERS_GEAR_SETTING } = require_('../systemBuilder/uniqueLines');
 const runtime = require_('../systemBuilder/runtime');
 const socketsFactory = require_('../sockets/index.js');
 
@@ -162,5 +162,82 @@ describe('kept by every write of the inventory', () => {
     const res = await request(app).put(`/api/sheets/npcs/${npc}`).set(gm).send({ fields: { inventory: JSON.stringify([line('Cutlass', { values: { weight: 5 } })]) } });
     expect(res.status).toBe(200);
     expect((await linesOf(`id = ${npc}`))[0].changed).toEqual({ weight: { by: 'gm', gm: true, at: expect.any(String) } });
+  });
+});
+
+describe('PLAYERS CHANGE GEAR off (G6a)', () => {
+  it('a player\'s lines keep their columns as stored, a new one comes without; name, how many, where and the rest as sent', () => {
+    const stored = [line('Cutlass', { values: { damage: '2d8' } }), line('Rope')];
+    const sent = [line('Cutlass', { qty: 2, carry: 'readied', values: { damage: '9d9', range: 'far' } }), line('Rope', { values: { weight: 99 } }), line('A stick', { type: 'weapons', values: { damage: '1d4' } })];
+    expect(keepColumns(stored, sent)).toEqual([line('Cutlass', { qty: 2, carry: 'readied', values: { damage: '2d8' } }), line('Rope'), line('A stick', { type: 'weapons' })]);
+    // Found by name where lines moved; a JSON string back as one; unreadable as given.
+    expect(JSON.parse(keepColumns(JSON.stringify(stored), JSON.stringify([line('Rope'), line('Cutlass', { values: {} })])))).toEqual([line('Rope'), line('Cutlass', { values: { damage: '2d8' } })]);
+    expect(keepColumns(stored, 'nope')).toBe('nope');
+    expect(PLAYERS_GEAR_SETTING).toBe('players_change_gear');
+  });
+});
+
+describe('PLAYERS CHANGE GEAR at the table (G6a)', () => {
+  let db;
+  let id;
+
+  beforeEach(async () => {
+    db = await makeTestDb();
+    await run(db, "INSERT INTO global_settings (key, value) VALUES ('game_system', 'cities_without_number')");
+    const app = express();
+    app.use(express.json({ limit: '2mb' }));
+    app.use('/api/systems', require_('../routes/systems.js')(db));
+    app.use('/api/sheets', require_('../routes/sheets.js')(db, { emit: () => {}, to: () => ({ emit: () => {} }) }));
+    id = (await request(app).post('/api/systems').set(gm).send({ definition: BLADES })).body.id;
+    await new Promise((resolve) => runtime.load(db, resolve));
+    await request(app).post(`/api/systems/${id}/publish`).set(gm);
+    await request(app).put('/api/sheets/system').set(gm).send({ system: id });
+    await run(db, 'INSERT INTO character_sheets (username, system, data, is_npc) VALUES (?, ?, ?, 0)',
+      ['kes', id, JSON.stringify({ name: 'Kes', inventory: JSON.stringify([line('Cutlass', { values: { damage: '2d8' } })]) })]);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  const connectAs = async (userName, { admin = false } = {}) => {
+    let connect;
+    socketsFactory({ on: (e, cb) => { if (e === 'connection') connect = cb; }, emit: () => {}, to: () => ({ emit: () => {} }) },
+      db, { elevatedUsers: new Set(), emitUpdate: vi.fn(), recordAction: vi.fn() });
+    const handlers = {};
+    connect({ id: `pg-${Math.random()}`, on: (e, fn) => { handlers[e] = fn; }, emit: () => {}, broadcast: { emit: () => {} }, use: () => {}, join: () => {}, disconnect: () => {} });
+    handlers.identify(admin ? { userName, isAdmin: true, token: GM } : userName);
+    await drain(db);
+    return handlers;
+  };
+  const kesLines = async () => JSON.parse(JSON.parse((await get(db, "SELECT data FROM character_sheets WHERE username = 'kes'")).data).inventory || '[]');
+  const off = () => run(db, 'INSERT INTO global_settings (key, value) VALUES (?, ?)', [PLAYERS_GEAR_SETTING, '0']);
+  const write = (handlers, rows) => handlers.updateSheetField({ fieldId: 'inventory', value: JSON.stringify(rows) });
+
+  it('off: the player\'s DAMAGE stays as it was, their new line comes without columns, the rest of the write lands', async () => {
+    await off();
+    const kes = await connectAs('kes');
+    write(kes, [line('Cutlass', { qty: 2, values: { damage: '9d9' } }), line('A stick', { type: 'weapons', values: { damage: '1d4' } })]);
+    await until(async () => (await kesLines()).length === 2, { label: 'written' });
+    const [cutlass, stick] = await kesLines();
+    expect(cutlass.qty).toBe(2);
+    expect(cutlass.values).toEqual({ damage: '2d8' });
+    expect(stick).toEqual(line('A stick', { type: 'weapons' }));
+  });
+
+  it('off: the GM, on their own socket, still changes it', async () => {
+    await off();
+    // The GM playing the character, as the GM: an admin socket.
+    await run(db, "UPDATE character_sheets SET username = 'gm' WHERE username = 'kes'");
+    const gmSocket = await connectAs('gm', { admin: true });
+    write(gmSocket, [line('Cutlass', { values: { damage: '3d8' } })]);
+    await until(async () => JSON.parse(JSON.parse((await get(db, "SELECT data FROM character_sheets WHERE username = 'gm'")).data).inventory)[0].values.damage === '3d8', { label: 'the GM\'s' });
+  });
+
+  it('on, or never set: the player changes it, as before', async () => {
+    const kes = await connectAs('kes');
+    write(kes, [line('Cutlass', { values: { damage: '4d8' } })]);
+    await until(async () => (await kesLines())[0].values.damage === '4d8', { label: 'never set' });
+    await run(db, 'INSERT INTO global_settings (key, value) VALUES (?, ?)', [PLAYERS_GEAR_SETTING, '1']);
+    write(kes, [line('Cutlass', { values: { damage: '5d8' } })]);
+    await until(async () => (await kesLines())[0].values.damage === '5d8', { label: 'on' });
   });
 });
