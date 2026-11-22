@@ -15,7 +15,8 @@ import type { CountAnswer, GearCount } from '../../sheets/gearTypes';
  * a line's own, one line at a time; + to add a line of a type by hand, opened; and the one list without types.
  */
 
-afterEach(() => cleanup());
+// Which bands are closed is kept in the browser (G2): each test starts from none kept.
+afterEach(() => { cleanup(); localStorage.clear(); });
 
 const SECTION: SheetSection = { id: 'gear', label: 'GEAR', layout: 'inventory', fields: [] };
 const ITEMS: ItemsShown = {
@@ -66,7 +67,8 @@ describe('a compact line per thing, by type', () => {
     // A stick: its own DAMAGE, and nothing else (doesn't apply).
     expect(within(screen.getByTestId('gear-line-2')).getAllByRole('note').map((n) => n.getAttribute('aria-label')).filter((l) => /^Item [0-9]+ /.test(l ?? ''))).toEqual(['Item 3 DAMAGE: 1d4']);
     expect(within(note('WEAPONS', 'Item 3 DAMAGE')!).getByText('1d4').getAttribute('title')).toBe('This line\'s own');
-    expect(table('GEAR').getByText('GEAR · 0')).toBeTruthy();
+    // A type with no lines has no group in its band (G2): GEAR has none.
+    expect(screen.queryByRole('region', { name: 'GEAR gear' })).toBeNull();
     // No boxes for the columns until ✎; no one list, and no + ITEM under it.
     expect(table('WEAPONS').queryByLabelText('Item 2 RANGE')).toBeNull();
     expect(screen.queryByRole('button', { name: '+ ITEM' })).toBeNull();
@@ -104,7 +106,8 @@ describe('a compact line per thing, by type', () => {
 
   it('+ a type\'s one adds a line of it by hand, opened to fill, which stays in its table as it is named; a stashed one says where', async () => {
     const last = show([line('Pistol')]);
-    await userEvent.click(table('GEAR').getByRole('button', { name: 'Add a Gear by hand' }));
+    // From the row of + at the top (G2).
+    await userEvent.click(within(screen.getByRole('group', { name: 'Add by hand' })).getByRole('button', { name: 'Add a Gear by hand' }));
     expect(last()[1]).toEqual(line('', { type: 'gear' }));
     expect(table('GEAR').getByLabelText('Item 2 WEIGHT')).toBeTruthy();
     fireEvent.change(table('GEAR').getByLabelText('Item 2 name'), { target: { value: 'Pistol' } });
@@ -113,12 +116,14 @@ describe('a compact line per thing, by type', () => {
     expect(table('GEAR').getByText('GEAR · 1')).toBeTruthy();
     fireEvent.change(table('GEAR').getByLabelText('Item 2 quantity'), { target: { value: '3' } });
     fireEvent.change(table('GEAR').getByLabelText('Item 2 carried'), { target: { value: 'stash' } });
-    fireEvent.change(table('GEAR').getByLabelText('Item 2 location'), { target: { value: 'the van' } });
+    // Stashed, it moves to the STASH band, which opens so the line is still in sight (G2).
+    const stashed = within(screen.getByTestId('gear-line-1'));
+    fireEvent.change(stashed.getByLabelText('Item 2 location'), { target: { value: 'the van' } });
     expect(last()[1]).toEqual(line('Pistol', { type: 'gear', qty: 3, carry: 'stash', location: 'the van' }));
-    await userEvent.click(table('GEAR').getByRole('button', { name: 'DONE' }));
+    await userEvent.click(stashed.getByRole('button', { name: 'DONE' }));
     expect(within(screen.getByTestId('gear-line-1')).getByText('the van')).toBeTruthy();
     expect(within(screen.getByTestId('gear-line-1')).getByText('STASHED')).toBeTruthy();
-    await userEvent.click(table('GEAR').getByRole('button', { name: 'Remove item 2' }));
+    await userEvent.click(within(screen.getByTestId('gear-line-1')).getByRole('button', { name: 'Remove item 2' }));
     expect(last()).toHaveLength(1);
   });
 
@@ -296,5 +301,54 @@ describe('a COUNT on its line (8a4b; decision 6 of the gear mockup)', () => {
     show([line('Pistol', { counts: { ammo: 4 } })]);
     expect(at(0).getByRole('note', { name: 'Item 1 AMMO: 4 / 6' })).toBeTruthy();
     expect(at(0).queryByRole('button', { name: /AMMO$/ })).toBeNull();
+  });
+});
+
+describe('in bands (G2)', () => {
+  // WEAPONS EQUIPPED, POTIONS USABLE, GEAR unsaid (PACK).
+  const BANDED: ItemsShown = {
+    slots: [], list: [],
+    types: [
+      { id: 'weapons', label: 'WEAPONS', one: 'Weapon', on_sheet: 'equipped', columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }] },
+      { id: 'potions', label: 'POTIONS', one: 'Potion', on_sheet: 'usable', columns: [] },
+      { id: 'gear', label: 'GEAR', one: 'Gear', columns: [] },
+    ],
+  };
+  const typed = (name: string, type: string, more = {}) => line(name, { type, ...more });
+  const band = (label: string) => screen.getByRole('region', { name: `${label} band` });
+  const head = (label: string) => within(band(label)).getByRole('button', { name: new RegExp(`^[▸▾] ${label} · \\d+$`) });
+
+  it('EQUIPPED, USABLE, PACK and STASH in order, each counted; a type\'s lines in its band, in hand first; STASH closed', () => {
+    show([typed('Rope', 'gear'), typed('Sword', 'weapons'), typed('Pistol', 'weapons', { carry: 'readied' }), typed('Draught', 'potions'), typed('Spare Sword', 'weapons', { carry: 'stash' })], { items: BANDED });
+    expect(screen.getAllByRole('button', { name: /^[▸▾] [A-Z]+ · \d+$/ }).map((b) => b.textContent)).toEqual(['▾ EQUIPPED · 2', '▾ USABLE · 1', '▾ PACK · 1', '▸ STASH · 1']);
+    expect(within(band('EQUIPPED')).getAllByLabelText(/^Item \d+ name$/).map((i) => (i as HTMLInputElement).value)).toEqual(['Pistol', 'Sword']);
+    expect(within(band('USABLE')).getByRole('region', { name: 'POTIONS gear' })).toBeTruthy();
+    expect(within(band('PACK')).getByRole('region', { name: 'GEAR gear' })).toBeTruthy();
+    expect(head('STASH').getAttribute('aria-expanded')).toBe('false');
+    expect(within(band('STASH')).queryByLabelText(/name$/)).toBeNull();
+  });
+
+  it('a head closes and opens its band, remembered; the STASH says each line\'s type; an empty band says so', async () => {
+    show([typed('Sword', 'weapons'), typed('Spare Sword', 'weapons', { carry: 'stash' })], { items: BANDED });
+    await userEvent.click(head('STASH'));
+    expect(head('STASH').getAttribute('aria-expanded')).toBe('true');
+    expect(within(band('STASH')).getByText('WEAPONS')).toBeTruthy();
+    expect((within(band('STASH')).getByLabelText('Item 2 name') as HTMLInputElement).value).toBe('Spare Sword');
+    expect(within(band('USABLE')).getByText('Nothing here.')).toBeTruthy();
+    await userEvent.click(head('EQUIPPED'));
+    expect(within(band('EQUIPPED')).queryByLabelText('Item 1 name')).toBeNull();
+    // Shown again, as left.
+    cleanup();
+    show([typed('Sword', 'weapons'), typed('Spare Sword', 'weapons', { carry: 'stash' })], { items: BANDED });
+    expect(head('EQUIPPED').getAttribute('aria-expanded')).toBe('false');
+    expect(head('STASH').getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('a thing made by hand opens its band if closed', async () => {
+    show([typed('Sword', 'weapons')], { items: BANDED });
+    await userEvent.click(head('EQUIPPED'));
+    await userEvent.click(within(screen.getByRole('group', { name: 'Add by hand' })).getByRole('button', { name: 'Add a Weapon by hand' }));
+    expect(head('EQUIPPED').getAttribute('aria-expanded')).toBe('true');
+    expect(within(band('EQUIPPED')).getByLabelText('Item 2 name')).toBeTruthy();
   });
 });

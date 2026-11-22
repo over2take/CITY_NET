@@ -34,15 +34,16 @@ test('GEAR as a table per type: a stick made by hand and its DAMAGE rolled, the 
   await mine.getByLabel('Might', { exact: true }).fill('12');
   await expect.poll(async () => (await sheetOf()).might, { timeout: 15_000 }).toBe(12);
 
-  // A table per type, each empty with its own +.
+  // In bands (G2): nothing carried yet, a + for each type in the row at the top.
   await sheetTab(mine, 'GEAR');
   const weapons = mine.getByRole('region', { name: 'WEAPONS gear' });
   const gear = mine.getByRole('region', { name: 'GEAR gear' });
-  await expect(weapons.getByText('WEAPONS · 0')).toBeVisible();
-  await expect(gear.getByText('GEAR · 0')).toBeVisible();
+  const add = mine.getByRole('group', { name: 'Add by hand' });
+  await expect(mine.getByRole('region', { name: 'PACK band' }).getByText('Nothing here.')).toBeVisible();
+  await expect(weapons).toHaveCount(0);
 
   // A stick, made by hand: its own DAMAGE and GRADE.
-  await weapons.getByRole('button', { name: 'Add a Weapon by hand' }).click();
+  await add.getByRole('button', { name: 'Add a Weapon by hand' }).click();
   await weapons.getByLabel('Item 1 name', { exact: true }).fill('A stick');
   await weapons.getByLabel('Item 1 DAMAGE', { exact: true }).fill('1d4');
   await weapons.getByLabel('Item 1 GRADE', { exact: true }).selectOption('HEAVY');
@@ -61,13 +62,13 @@ test('GEAR as a table per type: a stick made by hand and its DAMAGE rolled, the 
   await expect(tray).toBeHidden();
 
   // A line named like the Pistol: its values faint, until RANGE is typed over.
-  await weapons.getByRole('button', { name: 'Add a Weapon by hand' }).click();
+  await add.getByRole('button', { name: 'Add a Weapon by hand' }).click();
   await weapons.getByLabel('Item 2 name', { exact: true }).fill('Pistol');
   await expect(weapons.getByLabel('Item 2 DAMAGE', { exact: true })).toHaveAttribute('placeholder', '2d6 + @might');
   await weapons.getByLabel('Item 2 RANGE', { exact: true }).fill('50 m');
 
   // A rope, in GEAR.
-  await gear.getByRole('button', { name: 'Add a Gear by hand' }).click();
+  await add.getByRole('button', { name: 'Add a Gear by hand' }).click();
   await gear.getByLabel('Item 3 name', { exact: true }).fill('Rope');
   await gear.getByLabel('Item 3 WEIGHT', { exact: true }).fill('10');
 

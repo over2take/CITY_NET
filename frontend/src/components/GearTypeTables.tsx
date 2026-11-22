@@ -1,7 +1,8 @@
 import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { CARRY_STATES, type InventoryItem } from '../sheets/inventory';
 import type { ItemsShown } from '../sheets/gearItems';
-import { gearTables, valueText, withLineValue, newLineOf, shownCells, cellWords, countOf, type Cell, type CountAnswer, type CountKind } from '../sheets/gearTypes';
+import { gearTables, gearBands, valueText, withLineValue, newLineOf, shownCells, cellWords, countOf, type Cell, type CountAnswer, type CountKind, type TableRow, type TypeShown } from '../sheets/gearTypes';
+import { useGearBands } from '../hooks/useGearBands';
 import { diceWords, SHAPES, shapeText, insertName, type GearDiceRead } from '../sheets/gearDice';
 import { FormulaIcon } from './FormulaIcon';
 
@@ -12,7 +13,10 @@ import { FormulaIcon } from './FormulaIcon';
 // at a time, closed by DONE, ✎ again or opening another; a line made by hand opens so. One layout in SHEET.EXE and the
 // standalone tab, the wider fitting more on a line. What goes where is sheets/gearTypes.ts; the lines are the one
 // inventory, written back whole. A COUNT reads "AMMO 4 / 6" with its button (FIRE) and RELOAD beside it (8a4b), done by
-// the server, which asks which carried line to reload from when there are several.
+// the server, which asks which carried line to reload from when there are several. The lines in bands (G2; approved mockup
+// docs/mockups/sheet-gear-layout.html, layout A): EQUIPPED, USABLE and PACK by each type's ON THE SHEET, a group per type,
+// in hand first; STASH, closed to start, whatever the type; a band's head closes it and the sheet remembers. A thing is
+// made by hand from the row of + buttons at the top.
 
 interface Props {
   items: InventoryItem[];
@@ -161,32 +165,27 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, und
       else if (!answer.ok) setSaid({ index, text: answer.error });
     });
   };
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {tables.map(({ type, rows }) => (
-        <section key={type.id} aria-label={`${type.label} gear`} style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <span style={heading}>{type.label.toUpperCase()} · {rows.length}</span>
-            {!readOnly && (
-              <button type="button" className="utility-btn" style={{ fontSize: '0.55rem', padding: '1px 8px' }} aria-label={`Add a ${type.one} by hand`}
-                // A line made by hand opens under ✎, to be filled.
-                onClick={() => { write([...items, newLineOf(type)]); setOpen(items.length); }}>+ {type.one.toUpperCase()}</button>
-            )}
-          </div>
-          {rows.map(({ index: i, line, columns: lc }) => {
+  const bands = gearBands(itemsShown, items);
+  const { shut, toggle, openBand } = useGearBands();
+  const bandOfType = (type: TypeShown) => (type.on_sheet === 'equipped' || type.on_sheet === 'usable' ? type.on_sheet : 'pack');
+  /** One line as the sheet has drawn it since 8a3c1, by its place; `tagged`, in the STASH, says its type. */
+  const lineView = ({ index: i, line, columns: lc }: TableRow, type: TypeShown, tagged = false) => {
             const cells = shownCells(lc);
             const editing = open === i;
             const stashed = line.carry === 'stash';
             const lockedTitle = locked(i) ? 'Installed: REMOVE it first' : undefined;
             return (
               <div key={i} data-testid={`gear-line-${i}`} style={{ borderLeft: '1px solid var(--dark-green)', padding: '2px 0 4px 8px', display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0, opacity: stashed ? 0.6 : 1 }}>
+                {/* In the STASH, whatever its type: the type said, so GUNS and WEAPONS still read apart. */}
+                {tagged && <span style={small}>{type.label.toUpperCase()}</span>}
                 <div style={{ display: 'grid', gridTemplateColumns: readOnly ? 'minmax(0, 1fr) 40px 84px' : 'minmax(0, 1fr) 40px 84px 22px 14px', gap: '5px', alignItems: 'center' }}>
                   <input aria-label={`Item ${i + 1} name`} value={line.name} readOnly={readOnly || locked(i)} title={lockedTitle}
                     onChange={(e) => patch(i, { ...line, name: e.target.value })} style={input} />
                   <input aria-label={`Item ${i + 1} quantity`} type="number" min="1" value={line.qty} readOnly={readOnly}
                     onChange={(e) => patch(i, { ...line, qty: Math.max(1, Number(e.target.value) || 1) })} style={{ ...input, textAlign: 'center' }} />
                   <select aria-label={`Item ${i + 1} carried`} value={line.carry} disabled={readOnly || locked(i)} title={lockedTitle}
-                    onChange={(e) => patch(i, { ...line, carry: e.target.value as InventoryItem['carry'] })} style={input}>
+                    // Moved into the stash or out of it (G2): the band it lands in opens, so the line isn't lost from sight.
+                    onChange={(e) => { const carry = e.target.value as InventoryItem['carry']; patch(i, { ...line, carry }); openBand(carry === 'stash' ? 'stash' : bandOfType(type)); }} style={input}>
                     {CARRY_STATES.map((c) => <option key={c.value} value={c.value} title={c.title}>{c.value === 'stash' ? 'STASH' : c.value.toUpperCase()}</option>)}
                   </select>
                   {!readOnly && (
@@ -281,9 +280,40 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, und
                 {under(i)}
               </div>
             );
-          })}
-        </section>
-      ))}
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {/* A thing made by hand, of any type (G2): it opens under ✎ in its type's band, opened if closed. */}
+      {!readOnly && (
+        <div role="group" aria-label="Add by hand" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+          {tables.map(({ type }) => (
+            <button key={type.id} type="button" className="utility-btn" style={{ fontSize: '0.55rem', padding: '1px 8px' }} aria-label={`Add a ${type.one} by hand`}
+              onClick={() => { write([...items, newLineOf(type)]); setOpen(items.length); openBand(bandOfType(type)); }}>+ {type.one.toUpperCase()}</button>
+          ))}
+        </div>
+      )}
+      {bands.map((b) => {
+        const closed = shut.has(b.band);
+        return (
+          <section key={b.band} aria-label={`${b.label} band`} style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+            <button type="button" aria-expanded={!closed} onClick={() => toggle(b.band)} title={closed ? 'Open' : 'Close'}
+              style={{ background: 'none', border: 0, borderBottom: '1px solid var(--dark-green)', color: 'var(--green)', fontFamily: 'monospace', fontSize: '0.6rem', letterSpacing: '1px', textAlign: 'left', padding: '2px 0', cursor: 'pointer' }}>
+              {closed ? '▸' : '▾'} {b.label} · {b.count}
+            </button>
+            {!closed && (b.count === 0
+              ? <span style={small}>Nothing here.</span>
+              : <>
+                {b.groups.map(({ type, rows }) => (
+                  <section key={type.id} aria-label={`${type.label} gear`} style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
+                    <span style={heading}>{type.label.toUpperCase()} · {rows.length}</span>
+                    {rows.map((row) => lineView(row, type))}
+                  </section>
+                ))}
+                {b.loose.map(({ type, row }) => lineView(row, type, true))}
+              </>)}
+          </section>
+        );
+      })}
     </div>
   );
 }
