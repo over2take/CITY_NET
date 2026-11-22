@@ -52,14 +52,25 @@ test('GEAR in bands: EQUIPPED, USABLE, PACK by type, a sword stashed into the ST
   // The sword to the stash: into the STASH band, opened to show it, its type said.
   await band('EQUIPPED').getByLabel('Item 1 carried', { exact: true }).selectOption('stash');
   await expect(head('STASH')).toHaveText('▾ STASH · 1');
-  await expect(band('STASH').getByLabel('Item 1 name', { exact: true })).toHaveValue('Sword');
+  await expect(band('STASH').getByRole('button', { name: 'Sword, item 1', exact: true })).toBeVisible();
   await expect(band('STASH').getByText('WEAPONS', { exact: true })).toBeVisible();
   await expect(head('EQUIPPED')).toHaveText('▾ EQUIPPED · 0');
+
+  // One line a thing (G3): the Draught's HEALS is blank, so FILL IN, which opens its card at that box, ready to type.
+  const draught = mine.getByTestId('gear-line-1');
+  await expect(draught.getByRole('group', { name: 'Item 2 columns' })).toHaveCount(0);
+  await draught.getByRole('button', { name: 'Fill in item 2: HEALS', exact: true }).click();
+  await expect(draught.getByLabel('Item 2 HEALS', { exact: true })).toBeFocused();
+  await mine.keyboard.type('2d4');
+  await draught.getByRole('button', { name: 'DONE', exact: true }).click();
+  await expect(draught.getByRole('note', { name: 'Item 2 HEALS: 2d4' })).toBeVisible();
+  await expect(draught.getByRole('button', { name: /^Fill in/ })).toHaveCount(0);
+  await expect.poll(async () => JSON.parse(String((await sheetOf()).inventory ?? '[]'))[1]?.values, { timeout: 15_000 }).toEqual({ heals: '2d4' });
 
   // USABLE closed by its head; still closed after a reload.
   await head('USABLE').click();
   await expect(head('USABLE')).toHaveAttribute('aria-expanded', 'false');
-  await expect(band('USABLE').getByLabel('Item 2 name', { exact: true })).toHaveCount(0);
+  await expect(band('USABLE').getByRole('button', { name: 'Draught, item 2', exact: true })).toHaveCount(0);
   await expect.poll(async () => JSON.parse(String((await sheetOf()).inventory ?? '[]'))[0]?.carry, { timeout: 15_000 }).toBe('stash');
   // A fresh visit, signed in again: which bands are closed is kept in this browser.
   await signInAsPlayer(mine, player);
