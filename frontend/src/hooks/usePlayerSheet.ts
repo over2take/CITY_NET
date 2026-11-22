@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { getTemplate, getMaxPairs, hiddenTabsFor, type CharacterSheet, type SheetFieldValue } from '../sheets';
 import { SLOW_ADVANCEMENT_RULE } from '../sheets/cwnAdvancement';
 import { ENCUMBRANCE_RULE } from '../sheets/cwnEncumbrance';
-import { carryingShown } from '../sheets/tableSwitches';
+import { carryingShown, gearByPlayers } from '../sheets/tableSwitches';
 import { OVERDRAFT_RULE } from '../data/shopRules';
 import { isOpen } from '../sheets/restCalls';
 import { INVENTORY_FIELD } from '../sheets/inventory';
@@ -248,6 +248,8 @@ export function usePlayerSheet(
 
   // CARRYING on GEAR, unless the table switched SHOW ENCUMBRANCE off (8a6b).
   const showCarrying = carryingShown(ruleSettings);
+  // Players change their gear's columns, unless the table switched PLAYERS CHANGE GEAR off (G6b).
+  const playersChangeGear = gearByPlayers(ruleSettings);
 
   // Whether the GM has spending recovery dice open (R2b), read with the house rules.
   const recoveryOpen = isOpen(ruleSettings);
@@ -259,7 +261,7 @@ export function usePlayerSheet(
 
   /** Every play prop a surface hands SheetRenderer: both spread it whole (8s1a). */
   const sheetProps = {
-    ...actions, choicesRefused, recoveryOpen, allowFumbleShield, xpRate, encumbranceEnforced, hiddenTabs, vitals, carryingShown: showCarrying,
+    ...actions, choicesRefused, recoveryOpen, allowFumbleShield, xpRate, encumbranceEnforced, hiddenTabs, vitals, carryingShown: showCarrying, playersChangeGear,
   } satisfies Partial<SheetRendererProps>;
 
   return {
