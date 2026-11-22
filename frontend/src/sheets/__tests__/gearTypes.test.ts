@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { typesOf, fits, itemOfLine, lineColumns, gearTables, valueText, withLineValue, newLineOf, countOf, cellWords, LIMITS, type ColumnShown } from '../gearTypes';
+import { typesOf, fits, itemOfLine, lineColumns, gearTables, valueText, withLineValue, newLineOf, countOf, cellWords, LIMITS, type ColumnShown , gearBands } from '../gearTypes';
 import { normaliseItem, readInventory, type InventoryItem } from '../inventory';
 import type { ItemsShown } from '../gearItems';
 
@@ -161,5 +161,30 @@ describe('a line keeps its type, values and counts', () => {
     // Bought one more of: its type and values still there.
     const bought = placement.readInventory(placement.addToInventory({ inventory: JSON.stringify(rows) }, 'A stick', ''));
     expect(bought[0]).toMatchObject({ qty: 2, type: 'weapons', values: { damage: '1d4' }, counts: { ammo: 2 } });
+  });
+});
+
+describe('the GEAR tab\'s bands (G2)', () => {
+  const SHOWN = {
+    slots: [], list: [],
+    types: [
+      { id: 'weapons', label: 'WEAPONS', one: 'Weapon', on_sheet: 'equipped', columns: [] },
+      { id: 'potions', label: 'POTIONS', one: 'Potion', on_sheet: 'usable', columns: [] },
+      { id: 'gear', label: 'GEAR', one: 'Gear', columns: [] },
+      { id: 'odd', label: 'ODD', one: 'Odd', on_sheet: 'belt', columns: [] },
+    ],
+  } as never;
+  const at = (name: string, type: string, carry = 'stowed') => ({ name, qty: 1, enc: '', bundled: false, carry, location: '', type }) as never;
+
+  it('each type\'s lines in its band, in hand first and otherwise as listed; a band\'s groups only for types with lines; the STASH whatever the type', () => {
+    const bands = gearBands(SHOWN, [at('Sword', 'weapons'), at('Rope', 'gear'), at('Pistol', 'weapons', 'readied'), at('Knife', 'weapons'), at('Old Map', 'potions', 'stash'), at('Thing', 'odd')]);
+    expect(bands.map((b) => [b.band, b.count])).toEqual([['equipped', 3], ['usable', 0], ['pack', 2], ['stash', 1]]);
+    expect(bands[0].groups.map((g) => [g.type.id, g.rows.map((r) => r.line.name)])).toEqual([['weapons', ['Pistol', 'Sword', 'Knife']]]);
+    // POTIONS' only line is in the stash: no POTIONS group in USABLE, its one line counted in the STASH.
+    expect(bands[1].groups).toEqual([]);
+    expect(bands[1].count).toBe(0);
+    // A band that isn't one of the three is PACK.
+    expect(bands[2].groups.map((g) => g.type.id)).toEqual(['gear', 'odd']);
+    expect(bands[3].loose.map(({ type, row }) => [type.id, row.line.name, row.index])).toEqual([['potions', 'Old Map', 4]]);
   });
 });

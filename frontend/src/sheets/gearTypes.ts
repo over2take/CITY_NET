@@ -86,6 +86,30 @@ export const gearTables = (shown: ItemsShown | null | undefined, lines: Inventor
   return tables;
 };
 
+/**
+ * The GEAR tab's bands (G2; approved mockup docs/mockups/sheet-gear-layout.html, layout A, 2026-11-20): EQUIPPED, USABLE and
+ * PACK, each type's lines in its type's band (its ON THE SHEET, G1; PACK where unsaid), in hand first; and STASH, every line
+ * left in the stash whatever its type. Within a band, a group per type that has lines.
+ */
+export type GearBand = 'equipped' | 'usable' | 'pack' | 'stash';
+export const GEAR_BANDS: { id: GearBand; label: string }[] = [
+  { id: 'equipped', label: 'EQUIPPED' }, { id: 'usable', label: 'USABLE' }, { id: 'pack', label: 'PACK' }, { id: 'stash', label: 'STASH' },
+];
+export interface BandShown { band: GearBand; label: string; count: number; groups: { type: TypeShown; rows: TableRow[] }[]; loose: { type: TypeShown; row: TableRow }[] }
+export const gearBands = (shown: ItemsShown | null | undefined, lines: InventoryItem[]): BandShown[] => {
+  const bands: BandShown[] = GEAR_BANDS.map((b) => ({ band: b.id, label: b.label, count: 0, groups: [], loose: [] }));
+  const at = (id: GearBand) => bands.find((b) => b.band === id)!;
+  const inHand = (r: TableRow) => (r.line.carry === 'readied' ? 0 : 1);
+  for (const { type, rows } of gearTables(shown, lines)) {
+    const here = rows.filter((r) => r.line.carry !== 'stash').map((r, n) => ({ r, n })).sort((a, b) => inHand(a.r) - inHand(b.r) || a.n - b.n).map(({ r }) => r);
+    const band = at(type.on_sheet === 'equipped' || type.on_sheet === 'usable' ? type.on_sheet : 'pack');
+    if (here.length) band.groups.push({ type, rows: here });
+    for (const row of rows.filter((r) => r.line.carry === 'stash')) at('stash').loose.push({ type, row });
+  }
+  for (const b of bands) b.count = b.groups.reduce((n, g) => n + g.rows.length, 0) + b.loose.length;
+  return bands;
+};
+
 /** A value as a box shows it. */
 export const valueText = (v: Value | undefined): string => (v === undefined ? '' : String(v));
 

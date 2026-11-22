@@ -37,9 +37,10 @@ test('the sheet in a new tab: in the theme, WEAR and a DAMAGE ROLL work there as
 
   // Two lines, made in the window: the boots and the club.
   await sheetTab(mine, 'GEAR');
-  await mine.getByRole('region', { name: 'GEAR gear' }).getByRole('button', { name: 'Add a Gear by hand' }).click();
+  // From the row of + at the top of GEAR (G2).
+  await mine.getByRole('group', { name: 'Add by hand' }).getByRole('button', { name: 'Add a Gear by hand' }).click();
   await mine.getByLabel('Item 1 name', { exact: true }).fill('Boots of Quiet');
-  await mine.getByRole('region', { name: 'WEAPONS gear' }).getByRole('button', { name: 'Add a Weapon by hand' }).click();
+  await mine.getByRole('group', { name: 'Add by hand' }).getByRole('button', { name: 'Add a Weapon by hand' }).click();
   await mine.getByLabel('Item 2 name', { exact: true }).fill('Club');
   await expect.poll(async () => JSON.parse(String((await sheetOf()).inventory ?? '[]')).length, { timeout: 15_000 }).toBe(2);
 
