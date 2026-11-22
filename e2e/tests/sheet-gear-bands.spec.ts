@@ -81,6 +81,18 @@ test('GEAR in bands: EQUIPPED, USABLE, PACK by type, a sword stashed into the ST
   await expect(head('USABLE')).toHaveAttribute('aria-expanded', 'false');
   await expect(head('PACK')).toHaveAttribute('aria-expanded', 'true');
 
+  // FIND (G4): always there; 2d4 finds the Draught in USABLE, closed, opened while it shows; cleared, USABLE closed again.
+  const find = mine.getByRole('searchbox', { name: 'Find in your gear' });
+  await find.fill('2d4');
+  await expect(head('USABLE')).toHaveText('▾ USABLE · 1');
+  await expect(band('USABLE').getByRole('button', { name: 'Draught, item 2', exact: true })).toBeVisible();
+  await expect(head('PACK')).toHaveText('▾ PACK · 0');
+  await find.fill('lantern');
+  await expect(mine.getByRole('status', { name: 'What FIND found' })).toHaveText('Nothing on this sheet matches “lantern”.');
+  await find.fill('');
+  await expect(head('USABLE')).toHaveAttribute('aria-expanded', 'false');
+  await expect(head('USABLE')).toHaveText('▸ USABLE · 1');
+
   // A Cloak, GEAR, in PACK; worn, EQUIPPED; taken off, PACK again (G3: "my Cutlass is worn, should it be in EQUIPPED?").
   await add.getByRole('button', { name: 'Add a Gear by hand' }).click();
   await mine.getByLabel('Item 4 name', { exact: true }).fill('Cloak');

@@ -490,3 +490,80 @@ describe('one line a thing, its card on a click (G3)', () => {
     expect((screen.getByLabelText('Item 1 RANGE') as HTMLInputElement).style.width).toBe('100%');
   });
 });
+
+describe('FIND on GEAR (G4)', () => {
+  const TYPES: ItemsShown = {
+    slots: [], list: [],
+    types: [
+      { id: 'weapons', label: 'WEAPONS', one: 'Weapon', on_sheet: 'equipped', columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }] },
+      { id: 'gear', label: 'GEAR', one: 'Gear', columns: [] },
+    ],
+  };
+  const lines = [line('Sword', { type: 'weapons', values: { damage: '1d8' } }), line('Rope', { type: 'gear' }), line('Spare Sword', { type: 'weapons', carry: 'stash', values: { damage: '1d8' } })];
+  const box = () => screen.getByRole('searchbox', { name: 'Find in your gear' }) as HTMLInputElement;
+  const band = (label: string) => screen.getByRole('region', { name: `${label} band` });
+  const head = (label: string) => within(band(label)).getByRole('button', { name: new RegExp(`^[▸▾] ${label} · \\d+$`) });
+
+  it('always there; as you type only what matches, counted, every band open; cleared, as left', async () => {
+    show(lines, { items: TYPES });
+    expect(box().placeholder).toBe('Find on your sheet: a name, a type, 2d6, AMMO…');
+    expect(head('STASH').textContent).toBe('▸ STASH · 1');
+    await userEvent.type(box(), 'sword');
+    expect(screen.getAllByRole('button', { name: /^[▸▾] [A-Z]+ · \d+$/ }).map((b) => b.textContent)).toEqual(['▾ EQUIPPED · 1', '▾ USABLE · 0', '▾ PACK · 0', '▾ STASH · 1']);
+    expect(within(band('STASH')).getByRole('button', { name: 'Spare Sword, item 3' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Rope, item 2' })).toBeNull();
+    // A band with no match: its · 0 alone, no "Nothing here." under it.
+    expect(within(band('PACK')).queryByText('Nothing here.')).toBeNull();
+    // Heads can't open or close while it shows what it found, but stay readable (not disabled, which is drawn faint).
+    expect(head('STASH').getAttribute('aria-disabled')).toBe('true');
+    expect((head('STASH') as HTMLButtonElement).disabled).toBe(false);
+    expect(head('STASH').title).toBe('Showing what FIND matched: clear it to open or close bands');
+    await userEvent.click(head('STASH'));
+    // Its own × clears it.
+    await userEvent.click(screen.getByRole('button', { name: 'Clear FIND' }));
+    expect(box().value).toBe('');
+    expect(screen.queryByRole('button', { name: 'Clear FIND' })).toBeNull();
+    // As left: the click while finding changed nothing.
+    expect(head('STASH').textContent).toBe('▸ STASH · 1');
+    expect(head('STASH').getAttribute('aria-disabled')).toBeNull();
+    expect(within(band('USABLE')).getByText('Nothing here.')).toBeTruthy();
+    // Esc clears it too.
+    await userEvent.type(box(), 'rope{Escape}');
+    expect(box().value).toBe('');
+    expect(screen.getByRole('button', { name: 'Rope, item 2' })).toBeTruthy();
+    // Cleared, nothing lit: nothing landed anywhere.
+    expect(screen.getAllByRole('button', { name: /^[▸▾] [A-Z]+ · \d+$/ }).filter((b) => b.className)).toEqual([]);
+  });
+
+  it('by a value and a column; nothing found says so, with no bands; read only too', async () => {
+    show(lines, { items: TYPES, readOnly: true });
+    await userEvent.type(box(), 'damage 1d8');
+    expect(head('EQUIPPED').textContent).toBe('▾ EQUIPPED · 1');
+    expect(head('STASH').textContent).toBe('▾ STASH · 1');
+    await userEvent.clear(box());
+    await userEvent.type(box(), 'lantern');
+    expect(screen.getByRole('status', { name: 'What FIND found' }).textContent).toBe('Nothing on this sheet matches \u201clantern\u201d.');
+    expect(screen.queryByRole('region', { name: /band$/ })).toBeNull();
+  });
+});
+
+describe('the slot and install counters (2026-11-22)', () => {
+  const COUNTED: ItemsShown = {
+    slots: [{ id: 'attuned', label: 'Attuned', count: 3 }],
+    installs: [{ id: 'cyberware', label: 'Cyberware', against: 'Strain', way: 'adds' }],
+    list: [{ id: 'ring', label: 'Ring', needs: 'attuned', features: [], type: 'gear' }, { id: 'jack', label: 'Jack', needs: 'cyberware', features: [], type: 'gear' }],
+    types: [{ id: 'gear', label: 'GEAR', one: 'Gear', columns: [] }],
+  };
+  const counters = () => [...screen.queryAllByRole('group', { name: / slots$/ }), ...screen.queryAllByRole('group', { name: / installs$/ })].map((g) => g.getAttribute('aria-label'));
+
+  it('only those something on the sheet uses: none for a sheet of rope, the slot with a ring, the install with a jack', () => {
+    show([line('Rope', { type: 'gear' })], { items: COUNTED });
+    expect(counters()).toEqual([]);
+    cleanup();
+    show([line('Rope', { type: 'gear' }), line('Ring', { type: 'gear' })], { items: COUNTED });
+    expect(counters()).toEqual(['ATTUNED slots']);
+    cleanup();
+    show([line('Jack', { type: 'gear' })], { items: COUNTED, worked: { items: [], slots: [], installs: [{ id: 'cyberware', used: 0, value: 0, limit: 2 }] } });
+    expect(counters()).toEqual(['CYBERWARE installs']);
+  });
+});

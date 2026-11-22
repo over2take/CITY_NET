@@ -1371,6 +1371,12 @@ button.choice-off:disabled {
   .gear-band-news { animation: none; }
 }
 
+/* FIND on GEAR (G4) has its own × in the theme; the browser's is blue whatever the theme. */
+.gear-find::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .login-panel h1 {
   letter-spacing: 10px;
   margin-bottom: 5px;

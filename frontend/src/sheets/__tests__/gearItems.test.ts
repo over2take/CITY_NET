@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { itemsWorkedOn, itemLines, slotVerb, gearRow, slotCounters, slotCountAsked, itemUses, fits, installCounters, installedNames, amount, type ItemsShown, type ItemWorked } from '../gearItems';
+import { itemsWorkedOn, itemLines, slotVerb, gearRow, slotCounters, slotCountAsked, itemUses, fits, installCounters, installedNames, countersInUse, amount, type ItemsShown, type ItemWorked } from '../gearItems';
 import { blankItem, type InventoryItem } from '../inventory';
 
 /**
@@ -227,5 +227,22 @@ describe('installed items (7e4c)', () => {
   it('the names of those installed, lowercased, for the locked line and the sell list', () => {
     expect(installedNames(WIRED, { items: [{ id: 'jack', needs: 'cyber', installed: true }, { id: 'tweak', needs: 'bio' }] })).toEqual(new Set(['cranial jack']));
     expect(installedNames(undefined, { items: [{ id: 'jack', needs: 'cyber', installed: true }] })).toEqual(new Set());
+  });
+});
+
+describe('the counters a sheet has a use for (2026-11-22)', () => {
+  const ring = { id: 'ring', label: 'Ring', needs: 'attuned', features: [] };
+  const jack = { id: 'jack', label: 'Jack', needs: 'cyberware', features: [] };
+  const rope = { id: 'rope', label: 'Rope', needs: 'carried', features: [] };
+
+  it('a slot or install an item on a line needs, or one with something still counted against it; not one nothing uses', () => {
+    const none = { slots: [{ id: 'attuned', count: 3, used: 0 }], installs: [{ id: 'cyberware', used: 0, value: 0, limit: 0 }] };
+    expect([...countersInUse(new Map([[0, rope]]), none)].sort()).toEqual(['carried']);
+    expect(countersInUse(new Map([[0, ring]]), none).has('attuned')).toBe(true);
+    expect(countersInUse(new Map([[0, ring]]), none).has('cyberware')).toBe(false);
+    expect(countersInUse(new Map([[1, jack]]), none).has('cyberware')).toBe(true);
+    // Its line gone, still counted: shown, so the count isn't hidden while it is spent.
+    expect(countersInUse(new Map(), { slots: [{ id: 'attuned', count: 3, used: 1 }], installs: [{ id: 'cyberware', used: 2, value: 2, limit: 4 }] })).toEqual(new Set(['attuned', 'cyberware']));
+    expect(countersInUse(new Map(), { slots: [] })).toEqual(new Set());
   });
 });
