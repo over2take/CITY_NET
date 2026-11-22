@@ -8,7 +8,8 @@ import { signInAsGm, gmToken, runningSystem, openGameSystem, asGm } from './help
 // ITEMS: 2 (1 overruled), the Pistol overruling 200 → 260, the Cutlass and the Ring left out and why; saved, DOWNLOAD CURRENT
 // has the file's two lines and the game's items behind a #. With ADD NEW LINES TO ITEMS on (8a7a4a), the Hand Cannon becomes
 // an item of WEAPONS in the builder's draft, priced 900, the running game untouched until a publish; published (8a7a4b), its
-// catalogue line, now exactly the item, leaves the file and the item sells itself.
+// catalogue line, now exactly the item, leaves the file and the item sells itself. EDIT CURRENT (8a7a5) then puts what is on
+// sale in the box, asking first as the box still holds the file.
 
 const SYSTEM = (name: string) => ({
   format: 1, name, core: { health: { model: 'pool' } },
@@ -85,4 +86,13 @@ test('a catalogue held against the game\'s items: one overruling, an exact copy 
   expect(then).toMatch(/^# Hand Cannon\s*, 900\s*, 3d6/m);
   expect(then).not.toMatch(/^Hand Cannon/m);
   expect(then).toMatch(/^Pistol\s*, 260\s*, 2d6/m);
+
+  // EDIT CURRENT: the box still holds the file, so it asks; replaced, the box is what is on sale now, ready to change.
+  const text = page.getByLabel('Catalogue text');
+  await page.getByRole('button', { name: 'EDIT CURRENT', exact: true }).click();
+  const asked = page.getByRole('group', { name: 'Replace the box' });
+  await asked.getByRole('button', { name: 'REPLACE', exact: true }).click();
+  await expect(page.getByText('What the shops sell now is in the box. Change it, then PREVIEW and SAVE.')).toBeVisible({ timeout: 15_000 });
+  await expect(text).toHaveValue(/^Pistol\s*, 260\s*, 2d6/m);
+  await expect(text).toHaveValue(/^# Hand Cannon\s*, 900/m);
 });

@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **The catalogue and item import boxes show your game's own example.** Their grey hint showed Cities Without Number's weapons (a Zip Gun) and a fixed GEAR list in every game. Each now shows your own first section, in its own columns. A type with its own PRICE column also no longer lists price twice in the catalogue files.
 - **Selling back typed gear from the shop window.** A line of one of your item types, or one of your own items, could be bought but not sold back: the shop window didn't recognize it, and the sale was refused. It now sells back at the shop's buyback rate, and a new browser test sells one and checks the money.
 - **A catalogue section that names nothing is now said.** A section like `[rocks]`, which is neither a shelf nor one of your item types, used to be saved quietly where no shop would ever sell it. The preview now says so, listing your types, and its lines are not saved.
 - **The bank's windows now follow the theme.** BANK.EXE, PAYROLL.EXE and the GM's BANK_ADMIN.EXE drew in the classic green and grey whatever theme was picked; their boxes, numbers, chart and celebrations now take the theme's colors.
@@ -105,6 +106,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **EDIT CURRENT in SHOP_CATALOGUES.** A new button beside DOWNLOAD CURRENT puts what your shops sell now straight into the box, ready to change, PREVIEW and SAVE, with no file to download and upload again. If the box already has text in it, it asks before replacing it.
 - **Publishing tidies the shop catalogue.** When you publish a system, any catalogue line that is now exactly one of your items, same name, price and columns, is taken out of the file, since the item sells itself. That includes lines that ADD NEW LINES TO ITEMS turned into items. The builder's publish message says how many. Lines naming an item kept out of the shops stay, so they sell again if you switch it back on.
 - **Catalogue lines can become items.** In SHOP_CATALOGUES, PREVIEW now offers ADD NEW LINES TO ITEMS, off to start. Switched on, it lists what it will add and how many items your system will hold. SAVE then makes each line that isn't one of your items yet into an item: of its section's type (a shelf's lines go to your DEFAULT type), with its columns, price and words, in the shops. They go into the builder's draft and are kept once you publish; until then the catalogue line sells them. If the builder is open, it takes them in, so its next save keeps them.
 - **One-of-a-kind items sell back.** An item kept out of the shops is never on a shelf, but a player can still sell one to a shop that sells its type, at the item's own price times that shop's buyback rate. A ring sells at an Armorer, never at a Gun Shop.

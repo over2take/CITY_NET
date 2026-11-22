@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
-import { exampleFor, currentFor, typeSection, typeColumns, ownTypesOf } from '../catalogueSchema';
+import { exampleFor, currentFor, typeSection, typeColumns, ownTypesOf, catalogueHint } from '../catalogueSchema';
 import { itemsCatalogue, landsAsGear, itemsInPreview } from '../catalogueItems';
 import { registerCustomTemplate, clearCustomTemplates } from '../customTemplates';
 import type { TypeShown } from '../gearTypes';
@@ -109,5 +109,33 @@ describe('the preview', () => {
     expect(landsAsGear(SYS, 'type:guns')).toBe(true);
     const found = itemsInPreview(SYS, ITEMS, { 'type:guns': [{ name: 'Pistol', line: 3 }] });
     expect(found.matched).toEqual([expect.objectContaining({ name: 'Pistol', lands: true })]);
+  });
+});
+
+describe('price listed once, and the box\'s hint (8a7a5)', () => {
+  const PRICED: TypeShown = { id: 'kit', label: 'KIT', one: 'Kit', columns: [{ id: 'weight', label: 'WEIGHT', kind: 'number' }, { id: 'price', label: 'PRICE', kind: 'number' }] };
+
+  it('a type\'s own price column is the file\'s price, listed once', () => {
+    expect(typeColumns(PRICED)).toEqual(['name', 'price', 'weight', 'description']);
+  });
+
+  it('the hint: the system\'s first type, its columns and a line, read back without a mistake as a line of that type', () => {
+    const hint = catalogueHint(SYS);
+    expect(hint).toBe('Paste a table here, or upload a file. DOWNLOAD EXAMPLE gives one in the right shape.\n\n[GUNS]\nname, price, damage, range, ammo, weight, grade\nExample Gun, 10, 1d6, words, 6, 1, LIGHT');
+    const back = read(hint.split('\n\n')[1]);
+    expect(back.problems).toEqual([]);
+    expect(back.sections['type:guns']).toEqual([expect.objectContaining({ name: 'Example Gun', price: 10, fields: { damage: '1d6', range: 'words', ammo: 6, weight: 1, grade: 'LIGHT' } })]);
+  });
+
+  it('a first type with a PRICE column of its own: price once in the hint too', () => {
+    const KITTED = 'sys_0a1b2c3d4e5f6a7d';
+    registerCustomTemplate({ id: KITTED, name: 'Kitted', parts: {}, derived: [], sheet: { sections: [] }, words: {}, items: { slots: [], list: [], types: [PRICED] } } as never);
+    expect(catalogueHint(KITTED).split('\n').slice(-2)).toEqual(['name, price, weight', 'Example Kit, 10, 1']);
+  });
+
+  it('a built-in game: its first shelf in its own columns, never another game\'s', () => {
+    const hint = catalogueHint('cyberpunk_red');
+    expect(hint).not.toMatch(/Zip Gun/);
+    expect(hint).toMatch(/^Paste a table here[^\n]*\n\n\[[a-z_]+\]\nname, price[^\n]*\nExample, 10$/);
   });
 });

@@ -242,8 +242,11 @@ export interface OutRow {
 /** A custom system's own item types (8a7a1): a section each in its files. None for a built-in game or one without types of its own. */
 export const ownTypesOf = (system: string): TypeShown[] => (isCustomSystem(system) ? customTemplate(system)?.items?.types ?? [] : []);
 
-/** A type's columns in a file (8a7a1): its name and price, then its own columns by id, then a description. */
-export const typeColumns = (type: TypeShown): string[] => [NAME, PRICE, ...type.columns.map((c) => c.id), 'description'];
+/**
+ * A type's columns in a file (8a7a1): its name and price, then its own columns by id, then a description. A column of the
+ * type's called price or name is that one, listed once (8a7a5): the server reads one price header as both.
+ */
+export const typeColumns = (type: TypeShown): string[] => [NAME, PRICE, ...type.columns.map((c) => c.id).filter((id) => id !== NAME && id !== PRICE), 'description'];
 
 /**
  * A type's section heading: its own name, as the GM wrote it, where it reads back as one (letters, digits, spaces, _ ' -);
@@ -257,6 +260,22 @@ const sampleOf = (c: ColumnShown): string =>
 
 /** The rows of one type, on their way into a file. */
 export type TypedRows = (type: TypeShown) => OutRow[];
+
+/**
+ * The catalogue box's grey hint (8a7a5): this system's own first section, in its columns, with a line to copy, as DOWNLOAD
+ * EXAMPLE shapes it. It showed CWN's [weapons] and a Zip Gun in every game.
+ */
+export const catalogueHint = (system: string): string => {
+  const lead = 'Paste a table here, or upload a file. DOWNLOAD EXAMPLE gives one in the right shape.';
+  const type = ownTypesOf(system)[0];
+  if (type) {
+    const one = type.one?.trim() || type.label.trim() || type.id;
+    const own = type.columns.filter((c) => c.id !== NAME && c.id !== PRICE);
+    return `${lead}\n\n[${typeSection(type)}]\n${[NAME, PRICE, ...own.map((c) => c.id)].join(', ')}\nExample ${one}, 10${own.map((c) => `, ${sampleOf(c)}`).join('')}`;
+  }
+  const shelf = CATALOGUES.map((c) => c.id).find((c) => catalogueOn(system, c));
+  return shelf ? `${lead}\n\n[${shelf}]\n${columnsFor(system, shelf).columns.join(', ')}\nExample, 10` : lead;
+};
 
 /**
  * Write a catalogue file: every catalogue as its own section, in the columns this system
