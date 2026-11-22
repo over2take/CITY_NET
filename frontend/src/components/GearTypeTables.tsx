@@ -1,7 +1,7 @@
 import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { CARRY_STATES, type InventoryItem } from '../sheets/inventory';
 import type { ItemsShown } from '../sheets/gearItems';
-import { gearTables, gearBands, foundIn, uniqueCells, uniqueTitle, uniqueCount, itemWas, valueText, withLineValue, newLineOf, shownCells, cellWords, countOf, type Cell, type CountAnswer, type CountKind, type TableRow, type TypeShown } from '../sheets/gearTypes';
+import { gearTables, gearBands, foundIn, uniqueCells, uniqueTitle, itemWas, valueText, withLineValue, newLineOf, shownCells, cellWords, countOf, type Cell, type CountAnswer, type CountKind, type TableRow, type TypeShown } from '../sheets/gearTypes';
 import { useGearBands } from '../hooks/useGearBands';
 import { diceWords, SHAPES, shapeText, insertName, type GearDiceRead } from '../sheets/gearDice';
 import { FormulaIcon } from './FormulaIcon';
@@ -18,7 +18,8 @@ import { FormulaIcon } from './FormulaIcon';
 // in hand first; STASH, closed to start, whatever the type; a band's head closes it and the sheet remembers. A thing is
 // made by hand from the row of + buttons at the top; a closed band something lands in pulses, then stays bright until
 // opened; a line changed from its item says UNIQUE, each column it made its own too, with THE ITEM'S to put it back and
-// the item's value and who changed it when, and the count of them at the top lists them in FIND (G5b); FIND at the top, always shown, keeps only the lines it matches, every band open while it has words (G4);
+// the item's value and who changed it when, and "unique" in FIND lists them (G5b; no count at the top, the user: FIND
+// is enough and saves the room); FIND at the top, always shown, keeps only the lines it matches, every band open while it has words (G4);
 // a thing worn, attuned or installed is in EQUIPPED whatever its type. One line a thing (G3; the same mockup, decision 3): its name, how many,
 // the columns it has as words with ROLL, FIRE and RELOAD, where it is carried; a click on it opens the card, every column a
 // box with NAME, HOW MANY, LOCATION and REMOVE, one card at a time; ✎ at the end of every line opens it too. A line with
@@ -333,13 +334,6 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on,
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {/* How many lines are their item made unique (G5b): a click lists them in FIND. */}
-      {uniqueCount(tables) > 0 && (
-        <button type="button" onClick={() => setFind('unique')} title="Lines that differ from their item: click to list them"
-          style={{ alignSelf: 'flex-start', background: 'none', border: 0, padding: 0, color: 'var(--warning)', fontFamily: 'inherit', fontSize: '0.6rem', letterSpacing: '1px', cursor: 'pointer' }}>
-          {uniqueCount(tables)} UNIQUE
-        </button>
-      )}
       {/* The box, and its own × in the theme (the browser's is blue in every theme): Esc clears it too. */}
       <span style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
         <input type="search" className="gear-find" aria-label="Find in your gear" placeholder="Find on your sheet: a name, a type, 2d6, AMMO…" value={find}

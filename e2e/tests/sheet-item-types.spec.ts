@@ -89,11 +89,15 @@ test('GEAR as a table per type: a stick made by hand and its DAMAGE rolled, the 
   await expect(weapons.getByText('WEAPONS · 2')).toBeVisible({ timeout: 15_000 });
   await expect(gear.getByText('GEAR · 1')).toBeVisible();
   await expect(weapons.getByRole('note', { name: 'Item 2 RANGE: 50 m' })).toBeVisible();
-  // UNIQUE (G5b): its RANGE its own, so the line says so, with the item's and who changed it when on hover; counted at the top.
+  // UNIQUE (G5b): its RANGE its own, so the line says so, with the item's and who changed it when on hover; "unique" in FIND finds it.
   const unique = weapons.getByRole('note', { name: 'Item 2 is unique' });
   await expect(unique).toHaveText('UNIQUE');
   await expect(unique).toHaveAttribute('title', new RegExp(`RANGE 50 m, the item's: 30 m · changed by ${player.username}, \\d{4}-\\d{2}-\\d{2}`));
-  await expect(mine.getByRole('button', { name: '1 UNIQUE', exact: true })).toBeVisible();
+  const find = mine.getByRole('searchbox', { name: 'Find in your gear' });
+  await find.fill('unique');
+  await expect(weapons.getByRole('button', { name: 'Pistol, item 2', exact: true })).toBeVisible();
+  await expect(weapons.getByRole('button', { name: 'A stick, item 1', exact: true })).toHaveCount(0);
+  await find.fill('');
   // Compact lines (8a3c1): in SHEET.EXE's width, nothing on the GEAR tab scrolls sideways.
   // The sheet and any box inside it (the old table scrolled in a box of its own).
   const sideways = await mine.locator('.sheet-scroll').evaluate((root) => [root, ...root.querySelectorAll('*')]
@@ -120,7 +124,6 @@ test('GEAR as a table per type: a stick made by hand and its DAMAGE rolled, the 
   await expect(weapons.getByLabel('Item 2 DAMAGE', { exact: true })).toHaveValue('');
   await weapons.getByRole('group', { name: 'Item 2 RANGE is unique' }).getByRole('button', { name: "Item 2 RANGE: the item's" }).click();
   await expect(unique).toHaveCount(0);
-  await expect(mine.getByRole('button', { name: /UNIQUE$/ })).toHaveCount(0);
   await expect.poll(async () => JSON.parse(String((await sheetOf()).inventory ?? '[]'))[1], { timeout: 15_000 }).toEqual(line('Pistol', { type: 'weapons' }));
   await context.close();
 });

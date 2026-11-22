@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { typesOf, fits, itemOfLine, lineColumns, gearTables, valueText, withLineValue, newLineOf, countOf, cellWords, LIMITS, type ColumnShown , gearBands, landedIn, foundIn, uniqueCells, changedWords, itemWas, uniqueTitle, uniqueCount } from '../gearTypes';
+import { typesOf, fits, itemOfLine, lineColumns, gearTables, valueText, withLineValue, newLineOf, countOf, cellWords, LIMITS, type ColumnShown , gearBands, landedIn, foundIn, uniqueCells, changedWords, itemWas, uniqueTitle } from '../gearTypes';
 import { normaliseItem, readInventory, type InventoryItem } from '../inventory';
 import type { ItemsShown } from '../gearItems';
 
@@ -295,10 +295,8 @@ describe('UNIQUE on the sheet (G5b)', () => {
       .toBe("Unique: changed from its item\nDAMAGE 2d8, the item's: 1d8 + @might · changed by kes, 2026-11-20\nRANGE 2 m, the item's: none");
   });
 
-  it('how many lines are unique; "unique" in FIND lists them', () => {
+  it('"unique" in FIND lists them', () => {
     const lines = [at('Cutlass', { values: { damage: '2d8' } }), at('Cutlass'), at('Rope', { type: 'gear', values: { weight: 1 } })];
-    expect(uniqueCount(gearTables(SHOWN, lines))).toBe(1);
-    expect(uniqueCount(gearTables(SHOWN, [at('Cutlass')]))).toBe(0);
     const found = foundIn(gearBands(SHOWN, lines), 'unique');
     expect(found.flatMap((b) => b.groups.flatMap((g) => g.rows.map((r) => r.index)))).toEqual([0]);
   });

@@ -595,17 +595,12 @@ describe('UNIQUE on the line and in its card (G5b)', () => {
     expect(at(0).queryByRole('group', { name: 'Item 1 DAMAGE is unique' })).toBeNull();
   });
 
-  it('the count at the top, which lists them in FIND; none where none are', async () => {
+  it('"unique" in FIND lists them; no count at the top (the user: FIND is enough)', async () => {
     show([made, line('Rope'), line('Pistol', { values: { range: '50 m' } })]);
-    const count = screen.getByRole('button', { name: '2 UNIQUE' });
-    expect(count.title).toBe('Lines that differ from their item: click to list them');
-    await userEvent.click(count);
-    expect((screen.getByRole('searchbox', { name: 'Find in your gear' }) as HTMLInputElement).value).toBe('unique');
+    expect(screen.queryByRole('button', { name: /UNIQUE$/ })).toBeNull();
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Find in your gear' }), 'unique');
     expect(screen.getByRole('button', { name: 'Pistol, item 1' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Pistol, item 3' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Rope, item 2' })).toBeNull();
-    cleanup();
-    show([line('Pistol'), line('Rope')]);
-    expect(screen.queryByRole('button', { name: /UNIQUE$/ })).toBeNull();
   });
 });

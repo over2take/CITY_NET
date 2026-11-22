@@ -176,9 +176,6 @@ export const itemWas = (cell: Cell, line: InventoryItem): string => {
 export const uniqueTitle = (row: TableRow): string =>
   ['Unique: changed from its item', ...uniqueCells(row.columns).map((c) => `${c.column.label.toUpperCase()} ${valueText(c.own)}, ${itemWas(c, row.line)}`)].join('\n');
 
-/** How many lines are their item made unique (G5b): at the top of GEAR. */
-export const uniqueCount = (tables: { rows: TableRow[] }[]): number => tables.reduce((n, t) => n + t.rows.filter((r) => uniqueCells(r.columns).length > 0).length, 0);
-
 /** A value as a box shows it. */
 export const valueText = (v: Value | undefined): string => (v === undefined ? '' : String(v));
 
