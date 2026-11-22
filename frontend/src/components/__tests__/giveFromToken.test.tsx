@@ -1,10 +1,10 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup, act, within } from '@testing-library/react';
+import { render, screen, cleanup, act, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { buildTokenActions, tokenActionKeys, type TokenActionContext, type TokenViewer } from '../tokenActions';
-import { GiftNotices, NOTICES_KEPT } from '../GiftNotices';
+import { GiftNotices, NOTICES_KEPT, NOTICE_MS } from '../GiftNotices';
 import { GiveItemWindow } from '../GiveItemWindow';
 import { registerCustomTemplate, clearCustomTemplates, type CustomRender } from '../../sheets/customTemplates';
 import type { AskSocket, ReceivedNotice } from '../../sheets/giveItems';
@@ -116,20 +116,56 @@ describe('the player\'s notice', () => {
     expect(screen.queryByTestId('gift-notices')).toBeNull();
     s.send(pistol);
     expect(screen.getByRole('status').textContent).toBe('THE GM GAVE YOU HEAVY PISTOL ×2“For the job tonight.”It\'s on your sheet.✕');
+    // A second: in the same box, newest first, not a box of its own (2026-11-22: "they stack and look bad").
     s.send({ ...pistol, item: 'Rope', qty: 1, note: '' });
-    expect(screen.getAllByRole('status')[0].textContent).toBe('THE GM GAVE YOU ROPE ×1It\'s on your sheet.✕');
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(screen.getAllByRole('listitem').map((r) => r.textContent)).toEqual(['THE GM GAVE YOU ROPE ×1', 'THE GM GAVE YOU HEAVY PISTOL ×2“For the job tonight.”']);
+    expect(screen.getByRole('status').textContent).toContain("They're on your sheet.");
   });
 
-  it('keeps the newest few, each until closed', async () => {
+  it('lists the newest few; ✕ closes them all', async () => {
     const s = fakeSocket();
     render(<GiftNotices socket={s.socket} system="generic" />);
     for (let i = 1; i <= NOTICES_KEPT + 1; i += 1) s.send({ ...pistol, item: `Thing ${i}`, note: '' });
     expect(NOTICES_KEPT).toBe(3);
-    expect(screen.getAllByRole('status').map((n) => n.textContent?.split(' ×')[0])).toEqual(['THE GM GAVE YOU THING 4', 'THE GM GAVE YOU THING 3', 'THE GM GAVE YOU THING 2']);
-    await userEvent.click(within(screen.getAllByRole('status')[1]).getByRole('button', { name: 'Dismiss' }));
-    expect(screen.getAllByRole('status').map((n) => n.textContent?.split(' ×')[0])).toEqual(['THE GM GAVE YOU THING 4', 'THE GM GAVE YOU THING 2']);
-    for (const n of screen.getAllByRole('status')) await userEvent.click(within(n).getByRole('button', { name: 'Dismiss' }));
+    expect(screen.getAllByRole('listitem').map((n) => n.textContent?.split(' ×')[0])).toEqual(['THE GM GAVE YOU THING 4', 'THE GM GAVE YOU THING 3', 'THE GM GAVE YOU THING 2']);
+    await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByTestId('gift-notices')).toBeNull();
+  });
+
+  it('each goes 5 seconds after it came, held while the pointer is on the box', () => {
+    vi.useFakeTimers();
+    try {
+      const s = fakeSocket();
+      render(<GiftNotices socket={s.socket} system="generic" />);
+      expect(NOTICE_MS).toBe(5000);
+      s.send({ ...pistol, item: 'First', note: '' });
+      act(() => { vi.advanceTimersByTime(3000); });
+      s.send({ ...pistol, item: 'Second', note: '' });
+      act(() => { vi.advanceTimersByTime(1999); });
+      expect(screen.getAllByRole('listitem')).toHaveLength(2);
+      // The first's 5 seconds: it goes, the second stays.
+      act(() => { vi.advanceTimersByTime(1); });
+      expect(screen.getAllByRole('listitem').map((n) => n.textContent?.split(' ×')[0])).toEqual(['THE GM GAVE YOU SECOND']);
+      // Held while read: past its 5 seconds it stays; let go, it goes.
+      fireEvent.mouseEnter(screen.getByTestId('gift-notices'));
+      act(() => { vi.advanceTimersByTime(10_000); });
+      expect(screen.getAllByRole('listitem')).toHaveLength(1);
+      fireEvent.mouseLeave(screen.getByTestId('gift-notices'));
+      act(() => { vi.advanceTimersByTime(500); });
+      expect(screen.queryByTestId('gift-notices')).toBeNull();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('stops its timers when it goes', () => {
+    vi.useFakeTimers();
+    try {
+      const s = fakeSocket();
+      const { unmount } = render(<GiftNotices socket={s.socket} system="generic" />);
+      s.send(pistol);
+      unmount();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { vi.useRealTimers(); }
   });
 
   it('says the game\'s own word for the GM', () => {

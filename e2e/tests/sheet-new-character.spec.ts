@@ -482,10 +482,9 @@ test('a kit the GM gives: listed in GIVE, ticked, landing on the sheet with the 
   await expect(who.getByText('4 items, in the inventory')).toBeVisible({ timeout: 15_000 });
   await who.getByRole('checkbox', { name: 'Wren' }).check();
   await page.getByRole('button', { name: 'GIVE 1 × ROOK TO 1' }).click();
-  await expect.poll(async () => JSON.parse((await stored()).inventory ?? '[]').map((i: { name: string; qty: number }) => [i.name, i.qty]), { timeout: 15_000 }).toEqual([['Old sword', 1], ['Candles', 3]]);
-
-  // The player is told, and it is on their sheet without a reload.
+  // The player is told (looked for first: the notice goes after 5 seconds), and it is on their sheet without a reload.
   await expect(theirs.getByText('THE GM GAVE YOU ROOK ×1: Old sword, 3x Candles')).toBeVisible({ timeout: 15_000 });
+  await expect.poll(async () => JSON.parse((await stored()).inventory ?? '[]').map((i: { name: string; qty: number }) => [i.name, i.qty]), { timeout: 15_000 }).toEqual([['Old sword', 1], ['Candles', 3]]);
   await sheetTab(theirs, 'GEAR');
   await expect(theirs.locator('[value="Candles"]')).toHaveCount(1, { timeout: 15_000 });
   await theirs.context().close();
