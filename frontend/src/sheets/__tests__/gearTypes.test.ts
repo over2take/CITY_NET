@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { typesOf, fits, itemOfLine, lineColumns, gearTables, valueText, withLineValue, newLineOf, countOf, cellWords, LIMITS, type ColumnShown , gearBands } from '../gearTypes';
+import { typesOf, fits, itemOfLine, lineColumns, gearTables, valueText, withLineValue, newLineOf, countOf, cellWords, LIMITS, type ColumnShown , gearBands, landedIn } from '../gearTypes';
 import { normaliseItem, readInventory, type InventoryItem } from '../inventory';
 import type { ItemsShown } from '../gearItems';
 
@@ -213,5 +213,14 @@ describe('a line on you is EQUIPPED (G3)', () => {
     expect(bands.map((b) => b.count)).toEqual([4, 0, 1, 2]);
     // Told nothing, as before: by type alone.
     expect(gearBands(SHOWN, lines).map((b) => b.count)).toEqual([1, 1, 3, 2]);
+  });
+});
+
+describe('what landed in a closed band (G3)', () => {
+  it('a closed band whose count went up; not an open one, not one that fell or held; nothing before the first drawing', () => {
+    const shut = new Set(['equipped', 'usable', 'stash'] as const);
+    expect(landedIn({ equipped: 0, usable: 1, pack: 2, stash: 0 }, { equipped: 1, usable: 1, pack: 3, stash: 1 }, shut as never)).toEqual(['equipped', 'stash']);
+    expect(landedIn({ equipped: 2, usable: 1, pack: 0, stash: 0 }, { equipped: 1, usable: 0, pack: 0, stash: 0 }, shut as never)).toEqual([]);
+    expect(landedIn(null, { equipped: 1, usable: 1, pack: 1, stash: 1 }, shut as never)).toEqual([]);
   });
 });

@@ -16,7 +16,8 @@ import { FormulaIcon } from './FormulaIcon';
 // the server, which asks which carried line to reload from when there are several. The lines in bands (G2; approved mockup
 // docs/mockups/sheet-gear-layout.html, layout A): EQUIPPED, USABLE and PACK by each type's ON THE SHEET, a group per type,
 // in hand first; STASH, closed to start, whatever the type; a band's head closes it and the sheet remembers. A thing is
-// made by hand from the row of + buttons at the top; a thing worn, attuned or installed is in EQUIPPED whatever its type. One line a thing (G3; the same mockup, decision 3): its name, how many,
+// made by hand from the row of + buttons at the top; a closed band something lands in pulses, then stays bright until
+// opened; a thing worn, attuned or installed is in EQUIPPED whatever its type. One line a thing (G3; the same mockup, decision 3): its name, how many,
 // the columns it has as words with ROLL, FIRE and RELOAD, where it is carried; a click on it opens the card, every column a
 // box with NAME, HOW MANY, LOCATION and REMOVE, one card at a time; ✎ at the end of every line opens it too. A line with
 // nothing filled in at all, on it or its item, says FILL IN, which opens the card at its first box: a column blank beside
@@ -176,7 +177,7 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on,
     });
   };
   const bands = gearBands(itemsShown, items, on);
-  const { shut, toggle, openBand } = useGearBands();
+  const { shut, toggle, openBand, news } = useGearBands(Object.fromEntries(bands.map((b) => [b.band, b.count])));
   const bandOfType = (type: TypeShown) => (type.on_sheet === 'equipped' || type.on_sheet === 'usable' ? type.on_sheet : 'pack');
   /** One line a thing (G3), by its place; a click opens its card. `tagged`, in the STASH, says its type. */
   const lineView = ({ index: i, line, columns: lc }: TableRow, type: TypeShown, tagged = false) => {
@@ -317,10 +318,14 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on,
       )}
       {bands.map((b) => {
         const closed = shut.has(b.band);
+        // Something landed in it while closed (G3): a short pulse, then bright until opened (opening clears it).
+        const fresh = news.has(b.band);
         return (
           <section key={b.band} aria-label={`${b.label} band`} style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
-            <button type="button" aria-expanded={!closed} onClick={() => toggle(b.band)} title={closed ? 'Open' : 'Close'}
-              style={{ background: 'none', border: 0, borderBottom: '1px solid var(--dark-green)', color: 'var(--green)', fontFamily: 'monospace', fontSize: '0.6rem', letterSpacing: '1px', textAlign: 'left', padding: '2px 0', cursor: 'pointer' }}>
+            <button type="button" aria-expanded={!closed} onClick={() => toggle(b.band)} title={fresh ? 'Something new landed here: open to see' : closed ? 'Open' : 'Close'}
+              className={fresh ? 'gear-band-news' : undefined}
+              // Lit in the theme's own color, a tint behind it: cyan is grey in some themes, and would read dimmer.
+              style={{ background: fresh ? 'color-mix(in srgb, var(--green) 20%, transparent)' : 'none', border: 0, borderBottom: '1px solid var(--dark-green)', color: 'var(--green)', fontFamily: 'monospace', fontSize: '0.6rem', letterSpacing: '1px', textAlign: 'left', padding: '2px 0', cursor: 'pointer' }}>
               {closed ? '▸' : '▾'} {b.label} · {b.count}
             </button>
             {!closed && (b.count === 0

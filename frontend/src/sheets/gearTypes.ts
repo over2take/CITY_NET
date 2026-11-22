@@ -120,6 +120,14 @@ export const gearBands = (shown: ItemsShown | null | undefined, lines: Inventory
   return bands;
 };
 
+/**
+ * The closed bands something landed in between two drawings (G3; the user, 2026-11-22: the header's number tells people
+ * there are things in it; a closed one a thing was just put into, worn or bought, should catch the eye): a closed band whose
+ * count went up. Nothing before the first drawing, so opening the sheet says nothing new.
+ */
+export const landedIn = (before: Partial<Record<GearBand, number>> | null, after: Partial<Record<GearBand, number>>, shut: Set<GearBand>): GearBand[] =>
+  before ? GEAR_BANDS.map((b) => b.id).filter((id) => shut.has(id) && (after[id] ?? 0) > (before[id] ?? 0)) : [];
+
 /** A value as a box shows it. */
 export const valueText = (v: Value | undefined): string => (v === undefined ? '' : String(v));
 

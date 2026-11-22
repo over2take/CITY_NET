@@ -85,9 +85,14 @@ test('GEAR in bands: EQUIPPED, USABLE, PACK by type, a sword stashed into the ST
   await add.getByRole('button', { name: 'Add a Gear by hand' }).click();
   await mine.getByLabel('Item 4 name', { exact: true }).fill('Cloak');
   await expect(band('PACK').getByRole('button', { name: 'Cloak, item 4', exact: true })).toBeVisible();
+  // EQUIPPED closed, the Cloak worn: its head lights up with the count (G3), and opened shows it.
+  await head('EQUIPPED').click();
   await mine.getByTestId('gear-item-cloak').getByRole('button', { name: 'WEAR Cloak', exact: true }).click();
-  await expect(band('EQUIPPED').getByRole('button', { name: 'Cloak, item 4', exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(head('EQUIPPED')).toHaveText('▾ EQUIPPED · 1');
+  await expect(head('EQUIPPED')).toHaveText('▸ EQUIPPED · 1', { timeout: 15_000 });
+  await expect(head('EQUIPPED')).toHaveClass('gear-band-news');
+  await head('EQUIPPED').click();
+  await expect(head('EQUIPPED')).not.toHaveClass('gear-band-news');
+  await expect(band('EQUIPPED').getByRole('button', { name: 'Cloak, item 4', exact: true })).toBeVisible();
   await mine.getByTestId('gear-item-cloak').getByRole('button', { name: /^WORN/ }).click();
   await expect(band('PACK').getByRole('button', { name: 'Cloak, item 4', exact: true })).toBeVisible({ timeout: 15_000 });
   await context.close();

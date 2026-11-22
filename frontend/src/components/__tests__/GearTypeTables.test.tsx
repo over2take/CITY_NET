@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, fireEvent, within, cleanup, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, within, cleanup, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { InventorySection } from '../InventorySection';
 import type { SheetSection } from '../../sheets/types';
@@ -35,6 +35,8 @@ const ITEMS: ItemsShown = {
 };
 const line = (name: string, more = {}) => ({ name, qty: 1, enc: '', bundled: false, carry: 'stowed', location: '', ...more });
 
+/** What the server sends next, from outside the sheet (a WEAR, a gift): set on the sheet shown. */
+const outside: { set: (more: Record<string, unknown>) => void } = { set: () => {} };
 const show = (lines: object[], { readOnly = false, items = ITEMS as ItemsShown | undefined, onGearRoll = undefined as ((line: number, column: string) => void) | undefined,
   onReadGearDice = undefined as ((text: string) => Promise<GearDiceRead | null>) | undefined, onGearCount = undefined as GearCount | undefined,
   worked = undefined as object | undefined } = {}) => {
@@ -42,6 +44,7 @@ const show = (lines: object[], { readOnly = false, items = ITEMS as ItemsShown |
   const Harness = () => {
     // `worked`: what the server worked out of the items (_worked), which are worn.
     const [data, setData] = useState<Record<string, unknown>>({ inventory: JSON.stringify(lines), ...(worked ? { _worked: worked } : {}) });
+    outside.set = (more) => setData((d) => ({ ...d, ...more }));
     return <InventorySection section={SECTION} data={data as never} readOnly={readOnly} itemsShown={items} onGearRoll={onGearRoll} onReadGearDice={onReadGearDice} onGearCount={onGearCount}
       onFieldChange={(id, v) => { writes.push(JSON.parse(v as string)); setData((d) => ({ ...d, [id]: v })); }} />;
   };
@@ -370,12 +373,38 @@ describe('in bands (G2)', () => {
     expect(within(band('PACK')).getByRole('button', { name: 'Cutlass, item 1' })).toBeTruthy();
   });
 
+  it('something landing in a closed band: its head bright with a pulse until opened; not on opening the sheet, not in an open band', async () => {
+    const items: ItemsShown = { ...BANDED, list: [{ id: 'cutlass', label: 'Cutlass', needs: 'worn', features: [], type: 'gear', values: {} }] };
+    show([typed('Cutlass', 'gear'), typed('Rope', 'gear'), typed('Old Map', 'gear', { carry: 'stash' })], { items });
+    // Opening the sheet: STASH closed with a line in it, nothing new.
+    expect(head('STASH').className).toBe('');
+    await userEvent.click(head('EQUIPPED'));
+    // The Cutlass worn, by the server: EQUIPPED is closed, so it says so.
+    act(() => outside.set({ _worked: { items: [{ id: 'cutlass', needs: 'worn', worn: true }] } }));
+    expect(head('EQUIPPED').textContent).toBe('▸ EQUIPPED · 1');
+    expect(head('EQUIPPED').className).toBe('gear-band-news');
+    expect(head('EQUIPPED').title).toBe('Something new landed here: open to see');
+    // Lit after the pulse, a tint of the theme's own color behind it.
+    expect(head('EQUIPPED').style.background).toContain('var(--green) 20%');
+    expect(head('PACK').style.background).toBe('none');
+    // PACK, open, lost one: nothing.
+    expect(head('PACK').className).toBe('');
+    // Opened: seen; closed again, nothing new.
+    await userEvent.click(head('EQUIPPED'));
+    expect(head('EQUIPPED').className).toBe('');
+    await userEvent.click(head('EQUIPPED'));
+    expect(head('EQUIPPED').className).toBe('');
+    expect(head('EQUIPPED').title).toBe('Open');
+  });
+
   it('a thing made by hand opens its band if closed', async () => {
     show([typed('Sword', 'weapons')], { items: BANDED });
     await userEvent.click(head('EQUIPPED'));
     await userEvent.click(within(screen.getByRole('group', { name: 'Add by hand' })).getByRole('button', { name: 'Add a Weapon by hand' }));
     expect(head('EQUIPPED').getAttribute('aria-expanded')).toBe('true');
     expect(within(band('EQUIPPED')).getByLabelText('Item 2 name')).toBeTruthy();
+    // Opened by the player's own hand: nothing to catch the eye.
+    expect(head('EQUIPPED').className).toBe('');
   });
 });
 

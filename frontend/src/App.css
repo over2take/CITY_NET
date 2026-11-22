@@ -1355,6 +1355,22 @@ button.choice-off:disabled {
   50% { color: #ff6666; text-shadow: 0 0 8px #ff6666; }
 }
 
+/* A closed GEAR band something just landed in (G3): three pulses in a second and a half, never a lasting blink, then
+   lit (a tint of the theme's own color, set on the head) until opened. None where motion is turned down. */
+@keyframes gear-band-news {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+.gear-band-news {
+  text-shadow: 0 0 6px var(--green);
+  animation: gear-band-news 0.5s ease-in-out 3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gear-band-news { animation: none; }
+}
+
 .login-panel h1 {
   letter-spacing: 10px;
   margin-bottom: 5px;
