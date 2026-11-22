@@ -38,9 +38,12 @@ export interface CustomRenderSheet {
 
 /** A system's own names for the app's building types and catalogues, and which it turned off. */
 export interface CustomBuildings {
-  types?: Record<string, { name?: string; on?: boolean }>;
+  /** A shop may buy ANYTHING (8a7b1b, backend systemBuilder/buildings.js buysOf); unset, what it sells. */
+  types?: Record<string, { name?: string; on?: boolean; buys?: 'anything' }>;
   /** A catalogue may name the currency it is priced in (sheets/currencies.ts catalogueCurrencyFor). */
   catalogues?: Record<string, { name?: string; on?: boolean; currency?: string }>;
+  /** The game's own kinds of shop (8a7b), where it makes some. */
+  shops?: { id: string; name: string; on: boolean; buys?: 'anything' }[];
 }
 
 export interface CustomRender {

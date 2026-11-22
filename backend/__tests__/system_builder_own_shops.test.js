@@ -49,7 +49,7 @@ describe('checked', () => {
     expect(problemsOf([{ id: 'fence', name: '  ' }])).toEqual([{ where: 'buildings shop 1, name', message: 'Must be some text' }]);
     expect(problemsOf([{ id: 'fence', name: 'x'.repeat(41) }])).toEqual([{ where: 'buildings shop 1, name', message: 'At most 40 characters' }]);
     expect(problemsOf([{ id: 'fence', name: 'Fence', on: 'no' }])).toEqual([{ where: 'buildings shop 1, on', message: 'Must be true or false' }]);
-    expect(problemsOf([{ id: 'fence', name: 'Fence', sells: ['gear'] }])).toEqual([{ where: 'buildings shop 1, sells', message: 'Only "id", "name" and "on" are set here' }]);
+    expect(problemsOf([{ id: 'fence', name: 'Fence', sells: ['gear'] }])).toEqual([{ where: 'buildings shop 1, sells', message: 'Only "id", "name", "on" and "buys" are set here' }]);
     expect(SHOPS_MOST).toBe(20);
     const many = Array.from({ length: 21 }, (_, n) => ({ id: `shop_${n}`, name: `Shop ${n}` }));
     expect(problemsOf(many)).toEqual([{ where: 'buildings shops', message: 'At most 20 shops of its own' }]);

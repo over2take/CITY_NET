@@ -194,6 +194,23 @@ export const shelvedIn = (
   ...ownItemTypes(system).filter((t) => (t.sold_at ?? []).includes(String(id ?? ''))).map((t) => `type:${t.id}` as ShopStock),
 ];
 
+/** What a shop of this type buys back in this game (8a7b1b): ANYTHING where a custom system says so, else what it sells. */
+export const buysIn = (system: string | null | undefined, id: string | null | undefined): 'sells' | 'anything' => {
+  const buildings = customTemplate(String(system ?? ''))?.buildings;
+  const key = String(id ?? '');
+  return (buildings?.shops?.find((s) => s.id === key) ?? buildings?.types?.[key])?.buys === 'anything' ? 'anything' : 'sells';
+};
+
+/**
+ * The shelves a shop of this type buys back from (8a7b1b): what it sells (`sold`), or where it BUYS ANYTHING every shelf
+ * this game prices, the app's it has on and each of its own types'. The server takes the same list (itemTypes.js boughtAt).
+ */
+export const boughtIn = (id: string | null | undefined, system: string | null | undefined, sold: ShopStock[]): ShopStock[] =>
+  (buysIn(system, id) === 'anything'
+    ? [...new Set([...sold, ...CATALOGUES.filter((c) => c.shelved && catalogueOn(system, c.id)).map((c) => c.id),
+      ...ownItemTypes(system).map((t) => `type:${t.id}` as ShopStock)])]
+    : sold);
+
 /** A custom system's own item types, as its render copy says them (8a7a2); none for a built-in game. */
 export const ownItemTypes = (system: string | null | undefined) =>
   customTemplate(String(system ?? ''))?.items?.types ?? [];

@@ -286,7 +286,7 @@ export interface SheetTemplate {
   parts?: Record<string, { on: boolean }>;
   /** The building types and shop catalogues a custom system renamed or turned off
    *  (data/buildingTypes.ts reads them). Absent on the built-in systems. */
-  buildings?: { types?: Record<string, { name?: string; on?: boolean }>; catalogues?: Record<string, { name?: string; on?: boolean; currency?: string }> };
+  buildings?: import('./customTemplates').CustomBuildings;
   /** A custom system's currencies, the first the main one (sheets/currencies.ts reads them).
    *  Absent on the built-in systems, which keep the app's single money. */
   currencies?: import('./currencies').Currency[];
