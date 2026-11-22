@@ -1,7 +1,7 @@
 import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { CARRY_STATES, type InventoryItem } from '../sheets/inventory';
 import type { ItemsShown } from '../sheets/gearItems';
-import { gearTables, gearBands, foundIn, valueText, withLineValue, newLineOf, shownCells, cellWords, countOf, type Cell, type CountAnswer, type CountKind, type TableRow, type TypeShown } from '../sheets/gearTypes';
+import { gearTables, gearBands, foundIn, uniqueCells, uniqueTitle, itemWas, valueText, withLineValue, newLineOf, shownCells, cellWords, countOf, type Cell, type CountAnswer, type CountKind, type TableRow, type TypeShown } from '../sheets/gearTypes';
 import { useGearBands } from '../hooks/useGearBands';
 import { diceWords, SHAPES, shapeText, insertName, type GearDiceRead } from '../sheets/gearDice';
 import { FormulaIcon } from './FormulaIcon';
@@ -17,7 +17,9 @@ import { FormulaIcon } from './FormulaIcon';
 // docs/mockups/sheet-gear-layout.html, layout A): EQUIPPED, USABLE and PACK by each type's ON THE SHEET, a group per type,
 // in hand first; STASH, closed to start, whatever the type; a band's head closes it and the sheet remembers. A thing is
 // made by hand from the row of + buttons at the top; a closed band something lands in pulses, then stays bright until
-// opened; FIND at the top, always shown, keeps only the lines it matches, every band open while it has words (G4);
+// opened; a line changed from its item says UNIQUE, each column it made its own too, with THE ITEM'S to put it back and
+// the item's value and who changed it when, and "unique" in FIND lists them (G5b; no count at the top, the user: FIND
+// is enough and saves the room); FIND at the top, always shown, keeps only the lines it matches, every band open while it has words (G4);
 // a thing worn, attuned or installed is in EQUIPPED whatever its type. One line a thing (G3; the same mockup, decision 3): its name, how many,
 // the columns it has as words with ROLL, FIRE and RELOAD, where it is carried; a click on it opens the card, every column a
 // box with NAME, HOW MANY, LOCATION and REMOVE, one card at a time; ✎ at the end of every line opens it too. A line with
@@ -193,6 +195,7 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on,
     const blank = lc.cells.filter((c) => c.own === undefined && c.given === undefined);
     const nothingFilled = blank.length > 0 && blank.length === lc.cells.length;
     const editing = open === i;
+    const unique = uniqueCells(lc).length > 0;
     const stashed = line.carry === 'stash';
     const lockedTitle = locked(i) ? 'Installed: REMOVE it first' : undefined;
     const name = line.name.trim() || 'UNNAMED';
@@ -210,6 +213,11 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on,
                 onClick={() => openAt(null)}
                 style={{ background: 'none', border: 0, padding: 0, color: 'var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', textAlign: 'left', cursor: 'pointer', overflowWrap: 'anywhere', textDecoration: editing ? 'underline' : 'none', opacity: line.name.trim() ? 1 : 0.6 }}>{name}</button>}
           {line.qty > 1 && <span title="How many">×{line.qty}</span>}
+          {/* Changed from its item (G5b): the GM sees it at a glance, the item's value and who changed it on hover. */}
+          {unique && (
+            <span role="note" aria-label={`Item ${i + 1} is unique`} title={uniqueTitle({ index: i, line, columns: lc })}
+              style={{ ...smallButton, border: '1px solid var(--warning)', color: 'var(--warning)', padding: '0 4px', cursor: 'help' }}>UNIQUE</span>
+          )}
           {/* Only the columns it has, as words: its item's faint, ROLL beside a DAMAGE or DICE (8a3b). */}
           {cells.map((cell) => {
             const label = `Item ${i + 1} ${cell.column.label}`;
@@ -294,6 +302,18 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on,
                 {(cell.column.kind === 'damage' || cell.column.kind === 'dice') && onReadDice
                   ? <DiceBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} focus={focusAt === cell.column.id} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} onRead={onReadDice} />
                   : <CellBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} readOnly={readOnly} focus={focusAt === cell.column.id} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} />}
+                {/* Made its own (G5b): said, with the item's value, who changed it when, and THE ITEM'S to put it back. */}
+                {cell.unique && (
+                  <>
+                    <span />
+                    <span role="group" aria-label={`Item ${i + 1} ${cell.column.label} is unique`} style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
+                      <span style={{ ...smallButton, border: '1px solid var(--warning)', color: 'var(--warning)', padding: '0 4px' }}>UNIQUE</span>
+                      <button type="button" className="utility-btn" aria-label={`Item ${i + 1} ${cell.column.label}: the item's`} title="Back to the item's own"
+                        onClick={() => patch(i, withLineValue(line, cell.column, ''))} style={smallButton}>THE ITEM&apos;S</button>
+                      <span style={{ ...small, overflowWrap: 'anywhere', textAlign: 'left' }}>{itemWas(cell, line)}</span>
+                    </span>
+                  </>
+                )}
               </React.Fragment>
             ))}
             <span style={{ ...small, textAlign: 'right' }} title="Where a stashed item actually is">LOCATION</span>

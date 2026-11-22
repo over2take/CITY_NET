@@ -567,3 +567,40 @@ describe('the slot and install counters (2026-11-22)', () => {
     expect(counters()).toEqual(['CYBERWARE installs']);
   });
 });
+
+describe('UNIQUE on the line and in its card (G5b)', () => {
+  const AT = '2026-11-20T10:00:00.000Z';
+  const at = (i: number) => within(screen.getByTestId(`gear-line-${i}`));
+  // ITEMS' Pistol: DAMAGE 2d6, RANGE 30 m.
+  const made = line('Pistol', { values: { damage: '3d6' }, changed: { damage: { by: 'kes', at: AT } } });
+
+  it('the line says UNIQUE, the item\'s and who changed it on hover; a Pistol as the item has it says nothing', () => {
+    show([made, line('Pistol')]);
+    const tag = at(0).getByRole('note', { name: 'Item 1 is unique' });
+    expect(tag.textContent).toBe('UNIQUE');
+    expect(tag.title).toBe("Unique: changed from its item\nDAMAGE 3d6, the item's: 2d6 · changed by kes, 2026-11-20");
+    expect(at(1).queryByRole('note', { name: 'Item 2 is unique' })).toBeNull();
+  });
+
+  it('in the card, each column made its own: UNIQUE, what the item had, who changed it; THE ITEM\'S puts it back', async () => {
+    const last = show([made]);
+    await userEvent.click(at(0).getByRole('button', { name: 'Edit item 1' }));
+    const damage = within(at(0).getByRole('group', { name: 'Item 1 DAMAGE is unique' }));
+    expect(damage.getByText("the item's: 2d6 · changed by kes, 2026-11-20")).toBeTruthy();
+    // RANGE is the item's: nothing said of it.
+    expect(at(0).queryByRole('group', { name: 'Item 1 RANGE is unique' })).toBeNull();
+    await userEvent.click(damage.getByRole('button', { name: "Item 1 DAMAGE: the item's" }));
+    expect(last()[0].values).toBeUndefined();
+    expect(at(0).queryByRole('note', { name: 'Item 1 is unique' })).toBeNull();
+    expect(at(0).queryByRole('group', { name: 'Item 1 DAMAGE is unique' })).toBeNull();
+  });
+
+  it('"unique" in FIND lists them; no count at the top (the user: FIND is enough)', async () => {
+    show([made, line('Rope'), line('Pistol', { values: { range: '50 m' } })]);
+    expect(screen.queryByRole('button', { name: /UNIQUE$/ })).toBeNull();
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Find in your gear' }), 'unique');
+    expect(screen.getByRole('button', { name: 'Pistol, item 1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Pistol, item 3' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Rope, item 2' })).toBeNull();
+  });
+});
