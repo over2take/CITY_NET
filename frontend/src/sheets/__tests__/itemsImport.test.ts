@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { exampleItemsFile, itemsListFile, itemsFileName, withImportedItems, itemPartText, itemIdsOf, MAX_BYTES } from '../itemsImport';
+import { exampleItemsFile, itemsListFile, itemsFileName, withImportedItems, itemPartText, itemIdsOf, MAX_BYTES , itemsHint } from '../itemsImport';
 import type { Definition } from '../systemsApi';
 
 /**
@@ -137,6 +137,16 @@ describe('PRICE and IN SHOPS (8a7a3b2)', () => {
   it('a game without types of its own: neither column, as before', () => {
     expect(itemsListFile(PLAIN)).not.toContain('in shops');
     expect(exampleItemsFile(PLAIN)).not.toContain('in shops');
+  });
+});
+
+describe('the import box\'s hint (8a7a5)', () => {
+  it('the system\'s first type headed by the columns its file has, and the features; read back without a mistake', () => {
+    const hint = itemsHint(TESTFALL);
+    expect(hint).toBe('Paste a table here, or upload a file. DOWNLOAD EXAMPLE gives one in the right shape.\n\n[gear]\nname, weight, price, in shops, needs, cost, words\n\n[features]\nitem, feature, words, uses, refill');
+    // Its table, below the words: read back without a mistake.
+    expect(readItemsFile(TESTFALL, hint.slice(hint.indexOf('\n\n') + 2)).skipped).toEqual([]);
+    expect(itemsHint(PLAIN)).toContain('[gear]\nname, weight, price, needs, words\n');
   });
 });
 

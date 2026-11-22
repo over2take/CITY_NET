@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { DraggableWindow } from './DraggableWindow';
-import { exampleFor, currentFor, type StoredEntry } from '../sheets/catalogueSchema';
+import { exampleFor, currentFor, catalogueHint, type StoredEntry } from '../sheets/catalogueSchema';
 import { catalogueLabel, type ShopStock } from '../data/buildingTypes';
 import { downloadText } from '../utils/downloadText';
 import { customTemplate } from '../sheets/customTemplates';
@@ -58,13 +58,17 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
   const [preview, setPreview] = useState<Preview | null>(null);
   /** The text that preview was of. SAVE is offered only while the box still matches it. */
   const [previewedText, setPreviewedText] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'preview' | 'save' | 'current' | null>(null);
+  const [busy, setBusy] = useState<'preview' | 'save' | 'current' | 'edit' | null>(null);
   const [message, setMessage] = useState<{ tone: 'ok' | 'bad'; text: string } | null>(null);
   /** ADD NEW LINES TO ITEMS (8a7a4a): off to start, afresh with each preview. */
   const [toItems, setToItems] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   /** Set when this window asked for the current catalogues, so their arrival means "download". */
   const awaitingCurrent = useRef(false);
+  /** Set when EDIT CURRENT asked for them (8a7a5), so their arrival fills the box instead. */
+  const awaitingEdit = useRef(false);
+  /** EDIT CURRENT asking before it replaces text in the box. */
+  const [askingEdit, setAskingEdit] = useState(false);
 
   useEffect(() => {
     if (!socket) return;
@@ -102,6 +106,16 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
      * a state updater would run it twice wherever React calls updaters twice.
      */
     const onCatalogues = (payload: { entries?: Partial<Record<ShopStock, StoredEntry[]>> }) => {
+      // EDIT CURRENT (8a7a5): what DOWNLOAD CURRENT would give, in the box to change, preview and save.
+      if (awaitingEdit.current) {
+        awaitingEdit.current = false;
+        setText(currentFor(system, payload?.entries ?? {}));
+        setPreview(null);
+        setPreviewedText(null);
+        setMessage({ tone: 'ok', text: 'What the shops sell now is in the box. Change it, then PREVIEW and SAVE.' });
+        setBusy(null);
+        return;
+      }
       if (!awaitingCurrent.current) return;
       awaitingCurrent.current = false;
       downloadText(`${system}-storefronts-current.csv`, currentFor(system, payload?.entries ?? {}));
@@ -128,6 +142,14 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
   const items = customTemplate(system)?.items;
   const starter = itemsCatalogue(system, items);
   const itemRows = preview ? itemsInPreview(system, items, preview.sections) : { matched: [], near: [] };
+
+  /** EDIT CURRENT (8a7a5): asks the server what the shops sell now; it arrives in the box. */
+  const editCurrent = () => {
+    if (!socket) return;
+    awaitingEdit.current = true;
+    setBusy('edit');
+    socket.emit('requestCatalogues');
+  };
 
   const runPreview = () => {
     if (!text.trim() || tooBig || !socket) return;
@@ -204,6 +226,14 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
               socket?.emit('requestCatalogues');
             }}
           >{busy === 'current' ? 'FETCHING…' : 'DOWNLOAD CURRENT'}</button>
+          <button
+            type="button"
+            className="utility-btn"
+            style={btn}
+            disabled={busy !== null || !socket}
+            title="What the shops sell now, in the box to change: then PREVIEW and SAVE"
+            onClick={() => { if (text.trim()) setAskingEdit(true); else editCurrent(); }}
+          >{busy === 'edit' ? 'FETCHING…' : 'EDIT CURRENT'}</button>
           {starter && (
             <button
               type="button"
@@ -229,10 +259,19 @@ export function CatalogueWindow({ pos, setPos, onClose, socket, system }: Props)
           />
         </div>
 
+        {/* EDIT CURRENT over text in the box (8a7a5): asked first, so a half-typed file isn't lost. */}
+        {askingEdit && (
+          <div role="group" aria-label="Replace the box" style={{ ...mono(10), display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', color: 'var(--warning)' }}>
+            <span>Replace what&apos;s in the box with what the shops sell now?</span>
+            <button type="button" className="utility-btn" style={btn} onClick={() => { setAskingEdit(false); editCurrent(); }}>REPLACE</button>
+            <button type="button" className="utility-btn" style={btn} onClick={() => setAskingEdit(false)}>KEEP</button>
+          </div>
+        )}
+
         <textarea
           value={text}
           onChange={(e) => { setText(e.target.value); setMessage(null); }}
-          placeholder={'Paste a table here, or upload a file.\n\n[weapons]\nname, price, dmg\nZip Gun, 15, 1d4'}
+          placeholder={catalogueHint(system)}
           aria-label="Catalogue text"
           spellCheck={false}
           style={{

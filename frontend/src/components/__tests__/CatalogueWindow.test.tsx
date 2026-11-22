@@ -418,3 +418,40 @@ describe('ADD NEW LINES TO ITEMS (8a7a4a)', () => {
     expect(within(screen.getByTestId('catalogue-to-items')).getByRole('switch', { name: /ADD NEW LINES TO ITEMS/ }).getAttribute('aria-checked')).toBe('false');
   });
 });
+
+describe('EDIT CURRENT and the box\'s hint (8a7a5)', () => {
+  const ON_SALE = { entries: { weapons: [{ id: 'unity', name: 'Militech Unity', price: 500, fields: {}, source: 'uploaded' }] } };
+
+  it('an empty box: filled with what the shops sell now, as DOWNLOAD CURRENT gives it, said', async () => {
+    show('cyberpunk_red');
+    await userEvent.click(button('EDIT CURRENT'));
+    expect(sent.at(-1)).toEqual({ event: 'requestCatalogues', data: undefined });
+    reply('catalogues', ON_SALE);
+    expect(box().value).toMatch(/^Militech Unity\s*, 500/m);
+    expect(screen.getByText('What the shops sell now is in the box. Change it, then PREVIEW and SAVE.')).toBeInTheDocument();
+    // Not a download: that's DOWNLOAD CURRENT's.
+    expect(downloads).toEqual([]);
+  });
+
+  it('text in the box: asked first; KEEP leaves it; REPLACE fills it', async () => {
+    show('cyberpunk_red');
+    type('[weapons]\nname, price\nHalf typed, 1');
+    await userEvent.click(button('EDIT CURRENT'));
+    expect(sent.some((s) => s.event === 'requestCatalogues')).toBe(false);
+    const asked = within(screen.getByRole('group', { name: 'Replace the box' }));
+    expect(asked.getByText("Replace what's in the box with what the shops sell now?")).toBeInTheDocument();
+    await userEvent.click(asked.getByRole('button', { name: 'KEEP' }));
+    expect(box().value).toBe('[weapons]\nname, price\nHalf typed, 1');
+    expect(screen.queryByRole('group', { name: 'Replace the box' })).toBeNull();
+    await userEvent.click(button('EDIT CURRENT'));
+    await userEvent.click(within(screen.getByRole('group', { name: 'Replace the box' })).getByRole('button', { name: 'REPLACE' }));
+    reply('catalogues', ON_SALE);
+    expect(box().value).toMatch(/^Militech Unity\s*, 500/m);
+  });
+
+  it('the hint is this game\'s, not CWN\'s Zip Gun', () => {
+    show('cyberpunk_red');
+    expect(box().placeholder).not.toMatch(/Zip Gun/);
+    expect(box().placeholder).toMatch(/^Paste a table here/);
+  });
+});

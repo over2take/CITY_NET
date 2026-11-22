@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
-  MAX_BYTES, lineRange, exampleItemsFile, itemsListFile, itemsFileName, withImportedItems, itemPartText, itemIdsOf, type ItemsImportPreview,
+  MAX_BYTES, lineRange, exampleItemsFile, itemsListFile, itemsFileName, withImportedItems, itemPartText, itemIdsOf, itemsHint, type ItemsImportPreview,
 } from '../sheets/itemsImport';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
@@ -133,7 +133,7 @@ export function ItemsImport({ definition, api, edit, onClose, onApplied }: Props
           })}
         </div>
         <textarea ref={box} value={text} aria-label="Text to import" spellCheck={false} className="cyber-scroll"
-          placeholder={'Paste a table here, or upload a file. DOWNLOAD EXAMPLE gives one in the right shape.\n\n[gear]\nname, weight, price, needs, words\n\n[features]\nitem, feature, words, uses, refill'}
+          placeholder={itemsHint(definition)}
           onChange={(e) => change(e.target.value)}
           onScroll={(e) => { if (gutter.current) gutter.current.scrollTop = e.currentTarget.scrollTop; }}
           style={{ ...lines, background: 'var(--black)', color: 'var(--green)', border: 0, resize: 'none', whiteSpace: 'pre', overflow: 'auto', height: '100%', width: '100%', outline: 'none' }} />

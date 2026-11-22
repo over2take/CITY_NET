@@ -131,6 +131,17 @@ const head = (def: Definition, intro: string[]): string[] => {
   ];
 };
 
+/**
+ * The import box's grey hint (8a7a5): this system's first type as its section, headed by the columns the file has, and the
+ * features section. It showed a fixed [gear] in every game.
+ */
+export const itemsHint = (def: Definition): string => {
+  const types = itemTypes(def);
+  const t = types[0];
+  return 'Paste a table here, or upload a file. DOWNLOAD EXAMPLE gives one in the right shape.\n\n'
+    + `[${sectionOf(types, t)}]\n${['name', ...t.columns.map((c) => headOf(t, c)), ...shopHeads(def, t), ...tail(def)].join(', ')}\n\n[features]\nitem, feature, words, uses, refill`;
+};
+
 /** DOWNLOAD EXAMPLE: a file made from this system, a section per type, with made-up rows that fit each column. */
 export const exampleItemsFile = (def: Definition): string => {
   const types = itemTypes(def);
