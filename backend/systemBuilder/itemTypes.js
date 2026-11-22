@@ -26,7 +26,7 @@
 
 const { boxProblem } = require('./tierRolls');
 const { BUILDING_TYPES } = require('../buildingTypes');
-const { shopKindsOf } = require('./buildings');
+const { shopKindsOf, buysOf } = require('./buildings');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
@@ -84,6 +84,13 @@ const soldAt = (type, definition) => {
 /** The shelves of the system's own types a kind of building sells (8a7a2): `type:<id>` for each sold at it. None without types of its own. */
 const typeShelvesAt = (definition, buildingType) => (ownTypes(definition)
   ? typesOf(definition).filter((t) => soldAt(t, definition).includes(buildingType)).map((t) => `type:${t.id}`) : []);
+
+/**
+ * The shelves a kind of shop buys back from (8a7b1b): those it sells (`sold`), or, where it BUYS ANYTHING, every shelf this
+ * game prices: the app's catalogues it has on (`onCatalogues`) and each of its own types'.
+ */
+const boughtAt = (definition, buildingType, sold, onCatalogues) => (buysOf(definition, buildingType) === 'anything'
+  ? [...new Set([...sold, ...onCatalogues, ...(ownTypes(definition) ? typesOf(definition).map((t) => `type:${t.id}`) : [])])] : sold);
 
 /** The type an item or a line is: the one it names, or the first. */
 const typeNamed = (definition, id) => { const types = typesOf(definition); return types.find((t) => t.id === id) || types[0]; };
@@ -263,4 +270,4 @@ const lineColumns = (definition, line, items, names) => {
   return { type: type.id, ...(item ? { item: item.id } : {}), values, counts };
 };
 
-module.exports = { BANDS, DEFAULT_BAND, bandOf, PRICE_COLUMN, MOST_PRICE, isPrice, itemPrice, inShops, KINDS, LIMITS, GEAR, NAME, SHOP_TYPES, DEFAULT_SOLD_AT, soldAt, typeShelvesAt, linesOf, typesOf, ownTypes, typeNamed, valueProblem, checkTypes, checkItemType, typesShown, itemValues, lineColumns };
+module.exports = { BANDS, DEFAULT_BAND, bandOf, PRICE_COLUMN, MOST_PRICE, isPrice, itemPrice, inShops, KINDS, LIMITS, GEAR, NAME, SHOP_TYPES, DEFAULT_SOLD_AT, soldAt, typeShelvesAt, boughtAt, linesOf, typesOf, ownTypes, typeNamed, valueProblem, checkTypes, checkItemType, typesShown, itemValues, lineColumns };

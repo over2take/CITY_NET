@@ -48,7 +48,7 @@ const vehicleSystems = require('../sheets/vehicleSystems');
 const ram = require('../sheets/ram');
 const enemyVehicles = require('../sheets/enemyVehicles');
 const buildingTypes = require('../buildingTypes');
-const { typesOf, ownTypes, typeShelvesAt } = require('../systemBuilder/itemTypes');
+const { typesOf, ownTypes, typeShelvesAt, boughtAt } = require('../systemBuilder/itemTypes');
 const { namesOf } = require('../systemBuilder/choices');
 // The merged catalogue: what the app ships with, plus whatever a GM uploaded.
 const shopPrices = require('../shops/catalogueStore');
@@ -2380,7 +2380,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               ...buildingTypes.shelvedCatalogues(loc.building_type).filter((c) => customSystems.buildingIn(system, 'catalogues', c)),
               ...(definition ? typeShelvesAt(definition, loc.building_type) : []),
             ];
-            if (!catalogues.length) return refuse('not_sold');
+            // What it buys back (8a7b1b): what it sells, or with BUYS ANYTHING every shelf this game prices.
+            const bought = boughtAt(definition, loc.building_type, catalogues,
+              buildingTypes.CATALOGUES.filter((c) => c.shelved && customSystems.buildingIn(system, 'catalogues', c.id)).map((c) => c.id));
+            if (!catalogues.length && !bought.length) return refuse('not_sold');
 
             db.all(
               'SELECT key, value FROM global_settings WHERE key IN (?, ?)',
@@ -2405,7 +2408,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                       let sheetData;
                       try { sheetData = JSON.parse(sheetRow.data || '{}'); } catch { return refuse('no_sheet'); }
                       sale = shopSell.planSale({
-                        data: sheetData, items: sells, catalogues,
+                        data: sheetData, items: sells, catalogues: bought,
                         locationPct: loc.buyback_pct, globalPct, system,
                       });
                       if (!sale.ok) return refuse(sale.reason, { itemId: sale.itemId });

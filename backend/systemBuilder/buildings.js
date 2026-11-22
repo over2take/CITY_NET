@@ -24,6 +24,12 @@
 // types that tick it, in the General Store's look. Another game hasn't got it: a building set to it is no shop there.
 //
 //   buildings: { shops: [{ id: 'apothecary', name: 'Apothecary' }, { id: 'fence', name: 'Fence', on: false }] }
+//
+// What a shop BUYS (8a7b1b; the user, 2026-11-21: "shops like pawns or fences that will buy anything"): WHAT IT SELLS, as
+// every shop always has, or ANYTHING, every priced thing this game has, at the building's BUYBACK rate. Set on the app's
+// shops and the game's own alike, unset meaning WHAT IT SELLS:
+//
+//   buildings: { types: { general_store: { buys: 'anything' } }, shops: [{ id: 'fence', name: 'Fence', buys: 'anything' }] }
 
 const { BUILDING_TYPES, CATALOGUES, shelvedCatalogues, isShop } = require('../buildingTypes');
 const { partOn } = require('./parts');
@@ -36,7 +42,10 @@ const NAME_LIMIT = 40;
 const SHOPS_MOST = 20;
 /** A shop's id: made from its name when made, fixed after, as items' and types' are. */
 const SHOP_ID = /^[a-z][a-z0-9_]{0,63}$/;
-const SHOP_KEYS = ['id', 'name', 'on'];
+const SHOP_KEYS = ['id', 'name', 'on', 'buys'];
+/** What a shop buys back (8a7b1b): what it sells, or anything with a price. */
+const BUYS = ['sells', 'anything'];
+const BUYS_MESSAGE = 'WHAT IT SELLS ("sells") or ANYTHING ("anything")';
 
 const KINDS = {
   types: new Set(BUILDING_TYPES.map((t) => t.id)),
@@ -61,10 +70,13 @@ const checkBuildings = (buildings, problems, currencyIds = []) => {
       const where = `buildings ${kind} ${id}`;
       if (!ids.has(id)) { problems.push({ where, message: kind === 'types' ? 'Not a building type of the app' : 'Not a shop catalogue of the app' }); continue; }
       if (!isPlainObject(setting)) { problems.push({ where, message: 'Must say a name, on, or both' }); continue; }
-      const keys = kind === 'catalogues' ? ['name', 'on', 'currency'] : ['name', 'on'];
+      // A shop also says what it BUYS (8a7b1b); a bar buys nothing.
+      const shop = kind === 'types' && isShop(id);
+      const keys = kind === 'catalogues' ? ['name', 'on', 'currency'] : shop ? ['name', 'on', 'buys'] : ['name', 'on'];
       for (const key of Object.keys(setting)) {
-        if (!keys.includes(key)) problems.push({ where: `${where}, ${key}`, message: kind === 'catalogues' ? 'Only "name", "on" and "currency" are set here' : 'Only "name" and "on" are set here' });
+        if (!keys.includes(key)) problems.push({ where: `${where}, ${key}`, message: kind === 'catalogues' ? 'Only "name", "on" and "currency" are set here' : shop ? 'Only "name", "on" and "buys" are set here' : 'Only "name" and "on" are set here' });
       }
+      if (shop && setting.buys !== undefined && !BUYS.includes(setting.buys)) problems.push({ where: `${where}, buys`, message: BUYS_MESSAGE });
       if (kind === 'catalogues' && setting.currency !== undefined) {
         if (!currencyIds.length) problems.push({ where: `${where}, currency`, message: 'This system has no currencies of its own' });
         else if (!currencyIds.includes(setting.currency)) problems.push({ where: `${where}, currency`, message: "Not one of this system's currencies" });
@@ -86,7 +98,7 @@ const checkShops = (shops, problems) => {
   shops.forEach((shop, n) => {
     const where = `buildings shop ${n + 1}`;
     if (!isPlainObject(shop)) { problems.push({ where, message: 'Must say an id and a name' }); return; }
-    for (const key of Object.keys(shop)) if (!SHOP_KEYS.includes(key)) problems.push({ where: `${where}, ${key}`, message: 'Only "id", "name" and "on" are set here' });
+    for (const key of Object.keys(shop)) if (!SHOP_KEYS.includes(key)) problems.push({ where: `${where}, ${key}`, message: 'Only "id", "name", "on" and "buys" are set here' });
     if (typeof shop.id !== 'string' || !SHOP_ID.test(shop.id)) problems.push({ where: `${where}, id`, message: 'Lowercase letters, digits and _, starting with a letter' });
     else if (KINDS.types.has(shop.id)) problems.push({ where: `${where}, id`, message: `The app has a building type called ${shop.id}: call it something else` });
     else if (seen.has(shop.id)) problems.push({ where: `${where}, id`, message: `Two shops called ${shop.id}` });
@@ -94,16 +106,17 @@ const checkShops = (shops, problems) => {
     if (typeof shop.name !== 'string' || !shop.name.trim()) problems.push({ where: `${where}, name`, message: 'Must be some text' });
     else if (shop.name.trim().length > NAME_LIMIT) problems.push({ where: `${where}, name`, message: `At most ${NAME_LIMIT} characters` });
     if (shop.on !== undefined && typeof shop.on !== 'boolean') problems.push({ where: `${where}, on`, message: 'Must be true or false' });
+    if (shop.buys !== undefined && !BUYS.includes(shop.buys)) problems.push({ where: `${where}, buys`, message: BUYS_MESSAGE });
   });
 };
 
-/** The game's own kinds of shop (8a7b), those well formed, in its order: { id, name, on }. None for a game with none. */
+/** The game's own kinds of shop (8a7b), those well formed, in its order: { id, name, on }, and buys: 'anything' where it says so. None for a game with none. */
 const ownShops = (definition) => {
   const list = definition && isPlainObject(definition.buildings) && Array.isArray(definition.buildings.shops) ? definition.buildings.shops : [];
   const seen = new Set();
   return list.filter((s) => isPlainObject(s) && typeof s.id === 'string' && SHOP_ID.test(s.id) && !KINDS.types.has(s.id)
     && typeof s.name === 'string' && s.name.trim() && !seen.has(s.id) && seen.add(s.id))
-    .map((s) => ({ id: s.id, name: s.name.trim().slice(0, NAME_LIMIT), on: s.on !== false }));
+    .map((s) => ({ id: s.id, name: s.name.trim().slice(0, NAME_LIMIT), on: s.on !== false, ...(s.buys === 'anything' ? { buys: 'anything' } : {}) }));
 };
 
 /** The game's own kind of shop by id (8a7b), or null where it has none of that id. */
@@ -116,6 +129,13 @@ const settingOf = (definition, kind, id) => {
   const section = definition && isPlainObject(definition.buildings) ? definition.buildings[kind] : undefined;
   const setting = isPlainObject(section) ? section[String(id || '')] : undefined;
   return isPlainObject(setting) ? setting : null;
+};
+
+/** What a kind of shop buys back in this game (8a7b1b): 'anything' where it says so, else 'sells', what it sells. Every built-in game's shops buy what they sell. */
+const buysOf = (definition, id) => {
+  const own = ownShopOf(definition, id);
+  const setting = own || (isShop(id) ? settingOf(definition, 'types', id) : null);
+  return setting && setting.buys === 'anything' ? 'anything' : 'sells';
 };
 
 /**
@@ -179,7 +199,9 @@ const ownBuildings = (definition) => {
       const on = buildingOn(definition, kind, id);
       const own = kind === 'catalogues' ? (settingOf(definition, kind, id) || {}).currency : undefined;
       const currency = own !== undefined && catalogueCurrency(definition, id) === own ? own : undefined;
-      if (name || !on || currency) out[kind][id] = { ...(name ? { name } : {}), ...(on ? {} : { on: false }), ...(currency ? { currency } : {}) };
+      // And a shop's BUYS where it buys anything (8a7b1b).
+      const buys = kind === 'types' && buysOf(definition, id) === 'anything' ? 'anything' : undefined;
+      if (name || !on || currency || buys) out[kind][id] = { ...(name ? { name } : {}), ...(on ? {} : { on: false }), ...(currency ? { currency } : {}), ...(buys ? { buys } : {}) };
     }
   }
   // And the game's own shops (8a7b), each as it is, for SOLD AT and the BUILDING TYPE list: only where it makes some.
@@ -187,4 +209,4 @@ const ownBuildings = (definition) => {
   return shops.length ? { ...out, shops } : out;
 };
 
-module.exports = { checkBuildings, buildingOn, buildingName, catalogueCurrency, ownBuildings, ownShops, ownShopOf, shopKindsOf, NAME_LIMIT, SHOPS_MOST };
+module.exports = { checkBuildings, buildingOn, buildingName, catalogueCurrency, ownBuildings, ownShops, ownShopOf, shopKindsOf, buysOf, BUYS, NAME_LIMIT, SHOPS_MOST };

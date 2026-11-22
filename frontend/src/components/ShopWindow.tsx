@@ -1,7 +1,7 @@
 import React, { useDeferredValue, useEffect, useState } from 'react';
 import { TerminalWindow } from './TerminalWindow';
 import {
-  buildingTypeById, shelvedIn, catalogueById, typeLabel, catalogueLabel, itemTypeOfShelf, type ShopStock,
+  buildingTypeById, shelvedIn, boughtIn, catalogueById, typeLabel, catalogueLabel, itemTypeOfShelf, type ShopStock,
 } from '../data/buildingTypes';
 import {
   SETTLE_BALANCE, SETTLE_DEBT, refusalText, buybackValue,
@@ -496,7 +496,8 @@ export function ShopWindow({
   // A custom system's items installed (7e4c) stay on the sheet, never sold: the server refuses them too.
   const installed = sheet ? installedNames(customTemplate(system)?.items, itemsWorkedOn(sheet.data as Record<string, unknown>)) : new Set<string>();
   const owned = sheet ? ownedItems(sheet.data as Record<string, unknown>, system).filter((l) => !installed.has(l.label.trim().toLowerCase())) : [];
-  const sellable = sellableAt(owned, catalogues);
+  // What it buys back (8a7b1b): what it sells, or with BUYS ANYTHING every priced thing.
+  const sellable = sellableAt(owned, boughtIn(buildingType, system, catalogues));
   const sellQuery = sellFilter.trim().toLowerCase();
   /** The sell list as shown: narrowed by its filter. Totals still count the whole list. */
   const shownSellable = sellQuery ? sellable.filter((l) => l.label.toLowerCase().includes(sellQuery)) : sellable;

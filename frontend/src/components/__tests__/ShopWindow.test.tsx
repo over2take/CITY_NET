@@ -2215,6 +2215,38 @@ describe('the shop\'s refusals', () => {
   });
 });
 
+// ─── What a shop buys (8a7b1b) ──────────────────────────────────────────────────
+describe('a shop that buys anything (8a7b1b)', () => {
+  const PAWN = 'sys_baba0baba0baba0b';
+  const SHEET = { system: PAWN, data: { inventory: JSON.stringify([{ name: 'Rope', qty: 1, carry: 'stowed' }, { name: 'Zip Gun', qty: 1, carry: 'stowed' }]) } };
+  const game = (buys?: 'anything') => registerCustomTemplate({
+    id: PAWN, name: 'Pawn', parts: {}, derived: [], sheet: { sections: [] }, words: {},
+    buildings: { types: buys ? { general_store: { buys } } : {} },
+  });
+
+  beforeEach(() => {
+    clearCustomTemplates();
+    loadUploaded({ gear: [{ id: 'rope', name: 'Rope', price: 100, fields: {} }], weapons: [{ id: 'zip_gun', name: 'Zip Gun', price: 200, fields: {} }] });
+    sheetState.sheet = SHEET;
+  });
+  afterEach(() => { clearCustomTemplates(); clearUploaded(); });
+
+  it('offers to buy back a gun at the General Store, priced at its rate; one on WHAT IT SELLS, only its gear', async () => {
+    game('anything');
+    const { unmount } = show('general_store', 'Pawn', PAWN);
+    await openFolder('SELL');
+    expect(screen.getByRole('button', { name: 'Add Zip Gun to the cart' })).toBeInTheDocument();
+    expect(within(screen.getByText('Zip Gun').closest('tr')!).getByText('90cr')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add Rope to the cart' })).toBeInTheDocument();
+    unmount();
+    game();
+    show('general_store', 'Goods', PAWN);
+    await openFolder('SELL');
+    expect(screen.getByRole('button', { name: 'Add Rope to the cart' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add Zip Gun to the cart' })).toBeNull();
+  });
+});
+
 // ─── A shelf of an item type (8a7a2) ────────────────────────────────────────────
 describe('a shelf of an item type (8a7a2)', () => {
   const TYPED = 'sys_dddddddddddddddd';
