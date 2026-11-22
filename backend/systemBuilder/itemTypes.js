@@ -26,6 +26,7 @@
 
 const { boxProblem } = require('./tierRolls');
 const { BUILDING_TYPES } = require('../buildingTypes');
+const { shopKindsOf } = require('./buildings');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
@@ -74,11 +75,15 @@ const SHOP_TYPES = BUILDING_TYPES.filter((t) => t.shop).map((t) => t.id);
 const DEFAULT_SOLD_AT = ['general_store'];
 
 /** The kinds of shop a type's lines are sold at (8a7a2; decided 2026-11-20): what it says, else the General Store. */
-const soldAt = (type) => (Array.isArray(type && type.sold_at) ? type.sold_at.filter((id) => SHOP_TYPES.includes(id)) : DEFAULT_SOLD_AT);
+// The game's own shops (8a7b) count where the definition is given: they are its alone; told no game, the app's six.
+const soldAt = (type, definition) => {
+  const kinds = shopKindsOf(definition);
+  return Array.isArray(type && type.sold_at) ? type.sold_at.filter((id) => kinds.includes(id)) : DEFAULT_SOLD_AT;
+};
 
 /** The shelves of the system's own types a kind of building sells (8a7a2): `type:<id>` for each sold at it. None without types of its own. */
 const typeShelvesAt = (definition, buildingType) => (ownTypes(definition)
-  ? typesOf(definition).filter((t) => soldAt(t).includes(buildingType)).map((t) => `type:${t.id}`) : []);
+  ? typesOf(definition).filter((t) => soldAt(t, definition).includes(buildingType)).map((t) => `type:${t.id}`) : []);
 
 /** The type an item or a line is: the one it names, or the first. */
 const typeNamed = (definition, id) => { const types = typesOf(definition); return types.find((t) => t.id === id) || types[0]; };
@@ -124,7 +129,7 @@ const checkTypes = (definition, problems, { text, keys, labelMost, itemIds = new
     if (t.sold_at !== undefined) {
       if (!Array.isArray(t.sold_at)) problems.push({ where: `${where}, sold_at`, message: 'A list of the kinds of shop that sell it' });
       else t.sold_at.forEach((id, n) => {
-        if (!SHOP_TYPES.includes(id)) problems.push({ where: `${where}, sold_at ${n + 1}`, message: `No kind of shop is called ${String(id)}` });
+        if (!shopKindsOf(definition).includes(id)) problems.push({ where: `${where}, sold_at ${n + 1}`, message: `No kind of shop is called ${String(id)}` });
         else if (t.sold_at.indexOf(id) !== n) problems.push({ where: `${where}, sold_at ${n + 1}`, message: 'Said twice' });
       });
     }
@@ -184,7 +189,7 @@ const typesShown = (definition, items = []) => {
   return typesOf(definition).map((t) => ({
     id: t.id, label: t.label || t.id, one: t.one || t.label || t.id,
     // The kinds of shop that sell it, the General Store where unsaid (8a7a2): the shop window's shelves follow it.
-    sold_at: soldAt(t),
+    sold_at: soldAt(t, definition),
     // Its band on the GEAR tab (G1), PACK where unsaid.
     on_sheet: bandOf(t),
     columns: t.columns.map((c) => ({
