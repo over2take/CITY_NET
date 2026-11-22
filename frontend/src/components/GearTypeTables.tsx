@@ -16,7 +16,7 @@ import { FormulaIcon } from './FormulaIcon';
 // the server, which asks which carried line to reload from when there are several. The lines in bands (G2; approved mockup
 // docs/mockups/sheet-gear-layout.html, layout A): EQUIPPED, USABLE and PACK by each type's ON THE SHEET, a group per type,
 // in hand first; STASH, closed to start, whatever the type; a band's head closes it and the sheet remembers. A thing is
-// made by hand from the row of + buttons at the top. One line a thing (G3; the same mockup, decision 3): its name, how many,
+// made by hand from the row of + buttons at the top; a thing worn, attuned or installed is in EQUIPPED whatever its type. One line a thing (G3; the same mockup, decision 3): its name, how many,
 // the columns it has as words with ROLL, FIRE and RELOAD, where it is carried; a click on it opens the card, every column a
 // box with NAME, HOW MANY, LOCATION and REMOVE, one card at a time. A column blank on the line and its item says FILL IN,
 // which opens the card at that box. A PICK ONE box is as wide as its words.
@@ -28,6 +28,8 @@ interface Props {
   write: (next: InventoryItem[]) => void;
   /** Whether a line is an item installed: kept named and in place. */
   locked: (index: number) => boolean;
+  /** Whether a line is an item worn, attuned or installed: on you, so in EQUIPPED whatever its type's band. */
+  on?: (index: number) => boolean;
   /** What goes under a line: an item's WEAR, ATTUNE and uses. */
   under: (index: number) => React.ReactNode;
   /** A DAMAGE or DICE rolled into the log (8a3b), where the viewer may roll: read only or not, as a stat's ROLL. */
@@ -140,7 +142,7 @@ function DiceBox({ cell, label, onType, onRead, focus = false }: { cell: Cell; l
   );
 }
 
-export function GearTypeTables({ items, itemsShown, readOnly, write, locked, under, onRoll, onReadDice, onCount }: Props) {
+export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on, under, onRoll, onReadDice, onCount }: Props) {
   // The one line open under ✎, by its place in the inventory.
   const [open, setOpen] = useState<number | null>(null);
   // The box the open card starts at: a column's id from FILL IN, 'name' for a line made by hand, else none.
@@ -171,7 +173,7 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, und
       else if (!answer.ok) setSaid({ index, text: answer.error });
     });
   };
-  const bands = gearBands(itemsShown, items);
+  const bands = gearBands(itemsShown, items, on);
   const { shut, toggle, openBand } = useGearBands();
   const bandOfType = (type: TypeShown) => (type.on_sheet === 'equipped' || type.on_sheet === 'usable' ? type.on_sheet : 'pack');
   /** One line a thing (G3), by its place; a click opens its card. `tagged`, in the STASH, says its type. */

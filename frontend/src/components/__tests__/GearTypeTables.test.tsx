@@ -36,10 +36,12 @@ const ITEMS: ItemsShown = {
 const line = (name: string, more = {}) => ({ name, qty: 1, enc: '', bundled: false, carry: 'stowed', location: '', ...more });
 
 const show = (lines: object[], { readOnly = false, items = ITEMS as ItemsShown | undefined, onGearRoll = undefined as ((line: number, column: string) => void) | undefined,
-  onReadGearDice = undefined as ((text: string) => Promise<GearDiceRead | null>) | undefined, onGearCount = undefined as GearCount | undefined } = {}) => {
+  onReadGearDice = undefined as ((text: string) => Promise<GearDiceRead | null>) | undefined, onGearCount = undefined as GearCount | undefined,
+  worked = undefined as object | undefined } = {}) => {
   const writes: object[][] = [];
   const Harness = () => {
-    const [data, setData] = useState<Record<string, unknown>>({ inventory: JSON.stringify(lines) });
+    // `worked`: what the server worked out of the items (_worked), which are worn.
+    const [data, setData] = useState<Record<string, unknown>>({ inventory: JSON.stringify(lines), ...(worked ? { _worked: worked } : {}) });
     return <InventorySection section={SECTION} data={data as never} readOnly={readOnly} itemsShown={items} onGearRoll={onGearRoll} onReadGearDice={onReadGearDice} onGearCount={onGearCount}
       onFieldChange={(id, v) => { writes.push(JSON.parse(v as string)); setData((d) => ({ ...d, [id]: v })); }} />;
   };
@@ -352,6 +354,18 @@ describe('in bands (G2)', () => {
     show([typed('Sword', 'weapons'), typed('Spare Sword', 'weapons', { carry: 'stash' })], { items: BANDED });
     expect(head('EQUIPPED').getAttribute('aria-expanded')).toBe('false');
     expect(head('STASH').getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('a thing worn is EQUIPPED though its type is PACK (G3): the Cutlass, as the user found it', () => {
+    const items: ItemsShown = { ...BANDED, list: [{ id: 'cutlass', label: 'Cutlass', needs: 'worn', features: [], type: 'gear', values: {} }] };
+    show([typed('Cutlass', 'gear'), typed('Rope', 'gear')], { items, worked: { items: [{ id: 'cutlass', needs: 'worn', worn: true }] } });
+    expect(within(band('EQUIPPED')).getByRole('button', { name: 'Cutlass, item 1' })).toBeTruthy();
+    expect(within(band('PACK')).getByRole('button', { name: 'Rope, item 2' })).toBeTruthy();
+    expect(head('EQUIPPED').textContent).toBe('▾ EQUIPPED · 1');
+    cleanup();
+    // Taken off: back in its type's band.
+    show([typed('Cutlass', 'gear'), typed('Rope', 'gear')], { items, worked: { items: [{ id: 'cutlass', needs: 'worn' }] } });
+    expect(within(band('PACK')).getByRole('button', { name: 'Cutlass, item 1' })).toBeTruthy();
   });
 
   it('a thing made by hand opens its band if closed', async () => {

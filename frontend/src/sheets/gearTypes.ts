@@ -89,21 +89,31 @@ export const gearTables = (shown: ItemsShown | null | undefined, lines: Inventor
 /**
  * The GEAR tab's bands (G2; approved mockup docs/mockups/sheet-gear-layout.html, layout A, 2026-11-20): EQUIPPED, USABLE and
  * PACK, each type's lines in its type's band (its ON THE SHEET, G1; PACK where unsaid), in hand first; and STASH, every line
- * left in the stash whatever its type. Within a band, a group per type that has lines.
+ * left in the stash whatever its type. Within a band, a group per type that has lines. A line worn, attuned or installed
+ * (`on`, by its place) is on you, so EQUIPPED whatever its type's band (the user, 2026-11-22: "my Cutlass is worn, should it
+ * be in EQUIPPED?"); in the stash it is still the STASH's.
  */
 export type GearBand = 'equipped' | 'usable' | 'pack' | 'stash';
 export const GEAR_BANDS: { id: GearBand; label: string }[] = [
   { id: 'equipped', label: 'EQUIPPED' }, { id: 'usable', label: 'USABLE' }, { id: 'pack', label: 'PACK' }, { id: 'stash', label: 'STASH' },
 ];
 export interface BandShown { band: GearBand; label: string; count: number; groups: { type: TypeShown; rows: TableRow[] }[]; loose: { type: TypeShown; row: TableRow }[] }
-export const gearBands = (shown: ItemsShown | null | undefined, lines: InventoryItem[]): BandShown[] => {
+export const gearBands = (shown: ItemsShown | null | undefined, lines: InventoryItem[], on: (index: number) => boolean = () => false): BandShown[] => {
   const bands: BandShown[] = GEAR_BANDS.map((b) => ({ band: b.id, label: b.label, count: 0, groups: [], loose: [] }));
   const at = (id: GearBand) => bands.find((b) => b.band === id)!;
   const inHand = (r: TableRow) => (r.line.carry === 'readied' ? 0 : 1);
+  const inOrder = (rows: TableRow[]) => rows.map((r, n) => ({ r, n })).sort((a, b) => inHand(a.r) - inHand(b.r) || a.n - b.n).map(({ r }) => r);
   for (const { type, rows } of gearTables(shown, lines)) {
-    const here = rows.filter((r) => r.line.carry !== 'stash').map((r, n) => ({ r, n })).sort((a, b) => inHand(a.r) - inHand(b.r) || a.n - b.n).map(({ r }) => r);
-    const band = at(type.on_sheet === 'equipped' || type.on_sheet === 'usable' ? type.on_sheet : 'pack');
-    if (here.length) band.groups.push({ type, rows: here });
+    const home: GearBand = type.on_sheet === 'equipped' || type.on_sheet === 'usable' ? type.on_sheet : 'pack';
+    const here = rows.filter((r) => r.line.carry !== 'stash');
+    // Its type's band, and EQUIPPED for what is on you: a group each, in the system's order of types.
+    const worn = here.filter((r) => on(r.index));
+    const rest = here.filter((r) => !on(r.index));
+    if (home === 'equipped') { if (here.length) at('equipped').groups.push({ type, rows: inOrder(here) }); }
+    else {
+      if (worn.length) at('equipped').groups.push({ type, rows: inOrder(worn) });
+      if (rest.length) at(home).groups.push({ type, rows: inOrder(rest) });
+    }
     for (const row of rows.filter((r) => r.line.carry === 'stash')) at('stash').loose.push({ type, row });
   }
   for (const b of bands) b.count = b.groups.reduce((n, g) => n + g.rows.length, 0) + b.loose.length;

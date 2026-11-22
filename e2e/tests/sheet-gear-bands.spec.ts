@@ -18,7 +18,8 @@ test('GEAR in bands: EQUIPPED, USABLE, PACK by type, a sword stashed into the ST
         { id: 'weapons', label: 'WEAPONS', one: 'Weapon', on_sheet: 'equipped', columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }] },
         { id: 'potions', label: 'POTIONS', one: 'Potion', on_sheet: 'usable', columns: [{ id: 'heals', label: 'HEALS', kind: 'dice' }] },
       ],
-      list: [],
+      // A GEAR thing to wear (G3): worn, it is on you, so EQUIPPED though GEAR is PACK.
+      list: [{ id: 'cloak', label: 'Cloak', type: 'gear', needs: 'worn', features: [] }],
     },
   });
   const player = { username: `e2e_bandhold${again}`, password: 'e2e-player-password' };
@@ -79,5 +80,15 @@ test('GEAR in bands: EQUIPPED, USABLE, PACK by type, a sword stashed into the ST
   await sheetTab(mine, 'GEAR');
   await expect(head('USABLE')).toHaveAttribute('aria-expanded', 'false');
   await expect(head('PACK')).toHaveAttribute('aria-expanded', 'true');
+
+  // A Cloak, GEAR, in PACK; worn, EQUIPPED; taken off, PACK again (G3: "my Cutlass is worn, should it be in EQUIPPED?").
+  await add.getByRole('button', { name: 'Add a Gear by hand' }).click();
+  await mine.getByLabel('Item 4 name', { exact: true }).fill('Cloak');
+  await expect(band('PACK').getByRole('button', { name: 'Cloak, item 4', exact: true })).toBeVisible();
+  await mine.getByTestId('gear-item-cloak').getByRole('button', { name: 'WEAR Cloak', exact: true }).click();
+  await expect(band('EQUIPPED').getByRole('button', { name: 'Cloak, item 4', exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(head('EQUIPPED')).toHaveText('▾ EQUIPPED · 1');
+  await mine.getByTestId('gear-item-cloak').getByRole('button', { name: /^WORN/ }).click();
+  await expect(band('PACK').getByRole('button', { name: 'Cloak, item 4', exact: true })).toBeVisible({ timeout: 15_000 });
   await context.close();
 });

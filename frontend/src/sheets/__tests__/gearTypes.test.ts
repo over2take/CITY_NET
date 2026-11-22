@@ -188,3 +188,30 @@ describe('the GEAR tab\'s bands (G2)', () => {
     expect(bands[3].loose.map(({ type, row }) => [type.id, row.line.name, row.index])).toEqual([['potions', 'Old Map', 4]]);
   });
 });
+
+describe('a line on you is EQUIPPED (G3)', () => {
+  const SHOWN = {
+    slots: [], list: [],
+    types: [
+      { id: 'weapons', label: 'WEAPONS', one: 'Weapon', columns: [] },
+      { id: 'armor', label: 'ARMOR', one: 'Armor', on_sheet: 'equipped', columns: [] },
+      { id: 'potions', label: 'POTIONS', one: 'Potion', on_sheet: 'usable', columns: [] },
+      { id: 'shields', label: 'SHIELDS', one: 'Shield', on_sheet: 'equipped', columns: [] },
+    ],
+  } as never;
+  const at = (name: string, type: string, carry = 'stowed') => ({ name, qty: 1, enc: '', bundled: false, carry, location: '', type }) as never;
+
+  it('worn, attuned or installed: EQUIPPED whatever its type\'s band, in a group of its type, in hand first; the rest where their type is; stashed, the STASH', () => {
+    const lines = [at('Cutlass', 'weapons'), at('Knife', 'weapons'), at('Leather', 'armor'), at('Charm', 'potions', 'readied'), at('Old Ring', 'potions', 'stash'), at('Dagger', 'weapons', 'readied'), at('Old Shield', 'shields', 'stash')];
+    const bands = gearBands(SHOWN, lines, (i) => [0, 3, 4, 5].includes(i));
+    const names = (b: number) => bands[b].groups.map((g) => [g.type.id, g.rows.map((r) => r.line.name)]);
+    expect(names(0)).toEqual([['weapons', ['Dagger', 'Cutlass']], ['armor', ['Leather']], ['potions', ['Charm']]]);
+    expect(names(1)).toEqual([]);
+    expect(names(2)).toEqual([['weapons', ['Knife']]]);
+    // SHIELDS are EQUIPPED, their one line in the stash: no empty SHIELDS group.
+    expect(bands[3].loose.map(({ row }) => row.line.name)).toEqual(['Old Ring', 'Old Shield']);
+    expect(bands.map((b) => b.count)).toEqual([4, 0, 1, 2]);
+    // Told nothing, as before: by type alone.
+    expect(gearBands(SHOWN, lines).map((b) => b.count)).toEqual([1, 1, 3, 2]);
+  });
+});
