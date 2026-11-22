@@ -48,6 +48,11 @@ export interface InventoryItem {
   values?: Record<string, string | number>;
   /** How many each COUNT column has left (8a1): { ammo: 4 }. Full where it says nothing. */
   counts?: Record<string, number>;
+  /**
+   * Who changed each column made its own, away from its item, and when (G5a): the server's, from what was stored; the sheet
+   * only shows it (UNIQUE), and what it sends back is never taken.
+   */
+  changed?: Record<string, { by: string; gm?: true; at: string }>;
 }
 
 const str = (v: unknown): string =>
@@ -63,6 +68,16 @@ const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
 const carryOf = (v: unknown): CarryState => {
   const s = str(v).trim().toLowerCase();
   return s === 'readied' || s === 'stowed' ? s : 'stash';
+};
+
+/** Who changed which column (G5a), those well formed: a name and a time; none where none are. */
+const changedOf = (v: unknown): { changed?: InventoryItem['changed'] } => {
+  if (!isObject(v)) return {};
+  const out: NonNullable<InventoryItem['changed']> = {};
+  for (const [id, c] of Object.entries(v)) {
+    if (isObject(c) && typeof c.by === 'string' && typeof c.at === 'string') out[id] = { by: c.by, ...(c.gm === true ? { gm: true as const } : {}), at: c.at };
+  }
+  return Object.keys(out).length ? { changed: out } : {};
 };
 
 /** An item with every field present, whatever it was handed. */
@@ -81,6 +96,7 @@ export const normaliseItem = (raw: unknown): InventoryItem => {
     ...(typeof r.type === 'string' && r.type ? { type: r.type } : {}),
     ...(isObject(r.values) ? { values: { ...r.values } as Record<string, string | number> } : {}),
     ...(isObject(r.counts) ? { counts: { ...r.counts } as Record<string, number> } : {}),
+    ...changedOf(r.changed),
   };
 };
 

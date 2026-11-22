@@ -49,8 +49,11 @@ const key = (name: string) => name.trim().toLowerCase();
 export const itemOfLine = (shown: ItemsShown | null | undefined, line: InventoryItem): ItemShown | undefined =>
   (shown?.list ?? []).find((i) => key(i.label || i.id) === key(line.name));
 
-/** One column of a line: its own value, its item's, and the one that counts (its own where it fits). */
-export interface Cell { column: ColumnShown; own?: Value; given?: Value; value?: Value }
+/**
+ * One column of a line: its own value, its item's, and the one that counts (its own where it fits). `unique` where the line
+ * is its item's, of its type, and its own isn't the item's (G5b; the server's uniqueLines.js, mirrored): the item made unique.
+ */
+export interface Cell { column: ColumnShown; own?: Value; given?: Value; value?: Value; unique?: true }
 /** A line's type, the item it is named like, and its cells in its type's order. */
 export interface LineColumns { type: TypeShown; item?: ItemShown; cells: Cell[] }
 
@@ -62,14 +65,17 @@ export const lineColumns = (shown: ItemsShown | null | undefined, line: Inventor
   const type = types.find((t) => t.id === line.type) ?? (item ? types.find((t) => t.id === item.type) : undefined) ?? types[0];
   const own = isObject(line.values) ? line.values : {};
   // An item's values count only on a line of its own type: made a WEAPON, the Pistol Rounds keep none.
-  const given = item && (types.find((t) => t.id === item.type) ?? types[0]).id === type.id && isObject(item.values) ? item.values : {};
+  const ofItem = !!item && (types.find((t) => t.id === item.type) ?? types[0]).id === type.id;
+  const given = ofItem && isObject(item.values) ? item.values : {};
   return {
     type, ...(item ? { item } : {}),
     cells: type.columns.map((column) => {
       const o = fits(column, own[column.id]) ? own[column.id] as Value : undefined;
       const g = fits(column, given[column.id]) ? given[column.id] as Value : undefined;
       const value = o ?? g;
-      return { column, ...(o !== undefined ? { own: o } : {}), ...(g !== undefined ? { given: g } : {}), ...(value !== undefined ? { value } : {}) };
+      // Read loosely, as the server does: 3 and "3", and spaces around, are the item's own; blank is nothing of its own.
+      const unique = ofItem && o !== undefined && String(o).trim() !== String(g ?? '').trim();
+      return { column, ...(o !== undefined ? { own: o } : {}), ...(g !== undefined ? { given: g } : {}), ...(value !== undefined ? { value } : {}), ...(unique ? { unique: true as const } : {}) };
     }),
   };
 };
@@ -135,6 +141,8 @@ export const landedIn = (before: Partial<Record<GearBand, number>> | null, after
  */
 export const lineWords = (row: TableRow, type: TypeShown, band: string): string =>
   [row.line.name, type.label, type.one, band, row.line.carry === 'stash' ? 'stash' : row.line.carry, row.line.location,
+    // A line made unique (G5b): "unique" in FIND lists them.
+    uniqueCells(row.columns).length ? 'unique' : '',
     ...shownCells(row.columns).map((c) => `${c.column.label} ${cellWords(c, row.line)}`)].join(' ').toLowerCase();
 
 /** The bands showing only what FIND matches, each counted by its matches; blank, the bands as they are. */
@@ -148,6 +156,28 @@ export const foundIn = (bands: BandShown[], text: string): BandShown[] => {
     return { ...b, groups, loose, count: groups.reduce((n, g) => n + g.rows.length, 0) + loose.length };
   });
 };
+
+/** A line's unique cells (G5b): the columns it made its own, away from its item's. */
+export const uniqueCells = (columns: LineColumns): Cell[] => columns.cells.filter((c) => c.unique);
+
+/** Who changed a column, and when, as words (G5b): "changed by kes, 2026-11-20", "changed by the GM, …"; none where no one did. */
+export const changedWords = (changed: InventoryItem['changed'], column: string): string => {
+  const c = changed?.[column];
+  return c ? `changed by ${c.gm ? 'the GM' : c.by}, ${c.at.slice(0, 10)}` : '';
+};
+
+/** What a unique column was (G5b): "the item's: 1d8 + @might · changed by kes, 2026-11-20"; "the item's: none" where it had none. */
+export const itemWas = (cell: Cell, line: InventoryItem): string => {
+  const who = changedWords(line.changed, cell.column.id);
+  return `the item's: ${cell.given !== undefined ? valueText(cell.given) : 'none'}${who ? ` · ${who}` : ''}`;
+};
+
+/** The hover on a unique line (G5b): each column it made its own, what the item's was, who changed it and when. */
+export const uniqueTitle = (row: TableRow): string =>
+  ['Unique: changed from its item', ...uniqueCells(row.columns).map((c) => `${c.column.label.toUpperCase()} ${valueText(c.own)}, ${itemWas(c, row.line)}`)].join('\n');
+
+/** How many lines are their item made unique (G5b): at the top of GEAR. */
+export const uniqueCount = (tables: { rows: TableRow[] }[]): number => tables.reduce((n, t) => n + t.rows.filter((r) => uniqueCells(r.columns).length > 0).length, 0);
 
 /** A value as a box shows it. */
 export const valueText = (v: Value | undefined): string => (v === undefined ? '' : String(v));

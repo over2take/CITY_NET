@@ -127,3 +127,14 @@ describe('where it lives', () => {
     }
   });
 });
+
+describe('who changed a line from its item (G5b)', () => {
+  it('kept where well formed, a name and a time, the GM said; dropped where not; none where none', () => {
+    const at = '2026-11-20T10:00:00.000Z';
+    expect(normaliseItem({ name: 'Cutlass', changed: { damage: { by: 'kes', at }, range: { by: 'gm', gm: true, at }, weight: { by: 3 }, grade: 'x' } }).changed)
+      .toEqual({ damage: { by: 'kes', at }, range: { by: 'gm', gm: true, at } });
+    expect(normaliseItem({ name: 'Cutlass', changed: { weight: { by: 'kes' } } })).not.toHaveProperty('changed');
+    expect(normaliseItem({ name: 'Rope' })).not.toHaveProperty('changed');
+    expect(normaliseItem({ name: 'Rope', changed: 'yes' })).not.toHaveProperty('changed');
+  });
+});

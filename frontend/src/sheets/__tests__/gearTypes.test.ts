@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { typesOf, fits, itemOfLine, lineColumns, gearTables, valueText, withLineValue, newLineOf, countOf, cellWords, LIMITS, type ColumnShown , gearBands, landedIn, foundIn } from '../gearTypes';
+import { typesOf, fits, itemOfLine, lineColumns, gearTables, valueText, withLineValue, newLineOf, countOf, cellWords, LIMITS, type ColumnShown , gearBands, landedIn, foundIn, uniqueCells, changedWords, itemWas, uniqueTitle, uniqueCount } from '../gearTypes';
 import { normaliseItem, readInventory, type InventoryItem } from '../inventory';
 import type { ItemsShown } from '../gearItems';
 
@@ -256,5 +256,50 @@ describe('FIND on GEAR (G4)', () => {
     const bands = gearBands(SHOWN, lines);
     expect(foundIn(bands, '')).toBe(bands);
     expect(foundIn(bands, '   ')).toBe(bands);
+  });
+});
+
+describe('UNIQUE on the sheet (G5b)', () => {
+  const SHOWN = {
+    slots: [],
+    list: [{ id: 'cutlass', label: 'Cutlass', needs: 'carried', features: [], type: 'weapons', values: { damage: '1d8 + @might', weight: 3 } }],
+    types: [
+      { id: 'weapons', label: 'WEAPONS', one: 'Weapon', columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }, { id: 'range', label: 'RANGE', kind: 'text' }, { id: 'weight', label: 'WEIGHT', kind: 'number' }] },
+      { id: 'gear', label: 'GEAR', one: 'Gear', columns: [{ id: 'weight', label: 'WEIGHT', kind: 'number' }] },
+    ],
+  } as never;
+  const at = (name: string, more = {}) => ({ name, qty: 1, enc: '', bundled: false, carry: 'stowed', location: '', ...more }) as never;
+  const ids = (line: object) => uniqueCells(lineColumns(SHOWN, line as never)!).map((c) => c.column.id);
+  const AT = '2026-11-20T10:00:00.000Z';
+
+  it('a column of its own that isn\'t its item\'s, one the item hasn\'t filled too; none for a thing made by hand or of another type; read loosely', () => {
+    expect(ids(at('Cutlass', { values: { damage: '2d8 + @might', range: '2 m', weight: 3 } }))).toEqual(['damage', 'range']);
+    expect(ids(at('Cutlass', { values: { damage: ' 1d8 + @might ' } }))).toEqual([]);
+    // Blank words over a column the item hasn't filled: nothing of its own, as the server reads it.
+    expect(ids(at('Cutlass', { values: { range: '  ' } }))).toEqual([]);
+    expect(ids(at('A stick', { type: 'weapons', values: { damage: '1d4' } }))).toEqual([]);
+    expect(ids(at('Cutlass', { type: 'gear', values: { weight: 9 } }))).toEqual([]);
+  });
+
+  it('who and when as words: a player by name, the GM as the GM, no one where none; what the item had', () => {
+    const changed = { damage: { by: 'kes', at: AT }, range: { by: 'gm', gm: true as const, at: AT } };
+    expect(changedWords(changed, 'damage')).toBe('changed by kes, 2026-11-20');
+    expect(changedWords(changed, 'range')).toBe('changed by the GM, 2026-11-20');
+    expect(changedWords(undefined, 'damage')).toBe('');
+    const line = at('Cutlass', { values: { damage: '2d8', range: '2 m' }, changed: { damage: changed.damage } });
+    const [damage, range] = uniqueCells(lineColumns(SHOWN, line)!);
+    expect(itemWas(damage, line)).toBe("the item's: 1d8 + @might · changed by kes, 2026-11-20");
+    // Made unique by no one (a catalogue's line), and over a column the item hadn't filled.
+    expect(itemWas(range, line)).toBe("the item's: none");
+    expect(uniqueTitle({ index: 0, line, columns: lineColumns(SHOWN, line)! }))
+      .toBe("Unique: changed from its item\nDAMAGE 2d8, the item's: 1d8 + @might · changed by kes, 2026-11-20\nRANGE 2 m, the item's: none");
+  });
+
+  it('how many lines are unique; "unique" in FIND lists them', () => {
+    const lines = [at('Cutlass', { values: { damage: '2d8' } }), at('Cutlass'), at('Rope', { type: 'gear', values: { weight: 1 } })];
+    expect(uniqueCount(gearTables(SHOWN, lines))).toBe(1);
+    expect(uniqueCount(gearTables(SHOWN, [at('Cutlass')]))).toBe(0);
+    const found = foundIn(gearBands(SHOWN, lines), 'unique');
+    expect(found.flatMap((b) => b.groups.flatMap((g) => g.rows.map((r) => r.index)))).toEqual([0]);
   });
 });
