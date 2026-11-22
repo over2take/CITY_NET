@@ -96,7 +96,8 @@ test('GEAR as a table per type: a stick made by hand and its DAMAGE rolled, the 
 
   // Its DAMAGE under ✎ (8a3c2): what it reads on this character, as ROLL reads it (Might 12); a name the system hasn't
   // got, said as typed rather than skipped at the roll.
-  await weapons.getByRole('button', { name: 'Edit item 2' }).click();
+  // Its card opened by a click on its name (G3).
+  await weapons.getByRole('button', { name: 'Pistol, item 2', exact: true }).click();
   const reads = weapons.getByRole('status', { name: 'Item 2 DAMAGE on this character' });
   await expect(reads).toHaveText('ON THIS CHARACTER: 2d6 + Might (12): 14 to 24', { timeout: 15_000 });
   await weapons.getByLabel('Item 2 DAMAGE', { exact: true }).fill('1d6 + @strength');

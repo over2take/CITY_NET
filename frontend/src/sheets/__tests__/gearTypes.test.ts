@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
-import { typesOf, fits, itemOfLine, lineColumns, gearTables, valueText, withLineValue, newLineOf, countOf, cellWords, LIMITS, type ColumnShown , gearBands } from '../gearTypes';
+import { typesOf, fits, itemOfLine, lineColumns, gearTables, valueText, withLineValue, newLineOf, countOf, cellWords, LIMITS, type ColumnShown , gearBands, landedIn } from '../gearTypes';
 import { normaliseItem, readInventory, type InventoryItem } from '../inventory';
 import type { ItemsShown } from '../gearItems';
 
@@ -186,5 +186,41 @@ describe('the GEAR tab\'s bands (G2)', () => {
     // A band that isn't one of the three is PACK.
     expect(bands[2].groups.map((g) => g.type.id)).toEqual(['gear', 'odd']);
     expect(bands[3].loose.map(({ type, row }) => [type.id, row.line.name, row.index])).toEqual([['potions', 'Old Map', 4]]);
+  });
+});
+
+describe('a line on you is EQUIPPED (G3)', () => {
+  const SHOWN = {
+    slots: [], list: [],
+    types: [
+      { id: 'weapons', label: 'WEAPONS', one: 'Weapon', columns: [] },
+      { id: 'armor', label: 'ARMOR', one: 'Armor', on_sheet: 'equipped', columns: [] },
+      { id: 'potions', label: 'POTIONS', one: 'Potion', on_sheet: 'usable', columns: [] },
+      { id: 'shields', label: 'SHIELDS', one: 'Shield', on_sheet: 'equipped', columns: [] },
+    ],
+  } as never;
+  const at = (name: string, type: string, carry = 'stowed') => ({ name, qty: 1, enc: '', bundled: false, carry, location: '', type }) as never;
+
+  it('worn, attuned or installed: EQUIPPED whatever its type\'s band, in a group of its type, in hand first; the rest where their type is; stashed, the STASH', () => {
+    const lines = [at('Cutlass', 'weapons'), at('Knife', 'weapons'), at('Leather', 'armor'), at('Charm', 'potions', 'readied'), at('Old Ring', 'potions', 'stash'), at('Dagger', 'weapons', 'readied'), at('Old Shield', 'shields', 'stash')];
+    const bands = gearBands(SHOWN, lines, (i) => [0, 3, 4, 5].includes(i));
+    const names = (b: number) => bands[b].groups.map((g) => [g.type.id, g.rows.map((r) => r.line.name)]);
+    expect(names(0)).toEqual([['weapons', ['Dagger', 'Cutlass']], ['armor', ['Leather']], ['potions', ['Charm']]]);
+    expect(names(1)).toEqual([]);
+    expect(names(2)).toEqual([['weapons', ['Knife']]]);
+    // SHIELDS are EQUIPPED, their one line in the stash: no empty SHIELDS group.
+    expect(bands[3].loose.map(({ row }) => row.line.name)).toEqual(['Old Ring', 'Old Shield']);
+    expect(bands.map((b) => b.count)).toEqual([4, 0, 1, 2]);
+    // Told nothing, as before: by type alone.
+    expect(gearBands(SHOWN, lines).map((b) => b.count)).toEqual([1, 1, 3, 2]);
+  });
+});
+
+describe('what landed in a closed band (G3)', () => {
+  it('a closed band whose count went up; not an open one, not one that fell or held; nothing before the first drawing', () => {
+    const shut = new Set(['equipped', 'usable', 'stash'] as const);
+    expect(landedIn({ equipped: 0, usable: 1, pack: 2, stash: 0 }, { equipped: 1, usable: 1, pack: 3, stash: 1 }, shut as never)).toEqual(['equipped', 'stash']);
+    expect(landedIn({ equipped: 2, usable: 1, pack: 0, stash: 0 }, { equipped: 1, usable: 0, pack: 0, stash: 0 }, shut as never)).toEqual([]);
+    expect(landedIn(null, { equipped: 1, usable: 1, pack: 1, stash: 1 }, shut as never)).toEqual([]);
   });
 });

@@ -18,7 +18,8 @@ test('GEAR in bands: EQUIPPED, USABLE, PACK by type, a sword stashed into the ST
         { id: 'weapons', label: 'WEAPONS', one: 'Weapon', on_sheet: 'equipped', columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }] },
         { id: 'potions', label: 'POTIONS', one: 'Potion', on_sheet: 'usable', columns: [{ id: 'heals', label: 'HEALS', kind: 'dice' }] },
       ],
-      list: [],
+      // A GEAR thing to wear (G3): worn, it is on you, so EQUIPPED though GEAR is PACK.
+      list: [{ id: 'cloak', label: 'Cloak', type: 'gear', needs: 'worn', features: [] }],
     },
   });
   const player = { username: `e2e_bandhold${again}`, password: 'e2e-player-password' };
@@ -52,14 +53,25 @@ test('GEAR in bands: EQUIPPED, USABLE, PACK by type, a sword stashed into the ST
   // The sword to the stash: into the STASH band, opened to show it, its type said.
   await band('EQUIPPED').getByLabel('Item 1 carried', { exact: true }).selectOption('stash');
   await expect(head('STASH')).toHaveText('▾ STASH · 1');
-  await expect(band('STASH').getByLabel('Item 1 name', { exact: true })).toHaveValue('Sword');
+  await expect(band('STASH').getByRole('button', { name: 'Sword, item 1', exact: true })).toBeVisible();
   await expect(band('STASH').getByText('WEAPONS', { exact: true })).toBeVisible();
   await expect(head('EQUIPPED')).toHaveText('▾ EQUIPPED · 0');
+
+  // One line a thing (G3): the Draught's HEALS is blank, so FILL IN, which opens its card at that box, ready to type.
+  const draught = mine.getByTestId('gear-line-1');
+  await expect(draught.getByRole('group', { name: 'Item 2 columns' })).toHaveCount(0);
+  await draught.getByRole('button', { name: 'Fill in item 2: HEALS', exact: true }).click();
+  await expect(draught.getByLabel('Item 2 HEALS', { exact: true })).toBeFocused();
+  await mine.keyboard.type('2d4');
+  await draught.getByRole('button', { name: 'DONE', exact: true }).click();
+  await expect(draught.getByRole('note', { name: 'Item 2 HEALS: 2d4' })).toBeVisible();
+  await expect(draught.getByRole('button', { name: /^Fill in/ })).toHaveCount(0);
+  await expect.poll(async () => JSON.parse(String((await sheetOf()).inventory ?? '[]'))[1]?.values, { timeout: 15_000 }).toEqual({ heals: '2d4' });
 
   // USABLE closed by its head; still closed after a reload.
   await head('USABLE').click();
   await expect(head('USABLE')).toHaveAttribute('aria-expanded', 'false');
-  await expect(band('USABLE').getByLabel('Item 2 name', { exact: true })).toHaveCount(0);
+  await expect(band('USABLE').getByRole('button', { name: 'Draught, item 2', exact: true })).toHaveCount(0);
   await expect.poll(async () => JSON.parse(String((await sheetOf()).inventory ?? '[]'))[0]?.carry, { timeout: 15_000 }).toBe('stash');
   // A fresh visit, signed in again: which bands are closed is kept in this browser.
   await signInAsPlayer(mine, player);
@@ -68,5 +80,20 @@ test('GEAR in bands: EQUIPPED, USABLE, PACK by type, a sword stashed into the ST
   await sheetTab(mine, 'GEAR');
   await expect(head('USABLE')).toHaveAttribute('aria-expanded', 'false');
   await expect(head('PACK')).toHaveAttribute('aria-expanded', 'true');
+
+  // A Cloak, GEAR, in PACK; worn, EQUIPPED; taken off, PACK again (G3: "my Cutlass is worn, should it be in EQUIPPED?").
+  await add.getByRole('button', { name: 'Add a Gear by hand' }).click();
+  await mine.getByLabel('Item 4 name', { exact: true }).fill('Cloak');
+  await expect(band('PACK').getByRole('button', { name: 'Cloak, item 4', exact: true })).toBeVisible();
+  // EQUIPPED closed, the Cloak worn: its head lights up with the count (G3), and opened shows it.
+  await head('EQUIPPED').click();
+  await mine.getByTestId('gear-item-cloak').getByRole('button', { name: 'WEAR Cloak', exact: true }).click();
+  await expect(head('EQUIPPED')).toHaveText('▸ EQUIPPED · 1', { timeout: 15_000 });
+  await expect(head('EQUIPPED')).toHaveClass('gear-band-news');
+  await head('EQUIPPED').click();
+  await expect(head('EQUIPPED')).not.toHaveClass('gear-band-news');
+  await expect(band('EQUIPPED').getByRole('button', { name: 'Cloak, item 4', exact: true })).toBeVisible();
+  await mine.getByTestId('gear-item-cloak').getByRole('button', { name: /^WORN/ }).click();
+  await expect(band('PACK').getByRole('button', { name: 'Cloak, item 4', exact: true })).toBeVisible({ timeout: 15_000 });
   await context.close();
 });

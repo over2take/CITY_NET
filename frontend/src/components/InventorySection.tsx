@@ -91,6 +91,11 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
   const installs = installCounters(itemsShown, worked);
   /** Whether a line is an item installed (7e4c): kept as it is, named and in place, until REMOVE. */
   const locked = (i: number) => lineItems.has(i) && !!worked.items.find((w) => w.id === lineItems.get(i)!.id)?.installed;
+  /** Whether a line is an item worn, attuned or installed: on you, so EQUIPPED on GEAR's bands (G3). */
+  const onYou = (i: number) => {
+    const w = lineItems.has(i) ? worked.items.find((x) => x.id === lineItems.get(i)!.id) : undefined;
+    return !!(w && (w.worn || w.attuned || w.installed));
+  };
   // Encumbrance is Cities Without Number's. A system with no carrying rule gets the table
   // without the column, rather than a rule invented for it.
   const showEnc = section.inventoryEnc === true;
@@ -131,7 +136,7 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
           time somebody picks up a rope. */}
       <div className="crt-scroll" style={{ maxHeight: typed ? '360px' : '220px', overflowY: 'auto', paddingRight: '4px' }}>
         {typed && itemsShown ? (
-          <GearTypeTables items={items} itemsShown={itemsShown} readOnly={readOnly} write={write} locked={locked} under={(i) => underLine(i)} onRoll={onGearRoll} onReadDice={onReadGearDice} onCount={onGearCount} />
+          <GearTypeTables items={items} itemsShown={itemsShown} readOnly={readOnly} write={write} locked={locked} on={onYou} under={(i) => underLine(i)} onRoll={onGearRoll} onReadDice={onReadGearDice} onCount={onGearCount} />
         ) : (
         <div style={{ display: 'grid', gridTemplateColumns: columns, gap: '4px 6px', alignItems: 'center' }}>
           <div style={heading}>ITEM</div>
