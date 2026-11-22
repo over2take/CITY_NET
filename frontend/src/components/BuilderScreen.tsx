@@ -395,7 +395,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
     }
     setPreview(null);
     setPage(back);
-    setStatus({ text: publishedMessage(r.value.version, running === systemId) });
+    setStatus({ text: publishedMessage(r.value.version, running === systemId, r.value.dropped ?? 0) });
     await load();
     window.dispatchEvent(new Event(SYSTEMS_CHANGED_EVENT));
   };

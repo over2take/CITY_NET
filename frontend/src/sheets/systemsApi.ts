@@ -220,7 +220,7 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      */
     publishPreview: (systemId: string) => call<PublishPreview>(fetcher, token, `${id(systemId)}/publish-preview`),
     /** Make the stored draft what the game runs; refused, with `problems`, while it has any. */
-    publish: (systemId: string) => call<{ version: number }>(fetcher, token, `${id(systemId)}/publish`, 'POST', {}),
+    publish: (systemId: string) => call<{ version: number; dropped?: number }>(fetcher, token, `${id(systemId)}/publish`, 'POST', {}),
     create: (name: string) => call<{ id: string }>(fetcher, token, '/api/systems', 'POST', { name }),
     /**
      * The built-in examples (4d1) or the genre starters (4d3) to copy: what each is called and

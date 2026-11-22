@@ -12,6 +12,8 @@ const { zipBody: readZipBody } = require('../middleware/jsonBody');
 const { previewPublish } = require('../systemBuilder/publishPreview');
 const { buildCustomTemplate } = require('../sheets/pdfTemplate');
 const runtime = require('../systemBuilder/runtime');
+const catalogueDb = require('../shops/catalogueDb');
+const shopPrices = require('../shops/catalogueStore');
 const { checkDefinition, NEW_SYSTEM_SEEN } = require('../systemBuilder/definition');
 const { previewDerived } = require('../systemBuilder/derived');
 const { rankedOf } = require('../systemBuilder/ranks');
@@ -221,12 +223,21 @@ module.exports = (db, io = null) => {
   router.post('/:id/publish', gm, (req, res) => {
     store.publishSystem(db, req.params.id, (err, done) => {
       if (err) return answer(res, err);
-      runtime.refresh(db, req.params.id, () => syncAllTokenMax(db, req.params.id, (moved) => {
-        // A new version may change what a feature adds to the token's maximum (7a5a3, tokenMax.js).
-        if (io && moved) io.emit('dataUpdated', { isRhombusOnly: true });
-        if (io) io.emit('customSystemChanged', { id: req.params.id });
-        answer(res, null, done);
-      }));
+      runtime.refresh(db, req.params.id, () => {
+        // Its catalogue lines now exactly one of its items taken out (8a7a4b), the items selling themselves; the running
+        // game's shops told, so their shelves come again without the copies.
+        catalogueDb.dropItemCopies(db, req.params.id, runtime.definitionOf(req.params.id), (dErr, dropped) => {
+          const reloaded = () => syncAllTokenMax(db, req.params.id, (moved) => {
+            // A new version may change what a feature adds to the token's maximum (7a5a3, tokenMax.js).
+            if (io && moved) io.emit('dataUpdated', { isRhombusOnly: true });
+            if (io) io.emit('customSystemChanged', { id: req.params.id });
+            answer(res, null, { ...done, ...(!dErr && dropped ? { dropped } : {}) });
+          });
+          if (dErr || !dropped) return reloaded();
+          if (shopPrices.systemLoaded() !== req.params.id) return reloaded();
+          catalogueDb.refresh(db, req.params.id, () => { if (io) io.emit('cataloguesChanged', { system: req.params.id }); reloaded(); });
+        });
+      });
     });
   });
 

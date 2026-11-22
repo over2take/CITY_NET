@@ -7,7 +7,8 @@ import { signInAsGm, gmToken, runningSystem, openGameSystem, asGm } from './help
 // with the Pistol at 260, the Cutlass exactly as it is, the Ring and a Hand Cannon previews as WEAPONS ×2, ALSO ON SALE FROM
 // ITEMS: 2 (1 overruled), the Pistol overruling 200 → 260, the Cutlass and the Ring left out and why; saved, DOWNLOAD CURRENT
 // has the file's two lines and the game's items behind a #. With ADD NEW LINES TO ITEMS on (8a7a4a), the Hand Cannon becomes
-// an item of WEAPONS in the builder's draft, priced 900, the running game untouched until a publish.
+// an item of WEAPONS in the builder's draft, priced 900, the running game untouched until a publish; published (8a7a4b), its
+// catalogue line, now exactly the item, leaves the file and the item sells itself.
 
 const SYSTEM = (name: string) => ({
   format: 1, name, core: { health: { model: 'pool' } },
@@ -75,4 +76,13 @@ test('a catalogue held against the game\'s items: one overruling, an exact copy 
   expect(now).toMatch(/^Hand Cannon\s*, 900\s*, 3d6/m);
   expect(now).toMatch(/^# Cutlass\s*, 120\s*, 1d8/m);
   expect(now).not.toMatch(/Ring of Might/);
+
+  // Published: the Hand Cannon's line, now exactly the item, taken out of the file, said by how many; the item sells itself.
+  const published = await asGm(request, gm, 'post', `/api/systems/${id}/publish`);
+  expect(published.dropped).toBe(1);
+  const [after] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'DOWNLOAD CURRENT', exact: true }).click()]);
+  const then = await readFile(await after.path(), 'utf8');
+  expect(then).toMatch(/^# Hand Cannon\s*, 900\s*, 3d6/m);
+  expect(then).not.toMatch(/^Hand Cannon/m);
+  expect(then).toMatch(/^Pistol\s*, 260\s*, 2d6/m);
 });

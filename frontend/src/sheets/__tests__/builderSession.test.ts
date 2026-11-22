@@ -202,6 +202,10 @@ describe('what it says', () => {
     expect(publishBlocked([PROBLEM, PROBLEM])).toBe('Fix these 2 problems before publishing.');
     expect(publishedMessage(4, true)).toBe('Published v4. The game runs it from now on.');
     expect(publishedMessage(1, false)).toBe('Published v1. It\'s ready to pick in the game-system picker.');
+    // Catalogue lines now exactly one of its items taken out of the file (8a7a4b).
+    expect(publishedMessage(4, true, 1)).toBe('Published v4. The game runs it from now on. 1 catalogue line taken out: it\'s an item now and sells itself.');
+    expect(publishedMessage(4, true, 3)).toBe('Published v4. The game runs it from now on. 3 catalogue lines taken out: they\'re items now and sell themselves.');
+    expect(publishedMessage(4, true, 0)).toBe('Published v4. The game runs it from now on.');
   });
 
   it('the sidebar\'s pages, in order, each saying what it is for', () => {

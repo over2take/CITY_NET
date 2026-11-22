@@ -10,6 +10,8 @@ import { createRequire } from 'module';
 import jwt from 'jsonwebtoken';
 import { makeTestDb, get, run } from './helpers/testDb.js';
 import { untilValue, drain } from './helpers/until.js';
+import express from 'express';
+import request from 'supertest';
 
 process.env.JWT_SECRET = 'test-secret';
 const require_ = createRequire(import.meta.url);
@@ -20,6 +22,8 @@ const { checkDefinition } = require_('../systemBuilder/definition');
 const store = require_('../shops/catalogueStore');
 const runtime = require_('../systemBuilder/runtime');
 const socketsFactory = (await import('../sockets/index.js')).default;
+const systemsRoute = require_('../routes/systems.js');
+const catalogueDb = require_('../shops/catalogueDb');
 
 const WEAPONS = { id: 'weapons', label: 'WEAPONS', one: 'Weapon', columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }, { id: 'ammo', label: 'AMMO', kind: 'count' }, { id: 'price', label: 'PRICE', kind: 'number' }] };
 const GEAR = { id: 'gear', label: 'GEAR', one: 'Gear', columns: [{ id: 'weight', label: 'WEIGHT', kind: 'number' }] };
@@ -127,5 +131,65 @@ describe('at the table', () => {
     gm.handlers.saveCatalogue({ text: FILE, toItems: true });
     expect((await last(gm.emitted, 'catalogueSaved')).data.toItems).toMatchObject({ ok: true, added: [], items: [] });
     expect((await copies()).draft.items.list).toHaveLength(3);
+  });
+});
+
+describe('on PUBLISH, the lines now exactly an item taken out of the file (8a7a4b)', () => {
+  const ID = 'sys_a74b0000a74b0000';
+  const GM = jwt.sign({ id: 1, username: 'gm', role: 'admin', isTemporary: false }, 'test-secret');
+  const RINGED = { ...DEF, items: { ...DEF.items, list: [...DEF.items.list, { id: 'ring', label: 'Ring of Might', type: 'gear', price: 5000, in_shops: false }] } };
+  let db;
+  let app;
+  let emitted;
+  const lines = async () => (await new Promise((resolve, reject) => db.all('SELECT catalogue, name FROM shop_catalogues WHERE system = ? ORDER BY name', [ID], (e, r) => (e ? reject(e) : resolve(r)))));
+  const publish = () => request(app).post(`/api/systems/${ID}/publish`).set({ Authorization: `Bearer ${GM}` }).send({});
+
+  beforeEach(async () => {
+    store.clear();
+    db = await makeTestDb();
+    await run(db, `CREATE TABLE IF NOT EXISTS shop_catalogues (system TEXT NOT NULL, catalogue TEXT NOT NULL, id TEXT NOT NULL,
+      name TEXT NOT NULL, price REAL NOT NULL DEFAULT 0, fields TEXT NOT NULL DEFAULT '{}', PRIMARY KEY (system, catalogue, id))`);
+    const def = JSON.stringify(RINGED);
+    await run(db, 'INSERT INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 1)', [ID, 'Intofall', def, def]);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    // The file: the Pistol exactly as the item is, the Hand Cannon no item yet, the Ring kept out of the shops.
+    await new Promise((resolve, reject) => catalogueDb.replaceCatalogues(db, ID, parse('[WEAPONS]\nname, price, damage\nPistol, 200, 2d6\nHand Cannon, 900, 3d6\n[gear]\nname, price\nRing of Might, 10\n', RINGED), (e) => (e ? reject(e) : resolve())));
+    emitted = [];
+    app = express();
+    app.use(express.json());
+    app.use('/api/systems', systemsRoute(db, { emit: (event, data) => emitted.push({ event, data }) }));
+  });
+
+  it('the exact copy out, said by how many; a new line, and one naming an item kept out of the shops, kept', async () => {
+    const res = await publish();
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.dropped).toBe(1);
+    expect(await lines()).toEqual([{ catalogue: 'type:weapons', name: 'Hand Cannon' }, { catalogue: 'type:gear', name: 'Ring of Might' }]);
+    // Again: nothing more to take out, nothing said.
+    const again = await publish();
+    expect(again.body).not.toHaveProperty('dropped');
+    expect(await lines()).toHaveLength(2);
+  });
+
+  it('a line made an item by ADD NEW LINES TO ITEMS leaves the file once that version is published', async () => {
+    const into = itemsFromLines(RINGED, parse('[WEAPONS]\nname, price, damage\nHand Cannon, 900, 3d6\n'));
+    const draft = { ...RINGED, items: { ...RINGED.items, list: [...RINGED.items.list, ...into.items] } };
+    await run(db, 'UPDATE custom_systems SET draft = ? WHERE id = ?', [JSON.stringify(draft), ID]);
+    expect((await publish()).body.dropped).toBe(2);
+    expect(await lines()).toEqual([{ catalogue: 'type:gear', name: 'Ring of Might' }]);
+  });
+
+  it('the running game\'s shops told, their store reloaded without the copies; another game\'s shops left alone', async () => {
+    await new Promise((resolve) => catalogueDb.refresh(db, ID, resolve));
+    expect(store.uploadedIn('type:weapons').map((e) => e.name).sort()).toEqual(['Hand Cannon', 'Pistol']);
+    await publish();
+    expect(store.uploadedIn('type:weapons').map((e) => e.name)).toEqual(['Hand Cannon']);
+    expect(emitted).toContainEqual({ event: 'cataloguesChanged', data: { system: ID } });
+    // Not the running game: its lines still go, but no shop is told.
+    store.clear();
+    emitted.length = 0;
+    await run(db, "INSERT INTO shop_catalogues (system, catalogue, id, name, price, fields) VALUES (?, 'type:weapons', 'pistol', 'Pistol', 200, ?)", [ID, JSON.stringify({ damage: '2d6', price: 200 })]);
+    expect((await publish()).body.dropped).toBe(1);
+    expect(emitted.map((e) => e.event)).not.toContain('cataloguesChanged');
   });
 });
