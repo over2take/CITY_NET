@@ -4,7 +4,7 @@ import { render, screen, cleanup, act, within, fireEvent } from '@testing-librar
 import userEvent from '@testing-library/user-event';
 
 import { buildTokenActions, tokenActionKeys, type TokenActionContext, type TokenViewer } from '../tokenActions';
-import { GiftNotices, NOTICES_KEPT, NOTICE_MS } from '../GiftNotices';
+import { GiftNotices, NOTICES_KEPT, NOTICE_MS, FADE_MS } from '../GiftNotices';
 import { GiveItemWindow } from '../GiveItemWindow';
 import { registerCustomTemplate, clearCustomTemplates, type CustomRender } from '../../sheets/customTemplates';
 import type { AskSocket, ReceivedNotice } from '../../sheets/giveItems';
@@ -144,15 +144,23 @@ describe('the player\'s notice', () => {
       s.send({ ...pistol, item: 'Second', note: '' });
       act(() => { vi.advanceTimersByTime(1999); });
       expect(screen.getAllByRole('listitem')).toHaveLength(2);
-      // The first's 5 seconds: it goes, the second stays.
+      // The first's 5 seconds: it fades out, then goes; the second stays, the box with it.
       act(() => { vi.advanceTimersByTime(1); });
+      expect(screen.getAllByRole('listitem').map((n) => n.className)).toEqual(['gift-row', 'gift-row leaving']);
+      expect(screen.getByTestId('gift-notices').className).toBe('gift-box');
+      expect(FADE_MS).toBe(400);
+      act(() => { vi.advanceTimersByTime(FADE_MS); });
       expect(screen.getAllByRole('listitem').map((n) => n.textContent?.split(' ×')[0])).toEqual(['THE GM GAVE YOU SECOND']);
       // Held while read: past its 5 seconds it stays; let go, it goes.
       fireEvent.mouseEnter(screen.getByTestId('gift-notices'));
       act(() => { vi.advanceTimersByTime(10_000); });
       expect(screen.getAllByRole('listitem')).toHaveLength(1);
       fireEvent.mouseLeave(screen.getByTestId('gift-notices'));
-      act(() => { vi.advanceTimersByTime(500); });
+      // Looked at again each half second while held (here at 15.5 s, the clock at 15.4): let go, it fades.
+      act(() => { vi.advanceTimersByTime(100); });
+      // The last going: the box fades with it, then is gone.
+      expect(screen.getByTestId('gift-notices').className).toBe('gift-box leaving');
+      act(() => { vi.advanceTimersByTime(FADE_MS); });
       expect(screen.queryByTestId('gift-notices')).toBeNull();
     } finally { vi.useRealTimers(); }
   });

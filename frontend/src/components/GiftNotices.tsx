@@ -11,7 +11,9 @@ import { noticeText, type AskSocket, type ReceivedNotice } from '../sheets/giveI
 //
 // One box, each gift a row in it, newest first (the user, 2026-11-22: separate boxes "stack and look bad"); each row goes
 // 5 seconds after it came ("can we have these time out after 5 seconds?"), held while the pointer or focus is on the box,
-// so a player reading one doesn't lose it; ✕ closes them all.
+// so a player reading one doesn't lose it; ✕ closes them all. A row fades in, and fades out before it goes (the user: it
+// "blinks out of existence"), the box with its last; ✕ is at once, the player's own choice. No fades where motion is
+// turned down (App.css).
 
 /** How many gifts the box lists at once, newest first. */
 export const NOTICES_KEPT = 3;
@@ -19,6 +21,8 @@ export const NOTICES_KEPT = 3;
 export const NOTICE_MS = 5000;
 /** How often a gift held on the screen looks again whether it may go. */
 const HELD_RECHECK_MS = 500;
+/** How long a gift takes to fade out before it goes, in ms (the fade in App.css .gift-row.leaving). */
+export const FADE_MS = 400;
 
 interface Props {
   socket: Pick<AskSocket, 'on' | 'off'> | null;
@@ -28,7 +32,7 @@ interface Props {
 
 export function GiftNotices({ socket, system }: Props) {
   const word = useWords(system);
-  const [notices, setNotices] = useState<(ReceivedNotice & { n: number })[]>([]);
+  const [notices, setNotices] = useState<(ReceivedNotice & { n: number; leaving?: true })[]>([]);
   // The pointer or focus on the box: what is being read isn't taken away.
   const held = useRef(false);
 
@@ -41,7 +45,12 @@ export function GiftNotices({ socket, system }: Props) {
       count += 1;
       const n = count;
       setNotices((prev) => [{ ...notice, n }, ...prev].slice(0, NOTICES_KEPT));
-      const go = () => { if (held.current) later(go, HELD_RECHECK_MS); else setNotices((prev) => prev.filter((x) => x.n !== n)); };
+      // Its time up: faded out, then gone.
+      const go = () => {
+        if (held.current) { later(go, HELD_RECHECK_MS); return; }
+        setNotices((prev) => prev.map((x) => (x.n === n ? { ...x, leaving: true as const } : x)));
+        later(() => setNotices((prev) => prev.filter((x) => x.n !== n)), FADE_MS);
+      };
       later(go, NOTICE_MS);
     };
     socket.on('itemReceived', heard);
@@ -49,16 +58,18 @@ export function GiftNotices({ socket, system }: Props) {
   }, [socket]);
 
   if (!notices.length) return null;
+  // The last going: the box fades with it.
+  const allLeaving = notices.every((g) => g.leaving);
 
   return createPortal(
-    <div data-testid="gift-notices" role="status" onMouseEnter={() => { held.current = true; }} onMouseLeave={() => { held.current = false; }}
+    <div data-testid="gift-notices" role="status" className={allLeaving ? 'gift-box leaving' : 'gift-box'} onMouseEnter={() => { held.current = true; }} onMouseLeave={() => { held.current = false; }}
       onFocus={() => { held.current = true; }} onBlur={() => { held.current = false; }}
       style={{ position: 'fixed', top: 70, left: '50%', transform: 'translateX(-50%)', zIndex: 3000, width: 'min(420px, calc(100vw - 32px))',
         fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, padding: '8px 10px', background: 'var(--black)',
         border: '1px solid var(--warning)', color: 'var(--warning)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
       <div role="list" aria-label="Given to you" style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
         {notices.map((g, i) => (
-          <div key={g.n} role="listitem" style={{ display: 'flex', flexDirection: 'column', gap: 4, ...(i > 0 ? { borderTop: '1px dashed var(--dark-green)', paddingTop: 6 } : {}) }}>
+          <div key={g.n} role="listitem" className={g.leaving ? 'gift-row leaving' : 'gift-row'} style={{ display: 'flex', flexDirection: 'column', gap: 4, ...(i > 0 ? { borderTop: '1px dashed var(--dark-green)', paddingTop: 6 } : {}) }}>
             <span>{noticeText(g, word('gm', 'short', 'GM'))}</span>
             {g.note && <span style={{ color: 'var(--green)', letterSpacing: 0, fontSize: 12 }}>“{g.note}”</span>}
           </div>

@@ -1371,6 +1371,25 @@ button.choice-off:disabled {
   .gear-band-news { animation: none; }
 }
 
+/* The GM's gifts (GiftNotices.tsx): each row fades in, and out over FADE_MS before it goes; the box with its last. */
+@keyframes gift-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+
+.gift-row, .gift-box {
+  animation: gift-fade-in 200ms ease-out;
+  transition: opacity 400ms ease-in;
+}
+
+.gift-row.leaving, .gift-box.leaving {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gift-row, .gift-box { animation: none; transition: none; }
+}
+
 /* FIND on GEAR (G4) has its own × in the theme; the browser's is blue whatever the theme. */
 .gear-find::-webkit-search-cancel-button {
   -webkit-appearance: none;
