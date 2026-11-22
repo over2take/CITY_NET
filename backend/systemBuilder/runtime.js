@@ -34,6 +34,7 @@ const { partOn, PARTS } = require('./parts');
 const { buildingOn, buildingName, catalogueCurrency, ownBuildings } = require('./buildings');
 const { currenciesOf } = require('./currencies');
 const { conditionsOf } = require('./conditions');
+const { ownTypes } = require('./itemTypes');
 const { loadTableConditions, tableConditionsOf } = require('./tableConditions');
 const { bankOf } = require('./bank');
 const { distanceOf } = require('./core');
@@ -210,10 +211,11 @@ const renderOf = (id, definition, on = new Set()) => ({
   items: itemsRenderedOf(definition),
   // Which of the GAME tab's switches this system has anything for (8a6b): SHOW ENCUMBRANCE where it counts encumbrance,
   // BAND CONDITIONS where a band (or the word past them) names a condition, APPLY CONDITION MODIFIERS where a condition is APPLIED,
-  // CONDITION TURN EFFECTS where a condition has an EACH TURN (8a9c).
+  // CONDITION TURN EFFECTS where a condition has an EACH TURN (8a9c), PLAYERS CHANGE GEAR where it makes its own item types (G6a).
   switches: {
     encumbrance: encumbranceOf(definition) !== null, band_conditions: namesCondition(definition), applied_conditions: conditionsOf(definition).some((c) => c.applied),
     turn_effects: conditionsOf(definition).some((c) => Array.isArray(c.each_turn) && c.each_turn.length > 0),
+    gear: ownTypes(definition),
   },
 });
 
