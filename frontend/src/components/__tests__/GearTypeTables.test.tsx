@@ -335,6 +335,8 @@ describe('in bands (G2)', () => {
     expect(screen.getAllByRole('button', { name: /^[▸▾] [A-Z]+ · \d+$/ }).map((b) => b.textContent)).toEqual(['▾ EQUIPPED · 2', '▾ USABLE · 1', '▾ PACK · 1', '▸ STASH · 1']);
     expect(within(band('EQUIPPED')).getAllByRole('button', { name: /, item \d+$/ }).map((b) => b.textContent)).toEqual(['Pistol', 'Sword']);
     expect(within(band('USABLE')).getByRole('region', { name: 'POTIONS gear' })).toBeTruthy();
+    // POTIONS has no columns: nothing to fill in, so no FILL IN (G3).
+    expect(within(band('USABLE')).queryByRole('button', { name: /^Fill in/ })).toBeNull();
     expect(within(band('PACK')).getByRole('region', { name: 'GEAR gear' })).toBeTruthy();
     expect(head('STASH').getAttribute('aria-expanded')).toBe('false');
     expect(within(band('STASH')).queryByRole('button', { name: /, item \d+$/ })).toBeNull();
@@ -408,19 +410,21 @@ describe('one line a thing, its card on a click (G3)', () => {
     expect(at(1).queryByRole('group', { name: 'Item 2 columns' })).toBeNull();
   });
 
-  it('FILL IN names the blank columns and opens the card at the first, its box ready; none where nothing is blank, or while open', async () => {
+  it('FILL IN only where nothing is filled in, naming the columns, opening the card at the first, its box ready; none while open', async () => {
     const items: ItemsShown = { ...ITEMS, list: [...ITEMS.list, { id: 'rope', label: 'Rope', needs: 'carried', features: [], type: 'gear', values: { weight: 5 } }] };
-    show([line('Pistol'), line('Rope', { type: 'gear' }), line('', { type: 'gear' })], { items });
-    // The Pistol's item has every column but CHARGES.
-    const fill = at(0).getByRole('button', { name: 'Fill in item 1: CHARGES' });
-    expect(fill.title).toBe('Blank: CHARGES');
+    show([line('Pistol'), line('Rope', { type: 'gear' }), line('', { type: 'gear' }), line('Knife', { type: 'weapons' })], { items });
+    // The Pistol's item has every column but CHARGES: a blank beside others filled doesn't apply, so no FILL IN (2026-11-22).
+    expect(at(0).queryByRole('button', { name: /^Fill in/ })).toBeNull();
     // The Rope's item has its WEIGHT: nothing blank.
     expect(at(1).queryByRole('button', { name: /^Fill in/ })).toBeNull();
     // A line with no name says so.
     expect(at(2).getByRole('button', { name: 'UNNAMED, item 3' })).toBeTruthy();
+    // A Knife made by hand, nothing filled in.
+    const fill = at(3).getByRole('button', { name: 'Fill in item 4: DAMAGE, RANGE, AMMO, WEIGHT, CHARGES, GRADE' });
+    expect(fill.title).toBe('Blank: DAMAGE, RANGE, AMMO, WEIGHT, CHARGES, GRADE');
     await userEvent.click(fill);
-    expect(document.activeElement).toBe(at(0).getByLabelText('Item 1 CHARGES'));
-    expect(at(0).queryByRole('button', { name: /^Fill in/ })).toBeNull();
+    expect(document.activeElement).toBe(at(3).getByLabelText('Item 4 DAMAGE'));
+    expect(at(3).queryByRole('button', { name: /^Fill in/ })).toBeNull();
     // A line's own value fills it.
     await userEvent.click(at(2).getByRole('button', { name: 'Fill in item 3: WEIGHT' }));
     fireEvent.change(at(2).getByLabelText('Item 3 WEIGHT'), { target: { value: '1' } });
@@ -432,6 +436,21 @@ describe('one line a thing, its card on a click (G3)', () => {
     show([line('Knife', { type: 'weapons' })], { onReadGearDice: async () => ({ ok: true, blank: true, names: [] }) });
     await userEvent.click(at(0).getByRole('button', { name: /^Fill in item 1: DAMAGE/ }));
     expect(document.activeElement).toBe(at(0).getByLabelText('Item 1 DAMAGE'));
+  });
+
+  it('✎ at the end of every line opens its card and closes it, as the line does; none read only', async () => {
+    show([line('Pistol'), line('Rope', { type: 'gear' })]);
+    const pencil = at(0).getByRole('button', { name: 'Edit item 1' });
+    expect(pencil.textContent).toBe('✎');
+    expect(at(1).getByRole('button', { name: 'Edit item 2' })).toBeTruthy();
+    await userEvent.click(pencil);
+    expect(pencil.getAttribute('aria-expanded')).toBe('true');
+    expect(at(0).getByRole('group', { name: 'Item 1 columns' })).toBeTruthy();
+    await userEvent.click(pencil);
+    expect(at(0).queryByRole('group', { name: 'Item 1 columns' })).toBeNull();
+    cleanup();
+    show([line('Pistol')], { readOnly: true });
+    expect(screen.queryByRole('button', { name: /^Edit item/ })).toBeNull();
   });
 
   it('a PICK ONE box as wide as its words, a number box 90 wide', async () => {

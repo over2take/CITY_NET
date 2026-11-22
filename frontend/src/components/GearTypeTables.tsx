@@ -18,8 +18,10 @@ import { FormulaIcon } from './FormulaIcon';
 // in hand first; STASH, closed to start, whatever the type; a band's head closes it and the sheet remembers. A thing is
 // made by hand from the row of + buttons at the top; a thing worn, attuned or installed is in EQUIPPED whatever its type. One line a thing (G3; the same mockup, decision 3): its name, how many,
 // the columns it has as words with ROLL, FIRE and RELOAD, where it is carried; a click on it opens the card, every column a
-// box with NAME, HOW MANY, LOCATION and REMOVE, one card at a time. A column blank on the line and its item says FILL IN,
-// which opens the card at that box. A PICK ONE box is as wide as its words.
+// box with NAME, HOW MANY, LOCATION and REMOVE, one card at a time; ✎ at the end of every line opens it too. A line with
+// nothing filled in at all, on it or its item, says FILL IN, which opens the card at its first box: a column blank beside
+// others filled is one that doesn't apply (8a3c1), so says nothing (the user, 2026-11-22). A PICK ONE box is as wide as its
+// words.
 
 interface Props {
   items: InventoryItem[];
@@ -179,8 +181,9 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on,
   /** One line a thing (G3), by its place; a click opens its card. `tagged`, in the STASH, says its type. */
   const lineView = ({ index: i, line, columns: lc }: TableRow, type: TypeShown, tagged = false) => {
     const cells = shownCells(lc);
-    // Blank on the line and its item alike: FILL IN, opening the card at the first.
+    // Blank on the line and its item alike. Only every column blank is FILL IN: one blank beside others filled doesn't apply.
     const blank = lc.cells.filter((c) => c.own === undefined && c.given === undefined);
+    const nothingFilled = blank.length > 0 && blank.length === lc.cells.length;
     const editing = open === i;
     const stashed = line.carry === 'stash';
     const lockedTitle = locked(i) ? 'Installed: REMOVE it first' : undefined;
@@ -233,16 +236,21 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on,
           {stashed && line.location && (
             <span style={{ display: 'inline-flex', gap: '4px', whiteSpace: 'nowrap' }}><b style={{ ...small, fontWeight: 'normal' }}>STASHED</b>{line.location}</span>
           )}
-          {!readOnly && !editing && blank.length > 0 && (
+          {!readOnly && !editing && nothingFilled && (
             <button type="button" aria-label={`Fill in item ${i + 1}: ${blank.map((c) => c.column.label.toUpperCase()).join(', ')}`}
               title={`Blank: ${blank.map((c) => c.column.label.toUpperCase()).join(', ')}`} onClick={() => openAt(blank[0].column.id)}
               style={{ ...smallButton, background: 'none', border: '1px dashed var(--green)', color: 'var(--green)', fontFamily: 'inherit', cursor: 'pointer', opacity: 0.8 }}>FILL IN</button>
+          )}
+          {/* ✎: the card, as a click on the line opens it, for whoever doesn't think to click a name. */}
+          {!readOnly && (
+            <button type="button" aria-label={`Edit item ${i + 1}`} aria-expanded={editing} title={editing ? 'Close its card' : 'Every column, to change'} onClick={() => openAt(null)}
+              style={{ marginLeft: 'auto', background: editing ? 'var(--green)' : 'none', color: editing ? 'var(--black)' : 'var(--green)', border: '1px solid var(--green)', cursor: 'pointer', padding: '0 4px', fontSize: '0.7rem', lineHeight: 1.2, fontFamily: 'inherit' }}>✎</button>
           )}
           {/* Where it is carried, one click to change, as a tag at the end of the line. */}
           <select aria-label={`Item ${i + 1} carried`} value={line.carry} disabled={readOnly || locked(i)} title={lockedTitle ?? 'Where it is carried'}
             // Moved into the stash or out of it (G2): the band it lands in opens, so the line isn't lost from sight.
             onChange={(e) => { const carry = e.target.value as InventoryItem['carry']; patch(i, { ...line, carry }); openBand(carry === 'stash' ? 'stash' : bandOfType(type)); }}
-            style={{ ...input, width: 'auto', marginLeft: 'auto', fontSize: '0.55rem', letterSpacing: '1px', padding: '0 2px' }}>
+            style={{ ...input, width: 'auto', marginLeft: readOnly ? 'auto' : 0, fontSize: '0.55rem', letterSpacing: '1px', padding: '0 2px' }}>
             {CARRY_STATES.map((c) => <option key={c.value} value={c.value} title={c.title}>{c.value === 'stash' ? 'STASH' : c.value.toUpperCase()}</option>)}
           </select>
         </div>
@@ -286,7 +294,7 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on,
             <span />
             <span style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <button type="button" className="utility-btn" onClick={() => setOpen(null)} style={{ fontSize: '0.55rem', padding: '1px 10px' }}>DONE</button>
-              <span style={{ ...small, fontSize: '0.5rem' }} title="Opening another line closes this one">or click the line again</span>
+              <span style={{ ...small, fontSize: '0.5rem' }} title="Opening another line closes this one">or ✎ again</span>
               <button type="button" aria-label={`Remove item ${i + 1}`} disabled={locked(i)} title={lockedTitle ?? 'Remove it from the sheet'} onClick={() => remove(i)}
                 style={{ marginLeft: 'auto', background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)', fontFamily: 'inherit', fontSize: '0.55rem', letterSpacing: '1px', padding: '1px 8px', cursor: locked(i) ? 'not-allowed' : 'pointer', opacity: locked(i) ? 0.35 : 1 }}>REMOVE</button>
             </span>
