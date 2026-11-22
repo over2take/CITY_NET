@@ -546,3 +546,24 @@ describe('FIND on GEAR (G4)', () => {
     expect(screen.queryByRole('region', { name: /band$/ })).toBeNull();
   });
 });
+
+describe('the slot and install counters (2026-11-22)', () => {
+  const COUNTED: ItemsShown = {
+    slots: [{ id: 'attuned', label: 'Attuned', count: 3 }],
+    installs: [{ id: 'cyberware', label: 'Cyberware', against: 'Strain', way: 'adds' }],
+    list: [{ id: 'ring', label: 'Ring', needs: 'attuned', features: [], type: 'gear' }, { id: 'jack', label: 'Jack', needs: 'cyberware', features: [], type: 'gear' }],
+    types: [{ id: 'gear', label: 'GEAR', one: 'Gear', columns: [] }],
+  };
+  const counters = () => [...screen.queryAllByRole('group', { name: / slots$/ }), ...screen.queryAllByRole('group', { name: / installs$/ })].map((g) => g.getAttribute('aria-label'));
+
+  it('only those something on the sheet uses: none for a sheet of rope, the slot with a ring, the install with a jack', () => {
+    show([line('Rope', { type: 'gear' })], { items: COUNTED });
+    expect(counters()).toEqual([]);
+    cleanup();
+    show([line('Rope', { type: 'gear' }), line('Ring', { type: 'gear' })], { items: COUNTED });
+    expect(counters()).toEqual(['ATTUNED slots']);
+    cleanup();
+    show([line('Jack', { type: 'gear' })], { items: COUNTED, worked: { items: [], slots: [], installs: [{ id: 'cyberware', used: 0, value: 0, limit: 2 }] } });
+    expect(counters()).toEqual(['CYBERWARE installs']);
+  });
+});

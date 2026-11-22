@@ -181,6 +181,18 @@ export const installCounters = (items: ItemsShown | undefined, worked: { install
   return { id: s.id, label: L, text: s.way === 'takes' ? `${L} · ${what} ${value}, NEVER BELOW ${limit}` : `${L} · ${what} ${value} OF ${limit}`, full };
 });
 
+/**
+ * The slots and installs this sheet has a use for (the user, 2026-11-22, of a sorcerer's sheet saying CYBERWARE · STRAIN
+ * 0 OF 0: "can I disable it?", then "that would be awesome!"): one an item on a gear line needs, or one with anything still
+ * counted against it. A counter for none of its things is noise; it comes back with the first item that needs it.
+ */
+export const countersInUse = (lineItems: Map<number, ItemShown>, worked: { slots: SlotWorked[]; installs?: InstallWorked[] }): Set<string> => {
+  const ids = new Set([...lineItems.values()].map((i) => i.needs));
+  for (const s of worked.slots) if (s.used > 0) ids.add(s.id);
+  for (const s of worked.installs ?? []) if (s.used > 0) ids.add(s.id);
+  return ids;
+};
+
 /** The names of the items installed, lowercased (7e4c): their lines are locked, and a shop won't buy one. */
 export const installedNames = (items: ItemsShown | undefined, worked: { items: ItemWorked[] }): Set<string> => {
   const installed = new Set(worked.items.filter((i) => i.installed).map((i) => i.id));

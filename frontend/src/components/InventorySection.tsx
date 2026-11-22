@@ -4,7 +4,7 @@ import {
   INVENTORY_FIELD, CARRY_STATES, readInventory, writeInventory, blankItem, itemEnc,
   type InventoryItem,
 } from '../sheets/inventory';
-import { itemLines, itemsWorkedOn, gearRow, slotCounters, installCounters, itemUses, type ItemsShown, type ItemAction } from '../sheets/gearItems';
+import { itemLines, itemsWorkedOn, gearRow, slotCounters, installCounters, countersInUse, itemUses, type ItemsShown, type ItemAction } from '../sheets/gearItems';
 import { workedOn, type ChoicesAction } from '../sheets/choicesShown';
 import { GearItemLine, GearSlots } from './GearItemLine';
 import { GearTypeTables } from './GearTypeTables';
@@ -87,8 +87,10 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
   const lineItems = itemLines(itemsShown, items);
   const worked = itemsWorkedOn(data as Record<string, unknown>);
   const uses = lineItems.size ? workedOn(data as Record<string, unknown>).uses : {};
-  const counters = slotCounters(itemsShown, worked);
-  const installs = installCounters(itemsShown, worked);
+  // Only the slots and installs something on this sheet uses (2026-11-22): no STRAIN on a sorcerer with no cyberware.
+  const using = countersInUse(lineItems, worked);
+  const counters = slotCounters(itemsShown, worked).filter((c) => using.has(c.id));
+  const installs = installCounters(itemsShown, worked).filter((c) => using.has(c.id));
   /** Whether a line is an item installed (7e4c): kept as it is, named and in place, until REMOVE. */
   const locked = (i: number) => lineItems.has(i) && !!worked.items.find((w) => w.id === lineItems.get(i)!.id)?.installed;
   /** Whether a line is an item worn, attuned or installed: on you, so EQUIPPED on GEAR's bands (G3). */

@@ -35,6 +35,8 @@ test('WEAR and ATTUNE on GEAR: the ring counts once attuned, a full slot is the 
 
   // Two lines named like the items, stowed: carried.
   await sheetTab(mine, 'GEAR');
+  // No ATTUNED bar while nothing on the sheet needs a slot (2026-11-22); it comes with the Ring's line.
+  await expect(mine.getByRole('group', { name: 'ATTUNED slots' })).toHaveCount(0);
   for (const [n, name] of [[1, 'Ring of Might'], [2, 'Cloak of Warding']] as const) {
     await mine.getByRole('button', { name: '+ ITEM', exact: true }).click();
     await mine.getByLabel(`Item ${n} name`, { exact: true }).fill(name);
