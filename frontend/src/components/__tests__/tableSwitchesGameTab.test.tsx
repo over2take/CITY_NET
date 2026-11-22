@@ -117,4 +117,21 @@ describe('the GAME tab\'s encumbrance and condition switches', () => {
     await screen.findByRole('checkbox', { name: /^SHOW ENCUMBRANCE/ });
     expect(box(/^CONDITION TURN EFFECTS/)).toBeNull();
   });
+
+  it('PLAYERS CHANGE GEAR (G6b): where the system makes its own item types, on to start; switched off and APPLY, written', async () => {
+    packs({ encumbrance: false, band_conditions: false, applied_conditions: false, gear: true });
+    await openRules();
+    const gear = await screen.findByRole('checkbox', { name: /^PLAYERS CHANGE GEAR/ });
+    expect((gear as HTMLInputElement).checked).toBe(true);
+    expect(gear.closest('label')!.getAttribute('title')).toMatch(/Off: only the GM changes them/);
+    await userEvent.click(gear);
+    await userEvent.click(screen.getByRole('button', { name: 'APPLY' }));
+    await screen.findByText('HOUSE RULES APPLIED');
+    expect(posted.filter((p) => p.key === 'players_change_gear')).toEqual([{ key: 'players_change_gear', value: '0', auth: 'Bearer admintoken' }]);
+    cleanup();
+    packs({ encumbrance: true, band_conditions: false, applied_conditions: false, gear: false });
+    await openRules();
+    await screen.findByRole('checkbox', { name: /^SHOW ENCUMBRANCE/ });
+    expect(box(/^PLAYERS CHANGE GEAR/)).toBeNull();
+  });
 });

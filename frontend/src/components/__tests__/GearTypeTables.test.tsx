@@ -39,13 +39,13 @@ const line = (name: string, more = {}) => ({ name, qty: 1, enc: '', bundled: fal
 const outside: { set: (more: Record<string, unknown>) => void } = { set: () => {} };
 const show = (lines: object[], { readOnly = false, items = ITEMS as ItemsShown | undefined, onGearRoll = undefined as ((line: number, column: string) => void) | undefined,
   onReadGearDice = undefined as ((text: string) => Promise<GearDiceRead | null>) | undefined, onGearCount = undefined as GearCount | undefined,
-  worked = undefined as object | undefined } = {}) => {
+  worked = undefined as object | undefined, columnsLocked = false } = {}) => {
   const writes: object[][] = [];
   const Harness = () => {
     // `worked`: what the server worked out of the items (_worked), which are worn.
     const [data, setData] = useState<Record<string, unknown>>({ inventory: JSON.stringify(lines), ...(worked ? { _worked: worked } : {}) });
     outside.set = (more) => setData((d) => ({ ...d, ...more }));
-    return <InventorySection section={SECTION} data={data as never} readOnly={readOnly} itemsShown={items} onGearRoll={onGearRoll} onReadGearDice={onReadGearDice} onGearCount={onGearCount}
+    return <InventorySection section={SECTION} data={data as never} readOnly={readOnly} itemsShown={items} columnsLocked={columnsLocked} onGearRoll={onGearRoll} onReadGearDice={onReadGearDice} onGearCount={onGearCount}
       onFieldChange={(id, v) => { writes.push(JSON.parse(v as string)); setData((d) => ({ ...d, [id]: v })); }} />;
   };
   render(<Harness />);
@@ -602,5 +602,42 @@ describe('UNIQUE on the line and in its card (G5b)', () => {
     expect(screen.getByRole('button', { name: 'Pistol, item 1' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Pistol, item 3' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Rope, item 2' })).toBeNull();
+  });
+});
+
+describe('PLAYERS CHANGE GEAR off, for a player (G6b)', () => {
+  const at = (i: number) => within(screen.getByTestId(`gear-line-${i}`));
+  const read = async () => ({ ok: true as const, blank: true as const, names: [] });
+
+  it('the card shows every column without changing it, said once; no eˣ, THE ITEM\'S or FILL IN; name, how many and REMOVE still theirs', async () => {
+    const made = line('Pistol', { values: { damage: '3d6' } });
+    show([made, line('Knife', { type: 'weapons' })], { columnsLocked: true, onReadGearDice: read });
+    // Nothing filled in on the Knife, but nothing to fill either.
+    expect(at(1).queryByRole('button', { name: /^Fill in/ })).toBeNull();
+    await userEvent.click(at(0).getByRole('button', { name: 'Edit item 1' }));
+    const card = within(at(0).getByRole('group', { name: 'Item 1 columns' }));
+    expect(card.getByRole('note', { name: 'Item 1 columns' }).textContent).toBe('ONLY THE GM CHANGES THESE AT THIS TABLE');
+    expect((card.getByLabelText('Item 1 DAMAGE') as HTMLInputElement).readOnly).toBe(true);
+    expect(card.queryByRole('button', { name: 'Help writing Item 1 DAMAGE' })).toBeNull();
+    expect((card.getByLabelText('Item 1 RANGE') as HTMLInputElement).readOnly).toBe(true);
+    expect((card.getByLabelText('Item 1 GRADE') as HTMLSelectElement).disabled).toBe(true);
+    // Still UNIQUE, with what the item had; nothing to put it back with.
+    expect(card.getByRole('group', { name: 'Item 1 DAMAGE is unique' })).toBeTruthy();
+    expect(card.queryByRole('button', { name: "Item 1 DAMAGE: the item's" })).toBeNull();
+    expect((card.getByLabelText('Item 1 name') as HTMLInputElement).readOnly).toBe(false);
+    expect((card.getByLabelText('Item 1 quantity') as HTMLInputElement).readOnly).toBe(false);
+    expect(card.getByRole('button', { name: 'Remove item 1' })).toBeTruthy();
+  });
+
+  it('on: none of that; a type with no columns says nothing either', async () => {
+    show([line('Pistol')], { onReadGearDice: read });
+    await userEvent.click(at(0).getByRole('button', { name: 'Edit item 1' }));
+    expect(at(0).queryByRole('note', { name: 'Item 1 columns' })).toBeNull();
+    expect(at(0).getByRole('button', { name: 'Help writing Item 1 DAMAGE' })).toBeTruthy();
+    cleanup();
+    const bare: ItemsShown = { slots: [], list: [], types: [{ id: 'gear', label: 'GEAR', one: 'Gear', columns: [] }] };
+    show([line('Rope', { type: 'gear' })], { items: bare, columnsLocked: true });
+    await userEvent.click(at(0).getByRole('button', { name: 'Edit item 1' }));
+    expect(at(0).queryByRole('note', { name: 'Item 1 columns' })).toBeNull();
   });
 });

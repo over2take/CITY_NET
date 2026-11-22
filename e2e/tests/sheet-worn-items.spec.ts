@@ -135,10 +135,9 @@ test('GIVE.EXE hands out a system\'s item from ITEMS: a stowed line of its name,
   await expect(who.getByText('an inventory line')).toBeVisible({ timeout: 15_000 });
   await who.getByRole('checkbox', { name: 'Wren' }).check();
   await give.getByRole('button', { name: 'GIVE 1 × RING OF MIGHT TO 1' }).click();
-  await expect.poll(async () => JSON.parse((await sheetOf()).inventory ?? '[]').map((i: { name: string; carry: string }) => [i.name, i.carry]), { timeout: 15_000 }).toEqual([['Ring of Might', 'stowed']]);
-
-  // The player is told, and it is that item: WEAR it there and then.
+  // The player is told (looked for first: the notice goes after 5 seconds), and it is that item: WEAR it there and then.
   await expect(mine.getByText('THE GM GAVE YOU RING OF MIGHT ×1: NEEDS ATTUNED · A heavy iron band.')).toBeVisible({ timeout: 15_000 });
+  await expect.poll(async () => JSON.parse((await sheetOf()).inventory ?? '[]').map((i: { name: string; carry: string }) => [i.name, i.carry]), { timeout: 15_000 }).toEqual([['Ring of Might', 'stowed']]);
   await sheetTab(mine, 'GEAR');
   const ring = mine.getByTestId('gear-item-ring');
   await ring.getByRole('button', { name: 'WEAR Ring of Might' }).click();

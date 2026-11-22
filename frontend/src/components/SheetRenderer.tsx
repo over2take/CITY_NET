@@ -91,6 +91,8 @@ export interface SheetRendererProps {
   encumbranceEnforced?: boolean;
   /** CARRYING at the top of GEAR (8a6a): false where the table switched SHOW ENCUMBRANCE off (8a6b). */
   carryingShown?: boolean;
+  /** Players change their gear's columns (G6b): false where the table switched PLAYERS CHANGE GEAR off; the GM always may. */
+  playersChangeGear?: boolean;
   /** A section's header button was pressed. Sections declare the label; what it does is
    *  the surface's business — the renderer has no idea what a window is. */
   onSectionAction?: (sectionId: string) => void;
@@ -1889,7 +1891,7 @@ function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection 
   return fields.length === 0 ? null : { ...section, fields };
 }
 
-export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onGearRoll, onReadGearDice, onGearCount, onSpend, onImprove, vitals, carryingShown = true }: SheetRendererProps) {
+export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onGearRoll, onReadGearDice, onGearCount, onSpend, onImprove, vitals, carryingShown = true, playersChangeGear = true }: SheetRendererProps) {
   // The vitals strip's REST ▾ (8s3c): the sheet's own RESTS, where this character has a rest to take from here or the GM
   // has called one; on the player's own sheet, beside the strip.
   const restView = vitals && !readOnly && onRestTake && template.resting ? restSection(template.resting, data as Record<string, unknown>, gm) : null;
@@ -2133,7 +2135,7 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
                   {section.layout === 'inventory' && <InventorySection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} rowActions={[consumeAction, loadAction].filter(Boolean) as RowAction[]}
-                    itemsShown={template.items} gm={gm} onItem={onItem} onGearRoll={onGearRoll} onReadGearDice={onReadGearDice} onGearCount={onGearCount} onChoices={onChoices} refused={choicesRefused} />}
+                    itemsShown={template.items} gm={gm} columnsLocked={playersChangeGear === false && !gm} onItem={onItem} onGearRoll={onGearRoll} onReadGearDice={onReadGearDice} onGearCount={onGearCount} onChoices={onChoices} refused={choicesRefused} />}
                   {section.layout === 'weapon_stash' && <WeaponStashSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} rows={weaponRows} />}
                   {section.layout === 'encumbrance' && <EncumbranceSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} enforced={encumbranceEnforced} />}
                   {section.layout === 'cyberware' && <CyberwareSection section={section} template={template} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}

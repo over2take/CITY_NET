@@ -17,7 +17,7 @@ import { FormulaIcon } from './FormulaIcon';
 // docs/mockups/sheet-gear-layout.html, layout A): EQUIPPED, USABLE and PACK by each type's ON THE SHEET, a group per type,
 // in hand first; STASH, closed to start, whatever the type; a band's head closes it and the sheet remembers. A thing is
 // made by hand from the row of + buttons at the top; a closed band something lands in pulses, then stays bright until
-// opened; a line changed from its item says UNIQUE, each column it made its own too, with THE ITEM'S to put it back and
+// opened; PLAYERS CHANGE GEAR off, a player's card shows the columns without changing them (G6b); a line changed from its item says UNIQUE, each column it made its own too, with THE ITEM'S to put it back and
 // the item's value and who changed it when, and "unique" in FIND lists them (G5b; no count at the top, the user: FIND
 // is enough and saves the room); FIND at the top, always shown, keeps only the lines it matches, every band open while it has words (G4);
 // a thing worn, attuned or installed is in EQUIPPED whatever its type. One line a thing (G3; the same mockup, decision 3): its name, how many,
@@ -34,6 +34,11 @@ interface Props {
   write: (next: InventoryItem[]) => void;
   /** Whether a line is an item installed: kept named and in place. */
   locked: (index: number) => boolean;
+  /**
+   * PLAYERS CHANGE GEAR off at this table, for a player (G6b; decided 2026-11-20): every column shown in the card but not
+   * changed, said once; no FILL IN or THE ITEM'S. The name, how many, where and REMOVE still theirs. The server holds it too.
+   */
+  columnsLocked?: boolean;
   /** Whether a line is an item worn, attuned or installed: on you, so in EQUIPPED whatever its type's band. */
   on?: (index: number) => boolean;
   /** What goes under a line: an item's WEAR, ATTUNE and uses. */
@@ -84,7 +89,7 @@ function CellBox({ cell, label, readOnly, onType, focus = false }: { cell: Cell;
  * ROLL would, or what is wrong with it; and eˣ, as the builder's formula box has it: SHAPE writes a common one, INSERT
  * puts in one of the system's names.
  */
-function DiceBox({ cell, label, onType, onRead, focus = false }: { cell: Cell; label: string; onType: (typed: string) => void; onRead: (text: string) => Promise<GearDiceRead | null>; focus?: boolean }) {
+function DiceBox({ cell, label, onType, onRead, focus = false, readOnly = false }: { cell: Cell; label: string; onType: (typed: string) => void; onRead: (text: string) => Promise<GearDiceRead | null>; focus?: boolean; readOnly?: boolean }) {
   const [open, setOpen] = useState(false);
   // What the server said, kept with the text it was said of: an answer for older text is never shown.
   const [read, setRead] = useState<{ text: string; result: GearDiceRead | null } | null>(null);
@@ -107,18 +112,19 @@ function DiceBox({ cell, label, onType, onRead, focus = false }: { cell: Cell; l
     <span style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
       <span style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
         <input ref={input} aria-label={label} type="text" value={valueText(cell.own)} placeholder={cell.given !== undefined ? valueText(cell.given) : 'none'}
-          aria-invalid={bad || undefined} spellCheck={false} autoFocus={focus}
+          aria-invalid={bad || undefined} spellCheck={false} autoFocus={focus} readOnly={readOnly}
           onChange={(e) => { onType(e.target.value); cursor.current = e.target.selectionStart ?? e.target.value.length; }}
           onSelect={(e) => { cursor.current = (e.target as HTMLInputElement).selectionStart ?? 0; }}
           style={{ ...input, flex: 1, ...(bad ? { borderColor: 'var(--danger)' } : {}) }} />
-        <button type="button" aria-label={`Help writing ${label}`} aria-expanded={open} title="Help writing it" onClick={() => setOpen((o) => !o)}
+        {/* eˣ helps write it: nothing to write where it can't be changed (G6b). */}
+        {!readOnly && <button type="button" aria-label={`Help writing ${label}`} aria-expanded={open} title="Help writing it" onClick={() => setOpen((o) => !o)}
           style={{
             width: 24, flexShrink: 0, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
             border: `1px solid ${open ? 'var(--cyan)' : 'var(--green)'}`, color: open ? 'var(--cyan)' : 'var(--green)',
             background: open ? 'color-mix(in srgb, var(--cyan) 18%, transparent)' : 'none',
           }}>
           <FormulaIcon size={13} />
-        </button>
+        </button>}
       </span>
       <span role="status" aria-label={`${label} on this character`} style={{ fontSize: '0.6rem', letterSpacing: '1px', color: bad ? 'var(--danger)' : 'var(--cyan)', overflowWrap: 'anywhere' }}>{words}</span>
       {open && (
@@ -148,7 +154,7 @@ function DiceBox({ cell, label, onType, onRead, focus = false }: { cell: Cell; l
   );
 }
 
-export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on, under, onRoll, onReadDice, onCount }: Props) {
+export function GearTypeTables({ items, itemsShown, readOnly, columnsLocked = false, write, locked, on, under, onRoll, onReadDice, onCount }: Props) {
   // The one line open under ✎, by its place in the inventory.
   const [open, setOpen] = useState<number | null>(null);
   // The box the open card starts at: a column's id from FILL IN, 'name' for a line made by hand, else none.
@@ -252,7 +258,7 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on,
           {stashed && line.location && (
             <span style={{ display: 'inline-flex', gap: '4px', whiteSpace: 'nowrap' }}><b style={{ ...small, fontWeight: 'normal' }}>STASHED</b>{line.location}</span>
           )}
-          {!readOnly && !editing && nothingFilled && (
+          {!readOnly && !columnsLocked && !editing && nothingFilled && (
             <button type="button" aria-label={`Fill in item ${i + 1}: ${blank.map((c) => c.column.label.toUpperCase()).join(', ')}`}
               title={`Blank: ${blank.map((c) => c.column.label.toUpperCase()).join(', ')}`} onClick={() => openAt(blank[0].column.id)}
               style={{ ...smallButton, background: 'none', border: '1px dashed var(--green)', color: 'var(--green)', fontFamily: 'inherit', cursor: 'pointer', opacity: 0.8 }}>FILL IN</button>
@@ -295,21 +301,30 @@ export function GearTypeTables({ items, itemsShown, readOnly, write, locked, on,
             <span style={{ ...small, textAlign: 'right' }}>HOW MANY</span>
             <input aria-label={`Item ${i + 1} quantity`} type="number" min="1" value={line.qty}
               onChange={(e) => patch(i, { ...line, qty: Math.max(1, Number(e.target.value) || 1) })} style={{ ...input, width: '90px' }} />
+            {/* PLAYERS CHANGE GEAR off (G6b): said once, above the columns. */}
+            {columnsLocked && lc.cells.length > 0 && (
+              <>
+                <span />
+                <span role="note" aria-label={`Item ${i + 1} columns`} style={{ ...small, color: 'var(--warning)', opacity: 1 }}>ONLY THE GM CHANGES THESE AT THIS TABLE</span>
+              </>
+            )}
             {lc.cells.map((cell) => (
               <React.Fragment key={cell.column.id}>
                 {/* Beside its box's top, not halfway down a DAMAGE with its words and eˣ open under it. */}
                 <span style={{ ...small, textAlign: 'right', alignSelf: 'start', paddingTop: '4px' }}>{cell.column.label.toUpperCase()}{cell.column.kind === 'number' && cell.column.unit ? ` (${cell.column.unit})` : ''}</span>
                 {(cell.column.kind === 'damage' || cell.column.kind === 'dice') && onReadDice
-                  ? <DiceBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} focus={focusAt === cell.column.id} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} onRead={onReadDice} />
-                  : <CellBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} readOnly={readOnly} focus={focusAt === cell.column.id} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} />}
+                  ? <DiceBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} readOnly={columnsLocked} focus={focusAt === cell.column.id} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} onRead={onReadDice} />
+                  : <CellBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} readOnly={readOnly || columnsLocked} focus={focusAt === cell.column.id} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} />}
                 {/* Made its own (G5b): said, with the item's value, who changed it when, and THE ITEM'S to put it back. */}
                 {cell.unique && (
                   <>
                     <span />
                     <span role="group" aria-label={`Item ${i + 1} ${cell.column.label} is unique`} style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
                       <span style={{ ...smallButton, border: '1px solid var(--warning)', color: 'var(--warning)', padding: '0 4px' }}>UNIQUE</span>
-                      <button type="button" className="utility-btn" aria-label={`Item ${i + 1} ${cell.column.label}: the item's`} title="Back to the item's own"
-                        onClick={() => patch(i, withLineValue(line, cell.column, ''))} style={smallButton}>THE ITEM&apos;S</button>
+                      {!columnsLocked && (
+                        <button type="button" className="utility-btn" aria-label={`Item ${i + 1} ${cell.column.label}: the item's`} title="Back to the item's own"
+                          onClick={() => patch(i, withLineValue(line, cell.column, ''))} style={smallButton}>THE ITEM&apos;S</button>
+                      )}
                       <span style={{ ...small, overflowWrap: 'anywhere', textAlign: 'left' }}>{itemWas(cell, line)}</span>
                     </span>
                   </>
