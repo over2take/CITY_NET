@@ -15,6 +15,7 @@ const cyberware = require('../sheets/cyberware');
 const { ownToken } = require('../sheets/ownToken');
 const sheetRolls = require('../sheets/rolls');
 const { rollGear, readGearDice } = require('../systemBuilder/gearRolls');
+const { withChanges } = require('../systemBuilder/uniqueLines');
 const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
 const cyberEffects = require('../sheets/cyberwareEffects');
@@ -1419,7 +1420,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             if (!isAdminSocket(socket) && (lockedWhileCreating(customSystems.definitionOf(system), data).has(payload.fieldId) || lockedByLevels(customSystems.definitionOf(system), data).has(payload.fieldId))) return undefined;
             // A rank past where a new character may start (7f1c2): the GM's to give.
             if (!isAdminSocket(socket) && pastStart(customSystems.definitionOf(system), data, payload.fieldId, payload.value)) return undefined;
-            data[payload.fieldId] = payload.value;
+            // The inventory: which lines are their item made unique, and by whom and when (G5a), from what was stored.
+            data[payload.fieldId] = payload.fieldId === 'inventory'
+              ? withChanges(customSystems.definitionOf(system), data.inventory, payload.value, { by: info.userName, gm: isAdminSocket(socket) })
+              : payload.value;
             // If the changed field is a max, clamp the paired current field.
             const curField = sheetTemplates.getMaxPairs(system)[payload.fieldId];
             if (curField && data[curField] !== undefined) {

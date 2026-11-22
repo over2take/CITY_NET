@@ -32,6 +32,7 @@ const { jsonTemplate, withImportedPicks } = require('../systemBuilder/sheetImpor
 const { HEALTH_BASE_KEY } = require('../systemBuilder/levels');
 const { withUploadedHealth } = require('../systemBuilder/healthLevels');
 const { inventoryAdded } = require('../sheets/inventoryImport');
+const { withChanges } = require('../systemBuilder/uniqueLines');
 
 // Admin-facing character sheet routes. Player self-service (open/edit own
 // sheet, quick-sheet lookups) goes through socket events, matching how the
@@ -213,6 +214,8 @@ module.exports = (db, io) => {
               const next = { ...current, ...patch };
               Object.keys(patch).forEach((f) => applyDerived(system, next, f));
               const definition = customSystems.definitionOf(system);
+              // The GM changing a line from its item (G5a): noted as theirs.
+              if (!upload && patch.inventory !== undefined) next.inventory = withChanges(definition, current.inventory, patch.inventory, { by: req.user.username, gm: true });
               if (!definition || !upload) return next;
               // As a player's upload is (sockets/index.js): their picks whole, and adding to the inventory.
               if (current.inventory !== undefined) next.inventory = inventoryAdded(current.inventory, patch.inventory);
@@ -523,7 +526,10 @@ module.exports = (db, io) => {
       let data = row.data;
       let mergedData = null;
       if (cleanFields) {
-        const merged = { ...JSON.parse(row.data || '{}'), ...cleanFields };
+        const stored = JSON.parse(row.data || '{}');
+        const merged = { ...stored, ...cleanFields };
+        // An NPC's line changed from its item (G5a): the GM's.
+        if (cleanFields.inventory !== undefined) merged.inventory = withChanges(customSystems.definitionOf(row.system), stored.inventory, cleanFields.inventory, { by: req.user.username, gm: true });
         Object.keys(cleanFields).forEach((f) => applyDerived(row.system, merged, f));
         data = JSON.stringify(merged);
         mergedData = merged;

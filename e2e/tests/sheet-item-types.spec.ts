@@ -75,7 +75,8 @@ test('GEAR as a table per type: a stick made by hand and its DAMAGE rolled, the 
   const line = (name: string, more: object) => ({ name, qty: 1, enc: '', bundled: false, carry: 'stowed', location: '', ...more });
   await expect.poll(async () => JSON.parse(String((await sheetOf()).inventory ?? '[]')), { timeout: 15_000 }).toEqual([
     line('A stick', { type: 'weapons', values: { damage: '1d4', grade: 'HEAVY' } }),
-    line('Pistol', { type: 'weapons', values: { range: '50 m' } }),
+    // Its RANGE its own, not the item's 30 m: the Pistol made unique, the server noting who and when (G5a).
+    line('Pistol', { type: 'weapons', values: { range: '50 m' }, changed: { range: { by: player.username, at: expect.any(String) } } }),
     line('Rope', { type: 'gear', values: { weight: 10 } }),
   ]);
 
