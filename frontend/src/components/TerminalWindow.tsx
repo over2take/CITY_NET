@@ -72,6 +72,8 @@ interface Props<Id extends string> {
   /** Anything between the panel and the buttons that belongs to the whole window. */
   footer?: React.ReactNode;
   width?: number;
+  /** A list window's own steady height for the panel (8a7c2, SHOP.EXE), in place of as tall as what it holds. */
+  panelHeight?: string;
   /** For screen readers and the arrow keys' focus target. */
   label?: string;
   /** Changes when this window should come to the front of its own accord (DraggableWindow). */
@@ -93,7 +95,7 @@ const toneStyle = (tone: TerminalAction['tone']): React.CSSProperties => {
 
 export function TerminalWindow<Id extends string>({
   title, pos, setPos, onClose, titleControls, preview, folders, open, onOpen, header, children,
-  panelMode = 'text', actions = [], footer, width = TERMINAL_WIDTH, label, raiseOn,
+  panelMode = 'text', actions = [], footer, width = TERMINAL_WIDTH, label, raiseOn, panelHeight,
 }: Props<Id>) {
   /** Up and down walk the folders, the way the terminal in the reference does. */
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -185,6 +187,8 @@ export function TerminalWindow<Id extends string>({
                 maxHeight: panelMode === 'list' ? 'min(66vh, 680px)' : 'min(62vh, 560px)',
                 overflowY: panelMode === 'list' ? 'hidden' : 'auto', padding: '8px 10px',
                 ...(panelMode === 'list' ? { display: 'flex', flexDirection: 'column', minHeight: 0 } : {}),
+                // After the list's own minHeight 0, which it replaces. Or as tall as the window says, whatever it holds (8a7c2): nothing jumps as a list is narrowed or a tab changed.
+                ...(panelHeight ? { minHeight: panelHeight, maxHeight: panelHeight } : {}),
                 border: '1px solid var(--green)', color: 'var(--green)',
                 overflowWrap: 'anywhere',
                 ...(panelMode === 'text' ? { whiteSpace: 'pre-wrap' } : {}),

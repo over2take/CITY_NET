@@ -74,3 +74,27 @@ describe('buttons', () => {
     expect(purge).toHaveBeenCalledOnce();
   });
 });
+
+describe('the panel\'s height (8a7c2)', () => {
+  const panel = (panelHeight?: string) => {
+    render(
+      <TerminalWindow title="LIST" pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()} folders={TWO} open="a" onOpen={vi.fn()}
+        panelMode="list" panelHeight={panelHeight}>
+        <span>rows</span>
+      </TerminalWindow>,
+    );
+    return screen.getByRole('tabpanel').style;
+  };
+
+  it('a window that says its own is that tall, whatever it holds', () => {
+    const style = panel('min(78vh, 760px)');
+    expect(style.minHeight).toBe('min(78vh, 760px)');
+    expect(style.maxHeight).toBe('min(78vh, 760px)');
+  });
+
+  it('one that doesn\'t is as tall as what it holds, as every window was', () => {
+    const style = panel();
+    expect(style.minHeight).toBe('0px');
+    expect(style.maxHeight).toBe('min(66vh, 680px)');
+  });
+});

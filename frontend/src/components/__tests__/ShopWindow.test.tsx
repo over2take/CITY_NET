@@ -204,14 +204,14 @@ describe('a ripperdoc', () => {
 
   it('filters the stock by name', async () => {
     show('ripperdoc');
-    await userEvent.type(screen.getByLabelText('Filter stock'), 'cranial');
+    await userEvent.type(screen.getByLabelText('Find in this shop'), 'cranial');
     expect(screen.getByText('Cranial Jack')).toBeInTheDocument();
     expect(screen.queryByText('Skinmod')).not.toBeInTheDocument();
   });
 
   it('says so when a filter matches nothing', async () => {
     show('ripperdoc');
-    await userEvent.type(screen.getByLabelText('Filter stock'), 'zzzz');
+    await userEvent.type(screen.getByLabelText('Find in this shop'), 'zzzz');
     expect(screen.getByText(/NOTHING MATCHES THAT/)).toBeInTheDocument();
   });
 
@@ -227,9 +227,9 @@ describe('looking like the windows it opens from', () => {
     const folders = within(screen.getByRole('tablist', { name: 'Folders' })).getAllByRole('tab');
     expect(folders.map((f) => f.textContent)).toEqual(['BUY', 'SELL', 'CART']);
     // The filter is part of the BUY list, not the window.
-    expect(within(screen.getByRole('tabpanel')).getByLabelText('Filter stock')).toBeInTheDocument();
+    expect(within(screen.getByRole('tabpanel')).getByLabelText('Find in this shop')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('tab', { name: 'SELL' }));
-    expect(screen.queryByLabelText('Filter stock')).toBeNull();
+    expect(screen.queryByLabelText('Find in this shop')).toBeNull();
   });
 
   it('keeps the filter and shelf tabs still while the list scrolls under them', () => {
@@ -250,7 +250,7 @@ describe('looking like the windows it opens from', () => {
     const box = () => screen.getByRole('table').parentElement as HTMLElement;
     // A full shelf's table takes the height and scrolls in it.
     expect(box().style.flex).not.toBe('0 0 auto');
-    await userEvent.type(screen.getByLabelText('Filter stock'), 'zzzz');
+    await userEvent.type(screen.getByLabelText('Find in this shop'), 'zzzz');
     // An empty one does not, so the message follows the header instead of the window's foot.
     expect(box().style.flex).toBe('0 0 auto');
     expect(box().nextElementSibling).toBe(screen.getByTestId('shelf-empty'));
@@ -269,7 +269,7 @@ describe('a shop with no catalogue built yet', () => {
   it('says so rather than showing an empty table', () => {
     show('bar');
     expect(screen.getByText(/NO CATALOGUE FOR THIS SHOP YET/)).toBeInTheDocument();
-    expect(screen.queryByLabelText('Filter stock')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Find in this shop')).not.toBeInTheDocument();
   });
 
   it('sells weapons at the gun shop now, which it did not', () => {
@@ -314,9 +314,10 @@ describe('one tab per catalogue', () => {
   it('clears a filter that belonged to the shelf being left', async () => {
     // Otherwise the new shelf opens already narrowed by something typed about another list.
     show('gun_shop');
-    await userEvent.type(screen.getByLabelText('Filter stock'), 'pistol');
-    await userEvent.click(screen.getByRole('tab', { name: 'WEAPON MODS' }));
-    expect(screen.getByLabelText('Filter stock')).toHaveValue('');
+    await userEvent.type(screen.getByLabelText('Find in this shop'), 'pistol');
+    // Its tab says how many it holds while QUICK FIND has words (8a7c2).
+    await userEvent.click(screen.getByRole('tab', { name: /^WEAPON MODS · \d+$/ }));
+    expect(screen.getByLabelText('Find in this shop')).toHaveValue('');
   });
 
   /**
@@ -758,7 +759,7 @@ describe('sorting the shelf', () => {
   it('keeps sorting after a filter is typed', async () => {
     show('gun_shop');
     await clickHeader('NAME');
-    await userEvent.type(screen.getByLabelText('Filter stock'), 'grenade');
+    await userEvent.type(screen.getByLabelText('Find in this shop'), 'grenade');
     const shown = names();
     expect(shown.length).toBeGreaterThan(1);
     expect(shown).toEqual([...shown].sort((a, b) => a.localeCompare(b)));
@@ -2379,12 +2380,13 @@ describe('a shelf of 1000 lines and a long gear list (8n3)', () => {
     await userEvent.click(screen.getByRole('button', { name: 'SHOW 200 MORE' }));
     expect(rows()).toHaveLength(400);
     expect(screen.getByText('SHOWING 400 OF 1000 · SCROLL OR FILTER FOR THE REST')).toBeInTheDocument();
-    // Typed a letter at a time, as a player does: "Gun 99" leaves Gun 99 and Gun 990 to 999, found past the first page.
-    took.filter = await timed(() => userEvent.type(screen.getByLabelText('Filter stock'), 'Gun 99'));
+    // Typed a letter at a time, as a player does: "Gun 99" leaves every gun with 99 in its name, as FIND matches every word
+    // anywhere (8a7c2; it was the phrase, 11): Gun 99, 199 to 899 and 990 to 999, found past the first page.
+    took.filter = await timed(() => userEvent.type(screen.getByLabelText('Find in this shop'), 'Gun 99'));
     console.log('shop window stress, filter (ms):', Math.round(took.filter));
-    expect(rows()).toHaveLength(11);
+    expect(rows()).toHaveLength(19);
     expect(screen.queryByText(/^SHOWING /)).toBeNull();
-    await userEvent.clear(screen.getByLabelText('Filter stock'));
+    await userEvent.clear(screen.getByLabelText('Find in this shop'));
     // A page afresh.
     expect(rows()).toHaveLength(200);
     // Sorted by PRICE, then the other way: the cheapest and the dearest of all 1000 at the top in turn; a sort starts
@@ -2452,5 +2454,84 @@ describe('what is bought, placed by the server (8n6b)', () => {
     await openFolder('CART');
     await userEvent.click(screen.getByRole('button', { name: 'CHECK OUT' }));
     expect(screen.getByText('There is no room on your sheet for that. Nothing was charged.')).toBeInTheDocument();
+  });
+});
+
+// ─── QUICK FIND (8a7c2) ─────────────────────────────────────────────────────────
+describe('QUICK FIND across the shop\'s shelves (8a7c2)', () => {
+  const box = () => screen.getByLabelText('Find in this shop');
+  const found = () => within(screen.getByTestId('shop-found'));
+  const tabs = () => screen.getAllByRole('tab', { name: /^WEAPON/ }).map((t) => [t.textContent, t.getAttribute('aria-selected')]);
+
+  it('every shelf looked along, each tab its count and none chosen, the list each match with its type; the header how many', async () => {
+    show('gun_shop');
+    await userEvent.type(box(), 'pistol');
+    const hits = found().getAllByRole('button', { name: / to the cart$/ });
+    expect(hits.length).toBeGreaterThan(1);
+    expect(tabs()).toEqual([[`WEAPONS · ${hits.length}`, 'false'], ['WEAPON MODS · 0', 'false']]);
+    expect(found().getAllByText('WEAPONS').length).toBe(hits.length);
+    expect(screen.getByText(new RegExp(`· ${hits.length} FOUND`))).toBeInTheDocument();
+    // A line said in full beside its name: the Heavy Pistol's damage among it.
+    expect(found().getByText('Heavy Pistol').closest('tr')!.textContent).toMatch(/DMG 1d8/);
+  });
+
+  it('every word, in any order; a shelf\'s name finds its lines; nothing, said', async () => {
+    show('gun_shop');
+    await userEvent.type(box(), 'heavy pistol');
+    const one = found().getAllByRole('button', { name: / to the cart$/ }).map((b) => b.getAttribute('aria-label'));
+    await userEvent.clear(box());
+    await userEvent.type(box(), 'pistol heavy');
+    expect(found().getAllByRole('button', { name: / to the cart$/ }).map((b) => b.getAttribute('aria-label'))).toEqual(one);
+    await userEvent.clear(box());
+    await userEvent.type(box(), 'mods');
+    expect(screen.getByRole('tab', { name: /^WEAPON MODS · / }).textContent).not.toBe('WEAPON MODS · 0');
+    await userEvent.clear(box());
+    await userEvent.type(box(), 'zzzz');
+    expect(screen.getByTestId('shelf-empty')).toHaveTextContent('NOTHING MATCHES THAT, ON ANY SHELF');
+  });
+
+  it('+ CART from the list; cleared, the open shelf back as it was, its tab chosen', async () => {
+    show('gun_shop');
+    await userEvent.type(box(), 'heavy pistol');
+    await userEvent.click(found().getByRole('button', { name: 'Add Heavy Pistol to the cart' }));
+    expect(cartTab()).toBe('CART · 1');
+    expect(found().getByRole('button', { name: 'Add Heavy Pistol to the cart' })).toHaveTextContent('+ CART ×1');
+    await userEvent.clear(box());
+    expect(screen.queryByTestId('shop-found')).toBeNull();
+    expect(screen.getByRole('tab', { name: 'WEAPONS' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('a shop of one shelf: its own table narrows, as before', async () => {
+    show('ripperdoc');
+    await userEvent.type(box(), 'cranial');
+    expect(screen.queryByTestId('shop-found')).toBeNull();
+    expect(screen.getByText('Cranial Jack')).toBeInTheDocument();
+  });
+});
+
+describe('QUICK FIND on a game\'s own shelves (8a7c2)', () => {
+  const OWN = 'sys_d1d1d1d1d1d1d1d1';
+  beforeEach(() => {
+    clearCustomTemplates();
+    registerCustomTemplate({ id: OWN, name: 'Own', parts: {}, derived: [], sheet: { sections: [] }, words: {}, items: { slots: [], list: [], types: [
+      { id: 'guns', label: 'GUNS', one: 'Gun', sold_at: ['general_store'], columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }, { id: 'ammo', label: 'AMMO', kind: 'count' }] },
+      { id: 'potions', label: 'POTIONS', one: 'Potion', sold_at: ['general_store'], columns: [{ id: 'heals', label: 'HEALS', kind: 'dice' }] },
+    ] } } as never);
+    loadUploaded({ 'type:guns': [{ id: 'pistol', name: 'Pistol', price: 250, fields: { damage: '2d6', ammo: 6 } }], 'type:potions': [{ id: 'draught', name: 'Draught', price: 40, fields: { heals: '2d4' } }] } as never);
+    sheetState.sheet = { system: OWN, data: { inventory: '[]' } };
+  });
+  afterEach(() => { clearCustomTemplates(); clearUploaded(); });
+
+  it('a column\'s value finds a line of its type, the type\'s name finds its lines, each line said in full', async () => {
+    show('general_store', 'Goods', OWN);
+    await userEvent.type(screen.getByLabelText('Find in this shop'), '2d6');
+    const list = within(screen.getByTestId('shop-found'));
+    // THE LINE exactly: its columns with values, never its name, price, how many owned, or a column it leaves blank.
+    expect(list.getByText('Pistol').closest('tr')!.querySelectorAll('td')[3].textContent).toBe('DAMAGE 2d6 · AMMO 6');
+    expect(list.queryByText('Draught')).toBeNull();
+    await userEvent.clear(screen.getByLabelText('Find in this shop'));
+    await userEvent.type(screen.getByLabelText('Find in this shop'), 'potions');
+    expect(within(screen.getByTestId('shop-found')).getByText('Draught')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'POTIONS · 1' })).toBeInTheDocument();
   });
 });

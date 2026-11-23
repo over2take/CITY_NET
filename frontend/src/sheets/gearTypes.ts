@@ -6,6 +6,7 @@
 
 import type { InventoryItem } from './inventory';
 import type { ItemsShown, ItemShown } from './gearItems';
+import { findWords, textHasEvery } from './findWords';
 
 export type ColumnKind = 'number' | 'text' | 'damage' | 'dice' | 'count' | 'pick';
 /** A column as the render copy says it: its name and kind, with a NUMBER's unit, PICK ONE's words, a COUNT's button. */
@@ -147,9 +148,10 @@ export const lineWords = (row: TableRow, type: TypeShown, band: string): string 
 
 /** The bands showing only what FIND matches, each counted by its matches; blank, the bands as they are. */
 export const foundIn = (bands: BandShown[], text: string): BandShown[] => {
-  const words = text.toLowerCase().split(/\s+/).filter(Boolean);
+  // Matched as every FIND box matches (findWords.ts, 8a7c2): every word, anywhere on the line.
+  const words = findWords(text);
   if (!words.length) return bands;
-  const hit = (row: TableRow, type: TypeShown, band: string) => { const on = lineWords(row, type, band); return words.every((w) => on.includes(w)); };
+  const hit = (row: TableRow, type: TypeShown, band: string) => textHasEvery(lineWords(row, type, band), words);
   return bands.map((b) => {
     const groups = b.groups.map((g) => ({ type: g.type, rows: g.rows.filter((r) => hit(r, g.type, b.label)) })).filter((g) => g.rows.length > 0);
     const loose = b.loose.filter(({ type, row }) => hit(row, type, b.label));

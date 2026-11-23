@@ -49,7 +49,10 @@ test('a CWN Gun Shop: paid by the GM, a Light Pistol bought through the cart ont
   await expect(header).toContainText(cr(1000), { timeout: 15_000 });
 
   // A Light Pistol into the cart, and checked out: paid for, then on the sheet.
-  await window.getByLabel('Filter stock').fill(PISTOL);
+  await window.getByLabel('Find in this shop').fill(PISTOL);
+  // QUICK FIND (8a7c2): both shelves looked along, WEAPONS saying how many it holds, the line found with its type.
+  await expect(window.getByTestId('shop-found').locator('tr', { hasText: PISTOL })).toContainText('WEAPONS');
+  await expect(window.getByRole('tab', { name: /^WEAPONS · \d+$/ })).toBeVisible();
   await window.getByRole('button', { name: `Add ${PISTOL} to the cart` }).click();
   await window.getByRole('tab', { name: 'CART' }).click();
   await window.getByRole('button', { name: 'CHECK OUT' }).click();
