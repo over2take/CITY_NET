@@ -21,6 +21,8 @@ export interface ItemType {
   id: string; label: string; one?: string; columns: ItemColumn[];
   /** Its band on the sheet's GEAR tab (G1): unsaid is PACK. */
   on_sheet?: Band;
+  /** The kinds of shop its lines are sold at (8a7a2; ticked in the builder, 8a7b2): unsaid is the General Store. */
+  sold_at?: string[];
 }
 
 /** Where a type's lines sit on the sheet's GEAR tab (G1; approved mockup sheet-gear-layout.html), as the server checks them. */
@@ -50,20 +52,26 @@ const price: ItemColumn = { id: 'price', label: 'PRICE', kind: 'number' };
 /** What a system with no types of its own has, as the server's GEAR. */
 export const GEAR: ItemType = { id: 'gear', label: 'GEAR', one: 'Gear', columns: [weight, price] };
 
-/** The presets a type starts from: its name, one of it, its columns. */
+/**
+ * The presets a type starts from: its name, one of it, its columns, and the shop it is suggested SOLD AT (8a7b2; approved
+ * mockup types-in-shops.html): WEAPON the Gun Shop, ARMOR the Armorer, CONSUMABLE the Clinic, GEAR the General Store as
+ * unsaid. SPELL is sold nowhere, a Magic Shop suggested under + NEW SHOP (PRESET_NEW_SHOP) for a game that sells them.
+ */
 export const PRESETS: { id: string; label: string; type: ItemType }[] = [
   { id: 'weapon', label: 'WEAPON', type: { id: 'weapons', label: 'WEAPONS', one: 'Weapon', columns: [
     { id: 'damage', label: 'DAMAGE', kind: 'damage' }, { id: 'range', label: 'RANGE', kind: 'text' },
-    { id: 'ammo', label: 'AMMO', kind: 'count', button: 'FIRE' }, weight, price], on_sheet: 'equipped' } },
+    { id: 'ammo', label: 'AMMO', kind: 'count', button: 'FIRE' }, weight, price], on_sheet: 'equipped', sold_at: ['gun_shop'] } },
   { id: 'armor', label: 'ARMOR', type: { id: 'armor', label: 'ARMOR', one: 'Armor', columns: [
-    { id: 'defense', label: 'DEFENSE', kind: 'number' }, { id: 'type', label: 'TYPE', kind: 'pick', options: ['LIGHT', 'MEDIUM', 'HEAVY'] }, weight, price], on_sheet: 'equipped' } },
+    { id: 'defense', label: 'DEFENSE', kind: 'number' }, { id: 'type', label: 'TYPE', kind: 'pick', options: ['LIGHT', 'MEDIUM', 'HEAVY'] }, weight, price], on_sheet: 'equipped', sold_at: ['armorer'] } },
   { id: 'gear', label: 'GEAR', type: GEAR },
   { id: 'consumable', label: 'CONSUMABLE', type: { id: 'consumables', label: 'CONSUMABLES', one: 'Consumable', columns: [
-    { id: 'uses', label: 'USES', kind: 'count', button: 'USE' }, { id: 'effect', label: 'EFFECT', kind: 'dice' }, weight, price], on_sheet: 'usable' } },
+    { id: 'uses', label: 'USES', kind: 'count', button: 'USE' }, { id: 'effect', label: 'EFFECT', kind: 'dice' }, weight, price], on_sheet: 'usable', sold_at: ['clinic'] } },
   { id: 'spell', label: 'SPELL', type: { id: 'spells', label: 'SPELLS', one: 'Spell', columns: [
     { id: 'level', label: 'LEVEL', kind: 'number' }, { id: 'range', label: 'RANGE', kind: 'text' }, { id: 'damage', label: 'DAMAGE', kind: 'damage' },
-    { id: 'charges', label: 'CHARGES', kind: 'count', button: 'CAST', refill: 'long_rest' }], on_sheet: 'usable' } },
+    { id: 'charges', label: 'CHARGES', kind: 'count', button: 'CAST', refill: 'long_rest' }], on_sheet: 'usable', sold_at: [] } },
 ];
+/** The shop + NEW SHOP is filled in with for a type made from a preset, ready to ADD (8a7b2, answered 3). */
+export const PRESET_NEW_SHOP: Record<string, string> = { spell: 'Magic Shop' };
 
 const copy = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 const itemsPart = (def: Definition): Obj => (isObject(def.items) ? def.items : {});
@@ -124,7 +132,7 @@ export const withNewType = (def: Definition, preset?: string): { definition: Def
 };
 
 /** A type's name or what one of it is called; its id stays. A blank ONE stores nothing. */
-export const withType = (def: Definition, id: string, patch: { label?: string; one?: string; on_sheet?: Band }): Definition =>
+export const withType = (def: Definition, id: string, patch: { label?: string; one?: string; on_sheet?: Band; sold_at?: string[] }): Definition =>
   withPart(def, itemTypes(def).map((t) => {
     if (t.id !== id) return t;
     const next: ItemType = { ...t, ...patch };

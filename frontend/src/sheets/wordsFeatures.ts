@@ -149,7 +149,8 @@ export const termPartOff = (def: Definition, row: TermRow): boolean => !!row.par
 // ─── PARTS: buildings and catalogues ────────────────────────────────────────
 
 export type BuildingKind = 'types' | 'catalogues';
-export interface BuildingSetting { name?: string; on?: boolean; currency?: string }
+/** A shop type may also say it BUYS anything (8a7b1b), kept whatever else changes. */
+export interface BuildingSetting { name?: string; on?: boolean; currency?: string; buys?: 'sells' | 'anything' }
 
 /** The app's shop types, its other buildings, and its catalogues, with the app's names. */
 export const SHOP_TYPES = BUILDING_TYPES.filter((t) => t.shop).map((t) => ({ id: t.id, label: t.label }));
@@ -185,6 +186,7 @@ export const withBuilding = (def: Definition, kind: BuildingKind, id: string, pa
   if (merged.on === false) next.on = false;
   const main = currencyList(def)[0]?.id;
   if (kind === 'catalogues' && merged.currency && merged.currency !== main) next.currency = merged.currency;
+  if (kind === 'types' && merged.buys === 'anything') next.buys = 'anything';
   const buildings = { ...section(def, 'buildings') };
   const entries = { ...(isObject(buildings[kind]) ? buildings[kind] as Obj : {}) };
   if (Object.keys(next).length) entries[id] = next; else delete entries[id];

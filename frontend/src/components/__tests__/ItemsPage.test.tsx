@@ -717,3 +717,65 @@ describe('ON THE SHEET on a type (G1)', () => {
     expect((last().items as unknown as { types: object[] }).types[0]).not.toHaveProperty('on_sheet');
   });
 });
+
+describe('SOLD AT on a type (8a7b2)', () => {
+  type Saved = { items: { types: { id: string; sold_at?: string[] }[] }; buildings?: { types?: object; shops?: object[] } };
+  const GAME = { ...WORN, buildings: { types: { gun_shop: { name: 'Blacksmith' }, garage: { on: false } } },
+    items: { types: [{ id: 'gear', label: 'GEAR', columns: [] }], list: [] } } as unknown as Definition;
+  const says = () => screen.getByText(/^Sold (at|nowhere)/);
+  const chips = (type = 'GEAR') => within(screen.getByRole('group', { name: `${type} sold at` }));
+
+  it('the game\'s shops by their names here, one turned off left out; unsaid, the General Store; a tick stored, said', async () => {
+    const last = open(GAME, 'TYPES');
+    expect(chips().getAllByRole('button').map((b) => b.textContent)).toEqual(['Ripperdoc', 'Blacksmith', 'Clinic', 'Armorer', 'General Store']);
+    expect(chips().getByRole('button', { name: 'General Store' }).getAttribute('aria-pressed')).toBe('true');
+    expect(says()).toHaveTextContent('Sold at every General Store in this game.');
+    await userEvent.click(chips().getByRole('button', { name: 'Blacksmith' }));
+    expect((last() as unknown as Saved).items.types[0].sold_at).toEqual(['gun_shop', 'general_store']);
+    expect(says()).toHaveTextContent('Sold at every Blacksmith, every General Store in this game.');
+    await userEvent.click(chips().getByRole('button', { name: 'Blacksmith' }));
+    await userEvent.click(chips().getByRole('button', { name: 'General Store' }));
+    expect((last() as unknown as Saved).items.types[0].sold_at).toEqual([]);
+    expect(says()).toHaveTextContent('Sold nowhere: only given, from GIVE.EXE.');
+  });
+
+  it('+ NEW SHOP: made, dashed, ticked, by ADD or Enter; a name already a shop ticks that one', async () => {
+    const last = open(GAME, 'TYPES');
+    const box = screen.getByRole('textbox', { name: 'New shop name' });
+    expect(screen.getByRole('button', { name: 'ADD' })).toBeDisabled();
+    await userEvent.type(box, '  Apothecary ');
+    await userEvent.click(screen.getByRole('button', { name: 'ADD' }));
+    const saved = last() as unknown as Saved;
+    expect(saved.buildings?.shops).toEqual([{ id: 'apothecary', name: 'Apothecary' }]);
+    expect(saved.buildings?.types).toEqual({ gun_shop: { name: 'Blacksmith' }, garage: { on: false } });
+    expect(saved.items.types[0].sold_at).toEqual(['general_store', 'apothecary']);
+    expect(chips().getByRole('button', { name: 'Apothecary' }).style.borderStyle).toBe('dashed');
+    expect(chips().getByRole('button', { name: 'Apothecary' }).style.outline).toMatch(/dashed/);
+    expect(chips().getByRole('button', { name: 'Clinic' }).style.borderStyle).toBe('solid');
+    expect(box).toHaveValue('');
+    expect(says()).toHaveTextContent('Sold at every General Store, every Apothecary in this game. Dashed: shops this game made.');
+    // By Enter; and a name that is already one of the game's shops ticks it, making nothing.
+    await userEvent.type(box, 'blacksmith{Enter}');
+    expect((last() as unknown as Saved).items.types[0].sold_at).toEqual(['gun_shop', 'general_store', 'apothecary']);
+    expect((last() as unknown as Saved).buildings?.shops).toHaveLength(1);
+    // One already ticked stays ticked.
+    await userEvent.type(box, 'Apothecary{Enter}');
+    expect((last() as unknown as Saved).items.types[0].sold_at).toEqual(['gun_shop', 'general_store', 'apothecary']);
+  });
+
+  it('a type from a preset starts at its shop; SPELL at none, a Magic Shop filled in, ready to ADD; another type, an empty box', async () => {
+    const last = open(GAME, 'TYPES');
+    const presets = within(screen.getByRole('group', { name: 'Add an item type' }));
+    await userEvent.click(presets.getByRole('button', { name: 'WEAPON', exact: true }));
+    expect(chips('WEAPONS').getByRole('button', { name: 'Blacksmith' }).getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(presets.getByRole('button', { name: 'SPELL', exact: true }));
+    expect(chips('SPELLS').getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true')).toEqual([]);
+    expect(screen.getByRole('textbox', { name: 'New shop name' })).toHaveValue('Magic Shop');
+    await userEvent.click(screen.getByRole('button', { name: 'ADD' }));
+    expect((last() as unknown as Saved).items.types.find((t) => t.id === 'spells')?.sold_at).toEqual(['magic_shop']);
+    await userEvent.click(presets.getByRole('button', { name: 'SPELL', exact: true }));
+    await userEvent.click(within(screen.getByRole('group', { name: 'The item types' })).getByRole('button', { name: 'GEAR' }));
+    expect(screen.getByRole('textbox', { name: 'New shop name' })).toHaveValue('');
+    for (const k of ['items.soldAt'] as const) expect(HINTS[k], k).toBeTruthy();
+  });
+});

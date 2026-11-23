@@ -3,8 +3,10 @@ import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   itemTypes, ownTypes, typeOf, itemValues, withNewType, withType, withoutType, withDefaultType, withNewColumn, withColumn, withoutColumn,
   withItemType, withItemValue, wordsFrom, KINDS, PRESETS, LIMITS, type ItemColumn, type ItemType, type ColumnKind,
-  priceColumnOf, itemPriceOf, inShopsOf, priceNeeded, withItemPrice, withInShops, MOST_PRICE, BANDS, bandOf,
+  priceColumnOf, itemPriceOf, inShopsOf, priceNeeded, withItemPrice, withInShops, MOST_PRICE, BANDS, bandOf, PRESET_NEW_SHOP,
 } from '../sheets/itemTypes';
+import { shopChoices, soldAtOf, withSoldAtToggled, withNewShop, soldAtWords, ownShopsOf, SHOPS_MOST } from '../sheets/gameShops';
+import { BUILDING_NAME_LIMIT } from '../sheets/wordsFeatures';
 import { ToggleSwitch } from './ToggleSwitch';
 import { itemList, type Item } from '../sheets/items';
 import { restsOf } from '../sheets/rests';
@@ -128,6 +130,49 @@ function OnTheSheet({ definition, type }: Props & { type: ItemType }) {
 }
 
 /**
+ * SOLD AT (8a7b2; approved mockup docs/mockups/types-in-shops.html, section 2): the game's shops by their names here, each a
+ * button to tick, the shops the game made dashed; and + NEW SHOP, a name typed and ADDed (or Enter) making one of its own,
+ * ticked. A name that is already a shop ticks that one. `shopName` is what the box holds, kept by the section so a SPELL
+ * made from its preset can start it as "Magic Shop".
+ */
+function SoldAt({ definition, edit, type, shopName, setShopName }: Props & { type: ItemType; shopName: string; setShopName: (name: string) => void }) {
+  const ticked = soldAtOf(type);
+  // A shop turned off on FEATURES is left out, unless the type is still sold at it.
+  const choices = shopChoices(definition).filter((c) => c.on || ticked.includes(c.id));
+  const full = ownShopsOf(definition).length >= SHOPS_MOST;
+  const add = () => {
+    const made = withNewShop(definition, shopName);
+    if (!made) return;
+    edit(ticked.includes(made.id) ? made.definition : withSoldAtToggled(made.definition, type.id, made.id));
+    setShopName('');
+  };
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start', minWidth: 0 }}>
+      <span role="group" aria-label={`${nameOf(type)} sold at`} style={row}>
+        {choices.map((c) => {
+          const on = ticked.includes(c.id);
+          return (
+            <button key={c.id} type="button" className={`utility-btn${on ? ' active' : ''}`} aria-pressed={on}
+              // The app's solid, the game's own dashed; ticked, filled, a dashed line inside it keeps the difference.
+              style={{ ...btn, padding: '3px 9px', borderStyle: c.own ? 'dashed' : 'solid', ...(c.own && on ? { outline: '1px dashed var(--black)', outlineOffset: -4 } : {}) }}
+              title={c.on ? undefined : 'Turned off on FEATURES: no building is one'}
+              onClick={() => edit(withSoldAtToggled(definition, type.id, c.id))}>{c.name}{c.on ? '' : ' (OFF)'}</button>
+          );
+        })}
+      </span>
+      <span style={row}>
+        <input type="text" aria-label="New shop name" maxLength={BUILDING_NAME_LIMIT} value={shopName} placeholder="+ NEW SHOP: a name, like Apothecary"
+          style={{ ...input, width: 280 }} disabled={full && !shopName}
+          onChange={(e) => setShopName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} />
+        <button type="button" className="utility-btn" style={btn} disabled={!shopName.trim()} onClick={add}>ADD</button>
+        {full && <span style={{ ...why, fontSize: 11 }}>{SHOPS_MOST} OF {SHOPS_MOST}: a name already a shop still ticks it.</span>}
+      </span>
+      <span role="note" style={{ ...why, fontSize: 11 }}>{soldAtWords(definition, type)}</span>
+    </span>
+  );
+}
+
+/**
  * ITEM TYPES (8aL1; approved mockup docs/mockups/items-layout.html, 2026-11-14): the types listed, the DEFAULT first,
  * with the presets and BLANK under them; beside them the open type's name, ONE, columns and how it looks on a sheet.
  * `place` keeps which type is open while the builder is open.
@@ -137,10 +182,15 @@ export function ItemTypesSection({ definition, edit, place = 'items' }: Props & 
   const [openId, setOpenId] = useBuilderPlace<string | null>(`${place}:type`, null);
   const [lastKind, setLastKind] = useState<ColumnKind | null>(null);
   const [asking, setAsking] = useState(false);
+  // What + NEW SHOP holds (8a7b2): a SPELL from its preset starts it as a Magic Shop, ready to ADD.
+  const [shopName, setShopName] = useState('');
   const type = types.find((t) => t.id === openId) ?? types[0];
   const isDefault = type.id === types[0].id;
   const full = types.length >= LIMITS.types;
-  const add = (preset?: string) => { const made = withNewType(definition, preset); if (made) { edit(made.definition); setOpenId(made.id); setAsking(false); setLastKind(null); } };
+  const add = (preset?: string) => {
+    const made = withNewType(definition, preset);
+    if (made) { edit(made.definition); setOpenId(made.id); setAsking(false); setLastKind(null); setShopName((preset && PRESET_NEW_SHOP[preset]) || ''); }
+  };
   const shownKind = lastKind ?? type.columns[type.columns.length - 1]?.kind ?? 'number';
   const items = itemList(definition);
   const countOf = (id: string) => items.filter((i) => typeOf(definition, i.type).id === id).length;
@@ -157,7 +207,7 @@ export function ItemTypesSection({ definition, edit, place = 'items' }: Props & 
               const on = t.id === type.id;
               return (
                 <button key={t.id} type="button" aria-label={nameOf(t).toUpperCase()} aria-pressed={on}
-                  onClick={() => { setOpenId(t.id); setAsking(false); setLastKind(null); }}
+                  onClick={() => { setOpenId(t.id); setAsking(false); setLastKind(null); if (t.id !== type.id) setShopName(''); }}
                   style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'space-between', background: on ? 'color-mix(in srgb, var(--green) 14%, transparent)' : 'none',
                     border: 0, borderLeft: `2px solid ${on ? 'var(--green)' : 'transparent'}`, color: 'var(--green)', fontFamily: 'monospace', fontSize: 12, padding: '5px 8px', cursor: 'pointer', textAlign: 'left' }}>
                   <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>{nameOf(t).toUpperCase()}{i === 0 && <span style={tag}>DEFAULT</span>}</span>
@@ -242,6 +292,10 @@ export function ItemTypesSection({ definition, edit, place = 'items' }: Props & 
             : <button type="button" className="utility-btn danger-btn" style={btn} onClick={() => setAsking(true)}>DELETE TYPE</button>)}
         </div>
         <p role="status" style={{ ...why, fontSize: 11 }}>{KINDS.find((k) => k.id === shownKind)?.why}</p>
+        <div style={grid}>
+          <FieldName beside hint={HINTS['items.soldAt']} style={small}>SOLD AT</FieldName>
+          <SoldAt definition={definition} edit={edit} type={type} shopName={shopName} setShopName={setShopName} />
+        </div>
         <OnTheSheet definition={definition} edit={edit} type={type} />
       </div>
     </section>
@@ -327,7 +381,7 @@ function ItemPrice({ definition, edit, item, id }: Props & { item: Item; id: (pa
   return (
     <>
       <FieldName beside htmlFor={id('price')} hint={HINTS['items.price']} style={small}>PRICE</FieldName>
-      <input id={id('price')} type="number" min={0} max={MOST_PRICE} step="any" value={price ?? ''} style={{ ...input, width: 80, justifySelf: 'start', ...(needed ? { borderColor: 'var(--warning)' } : {}) }}
+      <input id={id('price')} type="number" min={0} max={MOST_PRICE} step="any" value={price ?? ''} style={{ ...input, width: 80, justifySelf: 'start', ...(needed ? { border: '1px solid var(--warning)' } : {}) }}
         aria-invalid={needed ? true : undefined} aria-describedby={needed ? id('price-needed') : undefined}
         onChange={(e) => { const n = Number(e.target.value); if (!e.target.value.trim()) edit(withItemPrice(definition, item.id, undefined)); else if (Number.isFinite(n) && n >= 0 && n <= MOST_PRICE) edit(withItemPrice(definition, item.id, n)); }} />
       <FieldName beside hint={HINTS['items.inShops']} style={small}>IN SHOPS</FieldName>
