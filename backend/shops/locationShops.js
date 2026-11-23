@@ -105,4 +105,21 @@ const replaceAll = (db, rows, cb = () => {}) => {
   });
 };
 
-module.exports = { SCHEMA, typeIn, shopsIn, setShop, buildingIn, moveOldShops, pruneOrphans, all, replaceAll };
+/** How many buildings are each of `system`'s own shops there (8a7b3b, for FEATURES' DELETE): { shop id: count }. */
+const countsIn = (db, system, cb) => db.all(
+  `SELECT s.shop, COUNT(*) AS n FROM location_shops s JOIN locations l ON l.id = s.location_id WHERE s.system = ? GROUP BY s.shop`,
+  [String(system || '')], (err, rows) => cb(err, Object.fromEntries((rows || []).map((r) => [r.shop, r.n]))),
+);
+
+/**
+ * A game published without some of its own shops (8a7b3b, DELETE on FEATURES): its buildings let go of them, each its
+ * shared type again, so one made later with the same name starts with none. `kept` are the shop ids the game still makes.
+ * Answers how many buildings let go.
+ */
+const dropGone = (db, system, kept, cb = () => {}) => {
+  const ids = (kept || []).map(String);
+  db.run(`DELETE FROM location_shops WHERE system = ?${ids.length ? ` AND shop NOT IN (${ids.map(() => '?').join(', ')})` : ''}`,
+    [String(system), ...ids], function done(err) { cb(err || null, err ? 0 : this.changes); });
+};
+
+module.exports = { SCHEMA, typeIn, shopsIn, setShop, buildingIn, moveOldShops, pruneOrphans, all, replaceAll, countsIn, dropGone };

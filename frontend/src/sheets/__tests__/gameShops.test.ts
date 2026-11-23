@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Definition } from '../systemsApi';
-import { ownShopsOf, shopChoices, soldAtOf, withSoldAtToggled, withNewShop, soldAtWords, SHOPS_MOST, DEFAULT_SOLD_AT } from '../gameShops';
+import { ownShopsOf, shopChoices, soldAtOf, withSoldAtToggled, withNewShop, soldAtWords, SHOPS_MOST, DEFAULT_SOLD_AT, withOwnShop, withoutOwnShop, typesSoldAt } from '../gameShops';
 import { PRESETS, PRESET_NEW_SHOP, withNewType, itemTypes } from '../itemTypes';
 import { withBuilding } from '../wordsFeatures';
 
@@ -100,5 +100,37 @@ describe('FEATURES keeps what a shop BUYS (8a7b1b)', () => {
     expect((named as unknown as { buildings: object }).buildings).toEqual({ types: { general_store: { name: 'Pawn', buys: 'anything' } } });
     const back = withBuilding(named, 'types', 'general_store', { buys: 'sells', name: '' });
     expect(back as unknown as object).not.toHaveProperty('buildings');
+  });
+});
+
+describe('the game\'s own shops on FEATURES (8a7b3b)', () => {
+  const herbal = () => def({ buildings: { types: { gun_shop: { name: 'Blacksmith' } }, shops: [{ id: 'apothecary', name: 'Apothecary' }, { id: 'fence', name: 'Fence', buys: 'anything' }] },
+    items: { types: [{ id: 'potions', label: 'POTIONS', columns: [], sold_at: ['apothecary', 'general_store'] }, { id: 'herbs', label: '', columns: [], sold_at: ['apothecary'] }] } });
+
+  it('renamed, switched off, set to buy anything; on, and buying what it sells, store nothing', () => {
+    let d = withOwnShop(herbal(), 'apothecary', { name: 'Herbalist', on: false, buys: 'anything' });
+    expect(ownShopsOf(d)[0]).toEqual({ id: 'apothecary', name: 'Herbalist', on: false, buys: 'anything' });
+    d = withOwnShop(d, 'apothecary', { on: true, buys: 'sells' });
+    expect(ownShopsOf(d)[0]).toEqual({ id: 'apothecary', name: 'Herbalist' });
+    // A blank name kept while it is typed; the other shop untouched.
+    expect(ownShopsOf(withOwnShop(d, 'apothecary', { name: '' }))).toEqual([{ id: 'apothecary', name: '' }, { id: 'fence', name: 'Fence', buys: 'anything' }]);
+  });
+
+  it('deleted: gone from the shops and every type\'s SOLD AT; the last one gone, nothing stored but what else was set', () => {
+    let d = withoutOwnShop(herbal(), 'apothecary');
+    expect(ownShopsOf(d).map((s) => s.id)).toEqual(['fence']);
+    expect(itemTypes(d).map((t) => t.sold_at)).toEqual([['general_store'], []]);
+    d = withoutOwnShop(d, 'fence');
+    expect((d as unknown as { buildings: object }).buildings).toEqual({ types: { gun_shop: { name: 'Blacksmith' } } });
+    const bare = withoutOwnShop(def({ buildings: { shops: [{ id: 'fence', name: 'Fence' }] } }), 'fence');
+    expect(bare as unknown as object).not.toHaveProperty('buildings');
+    // A game with no types of its own: only the shop goes.
+    expect((withoutOwnShop(def({ items: undefined, buildings: { shops: [{ id: 'fence', name: 'Fence' }] } }), 'fence') as unknown as { items?: object }).items).toBeUndefined();
+  });
+
+  it('what a shop of its own sells: the types that tick it, by name', () => {
+    expect(typesSoldAt(herbal(), 'apothecary')).toEqual(['POTIONS', 'herbs']);
+    expect(typesSoldAt(herbal(), 'fence')).toEqual([]);
+    expect(typesSoldAt(def({ items: undefined }), 'general_store')).toEqual([]);
   });
 });

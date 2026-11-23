@@ -220,6 +220,8 @@ export const systemsApi = (token: string, fetcher: typeof fetch = fetch) => {
      */
     publishPreview: (systemId: string) => call<PublishPreview>(fetcher, token, `${id(systemId)}/publish-preview`),
     /** Make the stored draft what the game runs; refused, with `problems`, while it has any. */
+    /** How many buildings are each of the system's own shops in it (8a7b3b), for FEATURES' DELETE. */
+    shopBuildings: (systemId: string) => call<{ counts: Record<string, number> }>(fetcher, token, `${id(systemId)}/shop-buildings`),
     publish: (systemId: string) => call<{ version: number; dropped?: number }>(fetcher, token, `${id(systemId)}/publish`, 'POST', {}),
     create: (name: string) => call<{ id: string }>(fetcher, token, '/api/systems', 'POST', { name }),
     /**

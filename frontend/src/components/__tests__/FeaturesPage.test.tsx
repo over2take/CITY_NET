@@ -177,3 +177,85 @@ describe('ONLY WITH (4j4a)', () => {
     expect(screen.queryByRole('combobox', { name: 'ONLY WITH' })).toBeNull();
   });
 });
+
+describe('the game\'s own shops and BUYS on SHOP BUILDINGS (8a7b3b)', () => {
+  const HERBAL = { format: 1, name: 'Herbal', buildings: { shops: [{ id: 'apothecary', name: 'Apothecary' }, { id: 'fence', name: 'Fence', buys: 'anything' }] },
+    items: { types: [{ id: 'potions', label: 'POTIONS', columns: [], sold_at: ['apothecary'] }] } } as unknown as Definition;
+  const withApi = (start: Definition, counts: Record<string, number>) => {
+    const edits: Definition[] = [];
+    const api = { shopBuildings: async () => ({ ok: true, value: { counts } }) } as never;
+    const Harness = () => {
+      const [d, setD] = useState(start);
+      return <FeaturesPage definition={d} edit={(next) => { edits.push(next); setD(next); }} api={api} systemId="sys_herbalherbalherb" />;
+    };
+    render(<Harness />);
+    return () => edits[edits.length - 1] as unknown as { buildings?: { types?: object; shops?: object[] }; items?: { types: { sold_at?: string[] }[] } };
+  };
+  const row = (id: string) => within(screen.getByTestId(`own-shop-${id}`));
+
+  it('BUYS on each of the app\'s shops: WHAT IT SELLS to start, ANYTHING stored, back stores nothing', async () => {
+    const { last } = open();
+    await openShops();
+    const buys = screen.getByRole('combobox', { name: 'General Store buys' }) as HTMLSelectElement;
+    expect(buys.value).toBe('sells');
+    await userEvent.selectOptions(buys, 'anything');
+    expect(last().buildings).toEqual({ types: { general_store: { buys: 'anything' } } });
+    expect(buys.value).toBe('anything');
+    await userEvent.selectOptions(buys, 'sells');
+    expect(last()).not.toHaveProperty('buildings');
+  });
+
+  it('the game\'s own at the foot, each saying what it sells and how many buildings it is; renamed, set, switched', async () => {
+    const last = withApi(HERBAL, { apothecary: 2 });
+    await openShops();
+    expect(await row('apothecary').findByText('sells POTIONS · 2 buildings')).toBeTruthy();
+    expect(row('fence').getByText('sells nothing · buys anything · no building')).toBeTruthy();
+    fireEvent.change(row('apothecary').getByRole('textbox', { name: 'Apothecary called' }), { target: { value: 'Herbalist' } });
+    expect(last().buildings?.shops?.[0]).toEqual({ id: 'apothecary', name: 'Herbalist' });
+    await userEvent.selectOptions(row('apothecary').getByRole('combobox', { name: 'Herbalist buys' }), 'anything');
+    await userEvent.click(row('apothecary').getByRole('switch', { name: 'Herbalist on' }));
+    expect(last().buildings?.shops?.[0]).toEqual({ id: 'apothecary', name: 'Herbalist', buys: 'anything', on: false });
+    fireEvent.change(row('apothecary').getByRole('textbox', { name: 'Herbalist called' }), { target: { value: '' } });
+    expect(row('apothecary').getByRole('textbox', { name: 'apothecary called' }).getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('DELETE asks once, naming the buildings that go back to their ordinary type; KEEP keeps it', async () => {
+    const last = withApi(HERBAL, { apothecary: 2 });
+    await openShops();
+    await row('apothecary').findByText(/2 buildings/);
+    await userEvent.click(row('apothecary').getByRole('button', { name: 'Delete Apothecary' }));
+    const ask = screen.getByRole('group', { name: 'Delete Apothecary?' });
+    expect(ask.textContent).toContain('Delete Apothecary? 2 buildings are one in this game: they go back to their ordinary type once you publish.');
+    await userEvent.click(within(ask).getByRole('button', { name: 'KEEP' }));
+    expect(screen.queryByRole('group', { name: 'Delete Apothecary?' })).toBeNull();
+    await userEvent.click(row('fence').getByRole('button', { name: 'Delete Fence' }));
+    expect(screen.getByRole('group', { name: 'Delete Fence?' }).textContent).toContain('No building is one in this game.');
+    await userEvent.click(row('apothecary').getByRole('button', { name: 'Delete Apothecary' }));
+    await userEvent.click(within(screen.getByRole('group', { name: 'Delete Apothecary?' })).getByRole('button', { name: 'DELETE' }));
+    expect(last().buildings?.shops).toEqual([{ id: 'fence', name: 'Fence', buys: 'anything' }]);
+    expect(last().items?.types[0].sold_at).toEqual([]);
+    expect(screen.queryByTestId('own-shop-apothecary')).toBeNull();
+  });
+
+  it('1 building said in the singular', async () => {
+    withApi(HERBAL, { apothecary: 1 });
+    await openShops();
+    await row('apothecary').findByText('sells POTIONS · 1 building');
+    await userEvent.click(row('apothecary').getByRole('button', { name: 'Delete Apothecary' }));
+    expect(screen.getByRole('group', { name: 'Delete Apothecary?' }).textContent).toContain('1 building is one in this game: it goes back to its ordinary type once you publish.');
+  });
+
+  it('+ NEW SHOP here too: made by ADD or Enter, listed at the foot; none of its own, no rows', async () => {
+    const { last } = open();
+    await openShops();
+    expect(screen.queryByTestId(/^own-shop-/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'ADD' })).toBeDisabled();
+    await userEvent.type(screen.getByRole('textbox', { name: 'New shop name' }), 'Fence{Enter}');
+    expect(last().buildings).toEqual({ shops: [{ id: 'fence', name: 'Fence' }] });
+    expect(screen.getByTestId('own-shop-fence')).toBeTruthy();
+    await userEvent.type(screen.getByRole('textbox', { name: 'New shop name' }), 'Apothecary');
+    await userEvent.click(screen.getByRole('button', { name: 'ADD' }));
+    expect((last().buildings as { shops: object[] }).shops).toHaveLength(2);
+    expect(screen.getByRole('textbox', { name: 'New shop name' })).toHaveValue('');
+  });
+});
