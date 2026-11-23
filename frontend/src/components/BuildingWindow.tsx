@@ -1,6 +1,6 @@
 import { TerminalWindow, TERMINAL_PREVIEW, useFolder, type TerminalAction, type TerminalFolder } from './TerminalWindow';
 import { BuildingPreview } from './BuildingPreview';
-import { buildingTypeById, typeLabel, typeOn } from '../data/buildingTypes';
+import { buildingTypeIn, typeLabel, typeOn } from '../data/buildingTypes';
 import { GmNotes } from './GmNotes';
 import { useWords } from '../sheets/words';
 
@@ -52,7 +52,8 @@ export function BuildingWindow({
   // Opening another building starts at its INFO, not wherever the last one was left.
   const [open, setOpen] = useFolder(folders, location?.id);
 
-  const type = buildingTypeById(location?.building_type);
+  // The app's types, or one of the game's own shops (8a7b3a).
+  const type = buildingTypeIn(gameSystem, location?.building_type);
 
   return (
     <TerminalWindow

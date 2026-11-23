@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BUILDING_TYPES, shopsAvailable, cataloguesAvailable, giveAvailable, isShopIn, typeLabel, typeOn } from '../data/buildingTypes';
+import { BUILDING_TYPES, shopsAvailable, cataloguesAvailable, giveAvailable, isShopIn, typeLabel, typeOn, ownShopsIn, buildingTypeIn } from '../data/buildingTypes';
 import { EmptyShopSteps } from './EmptyShopSteps';
 import { SystemPicker } from './SystemPicker';
 import type { PickerSystem } from './systemPickerRules';
@@ -1947,12 +1947,29 @@ function CityAdminPanel({
                           style={{width: '100%'}}
                         >
                           <option value="">— NONE —</option>
-                          {/* The types this game has, by its names. One it turned off stays
-                              listed only on a building that already has it, so the box can
-                              show it and saving keeps it (the server allows that one). */}
-                          {BUILDING_TYPES.filter((t) => typeOn(globalSettings['game_system'], t.id) || t.id === editData.building_type).map((t) => (
-                            <option key={t.id} value={t.id}>{typeLabel(t.id, globalSettings['game_system'])}{typeOn(globalSettings['game_system'], t.id) ? (t.shop ? ' (shop)' : '') : ' (not in this game)'}</option>
-                          ))}
+                          {/*
+                            Grouped as FEATURES groups them (8a7b3a; the user, 2026-11-22: "should we add more headers ... should we
+                            also put the This Game Only at the top?"): the game's own shops first, made to be put on the map, then
+                            the app's shops, then its other buildings, each by this game's name; the header says which are shops.
+                            One turned off stays listed only on a building that already has it, so the box can show it and saving
+                            keeps it (the server allows that one).
+                          */}
+                          {[
+                            { label: 'THIS GAME\'S SHOPS', rows: ownShopsIn(globalSettings['game_system']).map((s) => ({ id: s.id })) },
+                            { label: 'SHOPS', rows: BUILDING_TYPES.filter((t) => t.shop) },
+                            { label: 'OTHER BUILDINGS', rows: BUILDING_TYPES.filter((t) => !t.shop) },
+                          ].map((g) => ({ ...g, rows: g.rows.filter((t) => typeOn(globalSettings['game_system'], t.id) || t.id === editData.building_type) }))
+                            .filter((g) => g.rows.length).map((g) => (
+                              <optgroup key={g.label} label={g.label}>
+                                {g.rows.map((t) => (
+                                  <option key={t.id} value={t.id}>{typeLabel(t.id, globalSettings['game_system'])}{typeOn(globalSettings['game_system'], t.id) ? '' : ' (not in this game)'}</option>
+                                ))}
+                              </optgroup>
+                            ))}
+                          {/* A type this game hasn't got at all (another game's own shop): shown as it is, so saving keeps it. */}
+                          {editData.building_type && !buildingTypeIn(globalSettings['game_system'], editData.building_type) && (
+                            <option value={editData.building_type}>{editData.building_type} (not in this game)</option>
+                          )}
                         </select>
 
                         {/*

@@ -168,17 +168,39 @@ const BOOK_SYSTEM = 'cities_without_number';
 const customSetting = (system: string | null | undefined, kind: 'types' | 'catalogues', id: string | null | undefined) =>
   (isCustomSystem(system) ? customTemplate(system)?.buildings?.[kind]?.[String(id ?? '')] : undefined);
 
-/** Whether this game has a building type: every one, unless a custom system turned it off. */
-export const typeOn = (system: string | null | undefined, id: string | null | undefined): boolean =>
-  customSetting(system, 'types', id)?.on !== false;
+/**
+ * The running game's own kinds of shop (8a7b1a; approved mockup types-in-shops.html), as its render copy says them: an
+ * Apothecary or a Fence the GM made. None for a built-in game or one that makes none.
+ */
+export const ownShopsIn = (system: string | null | undefined) =>
+  customTemplate(String(system ?? ''))?.buildings?.shops ?? [];
+
+/** One of the running game's own kinds of shop by id, or undefined. */
+export const ownShopIn = (system: string | null | undefined, id: string | null | undefined) =>
+  ownShopsIn(system).find((s) => s.id === String(id ?? ''));
+
+/**
+ * A building type in this game (8a7b3a): the app's, or one of the game's own shops, drawn as a shop selling nothing of the
+ * app's (its shelves are the types SOLD AT it). Undefined for an id neither has.
+ */
+export const buildingTypeIn = (system: string | null | undefined, id: string | null | undefined): BuildingType | undefined => {
+  const own = ownShopIn(system, id);
+  return own ? { id: own.id, label: own.name, shop: true, sells: [] } : buildingTypeById(id);
+};
+
+/** Whether this game has a building type: every one of the app's unless a custom system turned it off; its own, as each says. */
+export const typeOn = (system: string | null | undefined, id: string | null | undefined): boolean => {
+  const own = ownShopIn(system, id);
+  return own ? own.on !== false : customSetting(system, 'types', id)?.on !== false;
+};
 
 /** Whether this game has a shop catalogue: every one, unless a custom system turned it off. */
 export const catalogueOn = (system: string | null | undefined, id: ShopStock): boolean =>
   customSetting(system, 'catalogues', id)?.on !== false;
 
-/** Whether a building of this type is a shop in this game. */
+/** Whether a building of this type is a shop in this game: one of the app's it has, or one of its own that is on (8a7b3a). */
 export const isShopIn = (system: string | null | undefined, id: string | null | undefined): boolean =>
-  isShop(id) && typeOn(system, id);
+  (isShop(id) || !!ownShopIn(system, id)) && typeOn(system, id);
 
 /**
  * The catalogues a shop of this type puts on its shelves in this game. A shelf one of the game's own item types is named
@@ -193,6 +215,10 @@ export const shelvedIn = (
   // And a shelf for each of a custom system's own item types sold at this kind of building (8a7a2, SOLD AT): `type:<id>`.
   ...ownItemTypes(system).filter((t) => (t.sold_at ?? []).includes(String(id ?? ''))).map((t) => `type:${t.id}` as ShopStock),
 ];
+
+/** A shop that sells nothing and buys anything (8a7b3a): its window opens on SELL, its BUY folder saying so. */
+export const onlyBuysIn = (system: string | null | undefined, id: string | null | undefined): boolean =>
+  buysIn(system, id) === 'anything' && shelvedIn(id, system).length === 0;
 
 /** What a shop of this type buys back in this game (8a7b1b): ANYTHING where a custom system says so, else what it sells. */
 export const buysIn = (system: string | null | undefined, id: string | null | undefined): 'sells' | 'anything' => {
@@ -230,7 +256,8 @@ export const itemTypeOfShelf = (system: string | null | undefined, id: string) =
 
 /** A building type's name in this game. Blank for an id that is not on the list. */
 export const typeLabel = (id: string | null | undefined, system: string | null | undefined): string =>
-  customSetting(system, 'types', id)?.name ?? TYPE_NAMES[String(system ?? '')]?.[String(id ?? '')] ?? buildingTypeById(id)?.label ?? '';
+  // One of the game's own shops (8a7b3a): its name, the only one it has.
+  ownShopIn(system, id)?.name ?? customSetting(system, 'types', id)?.name ?? TYPE_NAMES[String(system ?? '')]?.[String(id ?? '')] ?? buildingTypeById(id)?.label ?? '';
 
 /** A catalogue's name in this game, for a shelf tab or a section of the catalogue file. */
 export const catalogueLabel = (id: ShopStock, system: string | null | undefined): string => {
