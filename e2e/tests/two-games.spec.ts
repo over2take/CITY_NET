@@ -77,17 +77,16 @@ test('two games on one table: a character, money, a building\'s shop and its she
     return p.locator('.win95-window', { has: p.getByText(`SHOP.EXE · ${shop}`, { exact: true }) });
   };
   /**
-   * One of something bought through the cart, paid, then on the sheet. Waited for on the sheet before anything else: the
-   * player's browser places what was bought after the checkout answers, and the server writes it into whichever game is
-   * running when it arrives, so a game switched in that moment would get it (found here, 2026-11-23; to be closed by placing
-   * on the server at checkout, as GIVE does).
+   * One of something bought through the cart, and paid. Not waited for on the sheet: the game is switched straight after.
+   * Placed by the player's browser once the checkout answered, it used to land in whichever game was running by then (found
+   * here, 2026-11-23: North's draught on South's Bryn); placed by the server in the checkout since 8n6, it lands in the game
+   * that took the money, which the checks below prove.
    */
   const buy = async (window: ReturnType<Page['locator']>, label: string, left: number) => {
     await window.getByRole('button', { name: `Add ${label} to the cart` }).click({ timeout: 15_000 });
     await window.getByRole('tab', { name: 'CART' }).click();
     await window.getByRole('button', { name: 'CHECK OUT' }).click();
     await expect(window.getByRole('tabpanel')).toContainText(`BALANCE ${left}cr`, { timeout: 15_000 });
-    await expect.poll(() => inventoryOf(request, gm, player.username), { timeout: 15_000 }).toEqual([[label, 1]]);
   };
   /** What the corner is in the running game, and what its shelf has, by its window: its name, its stock, the money left. */
   const shopShows = async (type: string, sells: string, notSold: string, money: number) => {

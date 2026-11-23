@@ -2313,6 +2313,16 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const places = data.place === true;
 
       /**
+       * A checkout's changes onto the sheet as it is now, with what follows from them worked out, as an ordinary write does
+       * (importSheetFields): a ring bought gives its features, one sold takes them away (8n6b; the sale's write skipped it).
+       */
+      const withDerivedPatch = (system, patch) => (current) => {
+        const next = { ...current, ...patch };
+        Object.keys(patch).forEach((k) => sheetTemplates.applyDerived(system, next, k));
+        return next;
+      };
+
+      /**
        * The sheet's changes for a checkout planned as `lines`: the sale's, and with `places` what was bought, placed on the
        * sheet as the sale leaves it; null for none. Refused (and null back as `false`) when something bought won't fit.
        */
@@ -2373,7 +2383,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           const patch = sheetPatch(system, sheetData, sale, plan.lines);
           if (patch === false) return;
           if (!patch) return pay();
-          patchSheet(db, sheetRow.id, patch, (pErr) => {
+          patchSheet(db, sheetRow.id, withDerivedPatch(system, patch), (pErr) => {
             if (pErr) return refuse('write');
             pay();
           });
@@ -2487,7 +2497,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                         const patch = sheetPatch(system, sheetData, sale, plan.lines);
                         if (patch === false) return;
                         if (!patch) return payBank();
-                        patchSheet(db, sheetRow.id, patch, (pErr) => {
+                        patchSheet(db, sheetRow.id, withDerivedPatch(system, patch), (pErr) => {
                           if (pErr) return refuse('write');
                           payBank();
                         });

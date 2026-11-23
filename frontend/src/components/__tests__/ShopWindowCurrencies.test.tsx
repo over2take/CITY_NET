@@ -122,6 +122,8 @@ describe('the cart', () => {
     expect(checkouts()).toEqual([{
       locationId: 7, buys: [{ catalogue: 'weapons', itemId: 'sword', qty: 1 }, { catalogue: 'weapon_mods', itemId: 'rune', qty: 1 }],
       sells: [], settle: {}, expectedNet: { gold: 1500, favor: 3 },
+      // Placed by the server, in the checkout (8n6b).
+      place: true,
     }]);
   });
 

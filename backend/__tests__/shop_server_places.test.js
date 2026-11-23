@@ -146,6 +146,32 @@ describe('a custom game\'s own items, asked to place', () => {
   });
 });
 
+describe('what follows from it, worked out as an ordinary write does (8n6b)', () => {
+  const RING = 'sys_0c0c0c0c0c0c0c0c';
+  const ringGame = {
+    format: 1, name: 'Rings', core: { health: { model: 'pool' } }, stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'con', label: 'Con' }] }],
+    items: {
+      slots: [{ id: 'attuned', label: 'ATTUNED', count: 3 }],
+      types: [{ id: 'trinkets', label: 'TRINKETS', one: 'Trinket', sold_at: ['general_store'], columns: [] }],
+      list: [{ id: 'ring', label: 'Ring of Might', type: 'trinkets', needs: 'attuned', features: [], price: 100, in_shops: true }],
+    },
+  };
+
+  it('a ring bought is worked out as on the sheet; sold, it is no longer', async () => {
+    const text = JSON.stringify(ringGame);
+    await run(db, 'INSERT INTO custom_systems (id, name, draft, published, version) VALUES (?, ?, ?, ?, 1)', [RING, 'Rings', text, text]);
+    await new Promise((resolve) => runtime.load(db, resolve));
+    await running(RING);
+    const store_ = await shop('general_store');
+    await seed(RING, { inventory: '[]' });
+    await fund(RING, 500);
+    expect((await checkout(store_, { buys: [{ catalogue: 'type:trinkets', itemId: 'item:ring', qty: 1 }], place: true })).answer).toMatchObject({ ok: true, placed: true });
+    expect((await sheetIn(RING))._worked.items.map((i) => i.id)).toEqual(['ring']);
+    expect((await checkout(store_, { sells: [{ catalogue: 'type:trinkets', id: 'item:ring', qty: 1 }] })).answer).toMatchObject({ ok: true });
+    expect((await sheetIn(RING))._worked.items).toEqual([]);
+  });
+});
+
 describe('placing what was bought', () => {
   it('line by line against the sheet as the last left it; one gone from the shelf, said', async () => {
     await running(CWN);

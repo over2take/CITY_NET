@@ -595,7 +595,10 @@ export function ShopWindow({
     setCartNews(false);
     setRefused(null);
   }, [locationId]);
-  /** Bought things still to be written onto the sheet, one per render so each sees the last. */
+  /**
+   * Bought things still to be written onto the sheet, one per render so each sees the last: only where the server didn't
+   * place them itself (8n6b; an older server that doesn't answer `placed`). It places them in the checkout now.
+   */
   const [placing, setPlacing] = useState<Array<() => void>>([]);
   const checkoutTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (checkoutTimer.current) clearTimeout(checkoutTimer.current); }, []);
@@ -661,6 +664,9 @@ export function ShopWindow({
       sells: groupSells(cartSells),
       settle,
       expectedNet,
+      // What is bought placed by the server, in the checkout (8n6a): in the game that took the money, nothing left to
+      // place once it answers (found by the two-games journey, 2026-11-23).
+      place: true,
     });
   };
 
@@ -673,12 +679,14 @@ export function ShopWindow({
   useEffect(() => {
     if (!socket) return;
     const onCheckout = (res: {
-      ok: boolean; reason?: RefusalReason | 'total_changed'; net?: number; buyTotal?: number;
+      ok: boolean; reason?: RefusalReason | 'total_changed' | 'no_room'; net?: number; buyTotal?: number;
       payout?: number; balance?: number; debt?: number; settled?: Settle; fromBody?: number;
       buys?: { catalogue: string; itemId: string; qty: number; price: number }[];
       /** In a custom system's currencies: the one a refusal is about, and each one's outcome. */
       currency?: string;
       currencies?: Record<string, { net: number; balance: number; debt: number; settled?: Settle }>;
+      /** The server placed what was bought (8n6a); and why not, where it wouldn't fit. */
+      placed?: boolean; message?: string;
     }) => {
       if (checkoutTimer.current) { clearTimeout(checkoutTimer.current); checkoutTimer.current = null; }
       setBusy(false);
@@ -692,6 +700,8 @@ export function ShopWindow({
           const said = cartRefusal(String(res.reason), { ...about, net });
           if (said) { setRefused(said); return; }
         }
+        // Something bought wouldn't fit on the sheet (8n6a): the server's reason, refused before anything was charged.
+        if (res.reason === 'no_room') { setRefused(`${res.message || 'There is no room on your sheet for that.'} Nothing was charged.`); return; }
         if (res.reason === 'total_changed') {
           setRepriced(Number(res.net) || 0);
           setRefused(`Prices changed while this sat in the cart — it now comes to ${money(Number(res.net) || 0)}. Check it, then CHECK OUT again.`);
@@ -701,8 +711,8 @@ export function ShopWindow({
         return;
       }
       const { buys, sells } = cartNow.current;
-      // Only now does any of it exist. Paid for, then owned.
-      setPlacing(buys.flatMap((l) => Array.from({ length: l.qty }, () => l.place)));
+      // Only now does any of it exist. Paid for, then owned: placed by the server already (8n6b), or here by an older one's.
+      if (res.placed !== true) setPlacing(buys.flatMap((l) => Array.from({ length: l.qty }, () => l.place)));
       // In a custom system's currencies, every line in its catalogue's and a total for each
       // currency the checkout touched, the main one first.
       const outcome = res.currencies;

@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Something bought lands on the sheet of the game it was bought in, every time.** The server now places purchases itself, in the same step as taking the money, so a GM switching games just as a player buys no longer puts the item in the other game, and closing the shop or the tab right after paying no longer loses it. A purchase that won't fit (a full weapon rack) is refused before anything is charged, with the reason. Also: selling an item that gives features (a ring) now takes its features away at once, and buying one gives them at once.
 - **The catalogue and item import boxes show your game's own example.** Their grey hint showed Cities Without Number's weapons (a Zip Gun) and a fixed GEAR list in every game. Each now shows your own first section, in its own columns. A type with its own PRICE column also no longer lists price twice in the catalogue files.
 - **Selling back typed gear from the shop window.** A line of one of your item types, or one of your own items, could be bought but not sold back: the shop window didn't recognize it, and the sale was refused. It now sells back at the shop's buyback rate, and a new browser test sells one and checks the money.
 - **A catalogue section that names nothing is now said.** A section like `[rocks]`, which is neither a shelf nor one of your item types, used to be saved quietly where no shop would ever sell it. The preview now says so, listing your types, and its lines are not saved.
