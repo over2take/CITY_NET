@@ -6,7 +6,7 @@
 import type { Definition } from './systemsApi';
 import { BUILDING_TYPES } from '../data/buildingTypes';
 import { idFor } from './setup';
-import { itemTypes, withType, type ItemType } from './itemTypes';
+import { itemTypes, ownTypes, withType, type ItemType } from './itemTypes';
 import { buildingSetting, BUILDING_NAME_LIMIT } from './wordsFeatures';
 
 type Obj = Record<string, unknown>;
@@ -75,6 +75,39 @@ export const withNewShop = (def: Definition, name: string): { definition: Defini
   const id = idFor(wanted, [...APP_IDS, ...own.map((s) => s.id)]);
   return { definition: { ...def, buildings: { ...buildingsOf(def), shops: [...own, { id, name: wanted }] } }, id };
 };
+
+/** The definition with these as the game's own shops; none stores nothing. */
+const withShops = (def: Definition, shops: OwnShop[]): Definition => {
+  const buildings: Obj = { ...buildingsOf(def) };
+  if (shops.length) buildings.shops = shops; else delete buildings.shops;
+  const next: Definition = { ...def };
+  if (Object.keys(buildings).length) next.buildings = buildings; else delete next.buildings;
+  return next;
+};
+
+/**
+ * One of the game's own shops renamed, switched on or off, or set to buy anything (8a7b3b, FEATURES). On, and buying what
+ * it sells, are as unsaid and store nothing. A blank name is kept while it is typed; the server's checks say it needs one.
+ */
+export const withOwnShop = (def: Definition, id: string, patch: { name?: string; on?: boolean; buys?: 'sells' | 'anything' }): Definition =>
+  withShops(def, ownShopsOf(def).map((s) => {
+    if (s.id !== id) return s;
+    const next: OwnShop = { ...s, ...patch };
+    if (next.on !== false) delete next.on;
+    if (next.buys !== 'anything') delete next.buys;
+    return next;
+  }));
+
+/** One of the game's own shops deleted (8a7b3b): gone from its shops, and from every type's SOLD AT. */
+export const withoutOwnShop = (def: Definition, id: string): Definition => {
+  let next = withShops(def, ownShopsOf(def).filter((s) => s.id !== id));
+  for (const t of itemTypes(next)) if (Array.isArray(t.sold_at) && t.sold_at.includes(id)) next = withType(next, t.id, { sold_at: t.sold_at.filter((s) => s !== id) });
+  return next;
+};
+
+/** The game's own types sold at a kind of shop, by name (8a7b3b: what a shop of its own sells, said on FEATURES). */
+export const typesSoldAt = (def: Definition, shopId: string): string[] =>
+  (ownTypes(def) ? itemTypes(def).filter((t) => soldAtOf(t).includes(shopId)).map((t) => t.label.trim() || t.id) : []);
 
 /** What SOLD AT says under its shops: every one it is sold at, by name, or that it is sold nowhere. */
 export const soldAtWords = (def: Definition, type: ItemType): string => {

@@ -7,6 +7,8 @@ import {
 } from '../sheets/wordsFeatures';
 import { OnlyWith } from './OnlyWith';
 import { ToggleSwitch } from './ToggleSwitch';
+import { ownShopsOf, withOwnShop, withoutOwnShop, withNewShop, typesSoldAt, SHOPS_MOST } from '../sheets/gameShops';
+import { useShopBuildings } from '../hooks/useShopBuildings';
 
 // The builder's PARTS page (4b1c; called FEATURES until 7a2a, renamed so a "feature" means only
 // what a pick gives, approved mockup builder-choices 2026-10-27; its id stays 'features'): which parts of the app the game uses, one switch each, the
@@ -20,8 +22,10 @@ import { ToggleSwitch } from './ToggleSwitch';
 interface Props {
   definition: Definition;
   edit: (next: Definition) => void;
-  /** For uploading a currency's icon (BankSettings). */
+  /** For uploading a currency's icon (BankSettings), and how many buildings each of the game's own shops is (8a7b3b). */
   api?: ReturnType<typeof systemsApi>;
+  /** The system open, for those counts. */
+  systemId?: string | null;
 }
 
 const small: React.CSSProperties = { fontSize: 10, letterSpacing: 2, opacity: 0.75 };
@@ -32,12 +36,19 @@ const field: React.CSSProperties = {
 const td: React.CSSProperties = { padding: '3px 8px 3px 0', verticalAlign: 'middle' };
 
 
-/** One table of building types or catalogues: the app's name, the system's, (a currency), on. */
-function BuildingTable({ definition, edit, kind, rows, priced }: {
+/** What a shop buys back (8a7b1b), as FEATURES offers it. */
+const BUYS_OPTIONS = [{ id: 'sells', label: 'WHAT IT SELLS' }, { id: 'anything', label: 'ANYTHING' }] as const;
+
+/**
+ * One table of building types or catalogues: the app's name, the system's, (a currency), (what it BUYS), on. The game's
+ * own shops come after the app's, as `after` (8a7b3b), with a last column for their DELETE.
+ */
+function BuildingTable({ definition, edit, kind, rows, priced, buys, after }: {
   definition: Definition; edit: (next: Definition) => void; kind: BuildingKind; rows: { id: string; label: string }[]; priced?: boolean;
+  buys?: boolean; after?: React.ReactNode;
 }) {
   const currencies = currencyList(definition);
-  const heads = ['THE APP\'S', 'CALLED', ...(priced ? ['PRICED IN'] : []), 'ON'];
+  const heads = ['THE APP\'S', 'CALLED', ...(priced ? ['PRICED IN'] : []), ...(buys ? ['BUYS'] : []), 'ON', ...(after ? [''] : [])];
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
       <thead><tr>{heads.map((h) => <th key={h} scope="col" style={{ ...td, ...small, textAlign: 'left', fontWeight: 'normal' }}>{h}</th>)}</tr></thead>
@@ -64,26 +75,117 @@ function BuildingTable({ definition, edit, kind, rows, priced }: {
                   </select>
                 </td>
               )}
+              {buys && (
+                <td style={{ ...td, width: 150 }}>
+                  <select aria-label={`${row.label} buys`} value={s.buys === 'anything' ? 'anything' : 'sells'}
+                    onChange={(e) => edit(withBuilding(definition, kind, row.id, { buys: e.target.value as 'sells' | 'anything' }))} style={{ ...field, border: '1px solid var(--green)' }}>
+                    {BUYS_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+                  </select>
+                </td>
+              )}
               <td style={{ ...td, width: 60 }}>
                 <ToggleSwitch on={s.on !== false} name={`${row.label} on`} disabled={partOff}
                   onChange={(on) => edit(withBuilding(definition, kind, row.id, { on }))} />
               </td>
+              {after && <td style={td} />}
             </tr>
           );
         })}
+        {after}
       </tbody>
     </table>
   );
 }
 
-function ShopsSettings({ definition, edit }: Props) {
+/** How many buildings, said: "1 building", "3 buildings", "no building". */
+const buildingsSaid = (n: number) => (n === 0 ? 'no building' : n === 1 ? '1 building' : `${n} buildings`);
+
+/**
+ * The game's own shops (8a7b3b; approved mockup docs/mockups/types-in-shops.html, section 4), at the foot of SHOP BUILDINGS:
+ * each renamed, set to buy anything, switched off, or deleted, saying what it sells and how many buildings it is in this
+ * game. DELETE asks once, naming them: each goes back to its ordinary type (8a7b3c1, kept per game).
+ */
+function OwnShopRows({ definition, edit, counts }: Props & { counts: Record<string, number> | null }) {
+  const [asking, setAsking] = useState<string | null>(null);
+  return <>
+    {ownShopsOf(definition).map((shop) => {
+      const name = shop.name.trim() || shop.id;
+      const sells = typesSoldAt(definition, shop.id);
+      const count = counts ? counts[shop.id] ?? 0 : null;
+      const says = [sells.length ? `sells ${sells.join(', ')}` : 'sells nothing', ...(shop.buys === 'anything' ? ['buys anything'] : []), ...(count === null ? [] : [buildingsSaid(count)])].join(' · ');
+      return (
+        <React.Fragment key={shop.id}>
+          <tr data-testid={`own-shop-${shop.id}`}>
+            <td style={{ ...td, width: 150 }}>
+              <span style={{ color: 'var(--cyan)' }}>THIS GAME'S</span>
+              <span style={{ display: 'block', fontSize: 10, opacity: 0.8 }}>{says}</span>
+            </td>
+            <td style={td}>
+              <input type="text" maxLength={BUILDING_NAME_LIMIT} aria-label={`${name} called`} value={shop.name} aria-invalid={!shop.name.trim() ? true : undefined}
+                onChange={(e) => edit(withOwnShop(definition, shop.id, { name: e.target.value }))} style={{ ...field, border: '1px solid var(--cyan)' }} />
+            </td>
+            <td style={{ ...td, width: 150 }}>
+              <select aria-label={`${name} buys`} value={shop.buys === 'anything' ? 'anything' : 'sells'}
+                onChange={(e) => edit(withOwnShop(definition, shop.id, { buys: e.target.value as 'sells' | 'anything' }))} style={{ ...field, border: '1px solid var(--green)' }}>
+                {BUYS_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+              </select>
+            </td>
+            <td style={{ ...td, width: 60 }}>
+              <ToggleSwitch on={shop.on !== false} name={`${name} on`} onChange={(on) => edit(withOwnShop(definition, shop.id, { on }))} />
+            </td>
+            <td style={td}>
+              <button type="button" className="utility-btn danger-btn" aria-label={`Delete ${name}`} style={{ fontFamily: 'monospace', fontSize: 11, padding: '3px 8px' }}
+                onClick={() => setAsking(shop.id)}>DELETE</button>
+            </td>
+          </tr>
+          {asking === shop.id && (
+            <tr>
+              <td colSpan={5} style={{ ...td, paddingBottom: 8 }}>
+                <span role="group" aria-label={`Delete ${name}?`} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ ...why, color: 'var(--danger)' }}>
+                    Delete {name}? {count ? `${count === 1 ? '1 building is one' : `${count} buildings are one`} in this game: ${count === 1 ? 'it goes' : 'they go'} back to ${count === 1 ? 'its' : 'their'} ordinary type once you publish.` : 'No building is one in this game.'}
+                  </span>
+                  <button type="button" className="utility-btn danger-btn" style={{ fontFamily: 'monospace', fontSize: 11, padding: '3px 8px' }}
+                    onClick={() => { edit(withoutOwnShop(definition, shop.id)); setAsking(null); }}>DELETE</button>
+                  <button type="button" className="utility-btn" style={{ fontFamily: 'monospace', fontSize: 11, padding: '3px 8px' }} onClick={() => setAsking(null)}>KEEP</button>
+                </span>
+              </td>
+            </tr>
+          )}
+        </React.Fragment>
+      );
+    })}
+  </>;
+}
+
+/** + NEW SHOP on FEATURES (8a7b3b; answered 2: here and on SOLD AT, making the same thing): a name, ADDed or by Enter. */
+function NewShop({ definition, edit }: Props) {
+  const [name, setName] = useState('');
+  const full = ownShopsOf(definition).length >= SHOPS_MOST;
+  const add = () => { const made = withNewShop(definition, name); if (!made) return; edit(made.definition); setName(''); };
+  return (
+    <span style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+      <input type="text" aria-label="New shop name" maxLength={BUILDING_NAME_LIMIT} value={name} placeholder="+ NEW SHOP: a name, like Apothecary" disabled={full && !name}
+        onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }}
+        style={{ ...field, width: 280, border: '1px solid var(--green)' }} />
+      <button type="button" className="utility-btn" style={{ fontFamily: 'monospace', fontSize: 11, padding: '4px 9px' }} disabled={!name.trim()} onClick={add}>ADD</button>
+      <span style={{ ...why, fontSize: 11 }}>{full ? `${SHOPS_MOST} OF ${SHOPS_MOST}: delete one to make another.` :'A shop of this game\'s own: tick it under SOLD AT on an item type, and give it to a building in BUILDING TYPE.'}</span>
+    </span>
+  );
+}
+
+function ShopsSettings({ definition, edit, api, systemId }: Props) {
   const priced = currencyList(definition).length > 0;
+  const counts = useShopBuildings(api, systemId);
+  const own = ownShopsOf(definition).length > 0;
   const box: React.CSSProperties = { border: '1px solid var(--dark-green)', padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 };
   return <>
     <section aria-label="Shop buildings" style={box}>
       <h3 style={{ ...small, margin: 0, color: 'var(--green)', opacity: 1 }}>SHOP BUILDINGS</h3>
-      <span style={why}>Rename the app's shop types, or turn one off. A building keeps its type and stock whatever it's called.</span>
-      <BuildingTable definition={definition} edit={edit} kind="types" rows={SHOP_TYPES} />
+      <span style={why}>Rename the app's shop types, or turn one off, and say what each BUYS back. A building keeps its type and stock whatever it's called. This game's own shops are listed under them.</span>
+      <BuildingTable definition={definition} edit={edit} kind="types" rows={SHOP_TYPES} buys
+        after={own ? <OwnShopRows definition={definition} edit={edit} counts={counts} /> : undefined} />
+      <NewShop definition={definition} edit={edit} />
     </section>
     <section aria-label="Catalogues" style={box}>
       <h3 style={{ ...small, margin: 0, color: 'var(--green)', opacity: 1 }}>CATALOGUES</h3>
@@ -100,7 +202,7 @@ function ShopsSettings({ definition, edit }: Props) {
   </>;
 }
 
-export function FeaturesPage({ definition, edit, api }: Props) {
+export function FeaturesPage({ definition, edit, api, systemId }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   // A part's settings, where it has any.
   const settings: Partial<Record<string, (p: Props) => React.ReactElement>> = { bank: BankSettings, shops: ShopsSettings };
@@ -136,7 +238,7 @@ export function FeaturesPage({ definition, edit, api }: Props) {
                   </span>
                 )}
               </div>
-              {isOpen && <div style={{ padding: '0 14px 14px 72px', display: 'flex', flexDirection: 'column', gap: 10 }}><Settings definition={definition} edit={edit} api={api} /></div>}
+              {isOpen && <div style={{ padding: '0 14px 14px 72px', display: 'flex', flexDirection: 'column', gap: 10 }}><Settings definition={definition} edit={edit} api={api} systemId={systemId} /></div>}
             </div>
           );
         })}

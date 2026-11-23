@@ -276,6 +276,13 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await expect(open.getByRole('group', { name: 'Each turn 2 changes HP' })).toBeVisible();
       await open.getByRole('combobox', { name: 'ENDS' }).selectOption('next_turn');
     }
+    if (p === 'PARTS') {
+      // SHOPS opened, with a shop of the game's own made, so BUYS and its row (name, BUYS, ON, DELETE) are there (8a7b3b).
+      await page.getByTestId('part-shops').getByRole('button', { name: /SETTINGS/ }).click();
+      await page.getByRole('textbox', { name: 'New shop name' }).fill('Fence');
+      await page.getByRole('textbox', { name: 'New shop name' }).press('Enter');
+      await expect(page.getByTestId('own-shop-fence')).toBeVisible();
+    }
     if (p === 'RESTS') {
       // Recovery dice on, counted by a formula and given back by an amount, so every box is there (R1b).
       const resting = page.getByRole('region', { name: 'Resting' });

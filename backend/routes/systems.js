@@ -34,6 +34,8 @@ const { checkTableConditions, saveTableConditions } = require('../systemBuilder/
 const { isBuiltIn } = require('../sheets/templates');
 const { houseRuleKey } = require('../systemBuilder/houseRules');
 const { syncAllTokenMax } = require('../systemBuilder/tokenMax');
+const locationShops = require('../shops/locationShops');
+const { ownShops } = require('../systemBuilder/buildings');
 
 /** The global_settings key that says the builder's first-time tour has been seen. */
 const TOUR_SEEN = 'builder_tour_seen';
@@ -213,6 +215,17 @@ module.exports = (db, io = null) => {
     });
   });
 
+  /**
+   * How many buildings are each of the system's own shops in it (8a7b3b): what FEATURES' DELETE says before it deletes one.
+   * Read from the map, so it is the same for the draft and the published version.
+   */
+  router.get('/:id/shop-buildings', gm, (req, res) => {
+    store.getSystem(db, req.params.id, (err) => {
+      if (err) return answer(res, err);
+      locationShops.countsIn(db, req.params.id, (cErr, counts) => answer(res, cErr, { counts }));
+    });
+  });
+
   router.put('/:id/draft', gm, (req, res) => {
     const { definition } = req.body || {};
     store.saveDraft(db, req.params.id, definition, (err, saved) => answer(res, err, saved));
@@ -224,6 +237,9 @@ module.exports = (db, io = null) => {
     store.publishSystem(db, req.params.id, (err, done) => {
       if (err) return answer(res, err);
       runtime.refresh(db, req.params.id, () => {
+        // A shop of its own deleted (8a7b3b): its buildings let go of it, each its shared type again, and every screen told.
+        locationShops.dropGone(db, req.params.id, ownShops(runtime.definitionOf(req.params.id)).map((s) => s.id), (gErr, letGo) => {
+        if (io && letGo) io.emit('dataUpdated', { isRhombusOnly: true });
         // Its catalogue lines now exactly one of its items taken out (8a7a4b), the items selling themselves; the running
         // game's shops told, so their shelves come again without the copies.
         catalogueDb.dropItemCopies(db, req.params.id, runtime.definitionOf(req.params.id), (dErr, dropped) => {
@@ -236,6 +252,7 @@ module.exports = (db, io = null) => {
           if (dErr || !dropped) return reloaded();
           if (shopPrices.systemLoaded() !== req.params.id) return reloaded();
           catalogueDb.refresh(db, req.params.id, () => { if (io) io.emit('cataloguesChanged', { system: req.params.id }); reloaded(); });
+        });
         });
       });
     });
