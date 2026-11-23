@@ -21,7 +21,7 @@ test('the game\'s own shops: an Apothecary picked under THIS GAME\'S SHOPS sells
   test.setTimeout(180_000);
   const again = info.retry ? `_${info.retry + 1}` : '';
   const gm = await gmToken(request);
-  await runningSystem(request, gm, SYSTEM(`Herbfall${again}`));
+  const herbal = await runningSystem(request, gm, SYSTEM(`Herbfall${again}`));
   const player = { username: `e2e_herbfall${again}`, password: 'e2e-player-password' };
   await approvedPlayer(request, gm, player);
   await playerToken(request, gm, player.username);
@@ -85,5 +85,17 @@ test('the game\'s own shops: an Apothecary picked under THIS GAME\'S SHOPS sells
   await back.getByRole('tab', { name: 'CART' }).click();
   await back.getByRole('button', { name: 'CHECK OUT' }).click();
   await expect(back.getByRole('tabpanel')).toContainText('BALANCE 78cr', { timeout: 15_000 });
+  await mine.keyboard.press('Escape');
+
+  // Kept per game (8a7b3c1): in another game, which makes an Apothecary of its own, the building is none of its shops until
+  // picked there, so no SHOP; back in this game, the Apothecary again.
+  const typeHere = async () => (await asGm(request, gm, 'get', '/api/locations')).find((l: { name: string }) => l.name === shop)?.building_type;
+  const pick = async () => { await list.getByText(fence, { exact: true }).click(); await list.getByText(shop, { exact: true }).click(); };
+  await runningSystem(request, gm, SYSTEM(`Herbfall Elsewhere${again}`));
+  await expect.poll(typeHere, { timeout: 15_000 }).toBeNull();
+  await expect.poll(async () => { await pick(); return mine.getByRole('button', { name: 'SHOP', exact: true }).count(); }, { timeout: 15_000 }).toBe(0);
+  await asGm(request, gm, 'put', '/api/sheets/system', { system: herbal });
+  await expect.poll(typeHere, { timeout: 15_000 }).toBe('apothecary');
+  await expect.poll(async () => { await pick(); return mine.getByRole('button', { name: 'SHOP', exact: true }).count(); }, { timeout: 15_000 }).toBe(1);
   await context.close();
 });

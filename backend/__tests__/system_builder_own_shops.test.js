@@ -159,7 +159,9 @@ describe('at the table', () => {
   it('a building can be one; not one turned off, nor one no game makes', async () => {
     const id = await stall();
     expect((await give(id, 'apothecary')).status).toBe(200);
-    expect((await get(db, 'SELECT building_type FROM locations WHERE id = ?', [id])).building_type).toBe('apothecary');
+    // This game's alone (8a7b3c1): kept per game, the shared type left as it was.
+    expect(await get(db, 'SELECT shop FROM location_shops WHERE location_id = ? AND system = ?', [id, ID])).toEqual({ shop: 'apothecary' });
+    expect((await get(db, 'SELECT building_type FROM locations WHERE id = ?', [id])).building_type).toBeNull();
     expect((await give(id, 'fence')).status).toBe(409);
     expect((await give(id, 'tavern')).status).toBe(400);
   });

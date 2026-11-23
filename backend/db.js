@@ -227,6 +227,10 @@ db.serialize(() => {
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  // Which of a game's own shops a building is, kept per game (8a7b3c1, shops/locationShops.js): a Magican in one game, a
+  // Mechanic in another, its shared building_type in the rest.
+  for (const sql of require('./shops/locationShops').SCHEMA) db.run(sql);
+
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN melee_ac INTEGER`, (err) => {});
   db.run(`ALTER TABLE custom_structure_library ADD COLUMN ranged_ac INTEGER`, (err) => {});
 
@@ -283,6 +287,8 @@ db.serialize(() => {
   // is loaded, so notes left behind in their own table would land on whatever building of
   // the next map happened to get the same id.
   db.run(`ALTER TABLE saved_maps ADD COLUMN gm_notes_data TEXT`, () => {});
+  // And which of a game's own shops each building is, per game (8a7b3c1), for the same reason.
+  db.run(`ALTER TABLE saved_maps ADD COLUMN shops_data TEXT`, () => {});
   db.run(`ALTER TABLE overpasses ADD COLUMN ramp_length_start REAL`, () => {});
   db.run(`ALTER TABLE overpasses ADD COLUMN ramp_length_end REAL`, () => {});
 

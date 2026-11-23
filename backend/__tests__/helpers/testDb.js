@@ -66,6 +66,9 @@ function makeTestDb() {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 
+      // A game's own shops, per game (8a7b3c1): the same SQL db.js runs.
+      for (const sql of require('../../shops/locationShops').SCHEMA) db.run(sql);
+
       db.run(`CREATE TABLE districts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT UNIQUE NOT NULL,
@@ -98,6 +101,7 @@ function makeTestDb() {
         water_bodies_data TEXT,
         signs_data TEXT,
         gm_notes_data TEXT,
+        shops_data TEXT,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
 

@@ -64,6 +64,7 @@ const shopPurchase = require('../shops/purchase');
 const shopCheckout = require('../shops/checkout');
 const shopSell = require('../shops/sell');
 const shopBuyback = require('../shops/buyback');
+const locationShops = require('../shops/locationShops');
 const { shopsOpen } = require('../shops/availability');
 const giving = require('../sheets/giving');
 const givenList = require('../sheets/givenList');
@@ -2367,13 +2368,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         // A custom system that turned its shops off has none to buy from.
         if (!shopsOpen(system)) return refuse('no_shops');
 
-        db.get(
-          'SELECT building_type, buyback_pct FROM locations WHERE id = ?',
-          [data.locationId],
-          (err, loc) => {
+        // The building's type in this game (8a7b3c1): the game's own shop it is here, else its shared type.
+        locationShops.buildingIn(db, data.locationId, system,
+          (err, found) => {
+            const loc = found && { ...found, building_type: locationShops.typeIn(customSystems.definitionOf(system), found.building_type, found.shop) };
             // A building whose type this game turned off is not a shop here (it keeps the type,
             // for when the type comes back), and a catalogue it turned off is on no shelf.
-            if (err || !loc || !customSystems.buildingIn(system, 'types', loc.building_type)) return refuse('no_shop');
+            // A building of no type is no shop either (8a7b3c1; it used to get as far as "not sold").
+            if (err || !loc || !loc.building_type || !customSystems.buildingIn(system, 'types', loc.building_type)) return refuse('no_shop');
             // And the shelf of each of the game's own item types sold at this kind of building (8a7a2, SOLD AT).
             const definition = customSystems.definitionOf(system);
             const catalogues = [
