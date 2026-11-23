@@ -3,8 +3,9 @@ import { createRequire } from 'module';
 import {
   LIMITS, DICE_PRESETS, symbolList, dieList, withDicePreset, withNewDie, withDieName, withDieColor, withFaceCount, withFace,
   withoutDie, withNewSymbol, withSymbol, alsoChoices, withoutSymbol, withTableDie, faceText, faceWords,
-  BLANK_DRAWN, drawnAt, withSquare, drawnSquares, withSymbolLook,
+  withSymbolLook,
 } from '../dice';
+import { BLANK_DRAWN, withSquare } from '../drawings';
 import type { Definition } from '../systemsApi';
 
 /**
@@ -155,23 +156,10 @@ describe('a symbol\'s look (6c2b1)', () => {
     expect(sym(withSymbolLook(unmarked, 'skull', { drawn: SKULL }), 'skull').mark).toBe('S');
   });
 
-  it('drawn on the pad a square at a time, stored as the server takes it', () => {
-    let d = BLANK_DRAWN;
-    expect(problems(withSymbolLook(base, 'skull', { drawn: d }))).toEqual([]);
-    d = withSquare(d, 0, 0, true);
-    d = withSquare(d, 15, 15, true);
-    d = withSquare(d, 7, 3, true);
-    expect([d[0], d[3], d[15]]).toEqual(['8000', '0100', '0001']);
-    expect([drawnAt(d, 0, 0), drawnAt(d, 1, 0), drawnAt(d, 15, 15)]).toEqual([true, false, true]);
-    expect(drawnSquares(d)).toEqual([[0, 0], [7, 3], [15, 15]]);
-    expect(withSquare(d, 0, 0, false)[0]).toBe('0000');
-    expect(withSquare(d, 16, 0, true)).toEqual(d);
-    expect(drawnSquares(SKULL).length).toBe(SKULL.reduce((n, row) => n + [...parseInt(row, 16).toString(2)].filter((b) => b === '1').length, 0));
-    // Any strokes at all make a drawing the server takes.
-    let seed = 3;
-    for (let i = 0; i < 300; i += 1) { seed = (seed * 69069 + 1) % 4294967296; d = withSquare(d, seed % 16, (seed >> 4) % 16, !!(seed & 256)); }
-    expect(backend.isDrawn(d)).toBe(true);
-    expect(problems(withSymbolLook(base, 'skull', { drawn: d }))).toEqual([]);
+  it('a drawing from the pad, blank or drawn on, is one the server takes on a symbol (the pad itself: drawings.test.ts)', () => {
+    expect(problems(withSymbolLook(base, 'skull', { drawn: BLANK_DRAWN }))).toEqual([]);
+    expect(problems(withSymbolLook(base, 'skull', { drawn: withSquare(withSquare(BLANK_DRAWN, 0, 0, true), 15, 15, true) }))).toEqual([]);
+    expect(problems({ ...base, symbols: [{ id: 'skull', name: 'Skull', drawn: ['zz'] }] })).toContain('symbol skull, drawn: A drawing of 16 rows, each 4 hex digits');
   });
 });
 

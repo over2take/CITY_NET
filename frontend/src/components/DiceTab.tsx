@@ -3,11 +3,13 @@ import type { Definition, systemsApi, TestedDice } from '../sheets/systemsApi';
 import type { CustomDie } from '../types';
 import {
   DICE_PRESETS, LIMITS, symbolList, dieList, withDicePreset, withNewDie, withDieName, withDieColor, withFaceCount, withFace, withoutDie,
-  withNewSymbol, withSymbol, alsoChoices, withoutSymbol, withSymbolLook, withTableDie, faceWords, BLANK_DRAWN,
+  withNewSymbol, withSymbol, alsoChoices, withoutSymbol, withSymbolLook, withTableDie, faceWords,
   type OwnDie, type DieSymbol,
 } from '../sheets/dice';
 import { small, why, btn, field } from './statsRulesStyles';
-import { DrawPad, SymbolLook, FaceShown } from './DrawPad';
+import { DrawPad } from './DrawPad';
+import { SymbolLook, FaceShown, OnADie } from './DiceLook';
+import { BLANK_DRAWN } from '../sheets/drawings';
 import { ConditionIconPicker } from './ConditionIconPicker';
 import { FieldName, HelpHint } from './HelpHint';
 import { HINTS } from '../sheets/builderHelp';
@@ -103,7 +105,7 @@ function SymbolRow({ definition, edit, symbol, api, drawing, onDraw }: Props & {
       {drawing && symbol.drawn && (
         <div style={{ ...section, marginLeft: 36 }}>
           <div style={heading}><span>DRAW {name.toUpperCase()}</span><span style={{ color: 'var(--cyan)' }}>16 × 16 · KEPT IN THE SYSTEM, IN ITS FILE</span></div>
-          <DrawPad drawn={symbol.drawn} name={name} onChange={(drawn) => edit(withSymbolLook(definition, symbol.id, { drawn }))} />
+          <DrawPad drawn={symbol.drawn} name={name} onChange={(drawn) => edit(withSymbolLook(definition, symbol.id, { drawn }))} preview={(rows) => <OnADie drawn={rows} />} />
           <div><button type="button" className="utility-btn" style={btn} onClick={() => onDraw(false)}>DONE</button></div>
         </div>
       )}

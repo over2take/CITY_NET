@@ -24,12 +24,11 @@
 // Pure: the definition's checks read it, and the rolls will.
 
 const { isIcon } = require('./conditions');
+const { isDrawn, DRAWN_PROBLEM } = require('./drawings');
 
 const NAME = /^[a-z][a-z0-9_]{0,39}$/;
 const LIMITS = { symbols: 12, dice: 20, name: 20, mark: 2, faces: 100, perFace: 6, number: 999 };
-/** A drawing: 16 rows of 16 squares, each row 4 hex digits (the first square the highest bit). */
-const DRAWN_ROW = /^[0-9a-f]{4}$/;
-const isDrawn = (rows) => Array.isArray(rows) && rows.length === 16 && rows.every((r) => typeof r === 'string' && DRAWN_ROW.test(r));
+// A drawing is drawings.js's (8b0), shared with whatever else takes one.
 const COLORS = ['theme', 'danger'];
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -55,7 +54,7 @@ const checkDice = (definition, problems) => {
         else ids.set(s.id, s);
         if (typeof s.name !== 'string' || !s.name.trim() || s.name.length > LIMITS.name) bad(`${where}, name`, `A name of up to ${LIMITS.name} characters`);
         if (s.icon !== undefined && !isIcon(s.icon)) bad(`${where}, icon`, 'One of the drawn icons, or an uploaded one');
-        if (s.drawn !== undefined && !isDrawn(s.drawn)) bad(`${where}, drawn`, 'A drawing of 16 rows, each 4 hex digits');
+        if (s.drawn !== undefined && !isDrawn(s.drawn)) bad(`${where}, drawn`, DRAWN_PROBLEM);
         if (s.icon !== undefined && s.drawn !== undefined) bad(`${where}, drawn`, 'An icon or a drawing, not both');
         if (s.mark !== undefined && (typeof s.mark !== 'string' || !s.mark.trim() || shown(s.mark) > LIMITS.mark)) bad(`${where}, mark`, `A mark of one or ${LIMITS.mark} characters`);
         if (s.mark === undefined && s.icon === undefined && s.drawn === undefined) bad(`${where}, mark`, 'Needs a mark, an icon or a drawing, to show on the dice');

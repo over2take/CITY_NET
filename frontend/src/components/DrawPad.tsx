@@ -1,38 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { drawnAt, withSquare, drawnSquares, BLANK_DRAWN, type DieSymbol, type OwnDie, type DieFace } from '../sheets/dice';
-import { ConditionIcon } from './ConditionIcon';
+import { drawnAt, withSquare, BLANK_DRAWN } from '../sheets/drawings';
 
-// A dice symbol drawn (6c2b2; approved mockup docs/mockups/builder-dice.html, decision 10): the
-// DICE tab's 16 by 16 pad, and a symbol as the dice show it. A drawing is one color, the color of
-// what it sits on (the theme's, or a bad die's danger), as the drawn icons are.
-
-/** A drawing as squares in the color around it. */
-export function Drawing({ drawn, size = 16 }: { drawn: string[]; size?: number }) {
-  return (
-    <svg viewBox="0 0 16 16" width={size} height={size} shapeRendering="crispEdges" aria-hidden style={{ display: 'inline-block', verticalAlign: '-0.15em', flexShrink: 0 }}>
-      {drawnSquares(drawn).map(([x, y]) => <rect key={`${x},${y}`} x={x} y={y} width={1} height={1} fill="currentColor" />)}
-    </svg>
-  );
-}
-
-/** A symbol as the dice show it: its drawing, its icon (drawn or uploaded), or its mark. */
-export function SymbolLook({ symbol, size = 16 }: { symbol: DieSymbol; size?: number }) {
-  if (symbol.drawn) return <Drawing drawn={symbol.drawn} size={size} />;
-  if (symbol.icon) return <span style={{ display: 'inline-block', verticalAlign: '-0.15em' }}><ConditionIcon icon={symbol.icon} size={size} title={symbol.name} /></span>;
-  return <span>{symbol.mark ?? [...symbol.name][0]?.toUpperCase() ?? '?'}</span>;
-}
-
-/** A face as the dice show it: its number (signed on a die with any below 0) and its symbols' looks, '·' for a blank. */
-export function FaceShown({ die, face, symbols, size = 15 }: { die: OwnDie; face: DieFace; symbols: DieSymbol[]; size?: number }) {
-  const signed = die.faces.some((f) => (f.n ?? 0) < 0);
-  const n = face.n === undefined ? '' : signed && face.n > 0 ? `+${face.n}` : String(face.n);
-  const looks = (face.s ?? []).map((id, i) => {
-    const s = symbols.find((x) => x.id === id);
-    return s ? <SymbolLook key={`${id}${i}`} symbol={s} size={size} /> : <span key={`${id}${i}`}>?</span>;
-  });
-  if (!n && !looks.length) return <span>·</span>;
-  return <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center' }}>{n}{looks}</span>;
-}
+// The builder's 16 by 16 pad (6c2b2 for a die's symbol; approved mockup docs/mockups/builder-dice.html, decision 10;
+// shared since 8b0, the damage types' icons next). A drawing is one color, the color of what it sits on, as the drawn
+// icons are. What it is drawn for shows its own preview beside the pen and CLEAR (the dice: ON A DIE, DiceLook.tsx).
 
 interface Props {
   drawn: string[];
@@ -40,13 +11,15 @@ interface Props {
   onChange: (drawn: string[]) => void;
   /** What is being drawn, for the squares' names: "Skull". */
   name: string;
+  /** How the drawing looks where it will be shown, as it is drawn: the rows on the pad now. */
+  preview?: (drawn: string[]) => React.ReactNode;
 }
 
 /**
  * The pad: press and drag to draw (or rub out, with ERASE); CLEAR empties it. Each square is a
  * button too, so a keyboard draws it a square at a time.
  */
-export function DrawPad({ drawn, onChange, name }: Props) {
+export function DrawPad({ drawn, onChange, name, preview }: Props) {
   const [rows, setRows] = useState(drawn);
   const [ink, setInk] = useState(true);
   const painting = useRef(false);
@@ -89,14 +62,7 @@ export function DrawPad({ drawn, onChange, name }: Props) {
           ))}
         </div>
         <div><button type="button" className="utility-btn" style={{ fontFamily: 'monospace', fontSize: 11, padding: '4px 9px' }} onClick={() => { setRows(BLANK_DRAWN); onChange(BLANK_DRAWN); }}>CLEAR</button></div>
-        <span style={{ fontSize: 10, letterSpacing: 2, opacity: 0.75 }}>ON A DIE</span>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {(['var(--green)', 'var(--danger)'] as const).map((color) => (
-            <span key={color} style={{ width: 40, height: 40, display: 'grid', placeItems: 'center', border: `2px solid ${color}`, color }}><Drawing drawn={rows} size={24} /></span>
-          ))}
-          <span style={{ width: 26, height: 26, display: 'grid', placeItems: 'center', border: '2px solid var(--green)', color: 'var(--green)' }}><Drawing drawn={rows} size={14} /></span>
-        </div>
-        <span style={{ fontSize: 11, opacity: 0.85, maxWidth: '26ch' }}>One color: the die&apos;s, or the theme&apos;s. Press and drag to draw; the log still writes its mark.</span>
+        {preview?.(rows)}
       </div>
     </div>
   );
