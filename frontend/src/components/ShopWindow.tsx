@@ -16,6 +16,7 @@ import { placeBook, asBookRow, type BookRow } from '../sheets/bookPlacement';
 import { columnsFor } from '../sheets/catalogueSchema';
 import { EmptyShopSteps } from './EmptyShopSteps';
 import { findWords, hasEvery } from '../sheets/findWords';
+import { pickColumnsOf, withPick, pickedIn, type Picks } from '../sheets/shelfPicks';
 import { CWN_CYBERWARE, type CwnCyberPreset } from '../sheets/cwnCyberwarePresets';
 import { CWN_WEAPONS, type CwnWeaponPreset } from '../sheets/cwnWeaponPresets';
 import { readStash } from '../sheets/cwnWeaponStash';
@@ -430,6 +431,8 @@ export function ShopWindow({
    * thing, so it shows everything either way rather than an empty shelf.
    */
   const [kinds, setKinds] = useState({ ranged: false, melee: false });
+  /** A type's shelf narrowed by its PICK ONE columns (8a7c3): a word per column, none for ALL. */
+  const [picks, setPicks] = useState<Picks>({});
 
   // The app's types, or one of the game's own shops (8a7b3a).
   const type = buildingTypeIn(system, buildingType);
@@ -1421,9 +1424,12 @@ export function ShopWindow({
     const named = catalogueLabel(s.id, system).toLowerCase();
     return hasEvery(words, (w) => named.includes(w) || s.matches(row, w));
   };
+  // A type's quick filters (8a7c3): each of its PICK ONE columns as buttons, ALL first.
+  const pickColumns = shelf ? pickColumnsOf(itemTypeOfShelf(system, shelf.id)) : [];
   const rows: any[] = (() => {
     if (!shelf) return [];
     let list = shelf.rows;
+    if (pickColumns.length) list = list.filter((e: UploadedEntry) => pickedIn(e.fields, picks));
     // The weapon shelf's own narrowing. Both on, or both off, means no opinion.
     if (shelf.id === 'weapons' && kinds.ranged !== kinds.melee) {
       list = list.filter((w: CwnWeaponPreset) =>
@@ -1478,6 +1484,7 @@ export function ShopWindow({
     setPicked(id);
     setSort({ key: '', dir: null });
     setFilter('');
+    setPicks({});
     firstPage();
     setRefused(null);
   };
@@ -1834,6 +1841,29 @@ export function ShopWindow({
                   }}
                 />
                 {!finding && shelf.controls}
+                {/* A type's PICK ONE columns as buttons (8a7c3), ALL first; out of the way while QUICK FIND lists every shelf. */}
+                {!finding && pickColumns.length > 0 && (
+                  <div data-testid="shop-picks" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', marginBottom: 6 }}>
+                    {pickColumns.map((c) => (
+                      <div key={c.id} role="group" aria-label={c.label} style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                        <span style={{ ...mono(9), color: 'var(--grid-section)', letterSpacing: 1, marginRight: 2 }}>{c.label}</span>
+                        {['', ...c.options].map((w) => {
+                          const on = (picks[c.id] ?? '') === w;
+                          return (
+                            <button
+                              key={w || ' all'}
+                              type="button"
+                              className={`utility-btn ${on ? 'active' : ''}`}
+                              aria-pressed={on}
+                              onClick={() => { setPicks((p) => withPick(p, c.id, w)); firstPage(); }}
+                              style={{ ...mono(11), padding: '2px 8px', letterSpacing: 1 }}
+                            >{w || 'ALL'}</button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {!finding && shelf.note && (
                   <div style={{ ...mono(9), color: 'var(--grid-section)', marginBottom: 6, letterSpacing: 0, lineHeight: 1.5 }}>
                     {shelf.note}

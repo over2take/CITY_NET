@@ -2535,3 +2535,72 @@ describe('QUICK FIND on a game\'s own shelves (8a7c2)', () => {
     expect(screen.getByRole('tab', { name: 'POTIONS · 1' })).toBeInTheDocument();
   });
 });
+
+describe('a type\'s quick filters (8a7c3)', () => {
+  const PICKY = 'sys_c3c3c3c3c3c3c3c3';
+  const row = (id: string, name: string, grade: string, finish: string) => ({ id, name, price: 100, fields: { damage: '2d6', grade, finish } });
+  beforeEach(() => {
+    clearCustomTemplates();
+    registerCustomTemplate({ id: PICKY, name: 'Picky', parts: {}, derived: [], sheet: { sections: [] }, words: {}, items: { slots: [], list: [], types: [
+      { id: 'guns', label: 'GUNS', one: 'Gun', sold_at: ['general_store'], columns: [
+        { id: 'damage', label: 'DAMAGE', kind: 'damage' },
+        { id: 'grade', label: 'GRADE', kind: 'pick', options: ['LIGHT', 'HEAVY'] },
+        { id: 'finish', label: 'FINISH', kind: 'pick', options: ['MATTE', 'CHROME'] },
+        { id: 'unused', label: 'UNUSED', kind: 'pick', options: [] },
+      ] },
+      { id: 'potions', label: 'POTIONS', one: 'Potion', sold_at: ['general_store'], columns: [{ id: 'heals', label: 'HEALS', kind: 'dice' }] },
+    ] } } as never);
+    loadUploaded({
+      'type:guns': [row('pistol', 'Pistol', 'LIGHT', 'MATTE'), row('rifle', 'Rifle', 'HEAVY', 'MATTE'), row('cannon', 'Cannon', 'HEAVY', 'CHROME')],
+      'type:potions': [{ id: 'draught', name: 'Draught', price: 40, fields: { heals: '2d4' } }],
+    } as never);
+    sheetState.sheet = { system: PICKY, data: { inventory: '[]' } };
+  });
+  afterEach(() => { clearCustomTemplates(); clearUploaded(); });
+  const open = async () => { show('general_store', 'Goods', PICKY); await userEvent.click(screen.getByRole('tab', { name: 'GUNS' })); };
+  const group = (name: string) => within(screen.getByRole('group', { name }));
+  const pressed = (name: string) => group(name).getAllByRole('button').filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.textContent);
+  const shown = () => ['Pistol', 'Rifle', 'Cannon'].filter((n) => screen.queryByText(n));
+
+  it('each PICK ONE column of the type as buttons, ALL first and pressed; a column with no words none', async () => {
+    await open();
+    expect(group('GRADE').getAllByRole('button').map((b) => b.textContent)).toEqual(['ALL', 'LIGHT', 'HEAVY']);
+    expect(group('FINISH').getAllByRole('button').map((b) => b.textContent)).toEqual(['ALL', 'MATTE', 'CHROME']);
+    expect(pressed('GRADE')).toEqual(['ALL']);
+    expect(screen.queryByRole('group', { name: 'UNUSED' })).toBeNull();
+    expect(shown()).toEqual(['Pistol', 'Rifle', 'Cannon']);
+  });
+
+  it('a word narrows the shelf to the lines of it, and the count says so; the columns together; ALL back to every line', async () => {
+    await open();
+    await userEvent.click(group('GRADE').getByRole('button', { name: 'HEAVY' }));
+    expect(shown()).toEqual(['Rifle', 'Cannon']);
+    expect(pressed('GRADE')).toEqual(['HEAVY']);
+    expect(screen.getByText(/2 LINES/)).toBeInTheDocument();
+    await userEvent.click(group('FINISH').getByRole('button', { name: 'CHROME' }));
+    expect(shown()).toEqual(['Cannon']);
+    expect(screen.getByText(/1 LINE\b/)).toBeInTheDocument();
+    await userEvent.click(group('GRADE').getByRole('button', { name: 'LIGHT' }));
+    expect(shown()).toEqual([]);
+    await userEvent.click(group('GRADE').getByRole('button', { name: 'ALL' }));
+    await userEvent.click(group('FINISH').getByRole('button', { name: 'ALL' }));
+    expect(shown()).toEqual(['Pistol', 'Rifle', 'Cannon']);
+  });
+
+  it('out of the way while QUICK FIND lists every shelf, as picked when it is cleared; another shelf, ALL again', async () => {
+    await open();
+    await userEvent.click(group('GRADE').getByRole('button', { name: 'HEAVY' }));
+    await userEvent.type(screen.getByLabelText('Find in this shop'), 'pistol');
+    expect(screen.queryByTestId('shop-picks')).toBeNull();
+    // QUICK FIND looks along every line, whatever is picked.
+    expect(within(screen.getByTestId('shop-found')).getByText('Pistol')).toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText('Find in this shop'));
+    expect(pressed('GRADE')).toEqual(['HEAVY']);
+    expect(shown()).toEqual(['Rifle', 'Cannon']);
+    await userEvent.click(screen.getByRole('tab', { name: 'POTIONS' }));
+    expect(screen.queryByTestId('shop-picks')).toBeNull();
+    await userEvent.click(screen.getByRole('tab', { name: 'GUNS' }));
+    expect(pressed('GRADE')).toEqual(['ALL']);
+    expect(shown()).toEqual(['Pistol', 'Rifle', 'Cannon']);
+  });
+});
