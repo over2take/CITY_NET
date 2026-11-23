@@ -148,6 +148,10 @@ test('every control in the builder takes a click, on every page', async ({ page 
       await expect(weapons.getByRole('textbox', { name: 'NEW COLUMN words' })).toBeVisible();
       await expect(weapons.getByRole('button', { name: 'MAKE DEFAULT' })).toBeVisible();
       await expect(weapons.getByRole('group', { name: 'WEAPONS on the sheet' })).toBeVisible();
+      // SOLD AT (8a7b2), with a shop of the game's own made, so a dashed chip is there too.
+      await weapons.getByRole('textbox', { name: 'New shop name' }).fill('Apothecary');
+      await weapons.getByRole('button', { name: 'ADD', exact: true }).click();
+      await expect(weapons.getByRole('group', { name: 'WEAPONS sold at' }).getByRole('button', { name: 'Apothecary' })).toHaveAttribute('aria-pressed', 'true');
       missed['ITEMS · TYPES'] = await faults(page);
       // A slot and an install (7e2b, 7e4b), side by side.
       await itemsTab('SLOTS & INSTALLS').click();

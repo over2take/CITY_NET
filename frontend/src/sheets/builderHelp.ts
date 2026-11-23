@@ -288,6 +288,7 @@ export const HINTS = {
   'items.types': 'What kinds of thing your game has, each with columns of its own: WEAPONS with a DAMAGE and AMMO, ARMOR with a DEFENSE. Every system starts with GEAR, a WEIGHT and a PRICE; a sheet shows each type as its own table.',
   'items.typeName': 'The type\'s name, as its table on a sheet is headed: WEAPONS.',
   'items.one': 'What one of it is called, where the table says one thing: a Weapon.',
+  'items.soldAt': 'The kinds of shop that sell its lines, each tick a kind: every building of that kind sells them, at their prices. None ticked, it is sold nowhere and only given. + NEW SHOP makes a kind of shop of this game\'s own, like an Apothecary, shown dashed; a building can then be one.',
   'items.onSheet': 'Where its lines sit on the sheet\'s GEAR tab: EQUIPPED (worn or wielded) at the top, USABLE (used up or used often: potions, ammo, kits), or PACK for the rest. Only where it is drawn; what a line does is the same in any.',
   'items.column': 'A column of the type\'s table, named as its head reads. Its name can change; what it is underneath stays, so the values filled in keep.',
   'items.kind': 'What the column holds: a NUMBER, TEXT, DAMAGE (dice that are damage), DICE (any other roll, like healing), a COUNT spent and refilled, or PICK ONE of the words you list. A new kind clears what items had filled in for it.',

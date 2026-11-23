@@ -72,7 +72,8 @@ test('ITEM TYPES: WEAPONS from its preset with AMMO and a GRADE, and a Pistol fi
   expect(saved.draft.items).toEqual({
     types: [
       { id: 'gear', label: 'GEAR', one: 'Gear', columns: [{ id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' }, { id: 'price', label: 'PRICE', kind: 'number' }] },
-      { id: 'weapons', label: 'WEAPONS', one: 'Weapon', on_sheet: 'equipped', columns: [
+      // Sold at the Gun Shop, as its preset suggests (8a7b2).
+      { id: 'weapons', label: 'WEAPONS', one: 'Weapon', on_sheet: 'equipped', sold_at: ['gun_shop'], columns: [
         { id: 'damage', label: 'DAMAGE', kind: 'damage' }, { id: 'range', label: 'RANGE', kind: 'text' },
         { id: 'ammo', label: 'AMMO', kind: 'count', button: 'FIRE', refill: 'long_rest', reload: ['rounds'] },
         { id: 'weight', label: 'WEIGHT', kind: 'number', unit: 'LB' }, { id: 'price', label: 'PRICE', kind: 'number' },
