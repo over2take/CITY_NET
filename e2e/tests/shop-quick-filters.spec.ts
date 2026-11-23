@@ -5,7 +5,9 @@ import { playerToken, sheetOf, payPlayer } from './shops';
 // A type's quick filters at the table (8a7c3; mockup docs/mockups/item-types-in-shops.html, section 3, answered 2 A). A game
 // whose GUNS type has a GRADE column, PICK ONE of LIGHT or HEAVY: the GM saves a Pistol (LIGHT) and a Rifle (HEAVY); on the
 // store's GUNS shelf the player sees GRADE as buttons, ALL first, presses HEAVY and only the Rifle is left, puts it in the
-// cart, presses ALL and the Pistol is back; checked out, the Rifle lands on their gear as a Gun with its grade.
+// cart, presses ALL and the Pistol is back; checked out, the Rifle lands on their gear as a Gun with its grade. Then GIVE.EXE
+// (8a7d): the GM's QUICK FIND finds the Rifle by "2d8" with THE LINE said; GUNS, the game's one catalogue, has GRADE as buttons
+// too, and HEAVY leaves the Rifle, given, so it stacks onto the one bought.
 
 const SYSTEM = (name: string) => ({
   format: 1, name, core: { health: { model: 'pool' } },
@@ -19,7 +21,7 @@ const SYSTEM = (name: string) => ({
   },
 });
 
-test('a GRADE column as buttons on the GUNS shelf: HEAVY leaves the Rifle, bought with its grade; ALL, every line (8a7c3)', async ({ page, browser, request }, info) => {
+test('a GRADE column as buttons on the GUNS shelf: HEAVY leaves the Rifle, bought with its grade; ALL, every line (8a7c3); in GIVE.EXE too, found by its damage and given (8a7d)', async ({ page, browser, request }, info) => {
   test.setTimeout(180_000);
   const again = info.retry ? `_${info.retry + 1}` : '';
   const gm = await gmToken(request);
@@ -87,5 +89,26 @@ test('a GRADE column as buttons on the GUNS shelf: HEAVY leaves the Rifle, bough
     const inventory = (await sheetOf(request, gm, player.username)).inventory;
     return (JSON.parse(typeof inventory === 'string' ? inventory : '[]') as { name: string; type?: string; values?: object }[]).map(({ name, type, values }) => ({ name, type, values }));
   }, { timeout: 15_000 }).toEqual([{ name: 'Rifle', type: 'guns', values: { damage: '2d8', grade: 'HEAVY' } }]);
+
+  // GIVE.EXE (8a7d): QUICK FIND by a value, the line said; GRADE as buttons, the game's one catalogue being GUNS; HEAVY, given.
+  await page.getByRole('button', { name: 'GIVE_ITEM', exact: true }).click();
+  const give = page.locator('.win95-window', { has: page.getByText('GIVE.EXE', { exact: true }) });
+  const items = give.getByRole('table', { name: 'Items' });
+  await give.getByLabel('Search every catalogue').fill('2d8');
+  await expect(items.getByRole('button', { name: /^Give / })).toHaveCount(1, { timeout: 15_000 });
+  await expect(items.locator('tr', { hasText: 'Rifle' })).toContainText('DAMAGE 2d8 · GRADE HEAVY');
+  await give.getByLabel('Search every catalogue').fill('');
+  const giveGrade = give.getByRole('group', { name: 'GRADE' });
+  await expect(giveGrade.getByRole('button')).toHaveText(['ALL', 'LIGHT', 'HEAVY']);
+  await giveGrade.getByRole('button', { name: 'HEAVY' }).click();
+  await expect(items.getByRole('button', { name: 'Give Pistol' })).toHaveCount(0);
+  await items.getByRole('button', { name: 'Give Rifle' }).click();
+  await give.getByRole('tablist', { name: 'Folders' }).getByRole('tab', { name: 'TO' }).click();
+  await give.getByRole('checkbox', { name: new RegExp(player.username, 'i') }).check();
+  await give.getByRole('button', { name: 'GIVE 1 × RIFLE TO 1' }).click();
+  await expect.poll(async () => {
+    const inventory = (await sheetOf(request, gm, player.username)).inventory;
+    return (JSON.parse(typeof inventory === 'string' ? inventory : '[]') as { name: string; qty: number }[]).map(({ name, qty }) => ({ name, qty }));
+  }, { timeout: 15_000 }).toEqual([{ name: 'Rifle', qty: 2 }]);
   await context.close();
 });

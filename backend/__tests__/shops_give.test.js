@@ -72,7 +72,8 @@ describe('what a CWN game can give', () => {
   it('has the GM\'s uploads too, one replacing the book\'s item of the same id', () => {
     store.load(CWN, { weapons: [pistol, { id: 'zip_gun', name: 'Zip Gun', price: 15 }] });
     const weapons = give.givable(CWN).find((c) => c.catalogue === 'weapons').items;
-    expect(weapons.filter((w) => w.id === 'heavy_pistol')).toEqual([{ id: 'heavy_pistol', name: 'House Pistol', price: 300 }]);
+    // With its values (8a7d); one with none, without.
+    expect(weapons.filter((w) => w.id === 'heavy_pistol')).toEqual([{ id: 'heavy_pistol', name: 'House Pistol', price: 300, fields: { dmg: '1d10', enc: '1' } }]);
     expect(weapons[weapons.length - 1]).toEqual({ id: 'zip_gun', name: 'Zip Gun', price: 15 });
     expect(weapons).toHaveLength(Object.keys(CATALOGUE.weapons).length + 1);
   });
@@ -95,7 +96,7 @@ describe('what another game can give', () => {
   it('is only what its GM uploaded, on shelves with something on them', () => {
     store.load(CPR, { weapons: [pistol], gear: [{ id: 'rope', name: 'Rope', price: 2 }] });
     expect(give.givable(CPR)).toEqual([
-      { catalogue: 'weapons', items: [{ id: 'heavy_pistol', name: 'House Pistol', price: 300 }] },
+      { catalogue: 'weapons', items: [{ id: 'heavy_pistol', name: 'House Pistol', price: 300, fields: { dmg: '1d10', enc: '1' } }] },
       { catalogue: 'gear', items: [{ id: 'rope', name: 'Rope', price: 2 }] },
     ]);
   });

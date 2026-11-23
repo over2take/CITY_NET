@@ -3,11 +3,13 @@
 // list (backend/shops/give.js, sheets/giving.js, sheets/givenList.js, through the socket); this
 // searches the list, says where a gift lands and why not, and shapes what is sent.
 
-import { catalogueLabel, type ShopStock } from '../data/buildingTypes';
+import { catalogueLabel, itemTypeOfShelf, type ShopStock } from '../data/buildingTypes';
+import { findWords, textHasEvery } from './findWords';
+import { pickedIn, type Picks } from './shelfPicks';
 import { catalogueCurrencyFor, formatAmount } from './currencies';
 
-/** One item the game can give, with what it's worth; a kit (7c4c) says what is in it. */
-export interface GivableItem { id: string; name: string; price: number; holds?: string }
+/** One item the game can give, with what it's worth; a kit (7c4c) says what is in it; a line its values (8a7d). */
+export interface GivableItem { id: string; name: string; price: number; holds?: string; fields?: Record<string, unknown> }
 /** A catalogue of them, as the server sends it ('givableItems'). */
 export interface GivableCatalogue { catalogue: string; items: GivableItem[] }
 /** An item as the window lists it: with its catalogue. */
@@ -49,14 +51,41 @@ export const NOTE_MAX = 200;
 /** HOW MANY, kept to what the server takes. */
 export const clampQty = (n: number): number => (Number.isFinite(n) ? Math.min(QTY_MAX, Math.max(1, Math.floor(n))) : 1);
 
-/** Every item, in one list, narrowed to a catalogue (`chip`, or all) and to names holding `query`; by name. */
-export const searchItems = (catalogues: GivableCatalogue[], query: string, chip: string | null): ListedItem[] => {
-  const q = query.trim().toLowerCase();
+/**
+ * The rest of a line, said in full (8a7d), as the shop's QUICK FIND says it: each value with its column's name, a type's
+ * columns in its own order and by its own names, then the rest by theirs; a blank one left out. Nothing for a kit or an
+ * item of the game's, which say what they hold instead.
+ */
+export const lineOf = (system: string | null | undefined, catalogue: string, item: Pick<GivableItem, 'fields'>): string => {
+  const fields = item.fields ?? {};
+  const columns = itemTypeOfShelf(system, catalogue)?.columns ?? [];
+  const named = columns.map((c) => [c.id, String(c.label || c.id).toUpperCase()] as const);
+  const rest = Object.keys(fields).filter((k) => !columns.some((c) => c.id === k)).map((k) => [k, k.replace(/_/g, ' ').toUpperCase()] as const);
+  return [...named, ...rest]
+    .map(([k, label]) => { const v = fields[k]; return v === '' || v === null || v === undefined ? '' : `${label} ${v}`; })
+    .filter(Boolean).join(' · ');
+};
+
+/** Whether an item has every word of a FIND box (findWords.ts): in its name, its catalogue's name, what it holds or its line. */
+const hasWords = (system: string | null | undefined, catalogue: string, item: GivableItem, words: string[]) =>
+  textHasEvery([item.name, chipLabel(catalogue, system), item.holds ?? '', lineOf(system, catalogue, item)].join(' '), words);
+
+/**
+ * Every item, in one list, narrowed to a catalogue (`chip`, or all), to what is typed (QUICK FIND, 8a7d: every word,
+ * anywhere, in any order, as FIND on GEAR and the shop's) and to a type's quick filters (`picks`, shelfPicks.ts); by name.
+ */
+export const searchItems = (catalogues: GivableCatalogue[], query: string, chip: string | null, system?: string | null, picks: Picks = {}): ListedItem[] => {
+  const words = findWords(query);
   return catalogues
     .filter((c) => !chip || c.catalogue === chip)
-    .flatMap((c) => c.items.map((i) => ({ ...i, catalogue: c.catalogue })))
-    .filter((i) => !q || i.name.toLowerCase().includes(q))
+    .flatMap((c) => c.items.filter((i) => hasWords(system, c.catalogue, i, words) && pickedIn(i.fields, picks)).map((i) => ({ ...i, catalogue: c.catalogue })))
     .sort((a, b) => a.name.localeCompare(b.name) || a.catalogue.localeCompare(b.catalogue));
+};
+
+/** How many of each catalogue's items have every word typed (8a7d), for its button to say; by catalogue. */
+export const foundPer = (catalogues: GivableCatalogue[], query: string, system?: string | null): Record<string, number> => {
+  const words = findWords(query);
+  return Object.fromEntries(catalogues.map((c) => [c.catalogue, c.items.filter((i) => hasWords(system, c.catalogue, i, words)).length]));
 };
 
 /** An item's key in the window: a catalogue can share an id with another. */

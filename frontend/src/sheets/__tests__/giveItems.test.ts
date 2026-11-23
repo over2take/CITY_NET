@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createRequire } from 'module';
 import {
-  clampQty, searchItems, itemKey, chipLabel, worthOf, landsText, shortReason, recipientText, resultText, giveLabel,
+  clampQty, searchItems, foundPer, lineOf, itemKey, chipLabel, worthOf, landsText, shortReason, recipientText, resultText, giveLabel,
   refusalText, givenAt, givenText, noticeText, recipientKey, previewRequest, giveRequest, askOnce, giveCalls,
   KITS_CATALOGUE, QTY_MAX, NOTE_MAX, ASK_TIMEOUT_MS, type GivableCatalogue, type Recipient, type AskSocket,
 } from '../giveItems';
@@ -260,5 +260,57 @@ describe('kits (7c4c)', () => {
     const items = [{ name: 'Rope', qty: 1 }, { name: 'Rations', qty: 3 }];
     expect(kitWords({ items })).toBe(kitItemsText(items));
     expect(kitWords({})).toBe('');
+  });
+});
+
+// QUICK FIND in GIVE.EXE (8a7d): every word anywhere, as FIND on GEAR and the shop's; each line said; a type's quick filters.
+describe('GIVE.EXE\'s QUICK FIND (8a7d)', () => {
+  const GAME = 'sys_8a7d8a7d8a7d8a7d';
+  const LINES: GivableCatalogue[] = [
+    { catalogue: 'type:guns', items: [
+      { id: 'pistol', name: 'Pistol', price: 250, fields: { damage: '2d6', grade: 'LIGHT', description: 'A snub revolver.' } },
+      { id: 'rifle', name: 'Rifle', price: 600, fields: { grade: 'HEAVY', damage: '2d8', ammo: '' } },
+    ] },
+    { catalogue: 'gear', items: [{ id: 'rope', name: 'Rope', price: 2, fields: { weight_lb: 5 } }, { id: 'tent', name: 'Tent', price: 9 }] },
+    { catalogue: KITS_CATALOGUE, items: [{ id: 'kit', name: 'Climber', price: 0, holds: 'Rope ×1, Pitons ×6' }] },
+  ];
+  beforeEach(() => {
+    clearCustomTemplates();
+    registerCustomTemplate({ id: GAME, name: 'Give', parts: {}, derived: [], sheet: { sections: [] }, words: {}, items: { slots: [], list: [], types: [
+      { id: 'guns', label: 'GUNS', one: 'Gun', columns: [
+        { id: 'damage', label: 'Damage', kind: 'damage' }, { id: 'ammo', label: 'AMMO', kind: 'count' },
+        { id: 'grade', label: 'GRADE', kind: 'pick', options: ['LIGHT', 'HEAVY'] },
+      ] },
+    ] } } as never);
+  });
+  afterEach(() => clearCustomTemplates());
+  const names = (list: { name: string }[]) => list.map((i) => i.name);
+
+  it('a line said in full: a type\'s columns in its order by their names, the rest by theirs, blanks left out', () => {
+    expect(lineOf(GAME, 'type:guns', LINES[0].items[0])).toBe('DAMAGE 2d6 · GRADE LIGHT · DESCRIPTION A snub revolver.');
+    expect(lineOf(GAME, 'type:guns', LINES[0].items[1])).toBe('DAMAGE 2d8 · GRADE HEAVY');
+    expect(lineOf(GAME, 'gear', LINES[1].items[0])).toBe('WEIGHT LB 5');
+    expect(lineOf(GAME, 'gear', LINES[1].items[1])).toBe('');
+  });
+
+  it('every word, anywhere, in any order: a name, a type\'s name, a value, what a kit holds', () => {
+    expect(names(searchItems(LINES, '2d6', null, GAME))).toEqual(['Pistol']);
+    expect(names(searchItems(LINES, 'heavy 2D8', null, GAME))).toEqual(['Rifle']);
+    expect(names(searchItems(LINES, 'guns', null, GAME))).toEqual(['Pistol', 'Rifle']);
+    expect(names(searchItems(LINES, 'pitons', null, GAME))).toEqual(['Climber']);
+    expect(names(searchItems(LINES, 'weight 5', null, GAME))).toEqual(['Rope']);
+    expect(names(searchItems(LINES, 'revolver rifle', null, GAME))).toEqual([]);
+    expect(names(searchItems(LINES, 'rope', 'gear', GAME))).toEqual(['Rope']);
+  });
+
+  it('a type\'s quick filters: the lines with every word picked, exactly; none picked, every line', () => {
+    expect(names(searchItems(LINES, '', 'type:guns', GAME, { grade: 'HEAVY' }))).toEqual(['Rifle']);
+    expect(names(searchItems(LINES, 'pistol', 'type:guns', GAME, { grade: 'HEAVY' }))).toEqual([]);
+    expect(names(searchItems(LINES, '', 'type:guns', GAME, {}))).toEqual(['Pistol', 'Rifle']);
+  });
+
+  it('each catalogue\'s count of what is typed, every catalogue said, none for none', () => {
+    expect(foundPer(LINES, 'rope', GAME)).toEqual({ 'type:guns': 0, gear: 1, [KITS_CATALOGUE]: 1 });
+    expect(foundPer(LINES, '2d', GAME)).toEqual({ 'type:guns': 2, gear: 0, [KITS_CATALOGUE]: 0 });
   });
 });

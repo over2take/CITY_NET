@@ -1,10 +1,11 @@
 import React from 'react';
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, within, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { GiveItemWindow } from '../GiveItemWindow';
 import type { AskSocket, Recipient } from '../../sheets/giveItems';
+import { registerCustomTemplate, clearCustomTemplates } from '../../sheets/customTemplates';
 
 /**
  * GIVE.EXE (4g4b; approved mockup docs/mockups/give-item.html, 2026-10-12), on the shop's layout:
@@ -313,4 +314,77 @@ describe('kits (7c4c)', () => {
     render(<GiveItemWindow pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()} socket={server.socket} system={CWN} npcs={[]} online={[]} />);
     return server;
   }
+});
+
+// ─── QUICK FIND and a type's quick filters (8a7d) ─────────────────────────────────────────────
+describe('QUICK FIND in GIVE.EXE (8a7d)', () => {
+  const GAME = 'sys_8a7d00008a7d0000';
+  const GIVABLE = { ok: true, system: GAME, catalogues: [
+    { catalogue: 'type:guns', items: [
+      { id: 'pistol', name: 'Pistol', price: 250, fields: { damage: '2d6', grade: 'LIGHT' } },
+      { id: 'rifle', name: 'Rifle', price: 600, fields: { damage: '2d8', grade: 'HEAVY' } },
+      { id: 'cannon', name: 'Cannon', price: 900, fields: { damage: '3d6', grade: 'HEAVY' } },
+    ] },
+    { catalogue: 'type:potions', items: [{ id: 'draught', name: 'Draught', price: 40, fields: { heals: '2d4' } }] },
+  ] };
+  beforeEach(() => {
+    registerCustomTemplate({ id: GAME, name: 'Givefall', parts: {}, derived: [], sheet: { sections: [] }, words: {}, items: { slots: [], list: [], types: [
+      { id: 'guns', label: 'GUNS', one: 'Gun', columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }, { id: 'grade', label: 'GRADE', kind: 'pick', options: ['LIGHT', 'HEAVY'] }] },
+      { id: 'potions', label: 'POTIONS', one: 'Potion', columns: [{ id: 'heals', label: 'HEALS', kind: 'dice' }] },
+    ] } } as never);
+  });
+  afterEach(() => clearCustomTemplates());
+  const openGame = () => open(fakeServer({ givable: GIVABLE }), { system: GAME });
+  const box = () => screen.getByRole('textbox', { name: 'Search every catalogue' });
+  const listed = () => within(screen.getByRole('table', { name: 'Items' })).getAllByRole('row').slice(1).map((r) => r.cells[0].textContent);
+  const chips = () => within(screen.getByRole('tablist', { name: 'Catalogue' })).getAllByRole('tab').map((t) => t.textContent);
+
+  it('each line with THE LINE in full; a value, a type\'s name, every word in any order finds it; each button its count', async () => {
+    openGame();
+    const table = await screen.findByRole('table', { name: 'Items' });
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent?.trim())).toEqual(['NAME', 'CATALOGUE', 'THE LINE', 'WORTH', '']);
+    expect(within(table).getByText('Pistol').closest('tr')!.cells[2].textContent).toBe('DAMAGE 2d6 · GRADE LIGHT');
+    expect(chips()).toEqual(['ALL', 'GUNS', 'POTIONS']);
+    await userEvent.type(box(), 'heavy 3d6');
+    expect(listed()).toEqual(['Cannon']);
+    expect(chips()).toEqual(['ALL · 1', 'GUNS · 1', 'POTIONS · 0']);
+    await userEvent.clear(box());
+    await userEvent.type(box(), 'potions');
+    expect(listed()).toEqual(['Draught']);
+    await userEvent.clear(box());
+    expect(chips()).toEqual(['ALL', 'GUNS', 'POTIONS']);
+  });
+
+  it('a type\'s PICK ONE column as buttons once it is picked, ALL first; a word narrows it, with what is typed; another, ALL again', async () => {
+    openGame();
+    await screen.findByRole('table', { name: 'Items' });
+    expect(screen.queryByTestId('give-picks')).toBeNull();
+    await userEvent.click(screen.getByRole('tab', { name: 'GUNS' }));
+    const grade = within(screen.getByRole('group', { name: 'GRADE' }));
+    expect(grade.getAllByRole('button').map((b) => b.textContent)).toEqual(['ALL', 'LIGHT', 'HEAVY']);
+    expect(grade.getByRole('button', { name: 'ALL' }).getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(grade.getByRole('button', { name: 'HEAVY' }));
+    expect(grade.getByRole('button', { name: 'HEAVY' }).getAttribute('aria-pressed')).toBe('true');
+    expect(listed()).toEqual(['Cannon', 'Rifle']);
+    expect(screen.getByText('2 OF 4 ITEMS · NOTHING IS CHARGED')).toBeTruthy();
+    await userEvent.type(box(), 'rifle');
+    expect(listed()).toEqual(['Rifle']);
+    await userEvent.clear(box());
+    await userEvent.click(grade.getByRole('button', { name: 'ALL' }));
+    expect(listed()).toEqual(['Cannon', 'Pistol', 'Rifle']);
+    await userEvent.click(grade.getByRole('button', { name: 'LIGHT' }));
+    await userEvent.click(screen.getByRole('tab', { name: 'POTIONS' }));
+    expect(screen.queryByTestId('give-picks')).toBeNull();
+    await userEvent.click(screen.getByRole('tab', { name: 'GUNS' }));
+    expect(within(screen.getByRole('group', { name: 'GRADE' })).getByRole('button', { name: 'ALL' }).getAttribute('aria-pressed')).toBe('true');
+    expect(listed()).toEqual(['Cannon', 'Pistol', 'Rifle']);
+  });
+
+  it('a game\'s one catalogue, with no buttons to pick it: its quick filters there all the same', async () => {
+    open(fakeServer({ givable: { ...GIVABLE, catalogues: [GIVABLE.catalogues[0]] } }), { system: GAME });
+    await screen.findByRole('table', { name: 'Items' });
+    expect(screen.queryByRole('tablist', { name: 'Catalogue' })).toBeNull();
+    await userEvent.click(within(screen.getByRole('group', { name: 'GRADE' })).getByRole('button', { name: 'LIGHT' }));
+    expect(listed()).toEqual(['Pistol']);
+  });
 });
