@@ -70,6 +70,9 @@ let checkouts: any[] = [];
 let silentServer = false;
 /** What the fake server says a sale came to. */
 let salePayout = 0;
+/** The fake server places what was bought itself, as the real one does when asked (8n6b); and why it wouldn't. */
+let serverPlaces = false;
+let refuseMessage: string | undefined;
 let saleFromBody = 0;
 
 /** The listeners of the socket most recently handed to a window, so a test can push to it. */
@@ -103,9 +106,9 @@ const makeSocket = () => {
         if (payload.sells.length) sold.push({ locationId: payload.locationId, items: payload.sells });
         act(() => (listeners.shopCheckout || []).forEach((f) => f(
           refuseWith
-            ? { ok: false, reason: refuseWith }
+            ? { ok: false, reason: refuseWith, ...(refuseMessage ? { message: refuseMessage } : {}) }
             : {
-              ok: true, payout: salePayout, fromBody: saleFromBody, net: payload.expectedNet,
+              ok: true, placed: serverPlaces, payout: salePayout, fromBody: saleFromBody, net: payload.expectedNet,
               settled: payload.settle ?? 'balance', balance: bank.balance - payload.expectedNet, debt: bank.debt,
             },
         )));
@@ -161,6 +164,8 @@ beforeEach(() => {
   refuseWith = null;
   salePayout = 0;
   saleFromBody = 0;
+  serverPlaces = false;
+  refuseMessage = undefined;
 });
 
 describe('a ripperdoc', () => {
@@ -2398,4 +2403,36 @@ describe('a shelf of 1000 lines and a long gear list (8n3)', () => {
     console.log('shop window stress, SELL (ms):', Math.round(ms));
     expect(ms).toBeLessThan(10_000);
   }, 120_000);
+});
+
+// ─── Placed by the server (8n6b) ────────────────────────────────────────────────
+describe('what is bought, placed by the server (8n6b)', () => {
+  it('asks the server to place it; placed there, nothing is written here, the receipt still says what was bought', async () => {
+    serverPlaces = true;
+    show('gun_shop');
+    await buyNow('Heavy Pistol');
+    expect(checkouts).toHaveLength(1);
+    expect(checkouts[0]).toMatchObject({ place: true });
+    expect(handleFieldsChange).not.toHaveBeenCalled();
+    expect(handleFieldChange).not.toHaveBeenCalled();
+    expect(screen.getByTestId('cart-receipt')).toHaveTextContent(/Heavy Pistol/);
+  });
+
+  it('a server that didn\'t place it (older): placed here, as before', async () => {
+    show('gun_shop');
+    await buyNow('Heavy Pistol');
+    expect(handleFieldsChange).toHaveBeenCalled();
+  });
+
+  it('no room on the sheet: the server\'s reason, and that nothing was charged', async () => {
+    refuseWith = 'no_room';
+    refuseMessage = 'No free weapon row — all 6 are full. Clear one on the sheet first.';
+    show('gun_shop');
+    await buyNow('Heavy Pistol');
+    expect(screen.getByText('No free weapon row — all 6 are full. Clear one on the sheet first. Nothing was charged.')).toBeInTheDocument();
+    refuseMessage = undefined;
+    await openFolder('CART');
+    await userEvent.click(screen.getByRole('button', { name: 'CHECK OUT' }));
+    expect(screen.getByText('There is no room on your sheet for that. Nothing was charged.')).toBeInTheDocument();
+  });
 });
