@@ -9,7 +9,7 @@ import {
 } from '../sheets/rolls';
 import { small, why, btn, field } from './statsRulesStyles';
 import { dieList, symbolList } from '../sheets/dice';
-import { FaceShown } from './DrawPad';
+import { FaceShown } from './DiceLook';
 import { onAllRolls } from '../sheets/conditions';
 import { FieldName, HelpHint } from './HelpHint';
 import { HINTS } from '../sheets/builderHelp';
