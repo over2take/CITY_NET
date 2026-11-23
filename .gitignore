@@ -76,3 +76,4 @@ frontend/src/*.bak
 e2e/test-results/
 e2e/playwright-report/
 e2e/.built/
+e2e/results/

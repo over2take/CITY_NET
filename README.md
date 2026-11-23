@@ -586,6 +586,7 @@ CITY_NET/
 │       ├── npc_rolls.test.js           # Rolling from an NPC's sheet: the GM from any NPC, a player from the friendly NPC given to them, the log naming the NPC; anyone else ignored
 │       ├── npc_attacks.test.js         # Attacking as an NPC in CWN, Shadowrun and Cyberpunk RED: its own sheet, wounds and position, the GM for any NPC and a controller for theirs, the log naming both
 │       ├── e2e_names.test.js        # Each browser journey's system and player names its own: on CI, tests sharing a database and a name clash
+│       ├── e2e_timings.test.js      # The journeys' times on CI (8n4, e2e/timings.js): every test, in describe blocks too, slowest first with its tries added; the summary table with failures and retries said, only the slowest ten; run as CI runs it, and a part with no report not failing the step
 │       ├── readme_structure.test.js    # This tree held to the files on disk: every backend and frontend source and test file named in its own folder, and no line naming a file that has gone. Reads the tree by indentation into full paths
 │       ├── system_isolation.test.js    # The CWN work kept out of the other systems where rolls are resolved and sheets written, so widening the shared engine has to be deliberate (the browser half is in components/__tests__/systemIsolation.test.tsx)
 │       ├── bank_own_account.test.js    # The bank's player handlers acting on the sender's own account only, where they used to act on whatever name the message carried; the ordinary cases unchanged
@@ -1440,6 +1441,7 @@ CITY_NET/
 │   │   │   └── setup.ts        # Loaded before every frontend test: Testing Library's DOM matchers
 │   │   ├── __tests__/
 │   │   │   ├── App.smoke.test.tsx       # The app mounts without throwing and draws the sidebar and canvas area, so a broken import or a crash on first render fails here; says its theme where an open sheet tab hears it (8s1a)
+│   │   │   ├── viteLogger.test.ts       # The dev and preview servers' logger (8n4, vite.config.ts): a closed browser's EPIPE and ECONNRESET on the socket's proxy dropped, every other error still said
 │   │   │   ├── SheetSurfaces.test.tsx       # The standalone tab and SHEET.EXE are one sheet (8s1a): the same play props (those still to come named with their piece), each action on the tab sent as the window's, refusals and recovery reaching it, in the theme and following it, signed in after a refresh, CONNECTION LOST, only own rolls; IMPORT where the system can import on both and IMPORT.EXE from the tab, what the GM gives said on the tab (8s1b); LEVEL_UP.EXE and NEW_CHARACTER.EXE opening on the tab (8s1c); every prop the window gives, the tab gives too, none left to come, the asks of the main window and the vehicle badge on the tab (8s1d); the vitals strip on both, each with its own sign-in (8s3b); FIRE (onGearCount) on both (8a4b)
 │   │   │   ├── BattleMapScene.test.tsx  # Which loader a map goes to — the whole of the animated-map change, and previously uncovered since the app smoke test mocks the scene away. A loop must not reach `useLoader`, which suspends with nothing above it to catch that
 │   │   │   ├── battleMapMedia.test.ts   # Still or loop, including the trap where the last dot is in the query string rather than the filename
@@ -1503,10 +1505,11 @@ CITY_NET/
 │   ├── COVERAGE.md             # Every option a GM can set in the builder, its server tests, and the browser test proving it at the table (AT THE TABLE / BUILDER ONLY / GAP), with the gaps in the order Phase 7 closes them; updated by every piece that adds or changes an option
 │   ├── README.md               # How to install and run the journeys, read a failure, and write a new one
 │   ├── package.json            # Playwright's test runner, and nothing else
-│   ├── playwright.config.ts    # Starts both servers (Secure Mode on, a temp database, the test GM), one worker, the installed Chrome locally or Playwright's Chromium in CI; with E2E_BUILT=1 (CI) the frontend built once into e2e/.built and served by vite preview rather than file by file
+│   ├── playwright.config.ts    # Starts both servers (Secure Mode on, a temp database, the test GM), one worker, the installed Chrome locally or Playwright's Chromium in CI; with E2E_BUILT=1 (CI) the frontend built once into e2e/.built and served by vite preview rather than file by file; on CI a whole part stops at 16 minutes, and a JSON report is written for timings.js (8n4)
 │   ├── fixtures/
 │   │   └── emberline.citysys   # A random system from the test generator, exported as the builder does: the file INSTALL A FILE is given in builder-clicks
 │   ├── cleanup.ts              # Before a run, the throwaway databases earlier runs left in the temp folder
+│   ├── timings.js              # How long each journey took on CI (8n4): Playwright's JSON report read into every test's time over its tries, slowest first; the slowest ten as a table on the run's summary page, every test's time kept as the part's file; a part with no report says so
 │   └── tests/
 │       ├── helpers.ts              # Signing in as the GM or a player, the GAME tab, the builder past its tour, a rail button (pointer moved off after), a builder page; a tab of an open character sheet (sheetTab); a running system and an approved player through the API; skipBoot, each tab started as one that has played the boot sequence
 │       ├── acceleration-notice.spec.ts # HARDWARE ACCELERATION IS OFF: a browser offering only slow drawing is told how to turn acceleration on, and DISMISS keeps it gone after a reload; SYSTEM_INFO's MAP SLOW? holds the steps, and WARN ME, off since DISMISS, brings it back

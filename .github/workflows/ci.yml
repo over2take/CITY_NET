@@ -201,10 +201,11 @@ jobs:
     name: Browser Journeys (${{ matrix.part }}/8)
     runs-on: ubuntu-latest
     # A part aims for 10 minutes or less. One hung once (2026-10-31) and would have held its machine
-    # for GitHub's default six hours. Playwright's own limit (playwright.config.ts globalTimeout, 25
-    # minutes) ends a hung run first, as a failure, so its report is still kept; this one catches a
-    # hang outside the tests.
-    timeout-minutes: 30
+    # for GitHub's default six hours. Playwright's own limit (playwright.config.ts globalTimeout, 16
+    # minutes) ends a hung run first, as a failure, so its report is still kept; the run step's own
+    # 18 minutes stop one Playwright itself froze in (2026-11-22: 28 minutes silent, cancelling did
+    # nothing), and this one a hang outside the tests. It was 30, with Playwright's at 25 (8n4).
+    timeout-minutes: 22
     strategy:
       # Every part runs to the end, so one failure never hides another's.
       fail-fast: false
@@ -242,11 +243,29 @@ jobs:
 
       - name: Run the journeys
         working-directory: ./e2e
+        # Enforced by GitHub's runner, not by Playwright: a part whose Playwright froze still ends here (8n4).
+        timeout-minutes: 18
         # The frontend built once and served whole (playwright.config.ts E2E_BUILT), not file by file by the dev
         # server: with the boot no longer played in every fresh tab (tests/helpers.ts skipBoot), a third of the time.
         env:
           E2E_BUILT: '1'
         run: npx playwright test --shard=${{ matrix.part }}/8 --fully-parallel
+
+      # How long each journey took (8n4, e2e/timings.js): the slowest ten on the run's summary page, and every test's time
+      # kept for 30 days, so the parts can be shared out by time. Passed or failed, so a slow failure shows too.
+      - name: Time the journeys
+        if: always()
+        working-directory: ./e2e
+        run: node timings.js results/report.json ${{ matrix.part }} results/timings-part-${{ matrix.part }}.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the journeys' times
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-timings-${{ matrix.part }}
+          path: e2e/results/timings-part-${{ matrix.part }}.json
+          if-no-files-found: ignore
+          retention-days: 30
 
       # What failed and why: screenshots, a trace of every step, and the HTML report, one per part.
       - name: Keep the report of a failed run
