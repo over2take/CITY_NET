@@ -177,11 +177,6 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
    */
   router.patch('/:id/building-type', authenticate, (req, res) => withShopSystem(res, (system) => {
     const { building_type, buyback_pct } = req.body;
-    // A value nobody recognises would put a SHOP button on a building that cannot sell
-    // anything, so it is refused rather than stored and puzzled over later.
-    // The app's types, or one of the running game's own shops (8a7b).
-    if (!isValidType(building_type) && !ownShopOf(customSystems.definitionOf(system), building_type)) return res.status(400).json({ error: 'Unknown building type' });
-
     const next = building_type === '' || building_type === undefined ? null : building_type;
 
     /**
@@ -198,6 +193,13 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     db.get('SELECT id, building_type FROM locations WHERE id = ?', [req.params.id], (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!row) return res.status(404).json({ error: 'Not found' });
+      // A value nobody recognises would put a SHOP button on a building that cannot sell
+      // anything, so it is refused rather than stored and puzzled over later: the app's types,
+      // or one of the running game's own shops (8a7b). One the building already has (another
+      // game's own shop, 8a7b3a) is kept, as saving the building sends it again.
+      if (next !== null && next !== row.building_type && !isValidType(next) && !ownShopOf(customSystems.definitionOf(system), next)) {
+        return res.status(400).json({ error: 'Unknown building type' });
+      }
       // A type this game turned off is not one a building can be given here. One already given
       // keeps it, unused, for when the type is turned back on - and saving the building again
       // (the editor sends its type on every save) is not giving it anything new.

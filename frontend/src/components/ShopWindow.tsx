@@ -1,7 +1,7 @@
 import React, { useDeferredValue, useEffect, useState } from 'react';
 import { TerminalWindow } from './TerminalWindow';
 import {
-  buildingTypeById, shelvedIn, boughtIn, catalogueById, typeLabel, catalogueLabel, itemTypeOfShelf, type ShopStock,
+  buildingTypeIn, onlyBuysIn, shelvedIn, boughtIn, catalogueById, typeLabel, catalogueLabel, itemTypeOfShelf, buysIn, ownShopIn, type ShopStock,
 } from '../data/buildingTypes';
 import {
   SETTLE_BALANCE, SETTLE_DEBT, refusalText, buybackValue,
@@ -342,7 +342,8 @@ export function ShopWindow({
   /** Whether this game's shops sell from the CWN book. Nobody else's do. */
   const book = system === BOOK_SYSTEM;
   const [pos, setPos] = useState({ x: 140, y: 90 });
-  const [tab, setTab] = useState<Tab>('buy');
+  // A shop that sells nothing and buys anything opens on SELL (8a7b3a).
+  const [tab, setTab] = useState<Tab>(() => (onlyBuysIn(system, buildingType) ? 'sell' : 'buy'));
   const [filter, setFilter] = useState('');
   // A custom system's own words for the shop, money, the GM and characters; today's text otherwise.
   const word = useWords(system);
@@ -418,7 +419,8 @@ export function ShopWindow({
    */
   const [kinds, setKinds] = useState({ ranged: false, melee: false });
 
-  const type = buildingTypeById(buildingType);
+  // The app's types, or one of the game's own shops (8a7b3a).
+  const type = buildingTypeIn(system, buildingType);
   // Without the catalogues this game turned off.
   // A shelf a type is named like only while lines are on it (8a7a2).
   const catalogues = shelvedIn(buildingType, system, (c) => uploadedIn(c).length > 0);
@@ -1755,13 +1757,16 @@ export function ShopWindow({
             </div>
 
             {!shelf ? (
-              <div style={{ ...mono(10), color: 'var(--grid-section)', padding: '10px 0', letterSpacing: 0, lineHeight: 1.6 }}>
-                NO CATALOGUE FOR THIS {SHOP} YET.
-                {/* Named, so the answer to "why is this empty" is on the screen. */}
-                {type?.sells.length
-                  ? ` The book has ${type.sells.map((s) => catalogueLabel(s, system)).join(' and ')} for this
+              <div data-testid="shop-sells-nothing" style={{ ...mono(10), color: buysIn(system, buildingType) === 'anything' ? 'var(--green)' : 'var(--grid-section)', padding: '10px 0', letterSpacing: 0, lineHeight: 1.6 }}>
+                {/* One that buys anything says so (8a7b3a); one of the game's own selling nothing yet, why. */}
+                {buysIn(system, buildingType) === 'anything'
+                  ? `THIS ${SHOP} ONLY BUYS: it sells nothing, and takes anything with a price. Open SELL.`
+                  : <>NO CATALOGUE FOR THIS {SHOP} YET.
+                    {/* Named, so the answer to "why is this empty" is on the screen. */}
+                    {type?.sells.length
+                      ? ` The book has ${type.sells.map((s) => catalogueLabel(s, system)).join(' and ')} for this
                       storefront, but nothing here can put it on a shelf yet.`
-                  : ' This building type does not trade.'}
+                      : ownShopIn(system, buildingType) ? ' No item type is sold here yet.' : ' This building type does not trade.'}</>}
               </div>
             ) : (
               <>

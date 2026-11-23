@@ -2215,6 +2215,44 @@ describe('the shop\'s refusals', () => {
   });
 });
 
+// ─── The game's own shops (8a7b3a) ──────────────────────────────────────────────
+describe('a shop of the game\'s own (8a7b3a)', () => {
+  const HERBAL = 'sys_beef0beef0beef0b';
+  const POTIONS = { id: 'potions', label: 'POTIONS', one: 'Potion', sold_at: ['apothecary'], columns: [] };
+
+  beforeEach(() => {
+    clearCustomTemplates();
+    registerCustomTemplate({
+      id: HERBAL, name: 'Herbal', parts: {}, derived: [], sheet: { sections: [] }, words: {},
+      buildings: { shops: [{ id: 'apothecary', name: 'Apothecary', on: true }, { id: 'fence', name: 'Fence', on: true, buys: 'anything' }, { id: 'stall', name: 'Stall', on: true }] },
+      items: { slots: [], list: [], types: [POTIONS] },
+    } as never);
+    loadUploaded({ 'type:potions': [{ id: 'item:draught', name: 'Healing Draught', price: 40, fields: {} }], gear: [{ id: 'rope', name: 'Rope', price: 100, fields: {} }] } as never);
+    sheetState.sheet = { system: HERBAL, data: { inventory: JSON.stringify([{ name: 'Rope', qty: 1, carry: 'stowed' }]) } };
+  });
+  afterEach(() => { clearCustomTemplates(); clearUploaded(); });
+
+  it('named as the game names it, selling the types SOLD AT it, on BUY', () => {
+    show('apothecary', 'Moss & Root', HERBAL);
+    expect(screen.getByText(/^APOTHECARY · 1 LINE/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add Healing Draught to the cart' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'BUY' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('one that sells nothing and buys anything opens on SELL, its BUY folder saying it only buys', async () => {
+    show('fence', 'Back Door', HERBAL);
+    expect(screen.getByRole('tab', { name: 'SELL' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('button', { name: 'Add Rope to the cart' })).toBeInTheDocument();
+    await openFolder('BUY');
+    expect(screen.getByTestId('shop-sells-nothing')).toHaveTextContent('THIS SHOP ONLY BUYS: it sells nothing, and takes anything with a price. Open SELL.');
+  });
+
+  it('one selling nothing yet, and buying what it sells, says no type is sold there yet', () => {
+    show('stall', 'Corner', HERBAL);
+    expect(screen.getByTestId('shop-sells-nothing')).toHaveTextContent('NO CATALOGUE FOR THIS SHOP YET. No item type is sold here yet.');
+  });
+});
+
 // ─── What a shop buys (8a7b1b) ──────────────────────────────────────────────────
 describe('a shop that buys anything (8a7b1b)', () => {
   const PAWN = 'sys_baba0baba0baba0b';

@@ -164,6 +164,16 @@ describe('at the table', () => {
     expect((await give(id, 'tavern')).status).toBe(400);
   });
 
+  it('a building keeps another game\'s own shop when saved again (8a7b3a); a new unknown one is still refused', async () => {
+    const id = await stall('apothecary');
+    await install({ ...HERBAL([]), items: { types: [{ ...POTIONS, sold_at: [] }], list: [] } });
+    expect((await give(id, 'apothecary')).status).toBe(200);
+    expect((await get(db, 'SELECT building_type FROM locations WHERE id = ?', [id])).building_type).toBe('apothecary');
+    expect((await give(id, 'tavern')).status).toBe(400);
+    expect((await give(id, '')).status).toBe(200);
+    expect((await give(id, 'apothecary')).status).toBe(400);
+  });
+
   it('sells the types that tick it, at their price; the General Store doesn\'t; off, or in another game, it is no shop', async () => {
     const shop = await stall('apothecary');
     const goods = await stall('general_store');

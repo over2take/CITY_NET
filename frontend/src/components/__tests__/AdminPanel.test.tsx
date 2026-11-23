@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, cleanup } from '@testing-library/react';
 import * as THREE from 'three';
 import userEvent from '@testing-library/user-event';
 
@@ -1238,6 +1238,40 @@ describe('the building type control', () => {
       editView({ globalSettings: { game_system: 'cyberpunk_red' } });
       expect(options()).toHaveLength(10);
       expect(options()).not.toContain('Gun Shop (not in this game)');
+    });
+  });
+
+  describe('the game\'s own shops (8a7b3a)', () => {
+    const HERBAL = 'sys_bbbbbbbbbbbbbbbb';
+    beforeEach(() => {
+      clearCustomTemplates();
+      registerCustomTemplate({ id: HERBAL, name: 'Herbal', parts: {}, derived: [], sheet: { sections: [] }, words: {},
+        buildings: { shops: [{ id: 'apothecary', name: 'Apothecary', on: true }, { id: 'fence', name: 'Fence', on: false }] } } as never);
+    });
+    afterEach(() => clearCustomTemplates());
+    const group = () => screen.getByRole('group', { name: 'THIS GAME\'S OWN' });
+
+    it('after the app\'s, under THIS GAME\'S OWN; one turned off left out; a shop, with its rate', () => {
+      editView({ globalSettings: { game_system: HERBAL }, editData: { building_type: 'apothecary' } });
+      expect([...group().querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Apothecary (shop)']);
+      expect((screen.getByLabelText('Building type') as HTMLSelectElement).value).toBe('apothecary');
+      expect(screen.getByLabelText('Buy-back rate for this shop')).toBeInTheDocument();
+    });
+
+    it('one turned off, or another game\'s, still shown on a building that has it, so saving keeps it; no shop', () => {
+      editView({ globalSettings: { game_system: HERBAL }, editData: { building_type: 'fence' } });
+      expect([...group().querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Apothecary (shop)', 'Fence (not in this game)']);
+      expect(screen.queryByLabelText('Buy-back rate for this shop')).toBeNull();
+      cleanup();
+      editView({ globalSettings: { game_system: HERBAL }, editData: { building_type: 'tavern' } });
+      expect((screen.getByLabelText('Building type') as HTMLSelectElement).value).toBe('tavern');
+      expect(screen.getByRole('option', { name: 'tavern (not in this game)' })).toBeInTheDocument();
+    });
+
+    it('none in a game that makes none', () => {
+      editView({ globalSettings: { game_system: 'cyberpunk_red' } });
+      expect(screen.queryByRole('group', { name: 'THIS GAME\'S OWN' })).toBeNull();
+      expect(screen.queryByRole('option', { name: /not in this game/ })).toBeNull();
     });
   });
 
