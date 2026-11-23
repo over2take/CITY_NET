@@ -1196,16 +1196,22 @@ describe('the building type control', () => {
     );
   };
 
+  /** Each header of the BUILDING TYPE box with what is under it (8a7b3a). */
+  const groups = () => [...screen.getByLabelText('Building type').querySelectorAll('optgroup')]
+    .map((g) => [g.label, ...[...g.querySelectorAll('option')].map((o) => o.textContent)]);
+
   it('offers the types under Cities Without Number', () => {
     editView();
     expect(screen.getByLabelText('Building type')).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: /Ripperdoc \(shop\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Ripperdoc' })).toBeInTheDocument();
   });
 
-  it('marks which types trade, so the SHOP button is not a surprise', () => {
+  it('says which types trade under SHOPS, the rest under OTHER BUILDINGS, so the SHOP button is not a surprise', () => {
     editView();
-    expect(screen.getByRole('option', { name: 'Bar' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Bar (shop)' })).not.toBeInTheDocument();
+    expect(groups()).toEqual([
+      ['SHOPS', 'Ripperdoc', 'Gun Shop', 'Clinic', 'Garage', 'Armorer', 'General Store'],
+      ['OTHER BUILDINGS', 'Bar', 'Corporate', 'Residence', 'Industrial'],
+    ]);
   });
 
   describe('under a custom system that renamed or turned off types (3b3b2)', () => {
@@ -1221,7 +1227,7 @@ describe('the building type control', () => {
 
     it('offers the types it kept, by its names', () => {
       editView({ globalSettings: { game_system: HEARTH } });
-      expect(options()).toContain('Temple (shop)');
+      expect(options()).toContain('Temple');
       expect(options().some((o) => o?.startsWith('Gun Shop'))).toBe(false);
       expect(options()).toHaveLength(10 - 1);
     });
@@ -1249,18 +1255,17 @@ describe('the building type control', () => {
         buildings: { shops: [{ id: 'apothecary', name: 'Apothecary', on: true }, { id: 'fence', name: 'Fence', on: false }] } } as never);
     });
     afterEach(() => clearCustomTemplates());
-    const group = () => screen.getByRole('group', { name: 'THIS GAME\'S OWN' });
-
-    it('after the app\'s, under THIS GAME\'S OWN; one turned off left out; a shop, with its rate', () => {
+    it('first, under THIS GAME\'S SHOPS, made to be put on the map; one turned off left out; a shop, with its rate', () => {
       editView({ globalSettings: { game_system: HERBAL }, editData: { building_type: 'apothecary' } });
-      expect([...group().querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Apothecary (shop)']);
+      expect(groups().map((g) => g[0])).toEqual(['THIS GAME\'S SHOPS', 'SHOPS', 'OTHER BUILDINGS']);
+      expect(groups()[0]).toEqual(['THIS GAME\'S SHOPS', 'Apothecary']);
       expect((screen.getByLabelText('Building type') as HTMLSelectElement).value).toBe('apothecary');
       expect(screen.getByLabelText('Buy-back rate for this shop')).toBeInTheDocument();
     });
 
     it('one turned off, or another game\'s, still shown on a building that has it, so saving keeps it; no shop', () => {
       editView({ globalSettings: { game_system: HERBAL }, editData: { building_type: 'fence' } });
-      expect([...group().querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Apothecary (shop)', 'Fence (not in this game)']);
+      expect(groups()[0]).toEqual(['THIS GAME\'S SHOPS', 'Apothecary', 'Fence (not in this game)']);
       expect(screen.queryByLabelText('Buy-back rate for this shop')).toBeNull();
       cleanup();
       editView({ globalSettings: { game_system: HERBAL }, editData: { building_type: 'tavern' } });
@@ -1270,7 +1275,7 @@ describe('the building type control', () => {
 
     it('none in a game that makes none', () => {
       editView({ globalSettings: { game_system: 'cyberpunk_red' } });
-      expect(screen.queryByRole('group', { name: 'THIS GAME\'S OWN' })).toBeNull();
+      expect(groups().map((g) => g[0])).toEqual(['SHOPS', 'OTHER BUILDINGS']);
       expect(screen.queryByRole('option', { name: /not in this game/ })).toBeNull();
     });
   });
@@ -1278,8 +1283,8 @@ describe('the building type control', () => {
   it('is there under every system, named the way that game names them', () => {
     editView({ globalSettings: { game_system: 'shadowrun_6e' } });
     expect(screen.getByLabelText('Building type')).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Street Doc (shop)' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Ripperdoc (shop)' })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Street Doc' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Ripperdoc' })).not.toBeInTheDocument();
   });
 
   it('tells the GM how to stock a shop that has nothing to sell', async () => {

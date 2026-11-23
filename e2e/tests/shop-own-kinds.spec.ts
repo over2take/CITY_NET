@@ -4,7 +4,7 @@ import { playerToken, payPlayer } from './shops';
 
 // The game's own shops at the table (8a7b3a; approved mockup docs/mockups/types-in-shops.html, sections 3 and 4). A game with
 // an Apothecary selling its POTIONS and a Fence that sells nothing and BUYS anything. The GM makes a building an Apothecary
-// from BUILDING TYPE, under THIS GAME'S OWN; the player buys a Healing Draught there, then takes it to the Fence, whose
+// from BUILDING TYPE, under THIS GAME'S SHOPS; the player buys a Healing Draught there, then takes it to the Fence, whose
 // window opens on SELL, its BUY folder saying it only buys, and sells it back at the app's 45%.
 
 const SYSTEM = (name: string) => ({
@@ -17,7 +17,7 @@ const SYSTEM = (name: string) => ({
   },
 });
 
-test('the game\'s own shops: an Apothecary picked under THIS GAME\'S OWN sells a draught; a Fence that only buys takes it back (8a7b3a)', async ({ page, browser, request }, info) => {
+test('the game\'s own shops: an Apothecary picked under THIS GAME\'S SHOPS sells a draught; a Fence that only buys takes it back (8a7b3a)', async ({ page, browser, request }, info) => {
   test.setTimeout(180_000);
   const again = info.retry ? `_${info.retry + 1}` : '';
   const gm = await gmToken(request);
@@ -41,7 +41,7 @@ test('the game\'s own shops: an Apothecary picked under THIS GAME\'S OWN sells a
   await expect(mine.getByRole('group', { name: 'Vitals' })).toBeVisible({ timeout: 15_000 });
   await mine.keyboard.press('Escape');
 
-  // The GM: the building picked out, EDIT, BUILDING TYPE has the game's own under THIS GAME'S OWN; Apothecary, saved.
+  // The GM: the building picked out, EDIT, BUILDING TYPE has the game's own under THIS GAME'S SHOPS; Apothecary, saved.
   await page.setViewportSize({ width: 1280, height: 800 });
   await signInAsGm(page);
   await page.getByRole('button', { name: 'QUICK_ACCESS', exact: true }).click();
@@ -50,7 +50,8 @@ test('the game\'s own shops: an Apothecary picked under THIS GAME\'S OWN sells a
   await gmList.getByText(shop, { exact: true }).click();
   await page.locator('.selection-panel').getByRole('button', { name: 'EDIT', exact: true }).click();
   const picker = page.getByLabel('Building type');
-  await expect(picker.locator('optgroup[label="THIS GAME\'S OWN"] option')).toHaveText(['Apothecary (shop)', 'Fence (shop)']);
+  await expect(picker.locator('optgroup').first()).toHaveAttribute('label', 'THIS GAME\'S SHOPS');
+  await expect(picker.locator('optgroup[label="THIS GAME\'S SHOPS"] option')).toHaveText(['Apothecary', 'Fence']);
   await picker.selectOption('apothecary');
   await expect(page.getByLabel('Buy-back rate for this shop')).toBeVisible();
   await page.getByRole('button', { name: 'UPDATE_DATA_POINT', exact: true }).click();
