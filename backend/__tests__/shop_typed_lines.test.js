@@ -186,6 +186,8 @@ describe('at the table', () => {
     await install([{ ...GUNS, sold_at: [] }]);
     await save();
     expect(give.givable(ID).map((c) => c.catalogue)).toEqual(['type:guns']);
+    // Each line with its values (8a7d), for GIVE.EXE's QUICK FIND and THE LINE.
+    expect(give.givable(ID)[0].items).toEqual([expect.objectContaining({ id: 'pistol', fields: expect.objectContaining({ damage: '2d6', ammo: 6, grade: 'LIGHT' }) })]);
     const gift = give.placeGift(ID, 'type:guns', 'pistol', { inventory: '[]' }, 2);
     expect(gift.ok).toBe(true);
     expect(JSON.parse(gift.patch.inventory)).toEqual([expect.objectContaining({ name: 'Pistol', qty: 2, type: 'guns', values: { damage: '2d6', ammo: 6, grade: 'LIGHT' } })]);

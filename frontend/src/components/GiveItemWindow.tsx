@@ -1,10 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { TerminalWindow, TERMINAL_PREVIEW, type TerminalAction } from './TerminalWindow';
 import {
-  giveCalls, searchItems, itemKey, chipLabel, worthOf, recipientText, resultText, giveLabel, refusalText, givenAt,
+  giveCalls, searchItems, foundPer, lineOf, itemKey, chipLabel, worthOf, recipientText, resultText, giveLabel, refusalText, givenAt,
   recipientKey, previewRequest, giveRequest, clampQty, NOTE_MAX, QTY_MAX,
   type AskSocket, type GivableCatalogue, type ListedItem, type Recipient, type GivenLine,
 } from '../sheets/giveItems';
+import { findWords } from '../sheets/findWords';
+import { pickColumnsOf, withPick, type Picks } from '../sheets/shelfPicks';
+import { itemTypeOfShelf } from '../data/buildingTypes';
 
 // GIVE.EXE (4g4b; approved mockup docs/mockups/give-item.html, 2026-10-12): the GM gives items to
 // players for free. Laid out as the shop is (TerminalWindow): the item being given in the corner,
@@ -47,6 +50,8 @@ export function GiveItemWindow({ pos, setPos, onClose, socket, system, npcs, onl
   const [problem, setProblem] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [chip, setChip] = useState<string | null>(null);
+  /** A type's quick filters (8a7d, as the shop's 8a7c3): a word per PICK ONE column, none for ALL. */
+  const [picks, setPicks] = useState<Picks>({});
   const [picked, setPicked] = useState<ListedItem | null>(null);
   const [qty, setQty] = useState(1);
   const [people, setPeople] = useState<Recipient[]>([]);
@@ -109,7 +114,14 @@ export function GiveItemWindow({ pos, setPos, onClose, socket, system, npcs, onl
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [picked, qty, npcKey, calls]);
 
-  const found = catalogues ? searchItems(catalogues, query, chip) : [];
+  const found = catalogues ? searchItems(catalogues, query, chip, system, picks) : [];
+  // QUICK FIND (8a7d): with words typed, each catalogue's button says how many it holds, ALL every one.
+  const counts = catalogues && findWords(query).length ? foundPer(catalogues, query, system) : null;
+  const countOf = (c: string | null) => (counts ? ` · ${c ? counts[c] ?? 0 : Object.values(counts).reduce((n, k) => n + k, 0)}` : '');
+  // A type's PICK ONE columns, as buttons, once its catalogue is picked; a game's one catalogue, with no buttons to pick it, is open.
+  const openOne = chip ?? (catalogues?.length === 1 ? catalogues[0].catalogue : null);
+  const pickColumns = openOne ? pickColumnsOf(itemTypeOfShelf(system, openOne)) : [];
+  const openChip = (c: string | null) => { setChip(c); setPicks({}); };
   const total = catalogues ? catalogues.reduce((n, c) => n + c.items.length, 0) : 0;
   const onlineNames = new Set(online.map((u) => u.toLowerCase()));
   const chosen = people.filter((r) => ticked.has(recipientKey(r)));
@@ -202,14 +214,33 @@ export function GiveItemWindow({ pos, setPos, onClose, socket, system, npcs, onl
             <div role="tablist" aria-label="Catalogue" style={{ display: 'flex', gap: 4, marginBottom: 8, flexWrap: 'wrap' }}>
               {[null, ...(catalogues ?? []).map((c) => c.catalogue)].map((c) => (
                 <button key={c ?? 'all'} type="button" role="tab" className={`utility-btn ${chip === c ? 'active' : ''}`}
-                  aria-selected={chip === c} onClick={() => setChip(c)} style={{ ...mono(10), padding: '2px 10px', flex: 1 }}>
-                  {c ? chipLabel(c, system) : 'ALL'}
+                  aria-selected={chip === c} onClick={() => openChip(c)} style={{ ...mono(10), padding: '2px 10px', flex: 1 }}>
+                  {c ? chipLabel(c, system) : 'ALL'}{countOf(c)}
                 </button>
               ))}
             </div>
           )}
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search every catalogue by name"
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Quick find: a name, a type, anything on the line"
             aria-label="Search every catalogue" style={{ ...field, marginBottom: 6 }} />
+          {/* A type's PICK ONE columns as buttons (8a7d, as the shop's), ALL first. */}
+          {pickColumns.length > 0 && (
+            <div data-testid="give-picks" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 14px', marginBottom: 6 }}>
+              {pickColumns.map((c) => (
+                <div key={c.id} role="group" aria-label={c.label} style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                  <span style={{ ...label, marginRight: 2 }}>{c.label}</span>
+                  {['', ...c.options].map((w) => {
+                    const on = (picks[c.id] ?? '') === w;
+                    return (
+                      <button key={w || ' all'} type="button" className={`utility-btn ${on ? 'active' : ''}`} aria-pressed={on}
+                        onClick={() => setPicks((p) => withPick(p, c.id, w))} style={{ ...mono(11), padding: '2px 8px', letterSpacing: 1 }}>
+                        {w || 'ALL'}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
           <div className="cyber-scroll" style={{ flex: found.length ? 1 : '0 0 auto', minHeight: 0, overflowY: 'auto' }}>
             {found.length > 0 && (
               <table aria-label="Items" style={{ ...mono(10), width: '100%', borderCollapse: 'collapse', letterSpacing: 0 }}>
@@ -217,6 +248,7 @@ export function GiveItemWindow({ pos, setPos, onClose, socket, system, npcs, onl
                   <tr style={{ color: 'var(--grid-section)' }}>
                     <th style={cell}>NAME</th>
                     <th style={cell}>CATALOGUE</th>
+                    <th style={cell}>THE LINE</th>
                     <th style={{ ...cell, textAlign: 'right' }}>WORTH</th>
                     <th style={{ ...cell, textAlign: 'right' }}>&nbsp;</th>
                   </tr>
@@ -231,6 +263,7 @@ export function GiveItemWindow({ pos, setPos, onClose, socket, system, npcs, onl
                           {i.holds && <div style={{ color: 'var(--grid-section)' }}>{i.holds}</div>}
                         </td>
                         <td style={{ ...cell, color: 'var(--grid-section)' }}>{chipLabel(i.catalogue, system)}</td>
+                        <td style={{ ...cell, color: 'var(--grid-section)' }}>{lineOf(system, i.catalogue, i)}</td>
                         <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>{i.holds ? '' : worthOf(system, i.catalogue, i.price)}</td>
                         <td style={{ ...cell, textAlign: 'right' }}>
                           <button type="button" className={`utility-btn ${current ? 'active' : ''}`} aria-label={`Give ${i.name}`}
