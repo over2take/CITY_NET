@@ -102,7 +102,7 @@ npx playwright test --debug
   ```
 
 - In CI the same files, and an HTML report, are attached to the run as an artifact, one per part
-  (**e2e-report-1** to **e2e-report-4**), downloadable from the run's summary page on GitHub.
+  (**e2e-report-1** to **e2e-report-8**), downloadable from the run's summary page on GitHub.
 
 ## In CI
 
@@ -114,9 +114,15 @@ two runs in a row, add a part. A last job named **Browser Journeys**
 passes only when all eight did, so the check keeps its name. On a developer's machine nothing changes:
 one machine, files in order.
 
-A part that hangs fails after 25 minutes (Playwright's `globalTimeout`, CI only), with its report
-kept; the job itself stops at 30 (`timeout-minutes`), for a hang outside the tests. Either way,
-**Re-run failed jobs** runs just that part again.
+A part that hangs fails after 16 minutes (Playwright's `globalTimeout`, CI only), with its report
+kept. If Playwright itself freezes, as a GitHub runner did on 2026-11-22 (28 minutes silent, Cancel
+doing nothing), the run step stops at 18 (its own `timeout-minutes`, enforced by the runner), and the
+job at 22 for a hang outside the tests. Either way, **Re-run failed jobs** runs just that part again.
+
+Every part, passed or failed, writes how long each test took (`timings.js`, from Playwright's JSON
+report): the slowest ten as a table on the run's summary page, and every test's time as an artifact,
+**e2e-timings-1** to **e2e-timings-8**, kept 30 days. The parts are shared out by count today; these
+times are what sharing them out by time will use.
 
 ## Writing a journey
 

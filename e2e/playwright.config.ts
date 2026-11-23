@@ -40,11 +40,14 @@ export default defineConfig({
   // Two minutes: CI runs about four times slower than a desktop, and tests of 15 s here took past
   // one minute there (builder-dice, the bell, the journey, the clicks sweep; 2026-10-24 to 10-27).
   timeout: 120_000,
-  // A whole CI part, at most 25 minutes (a part took 12 to 21 by 2026-11-18, before E2E_BUILT and skipBoot): a hung run then fails, with its
-  // report kept, well before the job's own 30-minute limit (ci.yml) cancels it with none. No limit
-  // on a developer's machine, where the whole suite takes about 27 minutes.
-  globalTimeout: process.env.CI ? 25 * 60_000 : 0,
-  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
+  // A whole CI part, at most 16 minutes (8n4; parts took 4 to 12 by 2026-11-22, with E2E_BUILT and skipBoot): a hung run
+  // then fails, with its report kept, before the run step's own 18-minute limit (ci.yml) stops it with none. It was 25,
+  // and on 2026-11-22 a part sat silent for 28 minutes on a frozen runner until it was cancelled. No limit on a developer's
+  // machine, where the whole suite takes about 27 minutes.
+  globalTimeout: process.env.CI ? 16 * 60_000 : 0,
+  // On CI also a JSON report, which timings.js turns into the slowest ten on the run's summary page and a file of every
+  // test's time (8n4).
+  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }], ['json', { outputFile: 'results/report.json' }]] : 'list',
   use: {
     baseURL: `http://127.0.0.1:${FRONTEND_PORT}`,
     viewport: { width: 1366, height: 820 },
