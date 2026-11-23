@@ -117,6 +117,8 @@ describe('PUT /api/sheets/system', () => {
     const row = await get(db, `SELECT value FROM global_settings WHERE key = 'game_system'`);
     expect(row.value).toBe('cyberpunk_red');
     expect(emitted.some(e => e.event === 'gameSystemChanged' && e.payload.system === 'cyberpunk_red')).toBe(true);
+    // Every screen redraws the map: its tokens, and which of a game's own shops each building is (8a7b3c1), go by the game.
+    expect(emitted.some(e => e.event === 'dataUpdated' && e.payload.isRhombusOnly === true)).toBe(true);
   });
 
   it('rejects unknown systems', async () => {

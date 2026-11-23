@@ -20,6 +20,11 @@ const { Server } = require('socket.io');
 const db = require('./db');
 // Published custom game systems, into memory for the running game (systemBuilder/runtime.js).
 require('./systemBuilder/runtime').load(db);
+// Buildings set to a game's own shop before those were kept per game (8a7b3c1): moved once, to every game making it.
+require('./shops/locationShops').moveOldShops(db, (err, moved) => {
+  if (err) console.warn('[own shops] buildings not moved to their games:', err.message);
+  else if (moved) console.log(`[own shops] ${moved} building(s) moved to the games that make their shop`);
+});
 
 const app = express();
 const server = http.createServer(app);

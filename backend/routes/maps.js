@@ -1,6 +1,7 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
-const gmNotes = require('../buildings/gmNotes');
+const gmNotes = require('../buildings/gmNotes');
+const locationShops = require('../shops/locationShops');
 const tokenVitals = require('../tokens/vitals');
 const { columnsOf, queueInserts } = require('../buildings/locationRows');
 
@@ -60,9 +61,12 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
                   // the public listing returns names and timestamps, nothing else.
                   gmNotes.all(db, (err7, notes) => {
                     if (err7) return res.status(500).json({ error: err7.message });
+                    // Which of a game's own shops each building is, per game (8a7b3c1), with the buildings, as the notes.
+                    locationShops.all(db, (err8, shops) => {
+                    if (err8) return res.status(500).json({ error: err8.message });
 
-                    const sql = `INSERT INTO saved_maps (name, locations_data, districts_data, roads_data, overpasses_data, water_bodies_data, signs_data, gm_notes_data)
-                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    const sql = `INSERT INTO saved_maps (name, locations_data, districts_data, roads_data, overpasses_data, water_bodies_data, signs_data, gm_notes_data, shops_data)
+                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                                  ON CONFLICT(name) DO UPDATE SET
                                    locations_data=excluded.locations_data,
                                    districts_data=excluded.districts_data,
@@ -71,10 +75,12 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
                                    water_bodies_data=excluded.water_bodies_data,
                                    signs_data=excluded.signs_data,
                                    gm_notes_data=excluded.gm_notes_data,
+                                   shops_data=excluded.shops_data,
                                    timestamp=CURRENT_TIMESTAMP`;
-                    db.run(sql, [name, JSON.stringify(locations), JSON.stringify(districts), JSON.stringify(roads), JSON.stringify(overpasses), JSON.stringify(waterBodies), JSON.stringify(signs), JSON.stringify(notes)], function(err) {
+                    db.run(sql, [name, JSON.stringify(locations), JSON.stringify(districts), JSON.stringify(roads), JSON.stringify(overpasses), JSON.stringify(waterBodies), JSON.stringify(signs), JSON.stringify(notes), JSON.stringify(shops)], function(err) {
                       if (err) return res.status(500).json({ error: err.message });
                       res.json({ message: 'Map saved successfully' });
+                    });
                     });
                   });
                 });
@@ -101,6 +107,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       // Null for a map saved before notes traveled with it. That map had none to carry,
       // so whatever is in the table now belongs to a different map and goes.
       const notes = JSON.parse(row.gm_notes_data || '[]');
+      // Likewise the game's own shops per building (8a7b3c1); none for a map saved before they traveled.
+      const shops = JSON.parse(row.shops_data || '[]');
 
       // The table's columns, looked up before anything is queued so the inserts below keep
       // their place in the serialized order - the id sequence is reset after them.
@@ -163,10 +171,12 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
             // After the buildings are in, so a note is only restored onto a building the map
             // actually has.
             gmNotes.replaceAll(db, notes, () => {
+              locationShops.replaceAll(db, shops, () => {
               // The loaded tokens are new here: no other system has seen them.
               tokenVitals.pruneAfterMapChange(db, () => {
                 emitUpdate();
                 res.json({ message: 'Map loaded successfully' });
+              });
               });
             });
           });
@@ -195,6 +205,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       // The id sequence was just wound back, so the next building made gets an id a
       // cleared one had. Its notes must not be waiting for it.
       gmNotes.pruneOrphans(db);
+      // And which of a game's own shops they were (8a7b3c1).
+      locationShops.pruneOrphans(db);
       // Likewise a token's health saved under other systems.
       tokenVitals.pruneAfterMapChange(db);
 

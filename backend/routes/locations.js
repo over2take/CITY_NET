@@ -10,6 +10,7 @@ const { applyHealthAction } = require('../systemBuilder/health');
 const { BUILDING_TYPES, isValidType } = require('../buildingTypes');
 const { ownShops, ownShopOf } = require('../systemBuilder/buildings');
 const { readPct } = require('../shops/buyback');
+const locationShops = require('../shops/locationShops');
 const { shopsOpen } = require('../shops/availability');
 const { selectByIds, deleteByIds } = require('../bulk');
 const { canReadNpcSheets, redactLocation } = require('../sheets/npcPrivacy');
@@ -101,6 +102,12 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   // those who may open the sheet anyway (sheets/npcPrivacy.js).
   router.get('/', optionalAuthenticate, (req, res) => {
     const canRead = canReadNpcSheets(req.user);
+    // Each building's type in the running game (8a7b3c1): the game's own shop it is there, else its shared type.
+    db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (sErr, setting) => {
+    const system = (!sErr && setting && setting.value) || DEFAULT_SYSTEM;
+    const definition = customSystems.definitionOf(system);
+    locationShops.shopsIn(db, system, (shErr, shops) => {
+    if (shErr) return res.status(500).json({ error: shErr.message });
     db.all(
       `SELECT l.*, COALESCE(npc_cs.portrait_url, CASE WHEN l.shape = 'rhombus' THEN player_cs.portrait_url END) AS portrait_url,
               npc_cs.data AS sheet_data,
@@ -117,9 +124,14 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         // Everyone sees which conditions a token has; how many rounds each has left is the GM's.
-        res.json(rows.map((row) => redactLocation(canRead || row.conditions === undefined ? row : { ...row, conditions: publicTokenConditions(row.conditions) }, canRead)));
+        res.json(rows.map((raw) => {
+          const row = shops.has(raw.id) ? { ...raw, building_type: locationShops.typeIn(definition, raw.building_type, shops.get(raw.id)) } : raw;
+          return redactLocation(canRead || row.conditions === undefined ? row : { ...row, conditions: publicTokenConditions(row.conditions) }, canRead);
+        }));
       }
     );
+    });
+    });
   });
 
   router.patch('/:id/toggle-hidden', authenticate, (req, res) => {
@@ -190,14 +202,18 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
      */
     const pct = buyback_pct === undefined ? undefined : readPct(buyback_pct);
 
-    db.get('SELECT id, building_type FROM locations WHERE id = ?', [req.params.id], (err, row) => {
+    locationShops.buildingIn(db, req.params.id, system, (err, building) => {
       if (err) return res.status(500).json({ error: err.message });
-      if (!row) return res.status(404).json({ error: 'Not found' });
+      if (!building) return res.status(404).json({ error: 'Not found' });
+      const definition = customSystems.definitionOf(system);
+      // Its type in this game (8a7b3c1): what saving the building sends again, and what counts as no change.
+      const row = { building_type: locationShops.typeIn(definition, building.building_type, building.shop) };
+      const own = next !== null && !!ownShopOf(definition, next);
       // A value nobody recognises would put a SHOP button on a building that cannot sell
       // anything, so it is refused rather than stored and puzzled over later: the app's types,
       // or one of the running game's own shops (8a7b). One the building already has (another
       // game's own shop, 8a7b3a) is kept, as saving the building sends it again.
-      if (next !== null && next !== row.building_type && !isValidType(next) && !ownShopOf(customSystems.definitionOf(system), next)) {
+      if (next !== null && next !== row.building_type && !isValidType(next) && !own) {
         return res.status(400).json({ error: 'Unknown building type' });
       }
       // A type this game turned off is not one a building can be given here. One already given
@@ -207,20 +223,25 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         return res.status(409).json({ error: 'Not a building type in this game' });
       }
 
-      const sql = pct === undefined
-        ? 'UPDATE locations SET building_type = ? WHERE id = ?'
-        : 'UPDATE locations SET building_type = ?, buyback_pct = ? WHERE id = ?';
-      const args = pct === undefined
-        ? [next, req.params.id]
-        : [next, pct, req.params.id];
+      // One of the game's own shops is this game's alone: kept per game, the shared type left as it is for the rest. One
+      // of the app's (or none) is the shared type, as ever, and this game's own shop comes off, so it shows (8a7b3c1).
+      const sql = own
+        ? (pct === undefined ? 'SELECT 1' : 'UPDATE locations SET buyback_pct = ? WHERE id = ?')
+        : (pct === undefined ? 'UPDATE locations SET building_type = ? WHERE id = ?' : 'UPDATE locations SET building_type = ?, buyback_pct = ? WHERE id = ?');
+      const args = own
+        ? (pct === undefined ? [] : [pct, building.id])
+        : (pct === undefined ? [next, building.id] : [next, pct, building.id]);
 
       db.run(sql, args, (err2) => {
         if (err2) return res.status(500).json({ error: err2.message });
+        locationShops.setShop(db, building.id, system, own ? next : null, (err3) => {
+        if (err3) return res.status(500).json({ error: err3.message });
         emitUpdate();
         res.json({
           id: Number(req.params.id),
           building_type: next,
           ...(pct === undefined ? {} : { buyback_pct: pct }),
+        });
         });
       });
     });
