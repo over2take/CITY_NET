@@ -62,10 +62,12 @@ test('two games on one table: a character, money, a building\'s shop and its she
   };
   /** The corner's SHOP window, the building picked afresh so its type in this game is read. */
   const openShop = async (p: Page) => {
-    // One already open (SHOP stays pressed while it is) shut by its own ×, so the building is opened afresh.
+    // One already open (SHOP stays pressed while it is) shut by its own ×, so the building is opened afresh. After a game
+    // switch the app may shut it itself a moment later (the building another shop, or none, in this game), so the × is
+    // tried briefly, not waited on: either way it is gone before going on (CI, 2026-11-23, waited 4 minutes on a × gone).
     const open = p.locator('.win95-window', { hasText: 'SHOP.EXE' });
-    if (await open.count()) await open.locator('.win95-close-btn', { hasText: /^×$/ }).click();
-    await expect(open).toHaveCount(0);
+    if (await open.count()) await open.locator('.win95-close-btn', { hasText: /^×$/ }).first().click({ timeout: 3_000 }).catch(() => {});
+    await expect(open).toHaveCount(0, { timeout: 15_000 });
     const list = p.locator('.quick-access-panel');
     if (!(await list.isVisible())) await p.getByRole('button', { name: 'QUICK_ACCESS', exact: true }).click();
     if (!(await list.getByText(shop, { exact: true }).isVisible())) await list.getByText(/DEFINED_STRUCTURES/).click();
