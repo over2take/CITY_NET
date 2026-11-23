@@ -57,8 +57,8 @@ test('a 1000-line shelf: saved, opened, filtered as typed and sorted both ways, 
   // Scrolled to the end of the page: 200 more.
   await time('scroll', async () => { await rows.last().scrollIntoViewIfNeeded(); await expect(rows).toHaveCount(400, { timeout: 30_000 }); });
   // Typed a key at a time, as a player does.
-  await time('filter', async () => { await window.getByLabel('Filter stock').pressSequentially('Gun 99'); await expect(rows).toHaveCount(11, { timeout: 30_000 }); });
-  await time('clear', async () => { await window.getByLabel('Filter stock').fill(''); await expect(rows).toHaveCount(200, { timeout: 30_000 }); });
+  await time('filter', async () => { await window.getByLabel('Find in this shop').pressSequentially('Gun 99'); await expect(rows).toHaveCount(19, { timeout: 30_000 }); }); // every word anywhere (8a7c2): 99, 199 to 899, 990 to 999
+  await time('clear', async () => { await window.getByLabel('Find in this shop').fill(''); await expect(rows).toHaveCount(200, { timeout: 30_000 }); });
   const top = () => rows.first().getAttribute('aria-label');
   const before = await top();
   await time('sort', async () => { await window.getByLabel('Sort by PRICE').click(); await expect.poll(top, { timeout: 30_000 }).not.toBe(before); });

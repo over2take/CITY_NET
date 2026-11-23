@@ -15,6 +15,7 @@ import { placeUploaded, destinationOf } from '../sheets/shopPlacement';
 import { placeBook, asBookRow, type BookRow } from '../sheets/bookPlacement';
 import { columnsFor } from '../sheets/catalogueSchema';
 import { EmptyShopSteps } from './EmptyShopSteps';
+import { findWords, hasEvery } from '../sheets/findWords';
 import { CWN_CYBERWARE, type CwnCyberPreset } from '../sheets/cwnCyberwarePresets';
 import { CWN_WEAPONS, type CwnWeaponPreset } from '../sheets/cwnWeaponPresets';
 import { readStash } from '../sheets/cwnWeaponStash';
@@ -338,6 +339,13 @@ interface Shelf<T> {
   /** Extra controls above the table - the weapon kind toggles are the only ones so far. */
   controls?: React.ReactNode;
 }
+
+/**
+ * A shelf of whatever kind (8a7c2): each holds rows of its own sort, read only through its own columns and matcher, so the
+ * shop can handle every shelf it carries together without knowing what is on them.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyShelf = Shelf<any>;
 
 export function ShopWindow({
   name, locationId, buildingType, system, buybackPct: pct, socket, userName, onClose,
@@ -1353,7 +1361,7 @@ export function ShopWindow({
   // ------------------------------------------------------------------------
 
   /** Every CWN shelf, drawn from the book, by catalogue. */
-  const BOOK_SHELVES: Partial<Record<ShopStock, Shelf<any>>> = {
+  const BOOK_SHELVES: Partial<Record<ShopStock, AnyShelf>> = {
     cyberware: cyberShelf,
     weapons: weaponShelf,
     weapon_mods: modShelf('weapon_mods', CWN_WEAPON_MODS, 'Fix'),
@@ -1366,9 +1374,8 @@ export function ShopWindow({
     gear: gearShelf,
   };
 
-  const base: Shelf<any> | undefined = !shelfId
-    ? undefined
-    : book ? BOOK_SHELVES[shelfId] : uploadedShelf(shelfId);
+  /** A catalogue's shelf, as it is drawn: the book's on CWN, the uploads (and the game's own items) anywhere else. */
+  const baseOf = (id: ShopStock): AnyShelf | undefined => (book ? BOOK_SHELVES[id] : uploadedShelf(id));
 
   /**
    * The shelf, with whatever the GM uploaded added to it.
@@ -1390,33 +1397,62 @@ export function ShopWindow({
    * render happens before the balance has arrived. Every purchase then saw a zero balance
    * and refused. Filtering and sorting a few dozen rows is not worth that.
    */
-  const shelf: Shelf<any> | undefined = (() => {
+  // Any of the shop's shelves (8a7c2), so QUICK FIND can look along every one of them.
+  const shelfOf = (id: ShopStock): AnyShelf | undefined => {
+    const base = baseOf(id);
     // Outside CWN the shelf already IS the uploads; there is no book to add them to.
     if (!base || !book) return base;
     const extra = uploadedIn(base.id);
     if (!extra.length) return base;
 
     // As a row of this shelf (bookPlacement.ts asBookRow), so it is placed the CWN way.
-    const byId = new Map(base.rows.map((r: any) => [base.rowKey(r), r]));
+    const byId = new Map(base.rows.map((r: unknown) => [base.rowKey(r), r]));
     for (const e of extra) byId.set(e.id, asBookRow(e));
     return { ...base, rows: [...byId.values()] };
-  })();
+  };
+  const shelf: AnyShelf | undefined = shelfId ? shelfOf(shelfId) : undefined;
 
   /** The open shelf, filtered and sorted. Small lists, so done plainly on each render. */
   // What the shelf is filtered by: a step behind what is typed (8n3), so a long shelf never holds up the box being typed in.
   const shownFilter = useDeferredValue(filter);
+  // As every FIND box matches (findWords.ts, 8a7c2): every word typed, each by what the shelf searches or the shelf's name.
+  const words = findWords(shownFilter);
+  const shelfHas = (s: AnyShelf, row: unknown) => {
+    const named = catalogueLabel(s.id, system).toLowerCase();
+    return hasEvery(words, (w) => named.includes(w) || s.matches(row, w));
+  };
   const rows: any[] = (() => {
     if (!shelf) return [];
-    const q = shownFilter.trim().toLowerCase();
     let list = shelf.rows;
     // The weapon shelf's own narrowing. Both on, or both off, means no opinion.
     if (shelf.id === 'weapons' && kinds.ranged !== kinds.melee) {
       list = list.filter((w: CwnWeaponPreset) =>
         (kinds.ranged ? w.skill === 'shoot' : w.skill !== 'shoot'));
     }
-    if (q) list = list.filter((row) => shelf.matches(row, q));
+    if (words.length) list = list.filter((row) => shelfHas(shelf, row));
     return applySort(list, sort, shelf.columns);
   })();
+
+  /**
+   * QUICK FIND (8a7c2; approved mockup docs/mockups/item-types-in-shops.html, section 3, answered 3 A): typed into, in a
+   * shop with more than one shelf, every shelf is looked along, each tab saying how many it holds, and the list is every
+   * match with its shelf. Cleared, or a tab picked, the open shelf is back as it was. One shelf, its own table narrows.
+   */
+  const finding = catalogues.length > 1 && words.length > 0;
+  const found: { shelf: AnyShelf; row: unknown }[] = finding
+    ? catalogues.flatMap((id) => { const s = shelfOf(id); return s ? s.rows.filter((row) => shelfHas(s, row)).map((row) => ({ shelf: s, row })) : []; })
+    : [];
+  const foundIn = (id: ShopStock) => found.filter((f) => f.shelf.id === id).length;
+  /** What a found line costs, as its shelf draws its price. */
+  const priceCell = (s: AnyShelf, row: unknown): React.ReactNode => {
+    const col = s.columns.price ?? s.columns.cost ?? Object.values(s.columns).find((c) => c.label === 'PRICE');
+    return col ? (col.render ? col.render(row) : col.value(row)) : '';
+  };
+  /** The rest of a found line, said in full: each column but its name, price and how many you own, with its value. */
+  const lineSaid = (s: AnyShelf, row: unknown): string => Object.entries(s.columns)
+    .filter(([k, c]) => !['name', 'price', 'cost', 'owned'].includes(k) && c.label !== 'PRICE')
+    .map(([, c]) => { const v = c.value(row); return v === '' || v === null || v === undefined ? '' : `${c.label} ${v}`; })
+    .filter(Boolean).join(' · ');
 
   /**
    * A long shelf drawn a page at a time (8n3; the shop stress test found a 1000-line shelf took 400 ms to sort and up to
@@ -1687,11 +1723,13 @@ export function ShopWindow({
       }}
       panelMode="list"
       width={980}
+      // A steady height (8a7c2; the user, 2026-11-23: "we might want to make the shop.exe window taller"), whatever the shelf holds.
+      panelHeight="min(78vh, 760px)"
       label={`${name || word('shop', 'singular', 'Shop')} ${shopWord}`}
       header={(
         <span style={{ color: 'var(--cyan)' }}>
           {type ? typeLabel(type.id, system).toUpperCase() : 'UNKNOWN'} ·{' '}
-          {rows.length} LINE{rows.length === 1 ? '' : 'S'}
+          {finding ? `${found.length} FOUND` : `${rows.length} LINE${rows.length === 1 ? '' : 'S'}`}
           {/* The book page, so a price can be checked without hunting for the table. */}
           {book && shelf && catalogueById(shelf.id) && ` · CWN P${catalogueById(shelf.id)!.page}`}
           {/* What you can spend, where you are about to spend it. A shop that charges an
@@ -1737,11 +1775,11 @@ export function ShopWindow({
                     key={id}
                     type="button"
                     role="tab"
-                    className={`utility-btn ${shelfId === id ? 'active' : ''}`}
-                    aria-selected={shelfId === id}
+                    className={`utility-btn ${shelfId === id && !finding ? 'active' : ''}`}
+                    aria-selected={shelfId === id && !finding}
                     onClick={() => openShelf(id)}
                     style={{ ...mono(10), padding: '2px 10px', letterSpacing: 1, flex: 1 }}
-                  >{catalogueLabel(id, system).toUpperCase()}</button>
+                  >{catalogueLabel(id, system).toUpperCase()}{finding ? ` · ${foundIn(id)}` : ''}</button>
                 ))}
               </div>
             )}
@@ -1767,7 +1805,7 @@ export function ShopWindow({
             >
               {!sheet
                 ? `NO ${CHARACTER} SHEET LOADED — NOTHING TO BUY ONTO`
-                : shelf?.notice ?? ''}
+                : finding ? '' : shelf?.notice ?? ''}
             </div>
 
             {!shelf ? (
@@ -1787,16 +1825,16 @@ export function ShopWindow({
                 <input
                   value={filter}
                   onChange={(e) => { setFilter(e.target.value); firstPage(); }}
-                  placeholder={shelf.filterHint}
-                  aria-label="Filter stock"
+                  placeholder={catalogues.length > 1 ? 'Quick find in every shelf: a name, a type, anything on the line' : shelf.filterHint}
+                  aria-label="Find in this shop"
                   style={{
                     background: 'var(--black)', border: '1px solid var(--dark-green)',
                     color: 'var(--green)', fontFamily: 'monospace', fontSize: 11,
                     padding: '3px 5px', width: '100%', boxSizing: 'border-box', marginBottom: 6,
                   }}
                 />
-                {shelf.controls}
-                {shelf.note && (
+                {!finding && shelf.controls}
+                {!finding && shelf.note && (
                   <div style={{ ...mono(9), color: 'var(--grid-section)', marginBottom: 6, letterSpacing: 0, lineHeight: 1.5 }}>
                     {shelf.note}
                   </div>
@@ -1807,6 +1845,52 @@ export function ShopWindow({
                   </div>
                 )}
 
+                {finding ? (
+                  <div className="cyber-scroll" data-testid="shop-found" style={{ flex: found.length === 0 ? '0 0 auto' : 1, minHeight: 0, overflowY: 'auto' }}>
+                    <table style={{ ...mono(10), width: '100%', borderCollapse: 'collapse', letterSpacing: 0 }} aria-label="Found in this shop">
+                      <thead>
+                        <tr style={{ color: 'var(--grid-section)' }}>
+                          {['NAME', 'TYPE', 'PRICE', 'THE LINE'].map((h) => <th key={h} style={{ ...cell, whiteSpace: 'nowrap', textAlign: h === 'PRICE' ? 'right' : 'left' }}>{h}</th>)}
+                          <th style={{ ...cell, textAlign: 'right' }}>&nbsp;</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {found.slice(0, shownCount).map(({ shelf: s, row }) => {
+                          const key = s.rowKey(row);
+                          const inCart = cartBuys.find((l) => l.key === cartKey(s.id, key))?.qty ?? 0;
+                          const canBuy = s.buyable ? s.buyable(row) : true;
+                          const label = String(s.columns.name.value(row));
+                          return (
+                            <tr key={`${s.id}/${key}`}>
+                              <td style={{ ...cell, whiteSpace: 'nowrap' }}>{label}</td>
+                              <td style={{ ...cell, whiteSpace: 'nowrap' }}>
+                                <span style={{ border: '1px solid currentColor', padding: '0 4px', fontSize: 9, color: 'var(--cyan)' }}>{catalogueLabel(s.id, system).toUpperCase()}</span>
+                              </td>
+                              <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>{priceCell(s, row)}</td>
+                              <td style={{ ...cell, color: 'var(--grid-section)' }}>{lineSaid(s, row)}</td>
+                              <td style={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                {canBuy ? (
+                                  <button type="button" className="utility-btn" disabled={!sheet} aria-label={`Add ${label} to the cart`}
+                                    title={sheet ? s.notice : `No ${characterWord} sheet loaded`} onClick={() => s.buy(row)}
+                                    style={{ padding: '1px 6px', fontSize: 9 }}>+ CART{inCart ? ` ×${inCart}` : ''}</button>
+                                ) : <span style={{ color: 'var(--grid-section)' }}>—</span>}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {shownCount < found.length && (
+                      <div style={{ ...mono(9), color: 'var(--grid-section)', padding: '6px 0', letterSpacing: 0, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+                        <span role="status">SHOWING {shownCount} OF {found.length} · TYPE MORE TO NARROW</span>
+                        <button type="button" className="utility-btn" onClick={showMore} style={{ padding: '1px 6px', fontSize: 9 }}>SHOW {Math.min(SHELF_PAGE, found.length - shownCount)} MORE</button>
+                      </div>
+                    )}
+                    {found.length === 0 && (
+                      <div data-testid="shelf-empty" style={{ ...mono(11), color: 'var(--green)', padding: '10px 0', letterSpacing: 0 }}>NOTHING MATCHES THAT, ON ANY SHELF</div>
+                    )}
+                  </div>
+                ) : (<>
                 <div className="cyber-scroll" onScroll={nearEnd} style={{ flex: rows.length === 0 ? '0 0 auto' : 1, minHeight: 0, overflowY: 'auto' }}>
                   <table style={{ ...mono(10), width: '100%', borderCollapse: 'collapse', letterSpacing: 0 }}>
                     <thead>
@@ -1902,6 +1986,7 @@ export function ShopWindow({
                       : 'NOTHING MATCHES THAT'}
                   </div>
                 )}
+                </>)}
                 {isAdmin && (
                   <EmptyShopSteps
                     buildingType={buildingType}
