@@ -69,6 +69,7 @@ const { shopsOpen } = require('../shops/availability');
 const giving = require('../sheets/giving');
 const givenList = require('../sheets/givenList');
 const { givable } = require('../shops/give');
+const shopGive = require('../shops/give');
 const systemDice = require('../dice/systemDice');
 
 const SECRET = process.env.JWT_SECRET;
@@ -2295,8 +2296,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
      *
      * Order of writes: the sheet loses what was sold before the bank changes, since being
      * paid and keeping the goods is the outcome worth ordering against. What was bought is
-     * placed by the window once this confirms, because the sheet writing for each kind of
-     * item already lives there and is tested there.
+     * placed here too when the window asks (`place: true`, 8n6a): in the same write as the
+     * sale, before the bank, in the game that took the money, and refused before anything is
+     * charged when it won't fit (`no_room`). A window that doesn't ask still places it itself.
      */
     socket.on('checkoutShop', (data) => {
       const info = userSockets.get(socket.id);
@@ -2307,6 +2309,20 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const refuse = (reason, extra) =>
         socket.emit('shopCheckout', { ok: false, reason, ...(extra || {}) });
       const sells = Array.isArray(data.sells) ? data.sells : [];
+      // The server places what is bought (8n6a), where the window asks it to.
+      const places = data.place === true;
+
+      /**
+       * The sheet's changes for a checkout planned as `lines`: the sale's, and with `places` what was bought, placed on the
+       * sheet as the sale leaves it; null for none. Refused (and null back as `false`) when something bought won't fit.
+       */
+      const sheetPatch = (system, sheetData, sale, lines) => {
+        const salePatch = sale ? sale.patch : {};
+        if (!places) return sale ? salePatch : null;
+        const placed = shopGive.placePurchases(system, lines, { ...sheetData, ...salePatch });
+        if (!placed.ok) { refuse('no_room', { message: placed.reason, itemId: placed.itemId }); return false; }
+        return { ...salePatch, ...placed.patch };
+      };
 
       /**
        * The checkout in a custom system's currencies (3c2a4c, shops/checkout.js
@@ -2315,7 +2331,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
        * allows. `settle` and `expectedNet` come keyed by currency. As above, the sheet loses
        * what was sold before any account changes.
        */
-      const checkoutInCurrencies = ({ system, catalogues, sale, sheetRow }) => {
+      const checkoutInCurrencies = ({ system, catalogues, sale, sheetRow, sheetData }) => {
         bankCurrencies.all(db, username, system, (aErr, held) => {
           if (aErr) return refuse('no_account');
           const keyed = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : undefined);
@@ -2343,9 +2359,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               left -= 1;
               if (left) return;
               sendBankUpdate(username);
-              if (sale) io.emit('sheetUpdated', { username, system });
+              if (patch) io.emit('sheetUpdated', { username, system });
               socket.emit('shopCheckout', {
                 ok: true,
+                placed: places,
                 buys: plan.lines,
                 currencies: plan.currencies,
                 sold: sale ? sale.sold : [],
@@ -2353,8 +2370,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               });
             }));
           };
-          if (!sale) return pay();
-          patchSheet(db, sheetRow.id, sale.patch, (pErr) => {
+          const patch = sheetPatch(system, sheetData, sale, plan.lines);
+          if (patch === false) return;
+          if (!patch) return pay();
+          patchSheet(db, sheetRow.id, patch, (pErr) => {
             if (pErr) return refuse('write');
             pay();
           });
@@ -2403,12 +2422,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                    WHERE username = ? AND system = ? AND is_npc = 0`,
                   [username, system],
                   (sErr, sheetRow) => {
-                    // A sheet is needed to sell from; buying alone never needed one here.
+                    // A sheet is needed to sell from, and to place on (8n6a); buying placed by the window never needed one here.
                     let sale = null;
-                    if (sells.length) {
+                    let sheetData = null;
+                    if (sells.length || places) {
                       if (sErr || !sheetRow) return refuse('no_sheet');
-                      let sheetData;
                       try { sheetData = JSON.parse(sheetRow.data || '{}'); } catch { return refuse('no_sheet'); }
+                    }
+                    if (sells.length) {
                       sale = shopSell.planSale({
                         data: sheetData, items: sells, catalogues: bought,
                         locationPct: loc.buyback_pct, globalPct, system,
@@ -2419,7 +2440,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                     // A custom system with currencies of its own prices each catalogue in its
                     // currency and settles each on its own account (3c2a4c).
                     if (customSystems.currenciesIn(system).length) {
-                      return checkoutInCurrencies({ system, catalogues, sale, sheetRow });
+                      return checkoutInCurrencies({ system, catalogues, sale, sheetRow, sheetData });
                     }
 
                     bank.get(db, username, system,
@@ -2445,10 +2466,11 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                           bank.put(db, username, system, plan.balance, plan.debt, (wErr) => {
                             if (wErr) return refuse('write');
                             sendBankUpdate(username);
-                            if (sale) io.emit('sheetUpdated', { username, system });
-                            // The window places what was bought once it reads this.
+                            if (patch) io.emit('sheetUpdated', { username, system });
+                            // Placed here already where the window asked (8n6a); else the window places what was bought once it reads this.
                             socket.emit('shopCheckout', {
                               ok: true,
+                              placed: places,
                               buys: plan.lines,
                               buyTotal: plan.buyTotal,
                               payout: plan.payout,
@@ -2462,8 +2484,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                           });
                         };
 
-                        if (!sale) return payBank();
-                        patchSheet(db, sheetRow.id, sale.patch, (pErr) => {
+                        const patch = sheetPatch(system, sheetData, sale, plan.lines);
+                        if (patch === false) return;
+                        if (!patch) return payBank();
+                        patchSheet(db, sheetRow.id, patch, (pErr) => {
                           if (pErr) return refuse('write');
                           payBank();
                         });
