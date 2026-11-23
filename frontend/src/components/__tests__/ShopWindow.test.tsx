@@ -606,7 +606,7 @@ describe('the shelf says how many you own', () => {
   it('gives it a column of its own rather than moving the BUY button', () => {
     // Hung off the button, it shifted the button every time somebody bought something.
     show('gun_shop');
-    expect(screen.getByRole('columnheader', { name: 'Sort by OWNED' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sort by OWNED' })).toBeInTheDocument();
   });
 
   it('counts what is in the stash too, since you still own it', () => {
@@ -677,7 +677,25 @@ describe('sorting the shelf', () => {
       .map((b) => b.getAttribute('aria-label')!.replace(/^Add /, '').replace(/ to the cart$/, ''));
 
   const clickHeader = (label: string) =>
-    userEvent.click(screen.getByRole('columnheader', { name: new RegExp(`^Sort by ${label}$`) }));
+    userEvent.click(screen.getByRole('button', { name: new RegExp(`^Sort by ${label}$`) }));
+
+  it('a head is a button, reached by Tab and pressed by Enter, its column saying how it is sorted (8a7c1)', async () => {
+    show('gun_shop');
+    const head = screen.getByRole('button', { name: 'Sort by NAME' });
+    const column = head.closest('th')!;
+    expect(column.getAttribute('aria-sort')).toBe('none');
+    head.focus();
+    expect(head).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    const az = names();
+    expect(az).toEqual([...az].sort((a, b) => a.localeCompare(b)));
+    expect(column.getAttribute('aria-sort')).toBe('ascending');
+    await userEvent.keyboard(' ');
+    expect(column.getAttribute('aria-sort')).toBe('descending');
+    expect(head).toHaveTextContent('NAME ▼');
+    // Another column's head says nothing of it.
+    expect(screen.getByRole('button', { name: 'Sort by PRICE' }).closest('th')!.getAttribute('aria-sort')).toBe('none');
+  });
 
   it('starts in the order the book prints', () => {
     show('gun_shop');
@@ -809,7 +827,7 @@ describe('showing one kind of weapon', () => {
   it('still sorts and filters what it has narrowed to', async () => {
     show('gun_shop');
     await toggle('MELEE');
-    await userEvent.click(screen.getByRole('columnheader', { name: 'Sort by NAME' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sort by NAME' }));
     const shown = names();
     expect(shown).toEqual([...shown].sort((a, b) => a.localeCompare(b)));
     expect(shown).not.toContain('Heavy Pistol');
@@ -1846,9 +1864,9 @@ describe('a shop in another system\'s game', () => {
     show('gun_shop', 'Vic', RED);
     expect(screen.getByText('Militech Unity')).toBeInTheDocument();
     expect(screen.getByText('100cr')).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: /Sort by ROF/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sort by ROF/ })).toBeInTheDocument();
     // CWN's columns are not this sheet's.
-    expect(screen.queryByRole('columnheader', { name: /Sort by MAG/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Sort by MAG/ })).toBeNull();
     expect(screen.getByText('GOES INTO ONE OF YOUR 4 WEAPON SLOTS')).toBeInTheDocument();
   });
 
@@ -2316,8 +2334,8 @@ describe('a shelf of an item type (8a7a2)', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'GUNS' }));
     const row = screen.getByText('Pistol').closest('tr')!;
     expect(within(row).getByText('2d6')).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Sort by DAMAGE' })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: 'Sort by AMMO' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sort by DAMAGE' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sort by AMMO' })).toBeInTheDocument();
     expect(screen.getByText('GOES INTO YOUR GEAR AS A GUN')).toBeInTheDocument();
     unmount();
     show('gun_shop', 'Arms', TYPED);

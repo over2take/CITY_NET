@@ -258,6 +258,10 @@ const nextSort = (state: SortState, key: string, firstDir: SortDir): SortState =
 const sortArrow = (state: SortState, key: string): string =>
   state.key !== key || !state.dir ? '' : state.dir === 'asc' ? ' ▲' : ' ▼';
 
+/** How a column is sorted, as a screen reader says it on its head (8a7c1): ascending, descending, or none. */
+const ariaSort = (state: SortState, key: string): 'ascending' | 'descending' | 'none' =>
+  state.key !== key ? 'none' : state.dir === 'asc' ? 'ascending' : 'descending';
+
 /**
  * Sort a copy, or hand back the original order untouched.
  *
@@ -1810,15 +1814,23 @@ export function ShopWindow({
                         {Object.entries(shelf.columns).map(([key, col]) => (
                           <th
                             key={key}
-                            onClick={() => { setSort((st) => nextSort(st, key, col.first)); firstPage(); }}
-                            aria-label={`Sort by ${col.label}`}
-                            title="Click to sort — again to reverse, again for the book's own order"
+                            aria-sort={ariaSort(sort, key)}
                             style={{
-                              ...cell, cursor: 'pointer', whiteSpace: 'nowrap',
+                              ...cell, whiteSpace: 'nowrap',
                               textAlign: col.align ?? 'left',
                               color: sort.key === key && sort.dir ? 'var(--cyan)' : undefined,
                             }}
-                          >{col.label}{sortArrow(sort, key)}</th>
+                          >
+                            {/* A button (8a7c1; the mockup's "column heads all work"), so a head is reached by Tab and pressed by Enter or Space. */}
+                            <button
+                              type="button"
+                              className="shop-sort-head"
+                              onClick={() => { setSort((st) => nextSort(st, key, col.first)); firstPage(); }}
+                              aria-label={`Sort by ${col.label}`}
+                              title="Click to sort — again to reverse, again for the book's own order"
+                              style={{ background: 'none', border: 0, padding: 0, margin: 0, font: 'inherit', letterSpacing: 'inherit', color: 'inherit', cursor: 'pointer', textAlign: 'inherit', whiteSpace: 'nowrap' }}
+                            >{col.label}{sortArrow(sort, key)}</button>
+                          </th>
                         ))}
                         <th style={{ ...cell, textAlign: 'right' }}>&nbsp;</th>
                       </tr>

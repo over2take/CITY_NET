@@ -806,6 +806,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **A shop's column heads work from the keyboard.** Each head (NAME, PRICE, DAMAGE…) can now be reached with Tab and pressed with Enter or Space to sort, shows a focus ring in the theme's color, and tells a screen reader how the column is sorted.
 - **A game's own shops are set per game.** A building made one of a game's own shops (a Magican) is that only while that game runs: in another game it can be that game's Mechanic, and in a game that makes neither it is its ordinary building type again. Two games each making a "Magican" never mix. Saved maps carry which building is which shop in each game, and buildings set to a game's own shop before this were moved to every game that makes it.
 - **"THE GM GAVE YOU" notices in one box, gone after 5 seconds.** Gifts now share one box, newest first, instead of stacking a box each, and each fades away 5 seconds after it arrives. Hover over the box (or tab into it) to keep it while you read; ✕ closes them all.
 - **Slot and install counters only where they are used.** On GEAR, a counter like ATTUNED 0 OF 3 or CYBERWARE · STRAIN 0 OF 2 shows only once something on that sheet needs it, worn, carried or stashed, or while anything is still counted against it. A character with no cyberware no longer sees STRAIN 0 OF 0.

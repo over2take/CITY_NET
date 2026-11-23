@@ -1533,6 +1533,8 @@ button.choice-off:disabled {
 
 .district-member .member-name:hover { color: var(--green); text-decoration: underline; }
 .district-member .member-name:focus-visible { outline: 1px solid var(--green); outline-offset: 1px; }
+/* A shop shelf's column head (8a7c1), reached by Tab: a ring in the theme's own color, not the browser's. */
+.shop-sort-head:focus-visible { outline: 1px solid var(--green); outline-offset: 2px; }
 .district-member .upload-btn { width: 100%; }
 
 /* Themed scrollbar for a nested scroll container.
