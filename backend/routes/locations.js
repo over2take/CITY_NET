@@ -20,6 +20,7 @@ const { syncConditionsOnSheet } = require('../sheets/conditionsOnSheet');
 const { poolAfter } = require('../tokens/poolHealth');
 const { withMaxSet } = require('../systemBuilder/tokenMax');
 const { HAND_KEY, handProblem, handAfter } = require('../systemBuilder/resistances');
+const { resistancesShown } = require('../systemBuilder/resistancesShown');
 
 /** A change to a token refused (tokens/tokenAccess.js): 401 when nobody said who they are. */
 const refuse = (res, caller, message = 'You can only change your own token') =>
@@ -938,6 +939,40 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           }
           res.json({ id: Number(id), conditions: checked.value });
         });
+      });
+    });
+  });
+
+  /**
+   * What the token's character resists, for its HEALTH (8b3c2a): the game's damage types, what each kind means, what it has
+   * by type from its sheet and the token's conditions, the rows added by hand and what the one asking may add. The GM and
+   * editors any token's; a player their own or an NPC given them, as they change its health. A built-in game: { on: false }.
+   */
+  router.get('/:id/resistances', optionalAuthenticate, (req, res) => {
+    const { id } = req.params;
+    const caller = tokenAccess.callerOf(req);
+    db.get('SELECT shape, owner, controllers, conditions FROM locations WHERE id = ?', [id], (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: 'Not found' });
+      if (!caller.editor && !(caller.player && tokenAccess.mayChangeHealth(row, caller))) return res.status(403).json({ error: 'You can only see your own character\'s resistances' });
+      db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (gErr, gRow) => {
+        if (gErr) return res.status(500).json({ error: gErr.message });
+        const system = (gRow && gRow.value) || DEFAULT_SYSTEM;
+        const definition = customSystems.definitionOf(system);
+        if (!definition) return res.json({ on: false });
+        const conditionIds = parseTokenConditions(row.conditions).map((c) => c.id);
+        const found = (e, sheet) => {
+          if (e) return res.status(500).json({ error: e.message });
+          let data = null;
+          try { data = sheet ? JSON.parse(sheet.data || '{}') : null; } catch { data = {}; }
+          res.json({ on: true, ...resistancesShown(definition, data, conditionIds, caller.editor ? null : caller.player) });
+        };
+        if (row.shape === 'rhombus' && row.owner) {
+          db.get('SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0', [row.owner, system], found);
+        } else {
+          db.get(`SELECT cs.data FROM npc_sheet_links l JOIN character_sheets cs ON cs.id = l.sheet_id
+            WHERE l.location_id = ? AND cs.system = ?`, [id, system], found);
+        }
       });
     });
   });
