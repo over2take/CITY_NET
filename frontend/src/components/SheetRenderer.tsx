@@ -1913,7 +1913,12 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
   const effects = useMemo(() => (effectsWorked(template, data as Record<string, unknown>) ? choiceEffects(data as Record<string, unknown>, template) : sheetEffects(data, template)), [data, template]);
   // What made the maximum, for the vitals box's MAX on hover, as the HEALTH section it stands in for said it (8s3c).
   const maxBonus = template.header?.hpMaxField ? effects.fields[template.header.hpMaxField] : undefined;
-  const maxNote = maxBonus?.delta ? `${maxBonus.base} → ${maxBonus.value} (${describeSources(maxBonus)})` : undefined;
+  // MAX set by hand over a formula (8s4a): the ADJUST the server keeps, said beside the bonus.
+  const adjust = Number.isInteger((data as Record<string, unknown>)._max_adjust) ? (data as Record<string, unknown>)._max_adjust as number : 0;
+  const shownMax = vitals?.token?.hp_max;
+  const maxNote = adjust && typeof shownMax === 'number'
+    ? `${shownMax - adjust - (maxBonus?.delta ?? 0)} → ${shownMax} (${[maxBonus?.delta ? describeSources(maxBonus) : null, `adjusted ${adjust > 0 ? '+' : ''}${adjust}`].filter(Boolean).join(', ')})`
+    : maxBonus?.delta ? `${maxBonus.base} → ${maxBonus.value} (${describeSources(maxBonus)})` : undefined;
   // How many carried weapon rows this template declares. Counted rather than imported, so
   // the stash cannot disagree with the sheet it is moving weapons into.
   const weaponRows = useMemo(

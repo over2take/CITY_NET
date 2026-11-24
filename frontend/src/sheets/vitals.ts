@@ -42,7 +42,7 @@ export interface SheetVitals {
   reload: () => void;
 }
 
-export type VitalsAction = 'damage' | 'heal' | 'set_temp' | 'stim_heal';
+export type VitalsAction = 'damage' | 'heal' | 'set_temp' | 'set_max' | 'stim_heal';
 
 /**
  * Whether the strip offers STIM: CWN's field healing (stims, medkits), which heals and adds +1 System Strain, refused
@@ -58,7 +58,8 @@ export const amountOf = (text: string): number => {
 
 /** The body the health route takes for each, as HitPointsPanel sends it. */
 export const healthBody = (action: VitalsAction, amount: number) =>
-  (action === 'set_temp' ? { action, amount, hp_temp: amount } : { action, amount });
+  // MAX (8s4a) as HEALTH's SET sends it: the token's maximum, and the amount a second track's reads.
+  (action === 'set_temp' ? { action, amount, hp_temp: amount } : action === 'set_max' ? { action, amount, hp_max: amount } : { action, amount });
 
 /**
  * Whether the strip offers its own amount, DAMAGE, HEAL and TEMP: one pool of hit points, as every built-in game has and a
