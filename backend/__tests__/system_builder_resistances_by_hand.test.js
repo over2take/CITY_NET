@@ -19,7 +19,8 @@ const runtime = require_('../systemBuilder/runtime');
 const { resistancesOf } = require_('../systemBuilder/choices');
 const { HAND_KEY, handProblem, handIn, handAfter } = require_('../systemBuilder/resistances');
 const { elevatedUsers } = require_('../middleware/auth');
-const { resistancesShown } = require_('../systemBuilder/resistancesShown');
+const { resistancesShown, revealedOnly } = require_('../systemBuilder/resistancesShown');
+const { REVEALED_KEY, revealedIn, revealedProblem } = require_('../systemBuilder/resistances');
 const { BLANK_DRAWN } = require_('../systemBuilder/drawings');
 
 const sign = (payload) => jwt.sign(payload, 'test-secret');
@@ -89,6 +90,27 @@ describe('who added what', () => {
     const gmCold = { kind: 'vulnerable', type: 'cold' };
     expect(handAfter([gmCold], [gmCold, { kind: 'immune', type: 'fire' }], 'vex')).toEqual({ rows: [gmCold, { kind: 'immune', type: 'fire', by: 'vex' }] });
     expect(handAfter([], [gmCold])).toEqual({ rows: [gmCold] });
+  });
+});
+
+describe('what is revealed (8b4a)', () => {
+  it('kept as ids once each; checked against the game, ALL or a type, once each, as a list', () => {
+    expect(revealedIn(['cold', 'cold', '', 7, null, 'all'])).toEqual(['cold', 'all']);
+    expect(revealedIn('cold')).toEqual([]);
+    expect(revealedProblem(STONE_DEF, ['cold', 'all', 'sonic'])).toBeNull();
+    expect(revealedProblem(STONE_DEF, [7])).toBe('That is not one of this system\'s damage types, or all');
+    expect(revealedProblem(STONE_DEF, ['all', 'all'])).toBe('ALL is on the list twice');
+  });
+
+  it('a type revealed shows its own parts; ALL its part on every type; a kind as the shown parts come to', () => {
+    const worked = {
+      fire: { kind: null, from: [{ kind: 'vulnerable', from: 'Soaked' }, { kind: 'resist', from: 'the GM, by hand', all: true, hand: true }] },
+      cold: { kind: 'resist', from: [{ kind: 'resist', from: 'the GM, by hand', all: true, hand: true }] },
+    };
+    expect(revealedOnly(worked, ['fire'])).toEqual({ fire: { kind: 'vulnerable', from: [{ kind: 'vulnerable' }] } });
+    expect(revealedOnly(worked, ['all'])).toEqual({ fire: { kind: 'resist', from: [{ kind: 'resist', all: true }] }, cold: { kind: 'resist', from: [{ kind: 'resist', all: true }] } });
+    expect(revealedOnly(worked, ['fire', 'all']).fire).toEqual({ kind: null, from: [{ kind: 'vulnerable' }, { kind: 'resist', all: true }] });
+    expect(revealedOnly(worked, [])).toEqual({});
   });
 });
 
@@ -243,14 +265,61 @@ describe('the routes', () => {
       expect(res.body.may).toEqual({ add: true, vulnerable: true });
     });
 
-    it('a player on their own and an NPC given them, adding no vulnerability; never another\'s, nor unnamed', async () => {
+    it('a player on their own and an NPC given them, adding no vulnerability; another player\'s character to read (8b4a)', async () => {
       expect((await get_(ids.vex, VEX)).body.may).toEqual({ add: true, vulnerable: false, by: 'vex' });
       expect((await get_(ids.dog, VEX)).body.may).toEqual({ add: true, vulnerable: false, by: 'vex' });
-      const no = { status: 403, body: { error: 'You can only see your own character\'s resistances' } };
-      expect(await get_(ids.vex, ASH)).toMatchObject(no);
-      expect(await get_(ids.ghoul, VEX)).toMatchObject(no);
-      expect((await request(app).get(`/api/locations/${ids.vex}/resistances`)).status).toBe(403);
+      // The NPC given them: theirs in full, but REVEAL is the GM's to see.
+      expect((await get_(ids.dog, VEX)).body).not.toHaveProperty('revealed');
+      // The GM's look at a player's character: no REVEAL there.
+      expect((await get_(ids.vex)).body).not.toHaveProperty('npc');
+      await run(db, 'UPDATE character_sheets SET data = ? WHERE id = ?', [JSON.stringify({ name: 'X', [HAND_KEY]: [{ kind: 'immune', type: 'sonic', by: 'vex' }] }), ids.vexSheet]);
+      // Another player's character: all of it, openly, nothing to add or take off.
+      const watched = (await get_(ids.vex, ASH)).body;
+      expect(watched.worked.sonic.from).toEqual([{ kind: 'immune', from: 'vex, by hand', hand: true, by: 'vex' }]);
+      expect(watched.hand).toEqual([{ kind: 'immune', type: 'sonic', by: 'vex' }]);
+      expect(watched.may).toEqual({ add: false, vulnerable: false });
+      expect(watched).not.toHaveProperty('npc');
+      expect((await request(app).get(`/api/locations/${ids.vex}/resistances`)).body.may).toEqual({ add: false, vulnerable: false });
       expect((await get_(9999)).status).toBe(404);
+    });
+
+    it('an NPC (8b4a): the GM sees all of it and which are revealed; a player not given it nothing, until the GM reveals some', async () => {
+      await run(db, 'UPDATE character_sheets SET data = ? WHERE id = ?', [JSON.stringify({ name: 'Ghoul', [HAND_KEY]: [{ kind: 'resist', type: 'cold' }, { kind: 'vulnerable', type: 'fire' }, { kind: 'resist', type: 'all' }] }), ids.npc]);
+      const gm = (await get_(ids.ghoul)).body;
+      expect(gm).toMatchObject({ npc: true, revealed: [] });
+      expect(gm.worked.cold.from).toHaveLength(2);
+      const before = (await get_(ids.ghoul, VEX)).body;
+      expect(before).toMatchObject({ on: true, worked: {}, hand: [], may: { add: false, vulnerable: false }, revealedOnly: true });
+      expect(before).not.toHaveProperty('revealed');
+      // COLD revealed: its kind as its own parts come to, never where from; ALL's part hidden till ALL is.
+      expect((await request(app).put(`/api/locations/${ids.ghoul}/revealed`).set({ Authorization: `Bearer ${GM}` }).send({ revealed: ['cold'] })).body).toEqual({ id: ids.ghoul, revealed: ['cold'] });
+      expect((await get_(ids.ghoul2, VEX)).body.worked).toEqual({ cold: { kind: 'resist', from: [{ kind: 'resist' }] } });
+      expect(told.at(-1)).toEqual(['dataUpdated']);
+      // ALL too: every type now shows ALL's part; FIRE, a VULNERABLE with RESIST ALL, cancels as it does for the GM.
+      await request(app).put(`/api/locations/${ids.ghoul}/revealed`).set({ Authorization: `Bearer ${EDITOR}` }).send({ revealed: ['cold', 'all'] });
+      const after = (await get_(ids.ghoul, VEX)).body.worked;
+      expect(after.cold).toEqual({ kind: 'resist', from: [{ kind: 'resist' }, { kind: 'resist', all: true }] });
+      expect(after.fire).toEqual({ kind: 'resist', from: [{ kind: 'resist', all: true }] });
+      expect(after.acid).toEqual({ kind: 'resist', from: [{ kind: 'resist', all: true }] });
+      expect((await get_(ids.ghoul)).body.revealed).toEqual(['cold', 'all']);
+      // None left: nothing kept, and nothing shown.
+      await request(app).put(`/api/locations/${ids.ghoul}/revealed`).set({ Authorization: `Bearer ${GM}` }).send({ revealed: [] });
+      expect(await dataOf(ids.npc)).not.toHaveProperty(REVEALED_KEY);
+      expect((await get_(ids.ghoul, VEX)).body.worked).toEqual({});
+    });
+
+    it('REVEAL: the GM\'s only, an NPC\'s token with a sheet only, the game\'s types or ALL once each', async () => {
+      const reveal = (id, revealed, token = GM) => request(app).put(`/api/locations/${id}/revealed`).set({ Authorization: `Bearer ${token}` }).send({ revealed });
+      expect(await reveal(ids.ghoul, ['cold'], VEX)).toMatchObject({ status: 403, body: { error: 'Only the GM reveals an NPC\'s resistances' } });
+      expect(await reveal(ids.vex, ['cold'])).toMatchObject({ status: 400, body: { error: 'A player\'s character shows its resistances already: only an NPC\'s are revealed' } });
+      expect(await reveal(ids.bare, ['cold'])).toMatchObject({ status: 409 });
+      expect(await reveal(ids.ghoul, ['lava'])).toMatchObject({ status: 400, body: { error: 'lava is not one of this system\'s damage types, or all' } });
+      expect(await reveal(ids.ghoul, ['cold', 'cold'])).toMatchObject({ status: 400, body: { error: 'cold is on the list twice' } });
+      expect(await reveal(ids.ghoul, 'cold')).toMatchObject({ status: 400, body: { error: 'Must be a list of damage types' } });
+      expect((await reveal(9999, [])).status).toBe(404);
+      expect(await dataOf(ids.npc)).toEqual({ name: 'X' });
+      await run(db, `UPDATE global_settings SET value = 'generic' WHERE key = 'game_system'`);
+      expect(await reveal(ids.ghoul, [])).toMatchObject({ status: 400, body: { error: 'Resistances are for a game made in the builder' } });
     });
 
     it('a type drawn on the pad sent as its drawing; a row by hand that won\'t read left out; a sheet that won\'t read as none', async () => {
