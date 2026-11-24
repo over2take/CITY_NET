@@ -244,8 +244,8 @@ describe('the routes', () => {
     });
 
     it('a player on their own and an NPC given them, adding no vulnerability; never another\'s, nor unnamed', async () => {
-      expect((await get_(ids.vex, VEX)).body.may).toEqual({ add: true, vulnerable: false });
-      expect((await get_(ids.dog, VEX)).body.may).toEqual({ add: true, vulnerable: false });
+      expect((await get_(ids.vex, VEX)).body.may).toEqual({ add: true, vulnerable: false, by: 'vex' });
+      expect((await get_(ids.dog, VEX)).body.may).toEqual({ add: true, vulnerable: false, by: 'vex' });
       const no = { status: 403, body: { error: 'You can only see your own character\'s resistances' } };
       expect(await get_(ids.vex, ASH)).toMatchObject(no);
       expect(await get_(ids.ghoul, VEX)).toMatchObject(no);

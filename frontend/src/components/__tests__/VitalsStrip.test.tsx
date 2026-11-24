@@ -48,6 +48,8 @@ beforeEach(() => {
   forgetConditionLists();
   vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
     if (url.startsWith('/api/systems/conditions/')) return { ok: true, status: 200, json: async () => GAME };
+    // What the token's character resists (8b3c2b): none yet, the GM's to add.
+    if (url.endsWith('/resistances') && !init?.method) return { ok: true, status: 200, json: async () => ({ on: true, types: [], worked: {}, hand: [], may: { add: true, vulnerable: true } }) };
     fetched.push({ url, init });
     return { ok: answer.ok, status: answer.ok ? 200 : 403, json: async () => answer.body };
   }));
@@ -189,6 +191,10 @@ describe('HEALTH here', () => {
     const injuries = within(region).getByRole('button', { name: 'Injuries' });
     expect((injuries.parentElement as HTMLElement).style.justifyContent).toBe('center');
     expect(injuries.parentElement!.textContent).toBe('INJURIES');
+    // RESISTANCES and VULNERABILITIES under INJURIES (8b3c2b).
+    const resist = await within(region).findByRole('region', { name: 'Resistances' });
+    expect(within(region).getByRole('region', { name: 'Vulnerabilities' })).toBeTruthy();
+    expect(injuries.compareDocumentPosition(resist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(within(region).queryByRole('region', { name: 'Conditions' })).toBeNull();
     expect(within(region).queryByRole('button', { name: '+ CONDITION' })).toBeNull();
     // MAX is set on the strip now (8s4a): not twice.
