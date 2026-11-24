@@ -256,7 +256,8 @@ export const typeSection = (type: TypeShown): string => (/^[a-z0-9_][a-z0-9_ '-]
 
 /** A value to show a column's shape in the example, by what it holds. */
 const sampleOf = (c: ColumnShown): string =>
-  c.kind === 'number' ? '1' : c.kind === 'count' ? '6' : c.kind === 'damage' ? '1d6' : c.kind === 'dice' ? '1d4' : c.kind === 'pick' ? (c.options?.[0] ?? '') : 'words';
+  // A DAMAGE in its column's MOST LINES ARE (8b2b): 1d6 FIRE DMG.
+  c.kind === 'number' ? '1' : c.kind === 'count' ? '6' : c.kind === 'damage' ? (c.usual ? `1d6 ${c.usual} DMG` : '1d6') : c.kind === 'dice' ? '1d4' : c.kind === 'pick' ? (c.options?.[0] ?? '') : 'words';
 
 /** The rows of one type, on their way into a file. */
 export type TypedRows = (type: TypeShown) => OutRow[];
@@ -316,7 +317,7 @@ export const writeCatalogueFile = (
     const rows = typedRows!(type);
     out.push(`# ${'─'.repeat(70)}`);
     out.push(`# ${type.label.toUpperCase()} · each line a ${type.one.toUpperCase()}, its columns filled when it is bought or given`);
-    out.push(`# ${type.columns.map((c) => `${c.id}: ${c.kind === 'pick' ? `one of ${(c.options ?? []).join(', ')}` : c.kind === 'count' ? 'the most it holds, a whole number' : c.kind === 'damage' || c.kind === 'dice' ? 'dice' : c.kind === 'number' ? 'a number' : 'words'}`).join(' · ') || 'no columns of its own'}`);
+    out.push(`# ${type.columns.map((c) => `${c.id}: ${c.kind === 'pick' ? `one of ${(c.options ?? []).join(', ')}` : c.kind === 'count' ? 'the most it holds, a whole number' : c.kind === 'damage' ? 'dice, then its type if it has one (2d6 FIRE DMG)' : c.kind === 'dice' ? 'dice' : c.kind === 'number' ? 'a number' : 'words'}`).join(' · ') || 'no columns of its own'}`);
     out.push(`[${typeSection(type)}]`);
     const widths = columns.map((col) => Math.max(col.length, ...rows.map((r) => csvCell(r.values[col] ?? '').length)));
     const line = (cells: string[]) => cells.map((c, i) => pad(c, widths[i])).join(', ').replace(/\s+$/, '');

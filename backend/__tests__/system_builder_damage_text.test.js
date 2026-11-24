@@ -150,6 +150,28 @@ describe('in a catalogue file', () => {
   });
 });
 
+describe('a DAMAGE column\'s MOST LINES ARE (8b2b)', () => {
+  const { typesShown } = require_('../systemBuilder/itemTypes');
+  const withUsual = (usual, damage = ARMED.damage) => ({ ...ARMED, damage, items: { ...ARMED.items, types: [{ ...ARMED.items.types[0], columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage', usual }, ARMED.items.types[0].columns[1]] }] } });
+  const problems = (def) => checkDefinition(def).problems.map((p) => `${p.where}: ${p.message}`);
+  it('one of the game\'s damage types that is on; said to the sheet by the name a hit says', () => {
+    expect(problems(withUsual('slashing'))).toEqual([]);
+    expect(typesShown(withUsual('slashing'))[0].columns[0]).toEqual({ id: 'damage', label: 'DAMAGE', kind: 'damage', usual: 'SLASHING' });
+    // Renamed, by its new name.
+    expect(typesShown(withUsual('fire'))[0].columns[0].usual).toBe('HELL FIRE');
+  });
+  it('a type there isn\'t, or one off, refused; nothing said to the sheet; none, nothing to say', () => {
+    expect(problems(withUsual('sonic'))).toEqual(['type weapons, column damage, usual: No damage type that is on is called sonic']);
+    expect(problems(withUsual('fire', { types: { fire: { on: false } } }))).toEqual(['type weapons, column damage, usual: No damage type that is on is called fire']);
+    expect(problems(withUsual(3))).toEqual(['type weapons, column damage, usual: A damage type, or nothing']);
+    expect(typesShown(withUsual('fire', { types: { fire: { on: false } } }))[0].columns[0].usual).toBeUndefined();
+    expect(typesShown(ARMED)[0].columns[0].usual).toBeUndefined();
+    // A DICE column has none.
+    const dice = { ...ARMED, items: { ...ARMED.items, types: [{ ...ARMED.items.types[0], columns: [{ id: 'heals', label: 'HEALS', kind: 'dice', usual: 'fire' }] }] } };
+    expect(problems(dice)).toContain('type weapons, column heals, usual: Not part of a DICE column');
+  });
+});
+
 describe('checked, and previewed in the builder', () => {
   it('an item\'s DAMAGE with types is a value it may have; its dice still checked; DICE takes none', () => {
     expect(checkDefinition(ARMED).problems).toEqual([]);

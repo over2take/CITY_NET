@@ -9,6 +9,7 @@
 //                      fit each column, dice reading its own names, PICK ONE its own words, a rest its own.
 //   DOWNLOAD THIS LIST what its items are now, in the same shape; what a feature does beyond words and uses is a # note.
 
+import { damageList } from './damageTypes';
 import type { Definition } from './systemsApi';
 import { itemList, itemSlots, itemInstalls, itemFeatures, type Item } from './items';
 import { itemTypes, ownTypes, typeOf, itemValues, type ItemType, type ItemColumn } from './itemTypes';
@@ -94,11 +95,20 @@ const diceName = (def: Definition): string | null => {
   return mod ?? allStats(def).map((s) => s.id).find((id): id is string => typeof id === 'string') ?? null;
 };
 
+/** A DAMAGE column's MOST LINES ARE (8b2b) by the name a hit says, where that type is on; else none. */
+const usualName = (def: Definition, c: ItemColumn): string | null => {
+  const t = c.usual ? damageList(def).find((d) => d.on && d.id === c.usual) : undefined;
+  return t ? t.name.trim().toUpperCase() : null;
+};
+/** The game's first damage type that is on, by name, for the notes' example. */
+const firstType = (def: Definition): string | null => damageList(def).find((d) => d.on)?.name.trim().toUpperCase() ?? null;
+
 /** A made-up value that fits a column: the first row's, then the second's. */
 const sampleOf = (def: Definition, c: ItemColumn, second: boolean): string | number => {
   const name = diceName(def);
   switch (c.kind) {
-    case 'damage': return second ? '1d6' : `1d8${name ? ` + @${name}` : ''}`;
+    // In its column's MOST LINES ARE (8b2b): 1d8 + @might_mod SLASHING DMG.
+    case 'damage': { const usual = usualName(def, c); return `${second ? '1d6' : `1d8${name ? ` + @${name}` : ''}`}${usual ? ` ${usual} DMG` : ''}`; }
     case 'dice': return second ? '1d4' : '2d4 + 2';
     case 'text': return second ? 'melee' : '30 m';
     case 'count': return second ? 1 : 6;
@@ -120,7 +130,8 @@ const head = (def: Definition, intro: string[]): string[] => {
     '# Each [section] is one of this system\'s types, headed by its own columns. Matched by name: a name already here is updated',
     '# (and made the section\'s type), a new name is added. Nothing is deleted. An empty cell leaves that part as it is; write - to clear it.',
     '#',
-    `# DAMAGE and DICE are dice, like ${name ? `1d8 + @${name}` : '1d8 + 2'}. A COUNT is how many it holds, 0 to 1000. A NUMBER is a number.`,
+    `# DAMAGE and DICE are dice, like ${name ? `1d8 + @${name}` : '1d8 + 2'}; a DAMAGE may name its type after them, ${firstType(def) ? `1d8 ${firstType(def)} DMG` : '2d6 FIRE DMG'}, or several, 1d8 SLASHING + 2d6 FIRE.`,
+    '# A COUNT is how many it holds, 0 to 1000. A NUMBER is a number.',
     ...(picks.length ? [`# PICK ONE is one of its words: ${picks.join('; ')}.`] : []),
     `# needs is when its features count: ${needs.join(', ')}.`,
     ...(hasInstalls(def) ? ['# cost is what installing it costs, for an item that needs an install: fractions are fine, 0.25.'] : []),

@@ -180,9 +180,14 @@ describe('a roll\'s ADD and AGAINST, and a rest\'s amount (formula box 2)', () =
     expect(sampleLine('damage', { ok: true, value: 7, most: 18, reads: [], parts: [{ label: 'FIRE', value: 2, most: 12 }, { label: null, value: 5, most: 5 }] })).toBe('7 to 18 · 2 to 12 FIRE + 5');
     // Plain dice: as a rest's amount says them.
     expect(sampleLine('damage', { ok: true, value: 3, most: 10, reads: [] })).toBe('3 to 10');
-    expect(insertGroups(DEF, 'damage').map((g) => g.title)).toEqual(insertGroups(DEF, 'refill').map((g) => g.title));
+    // As a rest's amount offers, and the game's DAMAGE TYPES (8b2b) before the workings.
+    expect(insertGroups(DEF, 'damage').map((g) => g.title)).toEqual(['LEVELS', 'STATS', 'FORMULAS', 'CHOICES', 'DAMAGE TYPES', 'WORKINGS']);
     expect(shapesOf(DEF, 'damage')).toEqual(shapesOf(DEF, 'refill'));
     expect(serverKind('damage')).toBe('damage');
+    // DAMAGE TYPES (8b2b): the game's on ones, by name, for a DAMAGE written as one box; never elsewhere.
+    const typed = insertGroups({ ...DEF, damage: { types: { fire: { name: 'Flame' }, cold: { on: false } } } } as Definition, 'damage').find((g) => g.title === 'DAMAGE TYPES')!;
+    expect(typed.items.slice(0, 3)).toEqual([{ token: 'FLAME', label: 'BURNS.' }, { token: 'LIGHTNING', label: 'SHOCKS.' }, { token: 'ACID', label: 'EATS AWAY.' }]);
+    expect(insertGroups(DEF, 'refill').some((g) => g.title === 'DAMAGE TYPES')).toBe(false);
   });
 
   it('INSERT: the stat rolled first in a roll, no tables in a rest', () => {

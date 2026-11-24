@@ -781,7 +781,7 @@ describe('SOLD AT on a type (8a7b2)', () => {
 });
 
 describe('an item\'s DAMAGE with its types (8b2a)', () => {
-  it('read by the server as DAMAGE, each part\'s least and most said with its type; a DICE column read as before', async () => {
+  it('as rows (8b2b): each part\'s dice read as a rest\'s amount, the whole as DAMAGE; a DICE column read as before', async () => {
     const asked: { text: string; kind: string }[] = [];
     const api = { previewFormulas: vi.fn(async (_d: Definition, fs: { text: string; kind: string }[]) => {
       asked.push(...fs);
@@ -795,7 +795,97 @@ describe('an item\'s DAMAGE with its types (8b2a)', () => {
     render(<ItemsPage definition={def} edit={() => {}} api={api} />);
     fireEvent.click(screen.getByRole('tab', { name: 'ITEMS' }));
     const item = within(await screen.findByRole('region', { name: 'Flame Tongue item' }));
-    expect(await item.findByText(/3 to 20 · 1 to 8 SLASHING \+ 2 to 12 FIRE/)).toBeTruthy();
-    expect(asked).toEqual(expect.arrayContaining([{ text: '1d8 SLASHING + 2d6 FIRE', kind: 'damage' }, { text: '2d4', kind: 'refill' }]));
+    expect((await item.findByRole('status', { name: 'Flame Tongue DAMAGE in all' })).textContent).toBe('IN ALL: 3 to 20');
+    expect(asked).toEqual(expect.arrayContaining([{ text: '1d8', kind: 'refill' }, { text: '2d6', kind: 'refill' }, { text: '1d8 SLASHING + 2d6 FIRE', kind: 'damage' }, { text: '2d4', kind: 'refill' }]));
+  });
+});
+
+describe('an item\'s DAMAGE as rows (8b2b)', () => {
+  const ARMS = (values: object, usual?: string) => ({ ...WORN, items: { ...((WORN as unknown as { items: object }).items), types: [
+    { id: 'weapons', label: 'WEAPONS', one: 'Weapon', columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage', ...(usual ? { usual } : {}) }] },
+  ], list: [{ id: 'tongue', label: 'Flame Tongue', type: 'weapons', values }] } } as unknown as Definition);
+  const openArms = (def: Definition, api?: ReturnType<typeof systemsApi>) => {
+    const edits: Definition[] = [];
+    const Harness = () => { const [d, setD] = useState(def); return <ItemsPage definition={d} edit={(next) => { edits.push(next); setD(next); }} api={api} />; };
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('tab', { name: 'ITEMS' }));
+    return () => (edits[edits.length - 1] as unknown as { items: { list: { values: { damage?: string } }[]; types: { columns: { usual?: string }[] }[] } });
+  };
+  const item = () => within(screen.getByRole('region', { name: 'Flame Tongue item' }));
+  const damageOf = (last: ReturnType<typeof openArms>) => last().items.list[0].values.damage;
+
+  it('each part its dice and its TYPE, + PART, ×: kept as the text the server reads', async () => {
+    const last = openArms(ARMS({ damage: '1d8' }));
+    const parts = within(item().getByRole('group', { name: 'Flame Tongue DAMAGE parts' }));
+    fireEvent.change(parts.getByRole('combobox', { name: 'Flame Tongue DAMAGE type' }), { target: { value: 'slashing' } });
+    expect(damageOf(last)).toBe('1d8 SLASHING DMG');
+    await userEvent.click(parts.getByRole('button', { name: 'Add a part to Flame Tongue DAMAGE' }));
+    // A new part takes the last one's type, and waits for its dice.
+    expect((parts.getByRole('combobox', { name: 'Flame Tongue DAMAGE part 2 type' }) as HTMLSelectElement).value).toBe('slashing');
+    fireEvent.change(parts.getByRole('combobox', { name: 'Flame Tongue DAMAGE part 2 type' }), { target: { value: 'fire' } });
+    expect(damageOf(last)).toBe('1d8 SLASHING DMG');
+    fireEvent.change(parts.getByRole('textbox', { name: 'Flame Tongue DAMAGE part 2' }), { target: { value: '2d6' } });
+    expect(damageOf(last)).toBe('1d8 SLASHING + 2d6 FIRE DMG');
+    // The first part's box is still DAMAGE's own, by its name.
+    expect(item().getByLabelText('DAMAGE')).toBe(parts.getByRole('textbox', { name: 'Flame Tongue DAMAGE' }));
+    await userEvent.click(parts.getByRole('button', { name: 'Remove Flame Tongue DAMAGE' }));
+    expect(damageOf(last)).toBe('2d6 FIRE DMG');
+    expect(parts.queryByRole('button', { name: /^Remove/ })).toBeNull();
+    fireEvent.change(parts.getByRole('combobox', { name: 'Flame Tongue DAMAGE type' }), { target: { value: '' } });
+    expect(damageOf(last)).toBe('2d6');
+  });
+
+  it('each part its own eˣ; under several, what they come to in all', async () => {
+    const api = { previewFormulas: vi.fn(async (_d: Definition, fs: { text: string; kind: string }[]) => ({ ok: true, value: { sampleLevel: 3, results: fs.map((x) => (x.kind === 'damage'
+      ? { ok: true, value: 3, most: 20, reads: [], parts: [] } : { ok: true, value: 1, most: 8, reads: [] })) } })) } as unknown as ReturnType<typeof systemsApi>;
+    openArms(ARMS({ damage: '1d8 SLASHING + 2d6 FIRE DMG' }), api);
+    const parts = within(item().getByRole('group', { name: 'Flame Tongue DAMAGE parts' }));
+    expect(parts.getByRole('button', { name: 'Help writing Flame Tongue DAMAGE' })).toBeTruthy();
+    expect(parts.getByRole('button', { name: 'Help writing Flame Tongue DAMAGE part 2' })).toBeTruthy();
+    expect((await parts.findByRole('status', { name: 'Flame Tongue DAMAGE in all' })).textContent).toBe('IN ALL: 3 to 20');
+    expect(api.previewFormulas).toHaveBeenCalledWith(expect.anything(), [{ text: '1d8 SLASHING + 2d6 FIRE DMG', kind: 'damage' }]);
+  });
+
+  it('one part: no IN ALL, its own sample enough', async () => {
+    const api = { previewFormulas: vi.fn(async (_d: Definition, fs: { text: string; kind: string }[]) => ({ ok: true, value: { sampleLevel: 3, results: fs.map(() => ({ ok: true, value: 1, most: 8, reads: [] })) } })) } as unknown as ReturnType<typeof systemsApi>;
+    openArms(ARMS({ damage: '1d8 FIRE DMG' }), api);
+    await item().findByText(/1 to 8/);
+    expect(item().queryByRole('status', { name: 'Flame Tongue DAMAGE in all' })).toBeNull();
+    expect(api.previewFormulas.mock.calls.flatMap((c) => c[1]).some((f: { kind: string }) => f.kind === 'damage')).toBe(false);
+  });
+
+  it('+ PART with MOST LINES ARE: the new part starts as it, not as the last', async () => {
+    const last = openArms(ARMS({ damage: '1d8 SLASHING DMG' }, 'piercing'));
+    const parts = within(item().getByRole('group', { name: 'Flame Tongue DAMAGE parts' }));
+    await userEvent.click(parts.getByRole('button', { name: 'Add a part to Flame Tongue DAMAGE' }));
+    expect((parts.getByRole('combobox', { name: 'Flame Tongue DAMAGE part 2 type' }) as HTMLSelectElement).value).toBe('piercing');
+    fireEvent.change(parts.getByRole('textbox', { name: 'Flame Tongue DAMAGE part 2' }), { target: { value: '1d4' } });
+    expect(damageOf(last)).toBe('1d8 SLASHING + 1d4 PIERCING DMG');
+  });
+
+  it('a word that is no type stays one box, its eˣ offering the game\'s DAMAGE TYPES', async () => {
+    openArms(ARMS({ damage: '2d6 sonic' }));
+    expect(item().queryByRole('group', { name: 'Flame Tongue DAMAGE parts' })).toBeNull();
+    expect((item().getByLabelText('DAMAGE') as HTMLInputElement).value).toBe('2d6 sonic');
+    await userEvent.click(item().getByRole('button', { name: 'Help writing Flame Tongue DAMAGE' }));
+    expect(item().getByRole('group', { name: 'Help writing Flame Tongue DAMAGE' }).textContent).toContain('DAMAGE TYPES');
+  });
+
+  it('the column\'s MOST LINES ARE: kept on the column; an item with no DAMAGE starts as it', () => {
+    const last = openArms(ARMS({}));
+    fireEvent.click(screen.getByRole('tab', { name: 'TYPES' }));
+    const most = screen.getByRole('combobox', { name: 'DAMAGE most lines are' }) as HTMLSelectElement;
+    expect([...most.options].slice(0, 3).map((o) => o.textContent)).toEqual(['NO TYPE', 'FIRE', 'COLD']);
+    fireEvent.change(most, { target: { value: 'piercing' } });
+    expect(last().items.types[0].columns[0].usual).toBe('piercing');
+    fireEvent.click(screen.getByRole('tab', { name: 'ITEMS' }));
+    const parts = within(item().getByRole('group', { name: 'Flame Tongue DAMAGE parts' }));
+    expect((parts.getByRole('combobox', { name: 'Flame Tongue DAMAGE type' }) as HTMLSelectElement).value).toBe('piercing');
+    fireEvent.change(parts.getByRole('textbox', { name: 'Flame Tongue DAMAGE' }), { target: { value: '1d6' } });
+    expect(damageOf(last)).toBe('1d6 PIERCING DMG');
+    // Back to none.
+    fireEvent.click(screen.getByRole('tab', { name: 'TYPES' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'DAMAGE most lines are' }), { target: { value: '' } });
+    expect(last().items.types[0].columns[0].usual).toBeUndefined();
   });
 });

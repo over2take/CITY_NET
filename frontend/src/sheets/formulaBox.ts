@@ -11,6 +11,7 @@
 // And SPEND XP's cost of raising a stat (7f2b), which reads the stat as it is (@old) and as it will be (@new) too; and
 // IMPROVE BY USE's roll, target and gain (7f3a2), dice as a rest's amount, reading @this, the stat improved.
 
+import { damageList } from './damageTypes';
 import type { Definition } from './systemsApi';
 import { allStats, formulaList, tableList, isCondition, partOf, CONDITION_PARTS, FUNCTIONS, type Formula } from './statsRules';
 import { choiceLists, featureList } from './choices';
@@ -184,6 +185,8 @@ export const insertGroups = (def: Definition, kind: FormulaKind): InsertGroup[] 
   // amount reads stats as typed, and a rest's refill the sheet's own numbers, so neither offers them.
   { title: 'GEAR', items: kind === 'amount' || kind === 'least' || kind === 'refill' || kind === 'damage' ? [] : gearTokens(def) },
   { title: 'CHOICES', items: hasTokens(def) },
+  // A DAMAGE names its types after its dice (8b2b): the game's, to put in where it is written as one box.
+  { title: 'DAMAGE TYPES', items: kind === 'damage' ? damageList(def).filter((t) => t.on).map((t) => ({ token: t.name.trim().toUpperCase(), label: t.description.toUpperCase() })) : [] },
   { title: 'WORKINGS', items: FUNCTIONS.filter((fn) => fn !== 'has').map((fn) => ({ token: `${fn}()`, label: WORKINGS[fn] ?? '' })) },
 ].filter((g) => g.items.length);
 

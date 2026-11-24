@@ -26,6 +26,13 @@
 
 const { boxProblem } = require('./tierRolls');
 const { damageProblem } = require('./damageText');
+const { damageTypesOf } = require('./damageTypes');
+
+/** A DAMAGE column's MOST LINES ARE (8b2b) as a hit says it, or null: its type's name in capitals, where that type is on. */
+const usualOf = (definition, column) => {
+  const t = typeof column.usual === 'string' ? damageTypesOf(definition).find((d) => d.id === column.usual) : null;
+  return t ? t.name.toUpperCase() : null;
+};
 const { BUILDING_TYPES } = require('../buildingTypes');
 const { shopKindsOf, buysOf } = require('./buildings');
 
@@ -54,7 +61,8 @@ const DEFAULT_BAND = 'pack';
 const bandOf = (type) => (type && BANDS.includes(type.on_sheet) ? type.on_sheet : DEFAULT_BAND);
 const BASE = ['id', 'label', 'kind'];
 const COLUMN_KEYS = {
-  number: new Set([...BASE, 'unit']), text: new Set(BASE), damage: new Set(BASE), dice: new Set(BASE),
+  // A DAMAGE column's MOST LINES ARE (8b2b): the damage type a new line of it starts as.
+  number: new Set([...BASE, 'unit']), text: new Set(BASE), damage: new Set([...BASE, 'usual']), dice: new Set(BASE),
   count: new Set([...BASE, 'button', 'refill', 'reload']), pick: new Set([...BASE, 'options']),
 };
 /** What a system with no types of its own has. */
@@ -163,6 +171,9 @@ const checkTypes = (definition, problems, { text, keys, labelMost, itemIds = new
         else if (words.some((w) => typeof w !== 'string' || !w.trim() || w.length > LIMITS.word)) problems.push({ where: `${cw}, options`, message: `Each a word or two, at most ${LIMITS.word} characters` });
         else if (new Set(words).size !== words.length) problems.push({ where: `${cw}, options`, message: 'A word is there twice' });
       }
+      if (c.kind === 'damage' && c.usual !== undefined && !damageTypesOf(definition).some((d) => d.id === c.usual)) {
+        problems.push({ where: `${cw}, usual`, message: typeof c.usual === 'string' ? `No damage type that is on is called ${c.usual}` : 'A damage type, or nothing' });
+      }
       if (c.kind === 'count') {
         if (c.button !== undefined) text(c.button, `${cw}, button`, LIMITS.word, { required: true });
         if (c.refill !== undefined && !restIds.has(c.refill)) problems.push({ where: `${cw}, refill`, message: typeof c.refill === 'string' ? `No rest is called ${c.refill}` : 'A rest, or nothing' });
@@ -205,6 +216,8 @@ const typesShown = (definition, items = []) => {
       id: c.id, label: c.label || c.id, kind: c.kind,
       ...(c.kind === 'number' && typeof c.unit === 'string' && c.unit.trim() ? { unit: c.unit } : {}),
       ...(c.kind === 'pick' ? { options: list(c.options).filter((w) => typeof w === 'string') } : {}),
+      // MOST LINES ARE (8b2b), by the name a hit says, where the type is on.
+      ...(c.kind === 'damage' && usualOf(definition, c) ? { usual: usualOf(definition, c) } : {}),
       ...(c.kind === 'count' ? {
         button: typeof c.button === 'string' && c.button.trim() ? c.button : 'USE',
         ...(typeof c.refill === 'string' ? { refill: c.refill } : {}),

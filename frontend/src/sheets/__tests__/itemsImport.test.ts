@@ -56,6 +56,21 @@ describe('DOWNLOAD EXAMPLE: made from the system it comes from', () => {
     expect(checkDefinition(withImportedItems(TESTFALL, read.items)).problems).toEqual([]);
   });
 
+  it('a DAMAGE column\'s MOST LINES ARE in its sample rows (8b2b); the notes say how a type is written; read back without a mistake', () => {
+    const typed = JSON.parse(JSON.stringify(TESTFALL)) as Definition & { items: { types: { columns: { id: string; usual?: string }[] }[] } };
+    typed.items.types[1].columns[0].usual = 'piercing';
+    const file = exampleItemsFile(typed);
+    expect(file).toContain('\nSample Weapon, 1d8 + @might_mod PIERCING DMG, 2d4 + 2,');
+    expect(file).toContain('\nSample Weapon 2, 1d6 PIERCING DMG, 1d4,');
+    expect(file).toContain('# DAMAGE and DICE are dice, like 1d8 + @might_mod; a DAMAGE may name its type after them, 1d8 FIRE DMG, or several, 1d8 SLASHING + 2d6 FIRE.');
+    const read = readItemsFile(typed, file);
+    expect(read.skipped).toEqual([]);
+    expect(checkDefinition(withImportedItems(typed, read.items)).problems).toEqual([]);
+    // Its type switched off: plain dice.
+    const off = { ...typed, damage: { types: { piercing: { on: false } } } } as unknown as Definition;
+    expect(exampleItemsFile(off)).toContain('\nSample Weapon 2, 1d6, 1d4,');
+  });
+
   it('a system with GEAR alone and no slots or installs: [gear], worn or carried, no cost column', () => {
     const file = exampleItemsFile(PLAIN);
     expect(file).toContain('\n[gear]\nname, weight, price, needs, words\nSample Gear, 2, 25, worn, What the table reads about it.\nSample Gear 2, 1, 5, carried, \n');
