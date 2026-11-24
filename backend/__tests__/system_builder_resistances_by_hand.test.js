@@ -19,6 +19,8 @@ const runtime = require_('../systemBuilder/runtime');
 const { resistancesOf } = require_('../systemBuilder/choices');
 const { HAND_KEY, handProblem, handIn, handAfter } = require_('../systemBuilder/resistances');
 const { elevatedUsers } = require_('../middleware/auth');
+const { resistancesShown } = require_('../systemBuilder/resistancesShown');
+const { BLANK_DRAWN } = require_('../systemBuilder/drawings');
 
 const sign = (payload) => jwt.sign(payload, 'test-secret');
 const GM = sign({ id: 1, username: 'gm', role: 'admin', isTemporary: false });
@@ -32,6 +34,7 @@ const STONE_DEF = {
   stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'grit', label: 'Grit' }] }],
   damage: { types: { sonic: { name: 'Sonic' } } },
   choices: [{ id: 'kin', one: 'Kin', many: 'Kin', options: [{ id: 'dwarf', label: 'Dwarf', features: [{ id: 'resilience', label: 'Dwarven Resilience', resistances: [{ kind: 'resist', type: 'poison' }] }] }] }],
+  conditions: { soaked: { name: 'Soaked', resistances: [{ kind: 'vulnerable', type: 'lightning' }] } },
 };
 
 describe('the rows, as the GM sets them', () => {
@@ -217,6 +220,64 @@ describe('the routes', () => {
     expect((await dataOf(rook)).name).toBe('Rook');
     expect(await edit({ [HAND_KEY]: [] })).toMatchObject({ status: 400, body: { error: 'Resistances by hand are for a game made in the builder' } });
     expect(await dataOf(rook)).not.toHaveProperty(HAND_KEY);
+  });
+
+  describe('what HEALTH shows (8b3c2a)', () => {
+    const get_ = (id, token = GM) => request(app).get(`/api/locations/${id}/resistances`).set({ Authorization: `Bearer ${token}` });
+
+    it('the game\'s types with their pictures, what each kind means, what the character has from the sheet, the token\'s conditions and by hand, each named', async () => {
+      await run(db, 'UPDATE character_sheets SET data = ? WHERE id = ?', [JSON.stringify({ name: 'X', _choices: { kin: [{ option: 'dwarf' }] }, [HAND_KEY]: [{ kind: 'immune', type: 'sonic', by: 'vex' }] }), ids.vexSheet]);
+      await run(db, 'UPDATE locations SET conditions = ? WHERE id = ?', [JSON.stringify([{ id: 'soaked' }, { id: 'prone' }]), ids.vex]);
+      const res = await get_(ids.vex);
+      expect(res.status).toBe(200);
+      expect(res.body.on).toBe(true);
+      expect(res.body.types[0]).toEqual({ id: 'fire', name: 'Fire', icon: 'flame' });
+      expect(res.body.types.at(-1)).toEqual({ id: 'sonic', name: 'Sonic', icon: 'target' });
+      expect(res.body.means).toEqual({ resist: 'Takes half, rounded down.', immune: 'Takes none.', vulnerable: 'Takes double.' });
+      expect(res.body.worked).toEqual({
+        poison: { kind: 'resist', from: [{ kind: 'resist', from: 'Dwarven Resilience' }] },
+        lightning: { kind: 'vulnerable', from: [{ kind: 'vulnerable', from: 'Soaked' }] },
+        sonic: { kind: 'immune', from: [{ kind: 'immune', from: 'vex, by hand', hand: true, by: 'vex' }] },
+      });
+      expect(res.body.hand).toEqual([{ kind: 'immune', type: 'sonic', by: 'vex' }]);
+      expect(res.body.may).toEqual({ add: true, vulnerable: true });
+    });
+
+    it('a player on their own and an NPC given them, adding no vulnerability; never another\'s, nor unnamed', async () => {
+      expect((await get_(ids.vex, VEX)).body.may).toEqual({ add: true, vulnerable: false });
+      expect((await get_(ids.dog, VEX)).body.may).toEqual({ add: true, vulnerable: false });
+      const no = { status: 403, body: { error: 'You can only see your own character\'s resistances' } };
+      expect(await get_(ids.vex, ASH)).toMatchObject(no);
+      expect(await get_(ids.ghoul, VEX)).toMatchObject(no);
+      expect((await request(app).get(`/api/locations/${ids.vex}/resistances`)).status).toBe(403);
+      expect((await get_(9999)).status).toBe(404);
+    });
+
+    it('a type drawn on the pad sent as its drawing; a row by hand that won\'t read left out; a sheet that won\'t read as none', async () => {
+      const drawn = BLANK_DRAWN.map((r, i) => (i === 2 ? '0ff0' : r));
+      const shown = resistancesShown({ ...STONE_DEF, damage: { types: { sonic: { name: 'Sonic', drawn } } } }, { [HAND_KEY]: [{ kind: 'resist', type: 'fire' }, { kind: 'nope', type: 'cold' }, 'x'] }, [], 'vex');
+      expect(shown.types.at(-1)).toEqual({ id: 'sonic', name: 'Sonic', drawn });
+      expect(shown.hand).toEqual([{ kind: 'resist', type: 'fire' }]);
+      await run(db, 'UPDATE character_sheets SET data = ? WHERE id = ?', ['not json', ids.vexSheet]);
+      const res = await get_(ids.vex);
+      expect(res.status).toBe(200);
+      expect(res.body.hand).toEqual([]);
+      expect(res.body.may).toEqual({ add: true, vulnerable: true });
+    });
+
+    it('a token with no sheet: its conditions\' only, nothing to add by hand; an NPC\'s from its sheet; a built-in game: none', async () => {
+      await run(db, 'UPDATE locations SET conditions = ? WHERE id = ?', [JSON.stringify([{ id: 'soaked' }]), ids.bare]);
+      const bare = (await get_(ids.bare)).body;
+      expect(bare.worked).toEqual({ lightning: { kind: 'vulnerable', from: [{ kind: 'vulnerable', from: 'Soaked' }] } });
+      expect(bare.hand).toEqual([]);
+      expect(bare.may).toEqual({ add: false, vulnerable: false });
+      await put(ids.ghoul, [{ kind: 'resist', type: 'all' }]);
+      const ghoul = (await get_(ids.ghoul2)).body;
+      expect(ghoul.hand).toEqual([{ kind: 'resist', type: 'all' }]);
+      expect(ghoul.worked.fire).toEqual({ kind: 'resist', from: [{ kind: 'resist', from: 'the GM, by hand', all: true, hand: true }] });
+      await run(db, `UPDATE global_settings SET value = 'generic' WHERE key = 'game_system'`);
+      expect((await get_(ids.vex)).body).toEqual({ on: false });
+    });
   });
 
   it('a player never writes them: the key is the GM\'s, as every _ field', () => {
