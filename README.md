@@ -359,7 +359,7 @@ CITY_NET/
 │   │   ├── signs.js            # Custom sign CRUD (GET all / POST / PATCH :id / DELETE :id); text optional when image_url set; rotation_x/y/z persisted, non-finite angles rejected
 │   │   ├── fonts.js            # Font file upload/list/delete (.ttf .otf .woff .woff2); served as static under /uploads/fonts/
 │   │   ├── player.js           # Player auth (register, login, forgot, reset, registration status poll)
-│   │   └── sheets.js           # Character sheets — admin sheet access, NPC library, portraits, LUCK/Edge reset & grant, import preview. The table-wide resets scan to decide who is affected and then work out each value as that sheet is written, rather than writing back a scan that has already gone stale
+│   │   └── sheets.js           # Character sheets — admin sheet access, NPC library, portraits, LUCK/Edge reset & grant, import preview. The table-wide resets scan to decide who is affected and then work out each value as that sheet is written, rather than writing back a scan that has already gone stale; the NPC list names an NPC by its sheet's Name where its label is still "Token #n", with the HP a token placed for it starts with
 │   ├── dice/
 │   │   └── systemDice.js       # Built-in dice manifest keyed by game system (ids namespaced `builtin:`); lives in code, not the DB, so app updates change definitions with no migration and nothing is mutable through the API
 │   ├── sheets/
@@ -567,7 +567,7 @@ CITY_NET/
 │   │   │   ├── StreamerDirectorPanel.tsx # Admin director controls (camera mode, visibility flags)
 │   │   │   ├── CharacterSheetWindow.tsx # Player's own character sheet (socket-based, self-only)
 │   │   │   ├── NpcSheetWindow.tsx       # Admin view/edit of NPC or player sheets (REST-based)
-│   │   │   ├── NpcLibrary.tsx           # NPC sheet library (folders, attach-to-token, move, open)
+│   │   │   ├── NpcLibrary.tsx           # NPC sheet library (folders, attach-to-token, move, open); FIND by name or folder, PLACE AS ENEMY or FRIENDLY a new token for an NPC in the middle of the view, and how ATTACH works said
 │   │   │   ├── SheetRenderer.tsx        # Template-driven sheet renderer (any game system); sections may declare groupSize to collapse repeated entries, rowHidden to drop a row of one, and fields may declare presetFill (one select writing a whole stat block, as one save), fullWidth, startsRow or the tag_list type (an add/remove list stored as JSON) — only entries holding data render, plus one blank and a reveal button, so what you filled in comes back after a reload without anything storing that it should; MORTALLY WOUNDED / FRAIL banners, ability_list layout (dynamic add/remove rows with attr dropdown, cost, die, roll), hidden-tab gating
 │   │   │   ├── ImportSheetDialog.tsx    # Sheet import — fillable PDF, a Companion code (Cyberpunk only), or pasted JSON / stat block, plus a download of the blank form that upload expects
 │   │   │   ├── CyberwareWindow.tsx      # The body diagram and the table. Wires are measured from the live layout, since panels grow as chrome is added and where a wire starts is only knowable once laid out. Portalled to the body — rendered in place it inherits the character sheet's bounds and half the diagram is clipped away
@@ -617,7 +617,7 @@ CITY_NET/
 │   │   │       ├── Rhombuses.test.tsx
 │   │   │       ├── SecureLogin.test.tsx  # Login, register, approval polling, password reset, deny flows
 │   │   │       ├── CharacterSheet.test.tsx   # Template registry, renderer, sheet window, weapon rows, death saves
-│   │   │       ├── NpcLibrary.test.tsx
+│   │   │       ├── NpcLibrary.test.tsx # FIND, PLACE and the ATTACH line among the rest
 │   │   │       ├── ImportSheetDialog.test.tsx
 │   │   │       ├── TerminalWindow.test.tsx          # Folders by click and arrow keys (not while typing), falling back to the first when one disappears, and the buttons laid out as given
 │   │   │       ├── TokenWindow.test.tsx             # Folders shown exactly as handed over, INFO's handle and role from the server's public card, the GM's defense edit and ADD TO INIT, and opening HEALTH on request
@@ -754,10 +754,14 @@ CITY_NET/
 │   │       ├── fontLoader.ts       # FontFace loader for remote fonts (cached by URL); BUILTIN_FONTS list
 │   │       ├── mapExportBounds.ts  # City framing math — rotation-safe circumradius, road width, water, overpasses; tokens excluded; resolution presets and GPU-aware size resolution
 │   │       ├── mapExportWatermark.ts # CITY_NET watermark plus repo URL drawn in 2D canvas space; per-frame composite loop for video; exportFilename from the live map name
+│   │       ├── viewCenter.ts      # Where the middle of the view meets the ground: for a paste, a new token, an NPC placed from the library
+│   │       ├── npcLibrary.ts      # NPC_LIBRARY.EXE's rules: FIND (every word in the name or folder), the token PLACE makes
+│   │       ├── placeNpc.ts        # PLACE: the token made, then linked to the NPC's sheet, and the map asked again; what went wrong in words
 │   │       └── __tests__/
 │   │           ├── rotation.test.ts         # A rotation survives a save, swept across the whole angle range rather than sampled. Keeps the old behaviour beside the fix so the bug stays legible: 22 degrees out on two axes, and exactly right on a plain Y spin, which is why it went unnoticed for so long
 │   │           ├── locationHelpers.test.ts  # Unit tests for isUserDefinedName and getStructLabel
 │   │           ├── roadHelpers.test.ts      # consolidateRoads, chainRoadPolylines, buildRoadRibbonGeometry
+│   │           ├── npcLibrary.test.ts        # FIND, the token PLACE makes, and PLACE made, linked and said where it goes wrong
 │   │           ├── mapExportBounds.test.ts  # Bounds coverage; GPU clamping on both axes, aspect preserved when scaling down
 │   │           ├── mapExportWatermark.test.ts # Watermark anchor and stacking, scaling floor, filename slugging, download link cleanup
 │   │           ├── updateClient.test.ts     # Stale-container detection including an index.html fallback answering 200, refusals passed through, nothing POSTed to a server that cannot act
