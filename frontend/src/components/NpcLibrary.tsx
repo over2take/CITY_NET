@@ -1,13 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { DraggableWindow } from './DraggableWindow';
+import { npcsFound, type NpcRow, type PlaceAs } from '../utils/npcLibrary';
 
-interface NpcRow {
-  id: number;
-  npc_label: string;
-  folder: string | null;
-  portrait_url: string | null;
-  updated_at: string;
-}
+// NPC_LIBRARY.EXE. The user, 2026-11-24 ("a way of selecting a specific generated or created NPC on demand"): FIND across
+// the library by name or folder, every word matching; PLACE AS ENEMY or FRIENDLY on each row, a new token in the middle
+// of the view linked to that NPC's sheet; and a line saying how ATTACH works, which shows only with a token selected.
 
 interface NpcLibraryProps {
   token: string;
@@ -18,6 +15,8 @@ interface NpcLibraryProps {
   attachLocationId?: number | null;
   /** Open the full NPC sheet for viewing/editing. */
   onOpenNpc?: (npc: { id: number; npc_label: string }) => void;
+  /** A new token for this NPC, in the middle of the view, linked to its sheet; resolves once placed, with what went wrong if not. */
+  onPlace?: (npc: NpcRow, as: PlaceAs) => Promise<string | null>;
 }
 
 const row: React.CSSProperties = {
@@ -44,6 +43,7 @@ function NpcRow({
   onOpenNpc,
   folders,
   onMoved,
+  onPlace,
 }: {
   npc: NpcRow;
   token: string;
@@ -55,6 +55,8 @@ function NpcRow({
   folders?: string[];
   /** Reload the list after a folder move. */
   onMoved?: () => void;
+  /** PLACE: a new token for this NPC. */
+  onPlace?: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [moving, setMoving] = useState(false);
@@ -128,6 +130,11 @@ function NpcRow({
           </button>
         )
       )}
+      {onPlace && (
+        <button style={btnGreen} onClick={onPlace} aria-label={`Place ${npc.npc_label}`} title="A new token for this NPC in the middle of your view, using its sheet">
+          PLACE
+        </button>
+      )}
       {attachLocationId && (
         <button style={btnGreen} onClick={handleLink} title="Attach this NPC sheet to the selected token">
           ATTACH
@@ -155,6 +162,7 @@ function FolderGroup({
   onOpenNpc,
   folders,
   onMoved,
+  onPlace,
 }: {
   folderName: string;
   npcs: NpcRow[];
@@ -165,6 +173,7 @@ function FolderGroup({
   onOpenNpc?: (npc: { id: number; npc_label: string }) => void;
   folders?: string[];
   onMoved?: () => void;
+  onPlace?: (npc: NpcRow) => void;
 }) {
   const [open, setOpen] = useState(true);
   return (
@@ -176,19 +185,22 @@ function FolderGroup({
         {open ? '▼' : '▶'} {folderName.toUpperCase()}
       </button>
       {open && npcs.map(n => (
-        <NpcRow key={n.id} npc={n} token={token} onDeleted={onDeleted} attachLocationId={attachLocationId} onLinked={onLinked} onOpenNpc={onOpenNpc} folders={folders} onMoved={onMoved} />
+        <NpcRow key={n.id} npc={n} token={token} onDeleted={onDeleted} attachLocationId={attachLocationId} onLinked={onLinked} onOpenNpc={onOpenNpc} folders={folders} onMoved={onMoved} onPlace={onPlace && (() => onPlace(n))} />
       ))}
     </div>
   );
 }
 
-export function NpcLibrary({ token, pos, setPos, onClose, attachLocationId, onOpenNpc }: NpcLibraryProps) {
+export function NpcLibrary({ token, pos, setPos, onClose, attachLocationId, onOpenNpc, onPlace }: NpcLibraryProps) {
   const [npcs, setNpcs] = useState<NpcRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [newLabel, setNewLabel] = useState('');
   const [newFolder, setNewFolder] = useState('');
   const [creating, setCreating] = useState(false);
   const [linkedNpcId, setLinkedNpcId] = useState<number | null>(null);
+  const [find, setFind] = useState('');
+  const [placeAs, setPlaceAs] = useState<PlaceAs>('enemy');
+  const [placed, setPlaced] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -222,10 +234,17 @@ export function NpcLibrary({ token, pos, setPos, onClose, attachLocationId, onOp
 
   const handleLinked = (npcId: number) => setLinkedNpcId(npcId);
 
-  // Group by folder
+  const place = onPlace && (async (npc: NpcRow) => {
+    setPlaced(null);
+    const wrong = await onPlace(npc, placeAs);
+    setPlaced(wrong ?? `${npc.npc_label.toUpperCase()} PLACED AS ${placeAs === 'enemy' ? 'AN ENEMY' : 'A FRIENDLY'} IN THE MIDDLE OF YOUR VIEW`);
+  });
+
+  // Group by folder, those FIND leaves.
+  const shown = npcsFound(npcs, find);
   const grouped: Record<string, NpcRow[]> = {};
   const ungrouped: NpcRow[] = [];
-  npcs.forEach(n => {
+  shown.forEach(n => {
     if (n.folder) {
       (grouped[n.folder] = grouped[n.folder] || []).push(n);
     } else {
@@ -252,6 +271,28 @@ export function NpcLibrary({ token, pos, setPos, onClose, attachLocationId, onOp
             NPC LINKED — TOKEN NOW USES THIS SHEET
           </div>
         )}
+        {!attachLocationId && (
+          <div role="note" style={{ ...label9, fontSize: 11, color: 'var(--green)', opacity: 0.75 }}>
+            PLACE puts a new token for an NPC in the middle of your view. To give an NPC to a token already on the map, select it there: ATTACH then shows on each row.
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input aria-label="Find an NPC" value={find} onChange={(e) => setFind(e.target.value)} placeholder="FIND: name or folder"
+            onKeyDown={(e) => { if (e.key === 'Escape' && find) { e.stopPropagation(); setFind(''); } }}
+            style={{ flex: 1, minWidth: 160, fontFamily: 'monospace', fontSize: 13, background: 'var(--black)', border: '1px solid var(--green)', color: 'var(--green)', padding: '6px 10px', borderRadius: 2 }} />
+          {onPlace && (
+            <span role="group" aria-label="Place as" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ ...label9, fontSize: 11, color: 'var(--green)', opacity: 0.75 }}>PLACE AS</span>
+              {(['enemy', 'friendly'] as const).map((as) => (
+                <button key={as} type="button" aria-pressed={placeAs === as} onClick={() => setPlaceAs(as)}
+                  style={{ ...btn, border: '1px solid var(--green)', background: placeAs === as ? 'var(--green)' : 'none', color: placeAs === as ? 'var(--black)' : 'var(--green)' }}>
+                  {as.toUpperCase()}
+                </button>
+              ))}
+            </span>
+          )}
+        </div>
+        {placed && <div role="status" aria-label="Placed" style={{ ...label9, fontSize: 11, color: 'var(--green)' }}>{placed}</div>}
 
         {/* NPC list */}
         <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -259,13 +300,15 @@ export function NpcLibrary({ token, pos, setPos, onClose, attachLocationId, onOp
             <div style={{ ...label9, opacity: 0.5, padding: '16px 12px' }}>LOADING…</div>
           ) : npcs.length === 0 ? (
             <div style={{ ...label9, opacity: 0.5, padding: '16px 12px' }}>NO NPC SHEETS — CREATE ONE BELOW</div>
+          ) : shown.length === 0 ? (
+            <div style={{ ...label9, opacity: 0.5, padding: '16px 12px' }}>NO NPC MATCHES “{find.trim()}”</div>
           ) : (
             <>
               {ungrouped.map(n => (
-                <NpcRow key={n.id} npc={n} token={token} onDeleted={handleDeleted} attachLocationId={attachLocationId} onLinked={(_npcId, _locId) => handleLinked(_npcId)} onOpenNpc={onOpenNpc} folders={allFolders} onMoved={load} />
+                <NpcRow key={n.id} npc={n} token={token} onDeleted={handleDeleted} attachLocationId={attachLocationId} onLinked={(npcId) => handleLinked(npcId)} onOpenNpc={onOpenNpc} folders={allFolders} onMoved={load} onPlace={place && (() => { void place(n); })} />
               ))}
               {Object.entries(grouped).map(([folder, rows]) => (
-                <FolderGroup key={folder} folderName={folder} npcs={rows} token={token} onDeleted={handleDeleted} attachLocationId={attachLocationId} onLinked={(_npcId, _locId) => handleLinked(_npcId)} onOpenNpc={onOpenNpc} folders={allFolders} onMoved={load} />
+                <FolderGroup key={folder} folderName={folder} npcs={rows} token={token} onDeleted={handleDeleted} attachLocationId={attachLocationId} onLinked={(npcId) => handleLinked(npcId)} onOpenNpc={onOpenNpc} folders={allFolders} onMoved={load} onPlace={place && ((n) => { void place(n); })} />
               ))}
             </>
           )}

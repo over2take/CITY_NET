@@ -144,3 +144,55 @@ describe('NpcLibrary MOVE to folder', () => {
     });
   });
 });
+
+describe('NpcLibrary FIND and PLACE (2026-11-24: "selecting a specific generated or created NPC on demand")', () => {
+  const LIB = [
+    { id: 1, npc_label: 'Gang Member', folder: 'Tygers', portrait_url: null, updated_at: '' },
+    { id: 2, npc_label: 'Gang Boss', folder: 'Tygers', portrait_url: null, updated_at: '' },
+    { id: 3, npc_label: 'Fixer', folder: null, portrait_url: null, updated_at: '' },
+  ];
+
+  it('FIND narrows the list by name or folder, every word; Escape clears it; none found said so', async () => {
+    mockFetch(LIB);
+    render(<NpcLibrary token={TOKEN} pos={basePos} setPos={setPos} onClose={onClose} />);
+    await waitFor(() => expect(screen.getByText('FIXER')).toBeTruthy());
+    const find = screen.getByLabelText('Find an NPC');
+    fireEvent.change(find, { target: { value: 'tygers boss' } });
+    expect(screen.getByText('GANG BOSS')).toBeTruthy();
+    expect(screen.queryByText('GANG MEMBER')).toBeNull();
+    expect(screen.queryByText('FIXER')).toBeNull();
+    fireEvent.change(find, { target: { value: 'nobody' } });
+    expect(screen.getByText(/NO NPC MATCHES “nobody”/)).toBeTruthy();
+    fireEvent.keyDown(find, { key: 'Escape' });
+    expect(screen.getByText('FIXER')).toBeTruthy();
+    expect(screen.getByText('GANG MEMBER')).toBeTruthy();
+  });
+
+  it('PLACE AS ENEMY (to start) or FRIENDLY; PLACE on a row hands that NPC on, and says what happened', async () => {
+    mockFetch(LIB);
+    const onPlace = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce('NOT PLACED: NO CONNECTION');
+    render(<NpcLibrary token={TOKEN} pos={basePos} setPos={setPos} onClose={onClose} onPlace={onPlace} />);
+    await waitFor(() => expect(screen.getByText('FIXER')).toBeTruthy());
+    expect(screen.getByRole('button', { name: 'ENEMY' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Place Fixer' }));
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Placed' }).textContent).toBe('FIXER PLACED AS AN ENEMY IN THE MIDDLE OF YOUR VIEW'));
+    expect(onPlace).toHaveBeenCalledWith(expect.objectContaining({ id: 3 }), 'enemy');
+    fireEvent.click(screen.getByRole('button', { name: 'FRIENDLY' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Place Gang Boss' }));
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Placed' }).textContent).toBe('NOT PLACED: NO CONNECTION'));
+    expect(onPlace).toHaveBeenLastCalledWith(expect.objectContaining({ id: 2 }), 'friendly');
+  });
+
+  it('no PLACE without onPlace; how ATTACH works said with no token selected, not with one', async () => {
+    mockFetch(LIB);
+    render(<NpcLibrary token={TOKEN} pos={basePos} setPos={setPos} onClose={onClose} />);
+    await waitFor(() => expect(screen.getByText('FIXER')).toBeTruthy());
+    expect(screen.queryByText('PLACE')).toBeNull();
+    expect(screen.queryByRole('group', { name: 'Place as' })).toBeNull();
+    expect(screen.getByRole('note').textContent).toMatch(/select it there: ATTACH then shows on each row/);
+    mockFetch(LIB);
+    render(<NpcLibrary token={TOKEN} pos={basePos} setPos={setPos} onClose={onClose} attachLocationId={42} />);
+    await waitFor(() => expect(screen.getAllByText('ATTACH').length).toBe(3));
+    expect(screen.getAllByRole('note')).toHaveLength(1);
+  });
+});

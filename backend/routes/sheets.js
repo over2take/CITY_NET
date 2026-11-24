@@ -60,6 +60,21 @@ const withHandRows = (before, data) => {
   return next;
 };
 
+/** The label GENERATE_SHEET gives a sheet made from a token with no name. */
+const AUTO_LABEL = /^Token #\d+$/;
+/**
+ * An NPC as the library lists it (2026-11-24): its sheet's Name where its label is still the automatic one, and `hp_max`,
+ * what a token placed for it starts with (a token using it already, else the sheet's own), or null.
+ */
+const npcListed = ({ data, token_hp_max, ...row }) => {
+  let sheet = {};
+  try { sheet = JSON.parse(data || '{}') || {}; } catch { sheet = {}; }
+  const name = typeof sheet.name === 'string' ? sheet.name.trim() : '';
+  const own = Number(sheet.hp_max);
+  const hp = Number.isFinite(token_hp_max) && token_hp_max > 0 ? token_hp_max : Number.isFinite(own) && own > 0 ? own : null;
+  return { ...row, npc_label: name && AUTO_LABEL.test(row.npc_label || '') ? name : row.npc_label, hp_max: hp };
+};
+
 const requireAdmin = (req, res, next) => {
   const u = req.user;
   const isAdmin = u && (u.role === 'admin' || u.isTemporary);
@@ -426,17 +441,22 @@ module.exports = (db, io) => {
   // --- NPC library (admin-only) ---
 
   // List all NPC sheets for the current game system, grouped by folder
+  // The library's list. Its label is the sheet's own Name where the label is still the one GENERATE_SHEET gave an unnamed
+  // token ("Token #13698": the user, 2026-11-24, "why is the token still Token #"); and the HP a token PLACEd for it
+  // starts with: a token already using it, else what the sheet holds.
   router.get('/npcs', authenticate, requireAdmin, (req, res) => {
     getGameSystem((err, system) => {
       if (err) return res.status(500).json({ error: err.message });
       db.all(
-        `SELECT id, npc_label, folder, portrait_url, updated_at
-         FROM character_sheets WHERE is_npc = 1 AND system = ?
-         ORDER BY folder, npc_label`,
+        `SELECT cs.id, cs.npc_label, cs.folder, cs.portrait_url, cs.updated_at, cs.data,
+           (SELECT l.hp_max FROM npc_sheet_links k JOIN locations l ON l.id = k.location_id
+             WHERE k.sheet_id = cs.id AND l.hp_max IS NOT NULL ORDER BY k.location_id LIMIT 1) AS token_hp_max
+         FROM character_sheets cs WHERE cs.is_npc = 1 AND cs.system = ?
+         ORDER BY cs.folder, cs.npc_label`,
         [system],
         (err2, rows) => {
           if (err2) return res.status(500).json({ error: err2.message });
-          res.json(rows);
+          res.json(rows.map(npcListed));
         }
       );
     });

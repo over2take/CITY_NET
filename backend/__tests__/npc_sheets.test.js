@@ -48,6 +48,30 @@ describe('GET /api/sheets/npcs', () => {
     expect(res.body[0].folder).toBe('Gangs');
   });
 
+  it('a label GENERATE_SHEET gave an unnamed token shown as the sheet\'s Name once it has one; a label of the GM\'s own kept (2026-11-24)', async () => {
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc, npc_label) VALUES ('admin','cyberpunk_red','{"name":"Jack"}',1,'Token #13698')`);
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc, npc_label) VALUES ('admin','cyberpunk_red','{"name":"  "}',1,'Token #7')`);
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc, npc_label) VALUES ('admin','cyberpunk_red','{"name":"Vic"}',1,'Fixer')`);
+    await run(db, `INSERT INTO character_sheets (username, system, data, is_npc, npc_label) VALUES ('admin','cyberpunk_red','not json',1,'Token #8')`);
+    const res = await request(app).get('/api/sheets/npcs').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    expect(res.body.map((n) => n.npc_label).sort()).toEqual(['Fixer', 'Jack', 'Token #7', 'Token #8']);
+    expect(res.body[0]).not.toHaveProperty('data');
+  });
+
+  it('the HP a token placed for it starts with: a token using it already, else the sheet\'s own, else none', async () => {
+    const sheet = async (label, data) => (await run(db, `INSERT INTO character_sheets (username, system, data, is_npc, npc_label) VALUES ('admin','cyberpunk_red',?,1,?)`, [data, label])).lastID;
+    const onToken = await sheet('On Token', '{"hp_max":5}');
+    const zero = (await run(db, `INSERT INTO locations (name, x, y, z, shape, hp_current, hp_max) VALUES ('Z', 0, 0, 0, 'enemy_rhombus', 0, NULL)`)).lastID;
+    const tok = (await run(db, `INSERT INTO locations (name, x, y, z, shape, hp_current, hp_max) VALUES ('T', 0, 0, 0, 'enemy_rhombus', 9, 22)`)).lastID;
+    await run(db, 'INSERT INTO npc_sheet_links (location_id, sheet_id) VALUES (?, ?), (?, ?)', [zero, onToken, tok, onToken]);
+    await sheet('Own', '{"hp_max":12}');
+    await sheet('None', '{}');
+    await sheet('Below', '{"hp_max":-3}');
+    const res = await request(app).get('/api/sheets/npcs').set('Authorization', `Bearer ${ADMIN_TOKEN}`);
+    const hp = Object.fromEntries(res.body.map((n) => [n.npc_label, n.hp_max]));
+    expect(hp).toEqual({ 'On Token': 22, Own: 12, None: null, Below: null });
+  });
+
   it('rejects player tokens', async () => {
     const res = await request(app).get('/api/sheets/npcs').set('Authorization', `Bearer ${PLAYER_TOKEN}`);
     expect(res.status).toBe(403);
