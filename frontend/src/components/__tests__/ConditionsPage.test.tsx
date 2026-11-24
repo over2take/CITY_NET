@@ -423,3 +423,21 @@ describe('EACH TURN and the new ending (8a9b)', () => {
     expect(checkDefinition(last()).problems).toEqual([]);
   });
 });
+
+describe('a condition drawn on the pad (8b1b)', () => {
+  it('DRAW: the pad, with how it looks on a chip and the map; kept as the server takes it; an icon picked after, the drawing gone', async () => {
+    const { last } = open();
+    const blinded = detail('Blinded condition');
+    await userEvent.click(blinded.getByRole('button', { name: 'DRAW' }));
+    expect(blinded.getByText('ON A CHIP · ON THE MAP')).toBeTruthy();
+    fireEvent.click(within(blinded.getByRole('group', { name: 'Drawing of Blinded' })).getByRole('button', { name: 'Square 2, 1' }), { detail: 0 });
+    expect(stored(last())!.blinded).toEqual({ drawn: ['4000', ...Array(15).fill('0000')] });
+    expect(checkDefinition(last()).problems).toEqual([]);
+    // No icon checked while it is drawn; the list draws the drawing.
+    expect(within(blinded.getByRole('radiogroup', { name: 'Icon' })).getAllByRole('radio').some((r) => r.getAttribute('aria-checked') === 'true')).toBe(false);
+    expect(list().getByText('BLINDED').closest('li')!.querySelectorAll('rect')).toHaveLength(1);
+    await userEvent.click(within(blinded.getByRole('radiogroup', { name: 'Icon' })).getByRole('radio', { name: 'skull' }));
+    expect(stored(last())!.blinded).toEqual({ icon: 'skull' });
+    expect(blinded.queryByRole('group', { name: 'Drawing of Blinded' })).toBeNull();
+  });
+});

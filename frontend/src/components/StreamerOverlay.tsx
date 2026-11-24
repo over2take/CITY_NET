@@ -143,7 +143,7 @@ export function StreamerOverlay({ socket, directorState, selectedLocation, battl
                       <div data-testid="overlay-conditions" style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'center' }}>
                         {shown.map(({ condition: c }) => (
                           <span key={c.id} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: 'var(--danger)', border: '1px solid var(--danger)', padding: '1px 5px', fontSize: '10px', letterSpacing: '1px' }}>
-                            <ConditionIcon icon={c.icon} size={11} />{c.short}
+                            <ConditionIcon icon={c.icon} drawn={c.drawn} size={11} />{c.short}
                           </span>
                         ))}
                       </div>

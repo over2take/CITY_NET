@@ -2,7 +2,8 @@ import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { DrawPad } from '../DrawPad';
-import { IconLook, Drawing } from '../IconLook';
+import { IconLook } from '../IconLook';
+import { Drawing } from '../Drawing';
 import { BLANK_DRAWN, withSquare } from '../../sheets/drawings';
 
 // The builder's 16 by 16 pad and a picture of any kind (8b0): shared by the dice's symbols and, next, the damage types.

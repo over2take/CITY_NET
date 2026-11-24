@@ -217,7 +217,7 @@ function Detail({ rest, definition, edit, targets, api }: { rest: Rest; definiti
                   title={rounds ? `Ends after ${c.rounds ?? 1} round${c.rounds === 1 ? '' : 's'}` : undefined}
                   style={{ ...tick(own), ...(rounds ? { opacity: 0.4, cursor: 'not-allowed' } : {}) }}
                   onClick={() => edit(withWearsOff(definition, c.id, rest.id, !own))}>
-                  <ConditionIcon icon={c.icon} />{c.name.toUpperCase()}
+                  <ConditionIcon icon={c.icon} drawn={c.drawn} />{c.name.toUpperCase()}
                   {rounds && <span style={{ opacity: 0.6 }}>· {c.rounds ?? 1}R</span>}
                   {via && <span style={{ opacity: 0.6 }}>(as {nameOf(via).toLowerCase()})</span>}
                 </button>

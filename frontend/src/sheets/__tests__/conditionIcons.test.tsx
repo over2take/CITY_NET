@@ -89,3 +89,17 @@ describe('an icon by its name', () => {
     expect(isDrawnIcon('toString')).toBe(false);
   });
 });
+
+describe('an icon drawn on the pad (8b1b)', () => {
+  const DRAWN = [...Array(15).fill('0000'), '0ff0'];
+  it('draws the drawing\'s squares, never the icon, named where it is given a name', () => {
+    const { container } = render(<ConditionIcon icon="flame" drawn={DRAWN} size={20} />);
+    // '0ff0': the bottom row's eight middle squares.
+    expect(container.querySelectorAll('rect')).toHaveLength(8);
+    expect(container.querySelectorAll('path')).toHaveLength(0);
+    expect(container.querySelector('svg')!.getAttribute('width')).toBe('20');
+    cleanup();
+    const named = render(<ConditionIcon icon="flame" drawn={DRAWN} title="Hacked" />);
+    expect(named.getByRole('img', { name: 'Hacked' }).querySelectorAll('rect')).toHaveLength(8);
+  });
+});

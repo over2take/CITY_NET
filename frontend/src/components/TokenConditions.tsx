@@ -108,7 +108,7 @@ export function TokenConditions({ location, gameSystem, socket, canChange, authT
               background: 'none', border: 0, borderBottom: '1px solid color-mix(in srgb, var(--dark-green) 60%, transparent)',
               color: 'var(--green)', fontFamily: 'monospace', fontSize: '0.7rem', cursor: 'pointer',
             }}>
-            <ConditionIcon icon={c.icon} size={15} />
+            <ConditionIcon icon={c.icon} drawn={c.drawn} size={15} />
             <span>{c.name.toUpperCase()}{c.ends === 'rounds' && c.rounds ? <span style={{ opacity: 0.6 }}> · {c.rounds}R</span> : null}</span>
           </button>
         ))}
@@ -125,7 +125,7 @@ export function TokenConditions({ location, gameSystem, socket, canChange, authT
   const tinted = (on: boolean): React.CSSProperties => ({ ...chip, flexShrink: 0, cursor: 'pointer', fontFamily: 'inherit', background: on ? 'color-mix(in srgb, var(--warning) 20%, transparent)' : 'none' });
   const face = ({ condition: c, left }: typeof shown[number]) => (
     <>
-      <ConditionIcon icon={c.icon} size={13} />
+      <ConditionIcon icon={c.icon} drawn={c.drawn} size={13} />
       <span>{c.short}</span>
       {left !== undefined && <span style={{ opacity: 0.75 }}>{left}R</span>}
     </>
@@ -145,7 +145,7 @@ export function TokenConditions({ location, gameSystem, socket, canChange, authT
   const openBox = open && (
       <div role="group" aria-label={open.condition.name} style={box}>
         <span style={{ display: 'flex', gap: '6px', alignItems: 'center', color: 'var(--warning)', letterSpacing: '1px' }}>
-          <ConditionIcon icon={open.condition.icon} size={15} />
+          <ConditionIcon icon={open.condition.icon} drawn={open.condition.drawn} size={15} />
           <b>{open.condition.name.toUpperCase()}</b>
           {open.left !== undefined && <span style={{ opacity: 0.75 }}>· {roundsText(open.left)}</span>}
         </span>
@@ -172,7 +172,7 @@ export function TokenConditions({ location, gameSystem, socket, canChange, authT
         {shown.slice(kept).map((s) => (
           <button key={s.condition.id} type="button" onClick={() => setOpened(s.condition.id)}
             style={{ display: 'flex', gap: '8px', alignItems: 'center', padding: '4px 8px', background: 'none', border: 0, borderBottom: '1px solid color-mix(in srgb, var(--dark-green) 60%, transparent)', color: 'var(--warning)', fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '1px', cursor: 'pointer', textAlign: 'left' }}>
-            <ConditionIcon icon={s.condition.icon} size={15} />
+            <ConditionIcon icon={s.condition.icon} drawn={s.condition.drawn} size={15} />
             {s.condition.name.toUpperCase()}{s.left !== undefined ? ` · ${s.left}R` : ''}
           </button>
         ))}

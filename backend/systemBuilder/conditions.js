@@ -8,6 +8,7 @@
 //     exhausted: { ends: 'rest', at: ['long_rest'] },            // wears off at a rest (4f, rests.js)
 //     glitching: { name: 'Glitching', short: 'GLITCH', icon: '/uploads/condition_icons/<hash>.png',
 //                  description: 'Chrome misfiring.' },          // one of the system's own
+//     hacked: { name: 'Hacked', drawn: ['0000', ...] },           // a picture from the 16 x 16 pad (drawings.js)
 //   }
 //
 // Every system starts with the standard set below; a definition stores only what it changes, as
@@ -15,7 +16,8 @@
 // own condition and needs a name. Decided with the user the same day:
 // - conditions for every system, as many as a table needs (up to LIMITS.conditions in all);
 // - an icon is one of ICONS, drawn for CITY_NET in the theme's colors, or an uploaded PNG, WebP or
-//   SVG (POST /api/systems/condition-icons), kept in its own colors as currency icons are;
+//   SVG (POST /api/systems/condition-icons), kept in its own colors as currency icons are; or (8b1b, the user:
+//   "add it here just to get it done") a drawing on the 16 x 16 pad, `drawn`, in the theme's color, one or the other;
 // - a condition ends when removed, after a number of rounds, or at any of the rests it names
 //   (4f1, rests.js; approved mockup docs/mockups/builder-rests.html), one way only;
 // - modifiers name a stat, a formula or all rolls, and are recorded and shown; one on all rolls
@@ -41,6 +43,8 @@
 // Fired by tokens/turnEffects.js.
 //
 // Pure: the definition checks and the running game both read it.
+
+const { isDrawn, DRAWN_PROBLEM } = require('./drawings');
 
 const NAME = /^[a-z][a-z0-9_]{0,39}$/;
 const LIMITS = { conditions: 60, name: 30, short: 8, description: 300, rounds: 99, modifiers: 10, amount: 99, number: 9999, times: 100, formula: 200, eachTurn: 3, endsOn: 9999 };
@@ -82,8 +86,8 @@ const STANDARD = [
 const STANDARD_IDS = new Set(STANDARD.map((c) => c.id));
 
 // only_with, the house rule a condition waits on, is houseRules.js's to check.
-const STANDARD_KEYS = new Set(['on', 'name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with', 'applied', 'each_turn']);
-const OWN_KEYS = new Set(['name', 'short', 'icon', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with', 'applied', 'each_turn']);
+const STANDARD_KEYS = new Set(['on', 'name', 'short', 'icon', 'drawn', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with', 'applied', 'each_turn']);
+const OWN_KEYS = new Set(['name', 'short', 'icon', 'drawn', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with', 'applied', 'each_turn']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -184,6 +188,8 @@ const checkConditions = (conditions, targets, problems, rests = new Set(), parse
     text(c.short, `${where}, short`, LIMITS.short, problems);
     text(c.description, `${where}, description`, LIMITS.description, problems);
     if (c.icon !== undefined && !isIcon(c.icon)) problems.push({ where: `${where}, icon`, message: 'Must be one of the drawn icons or an uploaded one' });
+    if (c.drawn !== undefined && !isDrawn(c.drawn)) problems.push({ where: `${where}, drawn`, message: DRAWN_PROBLEM });
+    if (c.icon !== undefined && c.drawn !== undefined) problems.push({ where: `${where}, drawn`, message: 'An icon or a drawing, not both' });
     if (c.ends !== undefined && !ENDS.includes(c.ends)) problems.push({ where: `${where}, ends`, message: 'Ends when removed, after rounds, at a rest, or at the end of its next turn' });
     if (c.ends === 'rounds') {
       if (!Number.isInteger(c.rounds) || c.rounds < 1 || c.rounds > LIMITS.rounds) {
@@ -237,6 +243,8 @@ const conditionsOf = (definition) => {
       name: typeof c.name === 'string' && c.name.trim() ? c.name.trim() : base.name,
       short: typeof c.short === 'string' && c.short.trim() ? c.short.trim().toUpperCase() : (base.short || shortFrom(c.name || base.name)),
       icon: isIcon(c.icon) ? c.icon : (base.icon || 'target'),
+      // A drawing (8b1b) shows instead of the icon wherever the condition is drawn; the icon stays, for what draws only icons.
+      ...(isDrawn(c.drawn) ? { drawn: [...c.drawn] } : {}),
       description: typeof c.description === 'string' ? c.description : (base.description || ''),
       ends,
       ...(ends === 'rounds' && Number.isInteger(c.rounds) ? { rounds: c.rounds } : {}),

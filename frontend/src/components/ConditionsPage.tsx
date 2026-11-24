@@ -8,7 +8,7 @@ import {
 import { useFormulaBox } from '../hooks/useFormulaBox';
 import { restList } from '../sheets/rests';
 import { ConditionIcon } from './ConditionIcon';
-import { ConditionIconPicker } from './ConditionIconPicker';
+import { PicturePicker, OnAChip } from './PicturePicker';
 import { OnlyWith } from './OnlyWith';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
@@ -212,7 +212,8 @@ function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
         <input id={`cond-short-${c.id}`} type="text" maxLength={LIMITS.short} value={typed('short')} placeholder={c.short} style={{ ...input, width: 120 }}
           onChange={(e) => set({ short: e.target.value.toUpperCase() })} />
         <FieldName beside hint={HINTS['conditions.icon']} style={small}>ICON</FieldName>
-        <ConditionIconPicker value={c.icon} onPick={(icon) => set({ icon })} api={api} name={c.name || c.id} />
+        <PicturePicker icon={c.icon} drawn={c.drawn} api={api} name={c.name || c.id} onIcon={(icon) => set({ icon })} onDrawn={(drawn) => set({ drawn })}
+          preview={(rows) => <OnAChip drawn={rows} short={c.short} />} />
         <FieldName beside htmlFor={`cond-desc-${c.id}`} hint={HINTS['conditions.description']} style={small}>DESCRIPTION</FieldName>
         <textarea id={`cond-desc-${c.id}`} rows={2} maxLength={LIMITS.description} value={c.description} style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }}
           onChange={(e) => set({ description: e.target.value })} />
@@ -305,7 +306,7 @@ export function ConditionsPage({ definition, edit, api }: Props) {
               {c.standard
                 ? <ToggleSwitch on={c.on} name={`${c.name} on`} onChange={(on) => edit(withCondition(definition, c.id, { on }))} />
                 : <span />}
-              <span style={{ color: 'var(--green)', opacity: c.on ? 1 : 0.4 }}><ConditionIcon icon={c.icon} /></span>
+              <span style={{ color: 'var(--green)', opacity: c.on ? 1 : 0.4 }}><ConditionIcon icon={c.icon} drawn={c.drawn} /></span>
               <button type="button" aria-current={c.id === current?.id || undefined} onClick={() => setPicked(c.id)}
                 style={{ background: 'none', border: 0, padding: 0, textAlign: 'left', cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, letterSpacing: 1,
                   color: c.name.trim() ? 'var(--green)' : 'var(--danger)', opacity: c.on ? 1 : 0.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

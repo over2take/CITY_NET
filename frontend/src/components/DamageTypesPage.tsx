@@ -5,10 +5,8 @@ import {
   LIMITS, KINDS, MEANS, STANDARD, type Listed, type Kind,
 } from '../sheets/damageTypes';
 import { DAMAGE_ICON_IDS } from '../sheets/conditionIcons';
-import { BLANK_DRAWN } from '../sheets/drawings';
-import { ConditionIconPicker } from './ConditionIconPicker';
-import { DrawPad } from './DrawPad';
-import { IconLook, Drawing } from './IconLook';
+import { PicturePicker, OnTheRing } from './PicturePicker';
+import { IconLook } from './IconLook';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
 import { ToggleSwitch } from './ToggleSwitch';
@@ -35,20 +33,6 @@ const input: React.CSSProperties = {
 const row: React.CSSProperties = { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' };
 const WORD: Record<Kind, string> = { resist: 'RESIST', immune: 'IMMUNE', vulnerable: 'VULNERABLE' };
 
-/** How a drawing looks where a type is shown: in the HEALTH folder's ring (8b4), and large. */
-function OnTheRing({ drawn }: { drawn: string[] }) {
-  return (
-    <>
-      <span style={small}>ON THE HEALTH PAGE</span>
-      <div style={{ display: 'flex', gap: 10, alignItems: 'center', color: 'var(--cyan)' }}>
-        <span style={{ width: 30, height: 30, borderRadius: '50%', border: '2px solid var(--cyan)', display: 'grid', placeItems: 'center' }}><Drawing drawn={drawn} size={16} /></span>
-        <span style={{ color: 'var(--green)' }}><Drawing drawn={drawn} size={40} /></span>
-      </div>
-      <span style={{ fontSize: 11, opacity: 0.85, maxWidth: '26ch' }}>One color: the theme&apos;s. Press and drag to draw.</span>
-    </>
-  );
-}
-
 /** What RESIST, IMMUNE and VULNERABLE mean in this game, in words. */
 function Meanings({ definition, edit }: Props) {
   return (
@@ -70,17 +54,12 @@ function Meanings({ definition, edit }: Props) {
 
 function Detail({ t, definition, edit, api }: Props & { t: Listed }) {
   const [confirm, setConfirm] = useState(false);
-  const [drawing, setDrawing] = useState(false);
   const base = STANDARD.find((s) => s.id === t.id);
   const set = (patch: Parameters<typeof withDamageType>[2]) => edit(withDamageType(definition, t.id, patch));
   const stored = ((definition.damage as { types?: Record<string, Record<string, unknown>> } | undefined)?.types ?? {})[t.id] ?? {};
   const typedName = typeof stored.name === 'string' ? stored.name : (base ? '' : t.name);
   const trouble = nameTrouble(definition, t.id);
   const name = (t.name.trim() || t.id).toUpperCase();
-  const draw = () => {
-    if (!t.drawn) set({ drawn: BLANK_DRAWN });
-    setDrawing(true);
-  };
 
   return (
     <section aria-label={`${t.name || t.id} damage type`} style={{ border: '1px solid var(--dark-green)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, minWidth: 0 }}>
@@ -105,24 +84,8 @@ function Detail({ t, definition, edit, api }: Props & { t: Listed }) {
           {trouble && <span id={`damage-trouble-${t.id}`} role="alert" style={{ ...why, fontSize: 11, color: 'var(--danger)' }}>{trouble}</span>}
         </div>
         <FieldName beside hint={HINTS['damage.icon']} style={small}>ICON</FieldName>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
-          {/* A type with a drawing has no icon, so none is checked; picking one takes the drawing, and the pad, away. */}
-          <ConditionIconPicker value={t.icon ?? ''} icons={DAMAGE_ICON_IDS} api={api} name={t.name || t.id} onPick={(icon) => set({ icon })} />
-          <div style={row}>
-            {t.drawn && (
-              <span role="img" aria-label={`${name} drawn`} style={{ width: 30, height: 30, display: 'grid', placeItems: 'center', border: '1px solid var(--green)', color: 'var(--green)' }}><Drawing drawn={t.drawn} size={18} /></span>
-            )}
-            <button type="button" className="utility-btn" style={btn} aria-pressed={!!t.drawn} onClick={draw}>{t.drawn ? 'DRAW · EDIT' : 'DRAW'}</button>
-            <span style={{ ...why, fontSize: 11 }}>A drawing on the 16 × 16 pad, kept in the system and its file.</span>
-          </div>
-          {drawing && t.drawn && (
-            <div style={{ border: '1px solid var(--dark-green)', padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <span style={small}>DRAW {name}</span>
-              <DrawPad drawn={t.drawn} name={t.name || t.id} onChange={(drawn) => set({ drawn })} preview={(rows) => <OnTheRing drawn={rows} />} />
-              <div><button type="button" className="utility-btn" style={btn} onClick={() => setDrawing(false)}>DONE</button></div>
-            </div>
-          )}
-        </div>
+        <PicturePicker icon={t.icon} drawn={t.drawn} icons={DAMAGE_ICON_IDS} api={api} name={t.name || t.id}
+          onIcon={(icon) => set({ icon })} onDrawn={(drawn) => set({ drawn })} preview={(rows) => <OnTheRing drawn={rows} />} />
         <FieldName beside htmlFor={`damage-desc-${t.id}`} hint={HINTS['damage.description']} style={small}>DESCRIPTION</FieldName>
         <textarea id={`damage-desc-${t.id}`} rows={2} maxLength={LIMITS.description} value={t.description} style={{ ...input, resize: 'vertical', fontFamily: 'inherit' }}
           onChange={(e) => set({ description: e.target.value })} />

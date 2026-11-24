@@ -26,6 +26,8 @@ const GAME = conditionsOf({
   },
 });
 
+/** The game's list the server answers; a case may swap it. */
+let game = GAME;
 let puts: { url: string; body: unknown; auth: string | null }[];
 let putAnswer: { status: number; body: unknown };
 let listAsked: { url: string; auth: string | null }[];
@@ -33,6 +35,7 @@ let listAsked: { url: string; auth: string | null }[];
 beforeEach(() => {
   // The game's list is shared between windows: each case asks afresh.
   forgetConditionLists();
+  game = GAME;
   puts = [];
   listAsked = [];
   putAnswer = { status: 200, body: {} };
@@ -41,7 +44,7 @@ beforeEach(() => {
     const auth = (init?.headers as Record<string, string> | undefined)?.Authorization ?? null;
     if (url.startsWith('/api/systems/conditions/')) {
       listAsked.push({ url, auth });
-      return { ok: true, status: 200, json: async () => GAME } as Response;
+      return { ok: true, status: 200, json: async () => game } as Response;
     }
     puts.push({ url, body: JSON.parse(String(init!.body)), auth });
     return { ok: putAnswer.status < 300, status: putAnswer.status, json: async () => putAnswer.body } as Response;
@@ -216,5 +219,25 @@ describe('the game\'s list', () => {
     await waitFor(() => expect(listAsked).toHaveLength(1));
     act(() => { window.dispatchEvent(new Event(CONDITIONS_CHANGED_EVENT)); });
     await waitFor(() => expect(listAsked).toHaveLength(2));
+  });
+});
+
+describe('a condition drawn on the pad (8b1b)', () => {
+  it('its chip draws the drawing, as it does an icon', async () => {
+    game = conditionsOf({ conditions: { hacked: { name: 'Hacked', short: 'HACK', drawn: [...Array(15).fill('0000'), '0ff0'] } } });
+    render(<TokenConditions location={token('[{"id":"hacked"}]')} gameSystem={HEARTH} socket={fakeSocket(null)} canChange={false} />);
+    const chip = await within(await screen.findByRole('group', { name: 'On this token' })).findByText('HACK');
+    expect(chip.parentElement!.querySelectorAll('rect')).toHaveLength(8);
+    // Opened: drawn beside its name too.
+    await userEvent.click(screen.getByRole('button', { name: 'Hacked' }));
+    expect(screen.getByRole('group', { name: 'Hacked' }).querySelectorAll('rect')).toHaveLength(8);
+  });
+
+  it('drawn in the list a GM puts one on from', async () => {
+    game = conditionsOf({ conditions: { hacked: { name: 'Hacked', short: 'HACK', drawn: [...Array(15).fill('0000'), '0ff0'] } } });
+    render(<TokenConditions location={token('[]')} gameSystem={HEARTH} socket={fakeSocket([])} canChange authToken="gm-token" />);
+    await userEvent.click(await screen.findByRole('button', { name: '+ CONDITION' }));
+    const option = await within(screen.getByRole('listbox', { name: 'Put on a condition' })).findByRole('option', { name: /HACKED/ });
+    expect(option.querySelectorAll('rect')).toHaveLength(8);
   });
 });
