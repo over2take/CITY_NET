@@ -127,6 +127,16 @@ describe('price listed once, and the box\'s hint (8a7a5)', () => {
     expect(back.sections['type:guns']).toEqual([expect.objectContaining({ name: 'Example Gun', price: 10, fields: { damage: '1d6', range: 'words', ammo: 6, weight: 1, grade: 'LIGHT' } })]);
   });
 
+  it('a DAMAGE column\'s MOST LINES ARE in the sample line (8b2b), and the notes say a type may follow the dice; read back as written', () => {
+    const TYPED = 'sys_0a1b2c3d4e5f6a7e';
+    const typed: TypeShown = { ...GUNS, columns: GUNS.columns.map((c) => (c.id === 'damage' ? { ...c, usual: 'FIRE' } : c)) };
+    registerCustomTemplate({ id: TYPED, name: 'Typed fire', parts: {}, derived: [], sheet: { sections: [] }, words: {}, items: { ...ITEMS, types: [typed, ODD] } } as never);
+    const hint = catalogueHint(TYPED);
+    expect(hint.split('\n').at(-1)).toBe('Example Gun, 10, 1d6 FIRE DMG, words, 6, 1, LIGHT');
+    expect(read(hint.split('\n\n')[1]).sections['type:guns']).toEqual([expect.objectContaining({ fields: expect.objectContaining({ damage: '1d6 FIRE DMG' }) })]);
+    expect(exampleFor(TYPED)).toContain('damage: dice, then its type if it has one (2d6 FIRE DMG)');
+  });
+
   it('a first type with a PRICE column of its own: price once in the hint too', () => {
     const KITTED = 'sys_0a1b2c3d4e5f6a7d';
     registerCustomTemplate({ id: KITTED, name: 'Kitted', parts: {}, derived: [], sheet: { sections: [] }, words: {}, items: { slots: [], list: [], types: [PRICED] } } as never);

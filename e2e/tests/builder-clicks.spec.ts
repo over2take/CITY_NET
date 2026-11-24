@@ -179,8 +179,11 @@ test('every control in the builder takes a click, on every page', async ({ page 
       const item = page.getByRole('region', { name: 'NEW GEAR item' });
       await item.getByRole('combobox', { name: 'ITS FEATURES NEED' }).selectOption('new_install');
       await expect(item.getByRole('spinbutton', { name: 'COST' })).toBeVisible();
-      await item.getByRole('combobox', { name: 'TYPE' }).selectOption('weapons');
+      await item.getByRole('combobox', { name: 'TYPE', exact: true }).selectOption('weapons');
       await expect(item.getByRole('textbox', { name: 'NEW GEAR DAMAGE' })).toBeVisible();
+      // DAMAGE as rows (8b2b): a second part, so its box, TYPE and × are there.
+      await item.getByRole('button', { name: 'Add a part to NEW GEAR DAMAGE' }).click();
+      await expect(item.getByRole('combobox', { name: 'NEW GEAR DAMAGE part 2 type' })).toBeVisible();
       // PRICE and IN SHOPS under TYPE (8a7a3b1), a new item asking for its price, each name in line.
       await expect(item.getByRole('spinbutton', { name: 'PRICE' })).toBeVisible();
       await expect(item.getByRole('switch', { name: 'NEW GEAR in shops' })).toBeVisible();

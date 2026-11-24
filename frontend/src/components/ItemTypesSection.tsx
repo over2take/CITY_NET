@@ -11,6 +11,10 @@ import { ToggleSwitch } from './ToggleSwitch';
 import { itemList, type Item } from '../sheets/items';
 import { restsOf } from '../sheets/rests';
 import { useFormulaBox } from '../hooks/useFormulaBox';
+import { useFormulaReads } from '../hooks/useFormulaReads';
+import { damageList } from '../sheets/damageTypes';
+import { damageParts } from '../sheets/damageRows';
+import { DamageRows } from './DamageRows';
 import { useBuilderPlace } from '../hooks/useBuilderPlace';
 import { HINTS } from '../sheets/builderHelp';
 import { ColumnHead, FieldName } from './HelpHint';
@@ -66,6 +70,21 @@ function ColumnAnd({ definition, edit, type, c }: Props & { type: ItemType; c: I
     );
   }
   if (c.kind === 'pick') return <WordsBox words={c.options ?? []} label={`${name} words`} onWords={(options) => set({ options })} />;
+  // MOST LINES ARE (8b2b): the damage type a new item's DAMAGE starts as; an item keeps its own.
+  if (c.kind === 'damage') {
+    const types = damageList(definition).filter((t) => t.on);
+    return (
+      // The picker first, its words after, as a NUMBER's UNIT: in line with the column's head.
+      <span style={row}>
+        <select aria-label={`${name} most lines are`} value={c.usual ?? ''} style={input} onChange={(e) => set({ usual: e.target.value })}>
+          <option value="">NO TYPE</option>
+          {c.usual && !types.some((t) => t.id === c.usual) && <option value={c.usual}>{c.usual.toUpperCase()} (OFF)</option>}
+          {types.map((t) => <option key={t.id} value={t.id}>{t.name.toUpperCase()}</option>)}
+        </select>
+        <span style={{ ...why, fontSize: 11 }}>MOST LINES ARE</span>
+      </span>
+    );
+  }
   if (c.kind !== 'count') return <span style={{ ...why, fontSize: 11 }}>—</span>;
   const rests = restsOf(definition);
   const items = itemList(definition);
@@ -304,6 +323,31 @@ export function ItemTypesSection({ definition, edit, place = 'items' }: Props & 
 
 // ─── AN ITEM'S TYPE AND VALUES ──────────────────────────────────────────────
 
+/** One part of a DAMAGE (8b2b): its dice in a formula box with eˣ, read as a rest's amount is, its sample under it. */
+function PartBox({ definition, api, dice, onDice, label, id }: { definition: Definition; api?: ReturnType<typeof systemsApi>; dice: string; onDice: (dice: string) => void; label: string; id?: string }) {
+  const box = useFormulaBox({ definition, api, kind: 'refill', value: dice, id, onChange: onDice, label, placeholder: '1d8 + @might_mod', maxLength: LIMITS.text, inputStyle: { ...input, width: '100%' } });
+  return <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>{box.field}{box.help}</span>;
+}
+
+/**
+ * An item's DAMAGE as rows (8b2b): each part its dice with eˣ and its TYPE, + PART, and under them what it all comes to; one
+ * box (DiceValue) where the rows can't say it the same.
+ */
+function DamageValue({ definition, edit, api, item, c, id }: Props & { api?: ReturnType<typeof systemsApi>; item: Item; c: ItemColumn; id: string }) {
+  const value = itemValues(definition, item)[c.id];
+  const text = typeof value === 'string' ? value : '';
+  const types = damageList(definition).filter((t) => t.on).map((t) => ({ id: t.id, name: t.name, icon: t.icon, drawn: t.drawn }));
+  const several = text.trim() !== '' && damageParts(text).length > 1;
+  const all = useFormulaReads(definition, api, several ? [{ key: 'all', text, kind: 'damage' }] : []).all;
+  const label = `${item.label || item.id} ${columnName(c)}`;
+  return (
+    <DamageRows value={text} onChange={(next) => edit(withItemValue(definition, item.id, c.id, next))} types={types} usual={c.usual ?? null} label={label}
+      renderDice={({ i, dice, onDice, label: partLabel }) => <PartBox definition={definition} api={api} dice={dice} onDice={onDice} label={partLabel} id={i === 0 ? id : undefined} />}
+      fallback={<DiceValue definition={definition} edit={edit} api={api} item={item} c={c} id={id} />}
+      whole={several && all && all.ok ? <span role="status" aria-label={`${label} in all`} style={{ ...why, fontSize: 11, color: 'var(--cyan)' }}>IN ALL: {all.most !== undefined && all.most !== all.value ? `${all.value} to ${all.most}` : all.value}</span> : null} />
+  );
+}
+
 /** A DAMAGE or DICE value: a formula box reading the sheet, as a rest's amount is, its sample under it. */
 function DiceValue({ definition, edit, api, item, c, id }: Props & { api?: ReturnType<typeof systemsApi>; item: Item; c: ItemColumn; id: string }) {
   const value = itemValues(definition, item)[c.id];
@@ -321,7 +365,8 @@ function DiceValue({ definition, edit, api, item, c, id }: Props & { api?: Retur
 function ValueField({ definition, edit, api, item, c, id }: Props & { api?: ReturnType<typeof systemsApi>; item: Item; c: ItemColumn; id: string }) {
   const value = itemValues(definition, item)[c.id];
   const set = (v: string | number | undefined) => edit(withItemValue(definition, item.id, c.id, v));
-  if (c.kind === 'damage' || c.kind === 'dice') return <DiceValue definition={definition} edit={edit} api={api} item={item} c={c} id={id} />;
+  if (c.kind === 'damage') return <DamageValue definition={definition} edit={edit} api={api} item={item} c={c} id={id} />;
+  if (c.kind === 'dice') return <DiceValue definition={definition} edit={edit} api={api} item={item} c={c} id={id} />;
   if (c.kind === 'text') {
     return <input id={id} type="text" maxLength={LIMITS.text} value={typeof value === 'string' ? value : ''} placeholder="empty: it has none" style={{ ...input, width: 220, justifySelf: 'start' }} onChange={(e) => set(e.target.value)} />;
   }

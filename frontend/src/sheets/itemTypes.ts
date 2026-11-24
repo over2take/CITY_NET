@@ -16,7 +16,8 @@ const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
 export type ColumnKind = 'number' | 'text' | 'damage' | 'dice' | 'count' | 'pick';
 /** A column: its name and kind, with what its kind has (a NUMBER's unit, a COUNT's button, rest and reloads, PICK ONE's words). */
-export interface ItemColumn { id: string; label: string; kind: ColumnKind; unit?: string; button?: string; refill?: string; reload?: string[]; options?: string[] }
+/** `usual` (8b2b): a DAMAGE column's MOST LINES ARE, the damage type a new line of it starts as. */
+export interface ItemColumn { id: string; label: string; kind: ColumnKind; unit?: string; button?: string; refill?: string; reload?: string[]; options?: string[]; usual?: string }
 export interface ItemType {
   id: string; label: string; one?: string; columns: ItemColumn[];
   /** Its band on the sheet's GEAR tab (G1): unsaid is PACK. */
@@ -188,6 +189,7 @@ const kept = (c: ItemColumn): ItemColumn => {
     if (reload.length) next.reload = reload;
   }
   if (c.kind === 'pick') next.options = (c.options ?? []).slice(0, LIMITS.options);
+  if (c.kind === 'damage' && typeof c.usual === 'string' && c.usual) next.usual = c.usual;
   return next;
 };
 
@@ -197,7 +199,7 @@ const kept = (c: ItemColumn): ItemColumn => {
  * an item's word that is gone goes too.
  */
 export const withColumn = (def: Definition, typeId: string, columnId: string,
-  patch: { label?: string; kind?: ColumnKind; unit?: string; button?: string; refill?: string; reload?: string[]; options?: string[] }): Definition => {
+  patch: { label?: string; kind?: ColumnKind; unit?: string; button?: string; refill?: string; reload?: string[]; options?: string[]; usual?: string }): Definition => {
   const was = itemTypes(def).find((t) => t.id === typeId)?.columns.find((c) => c.id === columnId);
   if (!was) return def;
   const next = kept({ ...was, ...patch });

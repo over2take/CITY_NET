@@ -50,7 +50,7 @@ test('ITEM TYPES: WEAPONS from its preset with AMMO and a GRADE, and a Pistol fi
   await expect(page.getByRole('region', { name: 'NEW WEAPON item' }).getByRole('textbox', { name: 'NAME' })).toBeFocused();
   await page.keyboard.type('Pistol');
   const pistol = page.getByRole('region', { name: 'Pistol item' });
-  await expect(pistol.getByRole('combobox', { name: 'TYPE' })).toHaveValue('weapons');
+  await expect(pistol.getByRole('combobox', { name: 'TYPE', exact: true })).toHaveValue('weapons');
   await pistol.getByRole('textbox', { name: 'Pistol DAMAGE' }).fill('2d6 + @might');
   await pistol.getByRole('textbox', { name: 'RANGE' }).fill('30 m');
   await pistol.getByRole('spinbutton', { name: 'AMMO' }).fill('6');
