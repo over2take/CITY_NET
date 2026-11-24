@@ -78,6 +78,15 @@ describe('who added what', () => {
     expect(handAfter([vexFire], [], 'ash')).toEqual(no);
     expect(handAfter([gm, vexFire], [])).toEqual({ rows: [] });
   });
+
+  it('VULNERABLE is the GM\'s alone: a player neither adds one nor turns theirs into one; a GM\'s stays theirs to keep', () => {
+    const no = { error: 'Only the GM adds vulnerabilities' };
+    expect(handAfter([], [{ kind: 'vulnerable', type: 'cold' }], 'vex')).toEqual(no);
+    expect(handAfter([vexFire], [{ kind: 'vulnerable', type: 'fire' }], 'vex')).toEqual(no);
+    const gmCold = { kind: 'vulnerable', type: 'cold' };
+    expect(handAfter([gmCold], [gmCold, { kind: 'immune', type: 'fire' }], 'vex')).toEqual({ rows: [gmCold, { kind: 'immune', type: 'fire', by: 'vex' }] });
+    expect(handAfter([], [gmCold])).toEqual({ rows: [gmCold] });
+  });
 });
 
 describe('the routes', () => {
@@ -149,6 +158,7 @@ describe('the routes', () => {
     expect((await put(ids.vex, [{ kind: 'immune', type: 'sonic' }], VEX)).status).toBe(200);
     await put(ids.vex, [{ kind: 'immune', type: 'sonic' }, { kind: 'resist', type: 'cold' }], VEX);
     expect((await put(ids.vex, [{ kind: 'resist', type: 'cold' }])).body.resistances).toEqual([{ kind: 'resist', type: 'cold', by: 'vex' }]);
+    expect(await put(ids.vex, [{ kind: 'immune', type: 'sonic' }, { kind: 'vulnerable', type: 'cold' }], VEX)).toMatchObject({ status: 403, body: { error: 'Only the GM adds vulnerabilities' } });
     // The dog the GM handed them.
     expect((await put(ids.dog, [{ kind: 'resist', type: 'poison' }], VEX)).status).toBe(200);
     expect((await dataOf(ids.dogSheet))[HAND_KEY]).toEqual([{ kind: 'resist', type: 'poison', by: 'vex' }]);
