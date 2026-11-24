@@ -842,6 +842,13 @@ describe('an item\'s DAMAGE as rows (8b2b)', () => {
     const parts = within(item().getByRole('group', { name: 'Flame Tongue DAMAGE parts' }));
     expect(parts.getByRole('button', { name: 'Help writing Flame Tongue DAMAGE' })).toBeTruthy();
     expect(parts.getByRole('button', { name: 'Help writing Flame Tongue DAMAGE part 2' })).toBeTruthy();
+    // Its sample under the row of its box and TYPE, the whole width (8b2c).
+    const picker = parts.getByRole('combobox', { name: 'Flame Tongue DAMAGE part 2 type' });
+    const sample = (await parts.findAllByText(/1 to 8/)).at(-1)!;
+    const boxRow = picker.parentElement!.parentElement!;
+    expect(boxRow.contains(parts.getByRole('textbox', { name: 'Flame Tongue DAMAGE part 2' }))).toBe(true);
+    expect(boxRow.contains(sample)).toBe(false);
+    expect(boxRow.parentElement!.contains(sample)).toBe(true);
     expect((await parts.findByRole('status', { name: 'Flame Tongue DAMAGE in all' })).textContent).toBe('IN ALL: 3 to 20');
     expect(api.previewFormulas).toHaveBeenCalledWith(expect.anything(), [{ text: '1d8 SLASHING + 2d6 FIRE DMG', kind: 'damage' }]);
   });

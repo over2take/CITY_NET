@@ -5,6 +5,9 @@ import { gearTables, gearBands, foundIn, uniqueCells, uniqueTitle, itemWas, valu
 import { useGearBands } from '../hooks/useGearBands';
 import { diceWords, SHAPES, shapeText, insertName, type GearDiceRead } from '../sheets/gearDice';
 import { FormulaIcon } from './FormulaIcon';
+import { DamageRows } from './DamageRows';
+import { damageParts } from '../sheets/damageRows';
+import type { DamageTypeShown } from '../sheets/gearItems';
 
 // A custom system's gear by item type (8a3a; approved mockup docs/mockups/item-types.html, 2026-11-14), each thing one
 // compact line (8a3c1; approved mockup docs/mockups/gear-compact.html, 2026-11-15, after the user saw SHEET.EXE's table
@@ -84,19 +87,22 @@ function CellBox({ cell, label, readOnly, onType, focus = false }: { cell: Cell;
 }
 
 /**
- * A DAMAGE or DICE under ✎ (8a3c2; decision 4 of the gear mockup): this line's own dice, which ROLL rolls, its item's
- * faint until typed over and back when cleared; under it, what it reads on this character, worked out by the server as
- * ROLL would, or what is wrong with it; and eˣ, as the builder's formula box has it: SHAPE writes a common one, INSERT
- * puts in one of the system's names.
+ * One box of dice under ✎ (8a3c2; decision 4 of the gear mockup; its own since 8b2c, a DAMAGE's part being one): what is
+ * typed (`value`), something faint under it (the item's), and what ROLL would read (`text`); under it, what that reads on
+ * this character, worked out by the server as ROLL would, or what is wrong with it; and eˣ, as the builder's formula box
+ * has it: SHAPE writes a common one, INSERT puts in one of the system's names.
  */
-function DiceBox({ cell, label, onType, onRead, focus = false, readOnly = false }: { cell: Cell; label: string; onType: (typed: string) => void; onRead: (text: string) => Promise<GearDiceRead | null>; focus?: boolean; readOnly?: boolean }) {
+function DiceInput({ value, placeholder, text, column, label, onType, onRead, focus = false, readOnly = false, place }: {
+  value: string; placeholder: string; text: string; column: string; label: string;
+  onType: (typed: string) => void; onRead: (text: string) => Promise<GearDiceRead | null>; focus?: boolean; readOnly?: boolean;
+  /** Where a DAMAGE's part (8b2c) puts its box and its words: the box beside its TYPE, the words under both. */
+  place?: (field: React.ReactNode, help: React.ReactNode) => React.ReactElement;
+}) {
   const [open, setOpen] = useState(false);
   // What the server said, kept with the text it was said of: an answer for older text is never shown.
   const [read, setRead] = useState<{ text: string; result: GearDiceRead | null } | null>(null);
   const input = useRef<HTMLInputElement | null>(null);
   const cursor = useRef(0);
-  // What it rolls: its own, else its item's.
-  const text = valueText(cell.own ?? cell.given);
   // Asked again only when the text changes, a moment after typing stops: the reader is a new function each render.
   const ask = useEffectEvent((t: string) => onRead(t));
   useEffect(() => {
@@ -105,27 +111,30 @@ function DiceBox({ cell, label, onType, onRead, focus = false, readOnly = false 
     return () => { live = false; clearTimeout(timer); };
   }, [text]);
   const result = read?.text === text ? read.result : null;
-  const { words, bad } = diceWords(text, result, cell.column.label);
+  const { words, bad } = diceWords(text, result, column);
   const names = result?.names ?? [];
   const put = (next: string) => onType(next);
-  return (
-    <span style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
-      <span style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
-        <input ref={input} aria-label={label} type="text" value={valueText(cell.own)} placeholder={cell.given !== undefined ? valueText(cell.given) : 'none'}
-          aria-invalid={bad || undefined} spellCheck={false} autoFocus={focus} readOnly={readOnly}
-          onChange={(e) => { onType(e.target.value); cursor.current = e.target.selectionStart ?? e.target.value.length; }}
-          onSelect={(e) => { cursor.current = (e.target as HTMLInputElement).selectionStart ?? 0; }}
-          style={{ ...input, flex: 1, ...(bad ? { borderColor: 'var(--danger)' } : {}) }} />
-        {/* eˣ helps write it: nothing to write where it can't be changed (G6b). */}
-        {!readOnly && <button type="button" aria-label={`Help writing ${label}`} aria-expanded={open} title="Help writing it" onClick={() => setOpen((o) => !o)}
-          style={{
-            width: 24, flexShrink: 0, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-            border: `1px solid ${open ? 'var(--cyan)' : 'var(--green)'}`, color: open ? 'var(--cyan)' : 'var(--green)',
-            background: open ? 'color-mix(in srgb, var(--cyan) 18%, transparent)' : 'none',
-          }}>
-          <FormulaIcon size={13} />
-        </button>}
-      </span>
+  const field = (
+    <span style={{ display: 'flex', gap: '4px', minWidth: 0 }}>
+      <input ref={input} aria-label={label} type="text" value={value} placeholder={placeholder}
+        aria-invalid={bad || undefined} spellCheck={false} autoFocus={focus} readOnly={readOnly}
+        onChange={(e) => { onType(e.target.value); cursor.current = e.target.selectionStart ?? e.target.value.length; }}
+        onSelect={(e) => { cursor.current = (e.target as HTMLInputElement).selectionStart ?? 0; }}
+        // \`input\` here is the box's ref, not the style of that name: its width said outright, so it shrinks beside a part's TYPE (8b2c).
+        style={{ ...input, flex: 1, width: '100%', minWidth: 0, ...(bad ? { borderColor: 'var(--danger)' } : {}) }} />
+      {/* eˣ helps write it: nothing to write where it can't be changed (G6b). */}
+      {!readOnly && <button type="button" aria-label={`Help writing ${label}`} aria-expanded={open} title="Help writing it" onClick={() => setOpen((o) => !o)}
+        style={{
+          width: 24, flexShrink: 0, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+          border: `1px solid ${open ? 'var(--cyan)' : 'var(--green)'}`, color: open ? 'var(--cyan)' : 'var(--green)',
+          background: open ? 'color-mix(in srgb, var(--cyan) 18%, transparent)' : 'none',
+        }}>
+        <FormulaIcon size={13} />
+      </button>}
+    </span>
+  );
+  const help = (
+    <>
       <span role="status" aria-label={`${label} on this character`} style={{ fontSize: '0.6rem', letterSpacing: '1px', color: bad ? 'var(--danger)' : 'var(--cyan)', overflowWrap: 'anywhere' }}>{words}</span>
       {open && (
         <span role="group" aria-label={`Help writing ${label}`} style={{ border: '1px solid var(--cyan)', padding: '5px 7px', display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.6rem' }}>
@@ -150,7 +159,51 @@ function DiceBox({ cell, label, onType, onRead, focus = false, readOnly = false 
           <span style={{ ...small, fontSize: '0.5rem' }}>Reads this character&apos;s own numbers. A name the system hasn&apos;t got is said here, never rolled.</span>
         </span>
       )}
-    </span>
+    </>
+  );
+  if (place) return place(field, help);
+  return <span style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>{field}{help}</span>;
+}
+
+/** What a DAMAGE of several parts comes to on this character, all told (8b2c): IN ALL, as the builder says it. */
+function WholeRead({ text, label, onRead }: { text: string; label: string; onRead: (text: string) => Promise<GearDiceRead | null> }) {
+  const [read, setRead] = useState<{ text: string; result: GearDiceRead | null } | null>(null);
+  const ask = useEffectEvent((t: string) => onRead(t));
+  useEffect(() => {
+    let live = true;
+    const timer = setTimeout(() => { void ask(text).then((result) => { if (live) setRead({ text, result }); }); }, 300);
+    return () => { live = false; clearTimeout(timer); };
+  }, [text]);
+  const result = read?.text === text ? read.result : null;
+  if (!result || !result.ok || 'blank' in result) return null;
+  const r = result as Extract<GearDiceRead, { low: number }>;
+  return <span role="status" aria-label={`${label} in all`} style={{ fontSize: '0.6rem', letterSpacing: '1px', color: 'var(--cyan)' }}>IN ALL: {r.low === r.high ? r.low : `${r.low} to ${r.high}`}</span>;
+}
+
+/**
+ * A DAMAGE or DICE under ✎: this line's own dice, which ROLL rolls, its item's faint until typed over and back when cleared.
+ * A DAMAGE where the game has damage types is written a part at a time (8b2c, as the builder's ITEMS page, 8b2b): each part's
+ * dice with its own eˣ and words, its TYPE, + PART, IN ALL under several; its item's faint in the first part while the line
+ * has none of its own. A text the rows can't say, and a DICE, the one box.
+ */
+function DiceBox({ cell, label, onType, onRead, damageTypes, focus = false, readOnly = false }: {
+  cell: Cell; label: string; onType: (typed: string) => void; onRead: (text: string) => Promise<GearDiceRead | null>;
+  damageTypes?: DamageTypeShown[]; focus?: boolean; readOnly?: boolean;
+}) {
+  const own = valueText(cell.own);
+  const given = cell.given !== undefined ? valueText(cell.given) : '';
+  const one = <DiceInput value={own} placeholder={given || 'none'} text={own || given} column={cell.column.label} label={label} onType={onType} onRead={onRead} focus={focus} readOnly={readOnly} />;
+  if (cell.column.kind !== 'damage' || !damageTypes?.length) return one;
+  // MOST LINES ARE comes by name; the rows pick by id.
+  const usual = cell.column.usual ? damageTypes.find((t) => t.name.trim().toUpperCase() === cell.column.usual)?.id ?? null : null;
+  const several = own.trim() !== '' && damageParts(own).length > 1;
+  return (
+    <DamageRows value={own} onChange={onType} types={damageTypes} usual={usual} label={label} readOnly={readOnly} compact
+      renderDice={({ i, dice, onDice, label: partLabel, place }) => (
+        <DiceInput value={dice} placeholder={i === 0 && !own ? given || 'none' : ''} text={dice || (i === 0 && !own ? given : '')}
+          column={cell.column.label} label={partLabel} onType={onDice} onRead={onRead} focus={focus && i === 0} readOnly={readOnly} place={place} />
+      )}
+      fallback={one} whole={several ? <WholeRead text={own} label={label} onRead={onRead} /> : null} />
   );
 }
 
@@ -313,7 +366,7 @@ export function GearTypeTables({ items, itemsShown, readOnly, columnsLocked = fa
                 {/* Beside its box's top, not halfway down a DAMAGE with its words and eˣ open under it. */}
                 <span style={{ ...small, textAlign: 'right', alignSelf: 'start', paddingTop: '4px' }}>{cell.column.label.toUpperCase()}{cell.column.kind === 'number' && cell.column.unit ? ` (${cell.column.unit})` : ''}</span>
                 {(cell.column.kind === 'damage' || cell.column.kind === 'dice') && onReadDice
-                  ? <DiceBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} readOnly={columnsLocked} focus={focusAt === cell.column.id} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} onRead={onReadDice} />
+                  ? <DiceBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} readOnly={columnsLocked} focus={focusAt === cell.column.id} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} onRead={onReadDice} damageTypes={itemsShown.damage_types} />
                   : <CellBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} readOnly={readOnly || columnsLocked} focus={focusAt === cell.column.id} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} />}
                 {/* Made its own (G5b): said, with the item's value, who changed it when, and THE ITEM'S to put it back. */}
                 {cell.unique && (

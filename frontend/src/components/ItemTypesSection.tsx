@@ -324,9 +324,9 @@ export function ItemTypesSection({ definition, edit, place = 'items' }: Props & 
 // ─── AN ITEM'S TYPE AND VALUES ──────────────────────────────────────────────
 
 /** One part of a DAMAGE (8b2b): its dice in a formula box with eˣ, read as a rest's amount is, its sample under it. */
-function PartBox({ definition, api, dice, onDice, label, id }: { definition: Definition; api?: ReturnType<typeof systemsApi>; dice: string; onDice: (dice: string) => void; label: string; id?: string }) {
+function PartBox({ definition, api, dice, onDice, label, id, place }: { definition: Definition; api?: ReturnType<typeof systemsApi>; dice: string; onDice: (dice: string) => void; label: string; id?: string; place: (field: React.ReactNode, help: React.ReactNode) => React.ReactElement }) {
   const box = useFormulaBox({ definition, api, kind: 'refill', value: dice, id, onChange: onDice, label, placeholder: '1d8 + @might_mod', maxLength: LIMITS.text, inputStyle: { ...input, width: '100%' } });
-  return <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>{box.field}{box.help}</span>;
+  return place(box.field, box.help);
 }
 
 /**
@@ -342,7 +342,7 @@ function DamageValue({ definition, edit, api, item, c, id }: Props & { api?: Ret
   const label = `${item.label || item.id} ${columnName(c)}`;
   return (
     <DamageRows value={text} onChange={(next) => edit(withItemValue(definition, item.id, c.id, next))} types={types} usual={c.usual ?? null} label={label}
-      renderDice={({ i, dice, onDice, label: partLabel }) => <PartBox definition={definition} api={api} dice={dice} onDice={onDice} label={partLabel} id={i === 0 ? id : undefined} />}
+      renderDice={({ i, dice, onDice, label: partLabel, place }) => <PartBox definition={definition} api={api} dice={dice} onDice={onDice} label={partLabel} id={i === 0 ? id : undefined} place={place} />}
       fallback={<DiceValue definition={definition} edit={edit} api={api} item={item} c={c} id={id} />}
       whole={several && all && all.ok ? <span role="status" aria-label={`${label} in all`} style={{ ...why, fontSize: 11, color: 'var(--cyan)' }}>IN ALL: {all.most !== undefined && all.most !== all.value ? `${all.value} to ${all.most}` : all.value}</span> : null} />
   );

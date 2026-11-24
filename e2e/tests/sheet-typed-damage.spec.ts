@@ -34,9 +34,11 @@ test('a typed DAMAGE at the table: a Torch\'s FIRE, and a Flame Tongue\'s SLASHI
   // A Torch, its own DAMAGE with its type, read on this character.
   await add.getByRole('button', { name: 'Add a Weapon by hand' }).click();
   await weapons.getByLabel('Item 1 name', { exact: true }).fill('Torch');
-  await weapons.getByLabel('Item 1 DAMAGE', { exact: true }).fill('2d6 fire dmg');
+  // As rows under ✎ (8b2c): its dice, and FIRE from the game's types.
+  await weapons.getByLabel('Item 1 DAMAGE', { exact: true }).fill('2d6');
+  await weapons.getByRole('combobox', { name: 'Item 1 DAMAGE type' }).selectOption({ label: 'FIRE' });
   await expect(weapons.getByRole('status', { name: 'Item 1 DAMAGE on this character' })).toContainText('2 to 12', { timeout: 15_000 });
-  await expect.poll(async () => JSON.parse(String((await sheetOf()).inventory ?? '[]'))[0]?.values?.damage, { timeout: 15_000 }).toBe('2d6 fire dmg');
+  await expect.poll(async () => JSON.parse(String((await sheetOf()).inventory ?? '[]'))[0]?.values?.damage, { timeout: 15_000 }).toBe('2d6 FIRE DMG');
   await weapons.getByRole('button', { name: 'DONE', exact: true }).click();
 
   // A line named Flame Tongue: its item's DAMAGE, two parts.
@@ -53,7 +55,7 @@ test('a typed DAMAGE at the table: a Torch\'s FIRE, and a Flame Tongue\'s SLASHI
   await weapons.getByRole('button', { name: 'Roll Item 1 DAMAGE' }).click();
   await expect(tray).toBeVisible({ timeout: 15_000 });
   await mine.getByTitle('TOGGLE_HISTORY').click();
-  await expect(history.filter({ hasText: /rolled Torch DAMAGE 2d6 fire dmg \[\(\d+, \d+\)\] = \d+ FIRE DMG$/ }).last()).toBeVisible({ timeout: 15_000 });
+  await expect(history.filter({ hasText: /rolled Torch DAMAGE 2d6 FIRE DMG \[\(\d+, \d+\)\] = \d+ FIRE DMG$/ }).last()).toBeVisible({ timeout: 15_000 });
   await mine.keyboard.press('Escape');
   await expect(tray).toBeHidden();
   await weapons.getByRole('button', { name: 'Roll Item 2 DAMAGE' }).click();

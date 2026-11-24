@@ -172,6 +172,17 @@ describe('a DAMAGE column\'s MOST LINES ARE (8b2b)', () => {
   });
 });
 
+describe('told to the sheet with its items (8b2c)', () => {
+  const { itemsRenderedOf } = require_('../systemBuilder/choices');
+  it('the game\'s damage types that are on, each its id, name and picture; none for a system without types of its own', () => {
+    const DRAWN = [...Array(15).fill('0000'), '0ff0'];
+    const shown = itemsRenderedOf({ ...ARMED, damage: { types: { fire: { name: 'Hell Fire' }, cold: { on: false }, acid: { drawn: DRAWN } } } }).damage_types;
+    expect(shown.slice(0, 3)).toEqual([{ id: 'fire', name: 'Hell Fire', icon: 'flame' }, { id: 'lightning', name: 'Lightning', icon: 'bolt' }, { id: 'acid', name: 'Acid', drawn: DRAWN }]);
+    expect(shown.some((t) => t.id === 'cold')).toBe(false);
+    expect(itemsRenderedOf({ format: 1, name: 'Plain', items: { list: [{ id: 'rope', label: 'Rope' }] } }).damage_types).toBeUndefined();
+  });
+});
+
 describe('checked, and previewed in the builder', () => {
   it('an item\'s DAMAGE with types is a value it may have; its dice still checked; DICE takes none', () => {
     expect(checkDefinition(ARMED).problems).toEqual([]);

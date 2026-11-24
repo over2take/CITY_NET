@@ -23,7 +23,9 @@ export interface ItemShown { id: string; label: string; description?: string; ne
 /** An install as the render copy says it (7e4c): its name, what it costs against by name, which way. */
 export interface InstallShown { id: string; label: string; against: string; way: 'adds' | 'takes' }
 /** A system's items, slots and installs (backend choices.js itemsRenderedOf). */
-export interface ItemsShown { slots: SlotShown[]; installs?: InstallShown[]; list: ItemShown[]; types?: import('./gearTypes').TypeShown[] }
+/** One of the game's damage types that is on, as the sheet is told it (8b2c): its id, the name a hit says, and its picture. */
+export interface DamageTypeShown { id: string; name: string; icon?: string; drawn?: string[] }
+export interface ItemsShown { slots: SlotShown[]; installs?: InstallShown[]; list: ItemShown[]; types?: import('./gearTypes').TypeShown[]; damage_types?: DamageTypeShown[] }
 
 /** What the server worked out of one carried item (backend items.js itemsShown). */
 export interface ItemWorked { id: string; needs: string; worn?: true; attuned?: true; installed?: true; working?: true }
