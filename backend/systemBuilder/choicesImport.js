@@ -381,7 +381,7 @@ const readChoicesFile = (definition, listId, input) => {
     if (levelled && parts.some((p) => p.part === 'level')) option.features.sort((a, b) => atOf(a) - atOf(b));
     if (parts.length) changed.features.push({ line: row.line, option: option.label, feature: feature.label, parts });
     else unchanged += 1;
-    const keeps = [['modifiers', 'its modifiers'], ['rolls', 'the rolls it gives'], ['changes', 'the roll changes it allows'], ['choice', 'the list it opens']]
+    const keeps = [['modifiers', 'its modifiers'], ['rolls', 'the rolls it gives'], ['changes', 'the roll changes it allows'], ['choice', 'the list it opens'], ['resistances', 'its resistances']]
       .filter(([k]) => (Array.isArray(feature[k]) ? feature[k].length : feature[k] !== undefined)).map(([, words2]) => words2);
     if (keeps.length) notes.push({ line: row.line, message: `${option.label} · ${feature.label} keeps ${keeps.join(', ')}, set in the builder` });
   }

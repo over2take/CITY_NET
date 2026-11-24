@@ -172,10 +172,18 @@ const damageTypesOf = (definition) => {
   return out.slice(0, LIMITS.types);
 };
 
+/** Every type's id, on or off (8b3a): what a RESISTANCE row may name, kept while its type is off. */
+const damageTypeIdsOf = (definition) => {
+  const damage = definition && isPlainObject(definition.damage) ? definition.damage : {};
+  const stored = isPlainObject(damage.types) ? damage.types : {};
+  const own = Object.entries(stored).filter(([id, t]) => !STANDARD_IDS.has(id) && ID.test(id) && isPlainObject(t) && typed(t.name)).map(([id]) => id);
+  return new Set([...STANDARD_IDS, ...own]);
+};
+
 /** What RESIST, IMMUNE and VULNERABLE mean in a system: its words, or the app's where it says none. */
 const meaningsOf = (definition) => {
   const damage = definition && isPlainObject(definition.damage) ? definition.damage : {};
   return Object.fromEntries(KINDS.map((k) => [k, isPlainObject(damage[k]) && typed(damage[k].means) ? damage[k].means.trim() : MEANS[k]]));
 };
 
-module.exports = { STANDARD, ICONS, DAMAGE_ICONS, KINDS, MEANS, LIMITS, isIcon, checkDamage, damageTypesOf, meaningsOf };
+module.exports = { STANDARD, ICONS, DAMAGE_ICONS, KINDS, MEANS, LIMITS, isIcon, checkDamage, damageTypesOf, damageTypeIdsOf, meaningsOf };

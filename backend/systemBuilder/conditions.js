@@ -9,6 +9,7 @@
 //     glitching: { name: 'Glitching', short: 'GLITCH', icon: '/uploads/condition_icons/<hash>.png',
 //                  description: 'Chrome misfiring.' },          // one of the system's own
 //     hacked: { name: 'Hacked', drawn: ['0000', ...] },           // a picture from the 16 x 16 pad (drawings.js)
+//     petrified: { resistances: [{ kind: 'resist', type: 'all' }] }, // while it is on (8b3a, resistances.js)
 //   }
 //
 // Every system starts with the standard set below; a definition stores only what it changes, as
@@ -86,8 +87,8 @@ const STANDARD = [
 const STANDARD_IDS = new Set(STANDARD.map((c) => c.id));
 
 // only_with, the house rule a condition waits on, is houseRules.js's to check.
-const STANDARD_KEYS = new Set(['on', 'name', 'short', 'icon', 'drawn', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with', 'applied', 'each_turn']);
-const OWN_KEYS = new Set(['name', 'short', 'icon', 'drawn', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with', 'applied', 'each_turn']);
+const STANDARD_KEYS = new Set(['on', 'name', 'short', 'icon', 'drawn', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with', 'applied', 'each_turn', 'resistances']);
+const OWN_KEYS = new Set(['name', 'short', 'icon', 'drawn', 'description', 'ends', 'rounds', 'at', 'modifiers', 'only_with', 'applied', 'each_turn', 'resistances']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -167,7 +168,7 @@ const checkEachTurn = (list, where, problems, readRoll) => {
  * modifier may name: the system's stats and formulas; `rests` the ids a condition may end at; `parse` reads a modifier's
  * formula (8a5e1), none checking only that it is text.
  */
-const checkConditions = (conditions, targets, problems, rests = new Set(), parse = null, readRoll = null) => {
+const checkConditions = (conditions, targets, problems, rests = new Set(), parse = null, readRoll = null, checkResist = null) => {
   if (conditions === undefined) return;
   if (!isPlainObject(conditions)) { problems.push({ where: 'conditions', message: 'Must be a set of conditions' }); return; }
   const own = Object.keys(conditions).filter((id) => !STANDARD_IDS.has(id));
@@ -207,6 +208,11 @@ const checkConditions = (conditions, targets, problems, rests = new Set(), parse
     if (has(c, 'applied') && typeof c.applied !== 'boolean') problems.push({ where: `${where}, applied`, message: 'Whether its modifiers are applied: true or false' });
     checkModifiers(c.modifiers, `${where}, modifier`, targets, problems, parse);
     checkEachTurn(c.each_turn, `${where}, each turn`, problems, readRoll);
+    // Its RESISTANCE row (8b3a), checked against the system's damage types; a built-in game's own conditions have none.
+    if (c.resistances !== undefined) {
+      if (checkResist) checkResist(c.resistances, `${where}, resistance`);
+      else problems.push({ where: `${where}, resistances`, message: 'Not part of a condition' });
+    }
   }
 };
 
@@ -254,6 +260,8 @@ const conditionsOf = (definition) => {
       ...(c.applied === true ? { applied: true } : {}),
       // What it does on initiative turns (8a9a), each whole: changes_hp on and rolled by the table unless said otherwise.
       ...(eachTurnOf(c).length ? { each_turn: eachTurnOf(c) } : {}),
+      // What it resists while on (8b3a): the rows as written, resistances.js reading the kinds.
+      ...(Array.isArray(c.resistances) && c.resistances.length ? { resistances: c.resistances.filter((r) => isPlainObject(r) && typeof r.kind === 'string' && typeof r.type === 'string').map((r) => ({ kind: r.kind, type: r.type })) } : {}),
       standard,
     };
   };
