@@ -18,6 +18,7 @@ const tokenAccess = require('../tokens/tokenAccess');
 const { checkTokenConditions, publicTokenConditions, parseTokenConditions } = require('../tokens/conditions');
 const { syncConditionsOnSheet } = require('../sheets/conditionsOnSheet');
 const { poolAfter } = require('../tokens/poolHealth');
+const { withMaxSet } = require('../systemBuilder/tokenMax');
 const { HAND_KEY, handProblem, handAfter } = require('../systemBuilder/resistances');
 
 /** A change to a token refused (tokens/tokenAccess.js): 401 when nobody said who they are. */
@@ -678,6 +679,18 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         });
       };
 
+      /** DAMAGE, HEAL or a track's SET MAX: by the custom model where it isn't one pool, else as before. */
+      const modelOrPool = () => db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (gErr, gRow) => {
+        const system = !gErr && gRow ? gRow.value : null;
+        const health = system ? customSystems.health(system) : null;
+        if (!health || health.model === 'pool') return runHealth(action);
+        if (action === 'set_max') {
+          const second = health.model === 'tracks' && Array.isArray(health.tracks) ? health.tracks[1] : null;
+          if (!second || req.body.track !== second.id) return runHealth(action);
+        }
+        runModelHealth(system, health);
+      });
+
       const runHealth = (effAction) => {
       let newCurrent = hp_current !== undefined ? hp_current : row.hp_current;
       let newMax = hp_max !== undefined ? hp_max : row.hp_max;
@@ -742,6 +755,27 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
       }
       }; // runHealth
 
+      /**
+       * MAX set on a player's token in a game whose maximum is worked out (8s4a): kept on their sheet as an ADJUST over the
+       * formula, so the next working out leaves it where it was set; then set on the token as any MAX is. A second track's
+       * maximum, an NPC's, or a game where it is the GM's number: `plain`, as before.
+       */
+      const setMax = (plain) => {
+        const want = Number(hp_max);
+        if (!(row.shape === 'rhombus' && row.owner) || !Number.isFinite(want) || want < 0) return plain();
+        db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (gErr, gRow) => {
+          const system = !gErr && gRow ? gRow.value : null;
+          const definition = system ? customSystems.definitionOf(system) : null;
+          const health = system ? customSystems.health(system) : null;
+          const second = health && health.model === 'tracks' && Array.isArray(health.tracks) ? health.tracks[1] : null;
+          if (!definition || (second && req.body.track === second.id)) return plain();
+          db.get('SELECT id FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0', [row.owner, system], (sErr, sheet) => {
+            if (sErr || !sheet) return plain();
+            mutateSheet(db, sheet.id, (data) => withMaxSet(definition, data, want) || undefined, () => plain());
+          });
+        });
+      };
+
       // CWN stim heal: field healing costs +1 System Strain, and a character
       // whose strain is maxed gets NO stim benefit (the heal is refused).
       // Natural/rest healing stays on the plain 'heal' action, strain-free.
@@ -764,21 +798,15 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
             }
           );
         });
+      } else if (action === 'set_max' && hp_max !== undefined) {
+        // MAX set on the token: an ADJUST kept first where the game works it out (8s4a), then as before.
+        setMax(() => (req.body.track !== undefined ? modelOrPool() : runHealth(action)));
       } else if (action === 'damage' || action === 'heal' || (action === 'set_max' && req.body.track !== undefined)) {
         // A custom system whose health is not one pool takes damage by its own model
         // (systemBuilder/health.js). Everything else, the built-in systems included, goes
         // through runHealth exactly as before. So does every SET MAX but a second track's,
         // whose maximum lives on the sheet.
-        db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (gErr, gRow) => {
-          const system = !gErr && gRow ? gRow.value : null;
-          const health = system ? customSystems.health(system) : null;
-          if (!health || health.model === 'pool') return runHealth(action);
-          if (action === 'set_max') {
-            const second = health.model === 'tracks' && Array.isArray(health.tracks) ? health.tracks[1] : null;
-            if (!second || req.body.track !== second.id) return runHealth(action);
-          }
-          runModelHealth(system, health);
-        });
+        modelOrPool();
       } else {
         runHealth(action);
       }

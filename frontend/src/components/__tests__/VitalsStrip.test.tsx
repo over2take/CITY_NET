@@ -100,6 +100,43 @@ describe('DAMAGE, HEAL and TEMP', () => {
     expect(healthCalls().map((c) => c.body)).toEqual([{ action: 'damage', amount: 2 }, { action: 'set_temp', amount: 0, hp_temp: 0 }]);
   });
 
+  it('MAX set by clicking it (8s4a): typed in place, Enter sends it as HEALTH\'s SET; the same or nothing sends nothing; Escape leaves it', async () => {
+    draw();
+    await userEvent.click(screen.getByRole('button', { name: 'Max HP' }));
+    const max = screen.getByRole('spinbutton', { name: 'Max HP' }) as HTMLInputElement;
+    expect(max.value).toBe('20');
+    expect(max.className).toContain('in-place-number');
+    expect(max.style.borderBottom).toBe('2px solid var(--cyan)');
+    expect(max.style.width).toBe('2.4ch');
+    await userEvent.clear(max);
+    await userEvent.type(max, '24{Enter}');
+    expect(healthCalls().map((c) => c.body)).toEqual([{ action: 'set_max', amount: 24, hp_max: 24 }]);
+    await vi.waitFor(() => expect(screen.queryByRole('spinbutton', { name: 'Max HP' })).toBeNull());
+    // The same number, nothing typed, or Escape: back to the number, nothing sent.
+    await userEvent.click(screen.getByRole('button', { name: 'Max HP' }));
+    await userEvent.keyboard('{Enter}');
+    expect(screen.queryByRole('spinbutton', { name: 'Max HP' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Max HP' }));
+    await userEvent.clear(screen.getByRole('spinbutton', { name: 'Max HP' }));
+    await userEvent.keyboard('{Enter}');
+    expect(screen.queryByRole('spinbutton', { name: 'Max HP' })).toBeNull();
+    await userEvent.click(screen.getByRole('button', { name: 'Max HP' }));
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Max HP' }), '9{Escape}');
+    expect(screen.queryByRole('spinbutton', { name: 'Max HP' })).toBeNull();
+    expect(healthCalls()).toHaveLength(1);
+    // Left by clicking away: sent.
+    await userEvent.click(screen.getByRole('button', { name: 'Max HP' }));
+    await userEvent.clear(screen.getByRole('spinbutton', { name: 'Max HP' }));
+    await userEvent.type(screen.getByRole('spinbutton', { name: 'Max HP' }), '30');
+    await userEvent.click(screen.getByRole('button', { name: 'HEAL' }));
+    expect(healthCalls().map((c) => c.body)[1]).toEqual({ action: 'set_max', amount: 30, hp_max: 30 });
+    // TEMP typed in place too, as wide as its number.
+    await userEvent.click(screen.getByRole('button', { name: /^Temp HP/ }));
+    const temp = screen.getByRole('spinbutton', { name: 'Temp HP' }) as HTMLInputElement;
+    expect(temp.className).toContain('in-place-number');
+    expect(temp.style.width).toBe('2.4ch');
+  });
+
   it('shows the token\'s CURRENT, MAX and TEMP (-- with none), and what the server refused', async () => {
     draw({ token: { ...TOKEN, hp_temp: 0 } });
     expect(screen.getByLabelText('Current HP').textContent).toBe('14');
@@ -150,7 +187,8 @@ describe('HEALTH here', () => {
     expect(region.textContent).toContain('14 / 20');
     expect(within(region).queryByRole('region', { name: 'Conditions' })).toBeNull();
     expect(within(region).queryByRole('button', { name: '+ CONDITION' })).toBeNull();
-    expect(within(region).getByRole('spinbutton', { name: 'Max HP' })).toBeTruthy();
+    // MAX is set on the strip now (8s4a): not twice.
+    expect(within(region).queryByRole('spinbutton', { name: 'Max HP' })).toBeNull();
     for (const name of ['DAMAGE', 'HEAL']) expect(within(region).queryByRole('button', { name }), name).toBeNull();
     for (const name of ['Amount', 'Temp HP']) expect(within(region).queryByRole('spinbutton', { name }), name).toBeNull();
     const bar = screen.getByTitle('Synced with your token: click to open HEALTH here');
@@ -401,7 +439,7 @@ describe('the box stands in for the HEALTH section, and shows the AC (8s3c, the 
     { id: 'hp', label: 'HP', type: 'number', source: 'token_hp', maxField: 'hp_max' },
     { id: 'hp_max', label: 'HP MAX', type: 'number', source: 'token_hp_max' },
   ] };
-  const vitals = (): SheetVitals => ({ token: TOKEN, owner: 'kes', system: 'generic', authToken: 'tok', socket: socketWith(null), reload: vi.fn() });
+  const vitals = (over: Partial<SheetVitals> = {}): SheetVitals => ({ token: TOKEN, owner: 'kes', system: 'generic', authToken: 'tok', socket: socketWith(null), reload: vi.fn(), ...over });
   const withSections = (sections: unknown[]) => ({ ...template, sections: [...template.sections, ...sections] } as unknown as SheetTemplate);
 
   it('a section of only the token\'s HP and max isn\'t drawn beside the box; one with more is; without the strip it is', () => {
@@ -421,15 +459,33 @@ describe('the box stands in for the HEALTH section, and shows the AC (8s3c, the 
 
   it('MAX says on hover what made it, in cyan, as the section did; plain with nothing added', () => {
     draw();
-    expect(screen.getByLabelText('Max HP').getAttribute('title')).toBeNull();
+    expect(screen.getByLabelText('Max HP').getAttribute('title')).toBe('Click to set max HP');
+    expect(screen.getByLabelText('Max HP').style.color).toBe('var(--green)');
     cleanup();
     // A feat adding 6 to the maximum, as SheetRenderer.health.test.tsx carries it; the section itself not drawn.
     const feats = { ...withSections([pair]), choices: [{ id: 'feats', one: 'Feat', many: 'Feats', options: [] }] } as unknown as SheetTemplate;
     render(<SheetRenderer template={feats} data={{ name: 'Kes', hp: 14, hp_max: 26, [WORKED_KEY]: { from: { hp_max: [{ feature: 'Tough', amount: 6 }] } } } as never}
       onFieldChange={() => {}} vitals={vitals()} />);
     const max = screen.getByLabelText('Max HP');
-    expect(max.getAttribute('title')).toBe('20 → 26 (Tough +6)');
+    expect(max.getAttribute('title')).toBe('20 → 26 (Tough +6)\nClick to set max HP');
     expect(max.style.color).toBe('var(--cyan)');
+  });
+
+  it('MAX set by hand over a formula (8s4a): the ADJUST said beside the bonus, from the token\'s own maximum', () => {
+    const feats = { ...withSections([pair]), choices: [{ id: 'feats', one: 'Feat', many: 'Feats', options: [] }] } as unknown as SheetTemplate;
+    render(<SheetRenderer template={feats} data={{ name: 'Kes', hp: 14, hp_max: 26, _max_adjust: 4, [WORKED_KEY]: { from: { hp_max: [{ feature: 'Tough', amount: 6 }] } } } as never}
+      onFieldChange={() => {}} vitals={vitals({ token: { ...TOKEN, hp_max: 30 } })} />);
+    expect(screen.getByLabelText('Max HP').getAttribute('title')).toBe('20 → 30 (Tough +6, adjusted +4)\nClick to set max HP');
+    cleanup();
+    render(<SheetRenderer template={withSections([pair])} data={{ name: 'Kes', hp: 14, hp_max: 20, _max_adjust: -3 } as never}
+      onFieldChange={() => {}} vitals={vitals({ token: { ...TOKEN, hp_max: 17 } })} />);
+    expect(screen.getByLabelText('Max HP').getAttribute('title')).toBe('20 → 17 (adjusted -3)\nClick to set max HP');
+    expect(screen.getByLabelText('Max HP').style.color).toBe('var(--cyan)');
+    cleanup();
+    // Not a whole number: no ADJUST said.
+    render(<SheetRenderer template={withSections([pair])} data={{ name: 'Kes', hp: 14, hp_max: 20, _max_adjust: 'x' } as never}
+      onFieldChange={() => {}} vitals={vitals()} />);
+    expect(screen.getByLabelText('Max HP').getAttribute('title')).toBe('Click to set max HP');
   });
 
   it("the token's armor class as the game has it: one in its own words, two (both always), or none", () => {

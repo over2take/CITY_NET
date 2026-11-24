@@ -15,6 +15,10 @@
 // With MAX HEALTH: A FORMULA (7d4) or PER LEVEL (7d5a) the maximum is no longer the GM's number with the bonus
 // added: it is set outright, to what it works out to and the bonus, after each change to the sheet, the current
 // moving by as much.
+//
+// MAX set by hand there (8s4a; the user, 2026-11-24: "update their max health on level up or unexpected condition"): what
+// was typed is kept as an ADJUST on the sheet (ADJUST_KEY), the difference from the formula and the bonus, so the maximum
+// stays where it was set and follows the formula from there, a level up included.
 
 const { overlayOf, tokenMaxFieldOf } = require('./choices');
 const { partOn } = require('./parts');
@@ -23,10 +27,18 @@ const runtime = require('./runtime');
 const { healthBase } = require('./healthLevels');
 const { mutateSheetForUser } = require('../sheets/mutate');
 
+const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+
 /** Where a sheet keeps what it has added to its token's maximum: { token, amount }. */
 const TOKEN_MAX_KEY = '_token_max';
+/** Where a sheet keeps MAX set by hand over a formula or per level (8s4a): a whole number, + or -. */
+const ADJUST_KEY = '_max_adjust';
 
-const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+/** What MAX set by hand adds over the formula: 0 with none. */
+const adjustOf = (data) => {
+  const n = isPlainObject(data) ? data[ADJUST_KEY] : null;
+  return Number.isInteger(n) ? n : 0;
+};
 
 /** What the picks add to the token's maximum now: every modifier on that field, summed. 0 with none. */
 const bonusOf = (definition, data) => {
@@ -52,14 +64,14 @@ const moveFor = (definition, data, token) => {
 };
 
 /**
- * With a formula (7d4): how far `token`'s maximum, now `max`, moves to the formula and the bonus, { by, data }, the
+ * With a formula (7d4): how far `token`'s maximum, now `max`, moves to the formula, the bonus and MAX set by hand (8s4a), { by, data }, the
  * sheet recording the bonus; null when nothing moves. Null too without a formula that works out.
  */
 const moveToFormula = (definition, data, token, max) => {
   const base = healthBase(definition, data);
   if (base === null) return null;
   const bonus = bonusOf(definition, data);
-  const by = base + bonus - (Number.isFinite(max) ? max : 0);
+  const by = base + bonus + adjustOf(data) - (Number.isFinite(max) ? max : 0);
   const kept = by || addedTo(data, token) !== bonus;
   return kept ? { by, data: { ...data, [TOKEN_MAX_KEY]: { token, amount: bonus } } } : null;
 };
@@ -67,6 +79,19 @@ const moveToFormula = (definition, data, token, max) => {
 /** The player's token the bonus is kept against: the world map's, as the sheet reads its health. */
 const TOKEN_SQL = `SELECT id, hp_max FROM locations WHERE shape = 'rhombus' AND owner = ?
   ORDER BY (battle_map_id IS NULL) DESC, id LIMIT 1`;
+
+/**
+ * A sheet with MAX set by hand to `max` over its formula and bonus (8s4a): the ADJUST kept, none where it lands on the
+ * formula. Null where the maximum isn't worked out, or won't work out: then MAX is the GM's number, as before.
+ */
+const withMaxSet = (definition, data, max) => {
+  const base = healthBase(definition, data);
+  if (base === null) return null;
+  const adjust = Math.round(max) - base - bonusOf(definition, data);
+  const next = { ...data };
+  if (adjust) next[ADJUST_KEY] = adjust; else delete next[ADJUST_KEY];
+  return next;
+};
 
 /**
  * Bring a player's token maximum in step with their picks, in `system`, the game running. Every token
@@ -116,4 +141,4 @@ const syncAllTokenMax = (db, system, cb = () => {}) => {
   });
 };
 
-module.exports = { TOKEN_MAX_KEY, bonusOf, addedTo, moveFor, moveToFormula, syncTokenMax, syncAllTokenMax };
+module.exports = { TOKEN_MAX_KEY, ADJUST_KEY, adjustOf, withMaxSet, bonusOf, addedTo, moveFor, moveToFormula, syncTokenMax, syncAllTokenMax };

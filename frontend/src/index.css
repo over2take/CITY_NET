@@ -112,3 +112,8 @@ code {
 
 @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.2); opacity: 0.8; } 100% { transform: scale(1); opacity: 1; } }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* A number typed in place on the vitals strip (8s4a): no spinner arrows beside it. */
+.in-place-number { -moz-appearance: textfield; appearance: textfield; }
+.in-place-number::-webkit-inner-spin-button,
+.in-place-number::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }

@@ -21,6 +21,9 @@ import { TurnAskRolls } from './TurnAskRolls';
 // a rest to take here, opening the sheet's own RESTS (asked first, dice spent, FINISH) in place. 8a6c: the chips in a row of
 // their own over + CONDITION, two lines at most then "+N", each opening under the row with TAKE OFF where its × was.
 // 8a9c2: right under the box, a roll a condition's EACH TURN asks of this token, POISONED · YOUR SAVE and ROLL SAVE, until rolled.
+// 8s4a (the user, 2026-11-24: "make the MAX number editable"): MAX set by clicking it, as TEMP is, both typed in place, the
+// size of the number and underlined, no box (the user: "that box just does not fit"). Where a formula works MAX out, the
+// server keeps what was typed as an ADJUST over it.
 
 const small: React.CSSProperties = {
   background: 'none', fontFamily: 'inherit', fontSize: '0.6rem', letterSpacing: '1px', padding: '2px 6px', cursor: 'pointer', whiteSpace: 'nowrap',
@@ -50,6 +53,8 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
   const [track, setTrack] = useState<string | null>(null);
   /** TEMP being typed, after a click on it; null while it shows. */
   const [tempText, setTempText] = useState<string | null>(null);
+  /** MAX being typed, after a click on it (8s4a); null while it shows. */
+  const [maxText, setMaxText] = useState<string | null>(null);
   const [restsOpen, setRestsOpen] = useState(restCalled);
   // Where + CONDITION's list opens: under the row, full width, as REST's drawer does.
   const [pickerHost, setPickerHost] = useState<HTMLDivElement | null>(null);
@@ -148,7 +153,7 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
       // As HEALTH says it: a full track's damage spilling into the other.
       if (tracks && answer?.overflow) setSaid(`${tracks[1].label.toUpperCase()} FULL · ${answer.overflow} SPILLED INTO ${tracks[0].label.toUpperCase()}`);
       // The server tells every open sheet (sheetUpdated), this one with them: the numbers follow.
-      if (action === 'set_temp') setTempText(null); else setAmount('');
+      if (action === 'set_temp') setTempText(null); else if (action === 'set_max') setMaxText(null); else setAmount('');
     } catch {
       setRefused('NOT CHANGED: NO CONNECTION');
     } finally {
@@ -202,6 +207,17 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
   // As the header's bar colors it.
   const hpColor = ratio > 0.5 ? 'var(--green)' : ratio > 0.25 ? 'var(--warning)' : 'var(--danger)';
   const setTemp = () => { if (tempText !== null) void send('set_temp', amountOf(tempText)); };
+  // Nothing typed, or the same, sets nothing: it goes back to the number.
+  const setMax = () => {
+    if (maxText === null) return;
+    const n = amountOf(maxText);
+    if (!maxText.trim() || n === max) setMaxText(null); else void send('set_max', n);
+  };
+  // Typed in place, the size of the number it stands for, with a line under it rather than a box (8s4a).
+  const inPlace = (text: string, color: string): React.CSSProperties => ({
+    ...big, width: `${Math.max(2, text.length) + 0.4}ch`, padding: 0, margin: 0, textAlign: 'center', background: 'none', color, border: 0,
+    borderBottom: `2px solid ${color}`, outline: 'none', fontFamily: 'inherit',
+  });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
@@ -251,7 +267,20 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
           <span style={label}>MAX</span>
           <span aria-label={`Current ${hp}`} style={{ ...big, color: hpColor, transition: 'color 0.3s' }}>{cur}</span>
           <span style={{ ...big, opacity: 0.6, padding: '0 2px' }}>/</span>
-          <span aria-label={`Max ${hp}`} title={onSecond ? undefined : maxNote} style={{ ...big, ...(maxNote && !onSecond ? { color: 'var(--cyan)' } : {}) }}>{max}</span>
+          {maxText === null ? (
+            <button type="button" disabled={busy} onClick={() => setMaxText(String(max))} aria-label={`Max ${hp}`}
+              title={[onSecond ? undefined : maxNote, `Click to set max ${hp}`].filter(Boolean).join('\n')}
+              style={{ ...big, background: 'none', border: 0, padding: '0 2px', cursor: 'pointer', fontFamily: 'inherit', color: maxNote && !onSecond ? 'var(--cyan)' : 'var(--green)' }}>
+              {max}
+            </button>
+          ) : (
+            <input
+              autoFocus className="sheet-input in-place-number" type="number" min={0} inputMode="numeric" aria-label={`Max ${hp}`}
+              value={maxText} onChange={(e) => setMaxText(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') setMax(); if (e.key === 'Escape') setMaxText(null); }}
+              onBlur={setMax} style={inPlace(maxText, 'var(--cyan)')}
+            />
+          )}
         </div>
         <div style={{ width: '64px', flexShrink: 0, display: 'grid', gridTemplateRows: 'auto auto 1.25rem', alignItems: 'center', justifyItems: 'center', rowGap: '2px' }}>
           <span style={label}>TEMP</span>
@@ -263,16 +292,15 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
             </button>
           ) : (
             <input
-              autoFocus className="sheet-input" type="number" min={0} inputMode="numeric" aria-label={`Temp ${hp}`}
+              autoFocus className="sheet-input in-place-number" type="number" min={0} inputMode="numeric" aria-label={`Temp ${hp}`}
               value={tempText} onChange={(e) => setTempText(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') setTemp(); if (e.key === 'Escape') setTempText(null); }}
-              onBlur={setTemp}
-              style={{ width: '3.2em', textAlign: 'center', fontSize: '1rem', background: 'color-mix(in srgb, var(--black) 50%, transparent)', color: 'var(--cyan)', border: '1px solid var(--cyan)', fontFamily: 'inherit' }}
+              onBlur={setTemp} style={inPlace(tempText, 'var(--cyan)')}
             />
           )}
         </div>
         {/* Its own small padding and line height: with the browser's, its pressed fill reached up into the numbers. */}
-        <button type="button" aria-expanded={open} onClick={onToggle} title={`Open HEALTH here: max ${hp}, injuries, conditions`}
+        <button type="button" aria-expanded={open} onClick={onToggle} title={`Open HEALTH here: injuries and resistances`}
           style={{
             position: 'absolute', left: '50%', bottom: '6px', transform: 'translateX(-50%)', whiteSpace: 'nowrap',
             background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold',

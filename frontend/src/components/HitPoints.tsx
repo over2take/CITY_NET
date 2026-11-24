@@ -283,7 +283,8 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
         )}
       </div>}
 
-      {(!underStrip || token !== '') && <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {/* MAX is set on the strip under it (8s4a); the map's window keeps MAX_HP. */}
+      {!underStrip && <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
         {token !== '' && (
           <div>
             <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>MAX_{asLabel(hp)}</label>
