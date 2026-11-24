@@ -1,7 +1,8 @@
 /**
- * Resistances BY HAND (8b3c1; the user, 2026-11-23: "on the sheet and the health window", "the same for players"): the GM's
- * own rows, kept on the character's sheet, set from the token's HEALTH window or the sheet itself, the same list either way;
- * checked against the game's damage types; counted with what the features, items and conditions give.
+ * Resistances BY HAND (8b3c1; the user, 2026-11-23: "on the sheet and the health window", "the same for players"): rows kept
+ * on the character's sheet, set from the token's HEALTH window or the sheet itself, the same list either way; checked against
+ * the game's damage types; counted with what the features, items and conditions give. The GM's own, and (2026-11-24,
+ * "player") a player's on their own character, each kept with who added it, a player changing only theirs.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -16,13 +17,14 @@ process.env.JWT_SECRET = 'test-secret';
 const require_ = createRequire(import.meta.url);
 const runtime = require_('../systemBuilder/runtime');
 const { resistancesOf } = require_('../systemBuilder/choices');
-const { HAND_KEY, handProblem } = require_('../systemBuilder/resistances');
+const { HAND_KEY, handProblem, handIn, handAfter } = require_('../systemBuilder/resistances');
 const { elevatedUsers } = require_('../middleware/auth');
 
 const sign = (payload) => jwt.sign(payload, 'test-secret');
 const GM = sign({ id: 1, username: 'gm', role: 'admin', isTemporary: false });
 const EDITOR = sign({ username: 'ghost', isTemporary: true });
 const VEX = sign({ username: 'vex', role: 'player' });
+const ASH = sign({ username: 'ash', role: 'player' });
 
 const STONE = 'sys_stonestonestones';
 const STONE_DEF = {
@@ -52,6 +54,32 @@ describe('the rows, as the GM sets them', () => {
   });
 });
 
+describe('who added what', () => {
+  const gm = { kind: 'immune', type: 'sonic' };
+  const vexFire = { kind: 'resist', type: 'fire', by: 'vex' };
+
+  it('kept with who added it: a player\'s name, none for the GM\'s; the ill-formed passed over', () => {
+    expect(handIn([gm, vexFire, { kind: 'resist', type: 'cold', by: '' }, { kind: 'x', type: 'y' }, null])).toEqual([gm, vexFire, { kind: 'resist', type: 'cold' }]);
+    expect(handIn('x')).toEqual([]);
+  });
+
+  it('a row sent as it was keeps who added it; a new or changed one is the sender\'s', () => {
+    expect(handAfter([gm, vexFire], [{ kind: 'immune', type: 'sonic' }, { kind: 'resist', type: 'fire' }, { kind: 'vulnerable', type: 'cold' }])).toEqual({ rows: [gm, vexFire, { kind: 'vulnerable', type: 'cold' }] });
+    expect(handAfter([gm], [gm, { kind: 'resist', type: 'cold' }], 'vex')).toEqual({ rows: [gm, { kind: 'resist', type: 'cold', by: 'vex' }] });
+    // The GM's changed by a player's hand: theirs now.
+    expect(handAfter([vexFire], [{ kind: 'immune', type: 'fire' }])).toEqual({ rows: [{ kind: 'immune', type: 'fire' }] });
+  });
+
+  it('a player changes only their own: the GM\'s and another player\'s stay as they were', () => {
+    const no = { error: 'You can only change the ones you added' };
+    expect(handAfter([gm, vexFire], [gm], 'vex')).toEqual({ rows: [gm] });
+    expect(handAfter([gm, vexFire], [vexFire], 'vex')).toEqual(no);
+    expect(handAfter([gm], [{ kind: 'resist', type: 'sonic' }], 'vex')).toEqual(no);
+    expect(handAfter([vexFire], [], 'ash')).toEqual(no);
+    expect(handAfter([gm, vexFire], [])).toEqual({ rows: [] });
+  });
+});
+
 describe('the routes', () => {
   let db;
   let app;
@@ -75,7 +103,10 @@ describe('the routes', () => {
     app.use('/api/sheets', require_('../routes/sheets.js')(db, io));
     const add = async (name, shape, owner) => (await run(db, 'INSERT INTO locations (name, x, y, z, shape, owner) VALUES (?, 0, 0, 0, ?, ?)', [name, shape, owner])).lastID;
     const sheet = async (username, isNpc) => (await run(db, 'INSERT INTO character_sheets (username, system, data, is_npc) VALUES (?, ?, ?, ?)', [username, STONE, '{"name":"X"}', isNpc])).lastID;
-    ids = { vex: await add('VEX', 'rhombus', 'vex'), ghoul: await add('GHOUL', 'enemy_rhombus', 'gm'), ghoul2: await add('GHOUL', 'enemy_rhombus', 'gm'), bare: await add('RAT', 'enemy_rhombus', 'gm') };
+    ids = { vex: await add('VEX', 'rhombus', 'vex'), ash: await add('ASH', 'rhombus', 'ash'), ghoul: await add('GHOUL', 'enemy_rhombus', 'gm'), ghoul2: await add('GHOUL', 'enemy_rhombus', 'gm'), bare: await add('RAT', 'enemy_rhombus', 'gm') };
+    ids.dog = (await run(db, 'INSERT INTO locations (name, x, y, z, shape, owner, controllers) VALUES (?, 0, 0, 0, ?, ?, ?)', ['DOG', 'friendly_rhombus', 'gm', JSON.stringify({ all: false, users: ['vex'] })])).lastID;
+    ids.dogSheet = await sheet('gm', 1);
+    await run(db, 'INSERT INTO npc_sheet_links (location_id, sheet_id) VALUES (?, ?)', [ids.dog, ids.dogSheet]);
     ids.vexSheet = await sheet('vex', 0);
     ids.npc = await sheet('gm', 1);
     await run(db, 'INSERT INTO npc_sheet_links (location_id, sheet_id) VALUES (?, ?), (?, ?)', [ids.ghoul, ids.npc, ids.ghoul2, ids.npc]);
@@ -106,9 +137,34 @@ describe('the routes', () => {
     expect((await dataOf(ids.npc))[HAND_KEY]).toEqual([{ kind: 'immune', type: 'all' }]);
   });
 
-  it('the GM\'s and editors\' only; checked; a token with no sheet, or a built-in game, said so', async () => {
-    expect(await put(ids.vex, [{ kind: 'resist', type: 'fire' }], VEX)).toMatchObject({ status: 403, body: { error: 'Only the GM sets resistances by hand' } });
+  it('a player on their own character, and an NPC the GM gave them; their rows theirs, the GM\'s left alone', async () => {
+    await put(ids.vex, [{ kind: 'immune', type: 'sonic' }]);
+    const mine = await put(ids.vex, [{ kind: 'immune', type: 'sonic' }, { kind: 'resist', type: 'fire' }], VEX);
+    expect(mine.status).toBe(200);
+    expect(mine.body.resistances).toEqual([{ kind: 'immune', type: 'sonic' }, { kind: 'resist', type: 'fire', by: 'vex' }]);
+    expect(resistancesOf(STONE_DEF, await dataOf(ids.vexSheet)).fire).toEqual({ kind: 'resist', from: [{ kind: 'resist', from: 'vex, by hand', hand: true, by: 'vex' }] });
+    expect(await put(ids.vex, [{ kind: 'resist', type: 'fire' }], VEX)).toMatchObject({ status: 403, body: { error: 'You can only change the ones you added' } });
+    expect((await dataOf(ids.vexSheet))[HAND_KEY]).toEqual([{ kind: 'immune', type: 'sonic' }, { kind: 'resist', type: 'fire', by: 'vex' }]);
+    // Their own taken off; then the GM takes one a player added.
+    expect((await put(ids.vex, [{ kind: 'immune', type: 'sonic' }], VEX)).status).toBe(200);
+    await put(ids.vex, [{ kind: 'immune', type: 'sonic' }, { kind: 'resist', type: 'cold' }], VEX);
+    expect((await put(ids.vex, [{ kind: 'resist', type: 'cold' }])).body.resistances).toEqual([{ kind: 'resist', type: 'cold', by: 'vex' }]);
+    // The dog the GM handed them.
+    expect((await put(ids.dog, [{ kind: 'resist', type: 'poison' }], VEX)).status).toBe(200);
+    expect((await dataOf(ids.dogSheet))[HAND_KEY]).toEqual([{ kind: 'resist', type: 'poison', by: 'vex' }]);
+  });
+
+  it('never on another\'s character or an NPC not theirs, nor by anyone unnamed; checked; a token with no sheet, or a built-in game, said so', async () => {
+    const notYours = { status: 403, body: { error: 'You can only change your own character\'s resistances' } };
+    expect(await put(ids.vex, [{ kind: 'resist', type: 'fire' }], ASH)).toMatchObject(notYours);
+    expect(await put(ids.ghoul, [{ kind: 'resist', type: 'fire' }], VEX)).toMatchObject(notYours);
+    expect(await put(ids.dog, [{ kind: 'resist', type: 'fire' }], ASH)).toMatchObject(notYours);
     expect((await request(app).put(`/api/locations/${ids.vex}/resistances`).send({ resistances: [] })).status).toBe(403);
+    // Without Secure Mode a request with no name may change a player token's health; never their rows, which need a name.
+    process.env.SECURE_MODE = 'false';
+    expect(await request(app).put(`/api/locations/${ids.vex}/resistances`).send({ resistances: [{ kind: 'resist', type: 'fire' }] })).toMatchObject(notYours);
+    process.env.SECURE_MODE = 'true';
+    expect(await dataOf(ids.vexSheet)).toEqual({ name: 'X' });
     expect(await put(ids.vex, [{ kind: 'resist', type: 'lava' }])).toMatchObject({ status: 400, body: { error: 'resistance 1, type: Not one of this system\'s damage types, or all' } });
     expect(await put(ids.bare, [{ kind: 'resist', type: 'fire' }])).toMatchObject({ status: 409, body: { error: 'This token has no sheet to keep that on. Give it one first.' } });
     expect((await put(9999, [])).status).toBe(404);
@@ -134,7 +190,10 @@ describe('the routes', () => {
     expect(await npc({ [HAND_KEY]: 'fire' })).toMatchObject({ status: 400, body: { error: 'resistance: Must be a list of resistances' } });
     await npc({ [HAND_KEY]: [] });
     expect(await dataOf(ids.npc)).not.toHaveProperty(HAND_KEY);
-    // Another field changed leaves them as they were.
+    // A row a player added keeps their name through the GM's whole list; another field changed leaves them as they were.
+    await run(db, 'UPDATE character_sheets SET data = ? WHERE id = ?', [JSON.stringify({ name: 'X', [HAND_KEY]: [{ kind: 'resist', type: 'cold', by: 'vex' }] }), ids.vexSheet]);
+    await player({ [HAND_KEY]: [{ kind: 'resist', type: 'cold' }, { kind: 'immune', type: 'fire' }] });
+    expect((await dataOf(ids.vexSheet))[HAND_KEY]).toEqual([{ kind: 'resist', type: 'cold', by: 'vex' }, { kind: 'immune', type: 'fire' }]);
     await npc({ [HAND_KEY]: [{ kind: 'resist', type: 'fire' }] });
     await npc({ name: 'Ghoul' });
     expect((await dataOf(ids.npc))[HAND_KEY]).toEqual([{ kind: 'resist', type: 'fire' }]);

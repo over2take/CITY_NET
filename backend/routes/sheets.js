@@ -10,7 +10,7 @@ const bankAccounts = require('../bank/accounts');
 const { ownToken } = require('../sheets/ownToken');
 const tokenVitals = require('../tokens/vitals');
 const customSystems = require('../systemBuilder/runtime');
-const { HAND_KEY, handProblem } = require('../systemBuilder/resistances');
+const { HAND_KEY, handProblem, handAfter } = require('../systemBuilder/resistances');
 const { syncTokenMax } = require('../systemBuilder/tokenMax');
 const {
   TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived, cwnEffectiveAc,
@@ -48,11 +48,15 @@ const handRowsProblem = (system, patch) => {
   if (!definition) return 'Resistances by hand are for a game made in the builder';
   return handProblem(definition, patch[HAND_KEY]);
 };
-/** A sheet with its resistances by hand, checked already, or none at all where it has none left. */
-const withHandRows = (data) => {
-  if (!Object.prototype.hasOwnProperty.call(data, HAND_KEY) || data[HAND_KEY].length) return data;
+/**
+ * A sheet after the GM's edit, its resistances by hand (checked already) over what it had: a row kept keeps who added it;
+ * none left, none kept.
+ */
+const withHandRows = (before, data) => {
+  if (!Object.prototype.hasOwnProperty.call(data, HAND_KEY)) return data;
+  const { rows } = handAfter(before[HAND_KEY], data[HAND_KEY]);
   const next = { ...data };
-  delete next[HAND_KEY];
+  if (rows.length) next[HAND_KEY] = rows; else delete next[HAND_KEY];
   return next;
 };
 
@@ -230,7 +234,7 @@ module.exports = (db, io) => {
             db,
             row.id,
             (current) => {
-              const next = withHandRows({ ...current, ...patch });
+              const next = withHandRows(current, { ...current, ...patch });
               Object.keys(patch).forEach((f) => applyDerived(system, next, f));
               const definition = customSystems.definitionOf(system);
               // The GM changing a line from its item (G5a): noted as theirs.
@@ -549,7 +553,7 @@ module.exports = (db, io) => {
       let mergedData = null;
       if (cleanFields) {
         const stored = JSON.parse(row.data || '{}');
-        const merged = withHandRows({ ...stored, ...cleanFields });
+        const merged = withHandRows(stored, { ...stored, ...cleanFields });
         // An NPC's line changed from its item (G5a): the GM's.
         if (cleanFields.inventory !== undefined) merged.inventory = withChanges(customSystems.definitionOf(row.system), stored.inventory, cleanFields.inventory, { by: req.user.username, gm: true });
         Object.keys(cleanFields).forEach((f) => applyDerived(row.system, merged, f));
