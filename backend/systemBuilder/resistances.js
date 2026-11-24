@@ -9,7 +9,11 @@
 // counting, it is gone. Worked out, never written into the sheet, as modifiers are.
 //
 // Two for one type don't stack (the mockup, as most games say): IMMUNE beats either; RESIST and VULNERABLE together come
-// to nothing. ALL counts for every type that is on. A type switched off is kept in the row but counts for nothing until
+// to nothing. ALL counts for every type that is on.
+//
+// The GM's own, BY HAND (8b3c1; the user, 2026-11-23: "on the sheet and the health window"): rows kept on the character's
+// sheet under HAND_KEY, a name no field can have, so players never write it; the same list wherever the GM changes it (the
+// sheet, the token's HEALTH window), and tokens sharing one NPC sheet share it. A type switched off is kept in the row but counts for nothing until
 // it is on again. What each kind does to a number (WORKS OUT AS) is 8b5's.
 //
 // Pure: the definition's checks and the running game read it.
@@ -21,6 +25,8 @@ const ALL = 'all';
 /** The most rows one feature or condition has. */
 const LIMIT = 10;
 const KEYS = new Set(['kind', 'type']);
+/** Where a sheet keeps the GM's own resistances. */
+const HAND_KEY = '_resistances';
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
@@ -41,6 +47,13 @@ const checkResistances = (value, where, definition, problems) => {
     else if (seen.has(r.type)) problems.push({ where: `${at}, type`, message: r.type === ALL ? 'Already says ALL' : 'Already says that type' });
     seen.add(r.type);
   });
+};
+
+/** What is wrong with the GM's own rows for this system, in words, or null: as a feature's are checked. */
+const handProblem = (definition, value) => {
+  const problems = [];
+  checkResistances(value, 'resistance', definition, problems);
+  return problems.length ? `${problems[0].where}: ${problems[0].message}` : null;
 };
 
 /** The rows well formed enough to count, as written. */
@@ -64,9 +77,9 @@ const resistancesWorked = (definition, sources) => {
   for (const t of damageTypesOf(definition)) {
     const here = sources.filter((s) => s.type === t.id || s.type === ALL);
     if (!here.length) continue;
-    out[t.id] = { kind: kindOf(here.map((s) => s.kind)), from: here.map((s) => ({ kind: s.kind, from: s.from, ...(s.type === ALL ? { all: true } : {}) })) };
+    out[t.id] = { kind: kindOf(here.map((s) => s.kind)), from: here.map((s) => ({ kind: s.kind, from: s.from, ...(s.type === ALL ? { all: true } : {}), ...(s.hand ? { hand: true } : {}) })) };
   }
   return out;
 };
 
-module.exports = { ALL, LIMIT, checkResistances, resistancesIn, kindOf, resistancesWorked };
+module.exports = { ALL, LIMIT, HAND_KEY, handProblem, checkResistances, resistancesIn, kindOf, resistancesWorked };
