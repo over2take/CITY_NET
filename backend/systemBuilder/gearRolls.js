@@ -2,16 +2,45 @@
 // 2026-11-14, decision 4): the line's own dice, else its item's, read against the sheet as rolls read it, rolled with the
 // server's dice into the log ("Wren rolled Longsword DAMAGE 1d8 + @might_mod [5] + 2 = 7"). Putting damage on a target,
 // its type and resistances, is 8b's. Pure: the socket hands in the sheet and the dice.
+//
+// A DAMAGE that names its types (8b2a, damageText.js) rolls part by part, the log saying each: "Kes rolled Flame Tongue
+// DAMAGE 1d8 SLASHING + 2d6 FIRE [5] + [(4, 5)] = 5 SLASHING + 9 FIRE DMG (14)". Plain dice are rolled and said as before.
 
 const { lineColumns, typesOf, linesOf } = require('./itemTypes');
 const { rollAmount } = require('./tierRolls');
 const { namesOf, effectiveData } = require('./choices');
+const { damageParts, rollDamage, typed } = require('./damageText');
+const { damageTypesOf } = require('./damageTypes');
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
 
+/** The dice of one roll as the log shows them: "(4, 5)" for several, "5" for one, "0" for none. */
+const diceShown = (dice) => dice.map((d) => (d.rolls.length > 1 ? `(${d.rolls.join(', ')})` : String(d.rolls[0] ?? 0))).join(' + ') || '0';
+
+/** A DAMAGE that names its types, rolled part by part (8b2a): as rollGear answers, with `parts`. */
+const rollTyped = (definition, data, text, names, rng, { who, forName, line, type, col }) => {
+  const rolled = rollDamage(text, effectiveData(definition, data), names, rng, damageTypesOf(definition));
+  if ('error' in rolled) return { ok: false, error: rolled.error };
+  const name = typeof line.name === 'string' && line.name.trim() ? line.name.trim() : (type.one || type.label || type.id);
+  const label = (col.label || col.id).toUpperCase();
+  const shown = rolled.parts.map((p) => {
+    const sum = p.dice.reduce((n, d) => n + d.rolls.reduce((a, b) => a + b, 0), 0);
+    const add = p.value - sum;
+    return `[${diceShown(p.dice)}${add ? ` ${add > 0 ? '+' : '-'} ${Math.abs(add)}` : ''}]`;
+  }).join(' + ');
+  const each = rolled.parts.map((p) => (p.label ? `${p.value} ${p.label}` : String(p.value))).join(' + ');
+  const said = `${each} DMG${rolled.parts.length > 1 ? ` (${rolled.value})` : ''}`;
+  const history = `${who} rolled ${name} ${label}${forName ? ` for ${forName}` : ''} ${String(text).trim()} ${shown} = ${said}`;
+  const sum = rolled.dice.reduce((n, d) => n + d.rolls.reduce((a, b) => a + b, 0), 0);
+  return {
+    ok: true, line: name, label, kind: col.kind, text: String(text).trim(), value: rolled.value, dice: rolled.dice, add: rolled.value - sum, history,
+    parts: rolled.parts.map((p) => ({ value: p.value, label: p.label, type: p.type })),
+  };
+};
+
 /**
- * Line `index`'s column `column` rolled: `{ ok: true, line, label, kind, text, value, dice, add, history }`, or
+ * Line `index`'s column `column` rolled: `{ ok: true, line, label, kind, text, value, dice, add, history, parts? }`, or
  * `{ ok: false, error }` where there is nothing of a DAMAGE or DICE column with dice to roll. `who` and `forName` say
  * whose roll it is in the log, as a sheet's other rolls do.
  */
@@ -26,6 +55,8 @@ const rollGear = (definition, data, index, column, { rng, who, forName = null })
   if (!col || (col.kind !== 'damage' && col.kind !== 'dice')) return { ok: false, error: 'Not a DAMAGE or DICE column' };
   // Its own dice or its item's, where they fit; none is a blank box, nothing to roll.
   const text = cols.values[column];
+  // A DICE column's value never names a type: its words are refused before it gets here (itemTypes.js valueProblem).
+  if (typeof text === 'string' && typed(text)) return rollTyped(definition, data, text, names, rng, { who, forName, line, type, col });
   const rolled = rollAmount(text, effectiveData(definition, data), names, rng);
   if ('error' in rolled || 'blank' in rolled) return { ok: false, error: rolled.error || 'Nothing to roll' };
   const sum = rolled.dice.reduce((n, d) => n + d.rolls.reduce((a, b) => a + b, 0), 0);
@@ -50,6 +81,21 @@ const readGearDice = (definition, data, text) => {
   const nameList = [...labels].map(([id, label]) => ({ token: `@${id}`, label: String(label).toUpperCase() }));
   const values = effectiveData(definition, data);
   // The lowest every die can come up, and the highest; a die taken away (10 - 1d4) swaps which is which.
+  // A DAMAGE that names its types (8b2a): each part read, the least and most summed; the words are no names.
+  if (typeof text === 'string' && typed(text)) {
+    const parts = damageParts(text);
+    let lowSum = 0; let highSum = 0;
+    for (const p of parts) {
+      const lo = rollAmount(p.text, values, names, () => 0);
+      if ('blank' in lo) return { ok: false, error: p.label ? `Dice before ${p.label.toUpperCase()}` : 'Nothing to roll', names: nameList };
+      if ('error' in lo) return { ok: false, error: lo.error, names: nameList };
+      const hi = rollAmount(p.text, values, names, () => 1 - 1e-9);
+      lowSum += Math.min(lo.value, hi.value); highSum += Math.max(lo.value, hi.value);
+    }
+    const usedTyped = [...new Set([...String(text).matchAll(/@([a-z][a-z0-9_]*)/g)].map((m) => m[1]))]
+      .map((id) => { const n = Number(values[id]); return { token: `@${id}`, label: String(labels.get(id) || id), value: Number.isFinite(n) ? n : 0 }; });
+    return { ok: true, low: lowSum, high: highSum, used: usedTyped, names: nameList };
+  }
   const low = rollAmount(text, values, names, () => 0);
   if ('blank' in low) return { ok: true, blank: true, names: nameList };
   if ('error' in low) return { ok: false, error: low.error, names: nameList };

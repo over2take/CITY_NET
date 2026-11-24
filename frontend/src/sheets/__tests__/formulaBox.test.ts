@@ -111,7 +111,7 @@ describe('INSERT', () => {
     expect(gear('formula')!.items.map((i) => i.token)).toEqual(['@carried', '@capacity', '@armor_defense']);
     expect(insertGroups(geared, 'formula').map((g) => g.title).indexOf('GEAR')).toBe(insertGroups(geared, 'formula').map((g) => g.title).indexOf('TABLES') + 1);
     for (const kind of ['requires', 'uses', 'add', 'against', 'cost', 'improve'] as const) expect(gear(kind), kind).toBeTruthy();
-    for (const kind of ['amount', 'least', 'refill'] as const) expect(gear(kind), kind).toBeUndefined();
+    for (const kind of ['amount', 'least', 'refill', 'damage'] as const) expect(gear(kind), kind).toBeUndefined();
     // Nothing of the gear to read: no GEAR at all.
     expect(insertGroups(DEF, 'formula').map((g) => g.title)).not.toContain('GEAR');
   });
@@ -171,6 +171,18 @@ describe('a roll\'s ADD and AGAINST, and a rest\'s amount (formula box 2)', () =
     expect(sampleLine('against', { ok: true, value: 16, reads: ROLLED })).toBe('sample rolled stat 16: target 16');
     expect(sampleLine('refill', { ok: true, value: 3, most: 10, reads: [{ id: 'con_mod', label: 'CON modifier', value: 2 }] })).toBe('sample CON modifier 2: 3 to 10');
     expect(sampleLine('refill', { ok: true, value: 5, reads: [] })).toBe('5');
+  });
+
+  it('an item\'s DAMAGE (8b2a): said as written with its types, dice and sheet names as a rest\'s amount; each part\'s sample', () => {
+    expect(wordsOf('damage', '1d8 + @con_mod  SLASHING + 2d6 FIRE', [{ id: 'con_mod', label: 'CON modifier', value: 2 }])).toBe('1d8 + CON modifier SLASHING + 2d6 FIRE');
+    expect(sampleLine('damage', { ok: true, value: 5, most: 22, reads: [{ id: 'con_mod', label: 'CON modifier', value: 2 }], parts: [{ label: 'SLASHING', value: 3, most: 10 }, { label: 'FIRE', value: 2, most: 12 }] }))
+      .toBe('sample CON modifier 2: 5 to 22 · 3 to 10 SLASHING + 2 to 12 FIRE');
+    expect(sampleLine('damage', { ok: true, value: 7, most: 18, reads: [], parts: [{ label: 'FIRE', value: 2, most: 12 }, { label: null, value: 5, most: 5 }] })).toBe('7 to 18 · 2 to 12 FIRE + 5');
+    // Plain dice: as a rest's amount says them.
+    expect(sampleLine('damage', { ok: true, value: 3, most: 10, reads: [] })).toBe('3 to 10');
+    expect(insertGroups(DEF, 'damage').map((g) => g.title)).toEqual(insertGroups(DEF, 'refill').map((g) => g.title));
+    expect(shapesOf(DEF, 'damage')).toEqual(shapesOf(DEF, 'refill'));
+    expect(serverKind('damage')).toBe('damage');
   });
 
   it('INSERT: the stat rolled first in a roll, no tables in a rest', () => {

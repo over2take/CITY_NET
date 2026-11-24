@@ -308,7 +308,8 @@ export function ItemTypesSection({ definition, edit, place = 'items' }: Props & 
 function DiceValue({ definition, edit, api, item, c, id }: Props & { api?: ReturnType<typeof systemsApi>; item: Item; c: ItemColumn; id: string }) {
   const value = itemValues(definition, item)[c.id];
   const box = useFormulaBox({
-    definition, api, kind: 'refill', value: typeof value === 'string' ? value : '', id,
+    // A DAMAGE names its types after its dice (8b2a): read part by part, each with its type.
+    definition, api, kind: c.kind === 'damage' ? 'damage' : 'refill', value: typeof value === 'string' ? value : '', id,
     onChange: (text) => edit(withItemValue(definition, item.id, c.id, text)),
     label: `${item.label || item.id} ${columnName(c)}`, placeholder: c.kind === 'damage' ? '1d8 + @might_mod' : '2d4 + 2', maxLength: LIMITS.text,
     inputStyle: { ...input, width: '100%' },
