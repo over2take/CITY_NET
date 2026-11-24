@@ -34,8 +34,8 @@ test('DAMAGE in SHEET.EXE and HEAL on the tab move the token and both sheets; th
   // The token's AC beside the chips: a built system with combat on and no AC field shows its token's, as the token
   // menu does, an unset one being its 10 (Testfall showed none, the user saw).
   await expect(mine.getByRole('note', { name: 'AC 10' })).toHaveText('AC10');
-  // HIT POINTS ▾ sits wholly under the numbers (its padding once reached up into them, the user saw).
-  const caption = (await strip.getByRole('button', { name: /^HIT POINTS/ }).boundingBox())!;
+  // HP DETAILS ▾ sits wholly under the numbers (its padding once reached up into them, the user saw).
+  const caption = (await strip.getByRole('button', { name: /^HP DETAILS/ }).boundingBox())!;
   const current = (await strip.getByLabel('Current HP').boundingBox())!;
   expect(caption.y).toBeGreaterThanOrEqual(current.y + current.height - 1);
   // And the slash between CURRENT and MAX is centered over it, the box being symmetric (the user, 2026-11-17).
@@ -164,10 +164,10 @@ test('CWN\'s MELEE and RANGED AC by the box in SHEET.EXE, overlapping no button 
 
   const ac = mine.getByRole('note', { name: 'MELEE AC 13, RANGED AC 15' });
   await expect(ac).toHaveText('MELEE AC13RANGED AC15', { timeout: 15_000 });
-  // Every control in and under the box, CWN's STIM among them (its full name once spilled into HIT POINTS ▾).
+  // Every control in and under the box, CWN's STIM among them (its full name once spilled into HP DETAILS ▾).
   const strip = mine.getByRole('group', { name: 'Vitals' });
   const boxes = [(await ac.boundingBox())!, (await mine.getByRole('button', { name: 'Put on a condition' }).boundingBox())!];
-  for (const name of ['HEAL', 'DAMAGE', 'STIM +1 STRAIN', /^HIT POINTS/] as const) boxes.push((await strip.getByRole('button', { name, exact: typeof name === 'string' }).boundingBox())!);
+  for (const name of ['HEAL', 'DAMAGE', 'STIM +1 STRAIN', /^HP DETAILS/] as const) boxes.push((await strip.getByRole('button', { name, exact: typeof name === 'string' }).boundingBox())!);
   const rest = mine.getByRole('button', { name: /^REST/ });
   if (await rest.count()) boxes.push((await rest.boundingBox())!);
   const overlap = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>

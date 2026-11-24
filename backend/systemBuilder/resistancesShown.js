@@ -19,7 +19,8 @@ const resistancesShown = (definition, data, conditionIds, who) => ({
   means: meaningsOf(definition),
   worked: resistancesOf(definition, data || {}, conditionIds),
   hand: data ? handIn(data[HAND_KEY]) : [],
-  may: { add: !!data, vulnerable: !!data && !who },
+  // Who is asking, a player by name, for the rows of theirs they may take off.
+  may: { add: !!data, vulnerable: !!data && !who, ...(who ? { by: who } : {}) },
 });
 
 module.exports = { resistancesShown };

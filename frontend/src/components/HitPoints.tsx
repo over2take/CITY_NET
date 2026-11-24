@@ -5,6 +5,7 @@ import { useHealthView } from '../hooks/useHealthView';
 import { isCustomSystem } from '../sheets';
 import { useWords, asLabel } from '../sheets/words';
 import { ModelHealthEditor, ModelHealthDescription, NoHealthNotice, monitorBandFor, type SendHealth } from './HealthModelPanels';
+import { TokenResistances } from './TokenResistances';
 import { TokenConditions } from './TokenConditions';
 // Inline SVGs so we can tint them with CSS `color` (currentColor)
 export const PersonSVG = ({ color = 'currentColor', style }: { color?: string; style?: React.CSSProperties }) => (
@@ -210,6 +211,10 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
   const conditions = (
     <TokenConditions location={target} gameSystem={gameSystem} socket={socket} canChange authToken={token || undefined} onChanged={refreshLocations} />
   );
+  // RESISTANCES and VULNERABILITIES (8b3c2b): under CONDITIONS here, under INJURIES under the strip.
+  const resistances = (
+    <TokenResistances locationId={target.id} authToken={token || undefined} socket={socket} conditionsKey={String((target as unknown as { conditions?: string }).conditions ?? '')} />
+  );
   const tempRow = (
     <div>
       <label style={{ fontSize: '0.7rem', display: 'block', marginBottom: '5px' }}>TEMP_{asLabel(hp)}</label>
@@ -240,6 +245,7 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
         </>}
         {injuryMap}
         {!underStrip && conditions}
+        {resistances}
         <ModelHealthEditor key={`${target.id}:${view.model}`} view={view} target={target} send={sendHealth} gm={token !== ''} words={word} underStrip={underStrip} />
         {(view.model === 'locations' || (view.model === 'tracks' && !underStrip)) && (
           <div style={{ borderTop: '1px solid var(--dark-green)', paddingTop: '8px' }}>{tempRow}</div>
@@ -270,6 +276,7 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
 
       {injuryMap}
       {!underStrip && conditions}
+      {resistances}
 
       {!underStrip && <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
         <input type="number" placeholder="0" aria-label="Amount" value={actionAmount || ''} onChange={e => setActionAmount(parseInt(e.target.value) || 0)} style={{ width: '100%', boxSizing: 'border-box' }} />
