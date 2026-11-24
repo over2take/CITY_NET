@@ -33,15 +33,19 @@ describe('the checks', () => {
   it('take a table\'s own conditions with a name, label, icon (drawn or uploaded) and description', () => {
     expect(messages({ ...WIRED, fragged: { name: 'Fragged', short: 'FRAG', icon: `/uploads/condition_icons/${HASH}.png` } })).toEqual([]);
     expect(messages({})).toEqual([]);
+    // Or a drawing on the pad (8b1b), one picture.
+    const drawn = [...Array(15).fill('0000'), '0ff0'];
+    expect(messages({ hacked: { name: 'Hacked', drawn } })).toEqual([]);
+    expect(messages({ hacked: { name: 'Hacked', drawn, icon: 'bolt' } })).toEqual(['condition hacked, drawn: An icon or a drawing, not both']);
   });
 
   it('refuse what isn\'t a set, a standard condition\'s id, and modifiers or rounds that would change the rules', () => {
     expect(messages([])).toEqual(['conditions: Must be a set of conditions']);
     expect(messages({ prone: { name: 'Down' } })).toEqual(['condition prone: A standard condition is already there']);
     expect(messages({ wired: { name: 'Wired', modifiers: [{ target: 'all_rolls', amount: -1 }], ends: 'rounds', rounds: 2 } })).toEqual([
-      'condition wired, modifiers: A built-in game\'s conditions have a name, label, icon and description only',
-      'condition wired, ends: A built-in game\'s conditions have a name, label, icon and description only',
-      'condition wired, rounds: A built-in game\'s conditions have a name, label, icon and description only',
+      'condition wired, modifiers: A built-in game\'s conditions have a name, label, icon or drawing, and description only',
+      'condition wired, ends: A built-in game\'s conditions have a name, label, icon or drawing, and description only',
+      'condition wired, rounds: A built-in game\'s conditions have a name, label, icon or drawing, and description only',
     ]);
   });
 

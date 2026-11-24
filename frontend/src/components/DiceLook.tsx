@@ -1,6 +1,7 @@
 import React from 'react';
 import type { DieSymbol, OwnDie, DieFace } from '../sheets/dice';
-import { Drawing, IconLook } from './IconLook';
+import { IconLook } from './IconLook';
+import { Drawing } from './Drawing';
 
 // How a system's own dice look (6c2b2; approved mockup docs/mockups/builder-dice.html, decision 10): a symbol, a face, and
 // a drawing on a die for the pad's preview. Moved out of DrawPad.tsx in 8b0, so the pad is the pad for anything drawn.

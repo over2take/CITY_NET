@@ -11,6 +11,8 @@ export interface GameCondition {
   name: string;
   short: string;
   icon: string;
+  /** A drawing on the pad (8b1b), drawn instead of the icon. */
+  drawn?: string[];
   description: string;
   ends: 'removed' | 'rounds';
   rounds?: number;

@@ -6,11 +6,11 @@ import {
 } from '../sheets/tableConditions';
 import { useConditionList, CONDITIONS_CHANGED_EVENT } from '../hooks/useConditionList';
 import { ConditionIcon } from './ConditionIcon';
-import { ConditionIconPicker } from './ConditionIconPicker';
+import { PicturePicker, OnAChip } from './PicturePicker';
 
 // The GAME tab's CONDITIONS panel under a built-in game (4e2c2; approved mockup
 // docs/mockups/builder-conditions.html, 2026-10-09, stage 3): the standard set, and the table's own
-// added with a name, icon and description, or removed. No modifiers or rounds, so the game's rules
+// added with a name, icon (or a drawing on the pad, 8b1b) and description, or removed. No modifiers or rounds, so the game's rules
 // don't change. Main admin only, as the server's route is. What it reads and writes is
 // sheets/tableConditions.ts.
 
@@ -61,7 +61,7 @@ export function TableConditionsPanel({ token, system }: { token: string; system:
       <p style={why}>The standard set, plus any the table adds. Reminders only: nothing here changes this game&apos;s numbers.</p>
       {shown.map((c) => (
         <div key={c.id} style={item}>
-          <span style={{ color: 'var(--green)' }}><ConditionIcon icon={c.icon} /></span>
+          <span style={{ color: 'var(--green)' }}><ConditionIcon icon={c.icon} drawn={c.drawn} /></span>
           <span title={c.description}>{c.name.toUpperCase()}</span>
           <span style={{ opacity: 0.5, fontSize: '0.55rem' }}>STANDARD</span>
         </div>
@@ -75,7 +75,7 @@ export function TableConditionsPanel({ token, system }: { token: string; system:
       <ul aria-label="This table's own" style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
         {own.map((c) => (
           <li key={c.id} style={item}>
-            <span style={{ color: 'var(--green)' }}><ConditionIcon icon={c.icon} /></span>
+            <span style={{ color: 'var(--green)' }}><ConditionIcon icon={c.icon} drawn={c.drawn} /></span>
             <span title={c.description}>{c.name.toUpperCase()}</span>
             {removing === c.id
               ? <span style={{ display: 'flex', gap: 4 }}>
@@ -91,7 +91,9 @@ export function TableConditionsPanel({ token, system }: { token: string; system:
         ? <div role="group" aria-label="A condition of this table's own" style={{ display: 'flex', flexDirection: 'column', gap: 6, border: '1px solid var(--dark-green)', padding: 6 }}>
             <input type="text" aria-label="Name" placeholder="Name" maxLength={LIMITS.name} value={draft.name} style={input}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-            <ConditionIconPicker value={draft.icon} onPick={(icon) => setDraft({ ...draft, icon })} api={api} name={draft.name || 'the new condition'} size={24} />
+            <PicturePicker icon={draft.icon} drawn={draft.drawn} api={api} name={draft.name || 'the new condition'} size={24}
+              onIcon={(icon) => setDraft({ ...draft, icon, drawn: undefined })} onDrawn={(drawn) => setDraft({ ...draft, drawn })}
+              preview={(rows) => <OnAChip drawn={rows} short={(draft.name.trim().split(/\s+/)[0] || 'NEW').toUpperCase().slice(0, 8)} />} />
             <textarea aria-label="Description" placeholder="What it means at the table" rows={2} maxLength={LIMITS.description} value={draft.description}
               style={{ ...input, resize: 'vertical' }} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
             <div style={{ display: 'flex', gap: 6 }}>

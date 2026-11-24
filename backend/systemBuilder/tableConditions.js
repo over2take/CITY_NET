@@ -1,7 +1,7 @@
 // A built-in game's own conditions (4e2c1; approved mockup docs/mockups/builder-conditions.html,
 // 2026-10-09, stage 3): the table adds conditions of its own to CWN, Cyberpunk RED, Shadowrun or
 // Generic from the GAME tab, beside the standard set. Names, icons and descriptions only - no
-// modifiers and no rounds - so a built-in game's rules don't change. A custom system's conditions
+// modifiers and no rounds - so a built-in game's rules don't change. A drawing on the pad as its picture too (8b1b). A custom system's conditions
 // are its own definition's, edited in the builder.
 //
 //   global_settings 'table_conditions:cities_without_number' =
@@ -14,7 +14,7 @@ const { STANDARD, checkConditions } = require('./conditions');
 
 const PREFIX = 'table_conditions:';
 /** What a table's own condition may say: no modifiers or rounds, which would change the game's rules. */
-const KEYS = new Set(['name', 'short', 'icon', 'description']);
+const KEYS = new Set(['name', 'short', 'icon', 'drawn', 'description']);
 const STANDARD_IDS = new Set(STANDARD.map((c) => c.id));
 
 const own = new Map();
@@ -45,7 +45,7 @@ const checkTableConditions = (entries) => {
     if (STANDARD_IDS.has(id)) { problems.push({ where: `condition ${id}`, message: 'A standard condition is already there' }); continue; }
     if (!isPlainObject(c)) continue;
     for (const key of Object.keys(c)) {
-      if (!KEYS.has(key)) problems.push({ where: `condition ${id}, ${key}`, message: 'A built-in game\'s conditions have a name, label, icon and description only' });
+      if (!KEYS.has(key)) problems.push({ where: `condition ${id}, ${key}`, message: 'A built-in game\'s conditions have a name, label, icon or drawing, and description only' });
     }
   }
   checkConditions(entries, new Set(), problems);

@@ -1,4 +1,4 @@
-import { CONDITION_ICONS, isDrawnIcon, isUploadedIcon } from '../sheets/conditionIcons';
+import { DRAWN_ICONS, isDrawnIcon, isUploadedIcon } from '../sheets/conditionIcons';
 import type { ThrowFace, ThrowSymbol } from './trayThrow';
 
 // What is printed on a die's face in the tray (6c4b2b; mockup builder-dice, decision 10): its words,
@@ -63,7 +63,7 @@ export const paintLabel = (canvas: HTMLCanvasElement, parts: LabelPart[], color:
       img.onload = () => { g.drawImage(img, x0 + w * 0.08, SIZE / 2 - w * 0.42, w * 0.84, w * 0.84); loaded?.(); };
       img.src = part.icon;
     } else if (typeof Path2D !== 'undefined') {
-      const paths = CONDITION_ICONS[isDrawnIcon(part.icon) ? part.icon : 'target'];
+      const paths: readonly string[] = DRAWN_ICONS[isDrawnIcon(part.icon) ? part.icon : 'target'];
       g.save();
       g.translate(x0 + w * 0.08, SIZE / 2 - w * 0.42);
       g.scale((w * 0.84) / 24, (w * 0.84) / 24);

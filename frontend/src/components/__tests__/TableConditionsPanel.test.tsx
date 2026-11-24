@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
-import { render, screen, cleanup, within } from '@testing-library/react';
+import { fireEvent, render, screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createRequire } from 'module';
 
@@ -102,6 +102,30 @@ describe('the GAME tab\'s conditions', () => {
     expect(ownNames()).toEqual(['WIRED', 'HARD WIRED']);
     expect(listAsked).toBe(2);
     expect(screen.queryByRole('group', { name: 'A condition of this table\'s own' })).toBeNull();
+  });
+
+  it('add one drawn on the pad (8b1b): sent with its drawing in place of an icon, drawn in the list', async () => {
+    await open();
+    await userEvent.click(screen.getByRole('button', { name: '+ CONDITION' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Hacked');
+    await userEvent.click(screen.getByRole('button', { name: 'DRAW' }));
+    expect(screen.getByText('ON A CHIP · ON THE MAP')).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole('group', { name: 'Drawing of Hacked' })).getByRole('button', { name: 'Square 1, 1' }), { detail: 0 });
+    await userEvent.click(screen.getByRole('button', { name: 'ADD' }));
+    expect(saves[0].body.conditions.hacked).toEqual({ name: 'Hacked', drawn: ['8000', ...Array(15).fill('0000')] });
+    expect(saves[0].body.conditions.wired).toEqual({ name: 'Wired', icon: 'bolt', description: 'Jacked in.' });
+    const row = (await screen.findByText('HACKED')).closest('li')!;
+    expect(row.querySelectorAll('rect')).toHaveLength(1);
+  });
+
+  it('a drawing given up for an icon picked after it', async () => {
+    await open();
+    await userEvent.click(screen.getByRole('button', { name: '+ CONDITION' }));
+    await userEvent.type(screen.getByRole('textbox', { name: 'Name' }), 'Marked');
+    await userEvent.click(screen.getByRole('button', { name: 'DRAW' }));
+    await userEvent.click(screen.getByRole('radio', { name: 'star' }));
+    await userEvent.click(screen.getByRole('button', { name: 'ADD' }));
+    expect(saves[0].body.conditions.marked).toEqual({ name: 'Marked', icon: 'star' });
   });
 
   it('add one with an uploaded icon', async () => {

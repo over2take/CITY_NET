@@ -5,7 +5,7 @@ import { ConditionIcon } from './ConditionIcon';
 
 // A condition's icon, picked: the 27 drawn ones, which follow the theme, or one uploaded (a small
 // PNG, WebP or SVG kept in its own colors). The builder's CONDITIONS page and the GAME tab's
-// CONDITIONS panel (4e2c2) both pick with it.
+// CONDITIONS panel (4e2c2) both pick with it, and DAMAGE TYPES (8b1b) with damage's five more.
 
 interface Props {
   value: string;
@@ -16,13 +16,15 @@ interface Props {
   name: string;
   /** Each icon's width and height, in pixels. */
   size?: number;
+  /** The drawn icons offered: a condition's 27 unless said (DAMAGE TYPES offers its 32). */
+  icons?: readonly string[];
 }
 
 const btn: React.CSSProperties = { fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, padding: '4px 9px' };
 const why: React.CSSProperties = { fontSize: 11, lineHeight: 1.45, opacity: 0.85, margin: 0 };
 const row: React.CSSProperties = { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' };
 
-export function ConditionIconPicker({ value, onPick, api, name, size = 30 }: Props) {
+export function ConditionIconPicker({ value, onPick, api, name, size = 30, icons = CONDITION_ICON_IDS }: Props) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -40,7 +42,7 @@ export function ConditionIconPicker({ value, onPick, api, name, size = 30 }: Pro
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
       <div role="radiogroup" aria-label="Icon" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-        {CONDITION_ICON_IDS.map((id) => (
+        {icons.map((id) => (
           <button key={id} type="button" role="radio" aria-checked={value === id} aria-label={id} onClick={() => onPick(id)}
             style={{ width: size, height: size, display: 'grid', placeItems: 'center', cursor: 'pointer', color: 'var(--green)', padding: 0,
               border: `1px solid ${value === id ? 'var(--green)' : 'var(--dark-green)'}`, background: value === id ? 'color-mix(in srgb, var(--green) 15%, transparent)' : 'none' }}>

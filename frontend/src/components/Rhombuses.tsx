@@ -73,7 +73,7 @@ function ConditionIcons({ raw, gameSystem, height, isBattleMap }: { raw: string 
             width: '16px', height: '16px', display: 'grid', placeItems: 'center', boxSizing: 'border-box',
             border: '1px solid var(--warning)', color: 'var(--warning)', background: 'var(--black)',
           }}>
-            <ConditionIcon icon={c.icon} size={11} title={c.name} />
+            <ConditionIcon icon={c.icon} drawn={c.drawn} size={11} title={c.name} />
           </span>
         ))}
         {more > 0 && (

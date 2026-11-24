@@ -32,6 +32,8 @@ export interface Condition {
   name: string;
   short: string;
   icon: string;
+  /** A drawing on the 16 x 16 pad (8b1b), shown instead of the icon wherever it is drawn. */
+  drawn?: string[];
   description: string;
   ends: Ends;
   rounds?: number;
@@ -48,7 +50,7 @@ export interface Condition {
 export type Listed = Condition & { on: boolean };
 /** What the page changes on one condition. */
 /** `only_with`: the house rule it waits on (4j), or null for none. */
-export type ConditionPatch = Partial<Pick<Condition, 'name' | 'short' | 'icon' | 'description' | 'ends' | 'rounds' | 'at' | 'modifiers' | 'applied'>> & { on?: boolean; only_with?: string | null; each_turn?: EachTurn[] };
+export type ConditionPatch = Partial<Pick<Condition, 'name' | 'short' | 'icon' | 'drawn' | 'description' | 'ends' | 'rounds' | 'at' | 'modifiers' | 'applied'>> & { on?: boolean; only_with?: string | null; each_turn?: EachTurn[] };
 
 /** The standard set every system starts with, as the server has it. */
 export const STANDARD: Omit<Condition, 'ends' | 'modifiers' | 'standard'>[] = [
@@ -67,6 +69,8 @@ const standardOf = (id: string) => STANDARD.find((s) => s.id === id);
 
 type Stored = Record<string, Record<string, unknown>>;
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+/** A drawing as the server takes it (drawings.js): 16 rows of 4 hex digits. */
+const isDrawing = (v: unknown): v is string[] => Array.isArray(v) && v.length === 16 && v.every((r) => typeof r === 'string' && /^[0-9a-f]{4}$/.test(r));
 const storedOf = (def: Definition): Stored => (isObject(def.conditions)
   ? Object.fromEntries(Object.entries(def.conditions).filter(([, c]) => isObject(c))) as Stored : {});
 
@@ -92,6 +96,7 @@ const whole = (base: { id: string; name: string; short?: string; icon?: string; 
     name: text(c.name)?.trim() || base.name,
     short: text(c.short)?.trim().toUpperCase() || base.short || shortFrom(text(c.name) || base.name),
     icon: text(c.icon) || base.icon || 'target',
+    ...(isDrawing(c.drawn) ? { drawn: c.drawn } : {}),
     description: text(c.description) ?? base.description ?? '',
     ends,
     ...(ends === 'rounds' && Number.isInteger(c.rounds) ? { rounds: c.rounds as number } : {}),
@@ -154,6 +159,9 @@ export const withCondition = (def: Definition, id: string, patch: ConditionPatch
   const stored = storedOf(def);
   const base = standardOf(id);
   const entry: Record<string, unknown> = { ...(stored[id] ?? {}), ...patch };
+  // One picture (8b1b): an icon picked takes the drawing off, a drawing the icon.
+  if (patch.icon !== undefined) delete entry.drawn;
+  if (patch.drawn !== undefined) delete entry.icon;
   if (entry.ends === 'rounds') {
     if (!Number.isInteger(entry.rounds)) entry.rounds = 1;
     delete entry.at;
