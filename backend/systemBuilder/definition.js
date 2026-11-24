@@ -25,6 +25,7 @@
 //     spend:   { buys: [...], wait },                    // what XP buys, SPEND XP's price list (spendXp.js)
 //     improve: { stats, marked, at, roll, over, gain, most }, // IMPROVE BY USE (improveByUse.js)
 //     conditions: { blinded: { on: false }, glitching: { name: 'Glitching', ... } }, // (conditions.js)
+//     damage: { types: { fire: { name: 'Flame' }, sonic: { name: 'Sonic' } }, resist: { means } }, // (damageTypes.js, 8b1a)
 //     rests: { long_rest: { counts_as: ['short_rest'], refills: [...] } },          // (rests.js)
 //     house_rules: [ { id: 'magic', name: 'MAGIC', starts: false } ],  // what waits on one: houseRules.js
 //     choices: [ { id: 'classes', one, many, options: [...] } ],  // lists to pick from and their features (choices.js)
@@ -56,6 +57,7 @@ const { checkBuildings } = require('./buildings');
 const { checkCurrencies } = require('./currencies');
 const { checkBank } = require('./bank');
 const { checkConditions } = require('./conditions');
+const { checkDamage } = require('./damageTypes');
 const { checkRests, restIdsOf } = require('./rests');
 const { checkHouseRules } = require('./houseRules');
 const { checkGraph } = require('./graph');
@@ -83,7 +85,7 @@ const LIMITS = {
   word: 40,
 };
 
-const SECTIONS = new Set(['improve', 'spend', 'ranks', 'levels', 'format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'rests', 'house_rules', 'graph', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'items', 'resting', 'creation']);
+const SECTIONS = new Set(['improve', 'spend', 'ranks', 'levels', 'format', 'name', 'description', 'author', 'license', 'words', 'parts', 'buildings', 'currencies', 'bank', 'stats', 'samples', 'lookups', 'derived', 'sheet', 'npc', 'core', 'conditions', 'damage', 'rests', 'house_rules', 'graph', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'items', 'resting', 'creation']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const has = (obj, key) => Object.prototype.hasOwnProperty.call(obj, key);
@@ -206,6 +208,7 @@ const checkDefinition = (definition) => {
       const read = rollAmount(text, {}, { known: (n) => names.has(n), refused: (n) => `@${n} isn't one of this system's names` }, () => 0);
       return 'error' in read ? read.error : null;
     });
+  checkDamage(definition.damage, problems);
   checkRests(definition, problems);
   checkHouseRules(definition, problems);
   checkGraph(definition, problems);

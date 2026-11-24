@@ -7,6 +7,7 @@
 //     images/symbols/hit.png           a symbol's icon, named by the symbol's id
 //     images/conditions/glitching.png  a condition's
 //     images/currencies/scrip.svg      a currency's
+//     images/damage_types/sonic.png    a damage type's (8b1a)
 //
 // An uploaded icon's address is the SHA-256 of its bytes (routes/systems.js iconUpload), so the
 // file inside needs no rewriting: installing stores each image under its own hash, and the
@@ -15,8 +16,9 @@
 // claims for it (fflate stops there), so a zip can't fill the disk or the memory.
 //
 // Without the images (the GM's choice at EXPORT) the file leaves their addresses out instead, so
-// the system falls back cleanly on another server: a symbol shows its mark, a condition a drawn
-// icon, a currency none. Drawn symbols are data in the definition and travel either way.
+// the system falls back cleanly on another server: a symbol shows its mark, a condition or a damage
+// type a drawn icon, a currency none. Drawn symbols and pad drawings are data in the definition and
+// travel either way.
 
 const fs = require('fs');
 const path = require('path');
@@ -25,6 +27,7 @@ const { zipSync, unzipSync, strToU8, strFromU8 } = require('fflate');
 const citysys = require('./citysys');
 const { UPLOADED_ICON: CONDITION_ICON, STANDARD } = require('./conditions');
 const { UPLOADED_ICON: CURRENCY_ICON } = require('./currencies');
+const { STANDARD: DAMAGE_STANDARD } = require('./damageTypes');
 
 /** Where /uploads keeps its files: routes/systems.js iconUpload writes here. */
 const UPLOADS = path.join(__dirname, '../uploads');
@@ -34,6 +37,8 @@ const KINDS = {
   symbols: { folder: 'condition_icons', address: CONDITION_ICON },
   conditions: { folder: 'condition_icons', address: CONDITION_ICON },
   currencies: { folder: 'currency_icons', address: CURRENCY_ICON },
+  // A damage type's upload goes where a condition's does (8b1a): the same picker, the same route.
+  damage_types: { folder: 'condition_icons', address: CONDITION_ICON },
 };
 
 const LIMITS = {
@@ -41,11 +46,11 @@ const LIMITS = {
   zipBytes: 16 * 1024 * 1024,
   /** One icon, as an upload is capped (middleware/uploadConstraints.js). */
   imageBytes: 256 * 1024,
-  /** Twelve symbols, sixty conditions and the currencies, with room. */
-  images: 100,
+  /** Twelve symbols, sixty conditions, forty damage types and the currencies, with room. */
+  images: 150,
 };
 
-const ENTRY = /^images\/(symbols|conditions|currencies)\/[^/]+\.(png|webp|svg)$/;
+const ENTRY = /^images\/(symbols|conditions|currencies|damage_types)\/[^/]+\.(png|webp|svg)$/;
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /** Where a symbol shows on the system's dice: "Good faces 2, 3; Bad face 4". */
@@ -77,6 +82,10 @@ const uploadsIn = (definition) => {
   for (const c of Array.isArray(definition.currencies) ? definition.currencies : []) {
     if (isPlainObject(c)) add('currencies', c.id, c.name || c.id, c.icon);
   }
+  const damage = isPlainObject(definition.damage) && isPlainObject(definition.damage.types) ? definition.damage.types : {};
+  for (const [id, t] of Object.entries(damage)) {
+    if (isPlainObject(t)) add('damage_types', id, t.name || DAMAGE_STANDARD.find((b) => b.id === id)?.name || id, t.icon);
+  }
   return out;
 };
 
@@ -96,6 +105,10 @@ const withoutUploads = (definition, drop = null) => {
   if (Array.isArray(out.symbols)) out.symbols = out.symbols.map((s) => (s === strip(s) ? s : marked(strip(s))));
   if (Array.isArray(out.currencies)) out.currencies = out.currencies.map(strip);
   if (isPlainObject(out.conditions)) out.conditions = Object.fromEntries(Object.entries(out.conditions).map(([id, c]) => [id, strip(c)]));
+  // A damage type without its upload shows its starter icon, or the drawn target (damageTypes.js damageTypesOf).
+  if (isPlainObject(out.damage) && isPlainObject(out.damage.types)) {
+    out.damage = { ...out.damage, types: Object.fromEntries(Object.entries(out.damage.types).map(([id, t]) => [id, strip(t)])) };
+  }
   return out;
 };
 
