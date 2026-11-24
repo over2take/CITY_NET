@@ -68,6 +68,8 @@ import { VehicleBadgeButton } from './components/VehicleBadgeButton';
 import { useVehicleRoster } from './hooks/useVehicleRoster';
 import { useEnemyVehicles } from './hooks/useEnemyVehicles';
 import { hasVehicles } from './sheets/vehicleSystems';
+import { viewCenterOf } from './utils/viewCenter';
+import { placeNpc } from './utils/placeNpc';
 import { NpcLibrary } from './components/NpcLibrary';
 import { BuilderScreen } from './components/BuilderScreen';
 import { AccelerationNotice } from './components/AccelerationNotice';
@@ -2480,6 +2482,8 @@ function App() {
                 onClose={() => setIsNpcLibraryOpen(false)}
                 onOpenNpc={(npc) => setOpenNpcSheet(npc)}
                 attachLocationId={selectedLocation && ['enemy_rhombus', 'friendly_rhombus'].includes(selectedLocation.shape) ? selectedLocation.id : null}
+                onPlace={(npc, as) => placeNpc({ fetch: (url, init) => fetch(url, init), authToken: token, refresh: fetchLocations },
+                  npc, as, viewCenterOf(controlsRef.current), activeBattleMapData)}
               />
             )}
             {builder && token && isPrimaryAdmin && (
