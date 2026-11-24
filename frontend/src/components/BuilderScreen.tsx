@@ -17,13 +17,14 @@ const GraphView = React.lazy(() => import('./GraphView').then((m) => ({ default:
 import { SheetPage } from './SheetPage';
 import { NpcsPage } from './NpcsPage';
 import { ConditionsPage } from './ConditionsPage';
+import { DamageTypesPage } from './DamageTypesPage';
 import { RestsPage } from './RestsPage';
 import { NewCharacterPage } from './NewCharacterPage';
 import { LevelsPage } from './LevelsPage';
 import { HouseRulesPage } from './HouseRulesPage';
 import { ChoicesPage } from './ChoicesPage';
 import { ItemsPage } from './ItemsPage';
-import { CONDITION_ICONS } from '../sheets/conditionIcons';
+import { CONDITION_ICONS, DAMAGE_ICONS } from '../sheets/conditionIcons';
 import { TryItPage } from './TryItPage';
 import { PublishPreviewPage } from './PublishPreviewPage';
 import { HelpPage } from './HelpPage';
@@ -152,6 +153,7 @@ const Icons: Record<BuilderPage | 'builder' | 'systems' | 'help' | 'save' | 'pub
   levels: icon('M3 17l6-6 4 4 8-8', 'M15 7h6v6'),
   npcs: icon('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8z', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'),
   conditions: icon(...CONDITION_ICONS.skull),
+  damage: icon(...DAMAGE_ICONS.impact),
   rests: icon('M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z'),
   house_rules: icon('M9 11l3 3L22 4', 'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'),
   try: icon('M5 3l14 9-14 9z'),
@@ -597,6 +599,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
             {ready && page === 'sheet' && <SheetPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'npcs' && <NpcsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'conditions' && <ConditionsPage definition={definition!} edit={edit} api={looking ? undefined : api} />}
+            {ready && page === 'damage' && <DamageTypesPage definition={definition!} edit={edit} api={looking ? undefined : api} />}
             {ready && page === 'rests' && <RestsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'house_rules' && <HouseRulesPage definition={definition!} edit={edit} onGoTo={(p) => { setPage(p); setStatus(null); }} />}
             {ready && page === 'try' && <TryItPage definition={definition!} edit={looking ? undefined : edit} api={api} />}

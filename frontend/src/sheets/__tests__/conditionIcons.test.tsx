@@ -2,7 +2,7 @@ import React from 'react';
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
 import { createRequire } from 'module';
-import { CONDITION_ICONS, CONDITION_ICON_IDS, isUploadedIcon, isDrawnIcon } from '../conditionIcons';
+import { CONDITION_ICONS, CONDITION_ICON_IDS, DAMAGE_ICONS, DAMAGE_ICON_IDS, DRAWN_ICONS, isUploadedIcon, isDrawnIcon } from '../conditionIcons';
 import { ConditionIcon } from '../../components/ConditionIcon';
 
 /**
@@ -12,6 +12,7 @@ import { ConditionIcon } from '../../components/ConditionIcon';
  */
 
 const { ICONS } = createRequire(import.meta.url)('../../../../backend/systemBuilder/conditions.js');
+const { ICONS: DAMAGE_SERVER_ICONS } = createRequire(import.meta.url)('../../../../backend/systemBuilder/damageTypes.js');
 afterEach(cleanup);
 
 /** Feather's own path data for the four icons the first sketches followed (MIT, not ours to copy unmarked). */
@@ -23,14 +24,18 @@ const FEATHER = [
 ];
 
 describe('the drawn icons', () => {
-  it('are the server\'s 27, in its order', () => {
+  it('are the server\'s 27, in its order; a damage type\'s, those and damage\'s five (8b1b)', () => {
     expect(CONDITION_ICON_IDS).toEqual(ICONS);
+    expect(DAMAGE_ICON_IDS).toEqual(DAMAGE_SERVER_ICONS);
+    expect(Object.keys(DAMAGE_ICONS)).toEqual(['blade', 'point', 'impact', 'wave', 'ray']);
+    // A condition is never offered damage's.
+    for (const id of Object.keys(DAMAGE_ICONS)) expect(CONDITION_ICON_IDS as string[]).not.toContain(id);
   });
 
   it('are path data alone, each a drawing of its own', () => {
     const seen = new Set<string>();
-    for (const id of CONDITION_ICON_IDS) {
-      const paths = CONDITION_ICONS[id];
+    for (const id of DAMAGE_ICON_IDS) {
+      const paths: readonly string[] = DRAWN_ICONS[id];
       expect(paths.length, id).toBeGreaterThan(0);
       for (const d of paths) expect(d, id).toMatch(/^M[-\d. ]/);
       const whole = paths.join(' ');
@@ -40,17 +45,17 @@ describe('the drawn icons', () => {
   });
 
   it('copy none of Feather\'s paths', () => {
-    const all = CONDITION_ICON_IDS.flatMap((id) => [...CONDITION_ICONS[id]]);
+    const all = DAMAGE_ICON_IDS.flatMap((id) => [...DRAWN_ICONS[id]]);
     for (const f of FEATHER) expect(all.some((d) => d.replace(/[A-Za-z,]/g, ' ').trim() === f.replace(/[A-Za-z,]/g, ' ').trim()), f).toBe(false);
   });
 
   it('draw in the theme\'s color only: stroked in currentColor, never filled', () => {
-    for (const id of CONDITION_ICON_IDS) {
+    for (const id of DAMAGE_ICON_IDS) {
       const { container } = render(<ConditionIcon icon={id} />);
       const svg = container.querySelector('svg')!;
       expect(svg.getAttribute('stroke'), id).toBe('currentColor');
       expect(svg.getAttribute('fill'), id).toBe('none');
-      expect(svg.querySelectorAll('path').length, id).toBe(CONDITION_ICONS[id].length);
+      expect(svg.querySelectorAll('path').length, id).toBe(DRAWN_ICONS[id].length);
       expect(container.innerHTML, id).not.toMatch(/#[0-9a-f]{3,6}|rgb\(/i);
       cleanup();
     }
@@ -80,6 +85,7 @@ describe('an icon by its name', () => {
     expect(isUploadedIcon(UPLOADED)).toBe(true);
     expect(isUploadedIcon(`/uploads/condition_icons/../${'b'.repeat(64)}.svg`)).toBe(false);
     expect(isDrawnIcon('snow')).toBe(true);
+    expect(isDrawnIcon('blade')).toBe(true);
     expect(isDrawnIcon('toString')).toBe(false);
   });
 });

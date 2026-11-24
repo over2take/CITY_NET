@@ -168,6 +168,7 @@ panel), so a control that looks fine but does nothing is caught for all of them.
 | Option | Variants | Server tests | Browser test | Status |
 |---|---|---|---|---|
 | Conditions | standard renamed or off, the system's own, icons (uploaded icons via `builder-share`) | `conditions`, `table_conditions`, `token_conditions` | | **GAP**: never put on a token at the table |
+| Damage types | starter ones renamed or off, the system's own, a drawn icon, an upload or a pad drawing, what RESIST, IMMUNE and VULNERABLE mean (8b1) | `damage_types` | `builder-damage-types`, `builder-clicks` | **BUILDER ONLY**: nothing at the table reads them until a hit carries its type (8b2) and resistances show on the HEALTH page (8b4) |
 | A condition's modifier | on a stat, a formula, every roll | `conditions`, `table_rolls` | | **GAP** |
 | A condition's end | when removed, after rounds, at a rest | `condition_rounds`, `resting` | | **GAP** |
 | Rests | a refill up to a value | `rests`, `resting`, `call_rest` | `player-journey` (LONG REST: Resolve up to Grit) | **AT THE TABLE** |

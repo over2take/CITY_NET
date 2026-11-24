@@ -51,12 +51,36 @@ export const CONDITION_ICONS = {
   pack: [rect(5, 7, 14, 15, 3), 'M9 7V5a3 3 0 0 1 6 0v2', 'M5 12h14', rect(8, 15, 8, 4, 1)],
 } as const satisfies Record<string, readonly string[]>;
 
-export type ConditionIconId = keyof typeof CONDITION_ICONS;
+/**
+ * Five drawn for damage types (8b1b; docs/mockups/damage-pipeline.html section 6, approved by the user 2026-11-23): a sword,
+ * a fletched arrow, a burst, sound bars and a ringed sun. Offered for damage types only, as the server takes them there
+ * (backend/systemBuilder/damageTypes.js DAMAGE_ICONS); a condition or a die's symbol keeps to the 27.
+ */
+export const DAMAGE_ICONS = {
+  // A sword, point up and to the right, its crossguard and grip.
+  blade: ['M21 3l-1.5 5.5-8 8-4-4 8-8z', 'M5.5 11.5l7 7', 'M9 15l-5 5'],
+  // An arrow, its head up and to the right, fletched at the tail.
+  point: ['M5 19L20 4', 'M20 4l-6 1.5', 'M20 4l-1.5 6', 'M5 19l-1-4', 'M5 19l4 1', 'M8 16l-1-4', 'M8 16l4 1'],
+  // A burst: a center and eight rays.
+  impact: [circle(12, 12, 3), 'M12 2v4', 'M12 18v4', 'M2 12h4', 'M18 12h4', 'M5 5l3 3', 'M16 16l3 3', 'M19 5l-3 3', 'M8 16l-3 3'],
+  // Sound bars, tallest in the middle.
+  wave: ['M3 12h2', 'M8 8v8', 'M12 5v14', 'M16 8v8', 'M19 12h2'],
+  // A ringed sun: a circle and four short rays.
+  ray: [circle(12, 12, 4), 'M12 2v3', 'M12 19v3', 'M2 12h3', 'M19 12h3'],
+} as const satisfies Record<string, readonly string[]>;
 
-/** Every drawn icon's id, in the server's order. */
+/** Every drawing, for drawing an icon wherever it is used: the conditions' 27 and damage's 5. */
+export const DRAWN_ICONS = { ...CONDITION_ICONS, ...DAMAGE_ICONS } as const;
+
+export type ConditionIconId = keyof typeof CONDITION_ICONS;
+export type DrawnIconId = keyof typeof DRAWN_ICONS;
+
+/** Every drawn icon a condition or a die's symbol may have, in the server's order. */
 export const CONDITION_ICON_IDS = Object.keys(CONDITION_ICONS) as ConditionIconId[];
+/** Every drawn icon a damage type may have, in the server's order: the 27, then damage's 5. */
+export const DAMAGE_ICON_IDS = Object.keys(DRAWN_ICONS) as DrawnIconId[];
 
 /** An uploaded condition icon's address (POST /api/systems/condition-icons). */
 const UPLOADED = /^\/uploads\/condition_icons\/[0-9a-f]{64}\.(png|webp|svg)$/;
 export const isUploadedIcon = (icon: unknown): icon is string => typeof icon === 'string' && UPLOADED.test(icon);
-export const isDrawnIcon = (icon: unknown): icon is ConditionIconId => typeof icon === 'string' && Object.prototype.hasOwnProperty.call(CONDITION_ICONS, icon);
+export const isDrawnIcon = (icon: unknown): icon is DrawnIconId => typeof icon === 'string' && Object.prototype.hasOwnProperty.call(DRAWN_ICONS, icon);

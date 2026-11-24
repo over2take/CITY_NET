@@ -98,6 +98,10 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
     'Each has an icon, a description, how it ends (when removed, after rounds, or at a rest) and modifiers on a stat, a formula or every roll.',
     'A modifier on every roll changes each of the system\'s own rolls made by a character with the condition on their token, named in the log: 4 5 = 9 + 3 - 1 (HURT). TEST ROLL on the ROLLS tab has a switch for each, to see a roll under it.',
   ] },
+  { page: 'damage', title: 'DAMAGE TYPES', body: [
+    'What kind of hurt a hit is: FIRE, COLD, SLASHING and the rest of the starter set, renamed or switched off, and your own, up to forty. PHYSICAL, ENERGY, KINETIC and EMP start off, for tables that use them.',
+    'A hit says its type by name, "2d6 FIRE DMG", so two that are on can\'t share one. Each has an icon (drawn, uploaded or drawn on the pad) and words; at the top, what RESIST, IMMUNE and VULNERABLE mean in your game.',
+  ] },
   { page: 'rests', title: 'RESTS', body: [
     'The moments a game refills things: a short rest, a long rest, the end of a scene or a session, and your own. Each says what it refills, in order, and a rest can count as another.',
     'The GM calls one from the GAME tab for everyone or chosen characters, with a preview first.',
@@ -375,6 +379,11 @@ export const HINTS = {
   'npcs.defense': 'The NPC token\'s armor, worked out the same way as HP. Blank: the token keeps its own.',
   'npcs.level': 'The level to try the tier at, what @level reads. In play the GM picks the level in ID.EXE, beside GENERATE_SHEET.',
   // CONDITIONS
+  'damage.means': 'What the word means in your game, in a line: shown beside a character\'s resistances on the HEALTH page. Left blank, the app\'s words.',
+  'damage.name': 'What a hit says: "2d6 FIRE DMG". Letters, digits, spaces, a hyphen or an apostrophe; no two types that are on may share a name.',
+  'damage.icon': 'Shown on the HEALTH page beside a resistance: one of the drawn icons, one you upload, or one you DRAW on the 16 x 16 pad.',
+  'damage.description': 'What it is, in a line, shown with the type wherever it is named.',
+  'damage.readAs': 'How a line of gear or a file names it: the dice, the type, and DMG if you like, in any case.',
   'conditions.chip': 'The short word on the condition\'s chip in a token\'s HEALTH folder, up to 8 letters.',
   'conditions.icon': 'Drawn on the chip beside its word: one of the drawn icons, or one you upload.',
   'conditions.description': 'What it means at the table, shown to everyone who opens its chip, on the sheet or in the token\'s HEALTH folder.',
