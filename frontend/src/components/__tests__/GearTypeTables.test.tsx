@@ -641,3 +641,90 @@ describe('PLAYERS CHANGE GEAR off, for a player (G6b)', () => {
     expect(at(0).queryByRole('note', { name: 'Item 1 columns' })).toBeNull();
   });
 });
+
+describe('a DAMAGE as rows under ✎ (8b2c)', () => {
+  const TYPED: ItemsShown = {
+    ...ITEMS,
+    types: [{ ...ITEMS.types![0], columns: ITEMS.types![0].columns.map((c) => (c.id === 'damage' ? { ...c, usual: 'COLD' } : c)) }, ITEMS.types![1]],
+    damage_types: [{ id: 'fire', name: 'Fire', icon: 'flame' }, { id: 'cold', name: 'Cold', icon: 'snow' }, { id: 'slashing', name: 'Slashing', icon: 'blade' }],
+  };
+  const reads: string[] = [];
+  const onRead = async (text: string): Promise<GearDiceRead> => { reads.push(text); return { ok: true, low: 3, high: 16, used: [], names: [] }; };
+  const open = (i: number) => userEvent.click(table('WEAPONS').getByRole('button', { name: named(i) }));
+  const parts = (i: number) => within(table('WEAPONS').getByRole('group', { name: `Item ${i} DAMAGE parts` }));
+  const damageOf = (last: () => Record<string, unknown>[], i: number) => (last()[i] as { values?: { damage?: string } }).values?.damage;
+
+  it('the item\'s faint in the first part until typed over; a TYPE picked and dice typed, kept as the text ROLL reads', async () => {
+    const last = show([line('Pistol')], { items: TYPED, onReadGearDice: onRead });
+    await open(1);
+    const box = parts(1).getByRole('textbox', { name: 'Item 1 DAMAGE' }) as HTMLInputElement;
+    expect([box.value, box.placeholder]).toEqual(['', '2d6']);
+    // Its words read the item's, as ROLL would.
+    await waitFor(() => expect(reads).toContain('2d6'));
+    fireEvent.change(parts(1).getByRole('combobox', { name: 'Item 1 DAMAGE type' }), { target: { value: 'fire' } });
+    fireEvent.change(box, { target: { value: '1d8' } });
+    expect(damageOf(last, 0)).toBe('1d8 FIRE DMG');
+  });
+
+  it('+ PART, its own eˣ, ×; IN ALL under several, read on this character', async () => {
+    const last = show([line('Torch', { type: 'weapons', values: { damage: '2d6 FIRE DMG' } })], { items: TYPED, onReadGearDice: onRead });
+    await open(1);
+    await userEvent.click(parts(1).getByRole('button', { name: 'Add a part to Item 1 DAMAGE' }));
+    // A new part takes the column's MOST LINES ARE.
+    expect((parts(1).getByRole('combobox', { name: 'Item 1 DAMAGE part 2 type' }) as HTMLSelectElement).value).toBe('cold');
+    fireEvent.change(parts(1).getByRole('textbox', { name: 'Item 1 DAMAGE part 2' }), { target: { value: '1d4' } });
+    expect(damageOf(last, 0)).toBe('2d6 FIRE + 1d4 COLD DMG');
+    expect(parts(1).getByRole('button', { name: 'Help writing Item 1 DAMAGE part 2' })).toBeTruthy();
+    // Its words under the row of its box and TYPE, not beside the TYPE (8b2c: they wrapped there).
+    const picker = parts(1).getByRole('combobox', { name: 'Item 1 DAMAGE part 2 type' });
+    const words = parts(1).getByRole('status', { name: 'Item 1 DAMAGE part 2 on this character' });
+    const boxRow = picker.parentElement!.parentElement!;
+    expect(boxRow.contains(parts(1).getByRole('textbox', { name: 'Item 1 DAMAGE part 2' }))).toBe(true);
+    expect(boxRow.contains(words)).toBe(false);
+    expect(boxRow.parentElement!.contains(words)).toBe(true);
+    expect((await parts(1).findByRole('status', { name: 'Item 1 DAMAGE in all' })).textContent).toBe('IN ALL: 3 to 16');
+    expect(reads).toContain('2d6 FIRE + 1d4 COLD DMG');
+    await userEvent.click(parts(1).getByRole('button', { name: 'Remove Item 1 DAMAGE' }));
+    expect(damageOf(last, 0)).toBe('1d4 COLD DMG');
+    // One part: no IN ALL, even once a reading could have come.
+    await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
+    expect(parts(1).queryByRole('status', { name: 'Item 1 DAMAGE in all' })).toBeNull();
+    // The sheet's size: its pickers small, as a gear card's boxes.
+    expect((parts(1).getByRole('combobox', { name: 'Item 1 DAMAGE type' }) as HTMLSelectElement).style.fontSize).toBe('0.6rem');
+  });
+
+  it('a line made by hand starts as MOST LINES ARE; a word that is no type, one box; a DICE, one box', async () => {
+    show([line('Wand', { type: 'weapons', values: { damage: '2d6 sonic' } })], { items: TYPED, onReadGearDice: onRead });
+    await open(1);
+    expect(table('WEAPONS').queryByRole('group', { name: 'Item 1 DAMAGE parts' })).toBeNull();
+    expect((table('WEAPONS').getByRole('textbox', { name: 'Item 1 DAMAGE' }) as HTMLInputElement).value).toBe('2d6 sonic');
+    cleanup();
+    show([], { items: TYPED, onReadGearDice: onRead });
+    await userEvent.click(within(screen.getByRole('group', { name: 'Add by hand' })).getByRole('button', { name: 'Add a Weapon by hand' }));
+    expect((parts(1).getByRole('combobox', { name: 'Item 1 DAMAGE type' }) as HTMLSelectElement).value).toBe('cold');
+  });
+
+  it('a DICE column stays one box; a whole that won\'t read says no IN ALL', async () => {
+    const withHeals: ItemsShown = { ...TYPED, types: [{ ...TYPED.types![0], columns: [...TYPED.types![0].columns, { id: 'heals', label: 'HEALS', kind: 'dice' }] }, TYPED.types![1]] };
+    const refuses = async (text: string): Promise<GearDiceRead> => (text.includes('+') ? { ok: false, error: 'Nope', names: [] } : { ok: true, low: 1, high: 6, used: [], names: [] });
+    show([line('Torch', { type: 'weapons', values: { damage: '1d6 FIRE + 1d4 COLD DMG', heals: '1d4' } })], { items: withHeals, onReadGearDice: refuses });
+    await open(1);
+    expect(table('WEAPONS').queryByRole('group', { name: 'Item 1 HEALS parts' })).toBeNull();
+    expect((table('WEAPONS').getByRole('textbox', { name: 'Item 1 HEALS' }) as HTMLInputElement).value).toBe('1d4');
+    expect(parts(1).getByRole('textbox', { name: 'Item 1 DAMAGE part 2' })).toBeTruthy();
+    await act(async () => { await new Promise((r) => setTimeout(r, 450)); });
+    expect(parts(1).queryByRole('status', { name: 'Item 1 DAMAGE in all' })).toBeNull();
+  });
+
+  it('columns locked: shown, never changed; a game without damage types, the one box as before', async () => {
+    show([line('Torch', { type: 'weapons', values: { damage: '2d6 FIRE DMG' } })], { items: TYPED, onReadGearDice: onRead, columnsLocked: true });
+    await open(1);
+    expect((parts(1).getByRole('combobox', { name: 'Item 1 DAMAGE type' }) as HTMLSelectElement).disabled).toBe(true);
+    expect(parts(1).queryByRole('button', { name: 'Add a part to Item 1 DAMAGE' })).toBeNull();
+    cleanup();
+    show([line('Torch', { type: 'weapons', values: { damage: '2d6 FIRE DMG' } })], { onReadGearDice: onRead });
+    await open(1);
+    expect(table('WEAPONS').queryByRole('group', { name: 'Item 1 DAMAGE parts' })).toBeNull();
+    expect((table('WEAPONS').getByRole('textbox', { name: 'Item 1 DAMAGE' }) as HTMLInputElement).value).toBe('2d6 FIRE DMG');
+  });
+});

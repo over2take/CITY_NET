@@ -125,6 +125,7 @@ const { currenciesOf } = require('./currencies');
 const { checkItems, itemsOf, slotsOf, installsOf, workingFeatures, itemsOwned, itemsShown } = require('./items');
 const { stepFieldsOf, rankedStatsOf } = require('./ranks');
 const { ownTypes, typeNamed, itemValues, typesShown } = require('./itemTypes');
+const { damageTypesOf } = require('./damageTypes');
 const { checkEncumbrance, encumbranceOf, carriedOf, capacityText, CARRIED, CAPACITY } = require('./encumbrance');
 const { conditionsOf } = require('./conditions');
 
@@ -1121,7 +1122,11 @@ const itemsRenderedOf = (definition) => {
     })),
     // The item types and their columns (8a1).
     // The types only where the system makes its own (8a3a): a sheet then draws a table per type; else the one list, as before.
-    ...(ownTypes(definition) ? { types: typesShown(definition, items) } : {}),
+    ...(ownTypes(definition) ? {
+      types: typesShown(definition, items),
+      // The game's damage types that are on (8b2c), for a line's DAMAGE as rows on the sheet: each its name and picture.
+      damage_types: damageTypesOf(definition).map(({ id, name, icon, drawn }) => ({ id, name, ...(drawn ? { drawn } : { icon }) })),
+    } : {}),
   };
 };
 
