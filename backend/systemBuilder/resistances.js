@@ -30,6 +30,8 @@ const LIMIT = 10;
 const KEYS = new Set(['kind', 'type']);
 /** Where a sheet keeps the resistances added by hand. */
 const HAND_KEY = '_resistances';
+/** Where an NPC's sheet keeps which of its resistances the GM has shown the players (8b4a): type ids, or ALL. */
+const REVEALED_KEY = '_revealed';
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
@@ -63,6 +65,22 @@ const handProblem = (definition, value) => {
 const resistancesIn = (value) => list(value).slice(0, LIMIT)
   .filter((r) => isPlainObject(r) && KINDS.includes(r.kind) && typeof r.type === 'string')
   .map((r) => ({ kind: r.kind, type: r.type }));
+
+/** The types revealed, as kept: ids, once each; the ill-formed passed over. */
+const revealedIn = (value) => [...new Set(list(value).filter((v) => typeof v === 'string' && v))];
+
+/** What is wrong with a list of types to reveal in this system, in words, or null: ALL or the game's types, once each. */
+const revealedProblem = (definition, value) => {
+  if (!Array.isArray(value)) return 'Must be a list of damage types';
+  const ids = damageTypeIdsOf(definition);
+  const seen = new Set();
+  for (const v of value) {
+    if (v !== ALL && (typeof v !== 'string' || !ids.has(v))) return `${typeof v === 'string' ? v : 'That'} is not one of this system's damage types, or all`;
+    if (seen.has(v)) return `${v === ALL ? 'ALL' : v} is on the list twice`;
+    seen.add(v);
+  }
+  return null;
+};
 
 /** The rows added by hand as kept: each with who added it, a player's name, or none for the GM's. */
 const handIn = (value) => list(value).slice(0, LIMIT)
@@ -105,4 +123,4 @@ const resistancesWorked = (definition, sources) => {
   return out;
 };
 
-module.exports = { ALL, LIMIT, HAND_KEY, handProblem, handIn, handAfter, checkResistances, resistancesIn, kindOf, resistancesWorked };
+module.exports = { ALL, LIMIT, HAND_KEY, REVEALED_KEY, revealedIn, revealedProblem, handProblem, handIn, handAfter, checkResistances, resistancesIn, kindOf, resistancesWorked };

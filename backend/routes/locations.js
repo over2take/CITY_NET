@@ -19,7 +19,7 @@ const { checkTokenConditions, publicTokenConditions, parseTokenConditions } = re
 const { syncConditionsOnSheet } = require('../sheets/conditionsOnSheet');
 const { poolAfter } = require('../tokens/poolHealth');
 const { withMaxSet } = require('../systemBuilder/tokenMax');
-const { HAND_KEY, handProblem, handAfter } = require('../systemBuilder/resistances');
+const { HAND_KEY, REVEALED_KEY, handProblem, handAfter, revealedProblem } = require('../systemBuilder/resistances');
 const { resistancesShown } = require('../systemBuilder/resistancesShown');
 
 /** A change to a token refused (tokens/tokenAccess.js): 401 when nobody said who they are. */
@@ -947,6 +947,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
    * What the token's character resists, for its HEALTH (8b3c2a): the game's damage types, what each kind means, what it has
    * by type from its sheet and the token's conditions, the rows added by hand and what the one asking may add. The GM and
    * editors any token's; a player their own or an NPC given them, as they change its health. A built-in game: { on: false }.
+   * Anyone else (8b4a): another player's character to read, an NPC only as far as the GM has revealed it.
    */
   router.get('/:id/resistances', optionalAuthenticate, (req, res) => {
     const { id } = req.params;
@@ -954,7 +955,9 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
     db.get('SELECT shape, owner, controllers, conditions FROM locations WHERE id = ?', [id], (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
       if (!row) return res.status(404).json({ error: 'Not found' });
-      if (!caller.editor && !(caller.player && tokenAccess.mayChangeHealth(row, caller))) return res.status(403).json({ error: 'You can only see your own character\'s resistances' });
+      const player = row.shape === 'rhombus' && !!row.owner;
+      const theirs = caller.editor || (!!caller.player && tokenAccess.mayChangeHealth(row, caller));
+      const look = theirs ? 'full' : player ? 'watch' : 'revealed';
       db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (gErr, gRow) => {
         if (gErr) return res.status(500).json({ error: gErr.message });
         const system = (gRow && gRow.value) || DEFAULT_SYSTEM;
@@ -965,7 +968,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           if (e) return res.status(500).json({ error: e.message });
           let data = null;
           try { data = sheet ? JSON.parse(sheet.data || '{}') : null; } catch { data = {}; }
-          res.json({ on: true, ...resistancesShown(definition, data, conditionIds, caller.editor ? null : caller.player) });
+          res.json({ on: true, ...resistancesShown(definition, data, conditionIds, caller.editor ? null : caller.player, { look, npc: !player }) });
         };
         if (row.shape === 'rhombus' && row.owner) {
           db.get('SELECT data FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0', [row.owner, system], found);
@@ -973,6 +976,43 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           db.get(`SELECT cs.data FROM npc_sheet_links l JOIN character_sheets cs ON cs.id = l.sheet_id
             WHERE l.location_id = ? AND cs.system = ?`, [id, system], found);
         }
+      });
+    });
+  });
+
+  /**
+   * REVEAL (8b4a; the user, 2026-11-24): which of an NPC's resistances its players may see, the whole list, kept on the NPC's
+   * sheet so every token using it shows the same. The GM's and editors' only; an NPC's token with a sheet only.
+   */
+  router.put('/:id/revealed', optionalAuthenticate, (req, res) => {
+    const { id } = req.params;
+    if (!tokenAccess.callerOf(req).editor) return res.status(403).json({ error: 'Only the GM reveals an NPC\'s resistances' });
+    db.get('SELECT shape, owner FROM locations WHERE id = ?', [id], (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: 'Not found' });
+      if (row.shape === 'rhombus' && row.owner) return res.status(400).json({ error: 'A player\'s character shows its resistances already: only an NPC\'s are revealed' });
+      db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (gErr, gRow) => {
+        if (gErr) return res.status(500).json({ error: gErr.message });
+        const system = (gRow && gRow.value) || DEFAULT_SYSTEM;
+        const definition = customSystems.definitionOf(system);
+        if (!definition) return res.status(400).json({ error: 'Resistances are for a game made in the builder' });
+        const revealed = req.body ? req.body.revealed : undefined;
+        const wrong = revealedProblem(definition, revealed);
+        if (wrong) return res.status(400).json({ error: wrong });
+        db.get(`SELECT cs.id FROM npc_sheet_links l JOIN character_sheets cs ON cs.id = l.sheet_id WHERE l.location_id = ? AND cs.system = ?`, [id, system], (sErr, sheet) => {
+          if (sErr) return res.status(500).json({ error: sErr.message });
+          if (!sheet) return res.status(409).json({ error: 'This token has no sheet to keep that on. Give it one first.' });
+          mutateSheet(db, sheet.id, (data) => {
+            const next = { ...data };
+            if (revealed.length) next[REVEALED_KEY] = revealed; else delete next[REVEALED_KEY];
+            return next;
+          }, (err2) => {
+            if (err2) return res.status(500).json({ error: err2.message });
+            // Every screen watching this NPC asks again.
+            emitUpdate();
+            res.json({ id: Number(id), revealed });
+          });
+        });
       });
     });
   });
