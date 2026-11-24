@@ -60,7 +60,12 @@ test('DAMAGE in SHEET.EXE and HEAL on the tab move the token and both sheets; th
   // The HP bar opens HEALTH's own panel on the tab, the map's HEALTH window not needed.
   await bar(tab).click();
   const health = tab.getByRole('region', { name: 'Health' });
-  await expect(health).toContainText('18 / 20');
+  // No heart monitor or numbers there, the strip having them (8s4b): INJURIES, opening the injury map on the tab, a part
+  // marked there kept on the token.
+  await expect(health.getByRole('img', { name: /^Heart monitor/ })).toHaveCount(0);
+  await health.getByRole('button', { name: 'Injuries' }).click();
+  await health.getByRole('button', { name: 'HEAD' }).click();
+  await expect.poll(async () => JSON.parse((await asGm(request, gm, 'get', '/api/locations')).find((l: { owner?: string; shape?: string }) => l.shape === 'rhombus' && l.owner === player.username).injuries || '{}').head, { timeout: 15_000 }).toBe(true);
   // MAX is set on the strip (8s4a), not here too.
   await expect(health.getByRole('spinbutton', { name: 'Max HP' })).toHaveCount(0);
   // Not a second DAMAGE and HEAL: the strip has them.

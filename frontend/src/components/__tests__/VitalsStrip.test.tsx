@@ -182,9 +182,13 @@ describe('HEALTH here', () => {
     expect(screen.queryByRole('region', { name: 'Health' })).toBeNull();
     await userEvent.click(screen.getByRole('button', { name: /^HIT POINTS/ }));
     const region = screen.getByRole('region', { name: 'Health' });
-    // HEALTH's own panel: its numbers and MAX; not a second DAMAGE, HEAL, amount or TEMP (the user, 2026-11-17), nor the
-    // conditions, chips under the box (8s3c).
-    expect(region.textContent).toContain('14 / 20');
+    // HEALTH's own panel without what the strip already has (8s4b; the user, 2026-11-24): no heart monitor or numbers, only
+    // INJURIES, centered; not a second DAMAGE, HEAL, amount or TEMP (2026-11-17), nor the conditions, chips under the box (8s3c).
+    expect(region.textContent).not.toContain('14 / 20');
+    expect(within(region).queryByRole('img', { name: /^Heart monitor/ })).toBeNull();
+    const injuries = within(region).getByRole('button', { name: 'Injuries' });
+    expect((injuries.parentElement as HTMLElement).style.justifyContent).toBe('center');
+    expect(injuries.parentElement!.textContent).toBe('INJURIES');
     expect(within(region).queryByRole('region', { name: 'Conditions' })).toBeNull();
     expect(within(region).queryByRole('button', { name: '+ CONDITION' })).toBeNull();
     // MAX is set on the strip now (8s4a): not twice.
@@ -198,6 +202,18 @@ describe('HEALTH here', () => {
     await userEvent.click(bar);
     expect(screen.getByRole('region', { name: 'Health' })).toBeTruthy();
     expect(onOpenLink).not.toHaveBeenCalled();
+  });
+
+  it('INJURIES opens the injury map in place; a part clicked is saved on the token, as the HEALTH window does (8s4b)', async () => {
+    draw();
+    await userEvent.click(screen.getByRole('button', { name: /^HIT POINTS/ }));
+    const region = screen.getByRole('region', { name: 'Health' });
+    await userEvent.click(within(region).getByRole('button', { name: 'Injuries' }));
+    expect(within(region).getByText('INJURY_MAP')).toBeTruthy();
+    await userEvent.click(within(region).getByRole('button', { name: 'HEAD' }));
+    const saved = fetched.filter((f) => f.url === '/api/locations/7/injuries');
+    expect(saved.map((f) => ({ body: JSON.parse(String(f.init.body)), auth: (f.init.headers as Record<string, string>).Authorization }))).toEqual([{ body: { injuries: { head: true } }, auth: 'Bearer tok' }]);
+    expect(within(region).getByRole('button', { name: 'HEAD' }).getAttribute('aria-pressed')).toBe('true');
   });
 
   it('without the strip (another\'s sheet, or read only) the HP bar opens the linked window as before, and there is no strip', async () => {
@@ -249,6 +265,9 @@ describe('a custom system\'s other health models', () => {
     await userEvent.click(screen.getByRole('button', { name: /^HEALTH/ }));
     const health = screen.getByRole('region', { name: 'Health' });
     expect(within(health).queryByRole('region', { name: 'Conditions' })).toBeNull();
+    // As one pool's (8s4b): no heart monitor under the strip, INJURIES centered.
+    expect(within(health).queryByRole('img', { name: /^Heart monitor/ })).toBeNull();
+    expect((within(health).getByRole('button', { name: 'Injuries' }).parentElement as HTMLElement).style.justifyContent).toBe('center');
   });
 
   it('no health at all: no strip, the conditions still (8s3c)', async () => {

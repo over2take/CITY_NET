@@ -191,6 +191,14 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
     return { ok: res.ok, body };
   };
 
+  // Under the strip (8s4b; the user, 2026-11-24: "we don't need the heart beat monitor in the sheet", "center the injury
+  // map"): the strip has the numbers, so only the injury map's button, centered and named, opening it in place.
+  const injuriesRow = (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
+      <InjuryToggle open={injuriesOpen} onClick={() => setInjuriesOpen((o) => !o)} size={18} />
+      <span aria-hidden="true" style={{ fontSize: '0.6rem', letterSpacing: '2px', opacity: 0.75 }}>INJURIES</span>
+    </div>
+  );
   const injuryMap = injuriesOpen && (
     <InjuryMap
       injuries={injuries}
@@ -222,12 +230,14 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
   if (view && view.model !== 'pool') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left' }}>
-        {view.model === 'none'
-          ? <NoHealthNotice editing />
-          : <HeartMonitor band={monitorBandFor(view, target)} />}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <InjuryToggle open={injuriesOpen} onClick={() => setInjuriesOpen((o) => !o)} size={18} />
-        </div>
+        {underStrip ? injuriesRow : <>
+          {view.model === 'none'
+            ? <NoHealthNotice editing />
+            : <HeartMonitor band={monitorBandFor(view, target)} />}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <InjuryToggle open={injuriesOpen} onClick={() => setInjuriesOpen((o) => !o)} size={18} />
+          </div>
+        </>}
         {injuryMap}
         {!underStrip && conditions}
         <ModelHealthEditor key={`${target.id}:${view.model}`} view={view} target={target} send={sendHealth} gm={token !== ''} words={word} underStrip={underStrip} />
@@ -240,8 +250,9 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', textAlign: 'left' }}>
-      <HeartMonitor band={bandOf(target.hp_current ?? 0, target.hp_max ?? 0)} />
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+      {underStrip && injuriesRow}
+      {!underStrip && <HeartMonitor band={bandOf(target.hp_current ?? 0, target.hp_max ?? 0)} />}
+      {!underStrip && <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
           <div style={{ fontSize: '2rem', color: 'var(--green)', textShadow: 'var(--glow)', fontWeight: 'bold' }}>
             {target.hp_current || 0} / {target.hp_max || 0}
@@ -255,7 +266,7 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
         {(target.hp_temp ?? 0) > 0 && (
           <div style={{ color: 'var(--cyan)', fontSize: '0.85rem', textShadow: '0 0 6px var(--cyan)' }}>+ {target.hp_temp} TEMP</div>
         )}
-      </div>
+      </div>}
 
       {injuryMap}
       {!underStrip && conditions}
