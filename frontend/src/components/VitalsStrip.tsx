@@ -69,7 +69,6 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
   const view = useHealthView(socket, token?.id, isCustomSystem(system));
   const word = useWords(system);
   const hp = word('hp', 'short', 'HP').toUpperCase();
-  const hitPoints = word('hp', 'plural', 'HIT POINTS').toUpperCase();
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${authToken}` };
 
   // Under the box (8s3c): the token's conditions, and REST ▾.
@@ -254,14 +253,14 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
           />
           <button type="button" disabled={busy} onClick={() => byAmount('damage')} style={button('var(--danger)')}>DAMAGE</button>
           {hasStim(system) && (
-            // STIM on the button, as wide as HEAL and DAMAGE: the full name spilled out of the column into HIT POINTS ▾.
+            // STIM on the button, as wide as HEAL and DAMAGE: the full name spilled out of the column into HP DETAILS ▾.
             <button type="button" disabled={busy} onClick={() => byAmount('stim_heal')} aria-label="STIM +1 STRAIN"
               title="STIM, +1 STRAIN. Field healing (stims, medkits): heals and adds +1 System Strain. Refused when strain is maxed. HEAL is natural or rest healing."
               style={button('var(--warning)')}>STIM</button>
           )}
         </div>
         {/* CURRENT / MAX in the middle column, TEMP in a right column as wide as the buttons' on the left: the box is
-            symmetric, so the slash is centered on it, as HIT POINTS ▾ under it is (the user, 2026-11-17). */}
+            symmetric, so the slash is centered on it, as HP DETAILS ▾ under it is (the user, 2026-11-17). */}
         <div style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto minmax(0, 1fr)', gridTemplateRows: 'auto auto 1.25rem', alignItems: 'center', justifyItems: 'center', rowGap: '2px' }}>
           <span style={label}>CURRENT</span><span />
           <span style={label}>MAX</span>
@@ -306,7 +305,9 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
             background: 'none', border: 'none', color: 'var(--green)', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.65rem', letterSpacing: '2px', fontWeight: 'bold',
             padding: '2px 8px', lineHeight: 1.2, margin: 0, boxSizing: 'border-box',
           }}>
-          {picked ? picked.label.toUpperCase() : hitPoints} {open ? '▴' : '▾'}
+          {/* HP DETAILS (the user, 2026-11-24: "Hit Points is the issue"): what it opens, not the numbers above it; the game's
+              own word for HP, and with two tracks the track buttons over the box say which. */}
+          {hp} DETAILS {open ? '▴' : '▾'}
         </button>
       </div>
       {alert}

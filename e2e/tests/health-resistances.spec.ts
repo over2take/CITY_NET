@@ -3,7 +3,7 @@ import { signInAsPlayer, signInAsGm, gmToken, runningSystem, approvedPlayer, asG
 
 // RESISTANCES and VULNERABILITIES at the table (8b3c2b; the user, 2026-11-24, draft 2 approved). A player in their HEALTH
 // window: none yet, + RESISTANCE, IMMUNE FIRE added, no VULNERABILITIES row and no + VULNERABILITY; SOAKED put on their
-// token shows them VULNERABLE LIGHTNING, opened to say where from; the same two rows in SHEET.EXE's HIT POINTS ▾. The GM,
+// token shows them VULNERABLE LIGHTNING, opened to say where from; the same two rows in SHEET.EXE's HP DETAILS ▾. The GM,
 // in their view of the sheet, adds VULNERABLE COLD.
 
 test('a player adds IMMUNE FIRE, sees SOAKED\'s VULNERABLE LIGHTNING and can\'t add one; the GM adds VULNERABLE COLD (8b3c2b)', async ({ page, browser, request }, info) => {
@@ -53,10 +53,10 @@ test('a player adds IMMUNE FIRE, sees SOAKED\'s VULNERABLE LIGHTNING and can\'t 
   await expect(vulnerable.getByRole('group', { name: 'VULNERABLE LIGHTNING' })).toContainText('Takes double.');
   await expect(vulnerable.getByRole('button', { name: '+ VULNERABILITY' })).toHaveCount(0);
 
-  // The HEALTH window closed with its own ×, the nearest window round its rows; the same in SHEET.EXE's HIT POINTS ▾.
+  // The HEALTH window closed with its own ×, the nearest window round its rows; the same in SHEET.EXE's HP DETAILS ▾.
   await resist.locator('xpath=ancestor::*[.//button[contains(@class, "win95-close-btn")]][1]//button[contains(@class, "win95-close-btn") and text()="×"]').click();
   await expect(resist).toBeHidden();
-  await strip.getByRole('button', { name: /^HIT POINTS/ }).click({ timeout: 15_000 });
+  await strip.getByRole('button', { name: /^HP DETAILS/ }).click({ timeout: 15_000 });
   const drawer = mine.getByRole('region', { name: 'Health' });
   await expect(drawer.getByRole('region', { name: 'Resistances' }).getByRole('button', { name: 'IMMUNE FIRE' })).toBeVisible({ timeout: 15_000 });
   await expect(drawer.getByRole('region', { name: 'Vulnerabilities' }).getByRole('button', { name: 'VULNERABLE LIGHTNING' })).toBeVisible();
@@ -67,7 +67,7 @@ test('a player adds IMMUNE FIRE, sees SOAKED\'s VULNERABLE LIGHTNING and can\'t 
   await page.getByText(player.username, { exact: true }).first().click();
   await page.getByRole('button', { name: 'VIEW_PLAYER_INFO', exact: true }).click();
   await page.getByRole('button', { name: 'OPEN_SHEET', exact: true }).click();
-  await page.getByRole('group', { name: 'Vitals' }).getByRole('button', { name: /^HIT POINTS/ }).click({ timeout: 15_000 });
+  await page.getByRole('group', { name: 'Vitals' }).getByRole('button', { name: /^HP DETAILS/ }).click({ timeout: 15_000 });
   const gmVulnerable = page.getByRole('region', { name: 'Health' }).getByRole('region', { name: 'Vulnerabilities' });
   await gmVulnerable.getByRole('button', { name: '+ VULNERABILITY' }).click({ timeout: 15_000 });
   await gmVulnerable.getByRole('group', { name: 'Add a vulnerability' }).getByRole('button', { name: 'COLD', exact: true }).click();

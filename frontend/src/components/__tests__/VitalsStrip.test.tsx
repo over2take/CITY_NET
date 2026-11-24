@@ -178,11 +178,11 @@ describe('CWN\'s STIM', () => {
 });
 
 describe('HEALTH here', () => {
-  it('HIT POINTS ▾ and a click on the HP bar open and close HEALTH\'s own panel; the linked window isn\'t asked', async () => {
+  it('HP DETAILS ▾ (once HIT POINTS ▾) and a click on the HP bar open and close HEALTH\'s own panel; the linked window isn\'t asked', async () => {
     const onOpenLink = vi.fn();
     draw({}, { onOpenLink });
     expect(screen.queryByRole('region', { name: 'Health' })).toBeNull();
-    await userEvent.click(screen.getByRole('button', { name: /^HIT POINTS/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^HP DETAILS/ }));
     const region = screen.getByRole('region', { name: 'Health' });
     // HEALTH's own panel without what the strip already has (8s4b; the user, 2026-11-24): no heart monitor or numbers, only
     // INJURIES, centered; not a second DAMAGE, HEAL, amount or TEMP (2026-11-17), nor the conditions, chips under the box (8s3c).
@@ -212,7 +212,7 @@ describe('HEALTH here', () => {
 
   it('INJURIES opens the injury map in place; a part clicked is saved on the token, as the HEALTH window does (8s4b)', async () => {
     draw();
-    await userEvent.click(screen.getByRole('button', { name: /^HIT POINTS/ }));
+    await userEvent.click(screen.getByRole('button', { name: /^HP DETAILS/ }));
     const region = screen.getByRole('region', { name: 'Health' });
     await userEvent.click(within(region).getByRole('button', { name: 'Injuries' }));
     expect(within(region).getByText('INJURY_MAP')).toBeTruthy();
@@ -553,13 +553,13 @@ describe('other health models in the strip (8s3d1)', () => {
     expect([physical.textContent, physical.getAttribute('aria-pressed'), stun.textContent]).toEqual(['PHYSICAL 14/20', 'true', 'STUN 3/10']);
     await userEvent.type(amount(), '4');
     await userEvent.click(screen.getByRole('button', { name: 'DAMAGE' }));
-    // The second track: the box shows it, named under the numbers, and DAMAGE hits it; its spill into the first said.
+    // The second track: the box shows it, its track button pressed (HP DETAILS under the numbers, 2026-11-24), and DAMAGE hits it; its spill said.
     await userEvent.click(stun);
     expect(stun.getAttribute('aria-pressed')).toBe('true');
     expect([screen.getByLabelText('Current HP').textContent, screen.getByLabelText('Max HP').textContent]).toEqual(['3', '10']);
     // It counts damage marked: 3 of 10 is mostly clear, so green; full would be the danger color.
     expect(screen.getByLabelText('Current HP').style.color).toBe('var(--green)');
-    expect(screen.getByRole('button', { name: /^STUN/, expanded: false }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByRole('button', { name: /^HP DETAILS/, expanded: false }).getAttribute('aria-expanded')).toBe('false');
     answer = { ok: true, body: { overflow: 2 } };
     await userEvent.type(amount(), '9');
     await userEvent.click(screen.getByRole('button', { name: 'DAMAGE' }));
@@ -576,7 +576,7 @@ describe('other health models in the strip (8s3d1)', () => {
   it('two tracks: HEALTH under the strip leaves out its own picker, amount, HEAL, DAMAGE and TEMP', async () => {
     draw({ system: SYS, socket: socketWith('tracks', TRACKS) });
     await screen.findByRole('group', { name: 'Track' });
-    await userEvent.click(screen.getByRole('button', { name: /^PHYSICAL/, expanded: false }));
+    await userEvent.click(screen.getByRole('button', { name: /^HP DETAILS/, expanded: false }));
     const health = screen.getByRole('region', { name: 'Health' });
     expect(within(health).queryByRole('group', { name: 'Track' })).toBeNull();
     for (const name of ['DAMAGE', 'HEAL']) expect(within(health).queryByRole('button', { name }), name).toBeNull();

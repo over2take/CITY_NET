@@ -198,7 +198,7 @@ export function TokenConditions({ location, gameSystem, socket, canChange, authT
         )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
           {canChange && (
-            // Opened and closed as the strip's REST ▾ and HIT POINTS ▾ are (the user, 2026-11-17): the same name, ▾ / ▴.
+            // Opened and closed as the strip's REST ▾ and HP DETAILS ▾ are (the user, 2026-11-17): the same name, ▾ / ▴.
             <button type="button" aria-label="Put on a condition" aria-expanded={picking} disabled={busy}
               title="Put on a condition" onClick={() => { setOpened(null); setPicking((p) => !p); }}
               style={{
