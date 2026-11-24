@@ -63,6 +63,13 @@ describe('a section per type', () => {
     sound(r);
   });
 
+  it('a DAMAGE with its types (8b2a): kept as written; a type with no dice skipped by its line', () => {
+    const r = read(FILE('[weapons]', 'name, damage, grade', 'Flame Tongue, 1d8 SLASHING + 2d6 FIRE DMG, LIGHT', 'Dud, FIRE, LIGHT'));
+    expect(byId(r, 'flame_tongue')).toMatchObject({ values: { damage: '1d8 SLASHING + 2d6 FIRE DMG', grade: 'LIGHT' } });
+    expect(r.skipped).toEqual([{ line: 4, message: 'Dud: DAMAGE: Dice before FIRE, like 2d6 FIRE' }]);
+    sound(r);
+  });
+
   it('a section by its type\'s name or id, a column by its name or id; what isn\'t read said', () => {
     const r = read(FILE('[Weapons]', 'NAME, Damage, grade, colour', 'Club, 1d6, LIGHT, red', '[spells]', 'name', 'Fireball', '[gear]', 'weight', 'Rope'));
     expect(byId(r, 'club')).toMatchObject({ type: 'weapons', values: { damage: '1d6', grade: 'LIGHT' } });

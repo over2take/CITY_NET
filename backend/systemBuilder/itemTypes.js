@@ -25,6 +25,7 @@
 // Pure: checks and reads. Nothing here loads the CHOICES module: the sheet's names and the rests come in as tools.
 
 const { boxProblem } = require('./tierRolls');
+const { damageProblem } = require('./damageText');
 const { BUILDING_TYPES } = require('../buildingTypes');
 const { shopKindsOf, buysOf } = require('./buildings');
 
@@ -103,7 +104,8 @@ const valueProblem = (column, value, names) => {
     case 'damage': case 'dice': {
       if (typeof value !== 'string' || !value.trim()) return 'Dice, like 1d8 + @might_mod';
       if (value.length > LIMITS.text) return `At most ${LIMITS.text} characters`;
-      return boxProblem(value, names);
+      // DAMAGE names its type after its dice (8b2a, damageText.js): "2d6 FIRE DMG", "1d8 SLASHING + 2d6 FIRE".
+      return column.kind === 'damage' ? damageProblem(value, names) : boxProblem(value, names);
     }
     case 'count': return Number.isInteger(value) && value >= 0 && value <= LIMITS.count ? null : `How many it holds: 0 to ${LIMITS.count}`;
     case 'pick': return list(column.options).includes(value) ? null : `One of ${list(column.options).join(', ') || 'its words'}`;

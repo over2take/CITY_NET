@@ -29,6 +29,7 @@ const { namesOf, levelNamesOf, ownableOf } = require('./choices');
 const { fieldsRolledBy, fieldsFor } = require('./tableRolls');
 const { reachOf } = require('./rests');
 const { prepare } = require('./tierRolls');
+const { damageParts, typed } = require('./damageText');
 const { effectiveSheet, fieldsOf } = require('./sheet');
 const { improvingStats } = require('./improveByUse');
 const { derivedOf } = require('./encumbrance');
@@ -41,7 +42,7 @@ const SAMPLE_OLD = 2;
  * What a formula box holds: a modifier's amount, an option's requirement, a feature's uses; a roll's
  * ADD and AGAINST; a rest's refill amount; a formula of STATS & RULES (formula box 3).
  */
-const KINDS = new Set(['amount', 'requires', 'uses', 'add', 'against', 'refill', 'formula', 'cost', 'improve']);
+const KINDS = new Set(['amount', 'requires', 'uses', 'add', 'against', 'refill', 'damage', 'formula', 'cost', 'improve']);
 /** What a roll's own names are called in words. */
 const ROLL_OWN = new Map([['this', 'rolled stat'], ['this_mod', 'rolled stat\'s modifier'], ['tie', 'tied stat'], ['tie_mod', 'tied stat\'s modifier']]);
 /** What a cost of raising a stat calls its own names (7f2b), and what the sample reads for them. */
@@ -122,6 +123,26 @@ const previewRefill = (definition, text, sample, reach = reachOf(definition), ow
 };
 
 /**
+ * An item's DAMAGE (8b2a): read as a rest's amount is, part by part where it names its types ("1d8 SLASHING + 2d6 FIRE"),
+ * the least and most summed, each part with its type as written in `parts`. Plain dice read as before.
+ */
+const previewDamage = (definition, text, sample) => {
+  if (!typed(text)) return previewRefill(definition, text, sample);
+  const parts = [];
+  for (const p of damageParts(text)) {
+    if (!p.text) return { ok: false, problem: p.label ? `Dice before ${p.label.toUpperCase()}, like 2d6 ${p.label.toUpperCase()}` : 'Dice, like 1d8 + @might_mod' };
+    const read = previewRefill(definition, p.text, sample);
+    if (!read.ok) return read;
+    parts.push({ label: p.label ? p.label.toUpperCase() : null, value: read.value, most: read.most ?? read.value, reads: read.reads });
+  }
+  const value = parts.reduce((n, p) => n + p.value, 0);
+  const most = parts.reduce((n, p) => n + p.most, 0);
+  const seen = new Set();
+  const reads = parts.flatMap((p) => p.reads).filter((r) => (seen.has(r.id) ? false : seen.add(r.id)));
+  return { ok: true, value, ...(most !== value ? { most } : {}), reads, parts: parts.map(({ label, value: v, most: m }) => ({ label, value: v, most: m })) };
+};
+
+/**
  * One formula read against `definition`: `{ ok: false, problem, suggest? }` when it can't be used,
  * else `{ ok: true, value, reads }`, `reads` naming each @name it reads with its label and value.
  * A roll's box (`kind` add or against) names its roll in `roll`; it says the stat it samples in
@@ -130,6 +151,7 @@ const previewRefill = (definition, text, sample, reach = reachOf(definition), ow
 const previewFormula = (definition, text, kind, sample = sampleOf(definition), roll = null) => {
   if (typeof text !== 'string' || !text.trim()) return { ok: false, problem: 'Empty' };
   if (kind === 'refill') return previewRefill(definition, text, sample);
+  if (kind === 'damage') return previewDamage(definition, text, sample);
   // IMPROVE BY USE's boxes (7f3a2): the sheet's names and @this, the first stat that improves, as the sample has it.
   if (kind === 'improve') {
     const stat = improvingStats(definition)[0];

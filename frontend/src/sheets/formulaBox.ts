@@ -22,6 +22,8 @@ import { gearTokens } from './encumbrance';
  */
 /** `least` (7e1b): a modifier's amount set AT LEAST, read as an amount is, said as "at least". `cost` (7f2b): what raising a stat costs; `price`, what an option costs. `improve` (7f3a2): IMPROVE BY USE's boxes. */
 export type FormulaKind = 'amount' | 'least' | 'requires' | 'uses' | 'add' | 'against' | 'refill' | 'formula' | 'cost' | 'price' | 'improve'
+  // An item's DAMAGE (8b2a): dice as a rest's amount, with the type of each part after it ("1d8 SLASHING + 2d6 FIRE").
+  | 'damage'
   // A condition's modifier counted TIMES, SET TO or AT MOST (8a5e2): a formula, its sample said its way.
   | 'times' | 'set' | 'most';
 /** The ways a condition's modifier counts other than ADD, each a kind of box (8a5e2). */
@@ -40,6 +42,8 @@ export type FormulaRead =
     most?: number;
     /** A roll's box: the stat the sample rolls. */
     rolling?: string;
+    /** A DAMAGE that names its types (8b2a): each part's least and most, with its type as written. */
+    parts?: { label: string | null; value: number; most: number }[];
   }
   | { ok: false; problem: string; name?: string; suggest?: string };
 
@@ -47,6 +51,8 @@ export type FormulaRead =
 export const isMistake = (read: FormulaRead | null | undefined): read is FormulaRead & { ok: false } => !!read && !read.ok;
 
 const signed = (n: number) => (n < 0 ? `−${-n}` : `+${n}`);
+/** The boxes that read dice and the sheet's own numbers, said as written: a rest's amount, IMPROVE BY USE's, an item's DAMAGE. */
+const DICE_KINDS = new Set<FormulaKind>(['refill', 'improve', 'damage']);
 const word = (id: string, reads: FormulaReads[]) => reads.find((r) => r.id === id)?.label ?? id;
 
 /**
@@ -67,7 +73,7 @@ export const wordsOf = (kind: FormulaKind, text: string, reads: FormulaReads[] =
   // AT LEAST (7e1b): as a value is said, unsigned: at least 19, at least your Con.
   if (kind === 'least') return /^-?\d+$/.test(t) ? `at least ${t}` : `at least ${wordsOf('formula', t, reads)}`;
   // A rest's amount, dice and all, said with names in place of the @ids: 1d8 + CON modifier.
-  if (kind === 'refill' || kind === 'improve') return t.replace(/@([a-z][a-z0-9_]*)/g, (_, id: string) => word(id, reads)).replace(/\s+/g, ' ');
+  if (DICE_KINDS.has(kind)) return t.replace(/@([a-z][a-z0-9_]*)/g, (_, id: string) => word(id, reads)).replace(/\s+/g, ' ');
   if (kind === 'against') {
     if ((m = t.match(/^(-?\d+)$/))) return `against ${m[1]}`;
     if ((m = t.match(/^@([a-z][a-z0-9_]*)$/))) return `against your ${word(m[1], reads)}`;
@@ -106,7 +112,9 @@ export const sampleLine = (kind: FormulaKind, read: FormulaRead & { ok: true }):
   const v = round(read.value);
   const said = kind === 'uses' ? `${v} use${v === 1 ? '' : 's'}`
     : kind === 'against' ? `target ${v}`
-    : kind === 'refill' || kind === 'improve' ? (read.most !== undefined ? `${v} to ${round(read.most)}` : String(v))
+    : DICE_KINDS.has(kind) ? (read.most !== undefined ? `${v} to ${round(read.most)}` : String(v))
+      // Each part of a DAMAGE that names its types (8b2a): 1 to 8 SLASHING + 2 to 12 FIRE.
+      + (read.parts ? ` · ${read.parts.map((p) => `${p.most !== p.value ? `${round(p.value)} to ${round(p.most)}` : round(p.value)}${p.label ? ` ${p.label}` : ''}`).join(' + ')}` : '')
     : kind === 'least' ? `at least ${v}`
     : kind === 'cost' || kind === 'price' ? `costs ${v}`
     : kind === 'times' ? `×${v}` : kind === 'set' ? `to ${v}` : kind === 'most' ? `at most ${v}`
@@ -171,10 +179,10 @@ export const insertGroups = (def: Definition, kind: FormulaKind): InsertGroup[] 
   { title: 'LEVELS', items: levelTokens(def) },
   { title: 'STATS', items: allStats(def).map((s) => ({ token: `@${s.id}`, label: (s.label || s.id).toUpperCase() })) },
   { title: 'FORMULAS', items: kind === 'amount' || kind === 'least' ? [] : formulaList(def).map((f) => ({ token: `@${f.id}`, label: (f.label || f.id).toUpperCase() })) },
-  { title: 'TABLES', items: kind === 'refill' || kind === 'improve' ? [] : tableList(def).map((t) => ({ token: `${t.id}()`, label: 'A TABLE' })) },
+  { title: 'TABLES', items: DICE_KINDS.has(kind) ? [] : tableList(def).map((t) => ({ token: `${t.id}()`, label: 'A TABLE' })) },
   // What is carried, CAN CARRY and what is worn by column (8a5c): read wherever the sheet is read with its gear; an
   // amount reads stats as typed, and a rest's refill the sheet's own numbers, so neither offers them.
-  { title: 'GEAR', items: kind === 'amount' || kind === 'least' || kind === 'refill' ? [] : gearTokens(def) },
+  { title: 'GEAR', items: kind === 'amount' || kind === 'least' || kind === 'refill' || kind === 'damage' ? [] : gearTokens(def) },
   { title: 'CHOICES', items: hasTokens(def) },
   { title: 'WORKINGS', items: FUNCTIONS.filter((fn) => fn !== 'has').map((fn) => ({ token: `${fn}()`, label: WORKINGS[fn] ?? '' })) },
 ].filter((g) => g.items.length);
@@ -207,7 +215,7 @@ export const shapesOf = (def: Definition, kind: FormulaKind): Shape[] => {
       ] : []),
     ];
   }
-  if (kind === 'refill' || kind === 'improve') {
+  if (DICE_KINDS.has(kind)) {
     return [
       { id: 'number', label: 'A NUMBER', asks: 'number' },
       { id: 'dice', label: 'DICE', asks: 'dice' },

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { ItemsPage } from '../ItemsPage';
-import type { Definition } from '../../sheets/systemsApi';
+import type { Definition, systemsApi } from '../../sheets/systemsApi';
 import { HINTS, TOPICS } from '../../sheets/builderHelp';
 import { BUILDER_PAGES } from '../../sheets/builderSession';
 import { forgetBuilderPlaces } from '../../hooks/useBuilderPlace';
@@ -777,5 +777,25 @@ describe('SOLD AT on a type (8a7b2)', () => {
     await userEvent.click(within(screen.getByRole('group', { name: 'The item types' })).getByRole('button', { name: 'GEAR' }));
     expect(screen.getByRole('textbox', { name: 'New shop name' })).toHaveValue('');
     for (const k of ['items.soldAt'] as const) expect(HINTS[k], k).toBeTruthy();
+  });
+});
+
+describe('an item\'s DAMAGE with its types (8b2a)', () => {
+  it('read by the server as DAMAGE, each part\'s least and most said with its type; a DICE column read as before', async () => {
+    const asked: { text: string; kind: string }[] = [];
+    const api = { previewFormulas: vi.fn(async (_d: Definition, fs: { text: string; kind: string }[]) => {
+      asked.push(...fs);
+      return { ok: true, value: { results: fs.map((x) => (x.kind === 'damage'
+        ? { ok: true, value: 3, most: 20, reads: [], parts: [{ label: 'SLASHING', value: 1, most: 8 }, { label: 'FIRE', value: 2, most: 12 }] }
+        : { ok: true, value: 2, most: 8, reads: [] })), sampleLevel: 3 } };
+    }) } as unknown as ReturnType<typeof systemsApi>;
+    const def = { ...WORN, items: { ...((WORN as unknown as { items: object }).items), types: [
+      { id: 'weapons', label: 'WEAPONS', one: 'Weapon', columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }, { id: 'heals', label: 'HEALS', kind: 'dice' }] },
+    ], list: [{ id: 'tongue', label: 'Flame Tongue', type: 'weapons', values: { damage: '1d8 SLASHING + 2d6 FIRE', heals: '2d4' } }] } } as unknown as Definition;
+    render(<ItemsPage definition={def} edit={() => {}} api={api} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'ITEMS' }));
+    const item = within(await screen.findByRole('region', { name: 'Flame Tongue item' }));
+    expect(await item.findByText(/3 to 20 · 1 to 8 SLASHING \+ 2 to 12 FIRE/)).toBeTruthy();
+    expect(asked).toEqual(expect.arrayContaining([{ text: '1d8 SLASHING + 2d6 FIRE', kind: 'damage' }, { text: '2d4', kind: 'refill' }]));
   });
 });
