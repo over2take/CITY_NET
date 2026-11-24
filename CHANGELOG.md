@@ -816,6 +816,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **The sheet's HEALTH drawer is shorter.** HIT POINTS ▾ under the sheet's HP box no longer repeats the heart monitor and the big HP numbers the box already shows. What's left is INJURIES, centered, opening the injury map in place, in SHEET.EXE and the sheet's own tab alike. The map's HEALTH window is as it was.
 - **A shop's column heads work from the keyboard.** Each head (NAME, PRICE, DAMAGE…) can now be reached with Tab and pressed with Enter or Space to sort, shows a focus ring in the theme's color, and tells a screen reader how the column is sorted.
 - **A game's own shops are set per game.** A building made one of a game's own shops (a Magican) is that only while that game runs: in another game it can be that game's Mechanic, and in a game that makes neither it is its ordinary building type again. Two games each making a "Magican" never mix. Saved maps carry which building is which shop in each game, and buildings set to a game's own shop before this were moved to every game that makes it.
 - **"THE GM GAVE YOU" notices in one box, gone after 5 seconds.** Gifts now share one box, newest first, instead of stacking a box each, and each fades away 5 seconds after it arrives. Hover over the box (or tab into it) to keep it while you read; ✕ closes them all.
