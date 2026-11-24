@@ -321,7 +321,7 @@ const readItemsFile = (definition, input) => {
     else delete feature.uses;
     if (parts.length) changed.features.push({ line: row.line, item: item.label, feature: feature.label, parts });
     else unchanged += 1;
-    const keeps = [['modifiers', 'its modifiers'], ['rolls', 'the rolls it gives'], ['changes', 'the roll changes it allows']]
+    const keeps = [['modifiers', 'its modifiers'], ['rolls', 'the rolls it gives'], ['changes', 'the roll changes it allows'], ['resistances', 'its resistances']]
       .filter(([k]) => Array.isArray(feature[k]) && feature[k].length).map(([, w]) => w);
     if (keeps.length) notes.push({ line: row.line, message: `${item.label} · ${feature.label} keeps ${keeps.join(', ')}, set in the builder` });
   }

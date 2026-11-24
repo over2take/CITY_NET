@@ -58,6 +58,7 @@ const { checkCurrencies } = require('./currencies');
 const { checkBank } = require('./bank');
 const { checkConditions } = require('./conditions');
 const { checkDamage } = require('./damageTypes');
+const { checkResistances } = require('./resistances');
 const { checkRests, restIdsOf } = require('./rests');
 const { checkHouseRules } = require('./houseRules');
 const { checkGraph } = require('./graph');
@@ -207,7 +208,9 @@ const checkDefinition = (definition) => {
       const names = namesOf(definition);
       const read = rollAmount(text, {}, { known: (n) => names.has(n), refused: (n) => `@${n} isn't one of this system's names` }, () => 0);
       return 'error' in read ? read.error : null;
-    });
+    },
+    // A RESISTANCE row (8b3a), naming the system's damage types.
+    (value, where) => checkResistances(value, where, definition, problems));
   checkDamage(definition.damage, problems);
   checkRests(definition, problems);
   checkHouseRules(definition, problems);

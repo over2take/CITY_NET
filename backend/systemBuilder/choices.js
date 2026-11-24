@@ -33,6 +33,7 @@
 //               rolls: ['rally'],                               // rolls of the system it gives
 //               changes: [{ roll: 'mind_save', change: 'advantage' }], // a change it lets one roll take
 //               choice: 'specialties', choice_count: 2,         // a list picked from when it unlocks, and how many (1)
+//               resistances: [{ kind: 'resist', type: 'poison' }],   // 8b3a: while it is unlocked (resistances.js)
 //               increase: { points: 2, most: 2, stats: 'abilities', cap: 20, instead: 'feats' } }, // 7d6a: points the player
 //                                                               // spreads on stats, at most `most` on one (all of them when
 //                                                               // absent), from one group (all stats when absent),
@@ -128,6 +129,7 @@ const { ownTypes, typeNamed, itemValues, typesShown } = require('./itemTypes');
 const { damageTypesOf } = require('./damageTypes');
 const { checkEncumbrance, encumbranceOf, carriedOf, capacityText, CARRIED, CAPACITY } = require('./encumbrance');
 const { conditionsOf } = require('./conditions');
+const { checkResistances, resistancesIn, resistancesWorked } = require('./resistances');
 
 /** The token's conditions whose modifiers change this sheet's numbers (8a5e1), kept on the sheet by sheets/conditionsOnSheet.js. */
 const CONDITIONS_KEY = '_conditions_applied';
@@ -179,7 +181,7 @@ const PICKED = ['own', 'features', 'both', 'everyone'];
 const PLAYERS = ['hand', 'either', 'roll'];
 const LIST_KEYS = new Set(['id', 'one', 'many', 'picks', 'levelled', 'again', 'picked', 'table', 'players', 'options']);
 const OPTION_KEYS = new Set(['id', 'label', 'description', 'requires', 'die', 'roll', 'gives', 'features']);
-const FEATURE_KEYS = new Set(['id', 'label', 'text', 'at', 'modifiers', 'uses', 'rolls', 'changes', 'choice', 'choice_count', 'increase']);
+const FEATURE_KEYS = new Set(['id', 'label', 'text', 'at', 'modifiers', 'uses', 'rolls', 'changes', 'choice', 'choice_count', 'increase', 'resistances']);
 const INCREASE_KEYS = new Set(['points', 'most', 'stats', 'cap', 'instead']);
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -386,6 +388,7 @@ const checkChoices = (definition, problems) => {
         });
       }
     }
+    checkResistances(f.resistances, `${where}, resistance`, definition, problems);
     if (f.uses !== undefined) {
       if (!isPlainObject(f.uses)) problems.push({ where: `${where}, uses`, message: 'Must say how many, and what refills them' });
       else {
@@ -887,6 +890,26 @@ const overlayOf = (definition, data) => {
   return { sheet: over, add, bonus, levels, from, applied: {} };
 };
 
+/**
+ * Every RESISTANCE row counting for a character (8b3a), [{ kind, type, from }]: each unlocked feature's, named by it, each working
+ * item's, named by the item, and each of `conditionIds` (the token's) the system has, named by the condition.
+ */
+const resistanceSourcesOf = (definition, data, conditionIds = []) => {
+  const sheet = isPlainObject(data) ? data : {};
+  const sources = [];
+  for (const { feature, item = null } of [...unlockedOf(picksOf(definition, sheet)), ...workingFeatures(definition, sheet)]) {
+    for (const r of resistancesIn(feature.resistances)) sources.push({ ...r, from: item ? item.label || item.id : feature.label || feature.id });
+  }
+  const on = new Set(list(conditionIds));
+  for (const c of conditionsOf(definition)) {
+    if (on.has(c.id)) for (const r of resistancesIn(c.resistances)) sources.push({ ...r, from: c.name });
+  }
+  return sources;
+};
+
+/** What a character resists, by type (resistances.js resistancesWorked), given the conditions on their token. */
+const resistancesOf = (definition, data, conditionIds = []) => resistancesWorked(definition, resistanceSourcesOf(definition, data, conditionIds));
+
 /** The sheet as rolls read it: the stats and health fields with their modifiers, and the levels. Never stored. */
 const effectiveData = (definition, data) => ({ ...(isPlainObject(data) ? data : {}), ...overlayOf(definition, data).sheet });
 
@@ -1131,7 +1154,7 @@ const itemsRenderedOf = (definition) => {
 };
 
 module.exports = {
-  LIMITS, PICKED, PLAYERS, PICKS_KEY, USES_KEY, INCREASES_KEY, increaseOf, spentOf, WORKED_KEY, ROLLED_KEY, rolledOn, rolledKey, rolledOf, checkChoices, checkHasNames, ownableOf, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData,
+  LIMITS, PICKED, PLAYERS, PICKS_KEY, USES_KEY, INCREASES_KEY, increaseOf, spentOf, WORKED_KEY, ROLLED_KEY, rolledOn, rolledKey, rolledOf, checkChoices, checkHasNames, ownableOf, choicesOf, heldOf, picksOf, pickedOf, unlocksByLevelOf, openingsOf, loopsOf, levelsOf, levelNamesOf, unlockedOf, overlayOf, effectiveData, resistanceSourcesOf, resistancesOf,
   tableOf, rollRangeOf, playersOf,
   capOf, valueOn, meets, namesOf, needsText, usesOf, workedOf, worksOutPicks, choicesShown, itemsRenderedOf, tokenMaxFieldOf,
   MAIN_MONEY, moneyCurrencies, giftItemsOf, giftMoneyOf, openCountOf, targetsOf, CONDITIONS_KEY,
