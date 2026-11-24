@@ -11,6 +11,7 @@
 // option's roll on it, and how players pick from it. 7d6a: an INCREASE, points the player spreads on
 // stats as it unlocks.
 
+import type { Resistance } from './resistances';
 import type { Definition } from './systemsApi';
 import { idFor } from './setup';
 import { allStats, formulaList, statGroups } from './statsRules';
@@ -52,7 +53,7 @@ export interface RollChange { roll: string; change: string }
  * (all the points when absent), from one group of stats (all when absent), none past `cap` (no cap).
  */
 export interface Increase { points: number; most?: number; stats?: string; cap?: number; /** OR A FEAT INSTEAD (7d6c): a list picked through features. */ instead?: string }
-export interface Feature { id: string; label: string; text?: string; at?: number; modifiers?: Modifier[]; uses?: Uses; rolls?: string[]; changes?: RollChange[]; choice?: string; choice_count?: number; increase?: Increase }
+export interface Feature { id: string; label: string; text?: string; at?: number; modifiers?: Modifier[]; uses?: Uses; rolls?: string[]; changes?: RollChange[]; choice?: string; choice_count?: number; increase?: Increase; /** 8b3b: RESIST, IMMUNE or VULNERABLE to a type or ALL (sheets/resistances.ts). */ resistances?: Resistance[] }
 /** A change to a feature: `uses: null`, `choice: null` and `increase: null` take them away. */
 export type FeaturePatch = Partial<Omit<Feature, 'id' | 'uses' | 'choice' | 'increase'>> & { uses?: Uses | null; choice?: string | null; increase?: Increase | null };
 
@@ -284,10 +285,11 @@ export const featureList = (o: ChoiceOption): Feature[] => (Array.isArray(o.feat
 export const levelOf = (f: Feature): number => (Number.isInteger(f.at) && (f.at as number) >= 1 ? f.at as number : 1);
 
 /** What a feature does, in the order the page lists them; none is words only. */
-export type FeatureKind = 'modifier' | 'increase' | 'uses' | 'roll' | 'change' | 'choice' | 'text';
+export type FeatureKind = 'modifier' | 'resistance' | 'increase' | 'uses' | 'roll' | 'change' | 'choice' | 'text';
 export const kindsOf = (f: Feature): FeatureKind[] => {
   const kinds: FeatureKind[] = [];
   if (f.modifiers?.length) kinds.push('modifier');
+  if (f.resistances?.length) kinds.push('resistance');
   if (f.increase) kinds.push('increase');
   if (f.uses) kinds.push('uses');
   if (f.rolls?.length) kinds.push('roll');
@@ -335,7 +337,7 @@ export const keptFeature = (f: Feature, patch: FeaturePatch, levelled: boolean):
     if (typeof next.text === 'string' && !next.text.trim()) delete next.text;
     if (!levelled || !(Number.isInteger(next.at) && (next.at as number) > 1)) delete next.at;
     else next.at = Math.min(next.at as number, LIMITS.level);
-    for (const k of ['modifiers', 'rolls', 'changes'] as const) if (!next[k]?.length) delete next[k];
+    for (const k of ['modifiers', 'rolls', 'changes', 'resistances'] as const) if (!next[k]?.length) delete next[k];
     if (!next.uses) delete next.uses;
     else if (!next.uses.refill) next.uses = { count: next.uses.count };
     if (!next.choice) delete next.choice;

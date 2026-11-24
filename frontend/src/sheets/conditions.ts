@@ -4,6 +4,7 @@
 // as it was leaves nothing behind. Mirrors backend/systemBuilder/conditions.js, which checks what is
 // written and runs it; the tests hold the two together.
 
+import { resistancesIn, type Resistance } from './resistances';
 import type { Definition } from './systemsApi';
 import { idFor } from './setup';
 import { allStats, formulaList } from './statsRules';
@@ -44,13 +45,15 @@ export interface Condition {
   applied?: boolean;
   /** What it does on initiative turns (8a9a), each whole as the server reads it: none for most. */
   each_turn?: EachTurn[];
+  /** 8b3b: what it resists while on (sheets/resistances.ts). */
+  resistances?: Resistance[];
   standard: boolean;
 }
 /** A condition as the page lists it: whole, and whether it is on. */
 export type Listed = Condition & { on: boolean };
 /** What the page changes on one condition. */
 /** `only_with`: the house rule it waits on (4j), or null for none. */
-export type ConditionPatch = Partial<Pick<Condition, 'name' | 'short' | 'icon' | 'drawn' | 'description' | 'ends' | 'rounds' | 'at' | 'modifiers' | 'applied'>> & { on?: boolean; only_with?: string | null; each_turn?: EachTurn[] };
+export type ConditionPatch = Partial<Pick<Condition, 'name' | 'short' | 'icon' | 'drawn' | 'description' | 'ends' | 'rounds' | 'at' | 'modifiers' | 'applied' | 'resistances'>> & { on?: boolean; only_with?: string | null; each_turn?: EachTurn[] };
 
 /** The standard set every system starts with, as the server has it. */
 export const STANDARD: Omit<Condition, 'ends' | 'modifiers' | 'standard'>[] = [
@@ -106,6 +109,7 @@ const whole = (base: { id: string; name: string; short?: string; icon?: string; 
       .map((m) => ({ target: m.target, amount: m.amount, ...(m.way && m.way !== 'add' && WAYS.includes(m.way) ? { way: m.way } : {}) })) : [],
     ...(c.applied === true ? { applied: true } : {}),
     ...(eachTurnOf(c).length ? { each_turn: eachTurnOf(c) } : {}),
+    ...(resistancesIn(c.resistances).length ? { resistances: resistancesIn(c.resistances) } : {}),
     standard,
   };
 };
@@ -126,7 +130,7 @@ export const conditionList = (def: Definition): Listed[] => {
 /** The conditions the game offers: those on, as the server's conditionsOf gives them. */
 export const conditionsOf = (def: Definition): Condition[] => conditionList(def)
   .filter((c) => c.on && c.name.trim())
-  .map(({ on, ...c }) => c)
+  .map((c) => { const whole: Partial<Listed> = { ...c }; delete whole.on; return whole as Condition; })
   .slice(0, LIMITS.conditions);
 
 /**
@@ -179,6 +183,7 @@ export const withCondition = (def: Definition, id: string, patch: ConditionPatch
   }
   if (Array.isArray(entry.modifiers) && entry.modifiers.length === 0) delete entry.modifiers;
   if (Array.isArray(entry.each_turn) && entry.each_turn.length === 0) delete entry.each_turn;
+  if (Array.isArray(entry.resistances) && entry.resistances.length === 0) delete entry.resistances;
   // A reminder, as every condition was before 8a5e: nothing to store.
   if (entry.applied !== true) delete entry.applied;
   if (typeof entry.only_with !== 'string' || !entry.only_with) delete entry.only_with;
@@ -268,7 +273,8 @@ export const withNewCondition = (def: Definition): { definition: Definition; id:
 /** The definition without one of the system's own conditions; a standard one is only turned off. */
 export const withoutCondition = (def: Definition, id: string): Definition => {
   if (standardOf(id)) return def;
-  const { [id]: _gone, ...rest } = storedOf(def);
+  const rest = { ...storedOf(def) };
+  delete rest[id];
   return withStored(def, rest);
 };
 

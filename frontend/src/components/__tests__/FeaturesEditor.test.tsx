@@ -139,6 +139,45 @@ describe('a feature open', () => {
     expect(features()[0].modifiers).toEqual([{ target: 'con', amount: '1' }]);
   });
 
+  it('RESISTANCES (8b3b): + RESISTANCE, its kind and type, when it counts, no type twice, ×; tagged; held to the server\'s checks', async () => {
+    const { features, edits } = open();
+    await userEvent.click(row(/GUARD STANCE/));
+    const f = form('Guard Stance');
+    const rows = within(f.getByRole('group', { name: 'Resistances' }));
+    await userEvent.click(rows.getByRole('button', { name: '+ RESISTANCE' }));
+    await userEvent.click(rows.getByRole('button', { name: '+ RESISTANCE' }));
+    expect(features()[0].resistances).toEqual([{ kind: 'resist', type: 'fire' }, { kind: 'resist', type: 'cold' }]);
+    fireEvent.change(rows.getByRole('combobox', { name: 'Resistance 2: kind' }), { target: { value: 'immune' } });
+    fireEvent.change(rows.getByRole('combobox', { name: 'Resistance 2: type' }), { target: { value: 'all' } });
+    expect(features()[0].resistances).toEqual([{ kind: 'resist', type: 'fire' }, { kind: 'immune', type: 'all' }]);
+    // A type another row names can't be picked.
+    expect((within(rows.getByRole('combobox', { name: 'Resistance 1: type' })).getByRole('option', { name: 'ALL' }) as HTMLOptionElement).disabled).toBe(true);
+    expect((within(rows.getByRole('combobox', { name: 'Resistance 2: type' })).getByRole('option', { name: 'ALL' }) as HTMLOptionElement).disabled).toBe(false);
+    // A levelled list's: from its level.
+    expect(rows.getAllByText('from level 1')).toHaveLength(2);
+    expect(row(/GUARD STANCE/).textContent).toContain('RESISTANCE');
+    const { checkDefinition } = (await import('module')).createRequire(import.meta.url)('../../../../backend/systemBuilder/definition.js');
+    expect(checkDefinition(edits.at(-1)).problems).toEqual([]);
+    await userEvent.click(rows.getByRole('button', { name: 'Remove resistance 1' }));
+    await userEvent.click(rows.getByRole('button', { name: 'Remove resistance 1' }));
+    // None left: nothing kept, and no tag.
+    expect(features()[0]).not.toHaveProperty('resistances');
+    expect(row(/GUARD STANCE/).textContent).not.toContain('RESISTANCE');
+  });
+
+  it('a row naming a type switched off says it counts for nothing; one named that is no type shows as typed', async () => {
+    const start = { ...HEARTH, damage: { types: { necrotic: { on: false } } }, choices: [{ ...HEARTH.choices![0] as object, options: [{ id: 'soldier', label: 'Soldier', features: [
+      { id: 'guard', label: 'Guard Stance', resistances: [{ kind: 'resist', type: 'necrotic' }, { kind: 'immune', type: 'lava' }] }] }] }, HEARTH.choices![1]] } as unknown as Definition;
+    open(start);
+    await userEvent.click(row(/GUARD STANCE/));
+    const rows = within(form('Guard Stance').getByRole('group', { name: 'Resistances' }));
+    expect(rows.getByText('counts for nothing while its type is off')).toBeTruthy();
+    expect(within(rows.getByRole('combobox', { name: 'Resistance 1: type' })).getByRole('option', { name: 'NECROTIC (OFF)' })).toBeTruthy();
+    expect((rows.getByRole('combobox', { name: 'Resistance 2: type' }) as HTMLSelectElement).value).toBe('lava');
+    expect(within(rows.getByRole('combobox', { name: 'Resistance 2: type' })).getByRole('option', { name: 'LAVA (NOT A TYPE)' })).toBeTruthy();
+    expect(within(rows.getByRole('combobox', { name: 'Resistance 1: type' })).queryByRole('option', { name: 'LAVA (NOT A TYPE)' })).toBeNull();
+  });
+
   it('uses: switched on with a count and a rest, the GM\'s to refill with none, switched off', async () => {
     const { features } = open();
     await userEvent.click(row(/RALLY/));
@@ -257,7 +296,7 @@ describe('a feature open', () => {
   it('a "?" beside every setting', async () => {
     open();
     await userEvent.click(row(/GUARD STANCE/));
-    for (const k of ['choices.features', 'choices.featureName', 'choices.at', 'choices.text', 'choices.modifiers', 'choices.increase', 'choices.uses', 'choices.rolls', 'choices.changes', 'choices.choice'] as const) {
+    for (const k of ['choices.features', 'choices.featureName', 'choices.at', 'choices.text', 'choices.modifiers', 'choices.resistances', 'choices.increase', 'choices.uses', 'choices.rolls', 'choices.changes', 'choices.choice'] as const) {
       expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
     }
     await userEvent.click(form('Guard Stance').getByRole('switch', { name: 'RAISES STATS' }));

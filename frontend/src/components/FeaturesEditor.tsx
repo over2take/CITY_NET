@@ -9,12 +9,13 @@ import { FieldName } from './HelpHint';
 import { ToggleSwitch } from './ToggleSwitch';
 import { useFormulaBox } from '../hooks/useFormulaBox';
 import { itemFeatures, withNewItemFeature, withItemFeature, withoutItemFeature, LIMITS as ITEM_LIMITS, type Item } from '../sheets/items';
+import { ResistanceRows } from './ResistanceRows';
 
 // An option's features on the CHOICES page (7a2b2; approved mockup docs/mockups/builder-choices.html,
 // 2026-10-27): what a pick gives, grouped by the level each unlocks at in a levelled list. Each row
 // names a feature and tags what it does; the open one shows its name, words, level and every kind
 // of thing it can do, several at once: modifiers on a stat, formula or health field, uses a rest
-// refills, rolls it gives, changes it lets a roll take, a list it opens, and (7d6a) an INCREASE, points
+// refills, rolls it gives, changes it lets a roll take, a list it opens, (8b3b) RESISTANCES, and (7d6a) an INCREASE, points
 // the player spreads on stats as it unlocks. A modifier ADDs, stopping where it says (STOPS AT), or (7e1) sets AT LEAST
 // that much. What it reads and writes is
 // sheets/choices.ts; every change goes through the builder's `edit`.
@@ -46,7 +47,7 @@ const choice = (on: boolean): React.CSSProperties => ({
 
 /** Each kind as a tag: its word and its color, as the mockup has them. */
 const TAGS: Record<FeatureKind, [string, string]> = {
-  modifier: ['MODIFIER', 'var(--green)'], increase: ['INCREASE', 'var(--green)'], uses: ['USES', 'var(--cyan)'], roll: ['ROLL', 'var(--warning)'],
+  modifier: ['MODIFIER', 'var(--green)'], resistance: ['RESISTANCE', 'var(--cyan)'], increase: ['INCREASE', 'var(--green)'], uses: ['USES', 'var(--cyan)'], roll: ['ROLL', 'var(--warning)'],
   change: ['CHANGE', 'var(--warning)'], choice: ['CHOICE', 'var(--warning)'], text: ['TEXT', 'color-mix(in srgb, var(--green) 60%, transparent)'],
 };
 const Tag = ({ kind }: { kind: FeatureKind }) => (
@@ -174,6 +175,11 @@ function FeatureForm({ definition, edit, place, feature, api }: { definition: De
             onClick={() => set({ modifiers: [...mods, { target: targets[0].items[0].id, amount: '1' }] })}>+ MODIFIER</button></div>
           {!targets.length && <span style={{ ...why, fontSize: 11 }}>No stats or formulas yet to change: make them on STATS &amp; RULES.</span>}
         </div>
+
+        {/* RESISTANCES (8b3b): while the pick's feature is unlocked, or the item counts. */}
+        <FieldName beside hint={HINTS['choices.resistances']} style={small}>RESISTANCES</FieldName>
+        <ResistanceRows definition={definition} rows={feature.resistances ?? []} inputStyle={input} onChange={(rows) => set({ resistances: rows })}
+          when={place.item ? 'while the item counts: worn, attuned or installed' : place.levelled ? `from level ${levelOf(feature)}` : 'while it is held'} />
 
         {/* An item's feature counts while it is worn (7e2b): no increase, and below, no list. */}
         {!place.item && <>

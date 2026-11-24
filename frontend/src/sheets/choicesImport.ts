@@ -170,7 +170,7 @@ export const exampleFile = (def: Definition, list: ChoiceList): string => {
   ].join('\n');
 };
 
-const ALSO: Record<string, string> = { modifier: 'modifiers', roll: 'rolls it gives', change: 'roll changes', choice: 'a list it opens' };
+const ALSO: Record<string, string> = { modifier: 'modifiers', resistance: 'resistances', roll: 'rolls it gives', change: 'roll changes', choice: 'a list it opens' };
 
 /** DOWNLOAD THIS LIST: what the list holds now, to keep as a copy or edit and import back. */
 export const listFile = (def: Definition, list: ChoiceList): string => {

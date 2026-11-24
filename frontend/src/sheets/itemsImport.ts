@@ -183,7 +183,7 @@ export const exampleItemsFile = (def: Definition): string => {
 };
 
 /** The words an item's feature has beyond what a file carries, for its # note. */
-const ALSO: Record<string, string> = { modifier: 'modifiers', roll: 'rolls it gives', change: 'roll changes' };
+const ALSO: Record<string, string> = { modifier: 'modifiers', resistance: 'resistances', roll: 'rolls it gives', change: 'roll changes' };
 
 /** DOWNLOAD THIS LIST: the system's items as they are now, to keep as a copy or edit and import back. */
 export const itemsListFile = (def: Definition): string => {
