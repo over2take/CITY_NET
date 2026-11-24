@@ -22,6 +22,14 @@ Picking an NPC from the library when you need one.
 - **The library says how ATTACH works.** ATTACH only shows with an enemy or friendly token selected on the map, which
   was easy to miss; with none selected, a line now says to select one there to give it an NPC.
 
+### Fixed
+
+- **An NPC made from an unnamed token is listed by its name.** GENERATE_SHEET on a token with no name labels the NPC
+  "Token #13698" in the library, and the label stayed even after the sheet got a Name. The library, the sheet's window
+  and a token PLACEd for it now use the sheet's Name (a label you gave it yourself is kept).
+- **A PLACEd NPC starts with its HP.** Its new token takes the HP of a token already using that NPC, or what its sheet
+  holds, at full, instead of 0/0.
+
 ---
 
 ## [1.14.10] - 2026-10-22

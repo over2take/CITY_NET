@@ -28,6 +28,9 @@ describe('PLACE', () => {
       battle_map_id: 9, floor_index: 1,
     });
     expect(placedToken(NPCS[2], 'friendly', { tx: 0, tz: 0 })).toMatchObject({ name: 'Fixer', shape: 'friendly_rhombus', color: '#00ccff', battle_map_id: null, floor_index: null });
+    // At full HP where the library knows its HP; none where it doesn't (not 0/0).
+    expect(placedToken({ npc_label: 'Jack', hp_max: 18 }, 'enemy', { tx: 0, tz: 0 })).toMatchObject({ name: 'Jack', hp_current: 18, hp_max: 18 });
+    expect(placedToken({ npc_label: 'Jack', hp_max: null }, 'enemy', { tx: 0, tz: 0 })).not.toHaveProperty('hp_max');
   });
 
   const server = (made = { ok: true, body: { data: [{ id: 77 }] } as unknown }, link = { ok: true }) => {
