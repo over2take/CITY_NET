@@ -5,6 +5,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [1.14.11] - 2026-11-24
+
+Picking an NPC from the library when you need one.
+
+### Added
+
+- **FIND in NPC_LIBRARY.EXE.** A box at the top narrows the library as you type, by the NPC's name or its folder; every
+  word has to match ("tygers boss"). Esc clears it.
+- **PLACE an NPC straight from the library.** Each row has PLACE: it puts a new token for that NPC in the middle of your
+  view (on the battle map and floor you're looking at, if you're on one), already using the NPC's sheet. PLACE AS at the
+  top picks ENEMY or FRIENDLY. The library says what happened, or what went wrong.
+
+### Changed
+
+- **The library says how ATTACH works.** ATTACH only shows with an enemy or friendly token selected on the map, which
+  was easy to miss; with none selected, a line now says to select one there to give it an NPC.
+
+---
+
 ## [1.14.10] - 2026-10-22
 
 Node.js's October 2026 security fixes.

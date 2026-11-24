@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { viewCenterOf } from '../utils/viewCenter';
 import { BUILDING_TYPES, shopsAvailable, isShop, typeLabel } from '../data/buildingTypes';
 import { EmptyShopSteps } from './EmptyShopSteps';
 import { BuildingExtrasEditor, type BuildingExtrasHandle } from './BuildingExtrasEditor';
@@ -279,25 +280,8 @@ export function AdminPanel({
   }, [adminTab, fetchGlobalSettings]);
 
 
-  const getCenterGroundTarget = () => {
-    let tx = 0, tz = 0;
-    if (controlsRef.current) {
-        const camera = controlsRef.current._camera || controlsRef.current.camera;
-        if (camera) {
-            const rc = new THREE.Raycaster();
-            rc.setFromCamera(new THREE.Vector2(0, 0), camera);
-            const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-            const target = new THREE.Vector3();
-            rc.ray.intersectPlane(plane, target);
-            tx = target.x; tz = target.z;
-        } else if (controlsRef.current.getTarget) {
-            const t = new THREE.Vector3();
-            controlsRef.current.getTarget(t);
-            tx = t.x; tz = t.z;
-        }
-    }
-    return { tx, tz };
-  };
+  // The middle of the view, shared with the NPC library's PLACE (utils/viewCenter.ts).
+  const getCenterGroundTarget = () => viewCenterOf(controlsRef.current);
 
   const startNew = () => {
     setEditId(null); setSelectedLocation(null);
