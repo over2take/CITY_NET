@@ -129,7 +129,7 @@ const { ownTypes, typeNamed, itemValues, typesShown } = require('./itemTypes');
 const { damageTypesOf } = require('./damageTypes');
 const { checkEncumbrance, encumbranceOf, carriedOf, capacityText, CARRIED, CAPACITY } = require('./encumbrance');
 const { conditionsOf } = require('./conditions');
-const { checkResistances, resistancesIn, resistancesWorked } = require('./resistances');
+const { checkResistances, resistancesIn, resistancesWorked, HAND_KEY, handIn } = require('./resistances');
 
 /** The token's conditions whose modifiers change this sheet's numbers (8a5e1), kept on the sheet by sheets/conditionsOnSheet.js. */
 const CONDITIONS_KEY = '_conditions_applied';
@@ -892,7 +892,8 @@ const overlayOf = (definition, data) => {
 
 /**
  * Every RESISTANCE row counting for a character (8b3a), [{ kind, type, from }]: each unlocked feature's, named by it, each working
- * item's, named by the item, and each of `conditionIds` (the token's) the system has, named by the condition.
+ * item's, named by the item, each of `conditionIds` (the token's) the system has, named by the condition, and those added
+ * by hand kept on the sheet (8b3c1), `hand`, named by who added them.
  */
 const resistanceSourcesOf = (definition, data, conditionIds = []) => {
   const sheet = isPlainObject(data) ? data : {};
@@ -904,6 +905,7 @@ const resistanceSourcesOf = (definition, data, conditionIds = []) => {
   for (const c of conditionsOf(definition)) {
     if (on.has(c.id)) for (const r of resistancesIn(c.resistances)) sources.push({ ...r, from: c.name });
   }
+  for (const { by, ...r } of handIn(sheet[HAND_KEY])) sources.push({ ...r, from: by ? `${by}, by hand` : 'the GM, by hand', hand: true, ...(by ? { by } : {}) });
   return sources;
 };
 

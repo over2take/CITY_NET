@@ -9,7 +9,14 @@
 // counting, it is gone. Worked out, never written into the sheet, as modifiers are.
 //
 // Two for one type don't stack (the mockup, as most games say): IMMUNE beats either; RESIST and VULNERABLE together come
-// to nothing. ALL counts for every type that is on. A type switched off is kept in the row but counts for nothing until
+// to nothing. ALL counts for every type that is on.
+//
+// BY HAND (8b3c1; the user, 2026-11-23: "on the sheet and the health window"): rows kept on the character's sheet under
+// HAND_KEY, a name no field can have, so no sheet edit of a player's writes it; the same list wherever it is changed (the
+// sheet, the token's HEALTH window), and tokens sharing one NPC sheet share it. The GM's own, and (the user, 2026-11-24:
+// "player") a player's on their own character, as they put on conditions: each row kept with who added it (`by`, a
+// player's name; none for the GM's), a player changing only theirs, the GM any (handAfter). VULNERABLE is the GM's alone (the
+// user, 2026-11-24): a player adds RESIST and IMMUNE. A type switched off is kept in the row but counts for nothing until
 // it is on again. What each kind does to a number (WORKS OUT AS) is 8b5's.
 //
 // Pure: the definition's checks and the running game read it.
@@ -21,6 +28,8 @@ const ALL = 'all';
 /** The most rows one feature or condition has. */
 const LIMIT = 10;
 const KEYS = new Set(['kind', 'type']);
+/** Where a sheet keeps the resistances added by hand. */
+const HAND_KEY = '_resistances';
 
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const list = (v) => (Array.isArray(v) ? v : []);
@@ -43,10 +52,37 @@ const checkResistances = (value, where, definition, problems) => {
   });
 };
 
+/** What is wrong with rows sent by hand for this system, in words, or null: as a feature's are checked. */
+const handProblem = (definition, value) => {
+  const problems = [];
+  checkResistances(value, 'resistance', definition, problems);
+  return problems.length ? `${problems[0].where}: ${problems[0].message}` : null;
+};
+
 /** The rows well formed enough to count, as written. */
 const resistancesIn = (value) => list(value).slice(0, LIMIT)
   .filter((r) => isPlainObject(r) && KINDS.includes(r.kind) && typeof r.type === 'string')
   .map((r) => ({ kind: r.kind, type: r.type }));
+
+/** The rows added by hand as kept: each with who added it, a player's name, or none for the GM's. */
+const handIn = (value) => list(value).slice(0, LIMIT)
+  .filter((r) => isPlainObject(r) && KINDS.includes(r.kind) && typeof r.type === 'string')
+  .map((r) => ({ kind: r.kind, type: r.type, ...(typeof r.by === 'string' && r.by ? { by: r.by } : {}) }));
+
+/**
+ * What is kept when `who` (a player's name, or null for the GM) sends `incoming`, a whole list checked already, over
+ * `stored`: a row sent as it was keeps who added it; a new or changed one is `who`'s. A player changes only their own rows,
+ * and never adds VULNERABLE: `{ error }` where one of another's is missing or changed, or a new one of theirs is VULNERABLE.
+ * `{ rows }` otherwise.
+ */
+const handAfter = (stored, incoming, who = null) => {
+  const had = handIn(stored);
+  const same = (a, b) => a.kind === b.kind && a.type === b.type;
+  const rows = list(incoming).map((r) => had.find((h) => same(h, r)) || { kind: r.kind, type: r.type, ...(who ? { by: who } : {}) });
+  if (who && had.some((h) => h.by !== who && !rows.includes(h))) return { error: 'You can only change the ones you added' };
+  if (who && rows.some((r) => r.kind === 'vulnerable' && !had.includes(r))) return { error: 'Only the GM adds vulnerabilities' };
+  return { rows };
+};
 
 /** Of the kinds one type is given, what counts: IMMUNE beats either; RESIST and VULNERABLE together come to nothing. */
 const kindOf = (kinds) => {
@@ -64,9 +100,9 @@ const resistancesWorked = (definition, sources) => {
   for (const t of damageTypesOf(definition)) {
     const here = sources.filter((s) => s.type === t.id || s.type === ALL);
     if (!here.length) continue;
-    out[t.id] = { kind: kindOf(here.map((s) => s.kind)), from: here.map((s) => ({ kind: s.kind, from: s.from, ...(s.type === ALL ? { all: true } : {}) })) };
+    out[t.id] = { kind: kindOf(here.map((s) => s.kind)), from: here.map((s) => ({ kind: s.kind, from: s.from, ...(s.type === ALL ? { all: true } : {}), ...(s.hand ? { hand: true } : {}), ...(s.by ? { by: s.by } : {}) })) };
   }
   return out;
 };
 
-module.exports = { ALL, LIMIT, checkResistances, resistancesIn, kindOf, resistancesWorked };
+module.exports = { ALL, LIMIT, HAND_KEY, handProblem, handIn, handAfter, checkResistances, resistancesIn, kindOf, resistancesWorked };

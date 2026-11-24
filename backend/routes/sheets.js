@@ -10,6 +10,7 @@ const bankAccounts = require('../bank/accounts');
 const { ownToken } = require('../sheets/ownToken');
 const tokenVitals = require('../tokens/vitals');
 const customSystems = require('../systemBuilder/runtime');
+const { HAND_KEY, handProblem, handAfter } = require('../systemBuilder/resistances');
 const { syncTokenMax } = require('../systemBuilder/tokenMax');
 const {
   TEMPLATES, DEFAULT_SYSTEM, isValidSystem, getLinkedFields, applyDerived, cwnEffectiveAc,
@@ -40,6 +41,25 @@ const { withChanges } = require('../systemBuilder/uniqueLines');
 //
 // authenticate alone is not enough here: secure-mode player tokens also pass
 // it. Full-sheet access is admin (or elevated temporary admin) only.
+/** What is wrong with a patch's resistances BY HAND (8b3c1) in `system`, or null; a built-in game has none. */
+const handRowsProblem = (system, patch) => {
+  if (!Object.prototype.hasOwnProperty.call(patch, HAND_KEY)) return null;
+  const definition = customSystems.definitionOf(system);
+  if (!definition) return 'Resistances by hand are for a game made in the builder';
+  return handProblem(definition, patch[HAND_KEY]);
+};
+/**
+ * A sheet after the GM's edit, its resistances by hand (checked already) over what it had: a row kept keeps who added it;
+ * none left, none kept.
+ */
+const withHandRows = (before, data) => {
+  if (!Object.prototype.hasOwnProperty.call(data, HAND_KEY)) return data;
+  const { rows } = handAfter(before[HAND_KEY], data[HAND_KEY]);
+  const next = { ...data };
+  if (rows.length) next[HAND_KEY] = rows; else delete next[HAND_KEY];
+  return next;
+};
+
 const requireAdmin = (req, res, next) => {
   const u = req.user;
   const isAdmin = u && (u.role === 'admin' || u.isTemporary);
@@ -196,6 +216,9 @@ module.exports = (db, io) => {
           // token_ac is writable: it routes to the player's token.
           const linked = getLinkedFields(system);
           const patch = Object.fromEntries(Object.entries(fields).filter(([k]) => !linked[k]));
+          // The GM's own resistances (8b3c1), checked against the game.
+          const handWrong = handRowsProblem(system, patch);
+          if (handWrong) return res.status(400).json({ error: handWrong });
           const acCols = acColumns(linked, fields);
           const routeAc = (done) => {
             if (!acCols) return done();
@@ -211,7 +234,7 @@ module.exports = (db, io) => {
             db,
             row.id,
             (current) => {
-              const next = { ...current, ...patch };
+              const next = withHandRows(current, { ...current, ...patch });
               Object.keys(patch).forEach((f) => applyDerived(system, next, f));
               const definition = customSystems.definitionOf(system);
               // The GM changing a line from its item (G5a): noted as theirs.
@@ -513,6 +536,9 @@ module.exports = (db, io) => {
         const linked = getLinkedFields(row.system);
         cleanFields = Object.fromEntries(Object.entries(fields).filter(([k]) => !linked[k]));
         acCols = acColumns(linked, fields);
+        // The GM's own resistances (8b3c1), checked against the NPC's game.
+        const handWrong = handRowsProblem(row.system, cleanFields);
+        if (handWrong) return res.status(400).json({ error: handWrong });
       }
       const routeAc = (done) => {
         if (!acCols) return done();
@@ -527,7 +553,7 @@ module.exports = (db, io) => {
       let mergedData = null;
       if (cleanFields) {
         const stored = JSON.parse(row.data || '{}');
-        const merged = { ...stored, ...cleanFields };
+        const merged = withHandRows(stored, { ...stored, ...cleanFields });
         // An NPC's line changed from its item (G5a): the GM's.
         if (cleanFields.inventory !== undefined) merged.inventory = withChanges(customSystems.definitionOf(row.system), stored.inventory, cleanFields.inventory, { by: req.user.username, gm: true });
         Object.keys(cleanFields).forEach((f) => applyDerived(row.system, merged, f));

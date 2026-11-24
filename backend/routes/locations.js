@@ -18,6 +18,7 @@ const tokenAccess = require('../tokens/tokenAccess');
 const { checkTokenConditions, publicTokenConditions, parseTokenConditions } = require('../tokens/conditions');
 const { syncConditionsOnSheet } = require('../sheets/conditionsOnSheet');
 const { poolAfter } = require('../tokens/poolHealth');
+const { HAND_KEY, handProblem, handAfter } = require('../systemBuilder/resistances');
 
 /** A change to a token refused (tokens/tokenAccess.js): 401 when nobody said who they are. */
 const refuse = (res, caller, message = 'You can only change your own token') =>
@@ -909,6 +910,59 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
           }
           res.json({ id: Number(id), conditions: checked.value });
         });
+      });
+    });
+  });
+
+  /**
+   * Resistances by hand (8b3c1; the user, 2026-11-23): the whole list, kept on the sheet behind the token (a player's in the
+   * running game, or the NPC's it is linked to), so it is the same list on the sheet and here, and tokens sharing one NPC sheet
+   * share it. The GM and editors change any; a player (the user, 2026-11-24) only on a token whose health they may change, as
+   * with conditions, and only the rows they added. Each row checked against the game's damage types.
+   */
+  router.put('/:id/resistances', optionalAuthenticate, (req, res) => {
+    const { id } = req.params;
+    const caller = tokenAccess.callerOf(req);
+    db.get('SELECT shape, owner, controllers FROM locations WHERE id = ?', [id], (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: 'Not found' });
+      // A player by name, so their rows are theirs: never anyone unnamed.
+      if (!caller.editor && !(caller.player && tokenAccess.mayChangeHealth(row, caller))) return res.status(403).json({ error: 'You can only change your own character\'s resistances' });
+      const who = caller.editor ? null : caller.player;
+      db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (gErr, gRow) => {
+        if (gErr) return res.status(500).json({ error: gErr.message });
+        const system = (gRow && gRow.value) || DEFAULT_SYSTEM;
+        const definition = customSystems.definitionOf(system);
+        if (!definition) return res.status(400).json({ error: 'Resistances by hand are for a game made in the builder' });
+        // None sent is no list: said so, as anything else that isn't one.
+        const rows = req.body && req.body.resistances !== undefined ? req.body.resistances : null;
+        const wrong = handProblem(definition, rows);
+        if (wrong) return res.status(400).json({ error: wrong });
+        const found = (e, sheet) => {
+          if (e) return res.status(500).json({ error: e.message });
+          if (!sheet) return res.status(409).json({ error: 'This token has no sheet to keep that on. Give it one first.' });
+          let after = null;
+          mutateSheet(db, sheet.id, (data) => {
+            after = handAfter(data[HAND_KEY], rows, who);
+            if (after.error) return undefined;
+            const next = { ...data };
+            if (after.rows.length) next[HAND_KEY] = after.rows; else delete next[HAND_KEY];
+            return next;
+          }, (err2) => {
+            if (err2) return res.status(500).json({ error: err2.message });
+            if (after && after.error) return res.status(403).json({ error: after.error });
+            // The map redraws, an NPC's sheet window with it; a player's open sheets re-read.
+            emitUpdate();
+            if (!sheet.is_npc) io.emit('sheetUpdated', { username: sheet.username });
+            res.json({ id: Number(id), resistances: after.rows });
+          });
+        };
+        if (row.shape === 'rhombus' && row.owner) {
+          db.get('SELECT id, username, is_npc FROM character_sheets WHERE username = ? AND system = ? AND is_npc = 0', [row.owner, system], found);
+        } else {
+          db.get(`SELECT cs.id, cs.username, cs.is_npc FROM npc_sheet_links l JOIN character_sheets cs ON cs.id = l.sheet_id
+            WHERE l.location_id = ? AND cs.system = ?`, [id, system], found);
+        }
       });
     });
   });
