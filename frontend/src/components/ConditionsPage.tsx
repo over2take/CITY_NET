@@ -10,6 +10,7 @@ import { restList } from '../sheets/rests';
 import { ConditionIcon } from './ConditionIcon';
 import { PicturePicker, OnAChip } from './PicturePicker';
 import { OnlyWith } from './OnlyWith';
+import { ResistanceRows } from './ResistanceRows';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
 import { ToggleSwitch } from './ToggleSwitch';
@@ -257,6 +258,9 @@ function Detail({ c, definition, edit, api }: Props & { c: Listed }) {
             {c.modifiers.some((m) => m.target === ALL_ROLLS) ? ' ALL ROLLS always reaches every roll of this system\'s own.' : ''}
           </p>
         </div>
+        {/* RESISTANCES (8b3b): while it is on the token, APPLIED or not. */}
+        <FieldName beside hint={HINTS['conditions.resistances']} style={small}>RESISTANCES</FieldName>
+        <ResistanceRows definition={definition} rows={c.resistances ?? []} inputStyle={input} when="while it is on" onChange={(rows) => set({ resistances: rows })} />
         <FieldName beside hint={HINTS['conditions.eachTurn']} style={small}>EACH TURN</FieldName>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minWidth: 0 }}>
           {eachTurn.map((e, i) => (

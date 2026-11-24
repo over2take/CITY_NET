@@ -106,6 +106,9 @@ describe('DOWNLOAD THIS LIST', () => {
     expect(text).toContain('\n[options]\nname, description, requires, die, gives, money\nSoldier, "Holds a line, a wall, ""anything"".", , , , \n"#1 Fan", "  Spaces at the ends  ", @int >= 13, , , \n');
     expect(text).toContain('\noption, feature, level, words, uses, refill\nSoldier, Second Wind, 1, "Breathe; then keep going.", @soldier_level + 1, Short rest\n');
     expect(text).toContain('\n# Soldier · Guard Stance also has modifiers, set in the builder\nSoldier, Guard Stance, 2, , , \n');
+    // A feature's resistances (8b3b), said beside it.
+    const guarded = { ...HEARTH, choices: (HEARTH.choices as { id: string; options: { features?: { id: string }[] }[] }[]).map((c) => (c.id !== 'classes' ? c : { ...c, options: c.options.map((o) => ({ ...o, features: (o.features ?? []).map((f) => (f.id === 'guard_stance' ? { ...f, resistances: [{ kind: 'resist', type: 'fire' }] } : f)) })) })) } as unknown as Definition;
+    expect(listFile(guarded, list(guarded, 'classes'))).toContain('\n# Soldier · Guard Stance also has modifiers, resistances, set in the builder\n');
     // A rest turned off is found by its id only.
     expect(text).toContain('\nSoldier, Stand Firm, 3, , 1, end_of_scene\n');
     expect(text).toContain('\n"#1 Fan", Pray, 1, , 2, Dawn prayer\n');

@@ -96,6 +96,10 @@ describe('DOWNLOAD THIS LIST: the items as they are, back unchanged', () => {
     expect(file).not.toContain('[empty]');
     expect(file).toContain('Boots of Quiet, Quiet Step, "Hush, now.", 1, Long rest');
     expect(file).toContain('# Ring of Might · Mighty also has modifiers, set in the builder');
+    // A feature's resistances (8b3b), said beside it.
+    const shaped = TESTFALL as unknown as { items: { list: { id: string; features?: object[] }[] } };
+    const warm = { ...TESTFALL, items: { ...shaped.items, list: shaped.items.list.map((i) => (i.id !== 'ring' ? i : { ...i, features: (i.features ?? []).map((f) => ({ ...f, resistances: [{ kind: 'resist', type: 'cold' }] })) })) } } as unknown as Definition;
+    expect(itemsListFile(warm)).toContain('# Ring of Might · Mighty also has modifiers, resistances, set in the builder');
     const read = readItemsFile(TESTFALL, file);
     expect(read).toMatchObject({ changes: 0, skipped: [] });
     expect(read.items).toEqual(TESTFALL.items);

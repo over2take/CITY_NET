@@ -158,6 +158,10 @@ describe('ITEMS (beside their list since 8aL2)', () => {
     await userEvent.click(ring().getByRole('button', { name: /HARDY/ }));
     const form = within(ring().getByRole('group', { name: 'Feature Hardy' }));
     expect(form.getByRole('group', { name: 'Modifiers' })).toBeTruthy();
+    // RESISTANCES (8b3b): while the item counts.
+    await userEvent.click(within(form.getByRole('group', { name: 'Resistances' })).getByRole('button', { name: '+ RESISTANCE' }));
+    expect(form.getByText('while the item counts: worn, attuned or installed')).toBeTruthy();
+    expect(form.getByRole('combobox', { name: 'Resistance 1: type' })).toBeTruthy();
     expect(form.queryByText('INCREASE')).toBeNull();
     expect(form.queryByText('OPENS A LIST')).toBeNull();
     expect(form.queryByText('AT LEVEL')).toBeNull();

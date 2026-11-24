@@ -230,8 +230,8 @@ describe('the "?"', () => {
     for (const k of keys) expect(screen.getByRole('note', { name: HINTS[k] }), k).toBeTruthy();
   };
     open();
-    // ITS MODIFIERS and MODIFIERS joined them in 8a5e2, EACH TURN in 8a9b.
-    allShown('conditions', 7);
+    // ITS MODIFIERS and MODIFIERS joined them in 8a5e2, EACH TURN in 8a9b, RESISTANCES in 8b3b.
+    allShown('conditions', 8);
     for (const name of ['ON THE CHIP', 'DESCRIPTION']) expect(screen.getByRole('textbox', { name }), name).toBeTruthy();
     expect(screen.getByRole('combobox', { name: 'ENDS' })).toBeTruthy();
   });
@@ -258,6 +258,21 @@ describe('ONLY WITH (4j4a)', () => {
 });
 
 describe('ITS MODIFIERS and a modifier\'s way (8a5e2)', () => {
+  it('RESISTANCES (8b3b): while it is on, + RESISTANCE, its kind and type, stored as rows, held to the server\'s checks; × leaves nothing', async () => {
+    const { last } = open();
+    await userEvent.click(list().getByRole('button', { name: 'POISONED' }));
+    const rows = within(detail('Poisoned condition').getByRole('group', { name: 'Resistances' }));
+    await userEvent.click(rows.getByRole('button', { name: '+ RESISTANCE' }));
+    fireEvent.change(rows.getByRole('combobox', { name: 'Resistance 1: kind' }), { target: { value: 'vulnerable' } });
+    fireEvent.change(rows.getByRole('combobox', { name: 'Resistance 1: type' }), { target: { value: 'poison' } });
+    expect(stored(last())).toEqual({ poisoned: { resistances: [{ kind: 'vulnerable', type: 'poison' }] } });
+    expect(rows.getByText('while it is on')).toBeTruthy();
+    expect(screen.getByRole('note', { name: HINTS['conditions.resistances'] })).toBeTruthy();
+    expect(checkDefinition(last()).problems).toEqual([]);
+    await userEvent.click(rows.getByRole('button', { name: 'Remove resistance 1' }));
+    expect(last()).toEqual(H);
+  });
+
   it('A REMINDER to start; APPLIED stored, the words under the modifiers saying what it does; back, nothing stored', async () => {
     const { last } = open();
     await userEvent.click(list().getByRole('button', { name: 'POISONED' }));
