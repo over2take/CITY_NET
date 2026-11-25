@@ -363,6 +363,8 @@ interface HealthReviewPanelProps {
   gameSystem?: string;
   /** Called after emitting a roll so the app can pop the dice tray. */
   onRolled?: () => void;
+  /** The one looking's sign-in, for what the server lets them see of its resistances (8b4b). */
+  authToken?: string;
 }
 
 /**
@@ -370,7 +372,7 @@ interface HealthReviewPanelProps {
  * beat, a stun bar's fill, a temp-HP marker, the injury map. How close someone is to going
  * down is for the table to read, not to count.
  */
-export function HealthReviewPanel({ location, socket, gameSystem, onRolled }: HealthReviewPanelProps) {
+export function HealthReviewPanel({ location, socket, gameSystem, onRolled, authToken }: HealthReviewPanelProps) {
   const [injuriesOpen, setInjuriesOpen] = useState(false);
   const [stun, setStun] = useState<{ stun_current: number; stun_monitor: number } | null>(null);
   // A custom system's health model, described: never a number or a note.
@@ -466,6 +468,8 @@ export function HealthReviewPanel({ location, socket, gameSystem, onRolled }: He
       {injuriesOpen && <InjuryMap injuries={injuries} />}
       {/* Which conditions, and what they mean: never the rounds left or the modifiers (4e2b1). */}
       <TokenConditions location={location} gameSystem={gameSystem} socket={socket} canChange={false} />
+      {/* Its resistances, to read (8b4b): another player's character's all of them, an NPC's only as the GM revealed them. */}
+      <TokenResistances locationId={location.id} authToken={authToken} socket={socket} conditionsKey={String((location as unknown as { conditions?: string }).conditions ?? '')} />
     </div>
   );
 }

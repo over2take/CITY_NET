@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRequire } from 'module';
 import {
   ALL, kindOf, chipsOf, showVulnerabilities, handRowOf, mayTakeOff, pickable, withAdded, withTakenOff, chipWords, sourceWords,
+  showResistances, revealing, isRevealed, withRevealed, withAllRevealed, fromWords, helperLines,
   type ResistanceView,
 } from '../resistanceChips';
 
@@ -95,6 +96,60 @@ describe('who sees and does what', () => {
     expect(withAdded(v, 'vulnerable', 'cold')).toEqual([{ kind: 'resist', type: 'fire' }, { kind: 'immune', type: 'sonic' }, { kind: 'vulnerable', type: 'cold' }]);
     expect(withTakenOff(v, 'fire')).toEqual([{ kind: 'immune', type: 'sonic' }]);
     expect(withAdded({ on: true }, 'resist', ALL)).toEqual([{ kind: 'resist', type: ALL }]);
+  });
+});
+
+describe('REVEAL and reading only (8b4b)', () => {
+  const NPC = { _resistances: [{ kind: 'resist', type: 'cold' }, { kind: 'vulnerable', type: 'fire' }, { kind: 'resist', type: 'all' }], _revealed: ['cold'] };
+  const as = (look: string, who: string | null = null, npc = true): ResistanceView => ({ on: true, ...resistancesShown(DEF, NPC, [], who, { look, npc }) });
+
+  it('the GM choosing on an NPC only: a chip revealed as kept, every chip revealed where no one is choosing', () => {
+    const gm = as('full');
+    expect(revealing(gm)).toBe(true);
+    const { resist } = chipsOf(gm);
+    expect(resist.map((c) => [c.id, isRevealed(gm, c)])).toEqual([[ALL, false], ['fire', false], ['cold', true]]);
+    // A player's own, or one given them: nothing to choose.
+    expect(revealing(as('full', 'vex'))).toBe(false);
+    expect(revealing(as('full', null, false))).toBe(false);
+    expect(isRevealed(as('full', 'vex'), { id: 'fire' })).toBe(true);
+    expect(isRevealed({ on: true, npc: true }, { id: 'cold' })).toBe(false);
+  });
+
+  it('one shown or hidden again, the rest kept; REVEAL ALL every chip shown, once each, added to what is kept', () => {
+    const gm = as('full');
+    expect(withRevealed(gm, 'fire', true)).toEqual(['cold', 'fire']);
+    expect(withRevealed(gm, 'cold', false)).toEqual([]);
+    expect(withRevealed(gm, 'cold', true)).toEqual(['cold']);
+    expect(withRevealed({ on: true }, 'cold', true)).toEqual(['cold']);
+    const { resist, vulnerable } = chipsOf(gm);
+    expect(withAllRevealed(gm, [...resist, ...vulnerable])).toEqual(['cold', ALL, 'fire']);
+    expect(withAllRevealed({ on: true }, resist.slice(0, 1))).toEqual([ALL]);
+  });
+
+  it('RESISTANCES drawn where there is one or one may be added; never an empty row only to read', () => {
+    expect(showResistances(as('full'), [])).toBe(true);
+    expect(showResistances(as('watch', 'ash', false), [])).toBe(false);
+    expect(showResistances(as('watch', 'ash', false), chipsOf(as('watch', 'ash', false)).resist)).toBe(true);
+  });
+
+  it('a player looking at an NPC: no sources named, so no FROM; the GM\'s chip its sources', () => {
+    const player = as('revealed', 'vex');
+    const [cold] = chipsOf(player).resist;
+    expect(cold.from).toEqual([{ kind: 'resist' }]);
+    expect(fromWords(cold)).toBeNull();
+    expect(fromWords(chipsOf(as('full')).resist[2])).toBe('the GM, by hand · the GM, by hand · ALL');
+  });
+
+  it('the helper: kind and type, its meaning, where from, the type\'s words, and the GM\'s note on what players see', () => {
+    const gm = as('full');
+    const [all, fire, cold] = chipsOf(gm).resist;
+    expect(helperLines(gm, cold)).toEqual(['RESIST COLD', 'Takes half, rounded down.', 'From the GM, by hand · the GM, by hand · ALL.', 'COLD: Freezes.', 'Players see it.']);
+    expect(helperLines(gm, fire).at(-1)).toBe("Players don't see it yet: REVEAL shows it.");
+    expect(helperLines(gm, fire)[1]).toBe('Taken as rolled.');
+    expect(helperLines(gm, all)).toEqual(['RESIST TO ALL', 'Takes half, rounded down.', 'From the GM, by hand.', "Players don't see it yet: REVEAL shows it."]);
+    expect(helperLines(as('revealed', 'vex'), chipsOf(as('revealed', 'vex')).resist[0])).toEqual(['RESIST COLD', 'Takes half, rounded down.', 'COLD: Freezes.']);
+    // Nothing said where nothing is known.
+    expect(helperLines({ on: true }, { id: 'x', name: 'X', kind: 'resist', from: [] })).toEqual(['RESIST X']);
   });
 });
 

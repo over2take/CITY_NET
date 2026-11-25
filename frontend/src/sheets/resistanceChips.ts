@@ -7,11 +7,17 @@ import type { Kind } from './damageTypes';
 // VULNERABLE is what counts, otherwise in RESISTANCES, two that cancel there too. Adding by hand and taking off build the
 // whole list the server keeps (PUT /api/locations/:id/resistances): rows as kind and type only, the server keeping who
 // added each.
+//
+// REVEAL (8b4b; the user, 2026-11-24): an NPC's, the GM sees which chips players see, unrevealed ones drawn apart, and
+// reveals or hides them chip by chip or all at once (PUT /api/locations/:id/revealed, the whole list). A player looking at
+// an NPC gets only the revealed, with no sources named; one looking at another player's character reads it all. Where the
+// one looking may add nothing, an empty row isn't drawn, and nothing at all where there is nothing to show.
 
-export interface Source { kind: Kind; from: string; all?: true; hand?: true; by?: string }
+/** `from` names where it comes from; a player looking at an NPC isn't told (8b4a). */
+export interface Source { kind: Kind; from?: string; all?: true; hand?: true; by?: string }
 export interface Worked { kind: Kind | null; from: Source[] }
 export interface HandRow { kind: Kind; type: string; by?: string }
-export interface TypeShown { id: string; name: string; icon?: string; drawn?: string[] }
+export interface TypeShown { id: string; name: string; icon?: string; drawn?: string[]; description?: string }
 export interface ResistanceView {
   on: boolean;
   types?: TypeShown[];
@@ -20,8 +26,13 @@ export interface ResistanceView {
   hand?: HandRow[];
   /** What the one looking may add: anything (the GM), RESIST and IMMUNE (a player, `by`), or nothing (no sheet). */
   may?: { add: boolean; vulnerable: boolean; by?: string };
+  /** The GM's view of an NPC (8b4a): which chips its players see, by type id or ALL. */
+  npc?: boolean;
+  revealed?: string[];
+  /** A player's view of an NPC: only what the GM revealed, no sources named. */
+  revealedOnly?: boolean;
 }
-export interface Chip { id: string; name: string; icon?: string; drawn?: string[]; kind: Kind | null; from: Source[] }
+export interface Chip { id: string; name: string; icon?: string; drawn?: string[]; description?: string; kind: Kind | null; from: Source[] }
 
 /** A row's type for every type the game has on, as the server says it. */
 export const ALL = 'all';
@@ -51,6 +62,43 @@ export const chipsOf = (view: ResistanceView): { resist: Chip[]; vulnerable: Chi
 
 /** Whether VULNERABILITIES shows: always to the GM, who adds them; to a player only where their character has one. */
 export const showVulnerabilities = (view: ResistanceView, vulnerable: Chip[]): boolean => vulnerable.length > 0 || !!view.may?.vulnerable;
+
+/** Whether RESISTANCES shows: where there is one, or the one looking may add one; never an empty row only to read. */
+export const showResistances = (view: ResistanceView, resist: Chip[]): boolean => resist.length > 0 || !!view.may?.add;
+
+/** Whether the GM is choosing what an NPC's players see (8b4b): the server marks the GM's view of an NPC only. */
+export const revealing = (view: ResistanceView): boolean => !!view.npc;
+
+/** Whether a chip is one an NPC's players see: always so but where the GM is choosing. */
+export const isRevealed = (view: ResistanceView, chip: Pick<Chip, 'id'>): boolean => !revealing(view) || (view.revealed ?? []).includes(chip.id);
+
+/** The revealed list with one chip shown or hidden again, the rest as kept. */
+export const withRevealed = (view: ResistanceView, id: string, on: boolean): string[] => {
+  const kept = (view.revealed ?? []).filter((r) => r !== id);
+  return on ? [...kept, id] : kept;
+};
+
+/** REVEAL ALL: every chip shown now added to what is revealed already. */
+export const withAllRevealed = (view: ResistanceView, chips: Chip[]): string[] => [...new Set([...(view.revealed ?? []), ...chips.map((c) => c.id)])];
+
+/** Where it comes from, in the words the open chip and its helper use, or null where the one looking isn't told (the
+ * server names every source or none). */
+export const fromWords = (chip: Chip): string | null => (chip.from.some((s) => s.from)
+  ? chip.from.map((s) => sourceWords(chip, s)).join(' · ')
+  : null);
+
+/** What a chip's helper says, line by line (hover, keyboard focus, a tap): kind and type, its meaning here, where from,
+ * the type's own words, and the GM's note on an NPC's when players don't see it yet. */
+export const helperLines = (view: ResistanceView, chip: Chip): string[] => {
+  const from = fromWords(chip);
+  return [
+    chipWords(chip),
+    chip.kind === null ? 'Taken as rolled.' : (view.means?.[chip.kind] ?? ''),
+    ...(from ? [`From ${from}.`] : []),
+    ...(chip.description ? [`${chip.name}: ${chip.description}`] : []),
+    ...(revealing(view) ? [isRevealed(view, chip) ? 'Players see it.' : "Players don't see it yet: REVEAL shows it."] : []),
+  ].filter(Boolean);
+};
 
 /** The row added by hand for a chip's type, if any: one a type. */
 export const handRowOf = (view: ResistanceView, chip: Chip): HandRow | undefined => (view.hand ?? []).find((r) => r.type === chip.id);
