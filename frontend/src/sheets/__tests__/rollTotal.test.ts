@@ -48,6 +48,9 @@ describe('a hit\'s line and a typed DAMAGE (8b5c)', () => {
     expect(totalIn(line)).toEqual({ before: line.slice(0, -'TAKES 7 OF 10'.length), total: 'TAKES 7 OF 10', after: '', hit: true });
     expect(total(`${ROLL} → GHOUL · NOT APPLIED: APPLY DAMAGE IS OFF · WOULD TAKE 10`)).toBe('WOULD TAKE 10');
     expect(total('Kes rolled Club DAMAGE 5 [0 + 5 = 5] → GHOUL · TAKES 5')).toBe('TAKES 5');
+    // A built-in game's hit under APPLY DAMAGE OFF (8b5d), after its own working.
+    const off = 'kes: Gun damage vs VICTIM [3d6: (4, 5, 2) = 11] — SP BODY 7 soaks 7, 4 DAMAGE THROUGH · NOT APPLIED: APPLY DAMAGE IS OFF · WOULD TAKE 4';
+    expect(totalIn(off)).toEqual({ before: off.slice(0, -'WOULD TAKE 4'.length), total: 'WOULD TAKE 4', after: '', hit: true });
   });
 
   it("a to-hit: HIT or MISS after its target, marked a hit; a symbol roll's own HIT inside its dice part never", () => {

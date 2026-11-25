@@ -19,6 +19,10 @@ export const PLAYERS_CHANGE_GEAR = 'players_change_gear';
 /** APPLY DAMAGE and WORK OUT RESISTANCES at this table (8b5b; backend damageTypes.js APPLY_DAMAGE_SETTING, WORK_OUT_SETTING): blank, the system's. */
 export const APPLY_DAMAGE = 'apply_damage';
 export const WORK_OUT_RESISTANCES = 'work_out_resistances';
+/** A built-in game's APPLY DAMAGE (8b5d; backend BUILT_IN_APPLY_SETTING): its own, so a custom system's never reaches it. */
+export const APPLY_DAMAGE_BUILT_IN = 'apply_damage_built_in';
+/** The built-in games whose sheet attacks take a hit off their target (the server's sheetAttack). */
+const BUILT_IN_ATTACKS = ['cities_without_number', 'cyberpunk_red', 'shadowrun_6e'];
 /** HIT TOTALS ON NPCS: GM ONLY (8b5c; backend HIT_TOTALS_SETTING): on unless '0', what a hit took from an NPC the GM's alone. */
 export const HIT_TOTALS_GM_ONLY = 'hit_totals_gm_only';
 
@@ -48,6 +52,16 @@ export const choiceRules = (has: TableSwitches | null | undefined): ChoiceRule[]
     options: [option('1', 'ON', has.damage.work_out), option('0', 'OFF', !has.damage.work_out)],
   },
 ] : []);
+
+/**
+ * APPLY DAMAGE for a built-in game with sheet attacks (8b5d; the mockup's answer 8, "only the APPLY DAMAGE switch, starting on
+ * AUTO"): AUTO as the game always was, kept as following it, or OFF; none for a game without them.
+ */
+export const builtInChoiceRules = (system: string | null | undefined): ChoiceRule[] => (system && BUILT_IN_ATTACKS.includes(system) ? [{
+  settingKey: APPLY_DAMAGE_BUILT_IN, label: 'APPLY DAMAGE',
+  title: 'How a sheet attack\'s hit reaches its target. AUTO: taken off at once, as the game always has. OFF: rolled and logged with what it would take, and nothing on the target changed (hit points, armor, soak, shield); the table does the rest.',
+  options: [option('auto', 'AUTO', true), option('off', 'OFF', false)],
+}] : []);
 
 export interface SwitchRule { settingKey: string; label: string; title: string; defaultOn: true }
 

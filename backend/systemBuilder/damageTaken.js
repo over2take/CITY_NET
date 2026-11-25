@@ -65,4 +65,13 @@ const seenBy = (taken, shown) => {
   return { taken: { ...taken, parts }, total };
 };
 
-module.exports = { damageTaken, takenWords, seenBy, WORKS_WORDS };
+/** Why a hit wasn't taken (8b5c), said before what it would take. */
+const NOT_APPLIED = { off: 'NOT APPLIED: APPLY DAMAGE IS OFF', confirm: 'NOT APPLIED: APPLY DAMAGE IS CONFIRM' };
+
+/**
+ * What ends a built-in game's hit under APPLY DAMAGE OFF (8b5d; the user, 2026-11-25: "like custom systems"), after its
+ * own working: " · NOT APPLIED: APPLY DAMAGE IS OFF · WOULD TAKE 4", the number the tray draws larger.
+ */
+const notTakenTail = (n) => ` · ${NOT_APPLIED.off} · WOULD TAKE ${Math.max(0, Math.floor(Number(n) || 0))}`;
+
+module.exports = { damageTaken, takenWords, seenBy, notTakenTail, NOT_APPLIED, WORKS_WORDS };
