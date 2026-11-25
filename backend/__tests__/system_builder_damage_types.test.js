@@ -13,7 +13,9 @@ import { createRequire } from 'module';
  */
 
 const require_ = createRequire(import.meta.url);
-const { STANDARD, ICONS, DAMAGE_ICONS, KINDS, MEANS, LIMITS, checkDamage, damageTypesOf, meaningsOf } = require_('../systemBuilder/damageTypes');
+const {
+  STANDARD, ICONS, DAMAGE_ICONS, KINDS, MEANS, LIMITS, checkDamage, damageTypesOf, meaningsOf, worksOutOf, damageRulesOf, APPLY_DAMAGE_SETTING, WORK_OUT_SETTING,
+} = require_('../systemBuilder/damageTypes');
 const { checkDefinition } = require_('../systemBuilder/definition');
 const { ICONS: CONDITION_ICONS } = require_('../systemBuilder/conditions');
 const { BLANK_DRAWN } = require_('../systemBuilder/drawings');
@@ -92,9 +94,9 @@ describe('checked as an untrusted file is', () => {
   it('the section, the words and each type\'s parts', () => {
     expect(problemsOf(undefined)).toEqual([]);
     expect(problemsOf('x')).toEqual(['damage: Must be the damage types and what resisting means']);
-    expect(problemsOf({ apply: 'auto' })).toEqual(['damage, apply: Not part of damage']);
+    expect(problemsOf({ pending: [] })).toEqual(['damage, pending: Not part of damage']);
     expect(problemsOf({ resist: 'half' })).toEqual(['damage, resist: Must say what it means']);
-    expect(problemsOf({ immune: { means: 3, works_out: 'none' } })).toEqual(['damage, immune, works_out: Only what it means', 'damage, immune, means: Must be text']);
+    expect(problemsOf({ immune: { means: 3, works: 'none' } })).toEqual(['damage, immune, works: Only what it means and what it works out as', 'damage, immune, means: Must be text']);
     expect(problemsOf({ vulnerable: { means: 'x'.repeat(LIMITS.means + 1) } })).toEqual([`damage, vulnerable, means: Longer than ${LIMITS.means} characters`]);
     expect(problemsOf({ vulnerable: { means: 'x'.repeat(LIMITS.means) } })).toEqual([]);
     expect(problemsOf({ types: [] })).toEqual(['damage, types: Must be a set of damage types']);
@@ -160,8 +162,45 @@ describe('checked as an untrusted file is', () => {
   });
 });
 
+describe('what a hit does (8b5a)', () => {
+  it('WORKS OUT AS, WORK IT OUT and APPLY DAMAGE checked: the four, a yes or no, the three', () => {
+    expect(problemsOf({ resist: { works_out: 'half' }, immune: { means: 'Nothing.', works_out: 'words' }, vulnerable: { works_out: 'double' }, work_out: false, apply: 'off' })).toEqual([]);
+    expect(problemsOf({ resist: { works_out: 'none' }, apply: 'auto', work_out: true })).toEqual([]);
+    expect(problemsOf({ resist: { works_out: 'quarter' } })).toEqual(['damage, resist, works_out: half, none, double or words']);
+    expect(problemsOf({ vulnerable: { works_out: 2 } })).toEqual(['damage, vulnerable, works_out: half, none, double or words']);
+    expect(problemsOf({ work_out: 'yes' })).toEqual(['damage, work_out: Must say work_out: true or work_out: false']);
+    expect(problemsOf({ apply: 'confirm' })).toEqual([]);
+    expect(problemsOf({ apply: 'later' })).toEqual(['damage, apply: auto, confirm or off']);
+  });
+
+  it('WORKS OUT AS: the system\'s, or HALF, NONE and DOUBLE to start; one ill-formed its start', () => {
+    expect(worksOutOf(OWN)).toEqual({ resist: 'half', immune: 'none', vulnerable: 'double' });
+    expect(worksOutOf(null)).toEqual({ resist: 'half', immune: 'none', vulnerable: 'double' });
+    expect(worksOutOf({ ...OWN, damage: { resist: { works_out: 'words' }, immune: { works_out: 'half' }, vulnerable: { works_out: 'x' } } }))
+      .toEqual({ resist: 'words', immune: 'half', vulnerable: 'double' });
+  });
+
+  it('APPLY DAMAGE and WORK IT OUT: the table\'s over the system\'s; a custom system on CONFIRM, worked out, to start', () => {
+    expect(damageRulesOf(OWN)).toEqual({ apply: 'confirm', workOut: true });
+    const sys = { ...OWN, damage: { apply: 'auto', work_out: false } };
+    expect(damageRulesOf(sys)).toEqual({ apply: 'auto', workOut: false });
+    expect(damageRulesOf(sys, { [APPLY_DAMAGE_SETTING]: 'off', [WORK_OUT_SETTING]: '1' })).toEqual({ apply: 'off', workOut: true });
+    expect(damageRulesOf(OWN, { [APPLY_DAMAGE_SETTING]: 'auto', [WORK_OUT_SETTING]: '0' })).toEqual({ apply: 'auto', workOut: false });
+    // Not one of the three, or neither: the system's.
+    expect(damageRulesOf(sys, { [APPLY_DAMAGE_SETTING]: 'soon', [WORK_OUT_SETTING]: 'x' })).toEqual({ apply: 'auto', workOut: false });
+    expect(damageRulesOf({ ...OWN, damage: { apply: 'later' } })).toEqual({ apply: 'confirm', workOut: true });
+    expect([APPLY_DAMAGE_SETTING, WORK_OUT_SETTING]).toEqual(['apply_damage', 'work_out_resistances']);
+  });
+
+  it('a built-in game: APPLY DAMAGE alone, AUTO unless the table says OFF; nothing worked out', () => {
+    expect(damageRulesOf(null)).toEqual({ apply: 'auto', workOut: false });
+    expect(damageRulesOf(null, { [APPLY_DAMAGE_SETTING]: 'off', [WORK_OUT_SETTING]: '1' })).toEqual({ apply: 'off', workOut: false });
+    expect(damageRulesOf(null, { [APPLY_DAMAGE_SETTING]: 'confirm' })).toEqual({ apply: 'auto', workOut: false });
+  });
+});
+
 describe('carried with the system', () => {
-  const DEF = { ...OWN, damage: { types: { fire: { name: 'Flame' }, physical: { on: true }, sonic: { name: 'Sonic', icon: 'wave' }, laser: { name: 'Laser', drawn: DRAWN } }, resist: { means: 'Half.' } } };
+  const DEF = { ...OWN, damage: { types: { fire: { name: 'Flame' }, physical: { on: true }, sonic: { name: 'Sonic', icon: 'wave' }, laser: { name: 'Laser', drawn: DRAWN } }, resist: { means: 'Half.' }, immune: { works_out: 'words' }, work_out: false, apply: 'off' } };
 
   it('in its file beside the definition, for a builder from before, and read back unchanged', () => {
     const file = citysys.buildFile({ definition: DEF, version: 2, origin: 'org_ember' });
