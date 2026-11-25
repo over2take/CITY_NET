@@ -8,7 +8,7 @@ import { createRequire } from 'module';
  */
 
 const require_ = createRequire(import.meta.url);
-const { damageTaken, takenWords, seenBy, WORKS_WORDS } = require_('../systemBuilder/damageTaken');
+const { damageTaken, takenWords, seenBy, notTakenTail, NOT_APPLIED, WORKS_WORDS } = require_('../systemBuilder/damageTaken');
 const { worksOutOf } = require_('../systemBuilder/damageTypes');
 const { resistancesOf } = require_('../systemBuilder/choices');
 
@@ -107,5 +107,16 @@ describe('as players may know it (8b5c)', () => {
 
   it('said as not taken: WOULD TAKE', () => {
     expect(takenWords('Ganger', taken, { verb: 'WOULD TAKE' })).toBe('GANGER · VULNERABLE TO SLASHING: 5 → 10 · RESISTS FIRE: 9 → 4 · WOULD TAKE 14');
+  });
+});
+
+describe('a built-in game\'s hit under APPLY DAMAGE OFF (8b5d)', () => {
+  it('ends as a custom system\'s does: why, then what it would take, whole and never below nothing', () => {
+    expect(notTakenTail(4)).toBe(' · NOT APPLIED: APPLY DAMAGE IS OFF · WOULD TAKE 4');
+    expect(notTakenTail(0)).toBe(' · NOT APPLIED: APPLY DAMAGE IS OFF · WOULD TAKE 0');
+    expect(notTakenTail(-3)).toBe(' · NOT APPLIED: APPLY DAMAGE IS OFF · WOULD TAKE 0');
+    expect(notTakenTail(6.7)).toBe(' · NOT APPLIED: APPLY DAMAGE IS OFF · WOULD TAKE 6');
+    expect(notTakenTail('x')).toBe(' · NOT APPLIED: APPLY DAMAGE IS OFF · WOULD TAKE 0');
+    expect(NOT_APPLIED).toEqual({ off: 'NOT APPLIED: APPLY DAMAGE IS OFF', confirm: 'NOT APPLIED: APPLY DAMAGE IS CONFIRM' });
   });
 });

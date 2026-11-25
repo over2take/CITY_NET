@@ -14,7 +14,7 @@ import { createRequire } from 'module';
 
 const require_ = createRequire(import.meta.url);
 const {
-  STANDARD, ICONS, DAMAGE_ICONS, KINDS, MEANS, LIMITS, checkDamage, damageTypesOf, meaningsOf, worksOutOf, damageRulesOf, APPLY_DAMAGE_SETTING, WORK_OUT_SETTING,
+  STANDARD, ICONS, DAMAGE_ICONS, KINDS, MEANS, LIMITS, checkDamage, damageTypesOf, meaningsOf, worksOutOf, damageRulesOf, APPLY_DAMAGE_SETTING, WORK_OUT_SETTING, BUILT_IN_APPLY_SETTING,
 } = require_('../systemBuilder/damageTypes');
 const { checkDefinition } = require_('../systemBuilder/definition');
 const { ICONS: CONDITION_ICONS } = require_('../systemBuilder/conditions');
@@ -192,10 +192,14 @@ describe('what a hit does (8b5a)', () => {
     expect([APPLY_DAMAGE_SETTING, WORK_OUT_SETTING]).toEqual(['apply_damage', 'work_out_resistances']);
   });
 
-  it('a built-in game: APPLY DAMAGE alone, AUTO unless the table says OFF; nothing worked out', () => {
+  it('a built-in game: APPLY DAMAGE alone, in its own setting, AUTO unless the table says OFF; nothing worked out', () => {
     expect(damageRulesOf(null)).toEqual({ apply: 'auto', workOut: false });
-    expect(damageRulesOf(null, { [APPLY_DAMAGE_SETTING]: 'off', [WORK_OUT_SETTING]: '1' })).toEqual({ apply: 'off', workOut: false });
-    expect(damageRulesOf(null, { [APPLY_DAMAGE_SETTING]: 'confirm' })).toEqual({ apply: 'auto', workOut: false });
+    expect(damageRulesOf(null, { [BUILT_IN_APPLY_SETTING]: 'off', [WORK_OUT_SETTING]: '1' })).toEqual({ apply: 'off', workOut: false });
+    expect(damageRulesOf(null, { [BUILT_IN_APPLY_SETTING]: 'confirm' })).toEqual({ apply: 'auto', workOut: false });
+    // A custom system's APPLY DAMAGE never reaches a built-in game (8b5d), nor the built-in's a custom system.
+    expect(damageRulesOf(null, { [APPLY_DAMAGE_SETTING]: 'off' })).toEqual({ apply: 'auto', workOut: false });
+    expect(damageRulesOf(OWN, { [BUILT_IN_APPLY_SETTING]: 'off' }).apply).toBe('confirm');
+    expect(BUILT_IN_APPLY_SETTING).toBe('apply_damage_built_in');
   });
 });
 

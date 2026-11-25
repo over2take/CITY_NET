@@ -16,13 +16,12 @@ const { resistancesOf } = require('../systemBuilder/choices');
 const { worksOutOf, damageRulesOf, APPLY_DAMAGE_SETTING, WORK_OUT_SETTING, HIT_TOTALS_SETTING } = require('../systemBuilder/damageTypes');
 const { REVEALED_KEY, revealedIn } = require('../systemBuilder/resistances');
 const { revealedOnly } = require('../systemBuilder/resistancesShown');
-const { damageTaken, takenWords, seenBy } = require('../systemBuilder/damageTaken');
+const { damageTaken, takenWords, seenBy, NOT_APPLIED } = require('../systemBuilder/damageTaken');
 const { HIDDEN } = require('../systemBuilder/tableRolls');
 
 /** How long a HIT waits for its damage (the mockup: "a minute without one, and it waits no more"). */
 const HIT_WAITS_MS = 60_000;
 
-const NOT_APPLIED = { off: 'NOT APPLIED: APPLY DAMAGE IS OFF', confirm: 'NOT APPLIED: APPLY DAMAGE IS CONFIRM' };
 /** The GM's note where players were told less, as a roll's hidden target's (tableRolls.js HIDDEN, 6c4h). */
 const TOLD_LESS = HIDDEN.replace(/^ · /, '');
 

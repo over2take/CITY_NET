@@ -30,7 +30,9 @@
 // DOUBLE; WORK IT OUT, on to start, off taking every hit as rolled with its resistances said; APPLY DAMAGE, AUTO (taken
 // off at once), CONFIRM (waiting on the target's HEALTH for whoever may apply it, 8b6) or OFF (rolled and logged only),
 // a custom system starting on CONFIRM. A table overrules the last two in its settings (APPLY_DAMAGE_SETTING,
-// WORK_OUT_SETTING); a built-in game has APPLY DAMAGE alone, AUTO to start, so nobody's game changes.
+// WORK_OUT_SETTING); a built-in game has APPLY DAMAGE alone, AUTO or OFF, AUTO to start, so nobody's game changes, kept
+// in its own setting (BUILT_IN_APPLY_SETTING, 8b5d) so a custom system's CONFIRM never reaches a built-in game, nor a
+// built-in's OFF a custom system.
 //
 // Pure: the definition's checks read it, and the running game will.
 
@@ -80,6 +82,8 @@ const APPLY = ['auto', 'confirm', 'off'];
 /** The table's own choices, in its settings: APPLY DAMAGE, and WORK OUT RESISTANCES ('0' off, '1' on); none, the system's. */
 const APPLY_DAMAGE_SETTING = 'apply_damage';
 const WORK_OUT_SETTING = 'work_out_resistances';
+/** A built-in game's APPLY DAMAGE (8b5d): 'off', or AUTO for anything else. */
+const BUILT_IN_APPLY_SETTING = 'apply_damage_built_in';
 /** HIT TOTALS ON NPCS: GM ONLY (8b5c; the user, 2026-11-25, "on by default"): what a hit took from an NPC, and why, kept
  * from players unless the table sets it '0'. */
 const HIT_TOTALS_SETTING = 'hit_totals_gm_only';
@@ -219,11 +223,11 @@ const worksOutOf = (definition) => {
 /**
  * How hits are taken at this table (8b5a): `apply` (auto, confirm or off) and `workOut` (whether resistances change the
  * number), the table's settings ({ key: value }) over the system's. A built-in game (no definition) has APPLY DAMAGE alone,
- * AUTO or OFF, AUTO to start, and nothing to work out.
+ * AUTO or OFF in its own setting, AUTO to start, and nothing to work out.
  */
 const damageRulesOf = (definition, settings = {}) => {
+  if (!definition) return { apply: settings[BUILT_IN_APPLY_SETTING] === 'off' ? 'off' : 'auto', workOut: false };
   const table = settings[APPLY_DAMAGE_SETTING];
-  if (!definition) return { apply: table === 'off' ? 'off' : 'auto', workOut: false };
   const damage = isPlainObject(definition.damage) ? definition.damage : {};
   const workOut = settings[WORK_OUT_SETTING];
   return {
@@ -233,6 +237,6 @@ const damageRulesOf = (definition, settings = {}) => {
 };
 
 module.exports = {
-  STANDARD, ICONS, DAMAGE_ICONS, KINDS, MEANS, WORKS_OUT, APPLY, APPLY_DAMAGE_SETTING, WORK_OUT_SETTING, HIT_TOTALS_SETTING, LIMITS,
+  STANDARD, ICONS, DAMAGE_ICONS, KINDS, MEANS, WORKS_OUT, APPLY, APPLY_DAMAGE_SETTING, WORK_OUT_SETTING, BUILT_IN_APPLY_SETTING, HIT_TOTALS_SETTING, LIMITS,
   isIcon, checkDamage, damageTypesOf, damageTypeIdsOf, meaningsOf, worksOutOf, damageRulesOf,
 };

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { switchRules, choiceRules, carryingShown, gearByPlayers, SHOW_ENCUMBRANCE, BAND_CONDITIONS, APPLY_CONDITION_MODIFIERS, CONDITION_TURN_EFFECTS, PLAYERS_CHANGE_GEAR, APPLY_DAMAGE, WORK_OUT_RESISTANCES, HIT_TOTALS_GM_ONLY } from '../tableSwitches';
+import { switchRules, choiceRules, builtInChoiceRules, APPLY_DAMAGE_BUILT_IN, carryingShown, gearByPlayers, SHOW_ENCUMBRANCE, BAND_CONDITIONS, APPLY_CONDITION_MODIFIERS, CONDITION_TURN_EFFECTS, PLAYERS_CHANGE_GEAR, APPLY_DAMAGE, WORK_OUT_RESISTANCES, HIT_TOTALS_GM_ONLY } from '../tableSwitches';
 import { createRequire } from 'module';
 
 const damageTypes = createRequire(import.meta.url)('../../../../backend/systemBuilder/damageTypes.js');
@@ -28,6 +28,25 @@ describe('choiceRules (8b5b)', () => {
     expect(choiceRules(base)).toEqual([]);
     expect(choiceRules(null)).toEqual([]);
     expect(choiceRules(undefined)).toEqual([]);
+  });
+});
+
+describe('builtInChoiceRules (8b5d)', () => {
+  it('APPLY DAMAGE for the built-in games with sheet attacks, AUTO the system\'s, or OFF; none for another', () => {
+    for (const system of ['cities_without_number', 'cyberpunk_red', 'shadowrun_6e']) {
+      const rules = builtInChoiceRules(system);
+      expect(rules.map((r) => [r.settingKey, r.label])).toEqual([[APPLY_DAMAGE_BUILT_IN, 'APPLY DAMAGE']]);
+      expect(rules[0].options).toEqual([{ value: '', label: "AUTO (SYSTEM'S)" }, { value: 'off', label: 'OFF' }]);
+      expect(rules[0].title).toMatch(/OFF: rolled and logged/);
+    }
+    for (const system of ['generic', 'custom:abc', '', null, undefined]) expect(builtInChoiceRules(system)).toEqual([]);
+  });
+
+  it('kept where the server reads it, its own key, each value one it knows', () => {
+    expect(APPLY_DAMAGE_BUILT_IN).toBe(damageTypes.BUILT_IN_APPLY_SETTING);
+    expect(APPLY_DAMAGE_BUILT_IN).not.toBe(APPLY_DAMAGE);
+    const [apply] = builtInChoiceRules('cyberpunk_red');
+    expect(apply.options.map((o) => damageTypes.damageRulesOf(null, { [APPLY_DAMAGE_BUILT_IN]: o.value }).apply)).toEqual(['auto', 'off']);
   });
 });
 

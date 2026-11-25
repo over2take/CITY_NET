@@ -40,6 +40,8 @@ const { inventoryAdded } = require('../sheets/inventoryImport');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { hitOnTarget, HIT_WAITS_MS } = require('../tokens/hitOnTarget');
+const { damageRulesOf, BUILT_IN_APPLY_SETTING } = require('../systemBuilder/damageTypes');
+const { notTakenTail } = require('../systemBuilder/damageTaken');
 const { healthView } = require('../systemBuilder/healthView');
 const { syncTokenMax } = require('../systemBuilder/tokenMax');
 const headshots = require('../sheets/headshots');
@@ -3098,7 +3100,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     // miss. AR vs the token's Armor Rating (melee_ac slot) shifts the DV by
     // ±1. On a hit the potential DV applies to Physical HP; the soak roll is
     // adjudicated manually (GM can heal back what was soaked).
-    const handleSr6Attack = (info, payload, color) => {
+    const handleSr6Attack = (info, payload, color, off) => {
       const system = 'shadowrun_6e';
       rollSheetOf(info, payload, system, ({ row: sheetRow, forName, tokenId }) => {
           const attackerData = JSON.parse(sheetRow.data || '{}');
@@ -3132,12 +3134,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 `${attackerLabel(info, forName)} attacks ${target.name} with ${weapon.name} ` +
                 `[${pool.breakdown}]` +
                 (defense ? ` vs dodge [${defense.breakdown}] — net ${Math.max(0, netHits)}` : '') +
-                ` — ${hit ? `HIT · ${damage}${weapon.dv.track}${arTag} · GM: soak BOD+ARMOR` : 'MISS'}`;
+                ` — ${hit ? `HIT · ${damage}${weapon.dv.track}${arTag} · GM: soak BOD+ARMOR` : 'MISS'}`
+                + (off && hit && damage > 0 ? notTakenTail(damage) : '');
               const emitResult = makeEmitResult(info, target, weapon, { hit, roll: pool.hits, ac: armor, glitch: pool.glitch }, tokenId);
 
               const resolve = () => {
                 broadcastRoll(info.userName, pool, hitHistory, hit ? color : '#ff3333', () => {
                   if (!hit || damage <= 0) return emitResult({});
+                  if (off) return emitResult({ damage, notApplied: true });
                   applyTokenDamage(target, damage, (newHp) => {
                     emitResult({ damage, through: damage, targetHp: newHp, targetDown: newHp <= 0 });
                   });
@@ -3160,7 +3164,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     // multiplied on a traumatic hit when the cwn_trauma house rule is on.
     // Miss: a shock weapon still deals its shock damage if its shock AC
     // covers the target. Frail defenders die outright at 0 HP.
-    const handleCwnAttack = (info, payload, color) => {
+    const handleCwnAttack = (info, payload, color, off) => {
       const system = 'cities_without_number';
       rollSheetOf(info, payload, system, ({ row: sheetRow, forName, updated, tokenId }) => {
           const attackerData = JSON.parse(sheetRow.data || '{}');
@@ -3257,6 +3261,22 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 // roll so the dice tray can render them (shock passes none -
                 // no dice are rolled on shock).
                 const dealDamage = (amount, outcome, tagHistory, resultExtras, traumatic) => {
+                  // APPLY DAMAGE OFF (8b5d): the working said and nothing taken, no soak spent, no vehicle or token hit
+                  // points, nor what only taking it would say (DOWN, FRAIL, ARMOR HELD, what is left).
+                  if (off) {
+                    let history = tagHistory;
+                    let through;
+                    if (ride) {
+                      through = attackCwn.applyArmorRating(amount, ride.vehicle.armorRating);
+                      history += ` — ${ride.vehicle.name}: ${amount} − AR ${ride.vehicle.armorRating} = ${through}`;
+                    } else {
+                      const soak = attackCwn.applySoak(amount, defenderData.soak_current);
+                      through = soak.through;
+                      if (soak.absorbed > 0) history += ` — SOAK ${soak.absorbed} absorbed, ${soak.through} through`;
+                    }
+                    return broadcastRoll(info.userName, outcome ?? { rolls: {}, modTotal: 0, total: amount }, history + notTakenTail(through), color,
+                      () => emitResult({ ...resultExtras, through, notApplied: true }), boardOf(outcome ? 'DAMAGE' : 'SHOCK', 'NOT APPLIED'));
+                  }
                   // A hit on an occupied vehicle hits the vehicle: Armour Rating cuts
                   // the damage and the rest comes off its HP. Nobody inside is touched
                   // until it is destroyed, at which point it stops being cover and the
@@ -3361,10 +3381,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (!payload || !payload.targetId) return;
       pendingAttacks.delete(socket.id); // sheet attacks resolve in one step - no manual roll pending
       const color = typeof payload.color === 'string' ? payload.color : '#00ff00';
-      getGameSystem((err, system) => {
+      // With the game, its APPLY DAMAGE (8b5d): OFF rolls and logs a hit and leaves the target as it was.
+      const gameAndApply = (cb) => getGameSystem((err, system) => (err ? cb(err)
+        : db.get('SELECT value FROM global_settings WHERE key = ?', [BUILT_IN_APPLY_SETTING], (aErr, aRow) =>
+          cb(null, system, damageRulesOf(null, { [BUILT_IN_APPLY_SETTING]: !aErr && aRow ? aRow.value : undefined }).apply === 'off'))));
+      gameAndApply((err, system, off) => {
         if (err) return;
-        if (system === 'cities_without_number') return handleCwnAttack(info, payload, color);
-        if (system === 'shadowrun_6e') return handleSr6Attack(info, payload, color);
+        if (system === 'cities_without_number') return handleCwnAttack(info, payload, color, off);
+        if (system === 'shadowrun_6e') return handleSr6Attack(info, payload, color, off);
         if (system !== 'cyberpunk_red') return;
         rollSheetOf(info, payload, system, ({ row: sheetRow, hp: attackerHp, forName, updated, tokenId }) => {
             const attackerData = JSON.parse(sheetRow.data || '{}');
@@ -3467,17 +3491,19 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
                     let dmgHistory = `${weapon.name} damage vs ${target.name} [${dmg.breakdown} = ${dmg.total}]`;
                     if (shield.absorbed > 0) {
-                      dmgHistory += ` — SHIELD absorbs ${shield.absorbed}${shield.destroyed ? ' (SHIELD DOWN)' : ` (${shield.newShield} left)`}`;
+                      // What is left of it only where it is taken (8b5d).
+                      dmgHistory += ` — SHIELD absorbs ${shield.absorbed}${off ? '' : shield.destroyed ? ' (SHIELD DOWN)' : ` (${shield.newShield} left)`}`;
                     }
                     if (shield.remaining > 0) {
                       dmgHistory += ` — SP ${location} ${sp} soaks ${Math.min(sp, shield.remaining)}` +
                         (armorThrough > 0
-                          ? `, ${armorThrough} DAMAGE THROUGH${aimed ? ' (HEADSHOT x2)' : ''}${ablated && defender ? ', SP ABLATES -1' : ''}`
+                          ? `, ${armorThrough} DAMAGE THROUGH${aimed ? ' (HEADSHOT x2)' : ''}${ablated && defender && !off ? ', SP ABLATES -1' : ''}`
                           : ' — NO PENETRATION');
                     }
                     if (crit) {
                       dmgHistory += ` — CRITICAL INJURY! +${sheetAttack.CRIT_BONUS_DAMAGE} DIRECT · GM: ROLL THE INJURY TABLE`;
                     }
+                    if (off) dmgHistory += notTakenTail(through);
 
                     const resultExtras = {
                       damage: dmg.total, sp, through, ablated, location,
@@ -3487,14 +3513,16 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
                     const finish = () => {
                       broadcastRoll(info.userName, dmg, dmgHistory, color, () => {
+                        if (off) return emitResult({ ...resultExtras, ablated: false, notApplied: true });
                         if (through <= 0) return emitResult({ ...resultExtras, through: 0 });
                         applyTokenDamage(target, through, (newHp) => {
                           emitResult({ ...resultExtras, targetHp: newHp, targetDown: newHp <= 0 });
                         });
-                      }, boardOf('DAMAGE', crit ? 'CRITICAL INJURY' : through <= 0 ? 'ARMOR HELD' : null));
+                      }, boardOf('DAMAGE', crit ? 'CRITICAL INJURY' : off ? 'NOT APPLIED' : through <= 0 ? 'ARMOR HELD' : null));
                     };
 
-                    const sheetChanged = defender && ((ablated && shield.remaining > 0) || shield.absorbed > 0);
+                    // Under OFF the armor and shield stay as they were too (8b5d).
+                    const sheetChanged = !off && defender && ((ablated && shield.remaining > 0) || shield.absorbed > 0);
                     if (sheetChanged) {
                       // Through the queue, and applied to a fresh read rather than to the
                       // copy parsed before the roll was resolved. The defender is very
