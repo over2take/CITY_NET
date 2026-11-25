@@ -32,16 +32,37 @@ const damageTaken = (parts, worked, { worksOut, workOut }) => {
 };
 
 /**
- * What the log says a hit did, after the roll (8b5a): `GANGER TAKES 7`, then each part a resistance met, "RESISTS FIRE:
- * 4 → 2", or as rolled where it is words only or not worked out, "RESISTS FIRE (TAKEN AS ROLLED)".
+ * What the log says a hit did, after the roll (8b5a): the target, each part a resistance met, "RESISTS FIRE: 4 → 2", or as
+ * rolled where it is words only or not worked out, "RESISTS FIRE (TAKEN AS ROLLED)", then `notes`, then what it took last
+ * (8b5c; the user, 2026-11-25: "the total damage at the end and highlighted"): "TAKES 7 OF 10", or "TAKES 10" where that is
+ * all of it. `verb` WOULD TAKE where it isn't taken; `total` false leaves the number out, for players who aren't to know it.
  */
-const takenWords = (targetName, taken) => {
+const takenWords = (targetName, taken, { verb = 'TAKES', total = true, notes = [] } = {}) => {
   const met = taken.parts.filter((p) => p.kind);
   const each = met.map((p) => {
     const what = `${VERB[p.kind]} ${String(p.label || p.type).toUpperCase()}`;
     return p.works && p.works !== 'words' ? `${what}: ${p.value} → ${p.taken}` : `${what} (TAKEN AS ROLLED)`;
   });
-  return `${String(targetName).toUpperCase()} TAKES ${taken.taken}${each.length ? ` · ${each.join(' · ')}` : ''}`;
+  const took = total ? [`${verb} ${taken.taken}${taken.taken !== taken.rolled ? ` OF ${taken.rolled}` : ''}`] : [];
+  return [String(targetName).toUpperCase(), ...each, ...notes, ...took].join(' · ');
 };
 
-module.exports = { damageTaken, takenWords, WORKS_WORDS };
+/**
+ * A hit as the players may know it (8b5c; the user, 2026-11-25: an NPC's resistances hidden until the GM reveals them):
+ * `shown` the target's resistances as players see them (resistancesShown.js revealedOnly), or null where they see all (a
+ * player's character). A part met by what they don't know is said as a plain part, and where that changed its number the
+ * total is theirs no more (`total: false`).
+ */
+const seenBy = (taken, shown) => {
+  if (!shown) return { taken, total: true };
+  let total = true;
+  const parts = taken.parts.map((p) => {
+    if (!p.kind || (shown[p.type] && shown[p.type].kind === p.kind)) return p;
+    if (p.taken !== p.value) total = false;
+    const { works, ...plain } = p;
+    return { ...plain, kind: null };
+  });
+  return { taken: { ...taken, parts }, total };
+};
+
+module.exports = { damageTaken, takenWords, seenBy, WORKS_WORDS };

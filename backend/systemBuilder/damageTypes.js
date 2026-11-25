@@ -80,6 +80,9 @@ const APPLY = ['auto', 'confirm', 'off'];
 /** The table's own choices, in its settings: APPLY DAMAGE, and WORK OUT RESISTANCES ('0' off, '1' on); none, the system's. */
 const APPLY_DAMAGE_SETTING = 'apply_damage';
 const WORK_OUT_SETTING = 'work_out_resistances';
+/** HIT TOTALS ON NPCS: GM ONLY (8b5c; the user, 2026-11-25, "on by default"): what a hit took from an NPC, and why, kept
+ * from players unless the table sets it '0'. */
+const HIT_TOTALS_SETTING = 'hit_totals_gm_only';
 const KIND_KEYS = new Set(['means', 'works_out']);
 
 const DAMAGE_KEYS = new Set(['types', ...KINDS, 'work_out', 'apply']);
@@ -230,6 +233,6 @@ const damageRulesOf = (definition, settings = {}) => {
 };
 
 module.exports = {
-  STANDARD, ICONS, DAMAGE_ICONS, KINDS, MEANS, WORKS_OUT, APPLY, APPLY_DAMAGE_SETTING, WORK_OUT_SETTING, LIMITS,
+  STANDARD, ICONS, DAMAGE_ICONS, KINDS, MEANS, WORKS_OUT, APPLY, APPLY_DAMAGE_SETTING, WORK_OUT_SETTING, HIT_TOTALS_SETTING, LIMITS,
   isIcon, checkDamage, damageTypesOf, damageTypeIdsOf, meaningsOf, worksOutOf, damageRulesOf,
 };

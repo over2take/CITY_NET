@@ -260,6 +260,21 @@ describe('DiceTrayWindow', () => {
     expect(history.textContent).toContain('cody: rolled 2d6 [(3+5) = 8]');
   });
 
+  it("a hit's line (8b5c): what it took, last, bold and larger; a plain roll's total its usual size", () => {
+    const socketRef = makeSocketRef();
+    render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} openHistory />);
+    const histHandler = (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: unknown[]) => call[0] === 'diceRollHistory')![1] as (rolls: unknown[]) => void;
+    act(() => {
+      histHandler([
+        { total: 8, results: { 6: [3, 5] }, color: '#0f0', historyString: 'cody rolled 2d6 [(3+5) = 8]' },
+        { total: 10, results: {}, color: '#0f0', historyString: 'cody rolled Flame Tongue DAMAGE 4 SLASHING + 6 FIRE DMG [0 + 4] + [0 + 6] = 4 SLASHING + 6 FIRE DMG (10) → GHOUL · RESISTS FIRE: 6 → 3 · TAKES 7 OF 10' },
+      ]);
+    });
+    const [plain, hit] = within(screen.getByTestId('dice-history')).getAllByTestId('roll-total');
+    expect([plain.textContent, plain.style.fontSize]).toEqual(['8', '']);
+    expect([hit.tagName, hit.textContent, hit.style.fontSize]).toEqual(['STRONG', 'TAKES 7 OF 10', '1.3em']);
+  });
+
   it('renders the Canvas for 3D dice', () => {
     const socketRef = makeSocketRef();
     render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} />);

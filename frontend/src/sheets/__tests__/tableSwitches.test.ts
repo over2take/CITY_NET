@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { switchRules, choiceRules, carryingShown, gearByPlayers, SHOW_ENCUMBRANCE, BAND_CONDITIONS, APPLY_CONDITION_MODIFIERS, CONDITION_TURN_EFFECTS, PLAYERS_CHANGE_GEAR, APPLY_DAMAGE, WORK_OUT_RESISTANCES } from '../tableSwitches';
+import { switchRules, choiceRules, carryingShown, gearByPlayers, SHOW_ENCUMBRANCE, BAND_CONDITIONS, APPLY_CONDITION_MODIFIERS, CONDITION_TURN_EFFECTS, PLAYERS_CHANGE_GEAR, APPLY_DAMAGE, WORK_OUT_RESISTANCES, HIT_TOTALS_GM_ONLY } from '../tableSwitches';
 import { createRequire } from 'module';
 
 const damageTypes = createRequire(import.meta.url)('../../../../backend/systemBuilder/damageTypes.js');
@@ -28,6 +28,17 @@ describe('choiceRules (8b5b)', () => {
     expect(choiceRules(base)).toEqual([]);
     expect(choiceRules(null)).toEqual([]);
     expect(choiceRules(undefined)).toEqual([]);
+  });
+});
+
+describe('HIT TOTALS ON NPCS: GM ONLY (8b5c)', () => {
+  it('where hits reach their targets, on to start (the user, 2026-11-25), kept where the server reads it', () => {
+    const base = { encumbrance: false, band_conditions: false, applied_conditions: false };
+    expect(switchRules({ ...base, damage: { apply: 'confirm', work_out: true } }).map((r) => [r.settingKey, r.label, r.defaultOn]))
+      .toEqual([[HIT_TOTALS_GM_ONLY, 'HIT TOTALS ON NPCS: GM ONLY', true]]);
+    expect(switchRules({ ...base, gear: true, damage: { apply: 'auto', work_out: false } }).map((r) => r.settingKey)).toEqual([HIT_TOTALS_GM_ONLY, PLAYERS_CHANGE_GEAR]);
+    expect(switchRules(base).map((r) => r.settingKey)).not.toContain(HIT_TOTALS_GM_ONLY);
+    expect(HIT_TOTALS_GM_ONLY).toBe(damageTypes.HIT_TOTALS_SETTING);
   });
 });
 
