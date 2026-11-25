@@ -10,8 +10,10 @@
 //       laser: { name: 'Laser', drawn: ['0000', ...] },           // one with a picture from the 16 x 16 pad (drawings.js)
 //     },
 //     resist: { means: 'Takes half, rounded down.' },             // what each word means in this game, as words
-//     immune: { means: 'Takes none.' },
+//     immune: { means: 'Takes none.', works_out: 'none' },         // and what it does to a hit's number (8b5a)
 //     vulnerable: { means: 'Takes double.' },
+//     work_out: false,                                            // resistances said beside a hit, not worked out (8b5a)
+//     apply: 'auto',                                              // a hit taken off at once, waiting, or only logged (8b5a)
 //   }
 //
 // Every system starts with the starter set below, laid out as CONDITIONS is: a definition stores only what it changes, a
@@ -21,8 +23,14 @@
 // drawn ones and five drawn for damage (BLADE, POINT, IMPACT, WAVE, RAY), an upload, or a drawing on the pad (DRAW).
 //
 // A type's name is what a hit says ("2d6 FIRE DMG", 8b2), so two types that are on may not share one, and a name is
-// letters, digits, spaces, a hyphen or an apostrophe, never DMG. What RESIST, IMMUNE and VULNERABLE do to a number
-// (WORKS OUT AS) and APPLY DAMAGE come with 8b5, where they are first used.
+// letters, digits, spaces, a hyphen or an apostrophe, never DMG.
+//
+// What a hit does (8b5a; the mockup's answers 3 and 5, 2026-11-23): RESIST, IMMUNE and VULNERABLE each WORKS OUT AS HALF
+// (rounded down), NONE, DOUBLE or WORDS ONLY (taken as rolled, the word said beside it), starting as HALF, NONE and
+// DOUBLE; WORK IT OUT, on to start, off taking every hit as rolled with its resistances said; APPLY DAMAGE, AUTO (taken
+// off at once), CONFIRM (waiting on the target's HEALTH for whoever may apply it, 8b6) or OFF (rolled and logged only),
+// a custom system starting on CONFIRM. A table overrules the last two in its settings (APPLY_DAMAGE_SETTING,
+// WORK_OUT_SETTING); a built-in game has APPLY DAMAGE alone, AUTO to start, so nobody's game changes.
 //
 // Pure: the definition's checks read it, and the running game will.
 
@@ -64,8 +72,17 @@ const STANDARD_IDS = new Set(STANDARD.map((t) => t.id));
 /** RESIST, IMMUNE and VULNERABLE, and what each means in a game that hasn't said. */
 const KINDS = ['resist', 'immune', 'vulnerable'];
 const MEANS = { resist: 'Takes half, rounded down.', immune: 'Takes none.', vulnerable: 'Takes double.' };
+/** What each word may do to a hit's number (8b5a), and what each starts as. */
+const WORKS_OUT = ['half', 'none', 'double', 'words'];
+const WORKS_OUT_START = { resist: 'half', immune: 'none', vulnerable: 'double' };
+/** How a hit reaches its target (8b5a): taken off at once, waiting to be applied, or only logged. */
+const APPLY = ['auto', 'confirm', 'off'];
+/** The table's own choices, in its settings: APPLY DAMAGE, and WORK OUT RESISTANCES ('0' off, '1' on); none, the system's. */
+const APPLY_DAMAGE_SETTING = 'apply_damage';
+const WORK_OUT_SETTING = 'work_out_resistances';
+const KIND_KEYS = new Set(['means', 'works_out']);
 
-const DAMAGE_KEYS = new Set(['types', ...KINDS]);
+const DAMAGE_KEYS = new Set(['types', ...KINDS, 'work_out', 'apply']);
 const STANDARD_KEYS = new Set(['on', 'name', 'icon', 'drawn', 'description']);
 const OWN_KEYS = new Set(['name', 'icon', 'drawn', 'description']);
 
@@ -89,12 +106,16 @@ const checkDamage = (damage, problems) => {
     if (k === undefined) continue;
     const where = `damage, ${kind}`;
     if (!isPlainObject(k)) { problems.push({ where, message: 'Must say what it means' }); continue; }
-    for (const key of Object.keys(k)) if (key !== 'means') problems.push({ where: `${where}, ${key}`, message: 'Only what it means' });
+    for (const key of Object.keys(k)) if (!KIND_KEYS.has(key)) problems.push({ where: `${where}, ${key}`, message: 'Only what it means and what it works out as' });
+    if (k.works_out !== undefined && !WORKS_OUT.includes(k.works_out)) problems.push({ where: `${where}, works_out`, message: 'half, none, double or words' });
     if (k.means !== undefined) {
       if (typeof k.means !== 'string') problems.push({ where: `${where}, means`, message: 'Must be text' });
       else if (k.means.length > LIMITS.means) problems.push({ where: `${where}, means`, message: `Longer than ${LIMITS.means} characters` });
     }
   }
+
+  if (damage.work_out !== undefined && typeof damage.work_out !== 'boolean') problems.push({ where: 'damage, work_out', message: 'Must say work_out: true or work_out: false' });
+  if (damage.apply !== undefined && !APPLY.includes(damage.apply)) problems.push({ where: 'damage, apply', message: 'auto, confirm or off' });
 
   const types = damage.types;
   if (types === undefined) return;
@@ -186,4 +207,29 @@ const meaningsOf = (definition) => {
   return Object.fromEntries(KINDS.map((k) => [k, isPlainObject(damage[k]) && typed(damage[k].means) ? damage[k].means.trim() : MEANS[k]]));
 };
 
-module.exports = { STANDARD, ICONS, DAMAGE_ICONS, KINDS, MEANS, LIMITS, isIcon, checkDamage, damageTypesOf, damageTypeIdsOf, meaningsOf };
+/** What RESIST, IMMUNE and VULNERABLE do to a hit's number in a system (8b5a): its own, or what each starts as. */
+const worksOutOf = (definition) => {
+  const damage = definition && isPlainObject(definition.damage) ? definition.damage : {};
+  return Object.fromEntries(KINDS.map((k) => [k, isPlainObject(damage[k]) && WORKS_OUT.includes(damage[k].works_out) ? damage[k].works_out : WORKS_OUT_START[k]]));
+};
+
+/**
+ * How hits are taken at this table (8b5a): `apply` (auto, confirm or off) and `workOut` (whether resistances change the
+ * number), the table's settings ({ key: value }) over the system's. A built-in game (no definition) has APPLY DAMAGE alone,
+ * AUTO or OFF, AUTO to start, and nothing to work out.
+ */
+const damageRulesOf = (definition, settings = {}) => {
+  const table = settings[APPLY_DAMAGE_SETTING];
+  if (!definition) return { apply: table === 'off' ? 'off' : 'auto', workOut: false };
+  const damage = isPlainObject(definition.damage) ? definition.damage : {};
+  const workOut = settings[WORK_OUT_SETTING];
+  return {
+    apply: APPLY.includes(table) ? table : APPLY.includes(damage.apply) ? damage.apply : 'confirm',
+    workOut: workOut === '0' ? false : workOut === '1' ? true : damage.work_out !== false,
+  };
+};
+
+module.exports = {
+  STANDARD, ICONS, DAMAGE_ICONS, KINDS, MEANS, WORKS_OUT, APPLY, APPLY_DAMAGE_SETTING, WORK_OUT_SETTING, LIMITS,
+  isIcon, checkDamage, damageTypesOf, damageTypeIdsOf, meaningsOf, worksOutOf, damageRulesOf,
+};
