@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act, within } from '@testing-library/react';
+import { render, screen, act, within, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 vi.mock('../DraggableWindow', () => ({
@@ -159,6 +159,99 @@ describe('DiceTrayWindow', () => {
     render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} />);
     expect(socketRef.current.emit).toHaveBeenCalledWith('requestDiceHistory');
   });
+
+describe('each roll in the record once (the user found a gear roll twice, 2026-11-25)', () => {
+  /** The tray opened by a click, with the history it asks for and the rolls it hears, each handed in when the test says. */
+  const opened = () => {
+    const socketRef = makeSocketRef();
+    render(<DiceTrayWindow pos={basePos} setPos={setPos} onClose={onClose} socketRef={socketRef} openHistory />);
+    const handler = (name: string) => (socketRef.current.on as ReturnType<typeof vi.fn>).mock.calls.find((call: unknown[]) => call[0] === name)![1] as (d: unknown) => void;
+    return { hear: (d: unknown) => act(() => handler('diceRollBroadcast')(d)), history: (d: unknown[]) => act(() => handler('diceRollHistory')(d)) };
+  };
+  const roll = (line: string, more = {}) => ({ total: 10, results: {}, color: '#0f0', historyString: line, ...more });
+  const lines = () => [...screen.getByTestId('dice-history').children].map((c) => c.textContent).filter((t) => t);
+
+  it('a roll heard before the history asked for on opening is in it: shown once, landed or not', () => {
+    vi.useFakeTimers();
+    try {
+      const t = opened();
+      const gear = roll('kes rolled Flame Tongue DAMAGE 2 [2] = 2 FIRE DMG');
+      t.hear(gear);
+      t.history([roll('kes rolled 1d20 [(9) = 9]'), gear]);
+      act(() => { vi.advanceTimersByTime(2000); });
+      expect(lines()).toEqual(['kes: rolled 1d20 [(9) = 9]', 'kes: rolled Flame Tongue DAMAGE 2 [2] = 2 FIRE DMG']);
+      // One after it: recorded as it lands.
+      t.hear(roll('kes rolled 1d6 [(4) = 4]'));
+      act(() => { vi.advanceTimersByTime(2000); });
+      expect(lines().at(-1)).toBe('kes: rolled 1d6 [(4) = 4]');
+      expect(lines()).toHaveLength(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('in one throw, one held by the history and one after it: only the one after recorded; one heard early but not in it recorded', () => {
+    vi.useFakeTimers();
+    try {
+      const t = opened();
+      const rest = roll('SHORT REST · kes: nothing changed', { quiet: true });
+      const first = roll('kes rolled 1d20 [(12) = 12] → GHOUL · HIT', { group: 'g1' });
+      t.hear(rest);
+      t.hear(first);
+      t.history([rest, first]);
+      t.hear(roll('kes rolled Flame Tongue DAMAGE 2 [2] = 2 FIRE DMG', { group: 'g1' }));
+      t.hear(roll('LONG REST · kes: nothing changed', { quiet: true }));
+      act(() => { vi.advanceTimersByTime(2000); });
+      expect(lines()).toEqual([
+        'SHORT REST · kes: nothing changed', 'kes: rolled 1d20 [(12) = 12] → GHOUL · HIT',
+        'LONG REST · kes: nothing changed', 'kes: rolled Flame Tongue DAMAGE 2 [2] = 2 FIRE DMG',
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('asked twice (development), a roll heard between the two and held by the second: once; one cut short, kept, not again', () => {
+    vi.useFakeTimers();
+    try {
+      const t = opened();
+      t.history([roll('kes rolled 1d20 [(9) = 9]')]);
+      const gear = roll('kes rolled Flame Tongue DAMAGE 2 [2] = 2 FIRE DMG');
+      t.hear(gear);
+      t.history([roll('kes rolled 1d20 [(9) = 9]'), gear]);
+      // Another cuts in before it lands: the one held is told at once, not recorded again.
+      t.hear(roll('kes rolled 1d6 [(4) = 4]'));
+      act(() => { vi.advanceTimersByTime(2000); });
+      expect(lines()).toEqual(['kes: rolled 1d20 [(9) = 9]', 'kes: rolled Flame Tongue DAMAGE 2 [2] = 2 FIRE DMG', 'kes: rolled 1d6 [(4) = 4]']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('heard early but not in the history (older than it reaches, or another\'s line): recorded as it lands; the same line twice in it, both theirs', () => {
+    vi.useFakeTimers();
+    try {
+      const t = opened();
+      const same = roll('kes rolled 1d1 [(1) = 1]', { total: 1 });
+      t.hear(roll('kes rolled 1d4 [(3) = 3]', { total: 3 }));
+      t.history([roll('kes rolled 1d20 [(9) = 9]')]);
+      act(() => { vi.advanceTimersByTime(2000); });
+      expect(lines()).toEqual(['kes: rolled 1d20 [(9) = 9]', 'kes: rolled 1d4 [(3) = 3]']);
+      cleanup();
+      const u = opened();
+      const a = { ...same };
+      const b = { ...same };
+      u.hear(a);
+      u.hear(b);
+      // Both in it, as both were kept before it was asked for: each once, never three or four.
+      u.history([same, same]);
+      act(() => { vi.advanceTimersByTime(2000); });
+      expect(lines()).toEqual(['kes: rolled 1d1 [(1) = 1]', 'kes: rolled 1d1 [(1) = 1]']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
 
   it('registers diceRollBroadcast and diceRollHistory listeners', () => {
     const socketRef = makeSocketRef();

@@ -112,6 +112,10 @@ test('a HIT\'s Flame Tongue reaches the NPC: FIRE halved and taken off under AUT
   const gmCheck = page.getByTestId('dice-history').locator('> div').filter({ hasText: /rolled 1d20/ }).last();
   await expect(gmCheck).toContainText(`→ ${ghoul.toUpperCase()} · VS AC 0 · HIT`);
   await expect(gmCheck.getByTestId('roll-total')).toHaveText('HIT');
+  // Once, its dice long landed: opened by the click, the tray asks for its history as the roll is made, and never
+  // records it a second time as it lands.
+  await expect(mine.getByTestId('dice-board')).not.toHaveAttribute('aria-label', /Rolling/);
+  await expect(history.filter({ hasText: /rolled Flame Tongue DAMAGE/ })).toHaveCount(1);
   await mine.keyboard.press('Escape');
 
   // The table's APPLY DAMAGE OFF: the next hit only said.

@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **A roll shown twice in the dice tray's history.** Rolling from a sheet (a gear line's DAMAGE) opens the tray at once, and the roll could reach it before the history it asks for, which already held it: the line was recorded a second time as the dice landed. Each roll is now in the record once.
 - **A typed DAMAGE in the dice log:** the bold total was the first die's sum ("[0 + 4]") instead of the whole, "4 SLASHING + 6 FIRE DMG (10)".
 - **The dice log's order:** two rolls kept in the same second (a to-hit and its damage) could be read back in the wrong order when the tray opened. They now keep the order they were made in.
 - **Something bought lands on the sheet of the game it was bought in, every time.** The server now places purchases itself, in the same step as taking the money, so a GM switching games just as a player buys no longer puts the item in the other game, and closing the shop or the tab right after paying no longer loses it. A purchase that won't fit (a full weapon rack) is refused before anything is charged, with the reason. Also: selling an item that gives features (a ring) now takes its features away at once, and buying one gives them at once.

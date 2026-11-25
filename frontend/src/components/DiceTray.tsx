@@ -289,8 +289,14 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
   // No queue (6c4c): a new roll cuts straight in, and the one it cut short goes into the record at
   // once. Rolls the server puts in one group (one person's within a moment, as an attack's to-hit
   // and damage) land in one throw together. Dice-less rolls (shock damage) show briefly.
-  // `inHistory`: the rolls are in the history the tray asked for already (the roll that opened it).
-  const playing = useRef<{ group?: string; rolls: RollBroadcast[]; told: boolean; inHistory?: boolean } | null>(null);
+  const playing = useRef<{ group?: string; rolls: RollBroadcast[]; told: boolean } | null>(null);
+  // The rolls in a history the tray asked for already, never recorded again as they land: the roll that opened it, and
+  // any that history holds (the user found a gear roll twice in it, 2026-11-25: a tray opened by a click, ROLL on a sheet,
+  // asks for it in the moment the roll is made, so the roll may come first and be in it too; in development it asks
+  // twice). Roll by roll, as one throw may hold one kept and one after it.
+  const inHistory = useRef(new WeakSet<RollBroadcast>());
+  /** The rolls heard and not yet told in the record, for a history to say it holds. */
+  const unlanded = useRef(new Set<RollBroadcast>());
   const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const opener = useRef(openingRoll as RollBroadcast | null);
 
@@ -299,13 +305,19 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
     socketRef.current.emit('requestDiceHistory');
 
     /** Rolls into the record, in the order they came. */
+    /** A throw told: its rolls into the record, but those a history holds already. */
+    const tell = (rolls: RollBroadcast[]) => {
+      // Told: no history to look for it in any more, nor kept here for the rest of the session.
+      for (const r of rolls) unlanded.current.delete(r);
+      record(rolls.filter((r) => !inHistory.current.has(r)));
+    };
     const record = (rolls: RollBroadcast[]) => setHistory(prev => {
       setTimeout(() => { if (historyContainerRef.current) historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight; }, 50);
       return [...prev, ...(rolls as unknown as DiceRoll[])];
     });
 
     /** Throw a group's dice, all its rolls' together, from its first roll's seed; tell its result as they stop. */
-    const play = (group: { rolls: RollBroadcast[]; told: boolean; inHistory?: boolean }) => {
+    const play = (group: { rolls: RollBroadcast[]; told: boolean }) => {
       if (rollTimer.current) clearTimeout(rollTimer.current);
       const first = group.rolls[0];
       const last = group.rolls[group.rolls.length - 1];
@@ -323,13 +335,14 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
         if (group.rolls.some((r) => r.criticalGlitch)) setGlitchState('critical');
         else if (group.rolls.some((r) => r.glitch)) setGlitchState('glitch');
         group.told = true;
-        if (!group.inHistory) record(group.rolls);
+        tell(group.rolls);
       }, thrown && motionNow.current === 'roll' ? revealAfter(thrown) : 800);
     };
 
     const handleBroadcast = (data: RollBroadcast) => {
       // Nothing to throw: the line joins the record, and the board keeps what it shows.
       if (data.quiet) { record([data]); return; }
+      unlanded.current.add(data);
       const now = playing.current;
       // The same group as the throw under way: thrown with it.
       if (now && !now.told && data.group && now.group === data.group) {
@@ -338,12 +351,15 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
         return;
       }
       // Another: it cuts in, and what it cut short is told in the record at once.
-      if (now && !now.told) { now.told = true; if (!now.inHistory) record(now.rolls); }
+      if (now && !now.told) { now.told = true; tell(now.rolls); }
       playing.current = { group: data.group, rolls: [data], told: false };
       play(playing.current);
     };
 
     const handleHistory = (data: any[]) => {
+      // A roll heard and not yet told that it holds, by its line (every roll is kept before it is sent, so two alike heard
+      // before it are both in it).
+      for (const r of unlanded.current) if (data.some((row) => row && row.historyString === r.historyString)) inHistory.current.add(r);
       setHistory(data);
       setTimeout(() => { if (historyContainerRef.current) historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight; }, 50);
     };
@@ -357,7 +373,8 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
     // leaving the board on ROLLING with its timer gone.
     const first = opener.current;
     if (first && !first.quiet) {
-      playing.current = { group: first.group, rolls: [first], told: false, inHistory: true };
+      inHistory.current.add(first);
+      playing.current = { group: first.group, rolls: [first], told: false };
       play(playing.current);
     }
     return () => {
