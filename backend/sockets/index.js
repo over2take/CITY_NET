@@ -39,6 +39,7 @@ const { xpFrom, withImportedPicks } = require('../systemBuilder/sheetImport');
 const { inventoryAdded } = require('../sheets/inventoryImport');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
+const { hitOnTarget, HIT_WAITS_MS } = require('../tokens/hitOnTarget');
 const { healthView } = require('../systemBuilder/healthView');
 const { syncTokenMax } = require('../systemBuilder/tokenMax');
 const headshots = require('../sheets/headshots');
@@ -142,6 +143,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   // Attack system: one pending attack per socket. Cleared on roll, cancel, or disconnect.
   // { targetId, attackType: 'melee' | 'ranged', ac }
   const pendingAttacks = new Map();
+  // A HIT in a game made in the builder, waiting a minute for its attacker's DAMAGE from a line of gear (8b5c): socket id ->
+  // { targetId, until }. Taken by that roll, or let go by a new attack (so a MISS), CANCEL or leaving.
+  const hitsWaiting = new Map();
 
   // ── Radio Feed ────────────────────────────────────────────────────────────────
   let musicState = {
@@ -287,7 +291,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     });
 
     socket.on('requestDiceHistory', () => {
-      db.all('SELECT * FROM dice_rolls ORDER BY timestamp DESC LIMIT 5', (err, rows) => {
+      // Newest first by when each was kept: two rolls in one second (a HIT's to-hit and its damage, 8b5c) keep their order.
+      db.all('SELECT * FROM dice_rolls ORDER BY timestamp DESC, id DESC LIMIT 5', (err, rows) => {
         if (!err && rows) {
           // Each their own line where a roll's target was kept from players (6c4h).
           const gm = isGmSocket(socket);
@@ -819,6 +824,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           if (attack) {
             pendingAttacks.delete(socket.id);
             const hit = grandTotal >= attack.ac;
+            // A HIT waits for its damage; a MISS has none waiting, the attack before it let any go (initiateAttack).
+            if (hit) hitsWaiting.set(socket.id, { targetId: attack.targetId, until: Date.now() + HIT_WAITS_MS });
             const info = userSockets.get(socket.id);
             // Look up attacker position for animation — the attacker's rhombus on the
             // same map as the target (players get one rhombus per battle map + world).
@@ -1712,24 +1719,41 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             if (!made.ok) return;
             const color = typeof payload.color === 'string' ? payload.color : '#00ff00';
             const results = made.dice.flatMap((d) => d.rolls);
-            const broadcastData = {
-              userName: identity.displayName(info.userName),
-              account: info.userName,
-              results,
-              diceSides: made.dice.flatMap((d) => d.rolls.map(() => d.sides)),
-              modifiers: made.add !== 0 ? [made.add] : [],
-              color,
-              total: made.value,
-              historyString: made.history,
+            const send = (hit) => {
+              // A HIT's damage (8b5c): what it did, said after the roll; the players' words where they differ.
+              const history = hit ? `${made.history} → ${hit.words}` : made.history;
+              const players = hit && hit.players ? { historyText: `${made.history} → ${hit.players}` } : null;
+              const broadcastData = {
+                userName: identity.displayName(info.userName),
+                account: info.userName,
+                results,
+                diceSides: made.dice.flatMap((d) => d.rolls.map(() => d.sides)),
+                modifiers: made.add !== 0 ? [made.add] : [],
+                color,
+                total: made.value,
+                historyString: history,
+                ...(players ? { players } : {}),
+              };
+              db.run(
+                'INSERT INTO dice_rolls (username, total, results, color, historyString, players_history) VALUES (?, ?, ?, ?, ?, ?)',
+                [info.userName, made.value, JSON.stringify(results), color, history, players ? players.historyText : null],
+                (err3) => {
+                  if (err3) console.error('Error saving gear roll:', err3);
+                  emitRoll(io, connections, isGmSocket, broadcastData);
+                }
+              );
             };
-            db.run(
-              'INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
-              [info.userName, made.value, JSON.stringify(results), color, made.history],
-              (err3) => {
-                if (err3) console.error('Error saving gear roll:', err3);
-                emitRoll(io, connections, isGmSocket, broadcastData);
+            const waiting = made.kind === 'damage' ? hitsWaiting.get(socket.id) : null;
+            if (!waiting) return send(null);
+            hitsWaiting.delete(socket.id);
+            if (waiting.until < Date.now()) return send(null);
+            hitOnTarget(db, { system, definition: custom0, health: customSystems.health(system), targetId: waiting.targetId, made }, (hit) => {
+              if (hit && hit.applied) {
+                emitUpdate({ isRhombusOnly: true });
+                if (hit.owner) io.emit('sheetUpdated', { username: hit.owner });
               }
-            );
+              send(hit);
+            });
           });
           return;
         }
@@ -2843,6 +2867,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       // A game with combat turned off has no attacks (3b6b): none starts, so no roll resolves one.
       getGameSystem((sysErr, system) => {
         if (sysErr || !customSystems.partIn(system, 'combat')) return;
+        hitsWaiting.delete(socket.id);
         startAttack(data);
       });
     });
@@ -2866,6 +2891,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
     socket.on('cancelAttack', () => {
       pendingAttacks.delete(socket.id);
+      hitsWaiting.delete(socket.id);
     });
 
     // ── CP:R attack flow ─────────────────────────────────────────────────────
@@ -3826,6 +3852,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('disconnect', () => {
       connections.delete(socket.id);
       pendingAttacks.delete(socket.id);
+      hitsWaiting.delete(socket.id);
       if (socket.isSpectator) {
         console.log('Spectator disconnected:', socket.id);
         broadcastSpectatorCount();

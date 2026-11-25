@@ -8,7 +8,7 @@ import { createRequire } from 'module';
  */
 
 const require_ = createRequire(import.meta.url);
-const { damageTaken, takenWords, WORKS_WORDS } = require_('../systemBuilder/damageTaken');
+const { damageTaken, takenWords, seenBy, WORKS_WORDS } = require_('../systemBuilder/damageTaken');
 const { worksOutOf } = require_('../systemBuilder/damageTypes');
 const { resistancesOf } = require_('../systemBuilder/choices');
 
@@ -75,5 +75,37 @@ describe('in the log', () => {
     // A part with a type but no label: its id.
     expect(takenWords('Ganger', damageTaken([{ value: 3, type: 'fire' }], { fire: { kind: 'immune' } }, START))).toBe('GANGER TAKES 0 · IMMUNE TO FIRE: 3 → 0');
     expect(WORKS_WORDS).toEqual({ half: 'HALF', none: 'NONE', double: 'DOUBLE', words: 'WORDS ONLY' });
+  });
+});
+
+describe('as players may know it (8b5c)', () => {
+  const worked = { fire: { kind: 'resist' }, slashing: { kind: 'vulnerable' } };
+  const taken = damageTaken(FLAME_TONGUE, worked, START);
+
+  it("all of it where they see all (a player's character)", () => {
+    expect(seenBy(taken, null)).toEqual({ taken, total: true });
+  });
+
+  it("a part met by what they don't know said plainly, and the total kept from them where that changed its number", () => {
+    const seen = seenBy(taken, { slashing: { kind: 'vulnerable' } });
+    expect(seen.total).toBe(false);
+    expect(seen.taken.parts[1]).toEqual({ value: 9, type: 'fire', label: 'FIRE', kind: null, taken: 4 });
+    expect(seen.taken.parts[0]).toBe(taken.parts[0]);
+    expect(takenWords('Ganger', seen.taken, { total: seen.total })).toBe('GANGER · VULNERABLE TO SLASHING: 5 → 10');
+    // Known as something else than it is (ALL hidden behind a revealed type): still not theirs.
+    expect(seenBy(taken, { fire: { kind: 'vulnerable' }, slashing: { kind: 'vulnerable' } }).total).toBe(false);
+    // Nothing they know: no word, no total.
+    expect(takenWords('Ganger', seenBy(taken, {}).taken, { total: false })).toBe('GANGER');
+  });
+
+  it('one that changes nothing kept from them, the total theirs still; parts nothing met untouched', () => {
+    const words = damageTaken(FLAME_TONGUE, { fire: { kind: 'resist' } }, { ...START, workOut: false });
+    const seen = seenBy(words, {});
+    expect(seen.total).toBe(true);
+    expect(takenWords('Ganger', seen.taken, { total: seen.total })).toBe('GANGER TAKES 14');
+  });
+
+  it('said as not taken: WOULD TAKE', () => {
+    expect(takenWords('Ganger', taken, { verb: 'WOULD TAKE' })).toBe('GANGER WOULD TAKE 14 · VULNERABLE TO SLASHING: 5 → 10 · RESISTS FIRE: 9 → 4');
   });
 });

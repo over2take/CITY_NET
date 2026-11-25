@@ -19,6 +19,8 @@ export const PLAYERS_CHANGE_GEAR = 'players_change_gear';
 /** APPLY DAMAGE and WORK OUT RESISTANCES at this table (8b5b; backend damageTypes.js APPLY_DAMAGE_SETTING, WORK_OUT_SETTING): blank, the system's. */
 export const APPLY_DAMAGE = 'apply_damage';
 export const WORK_OUT_RESISTANCES = 'work_out_resistances';
+/** HIT TOTALS ON NPCS: GM ONLY (8b5c; backend HIT_TOTALS_SETTING): on unless '0', what a hit took from an NPC the GM's alone. */
+export const HIT_TOTALS_GM_ONLY = 'hit_totals_gm_only';
 
 /** What a system has for each switch to switch; `damage` what the system itself says of a hit (8b5b). */
 export interface TableSwitches {
@@ -66,6 +68,11 @@ export const switchRules = (has: TableSwitches | null | undefined): SwitchRule[]
   ...(has?.turn_effects ? [{
     settingKey: CONDITION_TURN_EFFECTS, label: 'CONDITION TURN EFFECTS', defaultOn: true as const,
     title: 'Each condition\'s EACH TURN is rolled on NEXT and BEGIN, burning, healing or a save, said in the log. Off: nothing is rolled on turns; the conditions stay on the tokens as reminders and the GM rolls by hand. One that ends at the end of its next turn still comes off.',
+  }] : []),
+  // HIT TOTALS ON NPCS: GM ONLY (8b5c; the user, 2026-11-25, "on by default"): where hits reach their targets.
+  ...(has?.damage ? [{
+    settingKey: HIT_TOTALS_GM_ONLY, label: 'HIT TOTALS ON NPCS: GM ONLY', defaultOn: true as const,
+    title: 'Players see a hit\'s roll and that it reached an NPC, never what the NPC took or what it resisted; you see all of it. Off: they see what it took, and the resistances you have revealed.',
   }] : []),
   // PLAYERS CHANGE GEAR (G6; decided 2026-11-20): where the system makes its own item types.
   ...(has?.gear ? [{
