@@ -49,7 +49,7 @@ import { useWords, asLabel, type WordLookup } from '../sheets/words';
 import { useParts, partOn, type PartLookup } from '../sheets/parts';
 import { currenciesFor, isUploadedIcon, BUILT_IN_ICONS, type Currency } from '../sheets/currencies';
 import { useCustomTemplate, refreshCustomTemplate, isCustomSystem, customTemplate } from '../sheets/customTemplates';
-import { switchRules } from '../sheets/tableSwitches';
+import { switchRules, choiceRules, type ChoiceRule } from '../sheets/tableSwitches';
 import { getTemplate } from '../sheets';
 import { useHouseRules, changedRules } from '../sheets/houseRules';
 import { systemsApi } from '../sheets/systemsApi';
@@ -2181,12 +2181,16 @@ function ShortfallNote({ system }: { system: string }) {
  * 2026-10-14), `own`, switched through the systems route so the running game takes them at once.
  * One APPLY for all of them.
  */
-function HouseRulesPanel({ token, defs, note, own }: {
+function HouseRulesPanel({ token, defs, note, own, choices = [] }: {
   token: string; defs: HouseRuleDef[]; note?: React.ReactNode;
   own?: { system: string; name: string; rules: HouseRuleState[] };
+  /** Rules picked from a few, kept as their value (8b5b: APPLY DAMAGE, WORK OUT RESISTANCES); '' the system's own. */
+  choices?: ChoiceRule[];
 }) {
   const [rules, setRules] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
+  const [picked, setPicked] = useState<Record<string, string>>({});
+  const [pickedSaved, setPickedSaved] = useState<Record<string, string>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   // The custom system's own boxes, from what the game runs; again whenever that changes.
@@ -2207,10 +2211,17 @@ function HouseRulesPanel({ token, defs, note, own }: {
       });
       setRules(loaded);
       setSaved(loaded);
+      const kept = Object.fromEntries(choices.map((c) => {
+        const value = (rows as { key: string; value: string }[]).find((r) => r.key === c.settingKey)?.value ?? '';
+        return [c.settingKey, c.options.some((o) => o.value === value) ? value : ''];
+      }));
+      setPicked(kept);
+      setPickedSaved(kept);
     }).catch(() => {});
-  }, [defs.map(d => d.settingKey).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [[...defs, ...choices].map(d => d.settingKey).join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const dirty = defs.some(d => rules[d.settingKey] !== saved[d.settingKey]) || Object.keys(ownChanged).length > 0;
+  const dirty = defs.some(d => rules[d.settingKey] !== saved[d.settingKey]) || Object.keys(ownChanged).length > 0
+    || choices.some((c) => (picked[c.settingKey] ?? '') !== (pickedSaved[c.settingKey] ?? ''));
   const apply = async () => {
     try {
       for (const d of defs) {
@@ -2221,6 +2232,14 @@ function HouseRulesPanel({ token, defs, note, own }: {
         });
       }
       setSaved({ ...rules });
+      for (const c of choices) {
+        await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ key: c.settingKey, value: picked[c.settingKey] ?? '' }),
+        });
+      }
+      setPickedSaved({ ...picked });
       if (own && Object.keys(ownChanged).length) {
         // The game redraws the system for everyone when the server says it changed.
         const r = await systemsApi(token).setHouseRules(own.system, ownChanged);
@@ -2234,6 +2253,7 @@ function HouseRulesPanel({ token, defs, note, own }: {
   };
   const revert = () => {
     setRules({ ...saved });
+    setPicked({ ...pickedSaved });
     setOwnTicked(Object.fromEntries((own?.rules ?? []).map((r) => [r.id, r.on])));
   };
 
@@ -2260,6 +2280,15 @@ function HouseRulesPanel({ token, defs, note, own }: {
               style={{ flexShrink: 0 }}
             />
             <span style={{ textAlign: 'left' }}>{d.label}</span>
+          </label>
+        ))}
+        {choices.map((c) => (
+          <label key={c.settingKey} title={c.title} style={{ fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+            <span style={{ textAlign: 'left', flex: '1 1 auto' }}>{c.label}</span>
+            <select aria-label={c.label} value={picked[c.settingKey] ?? ''} onChange={(e) => setPicked((p) => ({ ...p, [c.settingKey]: e.target.value }))}
+              style={{ fontSize: '0.6rem', background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--green)', padding: '2px 4px', fontFamily: 'inherit', maxWidth: '100%' }}>
+              {c.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
           </label>
         ))}
         {own && own.rules.length > 0 && <>
@@ -2464,7 +2493,7 @@ function TTRPGSystemPanel({ token, mainAdmin, onOpenNpcLibrary, onOpenSystems, a
             ...(system === 'shadowrun_6e' ? SR6_HOUSE_RULES : []),
             // A custom system's encumbrance and condition switches (8a6b), each only where it has what it switches.
             ...switchRules(isCustomSystem(system) ? customTemplate(system)?.switches : null),
-          ]} />
+          ]} choices={choiceRules(isCustomSystem(system) ? customTemplate(system)?.switches : null)} />
           {/* A built-in game's own conditions (4e2c2); a custom system's are edited in the builder. */}
           {mainAdmin && !isCustomSystem(system) && <TableConditionsPanel token={token} system={system} />}
 

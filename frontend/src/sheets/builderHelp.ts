@@ -381,6 +381,9 @@ export const HINTS = {
   'npcs.level': 'The level to try the tier at, what @level reads. In play the GM picks the level in ID.EXE, beside GENERATE_SHEET.',
   // CONDITIONS
   'damage.means': 'What the word means in your game, in a line: shown beside a character\'s resistances on the HEALTH page. Left blank, the app\'s words.',
+  'damage.worksOut': 'What the word does to a hit\'s number: HALF (rounded down), NONE, DOUBLE, or WORDS ONLY (taken as rolled, the word said beside it). Each part of a hit is worked out on its own.',
+  'damage.workOut': 'On: resistances change a hit\'s number as WORKS OUT AS says. Off: every hit is taken as rolled, with its resistances said. A table can change it in the GAME tab\'s HOUSE RULES.',
+  'damage.apply': 'How a hit reaches its target after the map\'s attack hits. AUTO takes it off at once; CONFIRM waits on the target\'s HEALTH for the GM or its player to apply; OFF only logs it. A table can change it in the GAME tab\'s HOUSE RULES.',
   'damage.name': 'What a hit says: "2d6 FIRE DMG". Letters, digits, spaces, a hyphen or an apostrophe; no two types that are on may share a name.',
   'damage.icon': 'Shown on the HEALTH page beside a resistance: one of the drawn icons, one you upload, or one you DRAW on the 16 x 16 pad.',
   'damage.description': 'What it is, in a line, shown with the type wherever it is named.',

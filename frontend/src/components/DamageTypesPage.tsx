@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   damageList, damageCount, withDamageType, withNewDamageType, withoutDamageType, meaningTyped, withMeaning, nameTrouble,
-  LIMITS, KINDS, MEANS, STANDARD, type Listed, type Kind,
+  worksOutOf, withWorksOut, workOutOf, withWorkOut, applyOf, withApply, unpublishedOf,
+  LIMITS, KINDS, MEANS, STANDARD, WORKS_OUT, WORKS_OUT_WORDS, APPLY, type Listed, type Kind, type WorksOut,
 } from '../sheets/damageTypes';
 import { DAMAGE_ICON_IDS } from '../sheets/conditionIcons';
 import { PicturePicker, OnTheRing } from './PicturePicker';
@@ -15,6 +16,8 @@ import { ToggleSwitch } from './ToggleSwitch';
 // what kind of hurt a hit is. At the top, what RESIST, IMMUNE and VULNERABLE mean in this game; below, the starter set with a
 // switch each, edited or switched off, and the system's own, added and deleted, laid out as CONDITIONS is. Each type's name
 // (what a hit says: "2d6 FIRE DMG"), its picture (a drawn icon, an upload, or a drawing on the 16 x 16 pad), and what it is.
+// What a hit does (8b5b; the mockup's answers 3 and 5): beside each word, what it WORKS OUT AS (HALF, NONE, DOUBLE, WORDS
+// ONLY); under them WORK IT OUT, and APPLY DAMAGE (AUTO, CONFIRM, OFF), each the system's start, a table's to overrule.
 // What it reads and writes is sheets/damageTypes.ts; every change goes through the builder's `edit`.
 
 interface Props {
@@ -22,6 +25,8 @@ interface Props {
   edit: (next: Definition) => void;
   /** For uploading an icon; without it only the drawn icons and DRAW are offered. */
   api?: ReturnType<typeof systemsApi>;
+  /** The version the table runs, for what a draft hasn't reached yet (8b5b); none where never published. */
+  published?: Definition | null;
 }
 
 const small: React.CSSProperties = { fontSize: 10, letterSpacing: 2, opacity: 0.75 };
@@ -32,22 +37,57 @@ const input: React.CSSProperties = {
 };
 const row: React.CSSProperties = { display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' };
 const WORD: Record<Kind, string> = { resist: 'RESIST', immune: 'IMMUNE', vulnerable: 'VULNERABLE' };
+const APPLY_WORDS = {
+  auto: 'AUTO: a hit is taken off its target\'s health at once, worked out as above.',
+  confirm: 'CONFIRM: a hit waits on its target\'s HEALTH until the GM, or the player it belongs to, applies or dismisses it.',
+  off: 'OFF: rolled and logged only; the table does the sums.',
+} as const;
 
-/** What RESIST, IMMUNE and VULNERABLE mean in this game, in words. */
-function Meanings({ definition, edit }: Props) {
+/** What RESIST, IMMUNE and VULNERABLE mean in this game, in words, and what each does to a hit; how a hit is taken (8b5b). */
+function Meanings({ definition, edit, published }: Props) {
+  const workOut = workOutOf(definition);
+  const apply = applyOf(definition);
+  const unpublished = unpublishedOf(definition, published);
+  const notYet = (words?: string) => words && <span role="note" style={{ ...why, fontSize: 11, color: 'var(--warning)', flexBasis: '100%' }}>{words}</span>;
   return (
     <section aria-label="In this game" style={{ border: '1px solid var(--dark-green)', padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 1100 }}>
       <span style={small}>IN THIS GAME</span>
-      <div style={{ display: 'grid', gridTemplateColumns: '130px minmax(0, 1fr)', gap: '8px 12px', alignItems: 'center' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '130px minmax(0, 1fr) auto auto', gap: '8px 12px', alignItems: 'center' }}>
         {KINDS.map((k) => (
           <React.Fragment key={k}>
             <FieldName beside htmlFor={`damage-means-${k}`} hint={HINTS['damage.means']} style={small}>{WORD[k]}</FieldName>
             <input id={`damage-means-${k}`} type="text" maxLength={LIMITS.means} value={meaningTyped(definition, k)} placeholder={MEANS[k]} style={input}
               onChange={(e) => edit(withMeaning(definition, k, e.target.value))} />
+            <FieldName beside htmlFor={`damage-works-${k}`} hint={HINTS['damage.worksOut']} style={{ ...small, opacity: workOut ? 0.75 : 0.4 }}>WORKS OUT AS</FieldName>
+            <select id={`damage-works-${k}`} aria-label={`${WORD[k]} works out as`} value={worksOutOf(definition, k)} style={{ ...input, opacity: workOut ? 1 : 0.5 }}
+              onChange={(e) => edit(withWorksOut(definition, k, e.target.value as WorksOut))}>
+              {WORKS_OUT.map((w) => <option key={w} value={w}>{WORKS_OUT_WORDS[w]}</option>)}
+            </select>
           </React.Fragment>
         ))}
+        <FieldName beside hint={HINTS['damage.workOut']} style={small}>WORK IT OUT</FieldName>
+        <span style={{ ...row, gridColumn: '2 / -1' }}>
+          <ToggleSwitch on={workOut} name="Work out resistances" onChange={(on) => edit(withWorkOut(definition, on))} />
+          <span style={{ ...why, fontSize: 11 }}>{workOut
+            ? 'On: a hit\'s number changes as each word WORKS OUT AS says.'
+            : 'Off: every hit is taken as rolled, its resistances said beside it.'}</span>
+          {notYet(unpublished.workOut)}
+        </span>
+        <FieldName beside hint={HINTS['damage.apply']} style={small}>APPLY DAMAGE</FieldName>
+        <span style={{ ...row, gridColumn: '2 / -1' }}>
+          <span role="group" aria-label="Apply damage" style={{ display: 'inline-flex' }}>
+            {APPLY.map((a) => (
+              <button key={a} type="button" className="utility-btn" aria-pressed={apply === a} onClick={() => edit(withApply(definition, a))}
+                style={{ ...btn, borderStyle: 'solid', background: apply === a ? 'var(--green)' : 'none', color: apply === a ? 'var(--black)' : 'var(--green)' }}>
+                {a.toUpperCase()}
+              </button>
+            ))}
+          </span>
+          <span style={{ ...why, fontSize: 11, flex: '1 1 260px' }}>{APPLY_WORDS[apply]}</span>
+          {notYet(unpublished.apply)}
+        </span>
       </div>
-      <p style={{ ...why, fontSize: 11 }}>Shown with a character&apos;s resistances on the HEALTH page. How each changes a hit&apos;s number comes with applying damage.</p>
+      <p style={{ ...why, fontSize: 11 }}>The words show with a character&apos;s resistances on the HEALTH page. WORK IT OUT and APPLY DAMAGE are where your game starts: a table changes them in the GAME tab&apos;s HOUSE RULES.</p>
     </section>
   );
 }
@@ -96,7 +136,7 @@ function Detail({ t, definition, edit, api }: Props & { t: Listed }) {
   );
 }
 
-export function DamageTypesPage({ definition, edit, api }: Props) {
+export function DamageTypesPage({ definition, edit, api, published }: Props) {
   const list = damageList(definition);
   const [picked, setPicked] = useState<string>(list[0]?.id ?? '');
   const current = list.find((t) => t.id === picked) ?? list[0];
@@ -111,7 +151,7 @@ export function DamageTypesPage({ definition, edit, api }: Props) {
 
   return (
     <div data-testid="damage-page" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <Meanings definition={definition} edit={edit} />
+      <Meanings definition={definition} edit={edit} published={published} />
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 300px) minmax(0, 1fr)', gap: 16, alignItems: 'start', maxWidth: 1100 }}>
         <div style={{ border: '1px solid var(--dark-green)', display: 'flex', flexDirection: 'column' }}>
           <div style={{ ...row, justifyContent: 'space-between', padding: '6px 10px', borderBottom: '1px solid var(--dark-green)' }}>

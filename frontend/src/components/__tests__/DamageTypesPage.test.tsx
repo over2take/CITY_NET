@@ -22,11 +22,11 @@ const H: Definition = { format: 1, name: 'Hearth' };
 type Api = ReturnType<typeof systemsApi>;
 const UPLOADED = `/uploads/condition_icons/${'d'.repeat(64)}.png`;
 
-const open = (start: Definition = H, api?: Partial<Api>) => {
+const open = (start: Definition = H, api?: Partial<Api>, published?: Definition | null) => {
   const edits: Definition[] = [];
   const Harness = () => {
     const [def, setDef] = useState(start);
-    return <DamageTypesPage definition={def} edit={(next) => { edits.push(next); setDef(next); }} api={api as Api | undefined} />;
+    return <DamageTypesPage definition={def} edit={(next) => { edits.push(next); setDef(next); }} api={api as Api | undefined} published={published} />;
   };
   render(<Harness />);
   return { edits, last: () => edits[edits.length - 1] };
@@ -163,12 +163,74 @@ describe('in this game', () => {
     expect(last().damage).toBeUndefined();
   });
 
+  it('WORKS OUT AS beside each word, as the system has it; picked, kept as the server reads it, the words untouched', async () => {
+    const { last } = open({ ...H, damage: { resist: { means: 'Half.', works_out: 'none' } } });
+    const resist = screen.getByRole('combobox', { name: 'RESIST works out as' });
+    expect(resist).toHaveProperty('value', 'none');
+    expect([...resist.querySelectorAll('option')].map((o) => o.textContent)).toEqual(['HALF', 'NONE', 'DOUBLE', 'WORDS ONLY']);
+    expect(screen.getByRole('combobox', { name: 'IMMUNE works out as' })).toHaveProperty('value', 'none');
+    expect(screen.getByRole('combobox', { name: 'VULNERABLE works out as' })).toHaveProperty('value', 'double');
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'VULNERABLE works out as' }), 'WORDS ONLY');
+    expect(last().damage).toEqual({ resist: { means: 'Half.', works_out: 'none' }, vulnerable: { works_out: 'words' } });
+    await userEvent.selectOptions(resist, 'HALF');
+    expect(last().damage).toEqual({ resist: { means: 'Half.' }, vulnerable: { works_out: 'words' } });
+    expect(problems(last())).toEqual([]);
+  });
+
+  it('WORK IT OUT: on to start; off said, and WORKS OUT AS faded beside it', async () => {
+    const { last } = open();
+    const sw = screen.getByRole('switch', { name: 'Work out resistances' });
+    expect(sw.getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('region', { name: 'In this game' }).textContent).toContain('On: a hit\'s number changes as each word WORKS OUT AS says.');
+    expect(screen.getByRole('combobox', { name: 'RESIST works out as' }).style.opacity).toBe('1');
+    expect(screen.getAllByText('WORKS OUT AS').map((l) => l.style.opacity)).toEqual(['0.75', '0.75', '0.75']);
+    await userEvent.click(sw);
+    expect(last().damage).toEqual({ work_out: false });
+    expect(screen.getByRole('region', { name: 'In this game' }).textContent).toContain('Off: every hit is taken as rolled, its resistances said beside it.');
+    expect(screen.getByRole('combobox', { name: 'RESIST works out as' }).style.opacity).toBe('0.5');
+    expect(screen.getAllByText('WORKS OUT AS').map((l) => l.style.opacity)).toEqual(['0.4', '0.4', '0.4']);
+    await userEvent.click(sw);
+    expect(last().damage).toBeUndefined();
+  });
+
+  it('APPLY DAMAGE: CONFIRM to start, one of three pressed, each said', async () => {
+    const { last } = open();
+    const group = within(screen.getByRole('group', { name: 'Apply damage' }));
+    expect(group.getAllByRole('button').map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([['AUTO', 'false'], ['CONFIRM', 'true'], ['OFF', 'false']]);
+    const said = () => screen.getByRole('region', { name: 'In this game' }).textContent;
+    expect(said()).toContain('CONFIRM: a hit waits on its target\'s HEALTH');
+    await userEvent.click(group.getByRole('button', { name: 'OFF' }));
+    expect(last().damage).toEqual({ apply: 'off' });
+    expect(said()).toContain('OFF: rolled and logged only');
+    await userEvent.click(group.getByRole('button', { name: 'AUTO' }));
+    expect(said()).toContain('AUTO: a hit is taken off its target\'s health at once');
+    expect(group.getByRole('button', { name: 'AUTO' }).getAttribute('aria-pressed')).toBe('true');
+    await userEvent.click(group.getByRole('button', { name: 'CONFIRM' }));
+    expect(last().damage).toBeUndefined();
+  });
+
+  it('NOT PUBLISHED where the draft differs from what the table runs; gone once they agree; none never published', async () => {
+    open(H, undefined, { ...H, damage: { apply: 'auto' } });
+    const notes = () => screen.queryAllByText(/^NOT PUBLISHED/).map((n) => n.textContent);
+    expect(notes()).toEqual(['NOT PUBLISHED: the table still uses AUTO']);
+    await userEvent.click(screen.getByRole('switch', { name: 'Work out resistances' }));
+    expect(notes()).toEqual(['NOT PUBLISHED: the table still works them out', 'NOT PUBLISHED: the table still uses AUTO']);
+    expect(screen.getByText('NOT PUBLISHED: the table still uses AUTO').style.color).toBe('var(--warning)');
+    await userEvent.click(screen.getByRole('switch', { name: 'Work out resistances' }));
+    await userEvent.click(within(screen.getByRole('group', { name: 'Apply damage' })).getByRole('button', { name: 'AUTO' }));
+    expect(notes()).toEqual([]);
+    cleanup();
+    open({ ...H, damage: { apply: 'off' } }, undefined, null);
+    expect(notes()).toEqual([]);
+  });
+
   it('every setting has its words beside it, each of the page\'s hints shown', () => {
     open();
     const keys = Object.keys(HINTS).filter((k) => k.startsWith('damage.')) as (keyof typeof HINTS)[];
-    expect(keys).toHaveLength(5);
+    expect(keys).toHaveLength(8);
     for (const k of keys) expect(screen.getAllByRole('note', { name: HINTS[k] }).length, k).toBeGreaterThan(0);
     // One for each of the three words.
     expect(screen.getAllByRole('note', { name: HINTS['damage.means'] })).toHaveLength(3);
+    expect(screen.getAllByRole('note', { name: HINTS['damage.worksOut'] })).toHaveLength(3);
   });
 });

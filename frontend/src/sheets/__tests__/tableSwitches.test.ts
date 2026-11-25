@@ -1,7 +1,35 @@
 import { describe, it, expect } from 'vitest';
-import { switchRules, carryingShown, gearByPlayers, SHOW_ENCUMBRANCE, BAND_CONDITIONS, APPLY_CONDITION_MODIFIERS, CONDITION_TURN_EFFECTS, PLAYERS_CHANGE_GEAR } from '../tableSwitches';
+import { switchRules, choiceRules, carryingShown, gearByPlayers, SHOW_ENCUMBRANCE, BAND_CONDITIONS, APPLY_CONDITION_MODIFIERS, CONDITION_TURN_EFFECTS, PLAYERS_CHANGE_GEAR, APPLY_DAMAGE, WORK_OUT_RESISTANCES } from '../tableSwitches';
+import { createRequire } from 'module';
+
+const damageTypes = createRequire(import.meta.url)('../../../../backend/systemBuilder/damageTypes.js');
 
 // The GAME tab's encumbrance and condition switches (8a6b; approved mockup docs/mockups/carrying-on-sheet.html).
+
+describe('choiceRules (8b5b)', () => {
+  const base = { encumbrance: false, band_conditions: false, applied_conditions: false };
+  it('APPLY DAMAGE and WORK OUT RESISTANCES, the system\'s own marked and kept as following it', () => {
+    const rules = choiceRules({ ...base, damage: { apply: 'confirm', work_out: true } });
+    expect(rules.map((r) => [r.settingKey, r.label])).toEqual([[APPLY_DAMAGE, 'APPLY DAMAGE'], [WORK_OUT_RESISTANCES, 'WORK OUT RESISTANCES']]);
+    expect(rules[0].options).toEqual([{ value: 'auto', label: 'AUTO' }, { value: '', label: "CONFIRM (SYSTEM'S)" }, { value: 'off', label: 'OFF' }]);
+    expect(rules[1].options).toEqual([{ value: '', label: "ON (SYSTEM'S)" }, { value: '0', label: 'OFF' }]);
+    const other = choiceRules({ ...base, damage: { apply: 'off', work_out: false } });
+    expect(other[0].options).toEqual([{ value: 'auto', label: 'AUTO' }, { value: 'confirm', label: 'CONFIRM' }, { value: '', label: "OFF (SYSTEM'S)" }]);
+    expect(other[1].options).toEqual([{ value: '1', label: 'ON' }, { value: '', label: "OFF (SYSTEM'S)" }]);
+    expect(rules.every((r) => r.title.length > 40)).toBe(true);
+  });
+
+  it('kept where the server reads them, every value one it knows; none for a game not made in the builder', () => {
+    expect([APPLY_DAMAGE, WORK_OUT_RESISTANCES]).toEqual([damageTypes.APPLY_DAMAGE_SETTING, damageTypes.WORK_OUT_SETTING]);
+    const [apply, workOut] = choiceRules({ ...base, damage: { apply: 'auto', work_out: true } });
+    const def = { format: 1, name: 'X', damage: { apply: 'auto' } };
+    expect(apply.options.map((o) => damageTypes.damageRulesOf(def, { [APPLY_DAMAGE]: o.value }).apply)).toEqual(['auto', 'confirm', 'off']);
+    expect(workOut.options.map((o) => damageTypes.damageRulesOf(def, { [WORK_OUT_RESISTANCES]: o.value }).workOut)).toEqual([true, false]);
+    expect(choiceRules(base)).toEqual([]);
+    expect(choiceRules(null)).toEqual([]);
+    expect(choiceRules(undefined)).toEqual([]);
+  });
+});
 
 describe('switchRules', () => {
   it('each only where the system has what it switches, in order, all on to start', () => {

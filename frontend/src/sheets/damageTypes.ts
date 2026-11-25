@@ -11,6 +11,14 @@ export type Kind = 'resist' | 'immune' | 'vulnerable';
 export const KINDS: Kind[] = ['resist', 'immune', 'vulnerable'];
 /** What each word means where the system says nothing: the server's MEANS. */
 export const MEANS: Record<Kind, string> = { resist: 'Takes half, rounded down.', immune: 'Takes none.', vulnerable: 'Takes double.' };
+/** What each word may do to a hit's number (8b5b; the server's WORKS_OUT), what each starts as, and how each is said. */
+export type WorksOut = 'half' | 'none' | 'double' | 'words';
+export const WORKS_OUT: WorksOut[] = ['half', 'none', 'double', 'words'];
+export const WORKS_OUT_START: Record<Kind, WorksOut> = { resist: 'half', immune: 'none', vulnerable: 'double' };
+export const WORKS_OUT_WORDS: Record<WorksOut, string> = { half: 'HALF', none: 'NONE', double: 'DOUBLE', words: 'WORDS ONLY' };
+/** How a hit reaches its target (8b5b; the server's APPLY), CONFIRM to start. */
+export type Apply = 'auto' | 'confirm' | 'off';
+export const APPLY: Apply[] = ['auto', 'confirm', 'off'];
 
 /** A damage type, whole: one picture, its icon (drawn or uploaded) or a pad drawing. */
 export interface DamageType { id: string; name: string; icon?: string; drawn?: string[]; description: string; standard: boolean }
@@ -153,11 +161,62 @@ export const meaningTyped = (def: Definition, kind: Kind): string => {
   return isObject(said) && typeof said.means === 'string' ? said.means : '';
 };
 
-/** The definition with what one word means set; blank, or the app's own words, stores nothing. */
-export const withMeaning = (def: Definition, kind: Kind, means: string): Definition => {
+/** The definition with one word's section changed: a part set to undefined taken out, an empty section none at all. */
+const withKind = (def: Definition, kind: Kind, patch: Obj): Definition => {
   const damage: Obj = { ...damageOf(def) };
-  if (!means.trim() || means.trim() === MEANS[kind]) delete damage[kind];
-  else damage[kind] = { means };
+  const said: Obj = { ...(isObject(damage[kind]) ? damage[kind] as Obj : {}), ...patch };
+  for (const key of Object.keys(said)) if (said[key] === undefined) delete said[key];
+  if (Object.keys(said).length) damage[kind] = said; else delete damage[kind];
+  return withDamage(def, damage);
+};
+
+/** The definition with what one word means set; blank, or the app's own words, stores nothing. Its WORKS OUT AS kept. */
+export const withMeaning = (def: Definition, kind: Kind, means: string): Definition =>
+  withKind(def, kind, { means: !means.trim() || means.trim() === MEANS[kind] ? undefined : means });
+
+/** What a word does to a hit's number in the system (8b5b): its own, or what it starts as. */
+export const worksOutOf = (def: Definition, kind: Kind): WorksOut => {
+  const v = (damageOf(def)[kind] as Obj | undefined)?.works_out;
+  return WORKS_OUT.includes(v as WorksOut) ? v as WorksOut : WORKS_OUT_START[kind];
+};
+
+/** The definition with what a word does to a hit set; what it starts as stores nothing. */
+export const withWorksOut = (def: Definition, kind: Kind, works: WorksOut): Definition =>
+  withKind(def, kind, { works_out: works === WORKS_OUT_START[kind] ? undefined : works });
+
+/** Whether resistances change a hit's number in the system (8b5b): on unless switched off. */
+export const workOutOf = (def: Definition): boolean => damageOf(def).work_out !== false;
+/** The definition with WORK IT OUT set; on, as it starts, stores nothing. */
+export const withWorkOut = (def: Definition, on: boolean): Definition => {
+  const damage: Obj = { ...damageOf(def) };
+  if (on) delete damage.work_out; else damage.work_out = false;
+  return withDamage(def, damage);
+};
+
+/** How a hit reaches its target in the system (8b5b): its own, or CONFIRM. */
+export const applyOf = (def: Definition): Apply => {
+  const v = damageOf(def).apply;
+  return APPLY.includes(v as Apply) ? v as Apply : 'confirm';
+};
+/**
+ * What the table is still running where the draft says otherwise (8b5b; the user, 2026-11-25): APPLY DAMAGE and WORK IT OUT
+ * reach the table only on PUBLISH, as every builder change does, so the page says what it still uses. Nothing where the
+ * system was never published, or where the two agree.
+ */
+export const unpublishedOf = (draft: Definition, published: Definition | null | undefined): { apply?: string; workOut?: string } => {
+  if (!published) return {};
+  const apply = applyOf(published);
+  const workOut = workOutOf(published);
+  return {
+    ...(apply !== applyOf(draft) ? { apply: `NOT PUBLISHED: the table still uses ${apply.toUpperCase()}` } : {}),
+    ...(workOut !== workOutOf(draft) ? { workOut: `NOT PUBLISHED: the table still ${workOut ? 'works them out' : 'takes every hit as rolled'}` } : {}),
+  };
+};
+
+/** The definition with APPLY DAMAGE set; CONFIRM, as it starts, stores nothing. */
+export const withApply = (def: Definition, apply: Apply): Definition => {
+  const damage: Obj = { ...damageOf(def) };
+  if (apply === 'confirm') delete damage.apply; else damage.apply = apply;
   return withDamage(def, damage);
 };
 
