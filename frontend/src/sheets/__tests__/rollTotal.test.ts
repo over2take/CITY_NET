@@ -40,3 +40,24 @@ describe('a roll line\'s final total', () => {
     expect(totalIn('rolled [ 5')).toBeNull();
   });
 });
+
+describe('a hit\'s line and a typed DAMAGE (8b5c)', () => {
+  const ROLL = 'Kes rolled Flame Tongue DAMAGE 4 SLASHING + 6 FIRE DMG [0 + 4] + [0 + 6] = 4 SLASHING + 6 FIRE DMG (10)';
+  it('what a hit took, last, marked a hit; never what comes before it', () => {
+    const line = `${ROLL} → GHOUL · RESISTS FIRE: 6 → 3 · HIDDEN FROM PLAYERS · TAKES 7 OF 10`;
+    expect(totalIn(line)).toEqual({ before: line.slice(0, -'TAKES 7 OF 10'.length), total: 'TAKES 7 OF 10', after: '', hit: true });
+    expect(total(`${ROLL} → GHOUL · NOT APPLIED: APPLY DAMAGE IS OFF · WOULD TAKE 10`)).toBe('WOULD TAKE 10');
+    expect(total('Kes rolled Club DAMAGE 5 [0 + 5 = 5] → GHOUL · TAKES 5')).toBe('TAKES 5');
+  });
+
+  it('a typed DAMAGE\'s whole after its dice, up to where a hit\'s words begin; not a hit', () => {
+    expect(totalIn(ROLL)).toEqual({ before: ROLL.slice(0, -'4 SLASHING + 6 FIRE DMG (10)'.length), total: '4 SLASHING + 6 FIRE DMG (10)', after: '' });
+    expect(total(`${ROLL} → GHOUL`)).toBe('4 SLASHING + 6 FIRE DMG (10)');
+    expect(totalIn(`${ROLL} → GHOUL`)!.after).toBe(' → GHOUL');
+    expect(total('Kes rolled Torch DAMAGE 2d6 FIRE DMG [(3, 3)] = 6 FIRE DMG')).toBe('6 FIRE DMG');
+    // Nothing after it: the dice part's own, as before.
+    expect(total('rolled [5] = ')).toBe('5');
+    // A plain roll's own = inside its brackets: as before.
+    expect(total('Sam rolled Save (Might) [3 + 13 = 16] — vs 15: SUCCESS')).toBe('16');
+  });
+});

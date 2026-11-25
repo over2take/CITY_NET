@@ -32,17 +32,19 @@ const damageTaken = (parts, worked, { worksOut, workOut }) => {
 };
 
 /**
- * What the log says a hit did, after the roll (8b5a): `GANGER TAKES 7`, then each part a resistance met, "RESISTS FIRE:
- * 4 → 2", or as rolled where it is words only or not worked out, "RESISTS FIRE (TAKEN AS ROLLED)". `verb` WOULD TAKE where
- * it isn't taken (8b5c); `total` false leaves the number out, for players who aren't to know it (seenBy).
+ * What the log says a hit did, after the roll (8b5a): the target, each part a resistance met, "RESISTS FIRE: 4 → 2", or as
+ * rolled where it is words only or not worked out, "RESISTS FIRE (TAKEN AS ROLLED)", then `notes`, then what it took last
+ * (8b5c; the user, 2026-11-25: "the total damage at the end and highlighted"): "TAKES 7 OF 10", or "TAKES 10" where that is
+ * all of it. `verb` WOULD TAKE where it isn't taken; `total` false leaves the number out, for players who aren't to know it.
  */
-const takenWords = (targetName, taken, { verb = 'TAKES', total = true } = {}) => {
+const takenWords = (targetName, taken, { verb = 'TAKES', total = true, notes = [] } = {}) => {
   const met = taken.parts.filter((p) => p.kind);
   const each = met.map((p) => {
     const what = `${VERB[p.kind]} ${String(p.label || p.type).toUpperCase()}`;
     return p.works && p.works !== 'words' ? `${what}: ${p.value} → ${p.taken}` : `${what} (TAKEN AS ROLLED)`;
   });
-  return `${String(targetName).toUpperCase()}${total ? ` ${verb} ${taken.taken}` : ''}${each.length ? ` · ${each.join(' · ')}` : ''}`;
+  const took = total ? [`${verb} ${taken.taken}${taken.taken !== taken.rolled ? ` OF ${taken.rolled}` : ''}`] : [];
+  return [String(targetName).toUpperCase(), ...each, ...notes, ...took].join(' · ');
 };
 
 /**

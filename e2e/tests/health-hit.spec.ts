@@ -50,7 +50,7 @@ test('a HIT\'s Flame Tongue reaches the NPC: FIRE halved and taken off under AUT
   for (const key of SETTINGS) await asGm(request, gm, 'post', '/api/settings', { key, value: '' });
   const player = { username: `e2e_hits${again}`, password: 'e2e-player-password' };
   await approvedPlayer(request, gm, player);
-  const ghoul = `Hit Ghoul${again}`;
+  const ghoul = `Bog Ghoul${again}`;
   const sheet = await asGm(request, gm, 'post', '/api/sheets/npcs', { npc_label: ghoul, data: { name: ghoul, _resistances: [{ kind: 'resist', type: 'fire' }] } });
   const token = { name: ghoul, description: 'An NPC', shape: 'friendly_rhombus', x: 0, y: 0, z: 0, width: 1, height: 1, depth: 1 };
   const made = await asGm(request, gm, 'post', '/api/locations', { ...token, hp_current: 20, hp_max: 20, hp_temp: 0 });
@@ -97,8 +97,12 @@ test('a HIT\'s Flame Tongue reaches the NPC: FIRE halved and taken off under AUT
   }).toPass({ timeout: 15_000 });
   // Opened on a roll's flash, it shows the history already.
   if (!(await page.getByTestId('dice-history').isVisible())) await toggle.click();
-  await expect(page.getByTestId('dice-history').locator('> div').filter({ hasText: /rolled Flame Tongue DAMAGE/ }).last())
-    .toContainText(`→ ${ghoul.toUpperCase()} TAKES 7 · RESISTS FIRE: 6 → 3 · HIDDEN FROM PLAYERS`, { timeout: 15_000 });
+  const gmLine = page.getByTestId('dice-history').locator('> div').filter({ hasText: /rolled Flame Tongue DAMAGE/ }).last();
+  await expect(gmLine)
+    .toContainText(`→ ${ghoul.toUpperCase()} · RESISTS FIRE: 6 → 3 · HIDDEN FROM PLAYERS · TAKES 7 OF 10`, { timeout: 15_000 });
+  // What it took, last, the one bold and larger.
+  await expect(gmLine.getByTestId('roll-total')).toHaveText('TAKES 7 OF 10');
+  await expect(gmLine.getByTestId('roll-total')).toHaveCSS('font-weight', '800');
   await mine.keyboard.press('Escape');
 
   // The table's APPLY DAMAGE OFF: the next hit only said.

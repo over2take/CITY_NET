@@ -108,7 +108,7 @@ describe('AUTO', () => {
     const t = await setUp({ settings: TOTALS_SHOWN });
     await t.attack();
     const said = await t.damage();
-    expect(said.gm).toBe(`${ROLLED} → GHOUL TAKES 7 · RESISTS FIRE: 6 → 3 · HIDDEN FROM PLAYERS`);
+    expect(said.gm).toBe(`${ROLLED} → GHOUL · RESISTS FIRE: 6 → 3 · HIDDEN FROM PLAYERS · TAKES 7 OF 10`);
     expect(said.kes).toBe(`${ROLLED} → GHOUL`);
     expect(await t.hp()).toEqual({ hp_current: 13, hp_temp: 0 });
     expect(t.emitUpdate).toHaveBeenCalledWith({ isRhombusOnly: true });
@@ -123,18 +123,18 @@ describe('AUTO', () => {
     const t = await setUp({ ghoulSheet: { name: 'Ghoul', ...FIRE_RESISTED, _revealed: ['fire'] }, settings: TOTALS_SHOWN });
     await t.attack();
     const said = await t.damage();
-    expect(said.gm).toBe(`${ROLLED} → GHOUL TAKES 7 · RESISTS FIRE: 6 → 3`);
+    expect(said.gm).toBe(`${ROLLED} → GHOUL · RESISTS FIRE: 6 → 3 · TAKES 7 OF 10`);
     expect(said.kes).toBe(said.gm);
     const plain = await setUp({ ghoulSheet: null, settings: TOTALS_SHOWN });
     await plain.attack();
-    expect((await plain.damage()).kes).toBe(`${ROLLED} → GHOUL TAKES 10`);
+    expect((await plain.damage()).kes).toBe(`${ROLLED} → GHOUL · TAKES 10`);
     expect(await plain.hp()).toEqual({ hp_current: 10, hp_temp: 0 });
   });
 
   it('a DAMAGE with no type: one part, taken whole', async () => {
     const t = await setUp({ settings: TOTALS_SHOWN });
     await t.attack();
-    expect((await t.damage('damage', 1)).kes).toBe('Kes rolled Club DAMAGE 5 [0 + 5 = 5] → GHOUL TAKES 5');
+    expect((await t.damage('damage', 1)).kes).toBe('Kes rolled Club DAMAGE 5 [0 + 5 = 5] → GHOUL · TAKES 5');
     expect(await t.hp()).toEqual({ hp_current: 15, hp_temp: 0 });
   });
 
@@ -142,27 +142,27 @@ describe('AUTO', () => {
     const t = await setUp({ system: SYSTEM({ damage: { apply: 'auto', resist: { works_out: 'words' } } }), settings: TOTALS_SHOWN });
     await t.attack();
     const said = await t.damage();
-    expect(said.gm).toBe(`${ROLLED} → GHOUL TAKES 10 · RESISTS FIRE (TAKEN AS ROLLED) · HIDDEN FROM PLAYERS`);
-    expect(said.kes).toBe(`${ROLLED} → GHOUL TAKES 10`);
+    expect(said.gm).toBe(`${ROLLED} → GHOUL · RESISTS FIRE (TAKEN AS ROLLED) · HIDDEN FROM PLAYERS · TAKES 10`);
+    expect(said.kes).toBe(`${ROLLED} → GHOUL · TAKES 10`);
   });
 
   it('HIT TOTALS ON NPCS: GM ONLY, as it starts: players told only that the NPC was hit, all revealed or none met', async () => {
     const t = await setUp({ ghoulSheet: { name: 'Ghoul', ...FIRE_RESISTED, _revealed: ['fire'] } });
     await t.attack();
     const said = await t.damage();
-    expect(said.gm).toBe(`${ROLLED} → GHOUL TAKES 7 · RESISTS FIRE: 6 → 3 · HIDDEN FROM PLAYERS`);
+    expect(said.gm).toBe(`${ROLLED} → GHOUL · RESISTS FIRE: 6 → 3 · HIDDEN FROM PLAYERS · TAKES 7 OF 10`);
     expect(said.kes).toBe(`${ROLLED} → GHOUL`);
     expect(await t.hp()).toEqual({ hp_current: 13, hp_temp: 0 });
     const on = await setUp({ ghoulSheet: null, settings: { hit_totals_gm_only: '1' } });
     await on.attack();
-    expect(await on.damage()).toEqual({ gm: `${ROLLED} → GHOUL TAKES 10 · HIDDEN FROM PLAYERS`, kes: `${ROLLED} → GHOUL` });
+    expect(await on.damage()).toEqual({ gm: `${ROLLED} → GHOUL · HIDDEN FROM PLAYERS · TAKES 10`, kes: `${ROLLED} → GHOUL` });
   });
 
   it('a player\'s character: every copy of their token, TEMP first; their sheet told; their resistances everyone\'s to know', async () => {
     const t = await setUp();
     await t.attack(t.ash);
     const said = await t.damage();
-    expect(said.gm).toBe(`${ROLLED} → ASH TAKES 7 · RESISTS FIRE: 6 → 3`);
+    expect(said.gm).toBe(`${ROLLED} → ASH · RESISTS FIRE: 6 → 3 · TAKES 7 OF 10`);
     expect(said.kes).toBe(said.gm);
     expect((await get(db, 'SELECT COUNT(*) AS n FROM locations WHERE owner = \'ash\' AND hp_current = 15 AND hp_temp = 0')).n).toBe(2);
     expect(t.shared.some((e) => e.event === 'sheetUpdated' && e.data.username === 'ash')).toBe(true);
@@ -173,19 +173,19 @@ describe('AUTO', () => {
     const t = await setUp({ system: SYSTEM({ core: { health: typed }, derived: [{ id: 'hurt', label: 'Hurt', formula: '@bashing + @lethal' }] }) });
     await run(db, 'UPDATE locations SET hp_max = 9, hp_current = 9 WHERE id = ?', [t.ghoul]);
     await t.attack();
-    expect((await t.damage()).gm).toContain('→ GHOUL TAKES 7');
+    expect((await t.damage()).gm).toContain('→ GHOUL · RESISTS FIRE: 6 → 3 · HIDDEN FROM PLAYERS · TAKES 7 OF 10');
     expect(await t.hp()).toEqual({ hp_current: 2, hp_temp: 0 });
     const sheet = await get(db, 'SELECT data FROM character_sheets WHERE npc_label = \'Ghoul\'');
     expect(JSON.parse(sheet.data)).toMatchObject({ bashing: 7, lethal: 0, hurt: 7 });
     // No sheet to keep the marks on: said, nothing taken.
     const bare = await setUp({ system: SYSTEM({ core: { health: typed } }), ghoulSheet: null });
     await bare.attack();
-    expect((await bare.damage()).gm).toBe(`${ROLLED} → GHOUL WOULD TAKE 10 · NOT APPLIED: THIS TOKEN HAS NO SHEET TO KEEP THAT ON · HIDDEN FROM PLAYERS`);
+    expect((await bare.damage()).gm).toBe(`${ROLLED} → GHOUL · NOT APPLIED: THIS TOKEN HAS NO SHEET TO KEEP THAT ON · HIDDEN FROM PLAYERS · WOULD TAKE 10`);
     expect(await bare.hp()).toEqual({ hp_current: 20, hp_temp: 0 });
     // Health as conditions only.
     const none = await setUp({ system: SYSTEM({ core: { health: { model: 'none' } } }) });
     await none.attack();
-    expect((await none.damage()).gm).toBe(`${ROLLED} → GHOUL WOULD TAKE 7 · RESISTS FIRE: 6 → 3 · NOT APPLIED: THIS SYSTEM TRACKS HARM AS CONDITIONS, NOT HEALTH · HIDDEN FROM PLAYERS`);
+    expect((await none.damage()).gm).toBe(`${ROLLED} → GHOUL · RESISTS FIRE: 6 → 3 · NOT APPLIED: THIS SYSTEM TRACKS HARM AS CONDITIONS, NOT HEALTH · HIDDEN FROM PLAYERS · WOULD TAKE 7 OF 10`);
     expect(await none.hp()).toEqual({ hp_current: 20, hp_temp: 0 });
   });
 });
@@ -195,14 +195,14 @@ describe('OFF and CONFIRM: said, not taken', () => {
     const off = await setUp({ settings: { apply_damage: 'off', work_out_resistances: '0' } });
     await off.attack();
     const said = await off.damage();
-    expect(said.gm).toBe(`${ROLLED} → GHOUL WOULD TAKE 10 · RESISTS FIRE (TAKEN AS ROLLED) · NOT APPLIED: APPLY DAMAGE IS OFF · HIDDEN FROM PLAYERS`);
+    expect(said.gm).toBe(`${ROLLED} → GHOUL · RESISTS FIRE (TAKEN AS ROLLED) · NOT APPLIED: APPLY DAMAGE IS OFF · HIDDEN FROM PLAYERS · WOULD TAKE 10`);
     expect(said.kes).toBe(`${ROLLED} → GHOUL · NOT APPLIED: APPLY DAMAGE IS OFF`);
     expect(await off.hp()).toEqual({ hp_current: 20, hp_temp: 0 });
     expect(off.emitUpdate).not.toHaveBeenCalledWith({ isRhombusOnly: true });
     const { damage: _d, ...noApply } = SYSTEM();
     const confirm = await setUp({ system: noApply, ghoulSheet: { name: 'Ghoul' }, settings: TOTALS_SHOWN });
     await confirm.attack();
-    expect((await confirm.damage()).gm).toBe(`${ROLLED} → GHOUL WOULD TAKE 10 · NOT APPLIED: APPLY DAMAGE IS CONFIRM`);
+    expect((await confirm.damage()).gm).toBe(`${ROLLED} → GHOUL · NOT APPLIED: APPLY DAMAGE IS CONFIRM · WOULD TAKE 10`);
     expect(await confirm.hp()).toEqual({ hp_current: 20, hp_temp: 0 });
   });
 });
@@ -221,7 +221,7 @@ describe('what lets a hit go', () => {
     const t = await setUp();
     await t.attack();
     expect((await t.damage('heals')).gm).toBe('Kes rolled Flame Tongue HEALS 2 [0 + 2 = 2]');
-    expect((await t.damage()).gm).toContain('→ GHOUL TAKES 7');
+    expect((await t.damage()).gm).toContain('→ GHOUL · RESISTS FIRE: 6 → 3 · HIDDEN FROM PLAYERS · TAKES 7 OF 10');
   });
 
   it('CANCEL, a new attack, leaving, or a minute gone by', async () => {

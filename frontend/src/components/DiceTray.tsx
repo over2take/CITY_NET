@@ -268,7 +268,8 @@ interface DiceTrayWindowProps {
 function BoldTotal({ line }: { line: string }) {
   const split = totalIn(line);
   if (!split) return <>{line}</>;
-  return <>{split.before}<strong data-testid="roll-total" style={{ fontWeight: 800 }}>{split.total}</strong>{split.after}</>;
+  // What a hit took (8b5c), larger too: the number the table acts on.
+  return <>{split.before}<strong data-testid="roll-total" style={{ fontWeight: 800, ...(split.hit ? { fontSize: '1.3em' } : {}) }}>{split.total}</strong>{split.after}</>;
 }
 
 export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bell, onToggleBell, openHistory = false, openingRoll = null }: DiceTrayWindowProps) {

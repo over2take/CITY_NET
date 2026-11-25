@@ -23,6 +23,8 @@ const { HIDDEN } = require('../systemBuilder/tableRolls');
 const HIT_WAITS_MS = 60_000;
 
 const NOT_APPLIED = { off: 'NOT APPLIED: APPLY DAMAGE IS OFF', confirm: 'NOT APPLIED: APPLY DAMAGE IS CONFIRM' };
+/** The GM's note where players were told less, as a roll's hidden target's (tableRolls.js HIDDEN, 6c4h). */
+const TOLD_LESS = HIDDEN.replace(/^ · /, '');
 
 /** The table's APPLY DAMAGE, WORK OUT RESISTANCES and HIT TOTALS ON NPCS, as { key: value }. */
 const tableSettings = (db, cb) => db.all('SELECT key, value FROM global_settings WHERE key IN (?, ?, ?)', [APPLY_DAMAGE_SETTING, WORK_OUT_SETTING, HIT_TOTALS_SETTING],
@@ -56,26 +58,27 @@ const hitOnTarget = (db, { system, definition, health, targetId, made }, cb) => 
       const seen = gmOnly ? { taken: seenBy(taken, {}).taken, total: false }
         : seenBy(taken, player ? null : revealedOnly(worked, revealedIn(data[REVEALED_KEY])));
       // The GM's line says when players were told less, as a roll's hidden target does (6c4h).
-      const say = (verb, tail = '') => {
-        const words = `${takenWords(name, taken, { verb })}${tail}`;
-        const players = `${takenWords(name, seen.taken, { verb, total: seen.total })}${tail}`;
-        return players === words ? { words } : { words: `${words}${HIDDEN}`, players };
+      // What it took last, in either; the GM's notes it was told less before that.
+      const say = (verb, notes = []) => {
+        const words = takenWords(name, taken, { verb, notes });
+        const players = takenWords(name, seen.taken, { verb, total: seen.total, notes });
+        return players === words ? { words } : { words: takenWords(name, taken, { verb, notes: [...notes, TOLD_LESS] }), players };
       };
-      if (rules.apply !== 'auto') return cb({ targetName: name, applied: false, ...say('WOULD TAKE', ` · ${NOT_APPLIED[rules.apply]}`) });
+      if (rules.apply !== 'auto') return cb({ targetName: name, applied: false, ...say('WOULD TAKE', [NOT_APPLIED[rules.apply]]) });
 
       const writeToken = (t, owner) => {
         const [sql, params] = player
           ? ['UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE shape = "rhombus" AND owner = ?', [t.current, t.max, t.temp, row.owner]]
           : ['UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE id = ?', [t.current, t.max, t.temp, row.id]];
         db.run(sql, params, (e) => cb(e
-          ? { targetName: name, applied: false, ...say('WOULD TAKE', ' · NOT APPLIED: COULD NOT BE SAVED') }
+          ? { targetName: name, applied: false, ...say('WOULD TAKE', ['NOT APPLIED: COULD NOT BE SAVED']) }
           : { targetName: name, applied: true, ...say('TAKES'), ...(owner ? { owner } : {}) }));
       };
       const token = { current: row.hp_current, max: row.hp_max, temp: row.hp_temp };
       if (!health || health.model === 'pool') return writeToken(poolAfter(token, 'damage', taken.taken), player ? row.owner : null);
       // Another model: its rule on the sheet as it is when written, as the HEALTH folder's DAMAGE.
       const act = { kind: 'damage', amount: taken.taken };
-      const refused = (result) => cb({ targetName: name, applied: false, ...say('WOULD TAKE', ` · NOT APPLIED: ${String(result.error).toUpperCase()}`) });
+      const refused = (result) => cb({ targetName: name, applied: false, ...say('WOULD TAKE', [`NOT APPLIED: ${String(result.error).toUpperCase()}`]) });
       if (!sheet) {
         const result = applyHealthAction(health, { current: token.current, max: token.max, temp: token.temp }, {}, act);
         if (!result.ok) return refused(result);

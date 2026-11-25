@@ -68,12 +68,12 @@ describe('each part on its own', () => {
 describe('in the log', () => {
   it('what the target takes, then each part a resistance met: how it worked out, or as rolled', () => {
     const worked = { fire: { kind: 'resist' }, slashing: { kind: 'vulnerable' } };
-    expect(takenWords('Ganger', damageTaken(FLAME_TONGUE, worked, START))).toBe('GANGER TAKES 14 · VULNERABLE TO SLASHING: 5 → 10 · RESISTS FIRE: 9 → 4');
-    expect(takenWords('Ganger', damageTaken(FLAME_TONGUE, { fire: { kind: 'immune' } }, { ...START, workOut: false }))).toBe('GANGER TAKES 14 · IMMUNE TO FIRE (TAKEN AS ROLLED)');
-    expect(takenWords('Ganger', damageTaken(FLAME_TONGUE, { fire: { kind: 'resist' } }, { worksOut: { ...START.worksOut, resist: 'words' }, workOut: true }))).toBe('GANGER TAKES 14 · RESISTS FIRE (TAKEN AS ROLLED)');
-    expect(takenWords('Ganger', damageTaken([{ value: 3 }], {}, START))).toBe('GANGER TAKES 3');
+    expect(takenWords('Ganger', damageTaken(FLAME_TONGUE, worked, START))).toBe('GANGER · VULNERABLE TO SLASHING: 5 → 10 · RESISTS FIRE: 9 → 4 · TAKES 14');
+    expect(takenWords('Ganger', damageTaken(FLAME_TONGUE, { fire: { kind: 'immune' } }, { ...START, workOut: false }))).toBe('GANGER · IMMUNE TO FIRE (TAKEN AS ROLLED) · TAKES 14');
+    expect(takenWords('Ganger', damageTaken(FLAME_TONGUE, { fire: { kind: 'resist' } }, { worksOut: { ...START.worksOut, resist: 'words' }, workOut: true }))).toBe('GANGER · RESISTS FIRE (TAKEN AS ROLLED) · TAKES 14');
+    expect(takenWords('Ganger', damageTaken([{ value: 3 }], {}, START))).toBe('GANGER · TAKES 3');
     // A part with a type but no label: its id.
-    expect(takenWords('Ganger', damageTaken([{ value: 3, type: 'fire' }], { fire: { kind: 'immune' } }, START))).toBe('GANGER TAKES 0 · IMMUNE TO FIRE: 3 → 0');
+    expect(takenWords('Ganger', damageTaken([{ value: 3, type: 'fire' }], { fire: { kind: 'immune' } }, START))).toBe('GANGER · IMMUNE TO FIRE: 3 → 0 · TAKES 0 OF 3');
     expect(WORKS_WORDS).toEqual({ half: 'HALF', none: 'NONE', double: 'DOUBLE', words: 'WORDS ONLY' });
   });
 });
@@ -102,10 +102,10 @@ describe('as players may know it (8b5c)', () => {
     const words = damageTaken(FLAME_TONGUE, { fire: { kind: 'resist' } }, { ...START, workOut: false });
     const seen = seenBy(words, {});
     expect(seen.total).toBe(true);
-    expect(takenWords('Ganger', seen.taken, { total: seen.total })).toBe('GANGER TAKES 14');
+    expect(takenWords('Ganger', seen.taken, { total: seen.total })).toBe('GANGER · TAKES 14');
   });
 
   it('said as not taken: WOULD TAKE', () => {
-    expect(takenWords('Ganger', taken, { verb: 'WOULD TAKE' })).toBe('GANGER WOULD TAKE 14 · VULNERABLE TO SLASHING: 5 → 10 · RESISTS FIRE: 9 → 4');
+    expect(takenWords('Ganger', taken, { verb: 'WOULD TAKE' })).toBe('GANGER · VULNERABLE TO SLASHING: 5 → 10 · RESISTS FIRE: 9 → 4 · WOULD TAKE 14');
   });
 });
