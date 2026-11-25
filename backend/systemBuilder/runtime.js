@@ -39,6 +39,7 @@ const { loadTableConditions, tableConditionsOf } = require('./tableConditions');
 const { bankOf } = require('./bank');
 const { distanceOf } = require('./core');
 const { houseRulesOf, houseRulesOn, withHouseRules, choicesFrom } = require('./houseRules');
+const { damageRulesOf } = require('./damageTypes');
 const templates = require('../sheets/templates');
 const npcTiers = require('../sheets/npcTiers');
 
@@ -216,6 +217,8 @@ const renderOf = (id, definition, on = new Set()) => ({
     encumbrance: encumbranceOf(definition) !== null, band_conditions: namesCondition(definition), applied_conditions: conditionsOf(definition).some((c) => c.applied),
     turn_effects: conditionsOf(definition).some((c) => Array.isArray(c.each_turn) && c.each_turn.length > 0),
     gear: ownTypes(definition),
+    // APPLY DAMAGE and WORK IT OUT as the system says (8b5b), for the GAME tab's AS THE SYSTEM SAYS.
+    damage: (({ apply, workOut }) => ({ apply, work_out: workOut }))(damageRulesOf(definition)),
   },
 });
 

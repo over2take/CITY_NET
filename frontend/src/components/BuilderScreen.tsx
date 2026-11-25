@@ -599,7 +599,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
             {ready && page === 'sheet' && <SheetPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'npcs' && <NpcsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'conditions' && <ConditionsPage definition={definition!} edit={edit} api={looking ? undefined : api} />}
-            {ready && page === 'damage' && <DamageTypesPage definition={definition!} edit={edit} api={looking ? undefined : api} />}
+            {ready && page === 'damage' && <DamageTypesPage definition={definition!} edit={edit} api={looking ? undefined : api} published={system?.published ?? null} />}
             {ready && page === 'rests' && <RestsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'house_rules' && <HouseRulesPage definition={definition!} edit={edit} onGoTo={(p) => { setPage(p); setStatus(null); }} />}
             {ready && page === 'try' && <TryItPage definition={definition!} edit={looking ? undefined : edit} api={api} />}
