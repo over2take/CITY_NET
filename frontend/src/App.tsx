@@ -2735,7 +2735,7 @@ function App() {
                     />
                   )
                   : (liveToken
-                    ? <HealthReviewPanel location={liveToken} socket={socketRef.current} gameSystem={gameSystem} onRolled={() => setIsDiceTrayOpen(true)} />
+                    ? <HealthReviewPanel location={liveToken} socket={socketRef.current} gameSystem={gameSystem} onRolled={() => setIsDiceTrayOpen(true)} authToken={token || playerToken || undefined} />
                     : <div style={{ opacity: 0.7 }}>NO VITALS · NOT ON THE MAP</div>);
                 return (
                   <TokenWindow

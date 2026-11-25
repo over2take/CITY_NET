@@ -33,7 +33,8 @@ const revealedOnly = (worked, revealed) => {
 const resistancesShown = (definition, data, conditionIds, who, { look = 'full', npc = false } = {}) => {
   const worked = resistancesOf(definition, data || {}, conditionIds);
   const base = {
-    types: damageTypesOf(definition).map(({ id, name, icon, drawn }) => ({ id, name, ...(drawn ? { drawn } : { icon }) })),
+    // Each type's own words too, for a chip's helper (8b4b).
+    types: damageTypesOf(definition).map(({ id, name, icon, drawn, description }) => ({ id, name, ...(drawn ? { drawn } : { icon }), ...(description ? { description } : {}) })),
     means: meaningsOf(definition),
   };
   if (look === 'revealed') return { ...base, worked: revealedOnly(worked, revealedIn(data && data[REVEALED_KEY])), hand: [], may: { add: false, vulnerable: false }, revealedOnly: true };

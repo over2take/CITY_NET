@@ -253,7 +253,7 @@ describe('the routes', () => {
       const res = await get_(ids.vex);
       expect(res.status).toBe(200);
       expect(res.body.on).toBe(true);
-      expect(res.body.types[0]).toEqual({ id: 'fire', name: 'Fire', icon: 'flame' });
+      expect(res.body.types[0]).toEqual({ id: 'fire', name: 'Fire', icon: 'flame', description: 'Burns.' });
       expect(res.body.types.at(-1)).toEqual({ id: 'sonic', name: 'Sonic', icon: 'target' });
       expect(res.body.means).toEqual({ resist: 'Takes half, rounded down.', immune: 'Takes none.', vulnerable: 'Takes double.' });
       expect(res.body.worked).toEqual({
