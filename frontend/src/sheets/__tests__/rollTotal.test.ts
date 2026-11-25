@@ -50,6 +50,15 @@ describe('a hit\'s line and a typed DAMAGE (8b5c)', () => {
     expect(total('Kes rolled Club DAMAGE 5 [0 + 5 = 5] → GHOUL · TAKES 5')).toBe('TAKES 5');
   });
 
+  it("a to-hit: HIT or MISS after its target, marked a hit; a symbol roll's own HIT inside its dice part never", () => {
+    expect(totalIn('Kes rolled 1d20 [(13) = 13] → GHOUL · VS AC 12 · HIT')).toEqual({ before: 'Kes rolled 1d20 [(13) = 13] → GHOUL · VS AC 12 · ', total: 'HIT', after: '', hit: true });
+    expect(total('Kes rolled 1d20 [(3) = 3] → GHOUL · MISS')).toBe('MISS');
+    expect(totalIn('K rolled 2×Good [✶◆ ✶ = 2 HIT, 1 EDGE]')).toMatchObject({ total: '2 HIT, 1 EDGE' });
+    expect(totalIn('K rolled Check [(4, 5) | 9 + 3 = 12 · 1 HIT]')!.hit).toBeUndefined();
+    // HIT last with no target before it: not a to-hit.
+    expect(totalIn('K rolled Strike [5] · HIT')).toMatchObject({ total: '5' });
+  });
+
   it('a typed DAMAGE\'s whole after its dice, up to where a hit\'s words begin; not a hit', () => {
     expect(totalIn(ROLL)).toEqual({ before: ROLL.slice(0, -'4 SLASHING + 6 FIRE DMG (10)'.length), total: '4 SLASHING + 6 FIRE DMG (10)', after: '' });
     expect(total(`${ROLL} → GHOUL`)).toBe('4 SLASHING + 6 FIRE DMG (10)');

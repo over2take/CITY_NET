@@ -2,14 +2,15 @@
 // of a line is its first [ ... ]: "rolled Save (Might) [3 + 13 = 16] — vs 15: SUCCESS". The total is what follows its
 // last " = " ("16"), or, with nothing added, the whole of it ("[17]"); anything said after a " · " (symbols left) is not.
 // A hit's line (8b5c; the user, 2026-11-25: "the total damage at the end and highlighted"): what it took, last, "TAKES 7 OF
-// 10" or "WOULD TAKE 7 OF 10", marked `hit` for the tray to draw it larger (the user: "make the total text larger"). A DAMAGE with its types (8b2a), its dice in parts "[0 + 4] + [(5, 3)]": the whole after the last
+// 10" or "WOULD TAKE 7 OF 10", and a to-hit's HIT or MISS after its target ("→ GHOUL · VS AC 13 · MISS"), marked `hit` for the tray to draw it larger (the user: "make the total text larger"). A DAMAGE with its types (8b2a), its dice in parts "[0 + 4] + [(5, 3)]": the whole after the last
 // "] = " ("4 SLASHING + 6 FIRE DMG (10)"), up to where a hit's words begin.
 // Pure, so DiceTray only draws.
 
 /** The line in three: before the total, the total, after it. Null when the line has no total to find. */
 export const totalIn = (line: string): { before: string; total: string; after: string; hit?: true } | null => {
-  const took = / · ((?:WOULD TAKE|TAKES) \d+(?: OF \d+)?)$/.exec(line);
-  if (took) return { before: line.slice(0, took.index + 3), total: took[1], after: '', hit: true };
+  const took = / · ((?:WOULD TAKE|TAKES) \d+(?: OF \d+)?)$/.exec(line) || / → .* · (HIT|MISS)$/.exec(line);
+  // Last on the line, so everything before it stays as written.
+  if (took) return { before: line.slice(0, line.length - took[1].length), total: took[1], after: '', hit: true };
   const typed = line.lastIndexOf('] = ');
   if (typed >= 0) {
     const from = typed + 4;

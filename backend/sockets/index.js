@@ -811,21 +811,29 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       if (modTotal !== 0) finalString += ` ${modTotal > 0 ? '+' : '-'} ${Math.abs(modTotal)}`;
       finalString += ` = ${grandTotal}]`;
 
-      const broadcastData = { userName: identity.displayName(userName), account: userName, results, modifiers, color, total: grandTotal, historyString: finalString };
-      db.run('INSERT INTO dice_rolls (username, total, results, color, historyString) VALUES (?, ?, ?, ?, ?)',
-        [userName, grandTotal, JSON.stringify(results), color, finalString], (err) => {
+      // A roll made for an attack picked on the map is its to-hit (6c4d2), taken now so one roll answers it.
+      const attack = pendingAttacks.get(socket.id);
+      if (attack) pendingAttacks.delete(socket.id);
+      const hit = !!attack && grandTotal >= attack.ac;
+      // A HIT waits for its damage (8b5c), from now; a MISS has none waiting, the attack before it let any go (initiateAttack).
+      if (hit) hitsWaiting.set(socket.id, { targetId: attack.targetId, until: Date.now() + HIT_WAITS_MS });
+      // Said in the log (8b5c; the user, 2026-11-25): the target and HIT or MISS; what it was against the GM's alone.
+      const verdict = attack ? (hit ? 'HIT' : 'MISS') : null;
+      const aimedAt = attack ? ` → ${String(attack.targetName || 'THE TARGET').toUpperCase()}` : '';
+      const history = attack ? `${finalString}${aimedAt} · VS ${attack.defense || 'AC'} ${attack.ac} · ${verdict}` : finalString;
+      const players = attack ? { historyText: `${finalString}${aimedAt} · ${verdict}`, board: boardOf('TO HIT', verdict) } : null;
+      const broadcastData = {
+        userName: identity.displayName(userName), account: userName, results, modifiers, color, total: grandTotal, historyString: history,
+        ...(players ? { players } : {}),
+      };
+      db.run('INSERT INTO dice_rolls (username, total, results, color, historyString, players_history) VALUES (?, ?, ?, ?, ?, ?)',
+        [userName, grandTotal, JSON.stringify(results), color, history, players ? players.historyText : null], (err) => {
           if (err) console.error('Error saving dice roll:', err);
-          // A roll made for an attack picked on the map is its to-hit (6c4d2).
-          const attack = pendingAttacks.get(socket.id);
-          const board = attack ? { board: boardOf('TO HIT', grandTotal >= attack.ac ? 'HIT' : 'MISS') } : {};
-          io.emit('diceRollBroadcast', withThrow({ ...broadcastData, ...board }));
+          const board = attack ? { board: boardOf('TO HIT', verdict) } : {};
+          emitRoll(io, connections, isGmSocket, withThrow({ ...broadcastData, ...board }));
 
           // If this player had a pending attack, resolve it.
           if (attack) {
-            pendingAttacks.delete(socket.id);
-            const hit = grandTotal >= attack.ac;
-            // A HIT waits for its damage; a MISS has none waiting, the attack before it let any go (initiateAttack).
-            if (hit) hitsWaiting.set(socket.id, { targetId: attack.targetId, until: Date.now() + HIT_WAITS_MS });
             const info = userSockets.get(socket.id);
             // Look up attacker position for animation — the attacker's rhombus on the
             // same map as the target (players get one rhombus per battle map + world).
@@ -2868,11 +2876,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       getGameSystem((sysErr, system) => {
         if (sysErr || !customSystems.partIn(system, 'combat')) return;
         hitsWaiting.delete(socket.id);
-        startAttack(data);
+        startAttack(data, system);
       });
     });
 
-    const startAttack = (data) => {
+    /** What a to-hit is against, in the game's word (the sheets' tokenDefense label): DV, ARMOR, or AC. */
+    const DEFENSE_WORDS = { cyberpunk_red: 'DV', shadowrun_6e: 'ARMOR' };
+    const startAttack = (data, system) => {
       db.get('SELECT id, name, x, z, melee_ac, ranged_ac, shape, battle_map_id, floor_index, vehicle_state FROM locations WHERE id = ?', [data.targetId], (err, target) => {
         if (err || !target) return;
         const isRhombus = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'].includes(target.shape);
@@ -2884,7 +2894,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         let vehicle = null;
         try { vehicle = target.vehicle_state ? JSON.parse(target.vehicle_state) : null; } catch (e) { vehicle = null; }
         const ac = vehicle ? vehicle.ac : (data.attackType === 'ranged' ? rangedAc : meleeAc);
-        pendingAttacks.set(socket.id, { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac, targetX: target.x, targetZ: target.z, targetBattleMapId: target.battle_map_id, targetFloorIndex: target.floor_index });
+        pendingAttacks.set(socket.id, { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac, defense: (vehicle ? null : DEFENSE_WORDS[system]) || 'AC', targetX: target.x, targetZ: target.z, targetBattleMapId: target.battle_map_id, targetFloorIndex: target.floor_index });
         socket.emit('attackPending', { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac, vehicle });
       });
     };

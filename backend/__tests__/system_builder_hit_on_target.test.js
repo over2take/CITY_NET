@@ -112,7 +112,7 @@ describe('AUTO', () => {
     expect(said.kes).toBe(`${ROLLED} → GHOUL`);
     expect(await t.hp()).toEqual({ hp_current: 13, hp_temp: 0 });
     expect(t.emitUpdate).toHaveBeenCalledWith({ isRhombusOnly: true });
-    const kept = await get(db, 'SELECT historyString, players_history FROM dice_rolls WHERE historyString LIKE \'%GHOUL%\'');
+    const kept = await get(db, 'SELECT historyString, players_history FROM dice_rolls WHERE historyString LIKE \'%Flame Tongue%GHOUL%\'');
     expect(kept).toEqual({ historyString: said.gm, players_history: said.kes });
     // Taken: the next roll goes nowhere.
     expect((await t.damage()).gm).toBe(ROLLED);
@@ -204,6 +204,68 @@ describe('OFF and CONFIRM: said, not taken', () => {
     await confirm.attack();
     expect((await confirm.damage()).gm).toBe(`${ROLLED} → GHOUL · NOT APPLIED: APPLY DAMAGE IS CONFIRM · WOULD TAKE 10`);
     expect(await confirm.hp()).toEqual({ hp_current: 20, hp_temp: 0 });
+  });
+});
+
+describe('the to-hit, said (8b5c; the user, 2026-11-25: players see HIT or MISS, never the AC)', () => {
+  /** Kes's d20 against the Ghoul, the GM's line and Kes's. */
+  const toHit = async (t) => {
+    await t.attack();
+    const said = { gm: t.gm.lines().find((l) => l.includes('rolled 1d20')), kes: t.kes.lines().find((l) => l.includes('rolled 1d20')) };
+    return said;
+  };
+
+  it('a HIT: the target and HIT for all, what it was against the GM\'s alone; kept so for the history', async () => {
+    const t = await setUp();
+    const said = await toHit(t);
+    expect(said.gm).toMatch(/^Kes rolled 1d20 \[\(\d+\) = \d+\] → GHOUL · VS AC 0 · HIT$/);
+    expect(said.kes).toBe(said.gm.replace(' · VS AC 0', ''));
+    await until(async () => !!(await get(db, 'SELECT 1 AS y FROM dice_rolls WHERE historyString = ?', [said.gm])), { label: 'kept' });
+    expect(await get(db, 'SELECT players_history FROM dice_rolls WHERE historyString = ?', [said.gm])).toEqual({ players_history: said.kes });
+    expect(t.shared.find((e) => e.event === 'attackResult').data).toMatchObject({ hit: true, ac: 0 });
+  });
+
+  it('a MISS: said so, past an AC no d20 reaches', async () => {
+    const t = await setUp({ ac: 99 });
+    const said = await toHit(t);
+    expect(said.gm).toMatch(/ → GHOUL · VS AC 99 · MISS$/);
+    expect(said.kes).toMatch(/ → GHOUL · MISS$/);
+    expect(said.kes).not.toContain('99');
+  });
+
+  it('in the game\'s word: Cyberpunk RED\'s DV, Shadowrun\'s ARMOR; a vehicle\'s AC whatever the game', async () => {
+    const t = await setUp();
+    await run(db, 'UPDATE global_settings SET value = ? WHERE key = ?', ['shadowrun_6e', 'game_system']);
+    expect((await toHit(t)).gm).toMatch(/ → GHOUL · VS ARMOR 0 · HIT$/);
+    const red = await setUp();
+    await run(db, 'UPDATE global_settings SET value = ? WHERE key = ?', ['cyberpunk_red', 'game_system']);
+    expect((await toHit(red)).gm).toMatch(/ → GHOUL · VS DV 0 · HIT$/);
+    const car = await setUp();
+    await run(db, 'UPDATE global_settings SET value = ? WHERE key = ?', ['shadowrun_6e', 'game_system']);
+    await run(db, 'UPDATE locations SET vehicle_state = ? WHERE id = ?', [JSON.stringify({ name: 'Van', ac: 0, hp: 20, hpMax: 20 }), car.ghoul]);
+    expect((await toHit(car)).gm).toMatch(/ → GHOUL · VS AC 0 · HIT$/);
+  });
+
+  it('one roll answers an attack: on its AC exactly a HIT, and the roll after it nobody\'s to-hit', async () => {
+    const t = await setUp({ ac: 5 });
+    t.kes.handlers.initiateAttack({ targetId: t.ghoul, attackType: 'melee' });
+    await until(() => t.kes.heard.some((e) => e.event === 'attackPending'), { label: 'the attack waiting' });
+    // A d1 and 4 added: 5, the AC itself.
+    t.kes.handlers.requestDiceRoll({ userName: 'kes', diceCounts: { 1: 1 }, modifiers: [4], color: '#0f0' });
+    await until(() => t.gm.lines().some((l) => l.includes('rolled 1d1')), { label: 'the to-hit' });
+    expect(t.gm.lines().find((l) => l.includes('rolled 1d1'))).toMatch(/ → GHOUL · VS AC 5 · HIT$/);
+    t.kes.handlers.requestDiceRoll({ userName: 'kes', diceCounts: { 1: 2 }, modifiers: [], color: '#0f0' });
+    await until(() => t.gm.lines().some((l) => l.includes('rolled 2d1')), { label: 'the roll after' });
+    expect(t.gm.lines().find((l) => l.includes('rolled 2d1'))).not.toContain('→');
+  });
+
+  it('a roll with no attack waiting: as it always was, one line for all', async () => {
+    const t = await setUp();
+    t.kes.handlers.requestDiceRoll({ userName: 'kes', diceCounts: { 6: 1 }, modifiers: [], color: '#0f0' });
+    await until(() => t.kes.lines().some((l) => l.includes('rolled 1d6')), { label: 'the plain roll' });
+    const line = t.kes.lines().find((l) => l.includes('rolled 1d6'));
+    expect(line).toMatch(/^Kes rolled 1d6 \[\(\d\) = \d\]$/);
+    expect(t.gm.lines().find((l) => l.includes('rolled 1d6'))).toBe(line);
   });
 });
 

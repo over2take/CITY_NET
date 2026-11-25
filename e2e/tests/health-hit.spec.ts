@@ -4,7 +4,8 @@ import { signInAsPlayer, signInAsGm, gmToken, runningSystem, approvedPlayer, asG
 // A hit reaching its target (8b5c; approved mockup docs/mockups/damage-pipeline.html, section 5). A player attacks an NPC
 // that RESISTS FIRE with MELEE from its window, rolls a d20 to hit (its AC 0, so a HIT), then rolls a Flame Tongue's
 // "4 SLASHING + 6 FIRE DMG" from their GEAR: with APPLY DAMAGE AUTO it takes 4 + 3 off the NPC, and the player's log says
-// only that it reached it (HIT TOTALS ON NPCS: GM ONLY, on to start), while the GM's says all of it. With the table's
+// only that it reached it (HIT TOTALS ON NPCS: GM ONLY, on to start), while the GM's says all of it. The d20 says HIT
+// after its target, the GM's also what it was against (VS AC 0). With the table's
 // APPLY DAMAGE OFF, the next hit is only said. A friendly NPC, as QUICK_ACCESS lists those.
 
 const SETTINGS = ['apply_damage', 'work_out_resistances', 'hit_totals_gm_only'];
@@ -87,6 +88,10 @@ test('a HIT\'s Flame Tongue reaches the NPC: FIRE halved and taken off under AUT
   await expect.poll(hp, { timeout: 15_000 }).toBe(13);
   await expect(line).not.toContainText('TAKES');
   await expect(line).not.toContainText('RESISTS');
+  // Its to-hit before it: the target and HIT, never what it was against.
+  const check = history.filter({ hasText: /rolled 1d20/ }).last();
+  await expect(check).toContainText(`→ ${ghoul.toUpperCase()} · HIT`);
+  await expect(check).not.toContainText('AC');
   // The GM's: what it took, and why, and that players weren't told.
   // Their tray, from the DICE_ROLLER (the rolls may open and shut it by themselves meanwhile, so until it stays open).
   await page.getByRole('button', { name: 'DICE_ROLLER', exact: true }).click();
@@ -103,6 +108,10 @@ test('a HIT\'s Flame Tongue reaches the NPC: FIRE halved and taken off under AUT
   // What it took, last, the one bold and larger.
   await expect(gmLine.getByTestId('roll-total')).toHaveText('TAKES 7 OF 10');
   await expect(gmLine.getByTestId('roll-total')).toHaveCSS('font-weight', '800');
+  // The GM's to-hit: against AC 0, HIT, bold.
+  const gmCheck = page.getByTestId('dice-history').locator('> div').filter({ hasText: /rolled 1d20/ }).last();
+  await expect(gmCheck).toContainText(`→ ${ghoul.toUpperCase()} · VS AC 0 · HIT`);
+  await expect(gmCheck.getByTestId('roll-total')).toHaveText('HIT');
   await mine.keyboard.press('Escape');
 
   // The table's APPLY DAMAGE OFF: the next hit only said.
