@@ -953,12 +953,13 @@ export const PlayerRhombus = React.memo(({ gameSystem, location, onClick, isSele
         </mesh>
       </mesh>
 
+      {/* What hangs above the token only while it is drawn: its owner offline, it has shrunk to nothing, so its health bar,
+          vehicle and conditions go with it rather than float over an empty spot (the user, 2026-11-25). */}
       {isOnline && streamerVis.showHealthBars && healthOn && (
           <HealthBar hpCurrent={location.hp_current} hpMax={location.hp_max} hpTemp={location.hp_temp} position={[0, 0, 0]} isBattleMap={isBattleMap} />
       )}
-
-      <VehicleTag raw={location.vehicle_state} height={location.height} isBattleMap={isBattleMap} />
-      <ConditionIcons raw={location.conditions} gameSystem={gameSystem} height={location.height} isBattleMap={isBattleMap} />
+      {isOnline && <VehicleTag raw={location.vehicle_state} height={location.height} isBattleMap={isBattleMap} />}
+      {isOnline && <ConditionIcons raw={location.conditions} gameSystem={gameSystem} height={location.height} isBattleMap={isBattleMap} />}
 
       {location.name && (isHovered || isSelected || (IS_SPECTATOR && streamerVis.showPlayerNames && streamerHovered)) && (
           <Html position={[0, isBattleMap ? 0.1 : ((location.height * 0.8) + 3), 0]} center zIndexRange={[100, 0]} occlude={!isBattleMap} style={{ pointerEvents: 'none', userSelect: 'none' }}>

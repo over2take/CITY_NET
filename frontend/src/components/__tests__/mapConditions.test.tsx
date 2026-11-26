@@ -62,10 +62,30 @@ describe('a token\'s condition icons', () => {
     render(<>
       <EnemyRhombus location={loc(1, 'enemy_rhombus', [{ id: 'prone' }])} token="" {...common()} />
       <FriendlyRhombus location={loc(2, 'friendly_rhombus', [{ id: 'glitching' }])} token="" userName="vex" {...common()} />
-      <PlayerRhombus location={loc(3, 'rhombus', [{ id: 'bleeding', left: 2 }])} token="" userName="vex" activeUsers={[]} {...common()} />
+      <PlayerRhombus location={loc(3, 'rhombus', [{ id: 'bleeding', left: 2 }])} token="" userName="vex" activeUsers={[{ userName: 'GHOST' }]} {...common()} />
     </>);
     await waitFor(() => expect(screen.getAllByTestId('map-conditions')).toHaveLength(3));
     expect(screen.queryAllByTestId('health-bar')).toHaveLength(0);
+  });
+
+  it('a player\'s token: its conditions and vehicle only while its owner is online, as its health bar (the user, 2026-11-25)', async () => {
+    // Offline, the token shrinks to nothing: what hangs above it went on floating over an empty spot.
+    const car = JSON.stringify({ name: 'Kestrel', ac: 13, armorRating: 3, hp: 20, hpMax: 30, moving: false, occupants: ['GHOST'] });
+    const player = (online: { userName: string }[]) => (
+      <PlayerRhombus location={{ ...loc(3, 'rhombus', [{ id: 'bleeding' }]), vehicle_state: car }} token="" userName="vex" activeUsers={online} {...common('generic')} />
+    );
+    const { rerender } = render(player([{ userName: 'GHOST' }]));
+    await waitFor(() => expect(screen.getAllByTestId('map-conditions')).toHaveLength(1));
+    expect(screen.getByText(/KESTREL|Kestrel/)).toBeTruthy();
+    expect(screen.getAllByTestId('health-bar')).toHaveLength(1);
+    rerender(player([{ userName: 'ROOK' }]));
+    expect(screen.queryAllByTestId('map-conditions')).toHaveLength(0);
+    expect(screen.queryByText(/KESTREL|Kestrel/)).toBeNull();
+    expect(screen.queryAllByTestId('health-bar')).toHaveLength(0);
+    // Back online: all of it again.
+    rerender(player([{ userName: 'GHOST' }]));
+    await waitFor(() => expect(screen.getAllByTestId('map-conditions')).toHaveLength(1));
+    expect(screen.getByText(/KESTREL|Kestrel/)).toBeTruthy();
   });
 
   it('draws nothing for a token with none, or only ones the game no longer has', async () => {
