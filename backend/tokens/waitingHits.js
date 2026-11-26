@@ -51,7 +51,8 @@ const shownTo = (hits, { may, editor, user }) => (may
   ? {
     may: true,
     // The players' words wherever they were told less, even none at all (an NPC's numbers kept to the GM): never the GM's.
-    hits: hits.map((h) => ({ id: h.id, from: h.from_name, what: h.what, words: editor || h.players === null || h.players === undefined ? h.words : h.players, at: h.created_at })),
+    // What it would take, for APPLY's button (8b6b2): to the GM, and to a player where its numbers aren't kept from them.
+    hits: hits.map((h) => ({ id: h.id, from: h.from_name, what: h.what, words: editor || h.players === null || h.players === undefined ? h.words : h.players, taken: editor || !h.totals_hidden ? h.taken : null, at: h.created_at })),
   }
   : { may: false, hits: [], mine: user ? hits.filter((h) => h.by_user === user).length : 0 });
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, cleanup, within, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, within, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { ItemsPage } from '../ItemsPage';
@@ -848,7 +848,9 @@ describe('an item\'s DAMAGE as rows (8b2b)', () => {
     expect(parts.getByRole('button', { name: 'Help writing Flame Tongue DAMAGE part 2' })).toBeTruthy();
     // Its sample under the row of its box and TYPE, the whole width (8b2c).
     const picker = parts.getByRole('combobox', { name: 'Flame Tongue DAMAGE part 2 type' });
-    const sample = (await parts.findAllByText(/1 to 8/)).at(-1)!;
+    // Both parts' samples read before taking part 2's, the last: on a slow machine part 1's alone can be there first.
+    await waitFor(() => expect(parts.getAllByText(/1 to 8/)).toHaveLength(2));
+    const sample = parts.getAllByText(/1 to 8/).at(-1)!;
     const boxRow = picker.parentElement!.parentElement!;
     expect(boxRow.contains(parts.getByRole('textbox', { name: 'Flame Tongue DAMAGE part 2' }))).toBe(true);
     expect(boxRow.contains(sample)).toBe(false);

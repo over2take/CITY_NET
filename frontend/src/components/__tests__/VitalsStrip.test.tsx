@@ -671,3 +671,31 @@ describe('a roll asked of this token (8a9c2)', () => {
     expect(await screen.findByText('POISONED · YOUR SAVE')).toBeInTheDocument();
   });
 });
+
+describe('hits waiting on this character (8b6b2; mockup waiting-hits, section 4)', () => {
+  const SYS = 'sys_0a1b2c3d4e5f6a7b';
+  /** A one-pool health view, and three hits waiting that they may apply, as the server answers them. */
+  const waiting = () => {
+    const base = socketWith('pool');
+    const hits = [1, 2, 3].map((id) => ({ id, from: 'OGRE', what: `Blow ${id}`, words: 'WOULD TAKE 4', taken: 4 }));
+    const emit = base.emit;
+    return { ...base, emit: vi.fn((e: string, p: { location_id: number }, ack?: (a: unknown) => void) => {
+      if (e === 'waitingHits' && ack) { queueMicrotask(() => ack({ ok: true, may: true, hits })); return; }
+      emit(e, p);
+    }) };
+  };
+  it('under the box, folded past two, opened in place; asked for this character\'s token', async () => {
+    const socket = waiting();
+    draw({ system: SYS, socket });
+    const fold = await screen.findByRole('button', { name: '3 HITS WAITING ▸' });
+    expect(socket.emit).toHaveBeenCalledWith('waitingHits', { locationId: 7 }, expect.any(Function));
+    await act(async () => { fold.click(); });
+    expect(screen.getByRole('button', { name: 'APPLY 4: Blow 3 from OGRE' })).toBeTruthy();
+  });
+  it('a built-in game: none asked', async () => {
+    const socket = waiting();
+    draw({ system: 'generic', socket });
+    await act(async () => {});
+    expect(socket.emit.mock.calls.some((c) => c[0] === 'waitingHits')).toBe(false);
+  });
+});

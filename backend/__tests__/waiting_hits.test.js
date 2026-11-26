@@ -40,7 +40,11 @@ describe('the rules (tokens/waitingHits.js)', () => {
     expect(shownTo(hits, { may: true, editor: false, user: 'vex' }).hits.map((h) => h.words)).toEqual([hit().words, 'WOULD TAKE …']);
     // Told nothing: nothing, never the GM's words.
     expect(shownTo([hit({ players: '' })], { may: true, editor: false, user: 'vex' }).hits[0].words).toBe('');
-    expect(shownTo(hits, { may: true, editor: true, user: 'gm' }).hits[0]).toEqual({ id: 1, from: 'Kes', what: 'Flame Tongue', words: hit().words, at: 't' });
+    expect(shownTo(hits, { may: true, editor: true, user: 'gm' }).hits[0]).toEqual({ id: 1, from: 'Kes', what: 'Flame Tongue', words: hit().words, taken: 7, at: 't' });
+    // What it would take: to the GM always, to a player only where its numbers aren't kept from them (8b6b2).
+    expect(shownTo([hit({ totals_hidden: 1 })], { may: true, editor: true, user: 'gm' }).hits[0].taken).toBe(7);
+    expect(shownTo([hit({ totals_hidden: 1 })], { may: true, editor: false, user: 'kes' }).hits[0].taken).toBeNull();
+    expect(shownTo([hit()], { may: true, editor: false, user: 'kes' }).hits[0].taken).toBe(7);
     expect(shownTo(hits, { may: false, editor: false, user: 'kes' })).toEqual({ may: false, hits: [], mine: 1 });
     expect(shownTo(hits, { may: false, editor: false, user: 'ash' })).toEqual({ may: false, hits: [], mine: 0 });
     expect(shownTo(hits, { may: false, editor: false, user: null })).toEqual({ may: false, hits: [], mine: 0 });
@@ -268,5 +272,18 @@ describe('a player\'s character, and two hands at once', () => {
     const answers = await Promise.all([t.gm.act({ act: 'apply', hitId: hit.id }), t.gm.act({ act: 'apply', hitId: hit.id })]);
     expect(answers.map((a) => a.done).sort()).toEqual([0, 1]);
     expect(await t.hp()).toBe(13);
+  });
+});
+
+describe('who made it', () => {
+  it('by their character\'s name where the sheet has one, the account\'s where it has none', async () => {
+    const t = await setUp();
+    await run(db, 'UPDATE character_sheets SET data = ? WHERE username = \'kes\'', [JSON.stringify({ name: 'Kestrel', ...LINES })]);
+    await t.hitWith();
+    expect((await t.gm.list()).hits[0].from).toBe('Kestrel');
+    const nameless = await setUp();
+    await run(db, 'UPDATE character_sheets SET data = ? WHERE username = \'kes\'', [JSON.stringify({ name: '  ', ...LINES })]);
+    await nameless.hitWith();
+    expect((await nameless.gm.list()).hits[0].from).toBe('Kes');
   });
 });
