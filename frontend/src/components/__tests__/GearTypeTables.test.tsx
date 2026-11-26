@@ -979,3 +979,80 @@ describe('each type a table (8e2a; mockup gear-table, answered 2026-11-25)', () 
     expect(stashed.getByRole('note', { name: 'Item 1 RANGE: 30 m' }).textContent).toBe('RANGE30 m');
   });
 });
+
+describe('the card under its row (8e2b; mockup gear-table, answer 7 A)', () => {
+  const drawnAt = (width: number) => {
+    class Seen { constructor(private fn: (e: { contentRect: { width: number } }[]) => void) {} observe() { this.fn([{ contentRect: { width } }]); } disconnect() {} }
+    vi.stubGlobal('ResizeObserver', Seen);
+  };
+  afterEach(() => vi.unstubAllGlobals());
+  const at = (i: number) => within(screen.getByTestId(`gear-line-${i}`));
+  const TWO: ItemsShown = {
+    ...ITEMS,
+    types: [{ ...ITEMS.types![0], columns: [{ id: 'one', label: 'One handed', kind: 'damage' }, { id: 'two', label: 'Two handed', kind: 'damage' }, ...ITEMS.types![0].columns.filter((c) => c.id !== 'damage')] }, ITEMS.types![1]],
+    list: [{ id: 'striker', label: 'Bone Striker', needs: 'carried', features: [], type: 'weapons', values: { one: '1d8', two: '1d10', range: '5 ft.' } }, ...ITEMS.list],
+  };
+  const open = async () => { await userEvent.click(at(0).getByRole('button', { name: 'Edit item 1' })); return at(0).getByRole('group', { name: 'Item 1 columns' }); };
+
+  it('narrow: one column as before, two or more DAMAGE boxes together under DAMAGE where the first is', async () => {
+    drawnAt(480);
+    show([line('Bone Striker')], { items: TWO });
+    const card = await open();
+    expect(card.style.gridTemplateColumns).toBe('90px minmax(0, 1fr)');
+    const damage = within(card).getByRole('group', { name: 'Item 1 damage' });
+    expect(within(damage).getByText('DAMAGE')).toBeTruthy();
+    expect(within(damage).getByLabelText('Item 1 One handed')).toBeTruthy();
+    expect(within(damage).getByLabelText('Item 1 Two handed')).toBeTruthy();
+    // In its place: before RANGE, after HOW MANY.
+    const order = [...card.querySelectorAll('input')].map((el) => el.getAttribute('aria-label'));
+    expect(order.indexOf('Item 1 One handed')).toBeGreaterThan(order.indexOf('Item 1 quantity'));
+    expect(order.indexOf('Item 1 One handed')).toBeLessThan(order.indexOf('Item 1 RANGE'));
+    expect(within(card).getByRole('button', { name: 'DONE' })).toBeTruthy();
+  });
+
+  it('one DAMAGE: a box like any other, no group', async () => {
+    drawnAt(480);
+    show([line('Pistol')], { items: ITEMS });
+    const card = await open();
+    expect(within(card).queryByRole('group', { name: 'Item 1 damage' })).toBeNull();
+    expect(within(card).getByLabelText('Item 1 DAMAGE')).toBeTruthy();
+  });
+
+  it('wide: two columns, NAME, the rest and LOCATION on the left, the DAMAGE boxes on the right; DONE and REMOVE across both', async () => {
+    drawnAt(900);
+    show([line('Bone Striker')], { items: TWO });
+    const card = await open();
+    expect(card.style.gridTemplateColumns).toBe('minmax(0, 1fr) minmax(0, 1fr)');
+    const [left, right, foot] = [...card.children] as HTMLElement[];
+    expect(within(left).getByLabelText('Item 1 name')).toBeTruthy();
+    expect(within(left).getByLabelText('Item 1 RANGE')).toBeTruthy();
+    expect(within(left).getByLabelText('Item 1 location')).toBeTruthy();
+    expect(within(left).queryByLabelText('Item 1 One handed')).toBeNull();
+    expect(right.getAttribute('aria-label')).toBe('Item 1 damage');
+    expect(within(right).getByLabelText('Item 1 One handed')).toBeTruthy();
+    expect(within(right).getByLabelText('Item 1 Two handed')).toBeTruthy();
+    expect(foot.style.gridColumn).toBe('1 / -1');
+    expect(within(foot).getByRole('button', { name: 'DONE' })).toBeTruthy();
+    expect(within(foot).getByRole('button', { name: 'Remove item 1' })).toBeTruthy();
+    // One DAMAGE: still on the right, under DAMAGE.
+    cleanup();
+    drawnAt(900);
+    show([line('Pistol')], { items: ITEMS });
+    const one = await open();
+    expect(within(within(one).getByRole('group', { name: 'Item 1 damage' })).getByLabelText('Item 1 DAMAGE')).toBeTruthy();
+  });
+
+  it('wide with no DAMAGE: one column; the STASH\'s card one column whatever the width', async () => {
+    drawnAt(900);
+    show([line('Rope', { type: 'gear' })], { items: ITEMS });
+    const card = await open();
+    expect(card.style.gridTemplateColumns).toBe('90px minmax(0, 1fr)');
+    cleanup();
+    drawnAt(900);
+    show([line('Bone Striker', { carry: 'stash' })], { items: TWO });
+    await userEvent.click(screen.getByRole('button', { name: /STASH · 1/ }));
+    const stashed = await open();
+    expect(stashed.style.gridTemplateColumns).toBe('90px minmax(0, 1fr)');
+    expect(within(stashed).getByRole('group', { name: 'Item 1 damage' })).toBeTruthy();
+  });
+});

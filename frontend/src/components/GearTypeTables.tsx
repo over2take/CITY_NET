@@ -458,57 +458,99 @@ export function GearTypeTables({ items, itemsShown, readOnly, columnsLocked = fa
           <span role="status" style={{ ...full, fontSize: '0.6rem', color: 'var(--warning)' }}>{said.text}</span>
         )}
         {/* The card: NAME and HOW MANY, every column as a box, its item's value faint until typed over, "none" where it has
-            none; LOCATION; DONE and REMOVE. */}
-        {editing && (
-          <div role="group" aria-label={`Item ${i + 1} columns`} style={{ ...full, display: 'grid', gridTemplateColumns: '90px minmax(0, 1fr)', gap: '3px 8px', alignItems: 'center', fontSize: '0.6rem', padding: '3px 0' }}>
-            <span style={{ ...small, textAlign: 'right' }}>NAME</span>
-            <input aria-label={`Item ${i + 1} name`} value={line.name} readOnly={locked(i)} title={lockedTitle} autoFocus={focusAt === 'name'}
-              onChange={(e) => patch(i, { ...line, name: e.target.value })} style={input} />
-            <span style={{ ...small, textAlign: 'right' }}>HOW MANY</span>
-            <input aria-label={`Item ${i + 1} quantity`} type="number" min="1" value={line.qty}
-              onChange={(e) => patch(i, { ...line, qty: Math.max(1, Number(e.target.value) || 1) })} style={{ ...input, width: '90px' }} />
-            {/* PLAYERS CHANGE GEAR off (G6b): said once, above the columns. */}
-            {columnsLocked && lc.cells.length > 0 && (
-              <>
-                <span />
-                <span role="note" aria-label={`Item ${i + 1} columns`} style={{ ...small, color: 'var(--warning)', opacity: 1 }}>ONLY THE GM CHANGES THESE AT THIS TABLE</span>
-              </>
-            )}
-            {lc.cells.map((cell) => (
-              <React.Fragment key={cell.column.id}>
-                {/* Beside its box's top, not halfway down a DAMAGE with its words and eˣ open under it. */}
-                <span style={{ ...small, textAlign: 'right', alignSelf: 'start', paddingTop: '4px' }}>{cell.column.label.toUpperCase()}{cell.column.kind === 'number' && cell.column.unit ? ` (${cell.column.unit})` : ''}</span>
-                {(cell.column.kind === 'damage' || cell.column.kind === 'dice') && onReadDice
-                  ? <DiceBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} readOnly={columnsLocked} focus={focusAt === cell.column.id} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} onRead={onReadDice} damageTypes={itemsShown.damage_types} />
-                  : <CellBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} readOnly={readOnly || columnsLocked} focus={focusAt === cell.column.id} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} />}
-                {/* Made its own (G5b): said, with the item's value, who changed it when, and THE ITEM'S to put it back. */}
-                {cell.unique && (
-                  <>
-                    <span />
-                    <span role="group" aria-label={`Item ${i + 1} ${cell.column.label} is unique`} style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
-                      <span style={{ ...smallButton, border: '1px solid var(--warning)', color: 'var(--warning)', padding: '0 4px' }}>UNIQUE</span>
-                      {!columnsLocked && (
-                        <button type="button" className="utility-btn" aria-label={`Item ${i + 1} ${cell.column.label}: the item's`} title="Back to the item's own"
-                          onClick={() => patch(i, withLineValue(line, cell.column, ''))} style={smallButton}>THE ITEM&apos;S</button>
-                      )}
-                      <span style={{ ...small, overflowWrap: 'anywhere', textAlign: 'left' }}>{itemWas(cell, line)}</span>
-                    </span>
-                  </>
-                )}
-              </React.Fragment>
-            ))}
-            <span style={{ ...small, textAlign: 'right' }} title="Where a stashed item actually is">LOCATION</span>
-            <input aria-label={`Item ${i + 1} location`} value={line.location} placeholder={stashed ? 'where is it?' : ''}
-              onChange={(e) => patch(i, { ...line, location: e.target.value })} style={input} />
-            <span />
+            none; LOCATION; DONE and REMOVE. Under its row, across the table (8e2a); in the tab's width two columns, its DAMAGE
+            boxes on the right, under the same DAMAGE word the table has (8e2b; mockup gear-table, answer 7 A). */}
+        {editing && (() => {
+          const pairs: React.CSSProperties = { display: 'grid', gridTemplateColumns: '90px minmax(0, 1fr)', gap: '3px 8px', alignItems: 'center', minWidth: 0 };
+          /** A column's label and box, and UNIQUE under it where the line made it its own. */
+          const box = (cell: Cell) => (
+            <React.Fragment key={cell.column.id}>
+              {/* Beside its box's top, not halfway down a DAMAGE with its words and eˣ open under it. */}
+              <span style={{ ...small, textAlign: 'right', alignSelf: 'start', paddingTop: '4px' }}>{cell.column.label.toUpperCase()}{cell.column.kind === 'number' && cell.column.unit ? ` (${cell.column.unit})` : ''}</span>
+              {(cell.column.kind === 'damage' || cell.column.kind === 'dice') && onReadDice
+                ? <DiceBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} readOnly={columnsLocked} focus={focusAt === cell.column.id} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} onRead={onReadDice} damageTypes={itemsShown.damage_types} />
+                : <CellBox cell={cell} label={`Item ${i + 1} ${cell.column.label}`} readOnly={readOnly || columnsLocked} focus={focusAt === cell.column.id} onType={(typed) => patch(i, withLineValue(line, cell.column, typed))} />}
+              {/* Made its own (G5b): said, with the item's value, who changed it when, and THE ITEM'S to put it back. */}
+              {cell.unique && (
+                <>
+                  <span />
+                  <span role="group" aria-label={`Item ${i + 1} ${cell.column.label} is unique`} style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap', minWidth: 0 }}>
+                    <span style={{ ...smallButton, border: '1px solid var(--warning)', color: 'var(--warning)', padding: '0 4px' }}>UNIQUE</span>
+                    {!columnsLocked && (
+                      <button type="button" className="utility-btn" aria-label={`Item ${i + 1} ${cell.column.label}: the item's`} title="Back to the item's own"
+                        onClick={() => patch(i, withLineValue(line, cell.column, ''))} style={smallButton}>THE ITEM&apos;S</button>
+                    )}
+                    <span style={{ ...small, overflowWrap: 'anywhere', textAlign: 'left' }}>{itemWas(cell, line)}</span>
+                  </span>
+                </>
+              )}
+            </React.Fragment>
+          );
+          const damages = lc.cells.filter((c) => c.column.kind === 'damage');
+          // Two or more DAMAGE boxes together, as the table's one DAMAGE head has them; one is a box like any other.
+          const grouped = damages.length > 1;
+          const damageGroup = grouped && (
+            <div key="damage" role="group" aria-label={`Item ${i + 1} damage`} style={{ ...pairs, gridColumn: '1 / -1', borderLeft: '2px solid var(--dark-green)', paddingLeft: '6px' }}>
+              <span style={{ ...small, gridColumn: '1 / -1', textAlign: 'left' }}>DAMAGE</span>
+              {damages.map(box)}
+            </div>
+          );
+          // Two columns only in the tab's width, and only with DAMAGE boxes for the right one.
+          const twoColumns = !!plan?.wide && damages.length > 0;
+          const rest = lc.cells.filter((c) => c.column.kind !== 'damage');
+          const top = (
+            <>
+              <span style={{ ...small, textAlign: 'right' }}>NAME</span>
+              <input aria-label={`Item ${i + 1} name`} value={line.name} readOnly={locked(i)} title={lockedTitle} autoFocus={focusAt === 'name'}
+                onChange={(e) => patch(i, { ...line, name: e.target.value })} style={input} />
+              <span style={{ ...small, textAlign: 'right' }}>HOW MANY</span>
+              <input aria-label={`Item ${i + 1} quantity`} type="number" min="1" value={line.qty}
+                onChange={(e) => patch(i, { ...line, qty: Math.max(1, Number(e.target.value) || 1) })} style={{ ...input, width: '90px' }} />
+              {/* PLAYERS CHANGE GEAR off (G6b): said once, above the columns. */}
+              {columnsLocked && lc.cells.length > 0 && (
+                <>
+                  <span />
+                  <span role="note" aria-label={`Item ${i + 1} columns`} style={{ ...small, color: 'var(--warning)', opacity: 1 }}>ONLY THE GM CHANGES THESE AT THIS TABLE</span>
+                </>
+              )}
+            </>
+          );
+          // One column: each box in its place, the DAMAGE group where the first DAMAGE is.
+          const inOrder = lc.cells.flatMap((c) => (c.column.kind !== 'damage' || !grouped ? [box(c)] : c === damages[0] ? [damageGroup] : []));
+          const location = (
+            <>
+              <span style={{ ...small, textAlign: 'right' }} title="Where a stashed item actually is">LOCATION</span>
+              <input aria-label={`Item ${i + 1} location`} value={line.location} placeholder={stashed ? 'where is it?' : ''}
+                onChange={(e) => patch(i, { ...line, location: e.target.value })} style={input} />
+            </>
+          );
+          const foot = (
             <span style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
               <button type="button" className="utility-btn" onClick={() => setOpen(null)} style={{ fontSize: '0.55rem', padding: '1px 10px' }}>DONE</button>
               <span style={{ ...small, fontSize: '0.5rem' }} title="Opening another line closes this one">or ✎ again</span>
               <button type="button" aria-label={`Remove item ${i + 1}`} disabled={locked(i)} title={lockedTitle ?? 'Remove it from the sheet'} onClick={() => remove(i)}
                 style={{ marginLeft: 'auto', background: 'none', border: '1px solid var(--danger)', color: 'var(--danger)', fontFamily: 'inherit', fontSize: '0.55rem', letterSpacing: '1px', padding: '1px 8px', cursor: locked(i) ? 'not-allowed' : 'pointer', opacity: locked(i) ? 0.35 : 1 }}>REMOVE</button>
             </span>
-          </div>
-        )}
+          );
+          return twoColumns ? (
+            <div role="group" aria-label={`Item ${i + 1} columns`} style={{ ...full, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '6px 16px', alignItems: 'start', fontSize: '0.6rem', padding: '3px 0' }}>
+              <div style={pairs}>{top}{rest.map(box)}{location}</div>
+              <div role="group" aria-label={`Item ${i + 1} damage`} style={{ ...pairs, borderLeft: '2px solid var(--dark-green)', paddingLeft: '8px' }}>
+                <span style={{ ...small, gridColumn: '1 / -1', textAlign: 'left' }}>DAMAGE</span>
+                {damages.map(box)}
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>{foot}</div>
+            </div>
+          ) : (
+            <div role="group" aria-label={`Item ${i + 1} columns`} style={{ ...full, ...pairs, fontSize: '0.6rem', padding: '3px 0' }}>
+              {top}
+              {inOrder}
+              {location}
+              <span />
+              {foot}
+            </div>
+          );
+        })()}
         {plan ? <div style={full}>{under(i)}</div> : under(i)}
         {/* The row's end, under whatever came with it. */}
         {plan && <div aria-hidden style={{ ...full, borderBottom: '1px solid color-mix(in srgb, var(--dark-green) 70%, transparent)' }} />}
