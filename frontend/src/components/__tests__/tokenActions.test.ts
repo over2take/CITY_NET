@@ -8,10 +8,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { hitPointsTarget, linkedHealthTarget, tokenActionKeys, tokenView, attackAsOptions, type TokenViewer } from '../tokenActions';
+import { hitPointsTarget, linkedHealthTarget, tokenActionKeys, tokenView, attackAsOptions, fightTokens, type TokenViewer } from '../tokenActions';
 import { controlsToken } from '../../utils/tokenControl';
 
-describe('who a viewer may attack as (4b5b4b)', () => {
+describe('who a viewer may attack as (4b5b4b; the target\'s scene for players too, a fight first, 8b6a)', () => {
   const grant = (users: string[], all = false) => JSON.stringify({ all, users });
   const target = { id: 1, shape: 'enemy_rhombus', battle_map_id: 4, floor_index: 0 };
   const locations = [
@@ -23,20 +23,39 @@ describe('who a viewer may attack as (4b5b4b)', () => {
     { id: 6, name: 'Sheetless', shape: 'enemy_rhombus', battle_map_id: 4, floor_index: 0 },
     { id: 7, name: 'Elsewhere', shape: 'enemy_rhombus', battle_map_id: null, sheet_data: '{}' },
     { id: 8, name: 'Vex', shape: 'rhombus', owner: 'vex', battle_map_id: 4, floor_index: 0, sheet_data: '{}' },
+    { id: 9, name: 'Upstairs Pet', shape: 'friendly_rhombus', controllers: grant(['vex']), battle_map_id: 4, floor_index: 1 },
   ];
   const as = (over: object) => attackAsOptions({ locations, userName: 'vex', isGm: false, target, controls: controlsToken, ...over });
+  const one = (id: number, name: string, inFight = false) => ({ id, name, inFight });
 
-  it('a player: each friendly NPC the GM gave them, wherever it is, never an enemy', () => {
-    expect(as({})).toEqual([{ id: 2, name: 'Rex' }, { id: 3, name: 'NPC' }]);
-    expect(as({ userName: 'ash' })).toEqual([{ id: 3, name: 'NPC' }]);
+  it('a player: each friendly NPC the GM gave them in the target\'s scene, never an enemy; no sheet asked (they aren\'t sent them)', () => {
+    // Rex on the city map and the pet upstairs are elsewhere; a player is never sent sheet_data.
+    expect(as({})).toEqual([one(3, 'NPC')]);
+    expect(as({ userName: 'ash' })).toEqual([one(3, 'NPC')]);
     expect(as({ userName: null })).toEqual([]);
+    expect(as({ target: { id: 99, battle_map_id: null } })).toEqual([one(2, 'Rex')]);
+    expect(as({ target: { id: 99, battle_map_id: 4, floor_index: 1 } })).toEqual([one(9, 'Upstairs Pet')]);
+    expect(as({ target: undefined })).toEqual([]);
   });
 
   it('the GM: each NPC with a sheet on the target\'s map and floor, not the target', () => {
-    expect(as({ isGm: true })).toEqual([{ id: 3, name: 'NPC' }, { id: 4, name: 'Ghoul' }]);
+    expect(as({ isGm: true })).toEqual([one(3, 'NPC'), one(4, 'Ghoul')]);
     expect(as({ isGm: true, target: { id: 7, battle_map_id: null } })).toEqual([]);
-    expect(as({ isGm: true, target: { id: 99, battle_map_id: null } })).toEqual([{ id: 7, name: 'Elsewhere' }]);
+    expect(as({ isGm: true, target: { id: 99, battle_map_id: null } })).toEqual([one(7, 'Elsewhere')]);
     expect(as({ isGm: true, target: undefined })).toEqual([]);
+  });
+
+  it('a fight running there: its NPCs first, the rest after, each in map order', () => {
+    expect(as({ isGm: true, fight: [4] })).toEqual([one(4, 'Ghoul', true), one(3, 'NPC')]);
+    expect(as({ isGm: true, fight: [4, 3] })).toEqual([one(3, 'NPC', true), one(4, 'Ghoul', true)]);
+    // A combatant elsewhere, or the target, changes nothing.
+    expect(as({ isGm: true, fight: [5, 1] })).toEqual([one(3, 'NPC'), one(4, 'Ghoul')]);
+  });
+
+  it('a fight\'s NPCs by token, from its combatants\' ids; players and anything else left out', () => {
+    expect(fightTokens([{ id: 'npc:12' }, { id: 'player:vex' }, { id: 'npc:3' }, { id: 'npc:x' }, { id: 'npc:4:2' }])).toEqual([12, 3]);
+    expect(fightTokens(null)).toEqual([]);
+    expect(fightTokens(undefined)).toEqual([]);
   });
 });
 

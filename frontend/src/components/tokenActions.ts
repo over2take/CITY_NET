@@ -242,22 +242,38 @@ export async function createPlayerTokenRow(
  * sheet on the target's map and floor, the target itself left out. The server refuses anything
  * else, so this only decides what ATTACK AS offers.
  */
+/** One of ATTACK AS's NPCs: its token, its name, and whether it is in the fight running in the target's scene. */
+export interface AttackAsOption { id: number; name: string; inFight: boolean }
+
+/**
+ * Whom ATTACK AS offers beside YOU (4b5b4b; 8b6a, mockup waiting-hits, "who's in the list"). The scene is the target's: its
+ * battle map and floor, or the city map. The GM gets every NPC with a sheet there, a player the NPCs there they control,
+ * never the target itself (the server asks the same, tokens/attackAs.js). `fight`, the tokens in the fight running there:
+ * they come first, the rest after, each kept in map order.
+ */
 export function attackAsOptions(c: {
   locations: any[];
   userName: string | null;
   isGm: boolean;
   target: any;
   controls: (row: any, userName: string | null) => boolean;
-}): { id: number; name: string }[] {
-  const named = (l: any) => ({ id: l.id, name: l.name || 'NPC' });
-  if (!c.isGm) return c.locations.filter((l) => c.controls(l, c.userName)).map(named);
+  fight?: number[];
+}): AttackAsOption[] {
   if (!c.target) return [];
-  const sameMap = (l: any) => (l.battle_map_id ?? null) === (c.target.battle_map_id ?? null)
+  const sameScene = (l: any) => (l.battle_map_id ?? null) === (c.target.battle_map_id ?? null)
     && (l.battle_map_id == null || (l.floor_index ?? null) === (c.target.floor_index ?? null));
-  return c.locations
-    .filter((l) => (l.shape === 'enemy_rhombus' || l.shape === 'friendly_rhombus') && l.sheet_data && l.id !== c.target.id && sameMap(l))
-    .map(named);
+  const fight = new Set(c.fight ?? []);
+  const shown = c.locations
+    .filter((l) => (l.shape === 'enemy_rhombus' || l.shape === 'friendly_rhombus') && l.id !== c.target.id && sameScene(l))
+    // The GM sees which have a sheet; a player is never sent NPC sheets (npcPrivacy.js), so the server asks it for them.
+    .filter((l) => (c.isGm ? !!l.sheet_data : c.controls(l, c.userName)))
+    .map((l) => ({ id: l.id, name: l.name || 'NPC', inFight: fight.has(l.id) }));
+  return [...shown.filter((o) => o.inFight), ...shown.filter((o) => !o.inFight)];
 }
+
+/** The NPCs in a fight, by token, from its combatants' ids ("npc:12"; a player's is their name). */
+export const fightTokens = (combatants: { id: string }[] | null | undefined): number[] =>
+  (combatants ?? []).map((c) => /^npc:(\d+)$/.exec(String(c.id))).filter((m): m is RegExpExecArray => !!m).map((m) => Number(m[1]));
 
 const TOKEN_SHAPES = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'];
 

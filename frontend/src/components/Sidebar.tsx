@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom';
 import { themeRoot } from '../utils/themeRoot';
 import { diceRailClick } from '../utils/rollNotify';
 import { controlsToken } from '../utils/tokenControl';
-import { attackAsOptions } from './tokenActions';
+import { attackAsOptions, type AttackAsOption } from './tokenActions';
+import { AttackAsPicker } from './AttackAsPicker';
+import { isCustomSystem } from '../sheets/customTemplates';
 import kofiLogo from '../assets/kofi.png';
 import { CityDataBaseMenu } from './CityDatabase';
 import type { CustomDie, AttackVehicle } from '../types';
@@ -607,9 +609,9 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
   setIsDiceTrayOpen: (v: any) => void;
   /**
    * NPCs this viewer may attack with (4b5b4b): a player, the friendly NPCs the GM gave them; the
-   * GM, the NPCs on the target's map. Offered as ATTACK AS beside the viewer themselves.
+   * GM, the NPCs on the target's map; a fight's first (8b6a). Offered as ATTACK AS beside the viewer themselves.
    */
-  attackAs?: { id: number; name: string }[];
+  attackAs?: AttackAsOption[];
   /** The viewer's login, for reading an NPC's sheet (GET /api/sheets/npcs/controlled/:id). */
   authToken?: string | null;
 }) {
@@ -739,19 +741,9 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
     setIsDiceTrayOpen(true);
   };
 
-  const picker = attackAs.length > 0 && (
-    <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', color: 'var(--green)', marginBottom: '5px' }}>
-      ATTACK AS
-      <select
-        aria-label="Attack as"
-        value={attacker === null ? '' : String(attacker)}
-        onChange={(e) => { setAttacker(e.target.value === '' ? null : Number(e.target.value)); setLoading(true); setWeapons([]); setSelected(null); setLuckSpend(0); setLuckNegate(false); }}
-        style={{ flex: 1, background: 'color-mix(in srgb, var(--black) 70%, transparent)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', padding: '3px' }}
-      >
-        <option value="">YOU</option>
-        {attackAs.map((a) => <option key={a.id} value={String(a.id)}>{a.name.toUpperCase()}</option>)}
-      </select>
-    </label>
+  const picker = (
+    <AttackAsPicker options={attackAs} value={attacker}
+      onChange={(id) => { setAttacker(id); setLoading(true); setWeapons([]); setSelected(null); setLuckSpend(0); setLuckNegate(false); }} />
   );
 
   if (weapons.length === 0) {
@@ -843,10 +835,23 @@ interface DiceMenuProps {
   gameSystem?: string;
   /** Someone else rolled while the tray was shut (6c4g, utils/rollNotify.ts): DICE_TRAY.exe flashes till it opens. */
   hasUnseenRoll?: boolean;
+  /** The NPCs in the fight running in this scene, by token (tokenActions.ts fightTokens): ATTACK AS lists them first. */
+  fight?: number[];
 }
 
-export function DiceMenu({ userName, token, writeToken, locations = [], socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack, gameSystem, customDice = [], onOpenCustomDieBuilder, onDeleteCustomDie, hasUnseenRoll = false }: DiceMenuProps) {
+export function DiceMenu({ userName, token, writeToken, locations = [], socketRef, rhombusState, setIsDiceTrayOpen, setNotification, attackPending, onCancelAttack, gameSystem, customDice = [], onOpenCustomDieBuilder, onDeleteCustomDie, hasUnseenRoll = false, fight }: DiceMenuProps) {
   const isAdmin = !!token;
+  // ATTACK AS (8b6a): whom this viewer may attack with in the target's scene, and, for a game made in the builder, the one
+  // picked for this attack (held with the attack it was picked for, so a new attack starts as YOU, as the server's does).
+  const attackAs = attackPending
+    ? attackAsOptions({ locations, userName, isGm: isAdmin, target: locations.find((l: any) => l.id === attackPending.targetId), controls: controlsToken, fight })
+    : [];
+  const [pickedAs, setPickedAs] = useState<{ attack: unknown; id: number | null } | null>(null);
+  const attackingAs = pickedAs && pickedAs.attack === attackPending ? pickedAs.id : null;
+  const attackAsPicked = (id: number | null) => {
+    setPickedAs({ attack: attackPending, id });
+    socketRef.current?.emit('attackAs', { locationId: id });
+  };
   const defenseLabel = getTokenDefense(gameSystem).label;
   const diceTypes = [2, 4, 6, 8, 10, 12, 20, 100];
   const [diceCounts, setDiceCounts] = useState<Record<number, number>>({});
@@ -943,6 +948,10 @@ export function DiceMenu({ userName, token, writeToken, locations = [], socketRe
                 ? `${attackPending.attackType.toUpperCase()} · ${defenseLabel} ${attackPending.ac} · Roll ${attackPending.ac}+ to hit`
                 : attackPending.attackType.toUpperCase()}
           </div>
+          {/* A game made in the builder (8b6a): the d20's HIT is the picked character's, and only its sheet's DAMAGE reaches it. */}
+          {!hasSheetCombat(gameSystem) && isCustomSystem(gameSystem) && (
+            <AttackAsPicker options={attackAs} value={attackingAs} onChange={attackAsPicked} />
+          )}
           {hasSheetCombat(gameSystem) && (
             <SheetAttackPanel
               system={gameSystem}
@@ -951,7 +960,7 @@ export function DiceMenu({ userName, token, writeToken, locations = [], socketRe
               targetId={attackPending.targetId}
               rhombusState={rhombusState}
               setIsDiceTrayOpen={setIsDiceTrayOpen}
-              attackAs={attackAsOptions({ locations, userName, isGm: isAdmin, target: locations.find((l: any) => l.id === attackPending.targetId), controls: controlsToken })}
+              attackAs={attackAs}
               authToken={writeToken || token}
             />
           )}
@@ -1237,6 +1246,8 @@ interface SidebarProps {
   onRollEnemies?: () => void;
   onRollFriendlies?: () => void;
   activeCombats?: import('../modules/initiative/hooks/useInitiative').ActiveCombat[];
+  /** The NPCs in the fight running in this scene, by token: ATTACK AS lists them first (8b6a). */
+  attackFight?: number[];
   onListCombats?: () => void;
   onJumpToScene?: (sceneKey: string) => void;
   onEndCombat?: (combatId: number) => void;
@@ -1247,7 +1258,7 @@ interface SidebarProps {
   onDeleteCustomDie?: (id: number | string) => void;
 }
 
-export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, writeToken, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, hasUnseenRoll = false, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, newCharacterWaiting, isVehiclesOpen, setIsVehiclesOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, onEndCombat, customDice, onOpenCustomDieBuilder, onDeleteCustomDie }: SidebarProps) {
+export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom, selectedLocation, userName, token, writeToken, onLogout, audioEnabled, setAudioEnabled, masterVolume, setMasterVolume, musicVolume, setMusicVolume, rhombusState, setRhombusState, refreshLocations, socketRef, isChatOpen, setIsChatOpen, hasUnreadChat, hasUnseenRoll = false, syncRhombusToDB, view, activeBattleMapData, isHitPointsOpen, setIsHitPointsOpen, activeUsers, setIsDiceTrayOpen, setNotification, measureMode, setMeasureMode, isBankOpen, setIsBankOpen, isSheetOpen, setIsSheetOpen, newCharacterWaiting, isVehiclesOpen, setIsVehiclesOpen, gameSystem, attackPending, onCancelAttack, isRadioOpen, onToggleRadio, musicPlaying, currencyIcon, currentTheme, onThemeChange, isInitiativeOpen, onToggleInitiative, initiativeActive, initiativeNeedsRoll, onRollEnemies, onRollFriendlies, activeCombats, onListCombats, onJumpToScene, onEndCombat, customDice, onOpenCustomDieBuilder, onDeleteCustomDie, attackFight }: SidebarProps) {
   /** The rail label under the pointer, positioned from the button it belongs to. */
   const [railTip, setRailTip] = useState<{ label: string; x: number; y: number } | null>(null);
   // A custom system's own words for the rail's labels; today's text otherwise.
@@ -1508,7 +1519,7 @@ export function Sidebar({ activeMenu, setActiveMenu, locations, onSelect, onZoom
           {activeMenu === 'nav_controls' && <NavControlsMenu onToggleHelp={() => setActiveMenu('none')} />}
           {activeMenu === 'character_controls' && <CharacterControlsMenu rhombusState={rhombusState} setRhombusState={setRhombusState} selectedLocation={selectedLocation} setSelectedLocation={onSelect} writeToken={writeToken} refreshLocations={refreshLocations} token={token} userName={userName} locations={locations} socketRef={socketRef} syncRhombusToDB={syncRhombusToDB} view={view} activeBattleMapData={activeBattleMapData} measureMode={measureMode} setMeasureMode={setMeasureMode} isSheetOpen={isSheetOpen} setIsSheetOpen={setIsSheetOpen} newCharacterWaiting={newCharacterWaiting} isVehiclesOpen={isVehiclesOpen} setIsVehiclesOpen={setIsVehiclesOpen} gameSystem={gameSystem} />}
           {activeMenu === 'city_data_base' && <CityDataBaseMenu token={token} emitUpdate={() => {}} />}
-          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} writeToken={writeToken} locations={locations} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} customDice={customDice} onOpenCustomDieBuilder={onOpenCustomDieBuilder} onDeleteCustomDie={onDeleteCustomDie} hasUnseenRoll={hasUnseenRoll} />}
+          {activeMenu === 'dice_menu' && <DiceMenu userName={userName} token={token} writeToken={writeToken} locations={locations} socketRef={socketRef} rhombusState={rhombusState} setIsDiceTrayOpen={setIsDiceTrayOpen} setNotification={setNotification} attackPending={attackPending} onCancelAttack={onCancelAttack} gameSystem={gameSystem} customDice={customDice} onOpenCustomDieBuilder={onOpenCustomDieBuilder} onDeleteCustomDie={onDeleteCustomDie} hasUnseenRoll={hasUnseenRoll} fight={attackFight} />}
           {activeMenu === 'initiative_tracker' && initiativeOn && (
             <InitiativeNavPanel
               system={gameSystem}
