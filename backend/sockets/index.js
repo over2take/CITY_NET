@@ -39,7 +39,8 @@ const { xpFrom, withImportedPicks } = require('../systemBuilder/sheetImport');
 const { inventoryAdded } = require('../sheets/inventoryImport');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
-const { hitOnTarget, HIT_WAITS_MS } = require('../tokens/hitOnTarget');
+const { hitOnTarget, targetOf, takeOff, HIT_WAITS_MS } = require('../tokens/hitOnTarget');
+const { hitsOn, mayApply, shownTo, appliedWords, dismissedWords, keepHit } = require('../tokens/waitingHits');
 const { attackAsProblem, characterKey, createHitsWaiting } = require('../tokens/attackAs');
 const { damageRulesOf, BUILT_IN_APPLY_SETTING } = require('../systemBuilder/damageTypes');
 const { notTakenTail } = require('../systemBuilder/damageTaken');
@@ -1778,7 +1779,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             // Only the hit of the character this sheet is (8b6a): one's own, or the NPC's it is rolled for.
             const waiting = made.kind === 'damage' ? hitsWaiting.take(socket.id, characterKey(tokenId)) : null;
             if (!waiting) return send(null);
-            hitOnTarget(db, { system, definition: custom0, health: customSystems.health(system), targetId: waiting.targetId, made }, (hit) => {
+            const from = { name: forName || identity.displayName(info.userName), what: made.line, user: info.userName };
+            hitOnTarget(db, { system, definition: custom0, health: customSystems.health(system), targetId: waiting.targetId, made, from }, (hit) => {
+              // Kept under CONFIRM (8b6b1): whoever shows the target's HEALTH reads it again.
+              if (hit && hit.waiting) io.emit('waitingHitsChanged', { locationId: waiting.targetId });
               if (hit && hit.applied) {
                 emitUpdate({ isRhombusOnly: true });
                 if (hit.owner) io.emit('sheetUpdated', { username: hit.owner });
@@ -2927,6 +2931,86 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const attack = pendingAttacks.get(socket.id);
       pendingAttacks.delete(socket.id);
       hitsWaiting.letGo(socket.id, characterKey(attack ? attack.as : null));
+    });
+
+    // Hits waiting under APPLY DAMAGE CONFIRM (8b6b1; mockup waiting-hits, answered 2026-11-25, tokens/waitingHits.js).
+    /** Who is asking, as the routes' tokenAccess.callerOf says it: the GM (or an editor), or a named player. */
+    const callerOfSocket = (info) => (isAdminSocket(socket) ? { editor: true, player: null } : { editor: false, player: info.userName });
+    /** A line in the dice log saying what was done, no dice: the GM's words, and the players' where they are told less. */
+    const sayDone = (info, said) => {
+      const who = identity.displayName(info.userName);
+      db.run('INSERT INTO dice_rolls (username, total, results, color, historyString, players_history) VALUES (?, ?, ?, ?, ?, ?)',
+        [info.userName, 0, '{}', '#00ff00', said.words, said.players || null], (e) => {
+          if (e) console.error('Error saving a waiting hit\'s line:', e);
+          emitRoll(io, connections, isGmSocket, withThrow({
+            userName: who, account: info.userName, results: {}, modifiers: [], color: '#00ff00', total: 0, historyString: said.words, quiet: true,
+            ...(said.players ? { players: { historyText: said.players } } : {}),
+          }));
+        });
+    };
+
+    // A token's waiting hits as the asker may see them (tokens/waitingHits.js shownTo), answered to them alone.
+    socket.on('waitingHits', (payload, ack) => {
+      if (typeof ack !== 'function') return;
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !payload || typeof payload !== 'object') return ack({ ok: false, error: 'Nothing to show' });
+      getGameSystem((err, system) => {
+        if (err || !customSystems.definitionOf(system)) return ack({ ok: false, error: 'No built system is running' });
+        targetOf(db, payload.locationId, system, (target) => {
+          if (!target) return ack({ ok: false, error: 'No such token' });
+          const caller = callerOfSocket(info);
+          hitsOn(db, target.row, system, (hits) => ack({ ok: true, ...shownTo(hits, { may: mayApply(target.row, caller), editor: isGmSocket(socket), user: info.userName }) }));
+        });
+      });
+    });
+
+    // APPLY one, DISMISS one, or APPLY ALL oldest first (answer 2), by whoever may (mayApply). Each taken out of the table
+    // before its damage is, so a second click applies nothing twice; one that can't be taken off is kept again. The log says
+    // each; whoever shows the token's HEALTH is told to read it again.
+    socket.on('waitingHitAct', (payload, ack) => {
+      const reply = typeof ack === 'function' ? ack : () => {};
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !payload || typeof payload !== 'object' || !['apply', 'dismiss', 'apply_all'].includes(payload.act)) {
+        return reply({ ok: false, error: 'Nothing to do' });
+      }
+      getGameSystem((err, system) => {
+        if (err || !customSystems.definitionOf(system)) return reply({ ok: false, error: 'No built system is running' });
+        targetOf(db, payload.locationId, system, (target) => {
+          if (!target) return reply({ ok: false, error: 'No such token' });
+          if (!mayApply(target.row, callerOfSocket(info))) return reply({ ok: false, error: 'Only the GM, or whoever plays it, applies its hits' });
+          hitsOn(db, target.row, system, (hits) => {
+            const chosen = payload.act === 'apply_all' ? hits : hits.filter((h) => h.id === payload.hitId);
+            if (!chosen.length) return reply({ ok: false, error: 'No such hit waiting' });
+            const who = identity.displayName(info.userName);
+            const health = customSystems.health(system);
+            const changed = () => io.emit('waitingHitsChanged', { locationId: target.row.id });
+            const step = (k, applied) => {
+              if (k >= chosen.length) { changed(); return reply({ ok: true, done: applied }); }
+              const hit = chosen[k];
+              db.run('DELETE FROM waiting_hits WHERE id = ?', [hit.id], function taken(e) {
+                // Already applied or dismissed by someone else: passed over.
+                if (e || this.changes !== 1) return step(k + 1, applied);
+                if (payload.act === 'dismiss') { sayDone(info, dismissedWords(hit, who)); return step(k + 1, applied + 1); }
+                // Its token as it is now: the hit before it may have changed its health.
+                targetOf(db, hit.location_id, system, (now) => {
+                  if (!now) return step(k + 1, applied);
+                  takeOff(db, { system, health, target: now, amount: hit.taken }, (done) => {
+                    if (!done.ok) {
+                      const { id: _gone, created_at: _at, ...again } = hit;
+                      return keepHit(db, again, () => { changed(); reply({ ok: false, error: done.error, done: applied }); });
+                    }
+                    sayDone(info, appliedWords(hit, who));
+                    emitUpdate({ isRhombusOnly: true });
+                    if (done.owner) io.emit('sheetUpdated', { username: done.owner });
+                    step(k + 1, applied + 1);
+                  });
+                });
+              });
+            };
+            step(0, 0);
+          });
+        });
+      });
     });
 
     // ATTACK AS (8b6a; mockup waiting-hits, section 1): who the attack picked on the map is made as. YOU, or an NPC with a

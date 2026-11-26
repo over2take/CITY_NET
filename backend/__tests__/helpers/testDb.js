@@ -226,6 +226,25 @@ function makeTestDb() {
         FOREIGN KEY(sheet_id) REFERENCES character_sheets(id) ON DELETE CASCADE
       )`);
 
+      // Hits waiting under APPLY DAMAGE CONFIRM (8b6b1), as db.js makes them, gone with their token.
+      db.run(`CREATE TABLE waiting_hits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        location_id INTEGER NOT NULL,
+        system TEXT NOT NULL,
+        target_name TEXT NOT NULL,
+        taken INTEGER NOT NULL,
+        rolled INTEGER NOT NULL,
+        from_name TEXT NOT NULL,
+        what TEXT NOT NULL,
+        words TEXT NOT NULL,
+        players TEXT,
+        totals_hidden INTEGER NOT NULL DEFAULT 0,
+        by_user TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      db.run(`CREATE TRIGGER waiting_hits_token_gone AFTER DELETE ON locations
+        BEGIN DELETE FROM waiting_hits WHERE location_id = OLD.id; END`);
+
       db.run(`CREATE TABLE vehicle_occupants (
         location_id INTEGER NOT NULL UNIQUE,
         sheet_id INTEGER NOT NULL,

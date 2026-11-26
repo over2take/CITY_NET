@@ -202,7 +202,8 @@ describe('OFF and CONFIRM: said, not taken', () => {
     const { damage: _d, ...noApply } = SYSTEM();
     const confirm = await setUp({ system: noApply, ghoulSheet: { name: 'Ghoul' }, settings: TOTALS_SHOWN });
     await confirm.attack();
-    expect((await confirm.damage()).gm).toBe(`${ROLLED} → GHOUL · NOT APPLIED: APPLY DAMAGE IS CONFIRM · WOULD TAKE 10`);
+    // Kept waiting on its target's HEALTH (8b6b1, answer 1 A), not taken.
+    expect((await confirm.damage()).gm).toBe(`${ROLLED} → GHOUL · WAITING ON ITS HEALTH · WOULD TAKE 10`);
     expect(await confirm.hp()).toEqual({ hp_current: 20, hp_temp: 0 });
   });
 });

@@ -484,6 +484,28 @@ db.serialize(() => {
     FOREIGN KEY(sheet_id) REFERENCES character_sheets(id) ON DELETE CASCADE
   )`);
 
+  // Hits waiting on a token under APPLY DAMAGE CONFIRM (8b6b1; mockup waiting-hits, answered 2026-11-25), until someone
+  // APPLYs or DISMISSes them: what it would take, worked out when hit (resistances then), and the words to say it. A token
+  // deleted, however, takes its waiting hits with it.
+  db.run(`CREATE TABLE IF NOT EXISTS waiting_hits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    location_id INTEGER NOT NULL,
+    system TEXT NOT NULL,
+    target_name TEXT NOT NULL,
+    taken INTEGER NOT NULL,
+    rolled INTEGER NOT NULL,
+    from_name TEXT NOT NULL,
+    what TEXT NOT NULL,
+    words TEXT NOT NULL,
+    players TEXT,
+    totals_hidden INTEGER NOT NULL DEFAULT 0,
+    by_user TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.run('CREATE INDEX IF NOT EXISTS waiting_hits_by_token ON waiting_hits(location_id)');
+  db.run(`CREATE TRIGGER IF NOT EXISTS waiting_hits_token_gone AFTER DELETE ON locations
+    BEGIN DELETE FROM waiting_hits WHERE location_id = OLD.id; END`);
+
   // Which of the GM's tokens are riding in which enemy vehicle.
   //
   // Keyed by the token rather than by a character sheet, because an enemy token need not
