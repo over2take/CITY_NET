@@ -34,6 +34,7 @@ import { BootScreen } from './components/BootScreen';
 import { createBootSounds, type BootSounds } from './sounds/bootSounds';
 import { useAmbientHum } from './sounds/useAmbientHum';
 import { buildTokenActions, fightTokens, createPlayerTokenRow, hitPointsTarget, linkedHealthTarget, isTokenShape, tokenView, type TokenViewer } from './components/tokenActions';
+import { sendTargets } from './sheets/sendTo';
 import { QuickActions } from './components/QuickActions';
 import { buildBuildingActions } from './components/buildingActions';
 import { TERMINAL_PREVIEW, type TerminalAction } from './components/TerminalWindow';
@@ -2578,6 +2579,8 @@ function App() {
                     onToggleBell={() => setTrayBell(trayBell === 'on' ? 'off' : 'on')}
                     openHistory={rollFlash.openOnHistory}
                     openingRoll={trayOpener}
+                    // SEND TO (8b7b): the GM's map and floor, its fight first; only the GM's tray is told a line may be sent.
+                    sendTargets={isAdmin ? sendTargets(locations, mapLevel, initiative.state?.combatants) : undefined}
                 />
             )}
             {(() => {

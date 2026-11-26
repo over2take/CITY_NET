@@ -16,6 +16,8 @@ import { useTrayMotion } from '../hooks/useTrayMotion';
 import { showOf, sayOf, emptyField, putShow, putNoise, decodedAt, COLS, WIDTH, HEIGHT, SETTLE_MS, HOLD_MS, type BoardRoll } from '../utils/trayBoard';
 import { makeWaiting } from '../utils/trayWaiting';
 import { totalIn } from '../sheets/rollTotal';
+import { SendTo } from './SendTo';
+import { sendOf, withSendNews, type RollSend, type SendTarget } from '../sheets/sendTo';
 
 // ─── CharacterBoard ──────────────────────────────────────────────────────────
 
@@ -262,6 +264,11 @@ interface DiceTrayWindowProps {
    * thrown as the tray opens. It is in the history the tray asks for already, so never added again.
    */
   openingRoll?: unknown;
+  /**
+   * SEND TO's picker (8b7b): the tokens on the map and floor the GM is looking at, a running fight's first (sheets/sendTo.ts
+   * sendTargets). Only the GM's tray is told a line may be sent.
+   */
+  sendTargets?: SendTarget[];
 }
 
 /** A roll line with its final total in bold, to catch the eye (sheets/rollTotal.ts). */
@@ -272,7 +279,7 @@ function BoldTotal({ line }: { line: string }) {
   return <>{split.before}<strong data-testid="roll-total" style={{ fontWeight: 800, ...(split.hit ? { fontSize: '1.3em' } : {}) }}>{split.total}</strong>{split.after}</>;
 }
 
-export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bell, onToggleBell, openHistory = false, openingRoll = null }: DiceTrayWindowProps) {
+export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bell, onToggleBell, openHistory = false, openingRoll = null, sendTargets = [] }: DiceTrayWindowProps) {
   const theme = useContext(ThemeContext);
   const [motion, setMotion] = useTrayMotion(authToken);
   // Read when a roll arrives, inside the socket handlers set up once.
@@ -299,6 +306,8 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
   const unlanded = useRef(new Set<RollBroadcast>());
   const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const opener = useRef(openingRoll as RollBroadcast | null);
+  /** The line whose SEND TO picker is open (8b7b), by its kept roll: one at a time. */
+  const [sendOpen, setSendOpen] = useState<number | null>(null);
 
   useEffect(() => {
     if (!socketRef.current) return;
@@ -364,10 +373,14 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
       setTimeout(() => { if (historyContainerRef.current) historyContainerRef.current.scrollTop = historyContainerRef.current.scrollHeight; }, 50);
     };
 
+    // Where a kept roll went (8b7b): SENT → under its line, in every GM tray.
+    const handleSent = (news: RollSend) => setHistory((prev) => withSendNews(prev, news));
+
     const socket = socketRef.current;
     if (!socket) return;
     socket.on('diceRollBroadcast', handleBroadcast);
     socket.on('diceRollHistory', handleHistory);
+    socket.on('rollSent', handleSent);
     // The roll that opened the tray, thrown now that it is listening; already in the history asked
     // for. Kept, not used up: React starting this twice (strict mode) throws it again rather than
     // leaving the board on ROLLING with its timer gone.
@@ -380,6 +393,7 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
     return () => {
       socket.off('diceRollBroadcast', handleBroadcast);
       socket.off('diceRollHistory', handleHistory);
+      socket.off('rollSent', handleSent);
       if (rollTimer.current) clearTimeout(rollTimer.current);
       rollTimer.current = null;
       playing.current = null;
@@ -460,10 +474,15 @@ export function DiceTrayWindow({ pos, setPos, onClose, socketRef, authToken, bel
               // "cody rolled 2d6 [...]" bolds who rolled; a line with its own colon first (a rest's
               // "SHORT REST · cody: rolled 1d4 ...") is shown as written, never "cody::".
               const match = h.historyString.match(/^([^:]*?) rolled (.*)$/);
+              const send = sendOf(h);
               return (
                 <React.Fragment key={i}>
                   <div style={{ marginBottom: '8px', color: themedRollColor(h.color, theme), textShadow: '1px 1px 2px #000, 0 0 8px #000, 0 0 4px #000', wordBreak: 'break-word' }}>
                     {match ? <><strong style={{ fontWeight: 800 }}>{match[1]}:</strong> rolled <BoldTotal line={match[2]} /></> : <BoldTotal line={h.historyString} />}
+                    {send && (
+                      <SendTo send={send} targets={sendTargets} socketRef={socketRef} open={sendOpen === send.rollId}
+                        onOpen={() => setSendOpen(send.rollId)} onClose={() => setSendOpen((o) => (o === send.rollId ? null : o))} />
+                    )}
                   </div>
                   {i < history.length - 1 && <div style={{ borderBottom: '1px solid var(--green)', opacity: 0.4, margin: '12px 0' }} />}
                 </React.Fragment>
