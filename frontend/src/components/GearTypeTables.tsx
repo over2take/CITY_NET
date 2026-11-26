@@ -198,7 +198,7 @@ function DiceBox({ cell, label, onType, onRead, damageTypes, focus = false, read
   const usual = cell.column.usual ? damageTypes.find((t) => t.name.trim().toUpperCase() === cell.column.usual)?.id ?? null : null;
   const several = own.trim() !== '' && damageParts(own).length > 1;
   return (
-    <DamageRows value={own} onChange={onType} types={damageTypes} usual={usual} label={label} readOnly={readOnly} compact
+    <DamageRows value={own} onChange={onType} types={damageTypes} usual={usual} given={given} label={label} readOnly={readOnly} compact
       renderDice={({ i, dice, onDice, label: partLabel, place }) => (
         <DiceInput value={dice} placeholder={i === 0 && !own ? given || 'none' : ''} text={dice || (i === 0 && !own ? given : '')}
           column={cell.column.label} label={partLabel} onType={onDice} onRead={onRead} focus={focus && i === 0} readOnly={readOnly} place={place} />

@@ -666,6 +666,54 @@ describe('a DAMAGE as rows under ✎ (8b2c)', () => {
     expect(damageOf(last, 0)).toBe('1d8 FIRE DMG');
   });
 
+  /** The type picker's chosen words. */
+  const chosen = (el: HTMLElement) => (el as HTMLSelectElement).selectedOptions[0].textContent;
+
+  it('a line using its item\'s typed dice: the item\'s type shown, faint and said to be the item\'s; dice typed keep it (found 2026-11-25)', async () => {
+    // Before, it said NO TYPE (or the column's MOST LINES ARE) though the item's dice were SLASHING, and dice typed lost it.
+    const items: ItemsShown = { ...TYPED, list: [...TYPED.list, { id: 'saber', label: 'Saber', needs: 'carried', features: [], type: 'weapons', values: { damage: '1d8 SLASHING DMG' } }] };
+    const last = show([line('Saber')], { items, onReadGearDice: onRead });
+    await open(1);
+    const picker = parts(1).getByRole('combobox', { name: 'Item 1 DAMAGE type' }) as HTMLSelectElement;
+    expect(picker.value).toBe('slashing');
+    expect(chosen(picker)).toBe('SLASHING');
+    // Said beside the picker, which a card's narrow one would cut short.
+    expect(parts(1).getByRole('note', { name: "Item 1 DAMAGE type is the item's" }).textContent).toBe("THE ITEM'S");
+    expect(picker.style.color).toBe('color-mix(in srgb, var(--green) 55%, transparent)');
+    expect(picker.title).toBe("The item's, until this line has its own");
+    fireEvent.change(parts(1).getByRole('textbox', { name: 'Item 1 DAMAGE' }), { target: { value: '1d6' } });
+    expect(damageOf(last, 0)).toBe('1d6 SLASHING DMG');
+    // Its own now: said plainly.
+    const own = parts(1).getByRole('combobox', { name: 'Item 1 DAMAGE type' }) as HTMLSelectElement;
+    expect(chosen(own)).toBe('SLASHING');
+    expect(parts(1).queryByRole('note', { name: "Item 1 DAMAGE type is the item's" })).toBeNull();
+    expect(own.style.color).toBe('var(--green)');
+    expect(own.title).toBe('');
+  });
+
+  it('an item\'s dice with no type: NO TYPE, the item\'s, not MOST LINES ARE; several parts: THE ITEM\'S', async () => {
+    const last = show([line('Pistol')], { items: TYPED, onReadGearDice: onRead });
+    await open(1);
+    const picker = parts(1).getByRole('combobox', { name: 'Item 1 DAMAGE type' }) as HTMLSelectElement;
+    expect(picker.value).toBe('');
+    expect(chosen(picker)).toBe('NO TYPE');
+    expect(parts(1).getByRole('note', { name: "Item 1 DAMAGE type is the item's" })).toBeTruthy();
+    fireEvent.change(parts(1).getByRole('textbox', { name: 'Item 1 DAMAGE' }), { target: { value: '1d8' } });
+    expect(damageOf(last, 0)).toBe('1d8');
+    cleanup();
+    const items: ItemsShown = { ...TYPED, list: [...TYPED.list, { id: 'tongue', label: 'Flame Tongue', needs: 'carried', features: [], type: 'weapons', values: { damage: '1d8 SLASHING + 2d6 FIRE DMG' } }] };
+    show([line('Flame Tongue')], { items, onReadGearDice: onRead });
+    await open(1);
+    const several = parts(1).getByRole('combobox', { name: 'Item 1 DAMAGE type' }) as HTMLSelectElement;
+    expect([several.value, chosen(several)]).toEqual(['', "THE ITEM'S"]);
+    expect(parts(1).queryByRole('note', { name: "Item 1 DAMAGE type is the item's" })).toBeNull();
+    // A type picked before any dice: the line's own, said plainly.
+    fireEvent.change(several, { target: { value: 'fire' } });
+    expect(chosen(parts(1).getByRole('combobox', { name: 'Item 1 DAMAGE type' }))).toBe('FIRE');
+    // Its own now: NO TYPE is NO TYPE again.
+    expect(parts(1).getByRole('combobox', { name: 'Item 1 DAMAGE type' }).querySelector('option[value=""]')!.textContent).toBe('NO TYPE');
+  });
+
   it('+ PART, its own eˣ, ×; IN ALL under several, read on this character', async () => {
     const last = show([line('Torch', { type: 'weapons', values: { damage: '2d6 FIRE DMG' } })], { items: TYPED, onReadGearDice: onRead });
     await open(1);
