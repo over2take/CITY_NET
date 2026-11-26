@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, within, cleanup, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { InventorySection } from '../InventorySection';
@@ -898,5 +898,84 @@ describe('the numbers worked out on the character (8e1; mockup gear-table, answe
     expect(button(1).textContent).toBe('1d8+7');
     await waitFor(() => expect(button(1).textContent).toBe('1d8+8'));
     expect(asked).toHaveLength(2);
+  });
+});
+
+describe('each type a table (8e2a; mockup gear-table, answered 2026-11-25)', () => {
+  /** The browser saying the GEAR tab is `width` wide. */
+  const drawnAt = (width: number) => {
+    class Seen { constructor(private fn: (e: { contentRect: { width: number } }[]) => void) {} observe() { this.fn([{ contentRect: { width } }]); } disconnect() {} }
+    vi.stubGlobal('ResizeObserver', Seen);
+  };
+  afterEach(() => vi.unstubAllGlobals());
+  const at = (i: number) => within(screen.getByTestId(`gear-line-${i}`));
+  const TWO: ItemsShown = {
+    ...ITEMS,
+    types: [{ ...ITEMS.types![0], columns: [{ id: 'one', label: 'One handed', kind: 'damage' }, { id: 'two', label: 'Two handed', kind: 'damage' }, ...ITEMS.types![0].columns.filter((c) => c.id !== 'damage')] }, ITEMS.types![1]],
+    list: [{ id: 'striker', label: 'Bone Striker', needs: 'carried', features: [], type: 'weapons', values: { one: '1d8', two: '1d10', range: '5 ft.', ammo: 6 } }, ...ITEMS.list],
+  };
+  const heads = (name: string) => within(screen.getByRole('region', { name: `${name} gear` })).getAllByText((_, el) => !!el && el.tagName === 'SPAN' && (el as HTMLElement).style.alignSelf === 'end').map((h) => h.textContent);
+
+  it('wide: heads once, the name\'s first; a cell each, a dim dash where a line has none; no words beside a cell', () => {
+    drawnAt(900);
+    show([line('Pistol'), line('Rope', { type: 'weapons', values: { range: '50 ft.' } })], { items: ITEMS });
+    expect(heads('WEAPONS')).toEqual(['WEAPON', 'DAMAGE', 'RANGE', 'AMMO', 'WEIGHT', 'CHARGES', 'GRADE']);
+    expect(heads('WEAPONS')).toHaveLength(7);
+    // The Pistol's RANGE its own cell, its head saying what it is: no RANGE word on the line.
+    const pistol = at(0);
+    expect(pistol.getByRole('note', { name: 'Item 1 RANGE: 30 m' }).textContent).toBe('30 m');
+    // The Rope has no DAMAGE: a dash in its cell.
+    expect(at(1).getAllByText('—').length).toBeGreaterThan(0);
+  });
+
+  it('narrow: what fits in the row, the rest folded under it, named; a COUNT that reloads folded with what is carried beside it', () => {
+    drawnAt(480);
+    show([line('Pistol'), line('Pistol Rounds', { type: 'gear', qty: 24, carry: 'readied' }), line('AP Rounds', { type: 'gear', qty: 6 }), line('AP Rounds', { type: 'gear', qty: 40, carry: 'stash' })],
+      { items: ITEMS, onGearCount: async () => ({ ok: true, now: 6, most: 6 }) });
+    expect(heads('WEAPONS')).toEqual(['WEAPON', 'DAMAGE']);
+    const ammo = at(0).getByRole('note', { name: 'Item 1 AMMO: 6 / 6' });
+    expect(ammo.textContent).toMatch(/^AMMO/);
+    expect(at(0).getByRole('note', { name: 'Item 1 AMMO carried' }).textContent).toBe('· PISTOL ROUNDS ×24 · AP ROUNDS ×6 CARRIED');
+    expect(at(0).getByRole('note', { name: 'Item 1 RANGE: 30 m' }).textContent).toBe('RANGE30 m');
+    // Each folded on a line of its own.
+    expect((ammo.parentElement as HTMLElement).style.flexDirection).toBe('column');
+  });
+
+  it('every DAMAGE under one head, a button each, each named where there are two', () => {
+    drawnAt(900);
+    show([line('Bone Striker')], { items: TWO, onGearRoll: () => {} });
+    expect(heads('WEAPONS').slice(0, 2)).toEqual(['WEAPON', 'DAMAGE']);
+    const cell = at(0).getByRole('button', { name: 'Roll Item 1 One handed' }).closest('div')!;
+    expect(within(cell).getByRole('button', { name: 'Roll Item 1 Two handed' })).toBeTruthy();
+    expect(within(cell).getByText('ONE HANDED')).toBeTruthy();
+    expect(within(cell).getByText('TWO HANDED')).toBeTruthy();
+    // One DAMAGE: its own head, no name beside it.
+    cleanup();
+    drawnAt(900);
+    show([line('Pistol')], { items: ITEMS, onGearRoll: () => {} });
+    expect(at(0).getByRole('button', { name: 'Roll Item 1 DAMAGE' }).closest('div')!.textContent).not.toMatch(/DAMAGE/);
+  });
+
+  it('the name\'s cell: how many, where carried and ✎ under it; ✎ and a click on the row open the card under it', async () => {
+    drawnAt(900);
+    show([line('Pistol', { qty: 2 })], { items: ITEMS });
+    expect(at(0).getByText('×2')).toBeTruthy();
+    expect(at(0).getByRole('combobox', { name: 'Item 1 carried' })).toBeTruthy();
+    await userEvent.click(at(0).getByRole('button', { name: 'Edit item 1' }));
+    const card = at(0).getByRole('group', { name: 'Item 1 columns' });
+    expect(card.style.gridColumn).toBe('1 / -1');
+    await userEvent.click(at(0).getByRole('button', { name: 'Edit item 1' }));
+    expect(at(0).queryByRole('group', { name: 'Item 1 columns' })).toBeNull();
+    await userEvent.click(at(0).getByRole('note', { name: 'Item 1 RANGE: 30 m' }));
+    expect(at(0).getByRole('group', { name: 'Item 1 columns' })).toBeTruthy();
+  });
+
+  it('the STASH, its types mixed: each line as before, its type said and each column named', async () => {
+    drawnAt(900);
+    show([line('Pistol', { carry: 'stash' })], { items: ITEMS });
+    await userEvent.click(screen.getByRole('button', { name: /STASH · 1/ }));
+    const stashed = at(0);
+    expect(stashed.getByText('WEAPONS')).toBeTruthy();
+    expect(stashed.getByRole('note', { name: 'Item 1 RANGE: 30 m' }).textContent).toBe('RANGE30 m');
   });
 });

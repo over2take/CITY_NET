@@ -10,6 +10,8 @@ import { damageParts } from '../sheets/damageRows';
 import type { DamageTypeShown } from '../sheets/gearItems';
 import { cellShown, textsToRead } from '../sheets/gearWorked';
 import { useGearReads } from '../hooks/useGearReads';
+import { useElementWidth } from '../hooks/useElementWidth';
+import { tablePlan, gridTemplate, reserveOf, reserveWords, type TablePlan } from '../sheets/gearTable';
 import { HelpHint } from './HelpHint';
 import { IconLook } from './IconLook';
 
@@ -77,6 +79,9 @@ const workedButton = (bonus: boolean, items: boolean): React.CSSProperties => ({
   fontSize: bonus ? '0.85rem' : '0.72rem', fontWeight: 'bold', padding: '0 6px', lineHeight: 1.5, opacity: items ? 0.85 : 1,
   display: 'inline-flex', alignItems: 'center',
 });
+
+/** A head of a type's table (8e2a): small, once, over its column. */
+const headCell: React.CSSProperties = { fontSize: '0.5rem', letterSpacing: '1px', opacity: 0.75, borderBottom: '1px solid var(--dark-green)', paddingBottom: '2px', whiteSpace: 'nowrap', alignSelf: 'end', textAlign: 'left' };
 
 const input: React.CSSProperties = {
   background: 'color-mix(in srgb, var(--black) 50%, transparent)', border: '1px solid var(--green)', color: 'var(--green)',
@@ -239,6 +244,8 @@ export function GearTypeTables({ items, itemsShown, readOnly, columnsLocked = fa
   // Waiting on the server: the buttons held, so a quick second FIRE never spends from an answer not yet back.
   const [busy, setBusy] = useState(false);
   const tables = gearTables(itemsShown, items);
+  // How wide the GEAR tab is drawn (8e2a): what each type's row holds.
+  const [measure, width] = useElementWidth();
   // What each DAMAGE and DICE comes to on this character (8e1), every line's at once.
   const reads = useGearReads(
     textsToRead(tables.flatMap((t) => t.rows.flatMap((r) => shownCells(r.columns).map((c) => ({ kind: c.column.kind, text: valueText(c.value) }))))),
@@ -273,8 +280,12 @@ export function GearTypeTables({ items, itemsShown, readOnly, columnsLocked = fa
   const shown = foundIn(bands, find);
   const found = shown.reduce((n, b) => n + b.count, 0);
   const bandOfType = (type: TypeShown) => (type.on_sheet === 'equipped' || type.on_sheet === 'usable' ? type.on_sheet : 'pack');
-  /** One line a thing (G3), by its place; a click opens its card. `tagged`, in the STASH, says its type. */
-  const lineView = ({ index: i, line, columns: lc }: TableRow, type: TypeShown, tagged = false) => {
+  /**
+   * One line a thing (G3), by its place; a click opens its card. `tagged`, in the STASH, says its type. With `plan`, a row of
+   * its type's table (8e2a; mockup gear-table): its name's cell (how many, UNIQUE, where carried, ✎), a cell under each head,
+   * what the width can't hold folded under it, named.
+   */
+  const lineView = ({ index: i, line, columns: lc }: TableRow, type: TypeShown, tagged = false, plan?: TablePlan) => {
     const cells = shownCells(lc);
     // Blank on the line and its item alike. Only every column blank is FILL IN: one blank beside others filled doesn't apply.
     const blank = lc.cells.filter((c) => c.own === undefined && c.given === undefined);
@@ -285,99 +296,155 @@ export function GearTypeTables({ items, itemsShown, readOnly, columnsLocked = fa
     const lockedTitle = locked(i) ? 'Installed: REMOVE it first' : undefined;
     const name = line.name.trim() || 'UNNAMED';
     const openAt = (at: string | null) => { setOpen(editing && at === null ? null : i); setFocusAt(at); };
+    // A click anywhere on the line but its buttons and boxes opens or closes the card.
+    const opens = (e: React.MouseEvent) => { if (!readOnly && !(e.target as HTMLElement).closest('button, input, select, a')) openAt(null); };
+    /** A column's cell: its words, or its worked-out button and "?"; named (WORD) where no head says it. */
+    const cellView = (cell: Cell, withWord: boolean) => {
+      const label = `Item ${i + 1} ${cell.column.label}`;
+      const rolls = (cell.column.kind === 'damage' || cell.column.kind === 'dice') && onRoll;
+      // A COUNT (8a4b; decision 6 of the gear mockup): "AMMO 4 / 6", its button and RELOAD beside it, like ROLL.
+      const left = cell.column.kind === 'count' && onCount ? countOf(line, cell) : null;
+      const word = cell.column.label.toUpperCase();
+      const button = (cell.column.button || 'USE').toUpperCase();
+      const reload = cell.column.reload ?? [];
+      // Worked out on this character (8e1): the sum done as the button, the formula behind its "?"; as typed where it
+      // has no plain sum or won't roll; as before until the server has read it.
+      const shown = rolls ? cellShown(valueText(cell.value), reads.get(valueText(cell.value))) : null;
+      return (
+        <span key={cell.column.id} role="note" aria-label={`${label}: ${cellWords(cell, line)}`} style={{ display: 'inline-flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap', textAlign: 'left',
+          // Words wrap in their column (RANGE, NOTES); a number and its buttons keep together.
+          ...(cell.column.kind === 'text' ? { overflowWrap: 'anywhere' } : { whiteSpace: 'nowrap' }) }}>
+          {withWord && <b style={{ ...small, fontWeight: 'normal' }}>{word}</b>}
+          {shown?.kind === 'roll' ? (
+            <button type="button" className="utility-btn" aria-label={`Roll ${label}`} title={`Roll ${valueText(cell.value)}`}
+              onClick={() => onRoll!(i, cell.column.id)} style={workedButton(shown.parts.length === 1 && /^[+−]\d+$/.test(shown.parts[0].text), cell.own === undefined)}>
+              {shown.parts.map((p, k) => {
+                const look = typeLook(p.type);
+                return (
+                  <React.Fragment key={k}>
+                    {k > 0 && <span style={{ opacity: 0.7, margin: '0 4px' }}>+</span>}
+                    <span data-testid="worked">{p.text}</span>
+                    {look && <span aria-hidden style={{ display: 'inline-flex', marginLeft: '2px' }}><IconLook icon={look.icon} drawn={look.drawn} size={11} /></span>}
+                  </React.Fragment>
+                );
+              })}
+            </button>
+          ) : (
+            <span title={cell.own === undefined ? 'As the item has it' : 'This line\'s own'} style={{ opacity: cell.own === undefined ? 0.7 : 1 }}>{cellWords(cell, line)}</span>
+          )}
+          {rolls && shown?.kind !== 'roll' && shown?.kind !== 'wont' && (
+            <button type="button" className="utility-btn" aria-label={`Roll ${label}`} title={`Roll ${valueText(cell.value)}`}
+              onClick={() => onRoll(i, cell.column.id)} style={smallButton}>ROLL</button>
+          )}
+          {shown && shown.kind !== 'reading' && <HelpHint text={shown.hint} />}
+          {left && (
+            <button type="button" className="utility-btn" aria-label={`${button} ${label}`} disabled={busy || left.now <= 0}
+              title={left.now <= 0 ? `No ${word} left` : `Use one of the ${word}`}
+              onClick={() => count(i, cell.column.id, word, 'spend')} style={smallButton}>{button}</button>
+          )}
+          {left && reload.length > 0 && (
+            <button type="button" className="utility-btn" aria-label={`Reload ${label}`} disabled={busy || left.now >= left.most}
+              title={left.now >= left.most ? `The ${word} is full` : `From ${reload.join(' or ')} you carry`}
+              onClick={() => count(i, cell.column.id, word, 'reload')} style={smallButton}>RELOAD</button>
+          )}
+          {/* What it reloads from, carried (8e2a; the user: "a weapon may only hold 20 but the player could have 800"). */}
+          {left && reload.length > 0 && (
+            <span role="note" aria-label={`${label} carried`} style={{ ...small, opacity: 0.85 }}>· {reserveWords(reserveOf(items, reload, i))}</span>
+          )}
+        </span>
+      );
+    };
+    const nameView = readOnly
+      ? <span style={{ color: 'var(--green)', overflowWrap: 'anywhere' }}>{name}</span>
+      : <button type="button" aria-label={`${name}, item ${i + 1}`} aria-expanded={editing} title={editing ? 'Close its card' : 'Open its card: every column, to change'}
+          onClick={() => openAt(null)}
+          style={{ background: 'none', border: 0, padding: 0, color: 'var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', textAlign: 'left', cursor: 'pointer', overflowWrap: 'anywhere', textDecoration: editing ? 'underline' : 'none', opacity: line.name.trim() ? 1 : 0.6 }}>{name}</button>;
+    const qtyView = line.qty > 1 && <span title="How many">×{line.qty}</span>;
+    // Changed from its item (G5b): the GM sees it at a glance, the item's value and who changed it on hover.
+    const uniqueView = unique && (
+      <span role="note" aria-label={`Item ${i + 1} is unique`} title={uniqueTitle({ index: i, line, columns: lc })}
+        style={{ ...smallButton, border: '1px solid var(--warning)', color: 'var(--warning)', padding: '0 4px', cursor: 'help' }}>UNIQUE</span>
+    );
+    // Where a stashed thing is, as words (its box is in the card).
+    const stashedView = stashed && line.location && (
+      <span style={{ display: 'inline-flex', gap: '4px', whiteSpace: 'nowrap' }}><b style={{ ...small, fontWeight: 'normal' }}>STASHED</b>{line.location}</span>
+    );
+    const fillIn = !readOnly && !columnsLocked && !editing && nothingFilled && (
+      <button type="button" aria-label={`Fill in item ${i + 1}: ${blank.map((c) => c.column.label.toUpperCase()).join(', ')}`}
+        title={`Blank: ${blank.map((c) => c.column.label.toUpperCase()).join(', ')}`} onClick={() => openAt(blank[0].column.id)}
+        style={{ ...smallButton, background: 'none', border: '1px dashed var(--green)', color: 'var(--green)', fontFamily: 'inherit', cursor: 'pointer', opacity: 0.8 }}>FILL IN</button>
+    );
+    // ✎: the card, as a click on the line opens it, for whoever doesn't think to click a name.
+    const pencil = !readOnly && (
+      <button type="button" aria-label={`Edit item ${i + 1}`} aria-expanded={editing} title={editing ? 'Close its card' : 'Every column, to change'} onClick={() => openAt(null)}
+        style={{ marginLeft: plan ? 0 : 'auto', background: editing ? 'var(--green)' : 'none', color: editing ? 'var(--black)' : 'var(--green)', border: '1px solid var(--green)', cursor: 'pointer', padding: '0 4px', fontSize: '0.7rem', lineHeight: 1.2, fontFamily: 'inherit' }}>✎</button>
+    );
+    // Where it is carried, one click to change.
+    const carrySelect = (
+      <select aria-label={`Item ${i + 1} carried`} value={line.carry} disabled={readOnly || locked(i)} title={lockedTitle ?? 'Where it is carried'}
+        // Moved into the stash or out of it (G2): the band it lands in opens, so the line isn't lost from sight.
+        onChange={(e) => { const carry = e.target.value as InventoryItem['carry']; patch(i, { ...line, carry }); openBand(carry === 'stash' ? 'stash' : bandOfType(type)); }}
+        style={{ ...input, width: 'auto', marginLeft: readOnly && !plan ? 'auto' : 0, fontSize: '0.55rem', letterSpacing: '1px', padding: '0 2px' }}>
+        {CARRY_STATES.map((c) => <option key={c.value} value={c.value} title={c.title}>{c.value === 'stash' ? 'STASH' : c.value.toUpperCase()}</option>)}
+      </select>
+    );
+    // A row of the table (8e2a): spanning the row, what comes under it; a cell for each head, a dim dash where it has none.
+    const full: React.CSSProperties | undefined = plan ? { gridColumn: '1 / -1' } : undefined;
+    const byId = new Map(cells.map((c) => [c.column.id, c]));
+    const folded = plan ? plan.folded.map((c) => byId.get(c.id)).filter((c): c is Cell => !!c) : [];
+    const rowCell: React.CSSProperties = { padding: '5px 0 3px', minWidth: 0, fontSize: '0.7rem', cursor: readOnly ? 'default' : 'pointer', alignSelf: 'center', textAlign: 'left' };
+    const none = <span style={{ ...small, opacity: 0.4 }}>—</span>;
+    const tableRow = plan && (
+      <>
+        <div onClick={opens} style={{ ...rowCell, display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-start' }}>
+          <span style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>{nameView}{qtyView}{uniqueView}</span>
+          <span style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>{carrySelect}{pencil}{fillIn}{stashedView}</span>
+        </div>
+        {plan.heads.map((h) => {
+          const mine = h.columns.map((c) => byId.get(c.id)).filter((c): c is Cell => !!c);
+          return (
+            <div key={h.key} onClick={opens} style={rowCell}>
+              {!mine.length ? none : h.damage
+                // Every DAMAGE under one head, a button each, each named where there are two or more (mockup answer 3).
+                ? <span style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-start' }}>
+                    {mine.map((c) => (
+                      <span key={c.column.id} style={{ display: 'inline-flex', gap: '5px', alignItems: 'center' }}>
+                        {cellView(c, false)}{h.columns.length > 1 && <span style={{ ...small, fontSize: '0.5rem' }}>{c.column.label.toUpperCase()}</span>}
+                      </span>
+                    ))}
+                  </span>
+                : cellView(mine[0], false)}
+            </div>
+          );
+        })}
+        {folded.length > 0 && (
+          // Each on a line of its own, RANGE, then AMMO, then NOTES (the user, 2026-11-25: it reads better, as the mockup had it).
+          <div onClick={opens} style={{ ...full, display: 'flex', flexDirection: 'column', gap: '2px', alignItems: 'flex-start', fontSize: '0.7rem', paddingBottom: '3px', cursor: readOnly ? 'default' : 'pointer' }}>
+            {folded.map((c) => cellView(c, true))}
+          </div>
+        )}
+      </>
+    );
     return (
-      <div key={i} data-testid={`gear-line-${i}`} style={{ borderLeft: `1px solid ${editing ? 'var(--green)' : 'var(--dark-green)'}`, padding: '2px 0 4px 8px', display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0, opacity: stashed ? 0.6 : 1 }}>
+      <div key={i} data-testid={`gear-line-${i}`} style={plan ? { display: 'contents' } : { borderLeft: `1px solid ${editing ? 'var(--green)' : 'var(--dark-green)'}`, padding: '2px 0 4px 8px', display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0, opacity: stashed ? 0.6 : 1 }}>
         {/* In the STASH, whatever its type: the type said, so GUNS and WEAPONS still read apart. */}
         {tagged && <span style={small}>{type.label.toUpperCase()}</span>}
-        {/* The line: a click anywhere on it but its buttons and box opens or closes the card. */}
-        <div onClick={(e) => { if (!readOnly && !(e.target as HTMLElement).closest('button, input, select, a')) openAt(null); }}
-          style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px', alignItems: 'center', fontSize: '0.7rem', minWidth: 0, cursor: readOnly ? 'default' : 'pointer' }}>
-          {readOnly
-            ? <span style={{ color: 'var(--green)', overflowWrap: 'anywhere' }}>{name}</span>
-            : <button type="button" aria-label={`${name}, item ${i + 1}`} aria-expanded={editing} title={editing ? 'Close its card' : 'Open its card: every column, to change'}
-                onClick={() => openAt(null)}
-                style={{ background: 'none', border: 0, padding: 0, color: 'var(--green)', fontFamily: 'inherit', fontSize: '0.75rem', textAlign: 'left', cursor: 'pointer', overflowWrap: 'anywhere', textDecoration: editing ? 'underline' : 'none', opacity: line.name.trim() ? 1 : 0.6 }}>{name}</button>}
-          {line.qty > 1 && <span title="How many">×{line.qty}</span>}
-          {/* Changed from its item (G5b): the GM sees it at a glance, the item's value and who changed it on hover. */}
-          {unique && (
-            <span role="note" aria-label={`Item ${i + 1} is unique`} title={uniqueTitle({ index: i, line, columns: lc })}
-              style={{ ...smallButton, border: '1px solid var(--warning)', color: 'var(--warning)', padding: '0 4px', cursor: 'help' }}>UNIQUE</span>
-          )}
-          {/* Only the columns it has, as words: its item's faint, ROLL beside a DAMAGE or DICE (8a3b). */}
-          {cells.map((cell) => {
-            const label = `Item ${i + 1} ${cell.column.label}`;
-            const rolls = (cell.column.kind === 'damage' || cell.column.kind === 'dice') && onRoll;
-            // A COUNT (8a4b; decision 6 of the gear mockup): "AMMO 4 / 6", its button and RELOAD beside it, like ROLL.
-            const left = cell.column.kind === 'count' && onCount ? countOf(line, cell) : null;
-            const word = cell.column.label.toUpperCase();
-            const button = (cell.column.button || 'USE').toUpperCase();
-            const reload = cell.column.reload ?? [];
-            // Worked out on this character (8e1): the sum done as the button, the formula behind its "?"; as typed where it
-            // has no plain sum or won't roll; as before until the server has read it.
-            const shown = rolls ? cellShown(valueText(cell.value), reads.get(valueText(cell.value))) : null;
-            return (
-              <span key={cell.column.id} role="note" aria-label={`${label}: ${cellWords(cell, line)}`} style={{ display: 'inline-flex', gap: '4px', alignItems: 'center', whiteSpace: 'nowrap' }}>
-                <b style={{ ...small, fontWeight: 'normal' }}>{word}</b>
-                {shown?.kind === 'roll' ? (
-                  <button type="button" className="utility-btn" aria-label={`Roll ${label}`} title={`Roll ${valueText(cell.value)}`}
-                    onClick={() => onRoll!(i, cell.column.id)} style={workedButton(shown.parts.length === 1 && /^[+−]\d+$/.test(shown.parts[0].text), cell.own === undefined)}>
-                    {shown.parts.map((p, k) => {
-                      const look = typeLook(p.type);
-                      return (
-                        <React.Fragment key={k}>
-                          {k > 0 && <span style={{ opacity: 0.7, margin: '0 4px' }}>+</span>}
-                          <span data-testid="worked">{p.text}</span>
-                          {look && <span aria-hidden style={{ display: 'inline-flex', marginLeft: '2px' }}><IconLook icon={look.icon} drawn={look.drawn} size={11} /></span>}
-                        </React.Fragment>
-                      );
-                    })}
-                  </button>
-                ) : (
-                  <span title={cell.own === undefined ? 'As the item has it' : 'This line\'s own'} style={{ opacity: cell.own === undefined ? 0.7 : 1 }}>{cellWords(cell, line)}</span>
-                )}
-                {rolls && shown?.kind !== 'roll' && shown?.kind !== 'wont' && (
-                  <button type="button" className="utility-btn" aria-label={`Roll ${label}`} title={`Roll ${valueText(cell.value)}`}
-                    onClick={() => onRoll(i, cell.column.id)} style={smallButton}>ROLL</button>
-                )}
-                {shown && shown.kind !== 'reading' && <HelpHint text={shown.hint} />}
-                {left && (
-                  <button type="button" className="utility-btn" aria-label={`${button} ${label}`} disabled={busy || left.now <= 0}
-                    title={left.now <= 0 ? `No ${word} left` : `Use one of the ${word}`}
-                    onClick={() => count(i, cell.column.id, word, 'spend')} style={smallButton}>{button}</button>
-                )}
-                {left && reload.length > 0 && (
-                  <button type="button" className="utility-btn" aria-label={`Reload ${label}`} disabled={busy || left.now >= left.most}
-                    title={left.now >= left.most ? `The ${word} is full` : `From ${reload.join(' or ')} you carry`}
-                    onClick={() => count(i, cell.column.id, word, 'reload')} style={smallButton}>RELOAD</button>
-                )}
-              </span>
-            );
-          })}
-          {/* Where a stashed thing is, as words (its box is in the card). */}
-          {stashed && line.location && (
-            <span style={{ display: 'inline-flex', gap: '4px', whiteSpace: 'nowrap' }}><b style={{ ...small, fontWeight: 'normal' }}>STASHED</b>{line.location}</span>
-          )}
-          {!readOnly && !columnsLocked && !editing && nothingFilled && (
-            <button type="button" aria-label={`Fill in item ${i + 1}: ${blank.map((c) => c.column.label.toUpperCase()).join(', ')}`}
-              title={`Blank: ${blank.map((c) => c.column.label.toUpperCase()).join(', ')}`} onClick={() => openAt(blank[0].column.id)}
-              style={{ ...smallButton, background: 'none', border: '1px dashed var(--green)', color: 'var(--green)', fontFamily: 'inherit', cursor: 'pointer', opacity: 0.8 }}>FILL IN</button>
-          )}
-          {/* ✎: the card, as a click on the line opens it, for whoever doesn't think to click a name. */}
-          {!readOnly && (
-            <button type="button" aria-label={`Edit item ${i + 1}`} aria-expanded={editing} title={editing ? 'Close its card' : 'Every column, to change'} onClick={() => openAt(null)}
-              style={{ marginLeft: 'auto', background: editing ? 'var(--green)' : 'none', color: editing ? 'var(--black)' : 'var(--green)', border: '1px solid var(--green)', cursor: 'pointer', padding: '0 4px', fontSize: '0.7rem', lineHeight: 1.2, fontFamily: 'inherit' }}>✎</button>
-          )}
-          {/* Where it is carried, one click to change, as a tag at the end of the line. */}
-          <select aria-label={`Item ${i + 1} carried`} value={line.carry} disabled={readOnly || locked(i)} title={lockedTitle ?? 'Where it is carried'}
-            // Moved into the stash or out of it (G2): the band it lands in opens, so the line isn't lost from sight.
-            onChange={(e) => { const carry = e.target.value as InventoryItem['carry']; patch(i, { ...line, carry }); openBand(carry === 'stash' ? 'stash' : bandOfType(type)); }}
-            style={{ ...input, width: 'auto', marginLeft: readOnly ? 'auto' : 0, fontSize: '0.55rem', letterSpacing: '1px', padding: '0 2px' }}>
-            {CARRY_STATES.map((c) => <option key={c.value} value={c.value} title={c.title}>{c.value === 'stash' ? 'STASH' : c.value.toUpperCase()}</option>)}
-          </select>
-        </div>
+        {plan ? tableRow : (
+          <div onClick={opens} style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px', alignItems: 'center', fontSize: '0.7rem', minWidth: 0, cursor: readOnly ? 'default' : 'pointer' }}>
+            {nameView}
+            {qtyView}
+            {uniqueView}
+            {/* Only the columns it has, as words: its item's faint, ROLL beside a DAMAGE or DICE (8a3b). */}
+            {cells.map((cell) => cellView(cell, true))}
+            {stashedView}
+            {fillIn}
+            {pencil}
+            {carrySelect}
+          </div>
+        )}
         {/* RELOAD with more than one kind carried (Pistol Rounds, AP Rounds): which, asked on the line. */}
         {asked && asked.index === i && (
-          <div role="group" aria-label={`Item ${i + 1} reload ${asked.label} from`} style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 6px', alignItems: 'center', fontSize: '0.6rem' }}>
+          <div role="group" aria-label={`Item ${i + 1} reload ${asked.label} from`} style={{ ...full, display: 'flex', flexWrap: 'wrap', gap: '4px 6px', alignItems: 'center', fontSize: '0.6rem' }}>
             <span style={small}>RELOAD {asked.label} FROM</span>
             {asked.from.map((s) => (
               <button key={s.line} type="button" className="utility-btn" disabled={busy} onClick={() => count(i, asked.column, asked.label, 'reload', s.line)}
@@ -388,12 +455,12 @@ export function GearTypeTables({ items, itemsShown, readOnly, columnsLocked = fa
           </div>
         )}
         {said && said.index === i && (
-          <span role="status" style={{ fontSize: '0.6rem', color: 'var(--warning)' }}>{said.text}</span>
+          <span role="status" style={{ ...full, fontSize: '0.6rem', color: 'var(--warning)' }}>{said.text}</span>
         )}
         {/* The card: NAME and HOW MANY, every column as a box, its item's value faint until typed over, "none" where it has
             none; LOCATION; DONE and REMOVE. */}
         {editing && (
-          <div role="group" aria-label={`Item ${i + 1} columns`} style={{ display: 'grid', gridTemplateColumns: '90px minmax(0, 1fr)', gap: '3px 8px', alignItems: 'center', fontSize: '0.6rem', padding: '3px 0' }}>
+          <div role="group" aria-label={`Item ${i + 1} columns`} style={{ ...full, display: 'grid', gridTemplateColumns: '90px minmax(0, 1fr)', gap: '3px 8px', alignItems: 'center', fontSize: '0.6rem', padding: '3px 0' }}>
             <span style={{ ...small, textAlign: 'right' }}>NAME</span>
             <input aria-label={`Item ${i + 1} name`} value={line.name} readOnly={locked(i)} title={lockedTitle} autoFocus={focusAt === 'name'}
               onChange={(e) => patch(i, { ...line, name: e.target.value })} style={input} />
@@ -442,12 +509,14 @@ export function GearTypeTables({ items, itemsShown, readOnly, columnsLocked = fa
             </span>
           </div>
         )}
-        {under(i)}
+        {plan ? <div style={full}>{under(i)}</div> : under(i)}
+        {/* The row's end, under whatever came with it. */}
+        {plan && <div aria-hidden style={{ ...full, borderBottom: '1px solid color-mix(in srgb, var(--dark-green) 70%, transparent)' }} />}
       </div>
     );
   };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <div ref={measure} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       {/* The box, and its own × in the theme (the browser's is blue in every theme): Esc clears it too. */}
       <span style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
         <input type="search" className="gear-find" aria-label="Find in your gear" placeholder="Find on your sheet: a name, a type, 2d6, AMMO…" value={find}
@@ -487,12 +556,20 @@ export function GearTypeTables({ items, itemsShown, readOnly, columnsLocked = fa
               // While finding, a band with no match says so by its · 0 alone.
               ? (finding ? null : <span style={small}>Nothing here.</span>)
               : <>
-                {b.groups.map(({ type, rows }) => (
-                  <section key={type.id} aria-label={`${type.label} gear`} style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
-                    <span style={heading}>{type.label.toUpperCase()} · {rows.length}</span>
-                    {rows.map((row) => lineView(row, type))}
-                  </section>
-                ))}
+                {b.groups.map(({ type, rows }) => {
+                  // Its lines a table (8e2a): heads once, what the width can't hold folded under each row.
+                  const plan = tablePlan(type, width);
+                  return (
+                    <section key={type.id} aria-label={`${type.label} gear`} style={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
+                      <span style={heading}>{type.label.toUpperCase()} · {rows.length}</span>
+                      <div style={{ display: 'grid', gridTemplateColumns: gridTemplate(plan), columnGap: '10px', alignItems: 'center', minWidth: 0 }}>
+                        <span style={headCell}>{type.one.toUpperCase()}</span>
+                        {plan.heads.map((h) => <span key={h.key} style={headCell}>{h.label}</span>)}
+                        {rows.map((row) => lineView(row, type, false, plan))}
+                      </div>
+                    </section>
+                  );
+                })}
                 {b.loose.map(({ type, row }) => lineView(row, type, true))}
               </>)}
           </section>
