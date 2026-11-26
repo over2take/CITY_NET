@@ -33,7 +33,7 @@ import { TokenWindow, type TokenFolder } from './components/TokenWindow';
 import { BootScreen } from './components/BootScreen';
 import { createBootSounds, type BootSounds } from './sounds/bootSounds';
 import { useAmbientHum } from './sounds/useAmbientHum';
-import { buildTokenActions, createPlayerTokenRow, hitPointsTarget, linkedHealthTarget, isTokenShape, tokenView, type TokenViewer } from './components/tokenActions';
+import { buildTokenActions, fightTokens, createPlayerTokenRow, hitPointsTarget, linkedHealthTarget, isTokenShape, tokenView, type TokenViewer } from './components/tokenActions';
 import { QuickActions } from './components/QuickActions';
 import { buildBuildingActions } from './components/buildingActions';
 import { TERMINAL_PREVIEW, type TerminalAction } from './components/TerminalWindow';
@@ -1886,6 +1886,7 @@ function App() {
                 (!token && !initiative.state.combatants.some((c: any) => c.id === `player:${userName}`))
               )}
               activeCombats={initiative.activeCombats}
+              attackFight={fightTokens(initiative.state?.combatants)}
               onListCombats={initiative.listCombats}
               onEndCombat={initiative.endCombat}
               onJumpToScene={(sceneKey: string) => {

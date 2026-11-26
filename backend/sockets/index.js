@@ -40,6 +40,7 @@ const { inventoryAdded } = require('../sheets/inventoryImport');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { hitOnTarget, HIT_WAITS_MS } = require('../tokens/hitOnTarget');
+const { attackAsProblem, characterKey, createHitsWaiting } = require('../tokens/attackAs');
 const { damageRulesOf, BUILT_IN_APPLY_SETTING } = require('../systemBuilder/damageTypes');
 const { notTakenTail } = require('../systemBuilder/damageTaken');
 const { healthView } = require('../systemBuilder/healthView');
@@ -145,9 +146,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   // Attack system: one pending attack per socket. Cleared on roll, cancel, or disconnect.
   // { targetId, attackType: 'melee' | 'ranged', ac }
   const pendingAttacks = new Map();
-  // A HIT in a game made in the builder, waiting a minute for its attacker's DAMAGE from a line of gear (8b5c): socket id ->
-  // { targetId, until }. Taken by that roll, or let go by a new attack (so a MISS), CANCEL or leaving.
-  const hitsWaiting = new Map();
+  // A HIT in a game made in the builder, waiting a minute for its attacker's DAMAGE from a line of gear (8b5c), one per
+  // character (8b6a, tokens/attackAs.js): socket id -> 'self' or 'npc:<token>' -> { targetId, until }. Taken by that
+  // character's damage, or let go by its next attack, a MISS, CANCEL or leaving.
+  const hitsWaiting = createHitsWaiting();
 
   // ── Radio Feed ────────────────────────────────────────────────────────────────
   let musicState = {
@@ -808,17 +810,20 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       let mathExpression = rollParts.join('+');
       if (modifiers.length > 0) mathExpression += ' ' + modifiers.map(m => m > 0 ? `+ ${m}` : `- ${Math.abs(m)}`).join(' ');
 
+      // A roll made for an attack picked on the map is its to-hit (6c4d2), taken now so one roll answers it; made as an NPC
+      // (ATTACK AS, 8b6a), the log names it as a built-in game's sheet attack does: "OGRE (The GM) rolled".
+      const attack = pendingAttacks.get(socket.id);
+      if (attack) pendingAttacks.delete(socket.id);
+      const roller = attack && attack.asName ? `${attack.asName} (${identity.displayName(userName)})` : identity.displayName(userName);
       const diceBreakdown = allRolls.join('+');
-      let finalString = `${identity.displayName(userName)} rolled ${mathExpression} [(${diceBreakdown})`;
+      let finalString = `${roller} rolled ${mathExpression} [(${diceBreakdown})`;
       if (modTotal !== 0) finalString += ` ${modTotal > 0 ? '+' : '-'} ${Math.abs(modTotal)}`;
       finalString += ` = ${grandTotal}]`;
 
-      // A roll made for an attack picked on the map is its to-hit (6c4d2), taken now so one roll answers it.
-      const attack = pendingAttacks.get(socket.id);
-      if (attack) pendingAttacks.delete(socket.id);
       const hit = !!attack && grandTotal >= attack.ac;
-      // A HIT waits for its damage (8b5c), from now; a MISS has none waiting, the attack before it let any go (initiateAttack).
-      if (hit) hitsWaiting.set(socket.id, { targetId: attack.targetId, until: Date.now() + HIT_WAITS_MS });
+      // A HIT waits for its character's damage (8b5c, 8b6a), from now, in place of that character's last; a MISS lets it go.
+      if (hit) hitsWaiting.set(socket.id, characterKey(attack.as), { targetId: attack.targetId, until: Date.now() + HIT_WAITS_MS });
+      else if (attack) hitsWaiting.letGo(socket.id, characterKey(attack.as));
       // Said in the log (8b5c; the user, 2026-11-25): the target and HIT or MISS; what it was against the GM's alone.
       const verdict = attack ? (hit ? 'HIT' : 'MISS') : null;
       const aimedAt = attack ? ` → ${String(attack.targetName || 'THE TARGET').toUpperCase()}` : '';
@@ -840,10 +845,10 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             // Look up attacker position for animation — the attacker's rhombus on the
             // same map as the target (players get one rhombus per battle map + world).
             const onBattleMap = attack.targetBattleMapId !== null && attack.targetBattleMapId !== undefined;
-            const attackerSql = onBattleMap
+            const attackerSql = attack.as != null ? 'SELECT x, z FROM locations WHERE id = ?' : onBattleMap
               ? 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id = ? AND floor_index = ?'
               : 'SELECT x, z FROM locations WHERE shape = "rhombus" AND owner = ? AND battle_map_id IS NULL';
-            const attackerParams = onBattleMap
+            const attackerParams = attack.as != null ? [attack.as] : onBattleMap
               ? [info ? info.userName : null, attack.targetBattleMapId, attack.targetFloorIndex]
               : [info ? info.userName : null];
             db.get(attackerSql, attackerParams, (posErr, attackerRow) => {
@@ -1722,7 +1727,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         const custom0 = customSystems.definitionOf(system);
         if (gear) {
           if (!custom0) return;
-          rollSheetOf(info, payload, system, ({ row, forName }) => {
+          rollSheetOf(info, payload, system, ({ row, forName, tokenId }) => {
             let data;
             try { data = JSON.parse(row.data || '{}'); } catch { return; }
             const made = rollGear(custom0, data, gear.line, gear.column, { rng: cryptoRng, who: identity.displayName(info.userName), forName });
@@ -1753,10 +1758,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
                 }
               );
             };
-            const waiting = made.kind === 'damage' ? hitsWaiting.get(socket.id) : null;
+            // Only the hit of the character this sheet is (8b6a): one's own, or the NPC's it is rolled for.
+            const waiting = made.kind === 'damage' ? hitsWaiting.take(socket.id, characterKey(tokenId)) : null;
             if (!waiting) return send(null);
-            hitsWaiting.delete(socket.id);
-            if (waiting.until < Date.now()) return send(null);
             hitOnTarget(db, { system, definition: custom0, health: customSystems.health(system), targetId: waiting.targetId, made }, (hit) => {
               if (hit && hit.applied) {
                 emitUpdate({ isRhombusOnly: true });
@@ -2877,7 +2881,8 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       // A game with combat turned off has no attacks (3b6b): none starts, so no roll resolves one.
       getGameSystem((sysErr, system) => {
         if (sysErr || !customSystems.partIn(system, 'combat')) return;
-        hitsWaiting.delete(socket.id);
+        // It starts as YOU (8b6a): your own last hit goes; an NPC's when its d20 is rolled, so the others' still wait.
+        hitsWaiting.letGo(socket.id, characterKey(null));
         startAttack(data, system);
       });
     });
@@ -2896,14 +2901,44 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         let vehicle = null;
         try { vehicle = target.vehicle_state ? JSON.parse(target.vehicle_state) : null; } catch (e) { vehicle = null; }
         const ac = vehicle ? vehicle.ac : (data.attackType === 'ranged' ? rangedAc : meleeAc);
-        pendingAttacks.set(socket.id, { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac, defense: (vehicle ? null : DEFENSE_WORDS[system]) || 'AC', targetX: target.x, targetZ: target.z, targetBattleMapId: target.battle_map_id, targetFloorIndex: target.floor_index });
+        pendingAttacks.set(socket.id, { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac, defense: (vehicle ? null : DEFENSE_WORDS[system]) || 'AC', as: null, asName: null, targetX: target.x, targetZ: target.z, targetBattleMapId: target.battle_map_id, targetFloorIndex: target.floor_index });
         socket.emit('attackPending', { targetId: data.targetId, targetName: target.name, attackType: data.attackType, ac, vehicle });
       });
     };
 
     socket.on('cancelAttack', () => {
+      const attack = pendingAttacks.get(socket.id);
       pendingAttacks.delete(socket.id);
-      hitsWaiting.delete(socket.id);
+      hitsWaiting.letGo(socket.id, characterKey(attack ? attack.as : null));
+    });
+
+    // ATTACK AS (8b6a; mockup waiting-hits, section 1): who the attack picked on the map is made as. YOU, or an NPC with a
+    // sheet in the target's scene that the asker may attack with (the GM any, a player those they control), never the
+    // target; anything else is ignored. Its last hit still waits until its d20 is rolled: a HIT takes its place, a MISS
+    // lets it go, so picking it by mistake and back loses nothing.
+    socket.on('attackAs', (data) => {
+      const info = userSockets.get(socket.id);
+      const attack = pendingAttacks.get(socket.id);
+      if (!info || !info.userName || !attack || !data || typeof data !== 'object') return;
+      const id = data.locationId;
+      if (id === null || id === undefined) { attack.as = null; attack.asName = null; return; }
+      getGameSystem((sysErr, system) => {
+        if (sysErr) return;
+        db.all('SELECT id, name, shape, owner, controllers, battle_map_id, floor_index FROM locations WHERE id IN (?, ?)', [id, Number(attack.targetId)], (err, rows) => {
+          if (err || !rows || pendingAttacks.get(socket.id) !== attack) return;
+          const token = rows.find((r) => r.id === id);
+          const target = rows.find((r) => r.id === Number(attack.targetId));
+          if (attackAsProblem({ token, target, isGm: isAdminSocket(socket), controls: !!token && tokenAccess.controls(token, info.userName) })) return;
+          db.get(`SELECT cs.data FROM npc_sheet_links l JOIN character_sheets cs ON cs.id = l.sheet_id
+                  WHERE l.location_id = ? AND cs.is_npc = 1 AND cs.system = ?`, [id, system], (e2, sheet) => {
+            if (e2 || !sheet || pendingAttacks.get(socket.id) !== attack) return;
+            let name = token.name;
+            try { name = JSON.parse(sheet.data || '{}').name || token.name; } catch { /* the token's name */ }
+            attack.as = id;
+            attack.asName = name || 'an NPC';
+          });
+        });
+      });
     });
 
     // ── CP:R attack flow ─────────────────────────────────────────────────────
@@ -3385,7 +3420,19 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       const gameAndApply = (cb) => getGameSystem((err, system) => (err ? cb(err)
         : db.get('SELECT value FROM global_settings WHERE key = ?', [BUILT_IN_APPLY_SETTING], (aErr, aRow) =>
           cb(null, system, damageRulesOf(null, { [BUILT_IN_APPLY_SETTING]: !aErr && aRow ? aRow.value : undefined }).apply === 'off'))));
-      gameAndApply((err, system, off) => {
+      // ATTACK AS an NPC (8b6a): it must be in the target's scene, as the custom games' box asks too.
+      const inScene = (cb) => {
+        if (payload.location_id === undefined || payload.location_id === null) return cb();
+        db.all('SELECT id, shape, owner, controllers, battle_map_id, floor_index FROM locations WHERE id IN (?, ?)', [payload.location_id, payload.targetId], (e, rows) => {
+          if (e || !rows) return;
+          const token = rows.find((r) => r.id === Number(payload.location_id));
+          const target = rows.find((r) => r.id === Number(payload.targetId));
+          const problem = attackAsProblem({ token, target, isGm: isAdminSocket(socket), controls: !!token && tokenAccess.controls(token, info.userName) });
+          if (problem) return socket.emit('sheetAttackError', { message: `CAN'T ATTACK AS THAT NPC // ${problem.toUpperCase()}` });
+          cb();
+        });
+      };
+      gameAndApply((err, system, off) => inScene(() => {
         if (err) return;
         if (system === 'cities_without_number') return handleCwnAttack(info, payload, color, off);
         if (system === 'shadowrun_6e') return handleSr6Attack(info, payload, color, off);
@@ -3551,7 +3598,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               }
             );
         });
-      });
+      }));
     });
 
     // ── CP:R death saves ─────────────────────────────────────────────────────
@@ -3890,7 +3937,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     socket.on('disconnect', () => {
       connections.delete(socket.id);
       pendingAttacks.delete(socket.id);
-      hitsWaiting.delete(socket.id);
+      hitsWaiting.drop(socket.id);
       if (socket.isSpectator) {
         console.log('Spectator disconnected:', socket.id);
         broadcastSpectatorCount();

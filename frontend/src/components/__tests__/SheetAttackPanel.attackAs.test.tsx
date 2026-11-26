@@ -118,3 +118,78 @@ describe('ATTACK AS', () => {
     expect([...picker.options].map((o) => o.textContent)).toEqual(['YOU', 'GHOUL']);
   });
 });
+
+/**
+ * ATTACK AS on a game made in the builder (8b6a; mockup waiting-hits, section 1, answer 4 A): the map attack's box offers the
+ * same picker, the d20 then made as the picked one, told to the server; a running fight's NPCs first, in their own group.
+ */
+describe('ATTACK AS, a game made in the builder', () => {
+  const CUSTOM = 'sys_0123456789abcdef';
+  const ON_MAP = [
+    { id: 5, name: 'Kes', shape: 'rhombus', owner: 'kes', battle_map_id: 4, floor_index: 0 },
+    { id: 11, name: 'Ogre', shape: 'enemy_rhombus', sheet_data: '{}', battle_map_id: 4, floor_index: 0 },
+    { id: 12, name: 'Goblin', shape: 'enemy_rhombus', sheet_data: '{}', battle_map_id: 4, floor_index: 0 },
+    { id: 13, name: 'Rex', shape: 'friendly_rhombus', controllers: JSON.stringify({ all: false, users: ['vex'] }), battle_map_id: 4, floor_index: 0 },
+    { id: 14, name: 'Far', shape: 'enemy_rhombus', sheet_data: '{}', battle_map_id: 9, floor_index: 0 },
+  ];
+  const ATTACK = { targetId: 5, targetName: 'KES', attackType: 'melee', ac: 13 };
+  const gmBox = (over: Partial<React.ComponentProps<typeof DiceMenu>> = {}) => {
+    serve();
+    return open({ userName: 'gm', token: 'gm-token', writeToken: 'gm-token', gameSystem: CUSTOM, locations: ON_MAP, attackPending: { ...ATTACK } as never, ...over });
+  };
+  const picker = () => screen.getByLabelText('Attack as') as HTMLSelectElement;
+  const groups = () => [...picker().querySelectorAll('optgroup')].map((g) => [g.label, ...[...g.querySelectorAll('option')].map((o) => o.textContent)]);
+
+  it('the GM: YOU and each NPC with a sheet in the target\'s scene, one list with no fight', () => {
+    gmBox();
+    expect([...picker().options].map((o) => o.textContent)).toEqual(['YOU', 'OGRE', 'GOBLIN']);
+    expect(groups()).toEqual([]);
+    expect(picker().value).toBe('');
+  });
+
+  it('a fight running there: IN THE FIGHT first, then ALSO ON THIS MAP; all in it, one list again', () => {
+    gmBox({ fight: [12] });
+    expect(groups()).toEqual([['IN THE FIGHT', 'GOBLIN'], ['ALSO ON THIS MAP', 'OGRE']]);
+    cleanup();
+    gmBox({ fight: [11, 12] });
+    expect(groups()).toEqual([]);
+    expect([...picker().options].map((o) => o.textContent)).toEqual(['YOU', 'OGRE', 'GOBLIN']);
+  });
+
+  it('picking one tells the server, and back to YOU', async () => {
+    const socket = gmBox();
+    await userEvent.selectOptions(picker(), '12');
+    expect(socket.emit).toHaveBeenCalledWith('attackAs', { locationId: 12 });
+    expect(picker().value).toBe('12');
+    await userEvent.selectOptions(picker(), '');
+    expect(socket.emit).toHaveBeenLastCalledWith('attackAs', { locationId: null });
+    await userEvent.selectOptions(picker(), '11');
+    expect(picker().value).toBe('11');
+  });
+
+  it('a new attack starts as YOU, as the server\'s does', async () => {
+    serve();
+    const socket = makeSocket('gm');
+    const box = (attack: object) => (
+      <DiceMenu userName="gm" token="gm-token" writeToken="gm-token" locations={ON_MAP} socketRef={{ current: socket } as never} rhombusState={{ color: '#00ff00' }}
+        setIsDiceTrayOpen={vi.fn()} setNotification={vi.fn()} gameSystem={CUSTOM} attackPending={attack as never} onCancelAttack={vi.fn()} />
+    );
+    const { rerender } = render(box({ ...ATTACK }));
+    await userEvent.selectOptions(picker(), '11');
+    expect(picker().value).toBe('11');
+    rerender(box({ ...ATTACK }));
+    expect(picker().value).toBe('');
+  });
+
+  it('a player: only their NPCs in the scene; none, no picker; a built-in game without sheet attacks, none either', () => {
+    serve();
+    open({ gameSystem: CUSTOM, locations: ON_MAP, attackPending: { ...ATTACK } as never });
+    expect([...picker().options].map((o) => o.textContent)).toEqual(['YOU', 'REX']);
+    cleanup();
+    open({ userName: 'ash', gameSystem: CUSTOM, locations: ON_MAP, attackPending: { ...ATTACK } as never });
+    expect(screen.queryByLabelText('Attack as')).toBeNull();
+    cleanup();
+    open({ userName: 'gm', token: 'gm-token', gameSystem: 'generic', locations: ON_MAP, attackPending: { ...ATTACK } as never });
+    expect(screen.queryByLabelText('Attack as')).toBeNull();
+  });
+});
