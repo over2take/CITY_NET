@@ -115,7 +115,8 @@ test('a HIT\'s Flame Tongue reaches the NPC: FIRE halved and taken off under AUT
   // Once, its dice long landed: opened by the click, the tray asks for its history as the roll is made, and never
   // records it a second time as it lands.
   await expect(mine.getByTestId('dice-board')).not.toHaveAttribute('aria-label', /Rolling/);
-  await expect(history.filter({ hasText: /rolled Flame Tongue DAMAGE/ })).toHaveCount(1);
+  // This player's own: the history is everyone's, and another journey on this database may roll a Flame Tongue too.
+  await expect(history.filter({ hasText: new RegExp(`^${player.username}:\\s*rolled Flame Tongue DAMAGE`) })).toHaveCount(1);
   await mine.keyboard.press('Escape');
 
   // The table's APPLY DAMAGE OFF: the next hit only said.

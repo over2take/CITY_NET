@@ -7,6 +7,8 @@ import { useWords, asLabel } from '../sheets/words';
 import { ModelHealthEditor, ModelHealthDescription, NoHealthNotice, monitorBandFor, type SendHealth } from './HealthModelPanels';
 import { TokenResistances } from './TokenResistances';
 import { TokenConditions } from './TokenConditions';
+import { WaitingHits } from './WaitingHits';
+import { useWaitingHits } from '../hooks/useWaitingHits';
 // Inline SVGs so we can tint them with CSS `color` (currentColor)
 export const PersonSVG = ({ color = 'currentColor', style }: { color?: string; style?: React.CSSProperties }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill={color} style={style}>
@@ -133,6 +135,8 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
   // A custom system's health model, as the server lets this viewer see it. Null for the
   // built-in systems, which keep the panel below exactly as it was.
   const view = useHealthView(socket, target?.id, isCustomSystem(gameSystem));
+  // Hits waiting under CONFIRM (8b6b2): under the HP here; under the strip the vitals box shows them.
+  const waiting = useWaitingHits(socket, target?.id, isCustomSystem(gameSystem) && !underStrip);
   // A custom system's own word for hit points (TEMP_WOUNDS); today's text otherwise.
   const word = useWords(gameSystem);
   const hp = word('hp', 'plural', 'HP');
@@ -207,6 +211,8 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
       onClear={() => saveInjuries({})}
     />
   );
+  // Right under the HP, above CONDITIONS, so they're seen first (8b6b2; mockup waiting-hits, answer 3 A).
+  const waitingBox = !underStrip && <WaitingHits view={waiting.view} act={waiting.act} gm={word('gm', 'short', 'GM')} />;
   // Whoever has this panel may change the token's health, and so its conditions (4e2b1).
   const conditions = (
     <TokenConditions location={target} gameSystem={gameSystem} socket={socket} canChange authToken={token || undefined} onChanged={refreshLocations} />
@@ -243,6 +249,7 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
             <InjuryToggle open={injuriesOpen} onClick={() => setInjuriesOpen((o) => !o)} size={18} />
           </div>
         </>}
+        {waitingBox}
         {injuryMap}
         {!underStrip && conditions}
         {resistances}
@@ -274,6 +281,7 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
         )}
       </div>}
 
+      {waitingBox}
       {injuryMap}
       {!underStrip && conditions}
       {resistances}
@@ -377,6 +385,9 @@ export function HealthReviewPanel({ location, socket, gameSystem, onRolled, auth
   const [stun, setStun] = useState<{ stun_current: number; stun_monitor: number } | null>(null);
   // A custom system's health model, described: never a number or a note.
   const view = useHealthView(socket, location.id, isCustomSystem(gameSystem));
+  // Hits waiting under CONFIRM (8b6b2): to the one who made some, how many and who applies them (they can't, here).
+  const waiting = useWaitingHits(socket, location.id, isCustomSystem(gameSystem));
+  const word = useWords(gameSystem);
 
   // SR6: second damage track - Stun lives on the sheet backing this token.
   // Refetches on sheet/token updates so damage shows live.
@@ -422,6 +433,7 @@ export function HealthReviewPanel({ location, socket, gameSystem, onRolled, auth
 
       {/* A custom model's own description: a second track, light and heavy, the worst harm... */}
       {view && <ModelHealthDescription view={view} target={location} />}
+      <WaitingHits view={waiting.view} act={waiting.act} gm={word('gm', 'short', 'GM')} />
 
       {/* SR6 Stun track (Physical is the token HP above) */}
       {stun && (() => {

@@ -6,6 +6,8 @@ import { useWords, todaysWords, type WordLookup } from '../sheets/words';
 import { useParts } from '../sheets/parts';
 import { customTemplate, isCustomSystem, useCustomTemplate } from '../sheets/customTemplates';
 import { othersSee } from '../sheets/publicLines';
+import { badgeWords } from '../sheets/waitingHits';
+import { useWaitingHits } from '../hooks/useWaitingHits';
 
 // A token's info window - a player, an enemy or a friendly NPC - drawn as a terminal like
 // the building window: the portrait in the corner, folders down the left, the open folder
@@ -93,10 +95,15 @@ export function TokenWindow({
   // still keeps in it, the defense (with combat) or a manual initiative score (3b6d).
   const healthOn = parts('token_health');
   const healthFolder = healthOn || (!!gmHealth && (combatOn || !!gmHealth.onAddToInit));
+  // How many hits wait under CONFIRM (8b6b2): on HEALTH's tab, to whoever may apply them or made some.
+  const waiting = useWaitingHits(socket, location?.id, isCustomSystem(gameSystem) && healthOn);
+  const waitingBadge = badgeWords(waiting.view);
   const gm = word('gm', 'short', 'GM').toUpperCase();
   const folders: TerminalFolder<TokenFolder>[] = [
     { id: 'info', label: 'INFO' },
-    ...(healthFolder ? [{ id: 'health' as const, label: 'HEALTH' }] : []),
+    ...(healthFolder ? [{ id: 'health' as const, label: waitingBadge
+      ? <span style={{ display: 'flex', justifyContent: 'space-between', gap: '6px' }}><span>HEALTH</span><span style={{ color: 'var(--warning)', fontSize: 9 }}>{waitingBadge}</span></span>
+      : 'HEALTH' }] : []),
     ...(quickActions ? [{ id: 'quick' as const, label: 'QUICK ACTIONS' }] : []),
     ...(gmNotesToken ? [{ id: 'gm' as const, label: `${gm} NOTES` }] : []),
   ];

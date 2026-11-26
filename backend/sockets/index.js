@@ -1779,7 +1779,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             // Only the hit of the character this sheet is (8b6a): one's own, or the NPC's it is rolled for.
             const waiting = made.kind === 'damage' ? hitsWaiting.take(socket.id, characterKey(tokenId)) : null;
             if (!waiting) return send(null);
-            const from = { name: forName || identity.displayName(info.userName), what: made.line, user: info.userName };
+            // Who made it, by their character's name where the sheet has one (an NPC's is already its own).
+            const own = typeof data.name === 'string' && data.name.trim() ? data.name.trim() : null;
+            const from = { name: forName || own || identity.displayName(info.userName), what: made.line, user: info.userName };
             hitOnTarget(db, { system, definition: custom0, health: customSystems.health(system), targetId: waiting.targetId, made, from }, (hit) => {
               // Kept under CONFIRM (8b6b1): whoever shows the target's HEALTH reads it again.
               if (hit && hit.waiting) io.emit('waitingHitsChanged', { locationId: waiting.targetId });
