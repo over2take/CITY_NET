@@ -15,6 +15,12 @@ interface Props {
   types: (RowType & { icon?: string; drawn?: string[] })[];
   /** The column's MOST LINES ARE (a type id): what an empty DAMAGE and a new part start as. */
   usual?: string | null;
+  /**
+   * The item's DAMAGE, for a line of gear with none of its own (the sheet's card; mockup gear-table, found 2026-11-25): its
+   * dice are the box's faint words, so its type is the first part's to start, drawn faint and said to be the item's, and
+   * dice typed there keep it. Not the column's MOST LINES ARE, which is a line made by hand's.
+   */
+  given?: string;
   /** What the first part's box is called: "Flame Tongue DAMAGE". The rest add "part 2". */
   label: string;
   /**
@@ -36,14 +42,19 @@ const select: React.CSSProperties = {
   background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'monospace', fontSize: 11, padding: '3px 4px', minWidth: 0, maxWidth: 160,
 };
 
-export function DamageRows({ value, onChange, types, usual = null, label, renderDice, fallback, whole, readOnly = false, compact = false }: Props) {
+export function DamageRows({ value, onChange, types, usual = null, given = '', label, renderDice, fallback, whole, readOnly = false, compact = false }: Props) {
   const pick = compact ? { ...select, fontSize: '0.6rem', padding: '0 2px', maxWidth: 120 } : select;
   const button = compact ? { fontFamily: 'inherit', fontSize: '0.55rem', letterSpacing: 1, padding: '1px 6px' } : { fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, padding: '3px 9px' };
   // The rows being written, with the text they make: kept while that is still the value, so a part with no dice yet stays.
   const [draft, setDraft] = useState<{ text: string; rows: DamageRow[] } | null>(null);
   // A usual type that isn't on writes nothing: textOf finds no name for it.
-  const rows = draft && draft.text === value ? draft.rows
-    : !value.trim() ? [{ dice: '', type: usual }] : rowsOf(value, types);
+  const drafting = !!draft && draft.text === value;
+  // The item's parts while the line has none of its own: one part's type is the row's; several, none of theirs.
+  const items = !value.trim() && given.trim() ? rowsOf(given, types) : null;
+  const faint = !drafting && !!items;
+  const start = items ? (items.length === 1 ? items[0].type : null) : usual;
+  const rows = drafting ? draft!.rows
+    : !value.trim() ? [{ dice: '', type: start }] : rowsOf(value, types);
   if (!rows) return <>{fallback}</>;
   const put = (next: DamageRow[]) => {
     const text = textOf(next, types);
@@ -65,13 +76,20 @@ export function DamageRows({ value, onChange, types, usual = null, label, render
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 0 }}>
             <div style={{ flex: '1 1 0', minWidth: 0 }}>{field}</div>
             <span style={{ display: 'flex', gap: 5, alignItems: 'center', flexShrink: 0 }}>
-              <select aria-label={`${partLabel(i)} type`} value={r.type ?? ''} disabled={readOnly} style={pick}
+              <select aria-label={`${partLabel(i)} type`} value={r.type ?? ''} disabled={readOnly}
+                style={faint ? { ...pick, color: 'color-mix(in srgb, var(--green) 55%, transparent)' } : pick}
+                title={faint ? "The item's, until this line has its own" : undefined}
                 onChange={(e) => put(withRow(rows, i, { type: e.target.value || null }))}>
-                <option value="">NO TYPE</option>
+                {/* Several parts of the item's: none of theirs is the row's, so the picker says whose they are. */}
+                <option value="">{faint && items!.length > 1 ? "THE ITEM'S" : 'NO TYPE'}</option>
                 {types.map((x) => <option key={x.id} value={x.id}>{x.name.toUpperCase()}</option>)}
               </select>
               {/* The type's picture after its name, clear of the dice box's eˣ (the user found it read as part of that button). */}
               <span aria-hidden style={{ width: 16, display: 'inline-flex', justifyContent: 'center', color: 'var(--green)' }}>{t && <IconLook icon={t.icon} drawn={t.drawn} size={14} />}</span>
+              {/* Whose the faint type is, beside the picker rather than in it, which a card's narrow picker would cut short. */}
+              {faint && items!.length === 1 && (
+                <span role="note" aria-label={`${partLabel(i)} type is the item's`} style={compact ? { ...small, fontSize: '0.5rem' } : small}>THE ITEM&apos;S</span>
+              )}
               <span style={compact ? { ...small, fontSize: '0.5rem' } : small}>DMG</span>
               {rows.length > 1 && !readOnly && (
                 <button type="button" className="utility-btn danger-btn" aria-label={`Remove ${partLabel(i)}`} style={{ ...button, padding: compact ? '0 5px' : '1px 7px' }}
