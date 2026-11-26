@@ -19,6 +19,7 @@ const { revealedOnly } = require('../systemBuilder/resistancesShown');
 const { damageTaken, takenWords, seenBy, NOT_APPLIED } = require('../systemBuilder/damageTaken');
 const { HIDDEN } = require('../systemBuilder/tableRolls');
 const { keepHit, rowWords, WAITING } = require('./waitingHits');
+const { halved, SAVED_HALF, SAVED } = require('./sendTo');
 
 /** How long a HIT waits for its damage (the mockup: "a minute without one, and it waits no more"). */
 const HIT_WAITS_MS = 60_000;
@@ -85,9 +86,10 @@ const takeOff = (db, { system, health, target: { row, player, sheet }, amount },
  * `made` a DAMAGE roll (gearRolls.js rollGear), `targetId` the token the HIT was on, `from` who made it ({ name, what, user }:
  * "KES", "Flame Tongue", their account). Calls back { targetName, applied, waiting?, words, players?, owner? }: `words` the
  * GM's, `players` the players' only where they are told less, `owner` a player whose token changed, `waiting` a hit kept
- * under CONFIRM (8b6b1). Nothing (null) where the target is gone.
+ * under CONFIRM (8b6b1). Nothing (null) where the target is gone. SEND TO (8b7a): `half` a target that saved, each part
+ * halved before its resistances; `dry` only what it would take ({ targetName, taken, rolled, words }), kept and taken nowhere.
  */
-const hitOnTarget = (db, { system, definition, health, targetId, made, from = {} }, cb) => {
+const hitOnTarget = (db, { system, definition, health, targetId, made, from = {}, half = false, dry = false }, cb) => {
   targetOf(db, targetId, system, (target) => {
     if (!target) return cb(null);
     const { row, player, sheet } = target;
@@ -97,8 +99,11 @@ const hitOnTarget = (db, { system, definition, health, targetId, made, from = {}
       const conditionIds = parseTokenConditions(row.conditions).map((c) => c.id);
       const worked = resistancesOf(definition, data, conditionIds);
       const rules = damageRulesOf(definition, settings);
-      const parts = Array.isArray(made.parts) && made.parts.length ? made.parts : [{ value: made.value }];
+      const rolledParts = Array.isArray(made.parts) && made.parts.length ? made.parts : [{ value: made.value }];
+      // SEND TO's HALF (8b7a, answer 2 A): each part halved before its resistances, said against the roll's whole total.
+      const parts = half ? halved(rolledParts) : rolledParts;
       const taken = damageTaken(parts, worked, { worksOut: worksOutOf(definition), workOut: rules.workOut });
+      const of = half ? damageTaken(rolledParts, null, { worksOut: {}, workOut: false }).rolled : taken.rolled;
       const name = row.name || 'THE TARGET';
       // The players' words: an NPC's resistances only as revealed, and nothing of what it took where the table keeps that
       // to the GM (on unless the table switched it off); a player's character's all.
@@ -107,16 +112,20 @@ const hitOnTarget = (db, { system, definition, health, targetId, made, from = {}
         : seenBy(taken, player ? null : revealedOnly(worked, revealedIn(data[REVEALED_KEY])));
       // The GM's line says when players were told less, as a roll's hidden target does (6c4h).
       // What it took last, in either; the GM's notes it was told less before that.
+      const lead = half ? [SAVED_HALF] : [];
+      const theirLead = half ? [seen.total ? SAVED_HALF : SAVED] : [];
       const say = (verb, notes = []) => {
-        const words = takenWords(name, taken, { verb, notes });
-        const players = takenWords(name, seen.taken, { verb, total: seen.total, notes });
-        return players === words ? { words } : { words: takenWords(name, taken, { verb, notes: [...notes, TOLD_LESS] }), players };
+        const words = takenWords(name, taken, { verb, notes, lead, of });
+        const players = takenWords(name, seen.taken, { verb, total: seen.total, notes, lead: theirLead, of });
+        return players === words ? { words } : { words: takenWords(name, taken, { verb, notes: [...notes, TOLD_LESS], lead, of }), players };
       };
+      // SEND TO's picker (8b7a): what it would take, kept and taken nowhere, in the GM's words (no note of the players').
+      if (dry) return cb({ targetName: name, applied: false, taken: taken.taken, rolled: of, words: takenWords(name, taken, { verb: 'WOULD TAKE', lead, of }) });
       // CONFIRM (8b6b1; answer 1 A): kept on the target, worked out now, until someone APPLYs or DISMISSes it.
       if (rules.apply === 'confirm') {
         const said = say('WOULD TAKE', [WAITING]);
         return keepHit(db, {
-          location_id: row.id, system, target_name: name, taken: taken.taken, rolled: taken.rolled,
+          location_id: row.id, system, target_name: name, taken: taken.taken, rolled: of,
           from_name: String(from.name || 'SOMEONE'), what: String(from.what || 'DAMAGE'),
           words: rowWords(name, said.words), players: said.players ? rowWords(name, said.players) : null,
           totals_hidden: seen.total ? 0 : 1, by_user: from.user || null,
