@@ -506,6 +506,27 @@ db.serialize(() => {
   db.run(`CREATE TRIGGER IF NOT EXISTS waiting_hits_token_gone AFTER DELETE ON locations
     BEGIN DELETE FROM waiting_hits WHERE location_id = OLD.id; END`);
 
+  // SEND TO (8b7a; mockup send-to, approved 2026-11-26): a damage roll that reached no target, kept with its line in the log
+  // (dice_rolls.id) so the GM's send is the server's own numbers, and each token it was sent to, once (tokens/sendTo.js).
+  // Gone with its line when the history is purged.
+  db.run(`CREATE TABLE IF NOT EXISTS sendable_rolls (
+    roll_id INTEGER PRIMARY KEY,
+    system TEXT NOT NULL,
+    what TEXT NOT NULL,
+    from_name TEXT NOT NULL,
+    by_user TEXT,
+    total INTEGER NOT NULL,
+    parts TEXT NOT NULL
+  )`);
+  db.run(`CREATE TABLE IF NOT EXISTS roll_sends (
+    roll_id INTEGER NOT NULL,
+    location_id INTEGER NOT NULL,
+    target_name TEXT NOT NULL,
+    UNIQUE (roll_id, location_id)
+  )`);
+  db.run(`CREATE TRIGGER IF NOT EXISTS sendable_rolls_line_gone AFTER DELETE ON dice_rolls
+    BEGIN DELETE FROM sendable_rolls WHERE roll_id = OLD.id; DELETE FROM roll_sends WHERE roll_id = OLD.id; END`);
+
   // Which of the GM's tokens are riding in which enemy vehicle.
   //
   // Keyed by the token rather than by a character sheet, because an enemy token need not

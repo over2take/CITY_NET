@@ -37,14 +37,15 @@ const damageTaken = (parts, worked, { worksOut, workOut }) => {
  * (8b5c; the user, 2026-11-25: "the total damage at the end and highlighted"): "TAKES 7 OF 10", or "TAKES 10" where that is
  * all of it. `verb` WOULD TAKE where it isn't taken; `total` false leaves the number out, for players who aren't to know it.
  */
-const takenWords = (targetName, taken, { verb = 'TAKES', total = true, notes = [] } = {}) => {
+const takenWords = (targetName, taken, { verb = 'TAKES', total = true, notes = [], lead = [], of = taken.rolled } = {}) => {
   const met = taken.parts.filter((p) => p.kind);
   const each = met.map((p) => {
     const what = `${VERB[p.kind]} ${String(p.label || p.type).toUpperCase()}`;
     return p.works && p.works !== 'words' ? `${what}: ${p.value} → ${p.taken}` : `${what} (TAKEN AS ROLLED)`;
   });
-  const took = total ? [`${verb} ${taken.taken}${taken.taken !== taken.rolled ? ` OF ${taken.rolled}` : ''}`] : [];
-  return [String(targetName).toUpperCase(), ...each, ...notes, ...took].join(' · ');
+  // `lead` said before the resistances (SEND TO's SAVED: HALF, 8b7a); `of` what "OF m" says, the roll's total where halved.
+  const took = total ? [`${verb} ${taken.taken}${taken.taken !== of ? ` OF ${of}` : ''}`] : [];
+  return [String(targetName).toUpperCase(), ...lead, ...each, ...notes, ...took].join(' · ');
 };
 
 /**

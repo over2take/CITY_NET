@@ -245,6 +245,23 @@ function makeTestDb() {
       db.run(`CREATE TRIGGER waiting_hits_token_gone AFTER DELETE ON locations
         BEGIN DELETE FROM waiting_hits WHERE location_id = OLD.id; END`);
 
+      // SEND TO's kept rolls and where each went (8b7a), as db.js makes them; dice_rolls is each test's own.
+      db.run(`CREATE TABLE sendable_rolls (
+        roll_id INTEGER PRIMARY KEY,
+        system TEXT NOT NULL,
+        what TEXT NOT NULL,
+        from_name TEXT NOT NULL,
+        by_user TEXT,
+        total INTEGER NOT NULL,
+        parts TEXT NOT NULL
+      )`);
+      db.run(`CREATE TABLE roll_sends (
+        roll_id INTEGER NOT NULL,
+        location_id INTEGER NOT NULL,
+        target_name TEXT NOT NULL,
+        UNIQUE (roll_id, location_id)
+      )`);
+
       db.run(`CREATE TABLE vehicle_occupants (
         location_id INTEGER NOT NULL UNIQUE,
         sheet_id INTEGER NOT NULL,

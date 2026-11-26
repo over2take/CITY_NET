@@ -40,7 +40,8 @@ const { inventoryAdded } = require('../sheets/inventoryImport');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { hitOnTarget, targetOf, takeOff, HIT_WAITS_MS } = require('../tokens/hitOnTarget');
-const { hitsOn, mayApply, shownTo, appliedWords, dismissedWords, keepHit } = require('../tokens/waitingHits');
+const { hitsOn, mayApply, shownTo, appliedWords, dismissedWords, keepHit, rowWords } = require('../tokens/waitingHits');
+const { sendableGear, sendableField, targetsOf, sentWords, sendShown, keepSendable, sendsOf, claimSend, nameSend, dropSend } = require('../tokens/sendTo');
 const { attackAsProblem, characterKey, createHitsWaiting } = require('../tokens/attackAs');
 const { damageRulesOf, BUILT_IN_APPLY_SETTING } = require('../systemBuilder/damageTypes');
 const { notTakenTail } = require('../systemBuilder/damageTaken');
@@ -198,6 +199,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
     });
   };
 
+  /** Send to every connection of the GM's (the main admin's), and to nobody else: SEND TO's (8b7a). */
+  const emitToGm = (event, data) => {
+    userSockets.forEach((info, id) => {
+      if (info && info.isAdmin) io.to(id).emit(event, data);
+    });
+  };
+
   const buildActiveUsers = () => {
     const userMap = new Map();
     userSockets.forEach((info) => {
@@ -301,9 +309,14 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (!err && rows) {
           // Each their own line where a roll's target was kept from players (6c4h).
           const gm = isGmSocket(socket);
-          socket.emit('diceRollHistory', rows.reverse().map(r => ({
-            userName: r.username, total: r.total, results: JSON.parse(r.results), color: r.color, historyString: historyFor(r, gm)
+          const lines = rows.reverse();
+          // The GM's lines that may be sent on, with where each went (SEND TO, 8b7a); nobody else's.
+          const done = (sends) => socket.emit('diceRollHistory', lines.map(r => ({
+            userName: r.username, total: r.total, results: JSON.parse(r.results), color: r.color, historyString: historyFor(r, gm),
+            ...(sends.has(r.id) ? { send: sends.get(r.id) } : {}),
           })));
+          if (!gm) return done(new Map());
+          sendsOf(db, lines.map((r) => r.id), done);
         }
       });
     });
@@ -1752,6 +1765,9 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             if (!made.ok) return;
             const color = typeof payload.color === 'string' ? payload.color : '#00ff00';
             const results = made.dice.flatMap((d) => d.rolls);
+            // Who made it, by their character's name where the sheet has one (an NPC's is already its own).
+            const own = typeof data.name === 'string' && data.name.trim() ? data.name.trim() : null;
+            const from = { name: forName || own || identity.displayName(info.userName), what: made.line, user: info.userName };
             const send = (hit) => {
               // A HIT's damage (8b5c): what it did, said after the roll; the players' words where they differ.
               const history = hit ? `${made.history} → ${hit.words}` : made.history;
@@ -1770,18 +1786,17 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
               db.run(
                 'INSERT INTO dice_rolls (username, total, results, color, historyString, players_history) VALUES (?, ?, ?, ?, ?, ?)',
                 [info.userName, made.value, JSON.stringify(results), color, history, players ? players.historyText : null],
-                (err3) => {
+                function saved(err3) {
                   if (err3) console.error('Error saving gear roll:', err3);
-                  emitRoll(io, connections, isGmSocket, broadcastData);
+                  // A DAMAGE that reached no target, kept for the GM to send on (8b7a).
+                  offerSend(err3 || hit ? null : this.lastID, sendableGear(made), { system, from: from.name, user: info.userName },
+                    (gm) => emitRoll(io, connections, isGmSocket, gm ? { ...broadcastData, gm } : broadcastData));
                 }
               );
             };
             // Only the hit of the character this sheet is (8b6a): one's own, or the NPC's it is rolled for.
             const waiting = made.kind === 'damage' ? hitsWaiting.take(socket.id, characterKey(tokenId)) : null;
             if (!waiting) return send(null);
-            // Who made it, by their character's name where the sheet has one (an NPC's is already its own).
-            const own = typeof data.name === 'string' && data.name.trim() ? data.name.trim() : null;
-            const from = { name: forName || own || identity.displayName(info.userName), what: made.line, user: info.userName };
             hitOnTarget(db, { system, definition: custom0, health: customSystems.health(system), targetId: waiting.targetId, made, from }, (hit) => {
               // Kept under CONFIRM (8b6b1): whoever shows the target's HEALTH reads it again.
               if (hit && hit.waiting) io.emit('waitingHitsChanged', { locationId: waiting.targetId });
@@ -1845,9 +1860,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             db.run(
               'INSERT INTO dice_rolls (username, total, results, color, historyString, players_history) VALUES (?, ?, ?, ?, ?, ?)',
               [info.userName, made.total, JSON.stringify(made.results), color, made.historyText, made.players ? made.players.historyText : null],
-              (err3) => {
+              function saved(err3) {
                 if (err3) console.error('Error saving sheet roll:', err3);
-                emitRoll(io, connections, isGmSocket, withThrow(broadcastData, made.own));
+                // A plain roll's total, kept for the GM to send on as damage of no type (8b7a).
+                const own = typeof data.name === 'string' && data.name.trim() ? data.name.trim() : null;
+                offerSend(err3 ? null : this.lastID, sendableField(made), { system, from: forName || own || identity.displayName(info.userName), user: info.userName },
+                  (gm) => emitRoll(io, connections, isGmSocket, withThrow(gm ? { ...broadcastData, gm } : broadcastData, made.own)));
               }
             );
           });
@@ -3012,6 +3030,107 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             step(0, 0);
           });
         });
+      });
+    });
+
+    // SEND TO (8b7a; approved mockup send-to, 2026-11-26). A damage roll that reached no target kept with its log line
+    // (tokens/sendTo.js), the GM's copy of the line told it may be sent: `cb` given what only the GM is told of it, or null.
+    const offerSend = (rollId, sendable, { system, from, user }, cb) => {
+      if (!rollId || !sendable) return cb(null);
+      const kept = { roll_id: rollId, system, what: sendable.what, from_name: String(from), by_user: user, total: sendable.total, parts: sendable.parts };
+      keepSendable(db, kept, (e) => cb(e ? null : { send: sendShown({ ...kept, parts: JSON.stringify(kept.parts) }) }));
+    };
+
+    /** A kept roll the GM may send, in the game being played: calls back (problem) or (null, { system, definition, roll, parts }). */
+    const sendableRoll = (payload, cb) => {
+      const rollId = payload && Number.isInteger(payload.rollId) ? payload.rollId : null;
+      if (!rollId) return cb('Nothing to send');
+      getGameSystem((err, system) => {
+        const definition = err ? null : customSystems.definitionOf(system);
+        if (!definition) return cb('No built system is running');
+        db.get('SELECT * FROM sendable_rolls WHERE roll_id = ?', [rollId], (e, roll) => {
+          if (e || !roll) return cb('That roll can\'t be sent');
+          if (roll.system !== system) return cb('That roll was made in another game');
+          let parts = [];
+          try { parts = JSON.parse(roll.parts || '[]'); } catch { parts = []; }
+          cb(null, { system, definition, roll, parts });
+        });
+      });
+    };
+
+    // The picker's numbers (8b7a, for 8b7b): what each token would take of a kept roll, FULL or HALF, its resistances worked
+    // out, and whether it went there already. Kept and taken nowhere; to the GM alone.
+    socket.on('sendRollPreview', (payload, ack) => {
+      if (typeof ack !== 'function') return;
+      if (!isGmSocket(socket)) return ack({ ok: false, error: 'Only the GM sends a roll' });
+      const checked = targetsOf(payload && payload.targets);
+      if (!checked.ok) return ack(checked);
+      sendableRoll(payload, (problem, found) => {
+        if (problem) return ack({ ok: false, error: problem });
+        const { system, definition, roll, parts } = found;
+        db.all('SELECT location_id FROM roll_sends WHERE roll_id = ?', [roll.roll_id], (e, rows) => {
+          const went = new Set((e ? [] : rows || []).map((r) => r.location_id));
+          const health = customSystems.health(system);
+          const each = [];
+          const step = (k) => {
+            if (k >= checked.targets.length) return ack({ ok: true, targets: each });
+            const t = checked.targets[k];
+            hitOnTarget(db, { system, definition, health, targetId: t.locationId, made: { value: roll.total, parts }, half: t.half, dry: true }, (hit) => {
+              if (hit) each.push({ locationId: t.locationId, half: t.half, name: String(hit.targetName).toUpperCase(), taken: hit.taken, words: rowWords(hit.targetName, hit.words), sent: went.has(t.locationId) });
+              step(k + 1);
+            });
+          };
+          step(0);
+        });
+      });
+    });
+
+    // The GM's SEND (8b7a): a kept roll sent on to each token picked, FULL or HALF, each taken as the table applies damage
+    // (under CONFIRM it waits on the target's HEALTH, answer 1 A), each said in the log after the roll's, players reading an
+    // NPC's as HIT TOTALS ON NPCS allows. A token it went to already is passed over; one gone, too.
+    socket.on('sendRoll', (payload, ack) => {
+      const reply = typeof ack === 'function' ? ack : () => {};
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !isGmSocket(socket)) return reply({ ok: false, error: 'Only the GM sends a roll' });
+      const checked = targetsOf(payload && payload.targets);
+      if (!checked.ok) return reply(checked);
+      sendableRoll(payload, (problem, found) => {
+        if (problem) return reply({ ok: false, error: problem });
+        const { system, definition, roll, parts } = found;
+        const health = customSystems.health(system);
+        const from = { name: roll.from_name, what: roll.what, user: roll.by_user };
+        const sent = [];
+        let healthChanged = false;
+        const step = (k) => {
+          if (k >= checked.targets.length) {
+            if (healthChanged) emitUpdate({ isRhombusOnly: true });
+            // Every GM tray showing the line: SENT → each it went to.
+            return sendsOf(db, [roll.roll_id], (shown) => {
+              if (shown.has(roll.roll_id)) emitToGm('rollSent', shown.get(roll.roll_id));
+              reply({ ok: true, sent });
+            });
+          }
+          const t = checked.targets[k];
+          claimSend(db, roll.roll_id, t.locationId, (first) => {
+            if (!first) return step(k + 1);
+            hitOnTarget(db, { system, definition, health, targetId: t.locationId, made: { value: roll.total, parts }, from, half: t.half }, (hit) => {
+              if (!hit) return dropSend(db, roll.roll_id, t.locationId, () => step(k + 1));
+              // Said as the log says it: SENT → GOBLIN A.
+              const named = String(hit.targetName).toUpperCase();
+              nameSend(db, roll.roll_id, t.locationId, named, () => {
+                if (hit.waiting) io.emit('waitingHitsChanged', { locationId: t.locationId });
+                if (hit.applied) {
+                  healthChanged = true;
+                  if (hit.owner) io.emit('sheetUpdated', { username: hit.owner });
+                }
+                sent.push(named);
+                sayDone(info, { words: sentWords(roll, hit.words), players: hit.players ? sentWords(roll, hit.players) : null });
+                step(k + 1);
+              });
+            });
+          });
+        };
+        step(0);
       });
     });
 

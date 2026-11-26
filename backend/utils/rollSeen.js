@@ -4,10 +4,14 @@
 // version. The GM here is the main admin only: granted editors see what players see (the user,
 // 2026-10-24). A roll everyone sees alike still goes out once, to everyone, as every roll did.
 
-/** `data` as one person is sent it. The players' version never goes out as itself: it only replaces the GM's words. */
+/**
+ * `data` as one person is sent it. The players' version never goes out as itself: it only replaces the GM's words. `gm`,
+ * what only the GM is told of it (SEND TO's, 8b7a), goes to the GM alone, spread into theirs.
+ */
 const rollFor = (data, isGm) => {
-  const { players, ...sent } = data;
-  if (isGm || !players) return sent;
+  const { players, gm, ...sent } = data;
+  if (isGm) return { ...sent, ...(gm || {}) };
+  if (!players) return sent;
   return { ...sent, historyString: players.historyText, board: players.board };
 };
 
@@ -16,7 +20,7 @@ const rollFor = (data, isGm) => {
  * sockets connected now) its own, `isGm(socket)` saying whose is the GM's.
  */
 const emitRoll = (io, connections, isGm, data) => {
-  if (!data.players) return io.emit('diceRollBroadcast', rollFor(data, true));
+  if (!data.players && !data.gm) return io.emit('diceRollBroadcast', rollFor(data, true));
   for (const socket of connections.values()) socket.emit('diceRollBroadcast', rollFor(data, isGm(socket)));
 };
 

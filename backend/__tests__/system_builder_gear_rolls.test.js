@@ -88,7 +88,9 @@ describe('at the table', () => {
     const join = async (who) => {
       const handlers = {};
       const said = [];
-      connection({ id: `gear-${who}-${Math.random()}`, on: (e, fn) => { handlers[e] = fn; }, emit: (e, p) => said.push([e, p]), broadcast: { emit: () => {} }, use: () => {}, join: () => {}, disconnect: () => {} });
+      // A roll sent to each socket on its own (a SEND TO's for the GM alone, 8b7a) is heard as one sent to all.
+      const emit = (e, p) => { said.push([e, p]); if (e === 'diceRollBroadcast') emitted.push({ event: e, data: p }); };
+      connection({ id: `gear-${who}-${Math.random()}`, on: (e, fn) => { handlers[e] = fn; }, emit, broadcast: { emit: () => {} }, use: () => {}, join: () => {}, disconnect: () => {} });
       handlers.identify(who);
       await drain(db);
       return { handlers, said };

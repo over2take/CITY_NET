@@ -301,6 +301,8 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
   return {
     ok: true,
     roll: roll.id,
+    // How its dice are read (sum, count, highest, symbols): only a sum may be sent on as damage (SEND TO, 8b7a).
+    read: read.read,
     result,
     historyText: line(tags) + (hide ? HIDDEN : ''),
     players: theirs ? { historyText: line(theirs.tags), board: { label: named, ...(theirs.board || {}) } } : null,

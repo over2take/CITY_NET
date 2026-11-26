@@ -240,7 +240,9 @@ describe('rolling at the table, through the socket', () => {
     const io = { on: (e, cb) => { if (e === 'connection') connection = cb; }, emit: (event, data) => emitted.push({ event, data }), to: () => ({ emit: () => {} }) };
     socketsFactory(io, db, { elevatedUsers: new Set(), emitUpdate: vi.fn(), recordAction: vi.fn() });
     const handlers = {};
-    connection({ id: `s-${who}-${Math.random()}`, on: (e, fn) => { handlers[e] = fn; }, emit: () => {}, broadcast: { emit: () => {} }, use: () => {}, join: () => {}, disconnect: () => {} });
+    // A roll sent to each socket on its own (a SEND TO's for the GM alone, 8b7a) is heard as one sent to all.
+    const emit = (event, data) => { if (event === 'diceRollBroadcast') emitted.push({ event, data }); };
+    connection({ id: `s-${who}-${Math.random()}`, on: (e, fn) => { handlers[e] = fn; }, emit, broadcast: { emit: () => {} }, use: () => {}, join: () => {}, disconnect: () => {} });
     handlers.identify(admin ? { userName: who, isAdmin: true, token: GM } : who);
     await drain(db);
     return { handlers, emitted };
