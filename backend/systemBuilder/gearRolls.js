@@ -75,11 +75,40 @@ const rollGear = (definition, data, index, column, { rng, who, forName = null })
  * character's value), `{ ok: true, blank: true, names }` for an empty box, or `{ ok: false, error, names }` (a name the
  * system hasn't got, said as typed rather than skipped at the roll). `names` is the system's, for the box's INSERT.
  */
-const readGearDice = (definition, data, text) => {
+/**
+ * A part's dice kept and all else summed, on this character (8e1; approved mockup docs/mockups/gear-table.html): "1d8 +
+ * @str_mod + 3" as { dice: [{ count: 1, sides: 8 }], add: 7 }, dice of a size together. Only where the roll is its dice
+ * plus a number: a die taken away, doubled or inside a function has no such sum, and is null.
+ */
+const workedOf = (text, values, names) => {
+  const low = rollAmount(text, values, names, () => 0);
+  const high = rollAmount(text, values, names, () => 1 - 1e-9);
+  if ('blank' in low || 'error' in low) return null;
+  const rolled = (r) => r.dice.reduce((n, d) => n + d.rolls.reduce((a, b) => a + b, 0), 0);
+  const add = low.value - rolled(low);
+  if (high.value - rolled(high) !== add) return null;
+  const dice = [];
+  for (const d of low.dice) {
+    if (!d.count) continue;
+    const same = dice.find((x) => x.sides === d.sides);
+    if (same) same.count += d.count; else dice.push({ count: d.count, sides: d.sides });
+  }
+  return { dice, add };
+};
+
+/** What one reading needs of the sheet, worked out once for every box read (readGearLines). */
+const readingOf = (definition, data) => {
   const labels = namesOf(definition);
-  const names = { known: (n) => labels.has(n), refused: (n) => `@${n} isn't one of this system's names` };
-  const nameList = [...labels].map(([id, label]) => ({ token: `@${id}`, label: String(label).toUpperCase() }));
-  const values = effectiveData(definition, data);
+  return {
+    labels,
+    names: { known: (n) => labels.has(n), refused: (n) => `@${n} isn't one of this system's names` },
+    nameList: [...labels].map(([id, label]) => ({ token: `@${id}`, label: String(label).toUpperCase() })),
+    values: effectiveData(definition, data),
+  };
+};
+
+const readGearDice = (definition, data, text, reading = readingOf(definition, data)) => {
+  const { labels, names, nameList, values } = reading;
   // The lowest every die can come up, and the highest; a die taken away (10 - 1d4) swaps which is which.
   // A DAMAGE that names its types (8b2a): each part read, the least and most summed; the words are no names.
   if (typeof text === 'string' && typed(text)) {
@@ -94,7 +123,10 @@ const readGearDice = (definition, data, text) => {
     }
     const usedTyped = [...new Set([...String(text).matchAll(/@([a-z][a-z0-9_]*)/g)].map((m) => m[1]))]
       .map((id) => { const n = Number(values[id]); return { token: `@${id}`, label: String(labels.get(id) || id), value: Number.isFinite(n) ? n : 0 }; });
-    return { ok: true, low: lowSum, high: highSum, used: usedTyped, names: nameList };
+    // Each part's dice and sum, with its type as written (8e1); none where one part has no plain sum.
+    const each = parts.map((p) => ({ ...workedOf(p.text, values, names), type: p.label ? String(p.label).toUpperCase() : null }));
+    const worked = each.every((w) => Array.isArray(w.dice)) ? each : null;
+    return { ok: true, low: lowSum, high: highSum, used: usedTyped, names: nameList, worked };
   }
   const low = rollAmount(text, values, names, () => 0);
   if ('blank' in low) return { ok: true, blank: true, names: nameList };
@@ -102,7 +134,21 @@ const readGearDice = (definition, data, text) => {
   const high = rollAmount(text, values, names, () => 1 - 1e-9);
   const used = [...new Set([...String(text).matchAll(/@([a-z][a-z0-9_]*)/g)].map((m) => m[1]))]
     .map((id) => { const n = Number(values[id]); return { token: `@${id}`, label: String(labels.get(id) || id), value: Number.isFinite(n) ? n : 0 }; });
-  return { ok: true, low: Math.min(low.value, high.value), high: Math.max(low.value, high.value), used, names: nameList };
+  const one = workedOf(text, values, names);
+  return { ok: true, low: Math.min(low.value, high.value), high: Math.max(low.value, high.value), used, names: nameList, worked: one ? [{ ...one, type: null }] : null };
 };
 
-module.exports = { rollGear, readGearDice };
+/** Most boxes one asking reads (8e1): a sheet's every line of gear, each DAMAGE and DICE, at once. */
+const READ_LINES_LIMIT = 200;
+
+/**
+ * Every DAMAGE and DICE on a sheet's lines of gear read at once (8e1): one answer per text, in order, as readGearDice
+ * answers each, the sheet worked out once. Not a list, or past READ_LINES_LIMIT, is nothing read.
+ */
+const readGearLines = (definition, data, texts) => {
+  if (!Array.isArray(texts) || texts.length > READ_LINES_LIMIT) return { ok: false, error: 'Nothing to read' };
+  const reading = readingOf(definition, data);
+  return { ok: true, reads: texts.map((t) => (typeof t === 'string' ? readGearDice(definition, data, t.slice(0, 200), reading) : { ok: false, error: 'Not dice' })) };
+};
+
+module.exports = { rollGear, readGearDice, readGearLines, workedOf, READ_LINES_LIMIT };

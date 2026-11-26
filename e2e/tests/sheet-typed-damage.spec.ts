@@ -49,6 +49,13 @@ test('a typed DAMAGE at the table: a Torch\'s FIRE, and a Flame Tongue\'s SLASHI
   await expect.poll(async () => JSON.parse(String((await sheetOf()).inventory ?? '[]'))[1]?.name, { timeout: 15_000 }).toBe('Flame Tongue');
   await weapons.getByRole('button', { name: 'DONE', exact: true }).click();
 
+  // Worked out on this character (8e1): the sum done as the button, a part each with its type's icon; the formula behind its ?.
+  await expect(weapons.getByRole('button', { name: 'Roll Item 1 DAMAGE' })).toHaveText('2d6', { timeout: 15_000 });
+  await expect(weapons.getByRole('button', { name: 'Roll Item 2 DAMAGE' })).toHaveText('1d8+2d6');
+  await expect(weapons.getByRole('button', { name: 'Roll Item 2 DAMAGE' }).locator('svg')).toHaveCount(2);
+  // No names in it: the formula and its sum, nothing said twice.
+  await expect(weapons.getByRole('note', { name: '1d8 SLASHING + 2d6 FIRE DMG = 1d8 SLASHING + 2d6 FIRE (3 to 20)' })).toBeVisible();
+
   // Each rolled: the log says the type, and each part with the whole.
   const tray = mine.getByText('DICE_TRAY.EXE', { exact: true });
   const history = mine.getByTestId('dice-history').locator('> div');

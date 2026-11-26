@@ -77,13 +77,15 @@ interface Props {
   onGearRoll?: (line: number, column: string) => void;
   /** A line's DAMAGE or DICE read as typed (8a3c2). */
   onReadGearDice?: (text: string) => Promise<import('../sheets/gearDice').GearDiceRead | null>;
+  /** Every line's DAMAGE and DICE read at once, for their worked-out numbers (8e1). */
+  onReadGearLines?: (texts: string[]) => Promise<import('../sheets/gearDice').GearDiceRead[] | null>;
   /** A line's COUNT spent by its button or reloaded (8a4b). */
   onGearCount?: GearCount;
   /** PLAYERS CHANGE GEAR off at this table, for a player (G6b): the columns shown but not changed. */
   columnsLocked?: boolean;
 }
 
-export function InventorySection({ section, data, readOnly, onFieldChange, rowActions, itemsShown, gm = false, onItem, onChoices, refused, onGearRoll, onReadGearDice, onGearCount, columnsLocked = false }: Props) {
+export function InventorySection({ section, data, readOnly, onFieldChange, rowActions, itemsShown, gm = false, onItem, onChoices, refused, onGearRoll, onReadGearDice, onReadGearLines, onGearCount, columnsLocked = false }: Props) {
   const items = readInventory(data);
   // A system's items (7e3b): which line draws which, and what the last save worked out.
   const lineItems = itemLines(itemsShown, items);
@@ -141,7 +143,7 @@ export function InventorySection({ section, data, readOnly, onFieldChange, rowAc
           time somebody picks up a rope. */}
       <div className="crt-scroll" style={{ maxHeight: typed ? '360px' : '220px', overflowY: 'auto', paddingRight: '4px' }}>
         {typed && itemsShown ? (
-          <GearTypeTables items={items} itemsShown={itemsShown} readOnly={readOnly} columnsLocked={columnsLocked} write={write} locked={locked} on={onYou} under={(i) => underLine(i)} onRoll={onGearRoll} onReadDice={onReadGearDice} onCount={onGearCount} />
+          <GearTypeTables items={items} itemsShown={itemsShown} readOnly={readOnly} columnsLocked={columnsLocked} write={write} locked={locked} on={onYou} under={(i) => underLine(i)} onRoll={onGearRoll} onReadDice={onReadGearDice} onReadLines={onReadGearLines} readVersion={data} onCount={onGearCount} />
         ) : (
         <div style={{ display: 'grid', gridTemplateColumns: columns, gap: '4px 6px', alignItems: 'center' }}>
           <div style={heading}>ITEM</div>

@@ -35,6 +35,7 @@ export interface PlayerSheetActions {
   onGearRoll?: (line: number, column: string) => void;
   /** A line's DAMAGE or DICE as typed, read as ROLL would on this character (8a3c2). */
   onReadGearDice?: (text: string) => Promise<import('../sheets/gearDice').GearDiceRead | null>;
+  onReadGearLines?: (texts: string[]) => Promise<import('../sheets/gearDice').GearDiceRead[] | null>;
   /** A line's COUNT spent by its button or RELOADed (8a4b), answered by the server. */
   onGearCount?: import('../sheets/gearTypes').GearCount;
   /** Picks, drops and uses on CHOICES (7a3), levels (7d), items (7e), SPEND XP (7f2), marks (7f3), rests and recovery dice. */
@@ -206,6 +207,12 @@ export function usePlayerSheet(
       if (!socket) { resolve(null); return; }
       const timer = setTimeout(() => resolve(null), 5000);
       socket.emit('readGearDice', { text }, (answer: import('../sheets/gearDice').GearDiceRead) => { clearTimeout(timer); resolve(answer ?? null); });
+    }),
+    // Every line's DAMAGE and DICE at once (8e1), for their worked-out numbers; no answer in 5 s is none, ROLL as before.
+    onReadGearLines: (texts: string[]) => new Promise((resolve) => {
+      if (!socket) { resolve(null); return; }
+      const timer = setTimeout(() => resolve(null), 5000);
+      socket.emit('readGearLines', { texts }, (answer: { ok: boolean; reads?: import('../sheets/gearDice').GearDiceRead[] }) => { clearTimeout(timer); resolve(answer && answer.ok && answer.reads ? answer.reads : null); });
     }),
     // FIRE and RELOAD (8a4b): a gear edit still waiting its 400 ms is sent first, in order, so it can't land after the
     // server's count and put it back. No answer in 5 s is none.

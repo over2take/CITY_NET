@@ -7,7 +7,7 @@
 /** What the server read (sockets readGearDice). */
 export type GearDiceRead =
   | { ok: true; blank: true; names: DiceName[] }
-  | { ok: true; blank?: undefined; low: number; high: number; used: { token: string; label: string; value: number }[]; names: DiceName[] }
+  | { ok: true; blank?: undefined; low: number; high: number; used: { token: string; label: string; value: number }[]; names: DiceName[]; worked?: import('./gearWorked').WorkedPart[] | null }
   | { ok: false; error: string; names?: DiceName[] };
 export interface DiceName { token: string; label: string }
 

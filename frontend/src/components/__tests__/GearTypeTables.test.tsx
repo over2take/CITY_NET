@@ -39,13 +39,13 @@ const line = (name: string, more = {}) => ({ name, qty: 1, enc: '', bundled: fal
 const outside: { set: (more: Record<string, unknown>) => void } = { set: () => {} };
 const show = (lines: object[], { readOnly = false, items = ITEMS as ItemsShown | undefined, onGearRoll = undefined as ((line: number, column: string) => void) | undefined,
   onReadGearDice = undefined as ((text: string) => Promise<GearDiceRead | null>) | undefined, onGearCount = undefined as GearCount | undefined,
-  worked = undefined as object | undefined, columnsLocked = false } = {}) => {
+  worked = undefined as object | undefined, columnsLocked = false, onReadGearLines = undefined as ((texts: string[]) => Promise<GearDiceRead[] | null>) | undefined } = {}) => {
   const writes: object[][] = [];
   const Harness = () => {
     // `worked`: what the server worked out of the items (_worked), which are worn.
     const [data, setData] = useState<Record<string, unknown>>({ inventory: JSON.stringify(lines), ...(worked ? { _worked: worked } : {}) });
     outside.set = (more) => setData((d) => ({ ...d, ...more }));
-    return <InventorySection section={SECTION} data={data as never} readOnly={readOnly} itemsShown={items} columnsLocked={columnsLocked} onGearRoll={onGearRoll} onReadGearDice={onReadGearDice} onGearCount={onGearCount}
+    return <InventorySection section={SECTION} data={data as never} readOnly={readOnly} itemsShown={items} columnsLocked={columnsLocked} onGearRoll={onGearRoll} onReadGearDice={onReadGearDice} onReadGearLines={onReadGearLines} onGearCount={onGearCount}
       onFieldChange={(id, v) => { writes.push(JSON.parse(v as string)); setData((d) => ({ ...d, [id]: v })); }} />;
   };
   render(<Harness />);
@@ -774,5 +774,129 @@ describe('a DAMAGE as rows under ✎ (8b2c)', () => {
     await open(1);
     expect(table('WEAPONS').queryByRole('group', { name: 'Item 1 DAMAGE parts' })).toBeNull();
     expect((table('WEAPONS').getByRole('textbox', { name: 'Item 1 DAMAGE' }) as HTMLInputElement).value).toBe('2d6 FIRE DMG');
+  });
+});
+
+describe('the numbers worked out on the character (8e1; mockup gear-table, answered 2026-11-25)', () => {
+  const TYPED: ItemsShown = {
+    ...ITEMS,
+    list: [
+      ...ITEMS.list,
+      { id: 'striker', label: 'Bone Striker', needs: 'carried', features: [], type: 'weapons', values: { damage: '1d8 + @str_mod + 3 SLASHING DMG' } },
+      { id: 'javelin', label: 'Javelin', needs: 'carried', features: [], type: 'weapons', values: { damage: '1d6 + @str_mod PIERCING + 4d6 LIGHTNING DMG' } },
+    ],
+    damage_types: [{ id: 'slashing', name: 'Slashing', icon: 'blade' }, { id: 'piercing', name: 'Piercing', icon: 'point' }, { id: 'lightning', name: 'Lightning', icon: 'bolt' }],
+  };
+  const ok = (low: number, high: number, worked: unknown, used: { token: string; label: string; value: number }[] = []): GearDiceRead =>
+    ({ ok: true, low, high, used, names: [], worked } as GearDiceRead);
+  /** The server's answers, by text; each asking kept. */
+  const server = (answers: Record<string, GearDiceRead>) => {
+    const asked: string[][] = [];
+    return { asked, read: async (texts: string[]) => { asked.push(texts); return texts.map((t) => answers[t] ?? { ok: false, error: 'Nothing to roll' }); } };
+  };
+  const ANSWERS: Record<string, GearDiceRead> = {
+    '2d6': ok(2, 12, [{ dice: [{ count: 2, sides: 6 }], add: 0, type: null }]),
+    '1d8 + @str_mod + 3 SLASHING DMG': ok(8, 15, [{ dice: [{ count: 1, sides: 8 }], add: 7, type: 'SLASHING' }], [{ token: '@str_mod', label: 'STR mod', value: 4 }]),
+    '1d6 + @str_mod PIERCING + 4d6 LIGHTNING DMG': ok(9, 34, [{ dice: [{ count: 1, sides: 6 }], add: 4, type: 'PIERCING' }, { dice: [{ count: 4, sides: 6 }], add: 0, type: 'LIGHTNING' }]),
+    '1d20 + @str_mod': ok(5, 24, [{ dice: [{ count: 1, sides: 20 }], add: 4, type: null }]),
+    '10 - 1d4': ok(6, 9, null),
+  };
+  const rolled: [number, string][] = [];
+  const roll = (line: number, column: string) => { rolled.push([line, column]); };
+  const button = (i: number) => table('WEAPONS').getByRole('button', { name: `Roll Item ${i} DAMAGE` });
+
+  it('the sum done as the button, its type\'s icon in it; pressed, the roll ROLL made; its "?" saying the formula and the sum', async () => {
+    const s = server(ANSWERS);
+    show([line('Bone Striker')], { items: TYPED, onGearRoll: roll, onReadGearLines: s.read });
+    await waitFor(() => expect(button(1).textContent).toBe('1d8+7'));
+    expect(button(1).querySelector('svg')).toBeTruthy();
+    // Not ROLL beside it any more, nor the formula as words.
+    expect(table('WEAPONS').queryByText('ROLL')).toBeNull();
+    expect(table('WEAPONS').queryByText('1d8 + @str_mod + 3 SLASHING DMG')).toBeNull();
+    await userEvent.click(button(1));
+    expect(rolled.at(-1)).toEqual([0, 'damage']);
+    const hint = table('WEAPONS').getByRole('note', { name: /^1d8 \+ @str_mod \+ 3 SLASHING DMG · / });
+    expect(hint.getAttribute('aria-label')).toBe('1d8 + @str_mod + 3 SLASHING DMG · on this character 1d8 + STR mod (4) + 3 SLASHING DMG = 1d8 + 7 SLASHING (8 to 15)');
+    // Every box read in one asking.
+    expect(s.asked).toEqual([['1d8 + @str_mod + 3 SLASHING DMG']]);
+  });
+
+  it('several parts each with its type; a lone d20 its bonus; the item\'s faint, the line\'s own bright', async () => {
+    const withHit: ItemsShown = { ...TYPED, types: [{ ...TYPED.types![0], columns: [...TYPED.types![0].columns, { id: 'hit', label: 'HIT', kind: 'dice' }] }, TYPED.types![1]] };
+    const s = server(ANSWERS);
+    show([line('Javelin'), line('Pistol', { values: { hit: '1d20 + @str_mod' } })], { items: withHit, onGearRoll: roll, onReadGearLines: s.read });
+    await waitFor(() => expect(within(button(1)).getAllByTestId('worked').map((w) => w.textContent)).toEqual(['1d6+4', '4d6']));
+    expect(button(1).querySelectorAll('svg')).toHaveLength(2);
+    const hit = table('WEAPONS').getByRole('button', { name: 'Roll Item 2 HIT' });
+    expect(hit.textContent).toBe('+4');
+    expect(hit.style.fontSize).toBe('0.85rem');
+    expect(button(2).textContent).toBe('2d6');
+    expect(button(2).style.fontSize).toBe('0.72rem');
+    // Pistol's DAMAGE is its item's (faint); its HIT its own (bright).
+    expect(button(2).style.opacity).toBe('0.85');
+    expect(hit.style.opacity).toBe('1');
+    expect(s.asked).toHaveLength(1);
+    expect([...s.asked[0]].sort()).toEqual(['1d20 + @str_mod', '1d6 + @str_mod PIERCING + 4d6 LIGHTNING DMG', '2d6']);
+  });
+
+  it('no plain sum: as typed with ROLL and a "?"; won\'t roll: as typed, no button, the "?" saying why', async () => {
+    const s = server(ANSWERS);
+    show([line('Odd', { type: 'weapons', values: { damage: '10 - 1d4' } }), line('Bad', { type: 'weapons', values: { damage: '1d6 + @gone' } })],
+      { items: TYPED, onGearRoll: roll, onReadGearLines: s.read });
+    await waitFor(() => expect(table('WEAPONS').getByRole('note', { name: /^10 - 1d4: / })).toBeTruthy());
+    expect(button(1).textContent).toBe('ROLL');
+    expect(table('WEAPONS').getByRole('note', { name: /^10 - 1d4: / }).getAttribute('aria-label')).toBe('10 - 1d4: 6 to 9');
+    expect(table('WEAPONS').queryByRole('button', { name: 'Roll Item 2 DAMAGE' })).toBeNull();
+    expect(table('WEAPONS').getByRole('note', { name: '1d6 + @gone: Nothing to roll. It won\'t roll.' })).toBeTruthy();
+    expect(table('WEAPONS').getByText('1d6 + @gone')).toBeTruthy();
+  });
+
+  it('until read, or with nobody to ask, or nothing to roll with: as before, words and ROLL', async () => {
+    let answer!: (v: GearDiceRead[] | null) => void;
+    show([line('Bone Striker')], { items: TYPED, onGearRoll: roll, onReadGearLines: () => new Promise((r) => { answer = r; }) });
+    expect(button(1).textContent).toBe('ROLL');
+    expect(table('WEAPONS').getByText('1d8 + @str_mod + 3 SLASHING DMG')).toBeTruthy();
+    // No answer at all (the connection down): still as before.
+    await waitFor(() => expect(answer).toBeTruthy());
+    await act(async () => { answer(null); });
+    expect(button(1).textContent).toBe('ROLL');
+    cleanup();
+    show([line('Bone Striker')], { items: TYPED, onGearRoll: roll });
+    expect(button(1).textContent).toBe('ROLL');
+    cleanup();
+    // Read only with no ROLL (nothing to roll with): not asked at all.
+    const s = server(ANSWERS);
+    show([line('Bone Striker')], { items: TYPED, onReadGearLines: s.read });
+    await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
+    expect(s.asked).toHaveLength(0);
+  });
+
+  it('an answer to an older asking, come late, is not drawn over the newer one', async () => {
+    const answers: ((v: GearDiceRead[] | null) => void)[] = [];
+    const read = () => new Promise<GearDiceRead[] | null>((r) => { answers.push(r); });
+    const at = (add: number) => [ok(1 + add, 8 + add, [{ dice: [{ count: 1, sides: 8 }], add, type: 'SLASHING' }])];
+    show([line('Bone Striker')], { items: TYPED, onGearRoll: roll, onReadGearLines: read });
+    await waitFor(() => expect(answers).toHaveLength(1));
+    act(() => outside.set({ str: 20 }));
+    await waitFor(() => expect(answers).toHaveLength(2));
+    await act(async () => { answers[1](at(8)); });
+    await waitFor(() => expect(button(1).textContent).toBe('1d8+8'));
+    // The first asking's answer, late: the sheet has moved on.
+    await act(async () => { answers[0](at(7)); });
+    expect(button(1).textContent).toBe('1d8+8');
+  });
+
+  it('asked again when the sheet changes, the numbers following its stats; the last ones kept meanwhile', async () => {
+    let str = 4;
+    const asked: string[][] = [];
+    const read = async (texts: string[]) => { asked.push(texts); return texts.map(() => ok(1 + str + 3, 8 + str + 3, [{ dice: [{ count: 1, sides: 8 }], add: str + 3, type: 'SLASHING' }])); };
+    show([line('Bone Striker')], { items: TYPED, onGearRoll: roll, onReadGearLines: read });
+    await waitFor(() => expect(button(1).textContent).toBe('1d8+7'));
+    str = 5;
+    act(() => outside.set({ str: 20, str_mod: 5 }));
+    // Kept while asking.
+    expect(button(1).textContent).toBe('1d8+7');
+    await waitFor(() => expect(button(1).textContent).toBe('1d8+8'));
+    expect(asked).toHaveLength(2);
   });
 });
