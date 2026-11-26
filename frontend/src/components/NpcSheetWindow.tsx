@@ -319,6 +319,15 @@ export function NpcSheetWindow({ token, npcId, npcLabel, playerUsername, headsho
             onRoll: (fieldId: string, luck?: number, luckNegate?: boolean, pick?: RollPick) => socket.emit('requestSheetRoll', { fieldId, location_id: locationId, ...(luck ? { luck } : {}), ...(luckNegate ? { luckNegate } : {}), ...(pick ? { rollId: pick.rollId, changes: pick.changes } : {}) }),
             onRollAbility: (formula: string, label: string) => socket.emit('rollAbility', { formula, label, location_id: locationId }),
             onGearRoll: (line: number, column: string) => socket.emit('requestSheetRoll', { gear: { line, column }, location_id: locationId }),
+            // Read on the NPC's own sheet, by its token (8e1): a line's box under ✎, and every line's worked-out numbers.
+            onReadGearDice: (text: string) => new Promise<import('../sheets/gearDice').GearDiceRead | null>((resolve) => {
+              const timer = setTimeout(() => resolve(null), 5000);
+              socket.emit('readGearDice', { text, location_id: locationId }, (answer: import('../sheets/gearDice').GearDiceRead) => { clearTimeout(timer); resolve(answer ?? null); });
+            }),
+            onReadGearLines: (texts: string[]) => new Promise<import('../sheets/gearDice').GearDiceRead[] | null>((resolve) => {
+              const timer = setTimeout(() => resolve(null), 5000);
+              socket.emit('readGearLines', { texts, location_id: locationId }, (answer: { ok: boolean; reads?: import('../sheets/gearDice').GearDiceRead[] }) => { clearTimeout(timer); resolve(answer && answer.ok && answer.reads ? answer.reads : null); });
+            }),
           } : {})}
           onPortraitUpload={handlePortraitUpload}
           portraitShadow={shadowFilter}

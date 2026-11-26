@@ -14,7 +14,7 @@ const { bandConditionHook } = require('../sheets/bandConditions');
 const cyberware = require('../sheets/cyberware');
 const { ownToken } = require('../sheets/ownToken');
 const sheetRolls = require('../sheets/rolls');
-const { rollGear, readGearDice } = require('../systemBuilder/gearRolls');
+const { rollGear, readGearDice, readGearLines } = require('../systemBuilder/gearRolls');
 const { withChanges, keepColumns, PLAYERS_GEAR_SETTING } = require('../systemBuilder/uniqueLines');
 const rollEngine = require('../sheets/rollEngine');
 const sheetAttack = require('../sheets/attack');
@@ -1712,6 +1712,23 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           let data = {};
           try { data = JSON.parse(row.data || '{}'); } catch { /* read against nothing */ }
           ack(readGearDice(definition, data, text));
+        });
+      });
+    });
+
+    // Every DAMAGE and DICE on a sheet's gear read at once (8e1, gearRolls.js readGearLines): what each comes to on the sheet
+    // ROLL would roll from, for the line's worked-out numbers and their ?, answered to the asker alone.
+    socket.on('readGearLines', (payload, ack) => {
+      if (typeof ack !== 'function') return;
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !payload || typeof payload !== 'object') return ack({ ok: false, error: 'Nothing to read' });
+      getGameSystem((err, system) => {
+        const definition = err ? null : customSystems.definitionOf(system);
+        if (!definition) return ack({ ok: false, error: 'No built system is running' });
+        rollSheetOf(info, payload, system, ({ row }) => {
+          let data = {};
+          try { data = JSON.parse(row.data || '{}'); } catch { /* read against nothing */ }
+          ack(readGearLines(definition, data, payload.texts));
         });
       });
     });

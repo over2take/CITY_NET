@@ -111,3 +111,34 @@ describe('an NPC\'s sheet', () => {
     expect(s.on.mock.calls.some((c) => c[0] === 'choicesRefused')).toBe(false);
   });
 });
+
+describe('an NPC\'s gear worked out, read for its token (8e1)', () => {
+  it('its lines asked at once with the token named; the answer its numbers; its card\'s box read the same way', async () => {
+    const ARMORY = 'sys_cccccccccccccccc';
+    registerCustomTemplate({
+      id: ARMORY, name: 'Armory', parts: {}, derived: [], words: {},
+      sheet: { sections: [{ id: 'gear', label: 'GEAR', layout: 'inventory', fields: [] }] },
+      items: { slots: [], list: [{ id: 'club', label: 'Club', needs: 'carried', features: [], type: 'weapons', values: { damage: '1d6 + @str_mod' } }],
+        types: [{ id: 'weapons', label: 'WEAPONS', one: 'Weapon', columns: [{ id: 'damage', label: 'DAMAGE', kind: 'damage' }] }] },
+    } as never);
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => (String(url).includes('/api/settings')
+      ? { ok: true, json: async () => [] }
+      : { ok: true, json: async () => ({ id: 3, username: 'gm', system: ARMORY, portrait_url: null, is_npc: 1,
+        data: { name: 'Ogre', inventory: JSON.stringify([{ name: 'Club', qty: 1, enc: '', bundled: false, carry: 'readied', location: '' }]) } }) })));
+    // The server answering each asking as it comes.
+    const answer = { ok: true, reads: [{ ok: true, low: 6, high: 11, used: [], names: [], worked: [{ dice: [{ count: 1, sides: 6 }], add: 5, type: null }] }] };
+    const s = socket();
+    s.emit.mockImplementation((e: string, _p: unknown, ack?: (a: unknown) => void) => { if (e === 'readGearLines' && ack) ack(answer); });
+    render(<NpcSheetWindow token="admintoken" npcId={3} npcLabel="Ogre" locationId={12} pos={{ x: 0, y: 0 }} setPos={vi.fn()} onClose={vi.fn()} socket={s} />);
+    await waitFor(() => expect(s.emit.mock.calls.some((c) => c[0] === 'readGearLines')).toBe(true));
+    expect(s.emit.mock.calls.find((c) => c[0] === 'readGearLines')![1]).toEqual({ texts: ['1d6 + @str_mod'], location_id: 12 });
+    const club = await screen.findByRole('button', { name: 'Roll Item 1 DAMAGE' });
+    await waitFor(() => expect(club.textContent).toBe('1d6+5'));
+    fireEvent.click(club);
+    expect(s.emit).toHaveBeenCalledWith('requestSheetRoll', { gear: { line: 0, column: 'damage' }, location_id: 12 });
+    // Its card's box: read on the same NPC.
+    fireEvent.click(screen.getByRole('button', { name: /, item 1$/ }));
+    await waitFor(() => expect(s.emit.mock.calls.some((c) => c[0] === 'readGearDice')).toBe(true));
+    expect(s.emit.mock.calls.find((c) => c[0] === 'readGearDice')![1]).toEqual({ text: '1d6 + @str_mod', location_id: 12 });
+  });
+});

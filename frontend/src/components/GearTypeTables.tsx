@@ -8,6 +8,10 @@ import { FormulaIcon } from './FormulaIcon';
 import { DamageRows } from './DamageRows';
 import { damageParts } from '../sheets/damageRows';
 import type { DamageTypeShown } from '../sheets/gearItems';
+import { cellShown, textsToRead } from '../sheets/gearWorked';
+import { useGearReads } from '../hooks/useGearReads';
+import { HelpHint } from './HelpHint';
+import { IconLook } from './IconLook';
 
 // A custom system's gear by item type (8a3a; approved mockup docs/mockups/item-types.html, 2026-11-14), each thing one
 // compact line (8a3c1; approved mockup docs/mockups/gear-compact.html, 2026-11-15, after the user saw SHEET.EXE's table
@@ -51,11 +55,28 @@ interface Props {
   /** A DAMAGE or DICE as typed under ✎, read as ROLL would on this character (8a3c2): its words line and eˣ. */
   onReadDice?: (text: string) => Promise<GearDiceRead | null>;
   /**
+   * Every DAMAGE and DICE on the lines read at once (8e1): what each comes to on this character, for its worked-out number
+   * on the line and its "?". Asked again when the lines or `readVersion` (the sheet) change. Without it, ROLL as before.
+   */
+  onReadLines?: (texts: string[]) => Promise<GearDiceRead[] | null>;
+  /** The sheet as it is now: a change asks the lines again, their numbers following its stats. */
+  readVersion?: unknown;
+  /**
    * A COUNT's button (FIRE, USE) or RELOAD, done by the server (8a4b): the line by its place, the column by id, RELOAD's
    * `from` the carried line picked once asked. Null where no answer came.
    */
   onCount?: (index: number, column: string, kind: CountKind, from?: number) => Promise<CountAnswer | null>;
 }
+
+/**
+ * A worked-out number as its button (8e1; mockup gear-table): a solid box, the theme's color, a lone d20's bonus larger;
+ * the item's faint as its words were, a line's own bright.
+ */
+const workedButton = (bonus: boolean, items: boolean): React.CSSProperties => ({
+  background: 'none', border: '1px solid var(--green)', color: 'var(--green)', fontFamily: 'inherit', cursor: 'pointer', whiteSpace: 'nowrap',
+  fontSize: bonus ? '0.85rem' : '0.72rem', fontWeight: 'bold', padding: '0 6px', lineHeight: 1.5, opacity: items ? 0.85 : 1,
+  display: 'inline-flex', alignItems: 'center',
+});
 
 const input: React.CSSProperties = {
   background: 'color-mix(in srgb, var(--black) 50%, transparent)', border: '1px solid var(--green)', color: 'var(--green)',
@@ -207,7 +228,7 @@ function DiceBox({ cell, label, onType, onRead, damageTypes, focus = false, read
   );
 }
 
-export function GearTypeTables({ items, itemsShown, readOnly, columnsLocked = false, write, locked, on, under, onRoll, onReadDice, onCount }: Props) {
+export function GearTypeTables({ items, itemsShown, readOnly, columnsLocked = false, write, locked, on, under, onRoll, onReadDice, onReadLines, readVersion, onCount }: Props) {
   // The one line open under ✎, by its place in the inventory.
   const [open, setOpen] = useState<number | null>(null);
   // The box the open card starts at: a column's id from FILL IN, 'name' for a line made by hand, else none.
@@ -218,6 +239,11 @@ export function GearTypeTables({ items, itemsShown, readOnly, columnsLocked = fa
   // Waiting on the server: the buttons held, so a quick second FIRE never spends from an answer not yet back.
   const [busy, setBusy] = useState(false);
   const tables = gearTables(itemsShown, items);
+  // What each DAMAGE and DICE comes to on this character (8e1), every line's at once.
+  const reads = useGearReads(
+    textsToRead(tables.flatMap((t) => t.rows.flatMap((r) => shownCells(r.columns).map((c) => ({ kind: c.column.kind, text: valueText(c.value) }))))),
+    onRoll ? onReadLines : undefined, readVersion);
+  const typeLook = (name: string | null) => (name ? (itemsShown.damage_types ?? []).find((t) => t.name.trim().toUpperCase() === name) : undefined);
   const patch = (i: number, next: InventoryItem) => write(items.map((it, n) => (n === i ? next : it)));
   const remove = (i: number) => {
     write(items.filter((_, n) => n !== i));
@@ -286,14 +312,34 @@ export function GearTypeTables({ items, itemsShown, readOnly, columnsLocked = fa
             const word = cell.column.label.toUpperCase();
             const button = (cell.column.button || 'USE').toUpperCase();
             const reload = cell.column.reload ?? [];
+            // Worked out on this character (8e1): the sum done as the button, the formula behind its "?"; as typed where it
+            // has no plain sum or won't roll; as before until the server has read it.
+            const shown = rolls ? cellShown(valueText(cell.value), reads.get(valueText(cell.value))) : null;
             return (
               <span key={cell.column.id} role="note" aria-label={`${label}: ${cellWords(cell, line)}`} style={{ display: 'inline-flex', gap: '4px', alignItems: 'center', whiteSpace: 'nowrap' }}>
                 <b style={{ ...small, fontWeight: 'normal' }}>{word}</b>
-                <span title={cell.own === undefined ? 'As the item has it' : 'This line\'s own'} style={{ opacity: cell.own === undefined ? 0.7 : 1 }}>{cellWords(cell, line)}</span>
-                {rolls && (
+                {shown?.kind === 'roll' ? (
+                  <button type="button" className="utility-btn" aria-label={`Roll ${label}`} title={`Roll ${valueText(cell.value)}`}
+                    onClick={() => onRoll!(i, cell.column.id)} style={workedButton(shown.parts.length === 1 && /^[+−]\d+$/.test(shown.parts[0].text), cell.own === undefined)}>
+                    {shown.parts.map((p, k) => {
+                      const look = typeLook(p.type);
+                      return (
+                        <React.Fragment key={k}>
+                          {k > 0 && <span style={{ opacity: 0.7, margin: '0 4px' }}>+</span>}
+                          <span data-testid="worked">{p.text}</span>
+                          {look && <span aria-hidden style={{ display: 'inline-flex', marginLeft: '2px' }}><IconLook icon={look.icon} drawn={look.drawn} size={11} /></span>}
+                        </React.Fragment>
+                      );
+                    })}
+                  </button>
+                ) : (
+                  <span title={cell.own === undefined ? 'As the item has it' : 'This line\'s own'} style={{ opacity: cell.own === undefined ? 0.7 : 1 }}>{cellWords(cell, line)}</span>
+                )}
+                {rolls && shown?.kind !== 'roll' && shown?.kind !== 'wont' && (
                   <button type="button" className="utility-btn" aria-label={`Roll ${label}`} title={`Roll ${valueText(cell.value)}`}
                     onClick={() => onRoll(i, cell.column.id)} style={smallButton}>ROLL</button>
                 )}
+                {shown && shown.kind !== 'reading' && <HelpHint text={shown.hint} />}
                 {left && (
                   <button type="button" className="utility-btn" aria-label={`${button} ${label}`} disabled={busy || left.now <= 0}
                     title={left.now <= 0 ? `No ${word} left` : `Use one of the ${word}`}

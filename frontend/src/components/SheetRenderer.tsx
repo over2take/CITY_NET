@@ -153,6 +153,8 @@ export interface SheetRendererProps {
   onGearRoll?: (line: number, column: string) => void;
   /** A line's DAMAGE or DICE as typed under ✎, read as ROLL would on this character (8a3c2): the box's words and eˣ. */
   onReadGearDice?: (text: string) => Promise<import('../sheets/gearDice').GearDiceRead | null>;
+  /** Every line's DAMAGE and DICE read at once, for their worked-out numbers (8e1). */
+  onReadGearLines?: (texts: string[]) => Promise<import('../sheets/gearDice').GearDiceRead[] | null>;
   /** A line's COUNT spent by its button (FIRE) or RELOADed, by the server (8a4b): its answer, to ask which to reload from. */
   onGearCount?: import('../sheets/gearTypes').GearCount;
   /** SPEND XP's BUY, and the GM's APPROVE, DECLINE and UNDO (7f2c1): asks the server (a spendAction). */
@@ -1891,7 +1893,7 @@ function dropEmptyRetired(section: SheetSection, data: SheetData): SheetSection 
   return fields.length === 0 ? null : { ...section, fields };
 }
 
-export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onGearRoll, onReadGearDice, onGearCount, onSpend, onImprove, vitals, carryingShown = true, playersChangeGear = true }: SheetRendererProps) {
+export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onFieldChange, portraitUrl, onPortraitUpload, portraitShadow, onTogglePortraitShadow, onOpenLink, onRoll, onDeathSave, onStabilize, allowFumbleShield = false, xpRate, encumbranceEnforced = false, hiddenTabs, onCastSpell, onRollAbility, onResistDrain, onFieldsChange, onSectionAction, gm = false, onChoices, choicesRefused, onLevel, onRecoverySpend, recoveryOpen, onRestTake, onItem, onGearRoll, onReadGearDice, onReadGearLines, onGearCount, onSpend, onImprove, vitals, carryingShown = true, playersChangeGear = true }: SheetRendererProps) {
   // The vitals strip's REST ▾ (8s3c): the sheet's own RESTS, where this character has a rest to take from here or the GM
   // has called one; on the player's own sheet, beside the strip.
   const restView = vitals && !readOnly && onRestTake && template.resting ? restSection(template.resting, data as Record<string, unknown>, gm) : null;
@@ -2140,7 +2142,7 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
                   {section.layout === 'spells' && <SpellsSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onCastSpell={onCastSpell} />}
                   {section.layout === 'ability_list' && <AbilityListSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onRollAbility={onRollAbility} onResistDrain={onResistDrain} />}
                   {section.layout === 'inventory' && <InventorySection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} rowActions={[consumeAction, loadAction].filter(Boolean) as RowAction[]}
-                    itemsShown={template.items} gm={gm} columnsLocked={playersChangeGear === false && !gm} onItem={onItem} onGearRoll={onGearRoll} onReadGearDice={onReadGearDice} onGearCount={onGearCount} onChoices={onChoices} refused={choicesRefused} />}
+                    itemsShown={template.items} gm={gm} columnsLocked={playersChangeGear === false && !gm} onItem={onItem} onGearRoll={onGearRoll} onReadGearDice={onReadGearDice} onReadGearLines={onReadGearLines} onGearCount={onGearCount} onChoices={onChoices} refused={choicesRefused} />}
                   {section.layout === 'weapon_stash' && <WeaponStashSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} onFieldsChange={onFieldsChange} rows={weaponRows} />}
                   {section.layout === 'encumbrance' && <EncumbranceSection section={section} data={data} readOnly={readOnly} onFieldChange={onFieldChange} enforced={encumbranceEnforced} />}
                   {section.layout === 'cyberware' && <CyberwareSection section={section} template={template} data={data} readOnly={readOnly} onFieldChange={onFieldChange} />}
