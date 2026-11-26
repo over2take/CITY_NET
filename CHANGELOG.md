@@ -9,6 +9,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **A condition icon floating where an offline player's token should be.** While a player is offline their token isn't drawn, and its health bar already went with it, but its condition icons (and a vehicle's tag) stayed hanging over the empty spot. They now come and go with the token.
 - **A line of gear's card said NO TYPE while using its item's SLASHING dice.** Open ✎ on a Bone Striker line that uses the item's own damage and the TYPE picker said NO TYPE (or the column's MOST LINES ARE), so it read as if the weapon had no damage type, and dice typed there lost the item's type. It now shows the item's type faintly, with THE ITEM'S beside it, until the line has its own, and dice typed there keep it. An item with several parts says THE ITEM'S.
 - **A GM running several NPCs sent one NPC's damage to another NPC's target.** In a game made in the builder, the Ogre hit Kes, then the Goblin hit Mira, and the Ogre's damage landed on Mira (the Goblin's attack had also let the Ogre's hit go). Now each character's hit waits for that character's own damage: the Ogre's reaches Kes, the Goblin's Mira. A character attacking again, or missing, lets only its own last hit go.
 - **A roll shown twice in the dice tray's history.** Rolling from a sheet (a gear line's DAMAGE) opens the tray at once, and the roll could reach it before the history it asks for, which already held it: the line was recorded a second time as the dice landed. Each roll is now in the record once.
