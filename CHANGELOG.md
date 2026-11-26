@@ -826,6 +826,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **The attack box is in your theme's colors.** The DICE_ROLLER's ATTACK ROLL box drew red text on a dark red ground, with a red FIRE button and grey CANCEL ATTACK, whatever the theme, which was hard to read, for colour-blind players above all. It now uses the theme's own colors, like every other window.
 - **HP DETAILS ▾.** The button under CURRENT / MAX / TEMP on the sheet said HIT POINTS ▾ (or a track's name), which read as a name for the numbers above it rather than a button. It now says HP DETAILS ▾, in your game's own word for HP, and opens the injury map, resistances and vulnerabilities as before.
 - **The sheet's HEALTH drawer is shorter.** HP DETAILS ▾ under the sheet's HP box no longer repeats the heart monitor and the big HP numbers the box already shows. What's left is INJURIES, centered, opening the injury map in place, in SHEET.EXE and the sheet's own tab alike. The map's HEALTH window is as it was.
 - **A shop's column heads work from the keyboard.** Each head (NAME, PRICE, DAMAGE…) can now be reached with Tab and pressed with Enter or Space to sort, shows a focus ring in the theme's color, and tells a screen reader how the column is sorted.

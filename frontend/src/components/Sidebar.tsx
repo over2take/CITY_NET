@@ -750,7 +750,7 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
     return (
       <div style={{ marginBottom: '6px' }}>
         {picker}
-        <div style={{ color: '#888', fontSize: '0.7rem' }}>
+        <div style={{ color: 'var(--green)', opacity: 0.75, fontSize: '0.7rem' }}>
           {loading ? 'READING ITS SHEET…' : attacker === null
             ? <>NO USABLE WEAPONS — set NAME, DMG (e.g. {cfg.dmgExample}) and SKILL on your CHARACTER_SHEET weapons rows.</>
             : <>NO USABLE WEAPONS — its sheet has no weapon row with NAME, DMG (e.g. {cfg.dmgExample}) and SKILL. Only the GM changes it.</>}
@@ -807,7 +807,7 @@ export function SheetAttackPanel({ system, userName, socketRef, targetId, rhombu
           )}
         </label>
       )}
-      <button className="upload-btn" style={{ width: '100%', padding: '6px', backgroundColor: '#cc2200', color: '#fff', fontWeight: 'bold' }} onClick={fire}>
+      <button className="upload-btn" style={{ width: '100%', padding: '6px', fontWeight: 'bold' }} onClick={fire}>
         {isMelee ? (system === 'cities_without_number' ? 'STRIKE' : 'SWING') : 'FIRE'}
       </button>
     </div>
@@ -920,8 +920,9 @@ export function DiceMenu({ userName, token, writeToken, locations = [], socketRe
       </header>
 
       {attackPending && (
-        <div style={{ marginBottom: '10px', padding: '8px 10px', border: '1px solid #cc2200', background: 'rgba(30,0,0,0.7)', flexShrink: 0 }}>
-          <div style={{ color: '#ff4444', fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '1px' }}>
+        // In the theme's own colors, as every window (the user, 2026-11-25: red on red was hard to read, colour blind above all).
+        <div data-testid="attack-box" style={{ marginBottom: '10px', padding: '8px 10px', border: '1px solid var(--green)', background: 'var(--panel-bg)', flexShrink: 0 }}>
+          <div style={{ color: 'var(--green)', fontSize: '0.8rem', fontWeight: 'bold', marginBottom: '4px', letterSpacing: '1px' }}>
             ATTACK ROLL — vs {attackPending.targetName}
           </div>
           {attackPending.vehicle && (
@@ -936,7 +937,7 @@ export function DiceMenu({ userName, token, writeToken, locations = [], socketRe
                   ABOARD: {attackPending.vehicle.occupants!.join(', ').toUpperCase()}
                 </div>
               )}
-              <div style={{ color: '#888', marginTop: '2px' }}>
+              <div style={{ color: 'var(--green)', opacity: 0.75, marginTop: '2px' }}>
                 DAMAGE HITS THE VEHICLE UNTIL IT IS DESTROYED
               </div>
             </div>
@@ -964,7 +965,7 @@ export function DiceMenu({ userName, token, writeToken, locations = [], socketRe
               authToken={writeToken || token}
             />
           )}
-          <button className="upload-btn" style={{ width: '100%', padding: '5px', fontSize: '0.75rem', backgroundColor: 'transparent', color: '#888', border: '1px solid #444' }} onClick={() => { socketRef.current?.emit('cancelAttack'); onCancelAttack?.(); }}>
+          <button className="upload-btn" style={{ width: '100%', padding: '5px', fontSize: '0.75rem' }} onClick={() => { socketRef.current?.emit('cancelAttack'); onCancelAttack?.(); }}>
             CANCEL ATTACK
           </button>
         </div>
