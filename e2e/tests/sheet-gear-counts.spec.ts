@@ -54,6 +54,9 @@ test('a COUNT at the table: FIRE spends one, RELOAD asks which and takes from th
   await expect(pistol.getByRole('note', { name: 'Item 1 AMMO: 1 / 6' })).toBeVisible({ timeout: 15_000 });
   await expect.poll(async () => (await gear())[0].counts, { timeout: 15_000 }).toEqual({ ammo: 1 });
 
+  // What it reloads from, carried, said beside it (8e2a): both kinds, and after each RELOAD what is left.
+  await expect(pistol.getByRole('note', { name: 'Item 1 AMMO carried' })).toHaveText('· PISTOL ROUNDS ×10 · AP ROUNDS ×3 CARRIED');
+
   // RELOAD with both carried: asked which, each with how many; the AP Rounds, all 3, gone once used up.
   await pistol.getByRole('button', { name: 'Reload Item 1 AMMO' }).click();
   const which = pistol.getByRole('group', { name: 'Item 1 reload AMMO from' });
@@ -61,12 +64,14 @@ test('a COUNT at the table: FIRE spends one, RELOAD asks which and takes from th
   await which.getByRole('button', { name: 'AP Rounds ×3' }).click();
   await expect(pistol.getByRole('note', { name: 'Item 1 AMMO: 4 / 6' })).toBeVisible({ timeout: 15_000 });
   await expect.poll(async () => (await gear()).map((l) => l.name), { timeout: 15_000 }).toEqual(['Pistol', 'Pistol Rounds', 'Wand']);
+  await expect(pistol.getByRole('note', { name: 'Item 1 AMMO carried' })).toHaveText('· PISTOL ROUNDS ×10 CARRIED');
 
   // RELOAD with the Pistol Rounds alone: no asking, as many as fit; full, RELOAD held.
   await pistol.getByRole('button', { name: 'Reload Item 1 AMMO' }).click();
   await expect(pistol.getByRole('note', { name: 'Item 1 AMMO: 6 / 6' })).toBeVisible({ timeout: 15_000 });
   await expect(pistol.getByRole('button', { name: 'Reload Item 1 AMMO' })).toBeDisabled();
   await expect.poll(async () => (await gear())[1].qty, { timeout: 15_000 }).toBe(8);
+  await expect(pistol.getByRole('note', { name: 'Item 1 AMMO carried' })).toHaveText('· PISTOL ROUNDS ×8 CARRIED');
 
   // The Wand: CHARGES with no RELOAD, filled by a short rest from the sheet.
   const wand = mine.getByTestId('gear-line-2');
