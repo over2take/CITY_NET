@@ -10,7 +10,7 @@
 // left, and the incoming system's are brought back, or blanks where that system has never seen
 // the token. One transaction, so a switch happens entirely or not at all.
 
-const FIELDS = ['hp_current', 'hp_max', 'hp_temp', 'melee_ac', 'ranged_ac', 'injuries', 'conditions'];
+const FIELDS = ['hp_current', 'hp_max', 'hp_temp', 'melee_ac', 'ranged_ac', 'injuries', 'conditions', 'dying'];
 /** What a token shows where a system has never seen it, for the fields that are lists rather than numbers. */
 const EMPTY = { injuries: '{}', conditions: '[]' };
 const TOKEN_SHAPES = ['rhombus', 'enemy_rhombus', 'friendly_rhombus'];

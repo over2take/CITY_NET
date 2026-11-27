@@ -40,6 +40,7 @@ const { inventoryAdded } = require('../sheets/inventoryImport');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { hitOnTarget, targetOf, takeOff, HIT_WAITS_MS } = require('../tokens/hitOnTarget');
+const { setAnnouncer: setDyingAnnouncer } = require('../tokens/dyingTable');
 const { hitsOn, mayApply, shownTo, appliedWords, dismissedWords, keepHit, rowWords } = require('../tokens/waitingHits');
 const { sendableGear, sendableField, targetsOf, sentWords, sendShown, keepSendable, sendsOf, claimSend, nameSend, dropSend } = require('../tokens/sendTo');
 const { attackAsProblem, characterKey, createHitsWaiting } = require('../tokens/attackAs');
@@ -144,6 +145,26 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
   // their own (6c4h, utils/rollSeen.js); and whose is the GM's (the main admin's, not an editor's).
   const connections = new Map();
   const isGmSocket = (s) => !!userSockets.get(s.id)?.isAdmin;
+  /** Whether a line kept for some (`dice_rolls.seen_by`, 8c1b1) reaches this socket: the GM's every one, a player's their own. */
+  const seesLine = (s, seenBy) => seenBy === null || seenBy === undefined || isGmSocket(s) || (!!seenBy && userSockets.get(s.id)?.userName === seenBy);
+
+  // Dying at the table (8c1b1, tokens/dyingTable.js): the map redrawn where a token's state changed, and each line said to
+  // the token's player and the GM alone (the count is theirs, the mockup's answer 5), kept for the history as that.
+  setDyingAnnouncer(({ lines, changed, owner }) => {
+    if (changed) {
+      emitUpdate({ isRhombusOnly: true });
+      if (owner) io.emit('sheetUpdated', { username: owner });
+    }
+    for (const { line, seenBy, account } of lines) {
+      const who = line.split(' · ')[0];
+      const data = { userName: who, account: account || who, results: {}, modifiers: [], color: '#00ff00', total: 0, historyString: line, quiet: true };
+      db.run('INSERT INTO dice_rolls (username, total, results, color, historyString, seen_by) VALUES (?, 0, ?, ?, ?, ?)', [data.account, '{}', data.color, line, seenBy], (e) => {
+        if (e) console.error('[dying] Could not keep a line:', e.message);
+        // No dice in a dying line: its throw is empty, sent as every roll's is.
+        for (const s of connections.values()) if (seesLine(s, seenBy)) s.emit('diceRollBroadcast', withThrow(data));
+      });
+    }
+  });
 
   // Attack system: one pending attack per socket. Cleared on roll, cancel, or disconnect.
   // { targetId, attackType: 'melee' | 'ranged', ac }
@@ -305,11 +326,12 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
 
     socket.on('requestDiceHistory', () => {
       // Newest first by when each was kept: two rolls in one second (a HIT's to-hit and its damage, 8b5c) keep their order.
-      db.all('SELECT * FROM dice_rolls ORDER BY timestamp DESC, id DESC LIMIT 5', (err, rows) => {
+      db.all('SELECT * FROM dice_rolls ORDER BY timestamp DESC, id DESC LIMIT 50', (err, rows) => {
         if (!err && rows) {
           // Each their own line where a roll's target was kept from players (6c4h).
           const gm = isGmSocket(socket);
-          const lines = rows.reverse();
+          // The last five this person may read: a line kept for some (a dying token's, 8c1b1) only theirs.
+          const lines = rows.filter((r) => seesLine(socket, r.seen_by)).slice(0, 5).reverse();
           // The GM's lines that may be sent on, with where each went (SEND TO, 8b7a); nobody else's.
           const done = (sends) => socket.emit('diceRollHistory', lines.map(r => ({
             userName: r.username, total: r.total, results: JSON.parse(r.results), color: r.color, historyString: historyFor(r, gm),

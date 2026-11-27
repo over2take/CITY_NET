@@ -47,6 +47,7 @@ function makeTestDb() {
         ranged_ac INTEGER,
         injuries TEXT DEFAULT '{}',
         conditions TEXT DEFAULT '[]',
+        dying TEXT,
         controllers TEXT,
         is_global INTEGER DEFAULT 0,
         has_sidewalk INTEGER DEFAULT 1,
@@ -302,6 +303,7 @@ function makeTestDb() {
         ranged_ac INTEGER,
         injuries TEXT DEFAULT '{}',
         conditions TEXT DEFAULT '[]',
+        dying TEXT,
         PRIMARY KEY (location_id, system)
       )`);
 
