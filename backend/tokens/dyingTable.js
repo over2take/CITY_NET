@@ -138,9 +138,11 @@ const onDown = (db, { runtime, locationId }, job) => get(db, `SELECT ${TOKEN} FR
  * A death save (8c1b2; the mockup's answer 3): pressed by the token's player or the GM, rolled on the server with the
  * character's own numbers. In a fight it waits for their turn (the GM's needn't); out of one each save is a turn. A natural
  * that brings them back heals 1, as HEAL would, and being healed above 0 then lets the rest go (noticeHealth). `who` is the
- * one who pressed it, as the log names them. Resolves to { ok: true, st, words } or { ok: false, error }.
+ * one who pressed it, as the log names them. `hits` is tokens/hitOnTarget.js's { targetOf, takeOff }, handed in (it needs
+ * packages a frontend test may not load, frontend/src/__tests__/crossBoundaryImports.test.ts). Resolves to { ok: true, st,
+ * words } or { ok: false, error }.
  */
-const rollDeathSave = (db, { runtime = require('../systemBuilder/runtime'), locationId, byGm = false, who, account = null, rng }) => onDown(db, { runtime, locationId }, async (row, rule, system) => {
+const rollDeathSave = (db, { runtime = require('../systemBuilder/runtime'), hits, locationId, byGm = false, who, account = null, rng }) => onDown(db, { runtime, locationId }, async (row, rule, system) => {
   const st = stateOf(row.dying);
   const definition = runtime.definitionOf(system);
   const values = effectiveData(definition, await sheetOf(db, row, system));
@@ -155,13 +157,12 @@ const rollDeathSave = (db, { runtime = require('../systemBuilder/runtime'), loca
       changed: true, owner: isPlayer(row) ? row.owner : null,
     });
   }
-  if (made.heal > 0) await backUp(db, { system, health: runtime.health(system), row, amount: made.heal });
+  if (made.heal > 0) await backUp(db, { hits, system, health: runtime.health(system), row, amount: made.heal });
   return { ok: true, st: made.st, words: made.words };
 });
 
 /** Healed by `amount` as HEAL heals under the game's health model, every copy of a player's token alike. */
-const backUp = (db, { system, health, row, amount }) => new Promise((ok) => {
-  const { targetOf, takeOff } = require('./hitOnTarget');
+const backUp = (db, { hits: { targetOf, takeOff }, system, health, row, amount }) => new Promise((ok) => {
   targetOf(db, row.id, system, (target) => (target ? takeOff(db, { system, health, target, amount, kind: 'heal' }, ok) : ok(null)));
 });
 

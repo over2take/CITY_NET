@@ -359,7 +359,7 @@ const fight = async (combatants) => {
   await run(db, 'INSERT INTO initiative_scene (scene_key, combat_id, combatants, turn_index, begun) VALUES (\'main\', ?, ?, 0, 1)', [combat, JSON.stringify(combatants)]);
 };
 const down = async (id = kes) => { await hp(id, 0); await noticeHealth(db, { locationId: id, hurt: true }); heard = []; };
-const save = (shown, more = {}) => rollDeathSave(db, { locationId: kes, who: 'kes', account: 'kes', rng: faces(20, ...shown), ...more });
+const save = (shown, more = {}) => rollDeathSave(db, { hits: { targetOf, takeOff }, locationId: kes, who: 'kes', account: 'kes', rng: faces(20, ...shown), ...more });
 
 describe('the death save (8c1b2)', () => {
   it('rolled with the character\'s numbers, kept, and said with its dice to the player and the GM', async () => {
@@ -525,5 +525,23 @@ describe('pressed at the table (8c1b2)', () => {
     await run(db, 'INSERT INTO initiative_scene (scene_key, combat_id, combatants, turn_index, begun) VALUES (\'main\', ?, ?, 0, 1)', [combat, JSON.stringify([{ id: 'player:kes' }])]);
     expect(await k.ask('deathSave', { locationId: kes })).toEqual({ ok: false, error: 'A death save waits for their turn' });
     expect(await gm.ask('deathSave', { locationId: kes })).toEqual({ ok: true });
+  });
+
+  it('DEATH SAVE pressed: a natural that brings them back heals them at the table too', async () => {
+    // Every face a natural BACK WITH 1 HP, so the server's own dice can only bring them back.
+    await setUp(SYSTEM({ ...DND, save: { dice: '1d2', target: '2' }, naturals: [{ face: 1, then: 'back_up' }, { face: 2, then: 'back_up' }] }));
+    await fight();
+    let connection;
+    const io = { on: (e, cb) => { if (e === 'connection') connection = cb; }, emit: () => {}, to: () => ({ emit: () => {} }) };
+    socketsFactory(io, db, { elevatedUsers: new Set(), emitUpdate: vi.fn(), recordAction: vi.fn() });
+    const handlers = {};
+    connection({ id: 'press-kes', on: (e, fn) => { handlers[e] = fn; }, emit: () => {}, broadcast: { emit: () => {} }, use: () => {}, join: () => {}, disconnect: () => {} });
+    handlers.identify('kes');
+    await drain(db);
+    await hp(kes, 0);
+    await noticeHealth(db, { locationId: kes, hurt: true });
+    expect(await new Promise((ok) => handlers.deathSave({ locationId: kes }, ok))).toEqual({ ok: true });
+    await until(async () => (await states('kes'))[0] === null, { label: 'back up' });
+    expect((await all(db, "SELECT hp_current FROM locations WHERE owner = 'kes'")).map((r) => r.hp_current)).toEqual([1, 1]);
   });
 });

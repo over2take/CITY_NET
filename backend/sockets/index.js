@@ -3018,7 +3018,7 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
         if (err || !row) return reply({ ok: false, error: 'No such token' });
         const own = row.shape === 'rhombus' && row.owner === info.userName;
         if (!gm && !own) return reply({ ok: false, error: 'Only their player or the GM rolls it' });
-        rollDeathSave(db, { runtime: customSystems, locationId: Number(payload.locationId), byGm: gm, who: identity.displayName(info.userName), account: info.userName, rng: cryptoRng })
+        rollDeathSave(db, { runtime: customSystems, hits: { targetOf, takeOff }, locationId: Number(payload.locationId), byGm: gm, who: identity.displayName(info.userName), account: info.userName, rng: cryptoRng })
           .then((done) => reply(done.ok ? { ok: true } : { ok: false, error: done.error }))
           .catch(() => reply({ ok: false, error: 'Could not be rolled' }));
       });
