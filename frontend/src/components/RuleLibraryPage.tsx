@@ -3,6 +3,7 @@ import type { Definition, systemsApi } from '../sheets/systemsApi';
 import {
   dyingOn, dyingOf, withDyingOn, withPreset, presetNow, withDying, withSave, withNpcs, wholeTyped, withNaturalAdded, withNatural, withoutNatural,
   asks, startsWhen, LIMITS, WAYS, HURTS, NATURAL_THENS, PRESETS, type NaturalThen,
+  helperFields, stabilizeConditions, stabilizeOf, withStabilizePart, STABILIZE_THENS,
 } from '../sheets/dying';
 import { useFormulaBox } from '../hooks/useFormulaBox';
 import { HINTS } from '../sheets/builderHelp';
@@ -12,7 +13,8 @@ import { ToggleSwitch } from './ToggleSwitch';
 // The builder's RULE LIBRARY page (8c2; approved mockup docs/mockups/rule-library.html, 2026-11-26, every recommended answer):
 // rules the app already knows, a card each, for the GM to switch on and fill in, never wire. Its first, WHEN HEALTH RUNS OUT:
 // death saves in one of four ways, picked from a preset named after a game and then changed as the GM likes. The card's switch
-// is the PARTS row DEATH SAVES'. Stabilize (8c4) and LUCK (8c5) come later. What it reads and writes is sheets/dying.ts; every
+// is the PARTS row DEATH SAVES'. STABILIZE (8c4b1): what someone else rolls to bring them back, under its own line. LUCK (8c5)
+// comes later. What it reads and writes is sheets/dying.ts; every
 // change goes through the builder's `edit`.
 
 interface Props {
@@ -187,11 +189,65 @@ function DyingCard({ definition, edit, api }: Props) {
             <span style={{ ...why, fontSize: 11 }}>an NPC left out is out at 0, as today</span>
           </span>
         </div>
+        <StabilizePart definition={definition} edit={edit} />
         <p style={{ ...why, fontSize: 11 }}>
-          Healed above 0 at any time: all of it is cleared. DEAD is never undone by a roll or a turn: the GM heals them back if the table says so.
+          Healed above 0 at any time, by anyone (a potion, a spell, a rest): all of it is cleared, DEAD too. No roll or turn undoes DEAD.
           The save is rolled on the character&apos;s sheet, and in a fight on their turn.
         </p>
       </>}
+    </section>
+  );
+}
+
+/** STABILIZE (8c4b1; the mockup's card): what someone else rolls, from their own sheet, to bring a character down back. */
+function StabilizePart({ definition, edit }: Pick<Props, 'definition' | 'edit'>) {
+  const s = stabilizeOf(definition);
+  const fields = helperFields(definition);
+  const field = s ? fields.find((f) => f.field === s.field) : undefined;
+  const conditions = stabilizeConditions(definition);
+  const set = (patch: Parameters<typeof withStabilizePart>[1]) => edit(withStabilizePart(definition, patch));
+  return (
+    <section aria-label="Stabilize" style={{ borderTop: '1px dashed var(--dark-green)', paddingTop: '10px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <span style={small}>STABILIZE · someone else brings them back</span>
+      <div style={grid}>
+        <FieldName beside htmlFor="stabilize-field" hint={HINTS['library.helper']} style={small}>THE HELPER ROLLS</FieldName>
+        <span style={row}>
+          <select id="stabilize-field" value={s?.field ?? ''} style={input} onChange={(e) => set({ field: e.target.value })}>
+            <option value="">— none: the GM says</option>
+            {fields.map((f) => <option key={f.field} value={f.field}>{f.label}</option>)}
+            {s && !field && <option value={s.field}>{s.field.toUpperCase()} (NO ROLL)</option>}
+          </select>
+          {field && field.rolls.length > 1 && (
+            <select aria-label="Its roll" value={s?.roll ?? ''} style={input} onChange={(e) => set({ roll: e.target.value || undefined })}>
+              <option value="">{field.rolls[0].label} (ITS FIRST)</option>
+              {field.rolls.slice(1).map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+            </select>
+          )}
+          <span style={{ ...why, fontSize: 11 }}>{fields.length ? 'one of this game\'s rolls, on the helper\'s own sheet' : 'this game has no rolls yet: give a field one on STATS & RULES'}</span>
+        </span>
+        {s && <>
+          <FieldName beside htmlFor="stabilize-vs" hint={HINTS['library.vs']} style={small}>VS</FieldName>
+          <span style={row}>
+            <input id="stabilize-vs" type="text" maxLength={LIMITS.text} value={s.vs} placeholder="10, 8 + @turns" style={{ ...input, width: '10em' }}
+              aria-invalid={!s.vs.trim() ? true : undefined} onChange={(e) => set({ vs: e.target.value })} />
+            <span style={{ ...why, fontSize: 11 }}>a number, or a formula: @turns is how long they&apos;ve been down</span>
+          </span>
+          <FieldName beside hint={HINTS['library.then']} style={small}>THEN THEY ARE</FieldName>
+          <Segs name="Then they are" of={STABILIZE_THENS} value={s.then} onPick={(t) => set({ then: t })} />
+          <FieldName beside htmlFor="stabilize-gets" hint={HINTS['library.gets']} style={small}>AND GET</FieldName>
+          <select id="stabilize-gets" value={s.gets ?? ''} style={{ ...input, justifySelf: 'start' }} onChange={(e) => set({ gets: e.target.value || undefined })}>
+            <option value="">— nothing</option>
+            {conditions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          {s.gets && <>
+            <FieldName beside hint={HINTS['library.again']} style={small}>DOWN AGAIN WITH IT</FieldName>
+            <span style={row}>
+              <ToggleSwitch on={!!s.again} name="Dead at once down again with it" onChange={(on) => set({ again: on })} />
+              <span style={{ ...why, fontSize: 11 }}>{s.again ? 'DEAD AT ONCE' : 'goes down as usual'}</span>
+            </span>
+          </>}
+        </>}
+      </div>
     </section>
   );
 }

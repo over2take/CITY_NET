@@ -152,3 +152,64 @@ describe('the card', () => {
     expect(pressed('Presets')).toBe('CYBERPUNK RED');
   });
 });
+
+describe("STABILIZE (8c4b1)", () => {
+  const HEALERS: Definition = {
+    format: 1, name: 'Healers',
+    stats: [{ id: 'skills', label: 'SKILLS', stats: [{ id: 'heal', label: 'Heal' }, { id: 'medicine', label: 'Medicine' }] }],
+    rolls: [
+      { id: 'check', label: 'Check', dice: [{ count: '1', sides: 20 }], add: '@this', by: ['heal', 'medicine'] },
+      { id: 'hard', label: 'Hard', dice: [{ count: '2', sides: 6 }], add: '@this', by: ['heal'] },
+    ],
+    conditions: { frail: { name: 'Frail' } },
+  };
+  const part = () => within(screen.getByRole('region', { name: 'Stabilize' }));
+  const stab = (def: Definition) => (def.dying as { stabilize?: Record<string, unknown> }).stabilize;
+
+  it('a game with no rolls: none, the GM says, and why', async () => {
+    open();
+    await turnOn();
+    expect((part().getByLabelText('THE HELPER ROLLS') as HTMLSelectElement).value).toBe('');
+    expect(part().getByText(/this game has no rolls yet/)).toBeTruthy();
+    expect(part().queryByLabelText('VS')).toBeNull();
+  });
+
+  it('D&D 5E finds MEDICINE; the field, its roll, VS, THEN, AND GET and DEAD AT ONCE each picked', async () => {
+    const { last } = open(HEALERS);
+    await turnOn();
+    expect((part().getByLabelText('THE HELPER ROLLS') as HTMLSelectElement).value).toBe('medicine');
+    expect((part().getByLabelText('VS') as HTMLInputElement).value).toBe('10');
+    expect(part().queryByLabelText('Its roll')).toBeNull();
+    await userEvent.selectOptions(part().getByLabelText('THE HELPER ROLLS'), 'heal');
+    await userEvent.selectOptions(part().getByLabelText('Its roll'), 'hard');
+    const vs = part().getByLabelText('VS');
+    await userEvent.clear(vs);
+    expect(vs.getAttribute('aria-invalid')).toBe('true');
+    await userEvent.type(vs, '8 + @turns');
+    await userEvent.click(within(part().getByRole('group', { name: 'Then they are' })).getByRole('button', { name: 'BACK WITH 1 HP' }));
+    expect(part().queryByRole('switch', { name: 'Dead at once down again with it' })).toBeNull();
+    await userEvent.selectOptions(part().getByLabelText('AND GET'), 'frail');
+    await userEvent.click(part().getByRole('switch', { name: 'Dead at once down again with it' }));
+    expect(part().getByText('DEAD AT ONCE')).toBeTruthy();
+    // And off again.
+    await userEvent.click(part().getByRole('switch', { name: 'Dead at once down again with it' }));
+    expect(stab(last())!.again).toBeUndefined();
+    await userEvent.click(part().getByRole('switch', { name: 'Dead at once down again with it' }));
+    expect(stab(last())).toEqual({ field: 'heal', roll: 'hard', vs: '8 + @turns', then: 'back_up', gets: 'frail', again: true });
+    expect(checkDefinition(last()).problems).toEqual([]);
+    for (const k of ['library.helper', 'library.vs', 'library.then', 'library.gets', 'library.again'] as const) expect(screen.getAllByLabelText(HINTS[k]).length, k).toBeGreaterThan(0);
+    // None: the GM says, and the rest goes with it.
+    await userEvent.selectOptions(part().getByLabelText('THE HELPER ROLLS'), '');
+    expect(stab(last())).toBeUndefined();
+    expect(part().queryByLabelText('VS')).toBeNull();
+  });
+
+  it('CITIES WITHOUT NUMBER: HEAL vs 8 + @turns, BACK WITH 1 HP, FRAIL, dead at once', async () => {
+    const { last } = open(HEALERS);
+    await turnOn();
+    await userEvent.click(card().getByRole('button', { name: 'CITIES WITHOUT NUMBER' }));
+    expect(stab(last())).toEqual({ field: 'heal', vs: '8 + @turns', then: 'back_up', gets: 'frail', again: true });
+    expect((part().getByLabelText('AND GET') as HTMLSelectElement).value).toBe('frail');
+    expect(part().getByRole('switch', { name: 'Dead at once down again with it' }).getAttribute('aria-checked')).toBe('true');
+  });
+});
