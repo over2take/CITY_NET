@@ -17,7 +17,7 @@ process.env.DICE_ANIM_MS = '0';
 const require_ = createRequire(import.meta.url);
 const runtime = require_('../systemBuilder/runtime');
 const { outNow } = require_('../systemBuilder/health');
-const { noticeHealth, setAnnouncer, publicDying } = require_('../tokens/dyingTable');
+const { noticeHealth, setAnnouncer, publicDying, rollDeathSave, turnGoesBy, dyingTurns, inFight } = require_('../tokens/dyingTable');
 const { takeOff, targetOf } = require_('../tokens/hitOnTarget');
 const { fireTurnMoments } = require_('../tokens/turnEffects');
 const { takeRest } = require_('../sheets/rests');
@@ -25,6 +25,8 @@ const { spendRecovery } = require_('../sheets/recover');
 const { PICKS_KEY } = require_('../systemBuilder/choices');
 const { switchSystem } = require_('../tokens/vitals');
 const socketsFactory = (await import('../sockets/index.js')).default;
+const initiativeMod = await import('../sockets/initiative.js');
+const registerInitiativeHandlers = initiativeMod.registerInitiativeHandlers || initiativeMod.default.registerInitiativeHandlers;
 
 const ID = 'sys_dyingtabledying01';
 const GM = jwt.sign({ id: 1, username: 'gm', role: 'admin', isTemporary: false }, 'test-secret');
@@ -340,5 +342,188 @@ describe('who reads it', () => {
     expect(await a.history()).toEqual(['ash rolled 4']);
     expect(await nobody.history()).toEqual(['ash rolled 4']);
     expect((await get(db, 'SELECT seen_by FROM dice_rolls WHERE historyString = \'GHOUL (NPC) · DYING\'')).seen_by).toBe('');
+  });
+});
+
+/** Dice that land on these faces, in turn. */
+const faces = (sides, ...shown) => { let i = 0; return () => (shown[Math.min(i++, shown.length - 1)] - 0.5) / sides; };
+const NATURALS = { ...DND, naturals: [{ face: 20, then: 'back_up' }] };
+const CWN = { word: 'Mortally Wounded', way: 'turns', turns: 2, hurt: 'dead' };
+const fight = async (combatants) => {
+  await run(db, `CREATE TABLE IF NOT EXISTS initiative_combat (id INTEGER PRIMARY KEY AUTOINCREMENT, turn_counter INTEGER DEFAULT 1,
+    pass_counter INTEGER DEFAULT 1, system TEXT DEFAULT 'generic', mode TEXT DEFAULT 'individual', created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  await run(db, `CREATE TABLE IF NOT EXISTS initiative_scene (scene_key TEXT PRIMARY KEY, combat_id INTEGER NOT NULL, combatants TEXT NOT NULL DEFAULT '[]',
+    sides TEXT NOT NULL DEFAULT '[]', turn_index INTEGER DEFAULT 0, turn_counter INTEGER DEFAULT 1, pass_counter INTEGER DEFAULT 1, begun INTEGER DEFAULT 0, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  if (!combatants) return;
+  const combat = (await run(db, 'INSERT INTO initiative_combat (system) VALUES (?)', [ID])).lastID;
+  await run(db, 'INSERT INTO initiative_scene (scene_key, combat_id, combatants, turn_index, begun) VALUES (\'main\', ?, ?, 0, 1)', [combat, JSON.stringify(combatants)]);
+};
+const down = async (id = kes) => { await hp(id, 0); await noticeHealth(db, { locationId: id, hurt: true }); heard = []; };
+const save = (shown, more = {}) => rollDeathSave(db, { locationId: kes, who: 'kes', account: 'kes', rng: faces(20, ...shown), ...more });
+
+describe('the death save (8c1b2)', () => {
+  it('rolled with the character\'s numbers, kept, and said with its dice to the player and the GM', async () => {
+    await setUp();
+    await fight();
+    await down();
+    expect(await save([14])).toEqual({ ok: true, st: { ...DOWN, saves: 1, turns: 1 }, words: 'DEATH SAVE 1d20 [14 = 14] · 10 OR MORE · SUCCESS · 1 OF 3 SAVES · 0 OF 3 FAILS' });
+    expect(await states('kes')).toEqual([{ ...DOWN, saves: 1, turns: 1 }, { ...DOWN, saves: 1, turns: 1 }]);
+    expect(heard).toEqual([{ lines: [{ line: 'kes: KES · DEATH SAVE 1d20 [14 = 14] · 10 OR MORE · SUCCESS · 1 OF 3 SAVES · 0 OF 3 FAILS', seenBy: 'kes', account: 'kes', userName: 'kes', results: { 20: [14] }, total: 14 }], changed: true, owner: 'kes' }]);
+    // Their own number to beat, read off their sheet.
+    await setUp(SYSTEM({ ...DND, save: { dice: '1d20', target: '@body + 6' } }));
+    await fight();
+    await down();
+    expect((await save([12])).words).toBe('DEATH SAVE 1d20 [12 = 12] · 13 OR MORE · FAILURE · 0 OF 3 SAVES · 1 OF 3 FAILS');
+  });
+
+  it('a natural that brings them back: 1 HP on every copy, and the rest let go', async () => {
+    await setUp(SYSTEM(NATURALS));
+    await fight();
+    await down();
+    expect((await save([20])).words).toBe('DEATH SAVE 1d20 [20 = 20] · 10 OR MORE · NATURAL 20 · BACK WITH 1 HP');
+    await until(() => lines().length === 2, { label: 'back up said after the save' });
+    expect((await all(db, 'SELECT hp_current FROM locations WHERE owner = \'kes\'')).map((r) => r.hp_current)).toEqual([1, 1]);
+    expect(await states('kes')).toEqual([null, null]);
+    expect(lines()[1].line).toBe('KES · BACK UP');
+  });
+
+  it('refused where nobody is down, or the game has no saves', async () => {
+    await setUp();
+    await fight();
+    expect(await save([14])).toEqual({ ok: false, error: 'Not dying' });
+    await down();
+    await save([1]); await save([1]); await save([1]);
+    expect(await save([14])).toEqual({ ok: false, error: 'Already dead' });
+    await setUp(SYSTEM(CWN));
+    await fight();
+    await down();
+    expect(await save([14])).toEqual({ ok: false, error: 'This game has no death saves' });
+    expect(await rollDeathSave(db, { locationId: 9999, who: 'kes', rng: faces(20, 14) })).toEqual({ ok: false, error: 'No such token' });
+    await setUp(SYSTEM(DND, { parts: { death: { on: false } } }));
+    await fight();
+    expect(await save([14])).toEqual({ ok: false, error: 'This game has no dying rule for them' });
+    expect(heard).toEqual([]);
+  });
+
+  it('in a fight it waits for their turn, which the tracker lights; the GM\'s needn\'t wait', async () => {
+    await setUp();
+    await fight([{ id: 'player:kes' }, { id: `npc:${ghoul}` }]);
+    expect(await inFight(db, { shape: 'rhombus', owner: 'kes' })).toBe(true);
+    expect(await inFight(db, { shape: 'friendly_rhombus', id: pal })).toBe(false);
+    await down();
+    expect(await save([14])).toEqual({ ok: false, error: 'A death save waits for their turn' });
+    await dyingTurns(db, { moments: [{ when: 'turn_end', ids: ['player:kes'] }, { when: 'turn_start', ids: ['player:kes', 'npc:x', 'nobody'] }] });
+    expect(await states('kes')).toEqual([{ ...DOWN, turns: 1, due: true }, { ...DOWN, turns: 1, due: true }]);
+    expect(lines()).toEqual([{ line: 'KES IS DYING: DEATH SAVE', seenBy: 'kes', account: 'kes' }]);
+    // Spent by the save, which the tracker has already counted as a turn.
+    expect((await save([14])).st).toEqual({ ...DOWN, saves: 1, turns: 1 });
+    expect(await save([14])).toEqual({ ok: false, error: 'A death save waits for their turn' });
+    expect((await save([14], { byGm: true })).st.saves).toBe(2);
+  });
+});
+
+describe('a turn going by (8c1b2)', () => {
+  it('TURNS LEFT runs down by the GM\'s A TURN GOES BY out of a fight, to DEAD', async () => {
+    await setUp(SYSTEM(CWN));
+    await fight();
+    await down();
+    expect(await turnGoesBy(db, { locationId: kes })).toEqual({ ok: true, st: { ...DOWN, turns: 1 }, said: '1 TURN LEFT' });
+    expect(lines()).toEqual([{ line: 'KES · MORTALLY WOUNDED · 1 TURN LEFT', seenBy: 'kes', account: 'kes' }]);
+    expect((await turnGoesBy(db, { locationId: kes })).st.state).toBe('dead');
+    expect(lines()[1].line).toBe('KES · MORTALLY WOUNDED · OUT OF TURNS · DEAD');
+    // The dead have no turns to count.
+    heard = [];
+    expect(await turnGoesBy(db, { locationId: kes })).toEqual({ ok: true, st: { ...DOWN, turns: 2, state: 'dead' }, said: null });
+    expect(heard).toEqual([]);
+  });
+
+  it('in a fight, the tracker\'s to count: the GM\'s refused, the turn start counted', async () => {
+    await setUp(SYSTEM({ ...CWN, npcs: { enemy: true } }));
+    await fight([{ id: `npc:${ghoul}` }]);
+    await down(ghoul);
+    expect(await turnGoesBy(db, { locationId: ghoul })).toEqual({ ok: false, error: 'In a fight the tracker counts their turns' });
+    await dyingTurns(db, { moments: [{ when: 'turn_start', ids: [`npc:${ghoul}`] }] });
+    expect((await stateOfToken(ghoul)).turns).toBe(1);
+    expect(lines()).toEqual([{ line: 'GHOUL (NPC) · MORTALLY WOUNDED · 1 TURN LEFT', seenBy: '', account: null }]);
+  });
+
+  it('SAVES COUNTED out of a fight: a turn counted, no save lit to carry into one', async () => {
+    await setUp();
+    await fight();
+    await down();
+    expect(await turnGoesBy(db, { locationId: kes })).toEqual({ ok: true, st: { ...DOWN, turns: 1 }, said: 'DEATH SAVE' });
+    expect((await states('kes'))[0].due).toBe(false);
+  });
+
+  it('nothing for one not down, nor a token gone', async () => {
+    await setUp();
+    await fight([{ id: 'player:kes' }]);
+    expect(await turnGoesBy(db, { locationId: kes })).toEqual({ ok: false, error: 'Not down' });
+    await dyingTurns(db, { moments: [{ when: 'turn_start', ids: ['player:kes'] }] });
+    expect(await states('kes')).toEqual([null, null]);
+    expect(heard).toEqual([]);
+    await dyingTurns(db, { moments: 'nonsense' });
+  });
+
+  it('the tracker\'s NEXT starts their turn and lights the save', async () => {
+    await setUp();
+    await fight([{ id: `npc:${ghoul}` }, { id: 'player:kes' }]);
+    await down();
+    let connect;
+    registerInitiativeHandlers({ on: (e, cb) => { if (e === 'connection') connect = cb; }, emit: () => {}, to: () => ({ emit: () => {} }) }, db, { emitUpdate: () => {} });
+    const handlers = {};
+    connect({ id: 'gm', on: (e, fn) => { handlers[e] = fn; }, emit: () => {}, use: () => {}, join: () => {} });
+    handlers['initiative:next']({ sceneKey: 'main' });
+    await until(() => lines().length === 1, { label: 'the save lit by the turn' });
+    expect(lines()[0].line).toBe('KES IS DYING: DEATH SAVE');
+    expect((await states('kes'))[0].due).toBe(true);
+  });
+});
+
+describe('pressed at the table (8c1b2)', () => {
+  it('DEATH SAVE: their player\'s or the GM\'s; A TURN GOES BY the GM\'s', async () => {
+    await setUp(SYSTEM({ ...DND, npcs: { enemy: true } }));
+    await fight();
+    let connection;
+    const io = { on: (e, cb) => { if (e === 'connection') connection = cb; }, emit: () => {}, to: () => ({ emit: () => {} }) };
+    socketsFactory(io, db, { elevatedUsers: new Set(), emitUpdate: vi.fn(), recordAction: vi.fn() });
+    const join = async (who, identity) => {
+      const handlers = {};
+      const got = [];
+      connection({ id: `press-${who}`, on: (e, fn) => { handlers[e] = fn; }, emit: (event, d) => got.push({ event, data: d }), broadcast: { emit: () => {} }, use: () => {}, join: () => {}, disconnect: () => {} });
+      handlers.identify(identity);
+      await drain(db);
+      const ask = (event, payload) => new Promise((ok) => handlers[event](payload, ok));
+      return { ask, got };
+    };
+    const gm = await join('gm', { userName: 'gm', isAdmin: true, token: GM });
+    const k = await join('kes', 'kes');
+    const a = await join('ash', 'ash');
+    await hp(kes, 0); await hp(ghoul, 0);
+    await noticeHealth(db, { locationId: kes, hurt: true });
+    await noticeHealth(db, { locationId: ghoul, hurt: true });
+    expect(await a.ask('deathSave', { locationId: kes })).toEqual({ ok: false, error: 'Only their player or the GM rolls it' });
+    expect(await k.ask('deathSave', { locationId: ghoul })).toEqual({ ok: false, error: 'Only their player or the GM rolls it' });
+    expect(await k.ask('deathSave', { locationId: 'x' })).toEqual({ ok: false, error: 'Which token?' });
+    expect(await k.ask('deathSave', { locationId: 9999 })).toEqual({ ok: false, error: 'No such token' });
+    expect(await k.ask('deathSave', { locationId: kes })).toEqual({ ok: true });
+    expect(await gm.ask('deathSave', { locationId: ghoul })).toEqual({ ok: true });
+    expect((await states('kes'))[0].turns).toBe(1);
+    expect((await stateOfToken(ghoul)).turns).toBe(1);
+    // Thrown in the tray with its die, named by who pressed it, as their rolls are (their character's name).
+    const thrown = await until(() => k.got.find((e) => e.event === 'diceRollBroadcast' && /^Kes: KES · DEATH SAVE 1d20 \[\d+ = \d+\]/.test(e.data.historyString)), { label: 'the save in kes\'s tray' });
+    expect(thrown.data.results['20']).toHaveLength(1);
+    expect(thrown.data.quiet).toBeUndefined();
+    expect(a.got.some((e) => e.event === 'diceRollBroadcast')).toBe(false);
+    expect(await k.ask('dyingTurn', { locationId: kes })).toEqual({ ok: false, error: 'The GM\'s to say' });
+    expect(await gm.ask('dyingTurn', { locationId: 'x' })).toEqual({ ok: false, error: 'Which token?' });
+    expect(await gm.ask('dyingTurn', { locationId: kes })).toEqual({ ok: true });
+    expect((await states('kes'))[0].turns).toBe(2);
+    expect(await gm.ask('dyingTurn', { locationId: pal })).toEqual({ ok: false, error: 'This game has no dying rule for them' });
+    // In a fight, their player waits for their turn; the GM needn't.
+    const combat = (await run(db, 'INSERT INTO initiative_combat (system) VALUES (?)', [ID])).lastID;
+    await run(db, 'INSERT INTO initiative_scene (scene_key, combat_id, combatants, turn_index, begun) VALUES (\'main\', ?, ?, 0, 1)', [combat, JSON.stringify([{ id: 'player:kes' }])]);
+    expect(await k.ask('deathSave', { locationId: kes })).toEqual({ ok: false, error: 'A death save waits for their turn' });
+    expect(await gm.ask('deathSave', { locationId: kes })).toEqual({ ok: true });
   });
 });

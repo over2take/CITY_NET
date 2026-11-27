@@ -227,7 +227,7 @@ describe('the death save', () => {
   const dnd = ruleOf(DND);
   it('SAVES COUNTED: a success or a failure each, said with the dice and the target', () => {
     const made = save(dnd, startState(), [14]);
-    expect(made).toEqual({ ok: true, st: { ...startState(), saves: 1, turns: 1 }, heal: 0, total: 14, natural: 14, words: 'DEATH SAVE 1d20 [14 = 14] · 10 OR MORE · SUCCESS · 1 OF 3 SAVES · 0 OF 3 FAILS' });
+    expect(made).toEqual({ ok: true, st: { ...startState(), saves: 1, turns: 1 }, heal: 0, total: 14, natural: 14, dice: [{ count: 1, sides: 20, rolls: [14] }], words: 'DEATH SAVE 1d20 [14 = 14] · 10 OR MORE · SUCCESS · 1 OF 3 SAVES · 0 OF 3 FAILS' });
     expect(save(dnd, startState(), [10]).st.saves).toBe(1);
     const missed = save(dnd, startState(), [9]);
     expect(missed.st).toEqual({ ...startState(), fails: 1, turns: 1 });

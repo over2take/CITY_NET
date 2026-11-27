@@ -50,23 +50,24 @@ const targetOf = (db, targetId, system, cb) => {
 /**
  * `amount` taken off a token as the HEALTH folder's DAMAGE takes it: one pool through tokens/poolHealth.js (every copy of a
  * player's token), any other model through the system's own rule on the sheet as it is when written. Calls back
- * { ok: true, owner } (`owner` a player whose token changed) or { ok: false, error }. AUTO's hit and APPLY alike (8b6b1).
+ * { ok: true, owner } (`owner` a player whose token changed) or { ok: false, error }. AUTO's hit and APPLY alike (8b6b1). `kind`
+ * 'heal' gives it back as HEAL does instead (a death save's natural, 8c1b2).
  */
-const takeOff = (db, { system, health, target: { row, player, sheet }, amount }, cb) => {
+const takeOff = (db, { system, health, target: { row, player, sheet }, amount, kind = 'damage' }, cb) => {
   const writeToken = (t) => {
     const [sql, params] = player
       ? ['UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE shape = "rhombus" AND owner = ?', [t.current, t.max, t.temp, row.owner]]
       : ['UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE id = ?', [t.current, t.max, t.temp, row.id]];
     db.run(sql, params, (e) => {
       // Down, or hurt while down, under the game's dying rule (8c1b1).
-      if (!e) noticeHealth(db, { locationId: row.id, hurt: amount > 0 });
+      if (!e) noticeHealth(db, { locationId: row.id, hurt: kind === 'damage' && amount > 0 });
       cb(e ? { ok: false, error: 'Could not be saved' } : { ok: true, owner: player ? row.owner : null });
     });
   };
   const token = { current: row.hp_current, max: row.hp_max, temp: row.hp_temp };
-  if (!health || health.model === 'pool') return writeToken(poolAfter(token, 'damage', amount));
+  if (!health || health.model === 'pool') return writeToken(poolAfter(token, kind, amount));
   // Another model: its rule on the sheet as it is when written, as the HEALTH folder's DAMAGE.
-  const act = { kind: 'damage', amount };
+  const act = { kind, amount };
   if (!sheet) {
     const result = applyHealthAction(health, { current: token.current, max: token.max, temp: token.temp }, {}, act);
     if (!result.ok) return cb({ ok: false, error: result.error });
