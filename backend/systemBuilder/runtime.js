@@ -40,7 +40,7 @@ const { bankOf } = require('./bank');
 const { distanceOf } = require('./core');
 const { houseRulesOf, houseRulesOn, withHouseRules, choicesFrom } = require('./houseRules');
 const { dyingShown } = require('./dying');
-const { luckShown } = require('./luck');
+const { luckShown, luckRuleOf, luckOf } = require('./luck');
 const { damageRulesOf } = require('./damageTypes');
 const templates = require('../sheets/templates');
 const npcTiers = require('../sheets/npcTiers');
@@ -107,6 +107,9 @@ const metaOf = (definition) => {
           }
           data[WORKED_KEY] = { ...(data[WORKED_KEY] || {}), carrying: carryingOf(definition, data, can) };
         }
+        // LUCK (8c6): what is left of the most, for the strip's points; THE MOST is a formula only the server reads.
+        const luckRule = luckRuleOf(definition);
+        if (luckRule) data[WORKED_KEY] = { ...(data[WORKED_KEY] || {}), luck: luckOf(definition, luckRule, data) };
         // MAX HEALTH: PER LEVEL (7d5a): what it comes to, each level, for the sheet and LEVEL_UP.EXE. Loaded here, as it
         // reads the levels this module's own load leads to.
         const byLevel = require('./healthLevels').healthByLevel(definition, data);

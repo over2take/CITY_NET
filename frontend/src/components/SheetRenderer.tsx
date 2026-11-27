@@ -34,8 +34,10 @@ import { ImproveMark } from './ImproveMark';
 import { markStates } from '../sheets/improveShown';
 import { withTempHp } from '../sheets/tempHp';
 import { VitalsStrip } from './VitalsStrip';
+import { LuckPoints } from './LuckPoints';
+import { luckNowOf, spendsOn } from '../sheets/luckPoints';
 import { defenseOf, type SheetVitals } from '../sheets/vitals';
-import { choiceEffects, effectsWorked, restSection, type ChoicesAction } from '../sheets/choicesShown';
+import { choiceEffects, effectsWorked, restSection, WORKED_KEY, type ChoicesAction } from '../sheets/choicesShown';
 
 function DiceIcon({ size = 14 }: { size?: number }) {
   return (
@@ -921,6 +923,11 @@ function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUp
               )}
             </div>
           );
+        })()}
+        {/* A game made in the builder with LUCK on (8c6): its points, set aside for the next roll. */}
+        {!h.luckField && template.luck && (() => {
+          const now = luckNowOf((data as Record<string, unknown>)[WORKED_KEY]);
+          return now && <LuckPoints rule={template.luck} now={now} armed={armedLuck ?? 0} onArm={canRoll && setArmedLuck ? setArmedLuck : undefined} />;
         })()}
       </div>
     </div>
@@ -1948,10 +1955,13 @@ export function SheetRenderer({ onLevelUp, template, data, readOnly = false, onF
   const rollNow = (fieldId: string, pick?: RollPick) => {
     if (!onRoll) return;
     // A pick only when the chooser made one, so every other roll calls onRoll as it always has.
-    const luck = armedLuck > 0 ? armedLuck : undefined;
+    // A game made in the builder's luck (8c6) is spent only on a roll it is on; any other roll keeps it set aside.
+    const field = template.luck ? template.sections.flatMap((s) => s.fields).find((f) => f.id === fieldId) : undefined;
+    const spends = !template.luck || spendsOn(template.luck, pick?.rollId ?? field?.customRolls?.[0]?.id);
+    const luck = armedLuck > 0 && spends ? armedLuck : undefined;
     if (pick) onRoll(fieldId, luck, armedNegate || undefined, pick);
     else onRoll(fieldId, luck, armedNegate || undefined);
-    setArmedLuck(0);
+    if (spends) setArmedLuck(0);
     setArmedNegate(false);
   };
   const handleRoll = onRoll
