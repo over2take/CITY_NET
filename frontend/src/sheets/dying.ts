@@ -105,7 +105,8 @@ export const dyingOf = (def: Definition): Dying => {
   };
 };
 
-const withDyingSection = (def: Definition, dying: Obj): Definition => ({ ...def, dying });
+/** The section written with `dying`, keeping what the card doesn't draw (STABILIZE, 8c4a, until its part of the card). */
+const withDyingSection = (def: Definition, dying: Obj): Definition => ({ ...def, dying: { ...(isObject(def.dying) ? def.dying : {}), ...dying } });
 
 /**
  * The card's switch, which is the PARTS row's: on writes the section (D&D 5E the first time) and the part on; off turns the part
