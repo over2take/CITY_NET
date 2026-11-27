@@ -33,7 +33,7 @@ import { TokenWindow, type TokenFolder } from './components/TokenWindow';
 import { BootScreen } from './components/BootScreen';
 import { createBootSounds, type BootSounds } from './sounds/bootSounds';
 import { useAmbientHum } from './sounds/useAmbientHum';
-import { buildTokenActions, fightTokens, createPlayerTokenRow, hitPointsTarget, linkedHealthTarget, isTokenShape, tokenView, type TokenViewer } from './components/tokenActions';
+import { buildTokenActions, fightTokens, createPlayerTokenRow, hitPointsTarget, linkedHealthTarget, isTokenShape, tokenView, stabilizeHelpers, type TokenViewer } from './components/tokenActions';
 import { sendTargets } from './sheets/sendTo';
 import { QuickActions } from './components/QuickActions';
 import { buildBuildingActions } from './components/buildingActions';
@@ -2734,6 +2734,8 @@ function App() {
                       gameSystem={gameSystem}
                       socket={socketRef.current}
                       gm={isAdmin}
+                      // Who may help a token down (8c4b2), for the GM's STABILIZE.
+                      helpers={isAdmin ? stabilizeHelpers(locations, liveToken) : undefined}
                       onCreate={selectedLocation.id === -1 && selectedLocation.owner
                         ? () => createPlayerTokenRow({ fetch: (url, init) => fetch(url, init), authToken: token, refreshLocations: fetchLocations }, selectedLocation.owner as string)
                         : undefined}

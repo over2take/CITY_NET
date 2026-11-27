@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { hitPointsTarget, linkedHealthTarget, tokenActionKeys, tokenView, attackAsOptions, fightTokens, type TokenViewer } from '../tokenActions';
+import { hitPointsTarget, linkedHealthTarget, tokenActionKeys, tokenView, attackAsOptions, fightTokens, stabilizeHelpers, type TokenViewer } from '../tokenActions';
 import { controlsToken } from '../../utils/tokenControl';
 
 describe('who a viewer may attack as (4b5b4b; the target\'s scene for players too, a fight first, 8b6a)', () => {
@@ -219,5 +219,23 @@ describe("the token a sheet's linked health opens, in the GM's view (2026-10-31)
     expect(linkedHealthTarget(locations, { username: 'vex' })).toEqual({ notice: 'VEX HAS NO TOKEN ON THIS MAP' });
     expect(linkedHealthTarget(locations, { locationId: 3 })).toEqual({ notice: 'THIS NPC HAS NO TOKEN ON THIS MAP' });
     expect(linkedHealthTarget(locations, { locationId: 9 })).toEqual({ notice: 'THIS NPC HAS NO TOKEN ON THIS MAP' });
+  });
+});
+
+describe("who may stabilize a token down, the GM's HELPED BY (8c4b2)", () => {
+  const at = (id: number, shape: string, more: Record<string, unknown> = {}) => ({ id, name: `T${id}`, shape, owner: null, battle_map_id: null, floor_index: null, ...more });
+  it('the characters in its scene, players first and once each, then NPCs; never the one down nor their other copies', () => {
+    const kes = at(1, 'rhombus', { owner: 'kes', name: 'Kes' });
+    const rows = [
+      kes, at(2, 'rhombus', { owner: 'kes', name: 'Kes' }),
+      at(3, 'enemy_rhombus', { name: 'Ogre' }), at(4, 'rhombus', { owner: 'ash', name: 'Ash' }), at(5, 'rhombus', { owner: 'ash', name: 'Ash' }),
+      at(6, 'friendly_rhombus', { name: '' }), at(7, 'box'), at(8, 'rhombus', { owner: 'vex', name: '' }),
+      // Another scene: a battle map's, or another floor of it.
+      at(9, 'rhombus', { owner: 'pip', battle_map_id: 4, floor_index: 0 }),
+    ];
+    expect(stabilizeHelpers(rows, kes)).toEqual([{ id: 4, name: 'Ash' }, { id: 8, name: 'vex' }, { id: 3, name: 'Ogre (NPC)' }, { id: 6, name: 'NPC (NPC)' }]);
+    const below = at(10, 'enemy_rhombus', { battle_map_id: 4, floor_index: 0 });
+    expect(stabilizeHelpers([...rows, below, at(11, 'friendly_rhombus', { battle_map_id: 4, floor_index: 1 })], below)).toEqual([{ id: 9, name: 'T9' }]);
+    expect(stabilizeHelpers(rows, null)).toEqual([]);
   });
 });

@@ -65,3 +65,23 @@ describe('what the box shows', () => {
     expect(boxOf(CWN, downOf(FULL({ state: 'dead' }))!, { gm: true })).toEqual({ word: 'DEAD', state: 'dead', turnButton: false, note: 'Any heal above 0 brings them back: a potion, a spell, a rest. Nothing on the sheet is lost.' });
   });
 });
+
+describe("STABILIZE and BY HAND (8c4b2)", () => {
+  it('BY HAND: STABLE and DEAD for one dying, DEAD for one stable, nothing for the dead or the well', async () => {
+    const { byHandOf } = await import('../dyingBox');
+    expect(byHandOf(downOf(FULL()))).toEqual(['stable', 'dead']);
+    expect(byHandOf(downOf(FULL({ state: 'stable' })))).toEqual(['dead']);
+    expect(byHandOf(downOf(FULL({ state: 'dead' })))).toEqual([]);
+    expect(byHandOf(null)).toEqual([]);
+  });
+
+  it("a player's offer: YOUR field VS its words, while dying, where the game says how", async () => {
+    const { offerOf } = await import('../dyingBox');
+    const healing = { ...DND, stabilize: { field: 'heal', label: 'Heal', roll: null, vs: '8 + TURNS', then: 'back_up' as const, gets: null } };
+    expect(offerOf(healing, downOf('{"state":"dying"}'))).toBe('YOUR HEAL VS 8 + TURNS');
+    expect(offerOf(healing, downOf('{"state":"stable"}'))).toBeNull();
+    expect(offerOf(healing, null)).toBeNull();
+    expect(offerOf(DND, downOf('{"state":"dying"}'))).toBeNull();
+    expect(offerOf(null, downOf('{"state":"dying"}'))).toBeNull();
+  });
+});

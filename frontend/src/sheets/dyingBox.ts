@@ -14,6 +14,8 @@ export interface DyingShown {
   to_die: number;
   harder: number;
   turns: number;
+  /** STABILIZE (8c4a), as the server shows it: the field by its name, VS in words; null or absent: the GM says, by hand. */
+  stabilize?: { field: string; label: string; roll: string | null; vs: string; then: 'stable' | 'back_up'; gets: string | null } | null;
 }
 export type DownState = 'dying' | 'stable' | 'dead';
 /** A token's state, as kept: the word alone for anyone but its player and the GM. */
@@ -46,6 +48,14 @@ export const saveWords = (rule: DyingShown, down: Down): string => {
   const dice = `${rule.save.dice}${harder > 0 ? ` + ${harder}` : harder < 0 ? ` - ${-harder}` : ''}`;
   return `${dice} · ${rule.save.way === 'under' ? `UNDER ${rule.save.target}` : `${rule.save.target} OR MORE`}`;
 };
+
+/** The GM's BY HAND (8c4b2): STABLE and DEAD for one dying, DEAD for one stable, nothing for the dead. */
+export const byHandOf = (down: Down | null): ('stable' | 'dead')[] =>
+  (!down ? [] : down.state === 'dying' ? ['stable', 'dead'] : down.state === 'stable' ? ['dead'] : []);
+
+/** What a player may offer someone down (8c4b2): YOUR HEAL VS 8 + TURNS, where the game says how, while they are dying. */
+export const offerOf = (rule: DyingShown | null | undefined, down: Down | null): string | null =>
+  (rule?.stabilize && down?.state === 'dying' ? `YOUR ${rule.stabilize.label.toUpperCase()} VS ${rule.stabilize.vs}` : null);
 
 /** What the box shows for a token down. `gm`: the GM's A TURN GOES BY, where turns are counted. */
 export interface Box {
