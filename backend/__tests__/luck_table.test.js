@@ -124,3 +124,20 @@ describe('REFILL LUCK, the GM\'s', () => {
     expect(await new Promise((ok) => handlers.refillLuck(ok))).toEqual({ ok: false, error: 'This game has no luck' });
   });
 });
+
+describe('worked out for the strip (8c6)', () => {
+  it("what is left of the most, beside the sheet's other worked values; nothing in a game without luck", async () => {
+    await setUp();
+    const { applyDerived } = require_('../sheets/templates');
+    const data = { name: 'Kes', aim: 3, luck: 4, [LUCK_KEY]: 1 };
+    applyDerived(ID, data);
+    expect(data._worked.luck).toEqual({ current: 1, most: 4 });
+    const full = { name: 'Kes', aim: 3, luck: 4 };
+    applyDerived(ID, full);
+    expect(full._worked.luck).toEqual({ current: 4, most: 4 });
+    await setUp(null);
+    const none = { name: 'Kes', aim: 3, luck: 4 };
+    applyDerived(ID, none);
+    expect(none._worked?.luck).toBeUndefined();
+  });
+});

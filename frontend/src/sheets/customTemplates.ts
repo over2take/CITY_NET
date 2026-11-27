@@ -85,6 +85,8 @@ export interface CustomRender {
   switches?: import('./tableSwitches').TableSwitches;
   /** When health runs out (8c3), null without the rule. */
   dying?: import('./dyingBox').DyingShown | null;
+  /** Luck (8c6), null without it. */
+  luck?: import('./luckPoints').LuckShown | null;
 }
 
 /** Fired on window when a custom template has been loaded, so the app can redraw. */
@@ -163,6 +165,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.choices?.length ? { choices: render.choices } : {}),
     ...(render.resting ? { resting: render.resting } : {}),
     ...(render.dying ? { dying: render.dying } : {}),
+    ...(render.luck ? { luck: render.luck } : {}),
     ...(render.creation ? { creation: render.creation } : {}),
     ...(render.levels ? { levels: render.levels } : {}),
     ...(render.items ? { items: render.items } : {}),

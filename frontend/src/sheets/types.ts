@@ -301,6 +301,8 @@ export interface SheetTemplate {
   houseRules?: HouseRuleState[];
   /** A custom system's rule for when health runs out, as a sheet shows it (8c3, sheets/dyingBox.ts); absent without one. */
   dying?: import('./dyingBox').DyingShown;
+  /** A custom system's luck, as a sheet shows it (8c6, sheets/luckPoints.ts); absent without it. */
+  luck?: import('./luckPoints').LuckShown;
   /** A custom system's lists to pick from, in words (backend choices.js choicesShown, 7a3b1): what
    *  its CHOICES block draws, with the character's own picks from the sheet's worked-out view. */
   choices?: import('./choicesShown').ChoiceListShown[];

@@ -56,6 +56,7 @@ import { systemsApi } from '../sheets/systemsApi';
 import type { HouseRuleState } from '../sheets/types';
 import { TableConditionsPanel } from './TableConditionsPanel';
 import { GameRestsPanel } from './GameRestsPanel';
+import { RefillLuck } from './RefillLuck';
 import { GameFolder } from './GameFolder';
 import { npcsOnMap } from '../sheets/restCalls';
 import { shortfallRule } from '../sheets/moneyText';
@@ -158,6 +159,8 @@ function BattleAdminPanel({
         {isCustomSystem(globalSettings?.game_system) && (
           <GameFolder id="rests" name="RESTS">
             <GameRestsPanel token={token} system={globalSettings.game_system} npcs={npcsOnMap(locations || [], 'battle_map', activeBattleMapData)} socket={socket} />
+            {/* LUCK (8c6): back to everyone's most, any time. */}
+            <RefillLuck system={globalSettings.game_system} socketOf={() => socket} />
           </GameFolder>
         )}
         {/* Money, which a custom system with the bank off does not have (3b2b). */}
@@ -1069,6 +1072,7 @@ function CityAdminPanel({
               {isCustomSystem(gameSystem) && (
                 <GameFolder id="rests" name="RESTS">
                   <GameRestsPanel token={token} system={gameSystem} npcs={npcsOnMap(locations || [], view, activeBattleMapData)} socket={socketRef.current} />
+                  <RefillLuck system={gameSystem} socketOf={() => socketRef.current} />
                 </GameFolder>
               )}
               {/* Money, which a custom system with the bank off does not have (3b2b): a folder, the
