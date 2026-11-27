@@ -17,7 +17,7 @@ process.env.DICE_ANIM_MS = '0';
 const require_ = createRequire(import.meta.url);
 const runtime = require_('../systemBuilder/runtime');
 const { outNow } = require_('../systemBuilder/health');
-const { noticeHealth, setAnnouncer, publicDying, rollDeathSave, turnGoesBy, dyingTurns, inFight } = require_('../tokens/dyingTable');
+const { noticeHealth, setAnnouncer, publicDying, rollDeathSave, turnGoesBy, dyingTurns, inFight, stabilizeToken, byHandToken } = require_('../tokens/dyingTable');
 const { takeOff, targetOf } = require_('../tokens/hitOnTarget');
 const { fireTurnMoments } = require_('../tokens/turnEffects');
 const { takeRest } = require_('../sheets/rests');
@@ -543,5 +543,117 @@ describe('pressed at the table (8c1b2)', () => {
     expect(await new Promise((ok) => handlers.deathSave({ locationId: kes }, ok))).toEqual({ ok: true });
     await until(async () => (await states('kes'))[0] === null, { label: 'back up' });
     expect((await all(db, "SELECT hp_current FROM locations WHERE owner = 'kes'")).map((r) => r.hp_current)).toEqual([1, 1]);
+  });
+});
+
+describe('STABILIZE and by hand (8c4a)', () => {
+  const HEALING = {
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'body', label: 'Body' }, { id: 'heal', label: 'Heal' }] }],
+    rolls: [{ id: 'check', label: 'Check', dice: [{ count: '1', sides: 20 }], add: '@this', by: ['heal'] }],
+    conditions: { frail: { name: 'Frail' }, shaken: { name: 'Shaken', short: 'SHAKEN', modifiers: [{ target: 'all_rolls', amount: -2 }] } },
+  };
+  const STABLE_AT = { field: 'heal', vs: '10' };
+  const CWN_STAB = { field: 'heal', roll: 'check', vs: '8 + @turns', then: 'back_up', gets: 'frail', again: true };
+  let ash;
+  const withAsh = async (dying) => {
+    await setUp(SYSTEM(dying, HEALING));
+    await run(db, 'INSERT INTO character_sheets (username, system, data, is_npc) VALUES (\'ash\', ?, ?, 0)', [ID, JSON.stringify({ name: 'Ash', heal: 5 })]);
+    ash = (await run(db, 'INSERT INTO locations (name, shape, owner, x, z, hp_current, hp_max, hp_temp) VALUES (\'Ash\', \'rhombus\', \'ash\', 0, 0, 10, 10, 0)')).lastID;
+    await hp(kes, 0);
+    await noticeHealth(db, { locationId: kes, hurt: true });
+    heard = [];
+  };
+  const helperRow = async (id) => get(db, 'SELECT id, name, shape, owner, conditions FROM locations WHERE id = ?', [id]);
+  const stabilize = async (shown, { by = ash, locationId = kes } = {}) => stabilizeToken(db, { hits: { targetOf, takeOff }, locationId, helper: { row: await helperRow(by) }, rng: faces(20, ...shown) });
+
+  it('made: STABLE, said to everyone with the helper\'s roll; missed: FAILED, nothing changed', async () => {
+    await withAsh({ ...DND, stabilize: STABLE_AT });
+    expect(await stabilize([3])).toEqual({ ok: true, made: false, words: 'ASH tries to stabilize KES · Heal [3 + 5 = 8] vs 10 · FAILED' });
+    expect((await states('kes'))[0].state).toBe('dying');
+    expect(await stabilize([9])).toEqual({ ok: true, made: true, words: 'ASH stabilizes KES · Heal [9 + 5 = 14] vs 10 · STABLE' });
+    expect(await states('kes')).toEqual([{ ...DOWN, state: 'stable' }, { ...DOWN, state: 'stable' }]);
+    expect(lines()[1]).toEqual({ line: 'ASH stabilizes KES · Heal [9 + 5 = 14] vs 10 · STABLE', seenBy: null, account: 'ash', userName: 'ASH', results: { 20: [9] }, total: 14 });
+    expect(await stabilize([9])).toEqual({ ok: false, error: 'Already stable' });
+  });
+
+  it('BACK WITH 1 HP and FRAIL; down again while FRAIL, dead at once', async () => {
+    await withAsh({ ...CWN, stabilize: CWN_STAB });
+    await turnGoesBy(db, { locationId: kes });
+    // Missed: nothing put on.
+    expect((await stabilize([2])).made).toBe(false);
+    expect(JSON.parse((await get(db, 'SELECT conditions FROM locations WHERE id = ?', [kes])).conditions)).toEqual([]);
+    // 8 + 1 turn = 9 to beat: 4 + 5 = 9 made.
+    expect((await stabilize([4])).words).toBe('ASH stabilizes KES · Heal [4 + 5 = 9] vs 9 · BACK WITH 1 HP · NOW FRAIL');
+    await until(async () => (await states('kes'))[0] === null, { label: 'back up' });
+    expect((await all(db, 'SELECT hp_current, conditions FROM locations WHERE owner = \'kes\'')).map((r) => [r.hp_current, JSON.parse(r.conditions).map((c) => c.id)]))
+      .toEqual([[1, ['frail']], [1, ['frail']]]);
+    await hp(kes, 0);
+    expect(await noticeHealth(db, { locationId: kes, hurt: true })).toEqual({ st: { ...DOWN, state: 'dead' }, said: 'DOWN AGAIN · DEAD' });
+  });
+
+  it('the helper\'s own conditions in their roll; a condition already on, not put on twice', async () => {
+    await withAsh({ ...CWN, stabilize: { field: 'heal', vs: '10', then: 'stable', gets: 'frail' } });
+    await run(db, 'UPDATE locations SET conditions = ? WHERE id = ?', [JSON.stringify([{ id: 'shaken' }]), ash]);
+    await run(db, 'UPDATE locations SET conditions = ? WHERE owner = \'kes\'', [JSON.stringify([{ id: 'frail' }])]);
+    const done = await stabilize([7]);
+    // 7 + 5 - 2 (SHAKEN) = 10: made, just.
+    expect(done.made).toBe(true);
+    expect(done.words).toMatch(/= 10\] vs 10 · STABLE · NOW FRAIL$/);
+    expect(JSON.parse((await get(db, 'SELECT conditions FROM locations WHERE id = ?', [kes])).conditions)).toEqual([{ id: 'frail' }]);
+  });
+
+  it('refused: not dying, by themselves, with no STABILIZE (the GM\'s by hand), or no one to help', async () => {
+    await withAsh({ ...DND, stabilize: STABLE_AT });
+    expect(await stabilize([9], { by: kes })).toEqual({ ok: false, error: 'Someone else stabilizes them' });
+    const other = (await all(db, 'SELECT id FROM locations WHERE owner = \'kes\' ORDER BY id'))[1].id;
+    expect(await stabilize([9], { by: other })).toEqual({ ok: false, error: 'Someone else stabilizes them' });
+    expect(await stabilize([9], { locationId: ash })).toEqual({ ok: false, error: 'Not dying' });
+    expect(await stabilizeToken(db, { hits: { targetOf, takeOff }, locationId: kes, helper: null, rng: faces(20, 9) })).toEqual({ ok: false, error: 'Who helps?' });
+    await withAsh(DND);
+    expect(await stabilize([9])).toEqual({ ok: false, error: 'In this game the GM says, by hand' });
+    expect(heard).toEqual([]);
+  });
+
+  it('the GM by hand: STABLE or DEAD, said to everyone; nothing for one not down', async () => {
+    await withAsh(DND);
+    expect(await byHandToken(db, { locationId: kes, to: 'stable' })).toEqual({ ok: true, st: { ...DOWN, state: 'stable' } });
+    expect(lines()).toEqual([{ line: 'GM: KES IS STABLE', seenBy: null, account: null }]);
+    expect((await byHandToken(db, { locationId: kes, to: 'dead' })).st.state).toBe('dead');
+    expect(await byHandToken(db, { locationId: kes, to: 'up' })).toEqual({ ok: false, error: 'Stable or dead' });
+    expect(await byHandToken(db, { locationId: ash, to: 'dead' })).toEqual({ ok: false, error: 'Not down' });
+    // The same again changes nothing and says nothing.
+    heard = [];
+    expect((await byHandToken(db, { locationId: kes, to: 'dead' })).ok).toBe(true);
+    expect(heard).toEqual([]);
+  });
+
+  it('pressed at the table: a player as themselves, never for themselves; the GM as a token they pick; by hand the GM\'s', async () => {
+    await withAsh({ ...DND, stabilize: STABLE_AT });
+    let connection;
+    const io = { on: (e, cb) => { if (e === 'connection') connection = cb; }, emit: () => {}, to: () => ({ emit: () => {} }) };
+    socketsFactory(io, db, { elevatedUsers: new Set(), emitUpdate: vi.fn(), recordAction: vi.fn() });
+    const join = async (who, identity) => {
+      const handlers = {};
+      connection({ id: `stab-${who}`, on: (e, fn) => { handlers[e] = fn; }, emit: () => {}, broadcast: { emit: () => {} }, use: () => {}, join: () => {}, disconnect: () => {} });
+      handlers.identify(identity);
+      await drain(db);
+      return (event, payload) => new Promise((ok) => handlers[event](payload, ok));
+    };
+    const gm = await join('gm', { userName: 'gm', isAdmin: true, token: GM });
+    const k = await join('kes', 'kes');
+    const a = await join('ash', 'ash');
+    const nobody = await join('pip', 'pip');
+    expect(await k('stabilize', { locationId: kes })).toEqual({ ok: false, error: 'Someone else stabilizes them' });
+    expect(await nobody('stabilize', { locationId: kes })).toEqual({ ok: false, error: 'Your character has no token on the map' });
+    expect(await a('stabilize', { locationId: 'x' })).toEqual({ ok: false, error: 'Which token?' });
+    expect(await gm('stabilize', { locationId: kes })).toEqual({ ok: false, error: 'Who helps?' });
+    expect(await gm('stabilize', { locationId: kes, as: 9999 })).toEqual({ ok: false, error: 'No such token to help' });
+    const tried = await a('stabilize', { locationId: kes });
+    expect(tried.ok).toBe(true);
+    if (!tried.made) expect((await gm('stabilize', { locationId: kes, as: ash })).ok).toBe(true);
+    expect(await a('dyingByHand', { locationId: kes, to: 'dead' })).toEqual({ ok: false, error: 'The GM\'s to say' });
+    expect(await gm('dyingByHand', { locationId: kes, to: 'sideways' })).toEqual({ ok: false, error: 'Stable or dead' });
+    expect(await gm('dyingByHand', { locationId: kes, to: 'dead' })).toEqual({ ok: true });
+    expect((await states('kes'))[0].state).toBe('dead');
   });
 });

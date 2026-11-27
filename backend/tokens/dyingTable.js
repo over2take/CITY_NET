@@ -10,7 +10,9 @@
 //
 // Who goes down is the rule's WHO GOES DOWN: a player's character always, an NPC as ticked (the user, 2026-11-26).
 
-const { dyingRuleOf, goesDown, afterHealth, aTurn, deathSave, stateOf } = require('../systemBuilder/dying');
+const { dyingRuleOf, goesDown, afterHealth, aTurn, deathSave, stateOf, stabilizeTarget, afterStabilize, byHand } = require('../systemBuilder/dying');
+const { rollField } = require('../systemBuilder/tableRolls');
+const { parseTokenConditions, checkTokenConditions } = require('./conditions');
 const { effectiveData } = require('../systemBuilder/choices');
 const { outNow } = require('../systemBuilder/health');
 
@@ -32,7 +34,7 @@ const inTurn = (key, job) => {
   return mine;
 };
 
-const TOKEN = 'id, name, shape, owner, hp_current, hp_max, hp_temp, dying';
+const TOKEN = 'id, name, shape, owner, hp_current, hp_max, hp_temp, dying, conditions';
 const isPlayer = (row) => row.shape === 'rhombus' && !!row.owner;
 /** A token as the log names it: its name (or its player's), an NPC said so. */
 const whoOf = (row) => `${String(row.name || row.owner || 'TOKEN').toUpperCase()}${isPlayer(row) ? '' : ' (NPC)'}`;
@@ -94,7 +96,9 @@ const noticeHealth = (db, { runtime = require('../systemBuilder/runtime'), locat
       const health = runtime.health(system);
       const isOut = outNow(health, { current: row.hp_current, max: row.hp_max, temp: row.hp_temp }, await sheetOf(db, row, system));
       const st = stateOf(row.dying);
-      const out = afterHealth(rule, st, { wasOut: !!st, isOut, hurt });
+      // STABILIZE's condition on, where it kills them down again (8c4a): CWN's FRAIL.
+      const deadAtOnce = !!rule.stabilize && rule.stabilize.again && parseTokenConditions(row.conditions).some((c) => c.id === rule.stabilize.gets);
+      const out = afterHealth(rule, st, { wasOut: !!st, isOut, hurt, deadAtOnce });
       const changed = !same(st, out.st);
       if (changed) await writeState(db, row, out.st);
       // Every change is said (going down, a hit while down, back up); a said one always changed something.
@@ -208,4 +212,69 @@ const dyingTurns = async (db, { runtime = require('../systemBuilder/runtime'), m
   }
 };
 
-module.exports = { noticeHealth, setAnnouncer, publicDying, whoOf, seenByOf, sheetOf, writeState, inTurn, isPlayer, inFight, rollDeathSave, turnGoesBy, dyingTurns };
+/** A condition put on a token (every copy of a player's alike), as + CONDITION would; a player's sheet told. Nothing if it is on. */
+const putOn = async (db, { runtime, system, row, id, io }) => {
+  const now = parseTokenConditions(row.conditions);
+  if (now.some((c) => c.id === id)) return false;
+  const made = checkTokenConditions([{ id }], runtime.conditionsIn(system));
+  if (!made.ok) return false;
+  const text = JSON.stringify([...now, ...made.value]);
+  if (isPlayer(row)) await run(db, "UPDATE locations SET conditions = ? WHERE shape = 'rhombus' AND owner = ?", [text, row.owner]);
+  else await run(db, 'UPDATE locations SET conditions = ? WHERE id = ?', [text, row.id]);
+  if (isPlayer(row) && io) await require('../sheets/conditionsOnSheet').syncConditionsOnSheet(db, { username: row.owner, io, runtime }).catch(() => null);
+  return true;
+};
+
+/**
+ * Someone else stabilizing a token down (8c4a; the mockup's answer 4): the `helper` token rolls its field's roll from its own sheet
+ * (rollField, its own conditions in it) against STABILIZE's VS, read on the one down with @turns. Made: STABLE, or BACK WITH 1
+ * HP (healed as HEAL heals; `hits` handed in, as rollDeathSave's), and the condition after. Said to everyone, as any roll at
+ * the table: it shows no more than the word does. Resolves { ok: true, made, words } or { ok: false, error }.
+ */
+const stabilizeToken = (db, { runtime = require('../systemBuilder/runtime'), hits, io = null, locationId, helper, rng }) => onDown(db, { runtime, locationId }, async (row, rule, system) => {
+  const st = stateOf(row.dying);
+  if (!st) return { ok: false, error: 'Not dying' };
+  if (st.state !== 'dying') return { ok: false, error: st.state === 'dead' ? 'Already dead' : 'Already stable' };
+  if (!rule.stabilize) return { ok: false, error: 'In this game the GM says, by hand' };
+  if (!helper || !helper.row) return { ok: false, error: 'Who helps?' };
+  if (helper.row.id === row.id || (isPlayer(row) && isPlayer(helper.row) && helper.row.owner === row.owner)) return { ok: false, error: 'Someone else stabilizes them' };
+  const definition = runtime.definitionOf(system);
+  const on = new Set(parseTokenConditions(helper.row.conditions).map((c) => c.id));
+  const helperData = await sheetOf(db, helper.row, system);
+  const rolled = rollField({
+    definition, data: helperData, fieldId: rule.stabilize.field, rollId: rule.stabilize.roll || undefined, rng, who: whoOf(helper.row),
+    conditions: runtime.conditionsIn(system).filter((c) => on.has(c.id)),
+  });
+  if (!rolled.ok) return { ok: false, error: rolled.error };
+  const target = stabilizeTarget(definition, rule, st, effectiveData(definition, await sheetOf(db, row, system)));
+  const made = rolled.total >= target;
+  const after = afterStabilize(rule, st, made);
+  if (!same(st, after.st)) await writeState(db, row, after.st);
+  const gets = after.gets ? runtime.conditionsIn(system).find((c) => c.id === after.gets) : null;
+  const helperName = whoOf(helper.row).replace(/ \(NPC\)$/, '');
+  const name = whoOf(row).replace(/ \(NPC\)$/, '');
+  const words = `${helperName} ${made ? 'stabilizes' : 'tries to stabilize'} ${name} · ${rolled.what || rolled.label} [${rolled.working}] vs ${target} · ${after.said}${gets ? ` · NOW ${String(gets.name).toUpperCase()}` : ''}`;
+  if (announce) {
+    announce({
+      lines: [{ line: words, seenBy: null, account: isPlayer(helper.row) ? helper.row.owner : null, userName: helperName, results: rolled.results, total: rolled.total }],
+      changed: !same(st, after.st), owner: isPlayer(row) ? row.owner : null,
+    });
+  }
+  // A miss has none (afterStabilize).
+  if (gets) await putOn(db, { runtime, system, row, id: gets.id, io });
+  if (after.heal > 0) await backUp(db, { hits, system, health: runtime.health(system), row, amount: after.heal });
+  return { ok: true, made, words };
+});
+
+/** The GM's STABLE or DEAD, by hand (8c4a): for a token down; said to everyone. Resolves { ok: true, st } or { ok: false, error }. */
+const byHandToken = (db, { runtime = require('../systemBuilder/runtime'), locationId, to }) => onDown(db, { runtime, locationId }, async (row) => {
+  const st = stateOf(row.dying);
+  const next = byHand(st, to);
+  if (!next) return { ok: false, error: st ? 'Stable or dead' : 'Not down' };
+  if (same(st, next)) return { ok: true, st };
+  await writeState(db, row, next);
+  if (announce) announce({ lines: [{ line: `GM: ${whoOf(row).replace(/ \(NPC\)$/, '')} IS ${to.toUpperCase()}`, seenBy: null, account: null }], changed: true, owner: isPlayer(row) ? row.owner : null });
+  return { ok: true, st: next };
+});
+
+module.exports = { noticeHealth, setAnnouncer, publicDying, whoOf, seenByOf, sheetOf, writeState, inTurn, isPlayer, inFight, rollDeathSave, turnGoesBy, dyingTurns, stabilizeToken, byHandToken, putOn };

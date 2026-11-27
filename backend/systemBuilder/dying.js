@@ -12,6 +12,11 @@
 //     turns: 6,                                                // TURNS LEFT: then dead, unless stabilized
 //     hurt: 'failure',                                         // HURT WHILE DOWN: 'nothing' more, 'failure', or 'dead'
 //     npcs: { friendly: true, enemy: false },                  // WHO GOES DOWN: players' characters always, NPCs as ticked
+//     stabilize: { field: 'heal', roll: 'check', vs: '8 + @turns', then: 'back_up', gets: 'frail', again: true },
+//                                                              // STABILIZE (8c4a): someone else's roll of one of their fields
+//                                                              // vs a number or formula (@turns, how long they've been down),
+//                                                              // then STABLE or BACK WITH 1 HP, a condition after, and dead at
+//                                                              // once down again with it on; none: the GM says, by hand
 //   }
 //
 // The rule is on when the PARTS row DEATH SAVES (parts.death) is and the section is written; a system without it has its
@@ -31,6 +36,8 @@
 const { rollAmount } = require('./tierRolls');
 const { partOn } = require('./parts');
 const { namesOf } = require('./choices');
+const { rollsFor } = require('./tableRolls');
+const { conditionsOf } = require('./conditions');
 
 const WAYS = ['count', 'once', 'turns', 'none'];
 const SAVE_WAYS = ['at_least', 'under'];
@@ -41,7 +48,10 @@ const NATURAL_WORDS = { back_up: 'BACK WITH 1 HP', stable: 'STABLE', two_failure
 const LIMITS = { word: 30, text: 200, count: 10, turns: 100, harder: 20, naturals: 6, face: 1000 };
 const START = { word: 'DYING', way: 'count', save: { dice: '1d20', way: 'at_least', target: '10' }, to_live: 3, to_die: 3, harder: 0, naturals: [], turns: 6, hurt: 'nothing', npcs: { friendly: false, enemy: false } };
 
-const DYING_KEYS = new Set(['word', 'way', 'save', 'to_live', 'to_die', 'harder', 'naturals', 'turns', 'hurt', 'npcs']);
+const DYING_KEYS = new Set(['word', 'way', 'save', 'to_live', 'to_die', 'harder', 'naturals', 'turns', 'hurt', 'npcs', 'stabilize']);
+const STABILIZE_KEYS = new Set(['field', 'roll', 'vs', 'then', 'gets', 'again']);
+/** What a stabilize made does: STABLE, AT 0, or BACK WITH 1 HP. */
+const THENS = ['stable', 'back_up'];
 const SAVE_KEYS = new Set(['dice', 'way', 'target']);
 const NATURAL_KEYS = new Set(['face', 'then']);
 const NPC_KEYS = new Set(['friendly', 'enemy']);
@@ -128,9 +138,46 @@ const checkDying = (definition, problems) => {
       });
     }
   }
+  if (dying.stabilize !== undefined) checkStabilize(definition, dying.stabilize, names, problems);
   // Nothing would start it: a game with no health never runs out of it.
   const model = isPlainObject(definition.core) && isPlainObject(definition.core.health) ? definition.core.health.model : 'pool';
   if (model === 'none' && partOn(definition, 'death')) problems.push({ where: 'dying', message: 'This game has no health to run out (SETUP: NO HEALTH), so nothing would start it' });
+};
+
+/** STABILIZE's problems: a field of the system's with a roll, a VS it can read (@turns too), and a condition it has. */
+const checkStabilize = (definition, s, names, problems) => {
+  const where = 'dying, stabilize';
+  if (!isPlainObject(s)) { problems.push({ where, message: 'Must say what the helper rolls and against what' }); return; }
+  for (const key of Object.keys(s)) if (!STABILIZE_KEYS.has(key)) problems.push({ where: `${where}, ${key}`, message: 'Not part of stabilize' });
+  const rolls = typeof s.field === 'string' ? rollsFor(definition, s.field) : [];
+  if (typeof s.field !== 'string' || !s.field) problems.push({ where: `${where}, field`, message: 'Which field the helper rolls' });
+  else if (!rolls.length) problems.push({ where: `${where}, field`, message: `${s.field} has no roll to make` });
+  else if (s.roll !== undefined && !rolls.some((r) => r.id === s.roll)) problems.push({ where: `${where}, roll`, message: `Not one of ${s.field}'s rolls` });
+  const withTurns = { known: (n) => n === 'turns' || names.known(n), refused: names.refused };
+  // VS left out is 10.
+  const read = s.vs === undefined ? { value: 10, dice: [] }
+    : typeof s.vs === 'number' || (typeof s.vs === 'string' && s.vs.length <= LIMITS.text) ? rollAmount(s.vs, {}, withTurns, () => 0) : { error: 'A number or a formula' };
+  if ('error' in read) problems.push({ where: `${where}, vs`, message: read.error });
+  else if ('blank' in read) problems.push({ where: `${where}, vs`, message: 'Needs a number or a formula to beat' });
+  else if (read.dice.length) problems.push({ where: `${where}, vs`, message: 'A number or a formula, not dice' });
+  if (s.then !== undefined && !THENS.includes(s.then)) problems.push({ where: `${where}, then`, message: 'stable or back_up' });
+  if (s.gets !== undefined && !conditionsOf(definition).some((c) => c.id === s.gets)) problems.push({ where: `${where}, gets`, message: 'Not one of this game\'s conditions' });
+  if (s.again !== undefined && typeof s.again !== 'boolean') problems.push({ where: `${where}, again`, message: 'Yes or no' });
+  if (s.again === true && s.gets === undefined) problems.push({ where: `${where}, again`, message: 'Dead down again with a condition: say which' });
+};
+
+/** STABILIZE as the rule has it, or null where the GM says, by hand. */
+const stabilizeOf = (d) => {
+  const s = isPlainObject(d.stabilize) ? d.stabilize : null;
+  if (!s || typeof s.field !== 'string' || !s.field) return null;
+  return {
+    field: s.field,
+    roll: typeof s.roll === 'string' ? s.roll : null,
+    vs: typeof s.vs === 'number' || (typeof s.vs === 'string' && s.vs.trim()) ? String(s.vs).trim() : '10',
+    then: THENS.includes(s.then) ? s.then : 'stable',
+    gets: typeof s.gets === 'string' && s.gets ? s.gets : null,
+    again: s.again === true && typeof s.gets === 'string' && !!s.gets,
+  };
 };
 
 /** The game's rule, every key filled in, or null where it is off or not written. */
@@ -153,6 +200,7 @@ const dyingRuleOf = (definition) => {
     turns: whole(d.turns, 1, LIMITS.turns) ? d.turns : START.turns,
     hurt: HURT.includes(d.hurt) ? d.hurt : START.hurt,
     npcs: { friendly: isPlainObject(d.npcs) && d.npcs.friendly === true, enemy: isPlainObject(d.npcs) && d.npcs.enemy === true },
+    stabilize: stabilizeOf(d),
   };
 };
 
@@ -182,11 +230,14 @@ const failed = (rule, st, by) => {
 /**
  * What a change to a character's health does: `{ st, said }`, the state after (null when they are not down) and the
  * words to say, or null when nothing is to be said. `wasOut` and `isOut` are the health model's answer before and after;
- * `hurt` is whether the change was damage.
+ * `hurt` is whether the change was damage; `deadAtOnce`, that STABILIZE's condition is on and kills them down again (8c4a).
  */
-const afterHealth = (rule, st, { wasOut, isOut, hurt }) => {
+const afterHealth = (rule, st, { wasOut, isOut, hurt, deadAtOnce = false }) => {
   if (!isOut) return st ? { st: null, said: 'BACK UP' } : { st: null, said: null };
-  if (!st) return wasOut && !hurt ? { st: null, said: null } : { st: startState(), said: rule.word };
+  if (!st && wasOut && !hurt) return { st: null, said: null };
+  // Down again with STABILIZE's condition on, where it says so (8c4a): dead at once.
+  if (!st && deadAtOnce) return { st: { ...startState(), state: 'dead' }, said: 'DOWN AGAIN · DEAD' };
+  if (!st) return { st: startState(), said: rule.word };
   if (!hurt || st.state === 'dead' || rule.hurt === 'nothing') return { st, said: null };
   if (rule.hurt === 'dead') return { st: { ...st, state: 'dead' }, said: 'HURT WHILE DOWN · DEAD' };
   if (rule.way === 'none') return { st, said: null };
@@ -274,8 +325,44 @@ const dyingShown = (definition) => {
     word: rule.word, way: rule.way,
     save: { dice: rule.save.dice, way: rule.save.way, target: said(rule.save.target) },
     to_live: rule.to_live, to_die: rule.to_die, harder: rule.harder, turns: rule.turns,
+    // STABILIZE (8c4a), for the HEALTH window to offer: the field rolled by its name, VS in words (@turns as TURNS); null where
+    // the GM says, by hand.
+    stabilize: rule.stabilize ? {
+      field: rule.stabilize.field,
+      label: String(labels.get(rule.stabilize.field) || rule.stabilize.field),
+      roll: rule.stabilize.roll,
+      vs: said(rule.stabilize.vs.replace(/@turns\b/g, 'TURNS')),
+      then: rule.stabilize.then,
+      gets: rule.stabilize.gets,
+    } : null,
   };
 };
+
+/**
+ * STABILIZE's number to beat for a character down (8c4a): its VS read with the character's `values` and @turns, how long they
+ * have been down. Null where the rule has no STABILIZE.
+ */
+const stabilizeTarget = (definition, rule, st, values) => {
+  if (!rule || !rule.stabilize) return null;
+  const names = namesFor(definition);
+  const read = rollAmount(rule.stabilize.vs, { ...values, turns: st ? st.turns : 0 }, { known: (n) => n === 'turns' || names.known(n), refused: names.refused }, () => 0);
+  return 'value' in read ? read.value : null;
+};
+
+/**
+ * A helper's roll at stabilizing (8c4a): `made` it or not. `{ st, heal, gets, said }`: STABLE, or BACK WITH 1 HP (`heal` 1, which
+ * clears the state as any heal does), with the condition to put on after; a miss changes nothing.
+ */
+const afterStabilize = (rule, st, made) => {
+  if (!made) return { st, heal: 0, gets: null, said: 'FAILED' };
+  const s = rule.stabilize;
+  const gets = s.gets;
+  if (s.then === 'back_up') return { st, heal: 1, gets, said: 'BACK WITH 1 HP' };
+  return { st: { ...st, state: 'stable', due: false }, heal: 0, gets, said: 'STABLE' };
+};
+
+/** The GM, by hand (8c4a): STABLE or DEAD, for a character down. */
+const byHand = (st, to) => (st && (to === 'stable' || to === 'dead') ? { ...st, state: to, due: false } : null);
 
 /** A stored state read back: the known shape, or null for anything else. */
 const stateOf = (v) => {
@@ -288,5 +375,5 @@ const stateOf = (v) => {
 
 module.exports = {
   WAYS, SAVE_WAYS, HURT, NATURALS, NATURAL_WORDS, LIMITS, START,
-  checkDying, dyingRuleOf, dyingShown, goesDown, startState, afterHealth, aTurn, deathSave, stateOf,
+  checkDying, dyingRuleOf, dyingShown, goesDown, startState, afterHealth, aTurn, deathSave, stateOf, stabilizeTarget, afterStabilize, byHand, THENS,
 };

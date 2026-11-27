@@ -312,6 +312,10 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
     // Named for what was rolled (6c4d3): the field where there is one (PHYSICAL SAVE says more
     // than its roll's SAVE), otherwise the roll.
     board: { label: named, ...(board || {}) },
+    // The dice and what was added, as the line has them in brackets, for a line said another way (stabilize, 8c4a).
+    working,
+    label,
+    what,
     total: result.total,
     glitch: !!result.glitch,
     criticalGlitch: !!result.glitch && result.critical === 'failure',

@@ -15,6 +15,7 @@ import { createRequire } from 'module';
 const require_ = createRequire(import.meta.url);
 const {
   WAYS, HURT, NATURALS, LIMITS, START, checkDying, dyingRuleOf, dyingShown, goesDown, startState, afterHealth, aTurn, deathSave, stateOf,
+  stabilizeTarget, afterStabilize, byHand, THENS,
 } = require_('../systemBuilder/dying');
 const { checkDefinition } = require_('../systemBuilder/definition');
 const citysys = require_('../systemBuilder/citysys');
@@ -46,7 +47,7 @@ describe('the dying section, checked', () => {
   it('refuses what is not part of it, and each key out of its range', () => {
     expect(problemsOf('dying')).toEqual(['dying: Must say what happens when health runs out']);
     expect(problemsOf([])).toEqual(['dying: Must say what happens when health runs out']);
-    expect(problemsOf({ stabilize: {} })).toEqual(['dying, stabilize: Not part of dying']);
+    expect(problemsOf({ cure: {} })).toEqual(['dying, cure: Not part of dying']);
     expect(problemsOf({ way: 'twice', hurt: 'ouch' })).toEqual(['dying, way: One of count, once, turns, none', 'dying, hurt: One of nothing, failure, dead']);
     expect(problemsOf({ npcs: true })).toEqual(['dying, npcs: Must say whether friendly and enemy NPCs go down']);
     expect(problemsOf({ npcs: { friendly: 'yes', allies: true } })).toEqual(['dying, npcs, friendly: Yes or no', 'dying, npcs, allies: Only friendly and enemy']);
@@ -126,10 +127,10 @@ describe('the rule a game plays by', () => {
   });
 
   it('every key filled in: as written, or as a game starts', () => {
-    expect(ruleOf({})).toEqual(START);
+    expect(ruleOf({})).toEqual({ ...START, stabilize: null });
     expect(START).toEqual({ word: 'DYING', way: 'count', save: { dice: '1d20', way: 'at_least', target: '10' }, to_live: 3, to_die: 3, harder: 0, naturals: [], turns: 6, hurt: 'nothing', npcs: { friendly: false, enemy: false } });
-    expect(ruleOf(CPR)).toEqual({ ...START, word: 'MORTALLY WOUNDED', way: 'once', save: { dice: '1d10', way: 'under', target: '@body' }, harder: 1, naturals: [{ face: 10, then: 'dead' }] });
-    expect(ruleOf({ save: { target: 12 }, to_live: 0, naturals: [{ face: 0, then: 'dead' }, { face: 3, then: 'dead' }] })).toEqual({ ...START, save: { ...START.save, target: '12' }, naturals: [{ face: 3, then: 'dead' }] });
+    expect(ruleOf(CPR)).toEqual({ ...START, stabilize: null, word: 'MORTALLY WOUNDED', way: 'once', save: { dice: '1d10', way: 'under', target: '@body' }, harder: 1, naturals: [{ face: 10, then: 'dead' }] });
+    expect(ruleOf({ save: { target: 12 }, to_live: 0, naturals: [{ face: 0, then: 'dead' }, { face: 3, then: 'dead' }] })).toEqual({ ...START, stabilize: null, save: { ...START.save, target: '12' }, naturals: [{ face: 3, then: 'dead' }] });
   });
 
   it("WHO GOES DOWN: players' characters always; friendly and enemy NPCs each as the GM ticks, both off to start", () => {
@@ -297,7 +298,7 @@ describe('as a sheet shows it (8c3)', () => {
     expect(dyingShown(OWN)).toBeNull();
     expect(dyingShown({ ...OWN, dying: DND, parts: { death: { on: false } } })).toBeNull();
     expect(dyingShown({ ...OWN, dying: { ...CPR, save: { dice: '1d10', way: 'under', target: '@body + @wis' } } }))
-      .toEqual({ word: 'MORTALLY WOUNDED', way: 'once', save: { dice: '1d10', way: 'under', target: 'BODY + WISDOM' }, to_live: 3, to_die: 3, harder: 1, turns: 6 });
+      .toEqual({ word: 'MORTALLY WOUNDED', way: 'once', save: { dice: '1d10', way: 'under', target: 'BODY + WISDOM' }, to_live: 3, to_die: 3, harder: 1, turns: 6, stabilize: null });
     // A name the system hasn't got is said as written.
     expect(dyingShown({ ...OWN, dying: { save: { target: '@gone' } } }).save.target).toBe('GONE');
   });
@@ -340,5 +341,82 @@ describe('carried with the system', () => {
 
   it('a system\'s problems name it, so it can\'t be published with any', () => {
     expect(checkDefinition({ ...OWN, dying: { way: 'twice' } }).problems.map((p) => p.where)).toEqual(['dying, way']);
+  });
+});
+
+describe('STABILIZE (8c4a)', () => {
+  const HEALER = {
+    ...OWN,
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'body', label: 'Body' }, { id: 'wis', label: 'Wisdom' }, { id: 'heal', label: 'Heal' }] }],
+    rolls: [{ id: 'check', label: 'Check', dice: [{ count: '1', sides: 20 }], add: '@this', by: ['heal'] }, { id: 'hard', label: 'Hard', dice: [{ count: '2', sides: 6 }], add: '@this', by: ['heal'] }],
+    conditions: { frail: { name: 'Frail' } },
+  };
+  const stab = (stabilize) => { const p = []; checkDying({ ...HEALER, dying: { ...CWN, stabilize } }, p); return p.map((x) => `${x.where}: ${x.message}`); };
+  const CWN_STAB = { field: 'heal', roll: 'check', vs: '8 + @turns', then: 'back_up', gets: 'frail', again: true };
+
+  it('checked: a field with a roll, one of its rolls, a VS it can read with @turns, then, a condition it has, and again only with one', () => {
+    expect(stab(CWN_STAB)).toEqual([]);
+    expect(stab({ field: 'heal' })).toEqual([]);
+    expect(checkDefinition({ ...HEALER, dying: { ...CWN, stabilize: CWN_STAB } }).problems).toEqual([]);
+    expect(stab('heal')).toEqual(['dying, stabilize: Must say what the helper rolls and against what']);
+    expect(stab({ field: 'heal', with: 1 })).toEqual(['dying, stabilize, with: Not part of stabilize']);
+    expect(stab({})).toEqual(['dying, stabilize, field: Which field the helper rolls']);
+    expect(stab({ field: 'body' })).toEqual(['dying, stabilize, field: body has no roll to make']);
+    expect(stab({ field: 'heal', roll: 'nope' })).toEqual(["dying, stabilize, roll: Not one of heal's rolls"]);
+    expect(stab({ field: 'heal', vs: '@nope' })).toEqual(["dying, stabilize, vs: @nope isn't one of this system's names"]);
+    expect(stab({ field: 'heal', vs: '1d6' })).toEqual(['dying, stabilize, vs: A number or a formula, not dice']);
+    expect(stab({ field: 'heal', vs: ' ' })).toEqual(['dying, stabilize, vs: Needs a number or a formula to beat']);
+    expect(stab({ field: 'heal', vs: true })).toEqual(['dying, stabilize, vs: A number or a formula']);
+    expect(stab({ field: 'heal', vs: 12, then: 'up' })).toEqual(['dying, stabilize, then: stable or back_up']);
+    expect(stab({ field: 'heal', gets: 'cursed' })).toEqual(["dying, stabilize, gets: Not one of this game's conditions"]);
+    expect(stab({ field: 'heal', gets: 'prone' })).toEqual([]);
+    expect(stab({ field: 'heal', gets: 'frail', again: 'yes' })).toEqual(['dying, stabilize, again: Yes or no']);
+    expect(stab({ field: 'heal', again: true })).toEqual(['dying, stabilize, again: Dead down again with a condition: say which']);
+    expect(THENS).toEqual(['stable', 'back_up']);
+  });
+
+  it('in the rule: filled in, or none where the GM says by hand', () => {
+    const rule = (stabilize) => dyingRuleOf({ ...HEALER, dying: { ...CWN, stabilize } }).stabilize;
+    expect(rule(CWN_STAB)).toEqual(CWN_STAB);
+    expect(rule({ field: 'heal' })).toEqual({ field: 'heal', roll: null, vs: '10', then: 'stable', gets: null, again: false });
+    expect(rule({ field: 'heal', vs: 12, then: 'sideways', again: true })).toMatchObject({ vs: '12', then: 'stable', again: false });
+    expect(rule(undefined)).toBeNull();
+    expect(rule({ vs: 10 })).toBeNull();
+  });
+
+  it('the number to beat, read on the one down with @turns; none without STABILIZE', () => {
+    const rule = dyingRuleOf({ ...HEALER, dying: { ...CWN, stabilize: { ...CWN_STAB, vs: '8 + @turns + @body' } } });
+    expect(stabilizeTarget(HEALER, rule, { ...startState(), turns: 2 }, { body: 1 })).toBe(11);
+    expect(stabilizeTarget(HEALER, rule, null, {})).toBe(8);
+    expect(stabilizeTarget(HEALER, ruleOf(CWN), startState(), {})).toBeNull();
+  });
+
+  it('made: STABLE, or BACK WITH 1 HP, with the condition after; missed: nothing changes', () => {
+    const back = dyingRuleOf({ ...HEALER, dying: { ...CWN, stabilize: CWN_STAB } });
+    const st = { ...startState(), turns: 2, due: true };
+    expect(afterStabilize(back, st, true)).toEqual({ st, heal: 1, gets: 'frail', said: 'BACK WITH 1 HP' });
+    expect(afterStabilize(back, st, false)).toEqual({ st, heal: 0, gets: null, said: 'FAILED' });
+    const stable = dyingRuleOf({ ...HEALER, dying: { ...CWN, stabilize: { field: 'heal' } } });
+    expect(afterStabilize(stable, st, true)).toEqual({ st: { ...st, state: 'stable', due: false }, heal: 0, gets: null, said: 'STABLE' });
+  });
+
+  it('by hand: STABLE or DEAD for one down; nothing else', () => {
+    const st = { ...startState(), due: true };
+    expect(byHand(st, 'stable')).toEqual({ ...st, state: 'stable', due: false });
+    expect(byHand(st, 'dead')).toEqual({ ...st, state: 'dead', due: false });
+    expect(byHand(st, 'up')).toBeNull();
+    expect(byHand(null, 'dead')).toBeNull();
+  });
+
+  it('down again with the condition on: dead at once, where it says so', () => {
+    expect(afterHealth(ruleOf(DND), null, { wasOut: false, isOut: true, hurt: true, deadAtOnce: true })).toEqual({ st: { ...startState(), state: 'dead' }, said: 'DOWN AGAIN · DEAD' });
+    expect(afterHealth(ruleOf(DND), null, { wasOut: false, isOut: true, hurt: true }).st).toEqual(startState());
+    // Already at 0 with nothing kept and not hurt: still nothing.
+    expect(afterHealth(ruleOf(DND), null, { wasOut: true, isOut: true, hurt: false, deadAtOnce: true })).toEqual({ st: null, said: null });
+  });
+
+  it('as a sheet shows it: the field by its name, VS in words', () => {
+    expect(dyingShown({ ...HEALER, dying: { ...CWN, stabilize: { ...CWN_STAB, vs: '8 + @turns + @body' } } }).stabilize)
+      .toEqual({ field: 'heal', label: 'Heal', roll: 'check', vs: '8 + TURNS + BODY', then: 'back_up', gets: 'frail' });
   });
 });

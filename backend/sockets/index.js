@@ -40,7 +40,7 @@ const { inventoryAdded } = require('../sheets/inventoryImport');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { hitOnTarget, targetOf, takeOff, HIT_WAITS_MS } = require('../tokens/hitOnTarget');
-const { setAnnouncer: setDyingAnnouncer, rollDeathSave, turnGoesBy } = require('../tokens/dyingTable');
+const { setAnnouncer: setDyingAnnouncer, rollDeathSave, turnGoesBy, stabilizeToken, byHandToken } = require('../tokens/dyingTable');
 const { hitsOn, mayApply, shownTo, appliedWords, dismissedWords, keepHit, rowWords } = require('../tokens/waitingHits');
 const { sendableGear, sendableField, targetsOf, sentWords, sendShown, keepSendable, sendsOf, claimSend, nameSend, dropSend } = require('../tokens/sendTo');
 const { attackAsProblem, characterKey, createHitsWaiting } = require('../tokens/attackAs');
@@ -3032,6 +3032,36 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       turnGoesBy(db, { runtime: customSystems, locationId: Number(payload.locationId) })
         .then((done) => reply(done.ok ? { ok: true } : { ok: false, error: done.error }))
         .catch(() => reply({ ok: false, error: 'Could not be counted' }));
+    });
+
+    // STABILIZE (8c4a; the mockup's answer 4): someone else brings a token down back. A player with their own character's
+    // roll; the GM as any token (`as`, as ATTACK AS picks one). Answers { ok, made?, error? }.
+    socket.on('stabilize', (payload, ack) => {
+      const reply = typeof ack === 'function' ? ack : () => {};
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !payload || !Number.isInteger(Number(payload.locationId))) return reply({ ok: false, error: 'Which token?' });
+      const gm = isGmSocket(socket);
+      if (gm && !Number.isInteger(Number(payload.as))) return reply({ ok: false, error: 'Who helps?' });
+      const cols = 'id, name, shape, owner, conditions';
+      const [sql, args] = gm
+        ? [`SELECT ${cols} FROM locations WHERE id = ? AND shape IN ('rhombus', 'friendly_rhombus', 'enemy_rhombus')`, [Number(payload.as)]]
+        : [`SELECT ${cols} FROM locations WHERE shape = 'rhombus' AND owner = ? ORDER BY id LIMIT 1`, [info.userName]];
+      db.get(sql, args, (err, helper) => {
+        if (err || !helper) return reply({ ok: false, error: gm ? 'No such token to help' : 'Your character has no token on the map' });
+        stabilizeToken(db, { runtime: customSystems, hits: { targetOf, takeOff }, io, locationId: Number(payload.locationId), helper: { row: helper }, rng: cryptoRng })
+          .then((done) => reply(done.ok ? { ok: true, made: done.made } : { ok: false, error: done.error }))
+          .catch(() => reply({ ok: false, error: 'Could not be rolled' }));
+      });
+    });
+
+    // STABLE or DEAD by hand (8c4a): the GM's alone. Answers { ok, error? }.
+    socket.on('dyingByHand', (payload, ack) => {
+      const reply = typeof ack === 'function' ? ack : () => {};
+      if (!isGmSocket(socket)) return reply({ ok: false, error: 'The GM\'s to say' });
+      if (!payload || !Number.isInteger(Number(payload.locationId)) || !['stable', 'dead'].includes(payload.to)) return reply({ ok: false, error: 'Stable or dead' });
+      byHandToken(db, { runtime: customSystems, locationId: Number(payload.locationId), to: payload.to })
+        .then((done) => reply(done.ok ? { ok: true } : { ok: false, error: done.error }))
+        .catch(() => reply({ ok: false, error: 'Could not be said' }));
     });
 
     // APPLY one, DISMISS one, or APPLY ALL oldest first (answer 2), by whoever may (mayApply). Each taken out of the table

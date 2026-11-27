@@ -152,3 +152,16 @@ describe('each number', () => {
     expect(startsWhen({ ...H, core: { health: { model: 'none' } } })).toBe('never: this game has no health (SETUP: NO HEALTH)');
   });
 });
+
+describe("what the card doesn't draw", () => {
+  it('kept through every change: STABILIZE from a file stays as it was (8c4a)', () => {
+    const stabilize = { field: 'body', vs: '10' };
+    let def: Definition = { ...on(H), dying: { ...(on(H).dying as object), stabilize } };
+    def = withDying(def, { word: 'Down' });
+    def = withSave(def, { dice: '1d12' });
+    def = withNpcs(def, { enemy: true });
+    def = withPreset(def, 'cwn');
+    def = withNaturalAdded(def);
+    expect((def.dying as { stabilize: unknown }).stabilize).toEqual(stabilize);
+  });
+});
