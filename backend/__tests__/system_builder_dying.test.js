@@ -14,7 +14,7 @@ import { createRequire } from 'module';
 
 const require_ = createRequire(import.meta.url);
 const {
-  WAYS, HURT, NATURALS, LIMITS, START, checkDying, dyingRuleOf, goesDown, startState, afterHealth, aTurn, deathSave, stateOf,
+  WAYS, HURT, NATURALS, LIMITS, START, checkDying, dyingRuleOf, dyingShown, goesDown, startState, afterHealth, aTurn, deathSave, stateOf,
 } = require_('../systemBuilder/dying');
 const { checkDefinition } = require_('../systemBuilder/definition');
 const citysys = require_('../systemBuilder/citysys');
@@ -289,6 +289,23 @@ describe('the death save', () => {
     expect(save(dnd, null, [14])).toEqual({ ok: false, error: 'Not dying' });
     for (const way of [CWN, { way: 'none' }]) expect(save(ruleOf(way), startState(), [14])).toEqual({ ok: false, error: 'This game has no death saves' });
     expect(deathSave(null, startState(), {})).toEqual({ ok: false, error: 'This game has no death saves' });
+  });
+});
+
+describe('as a sheet shows it (8c3)', () => {
+  it('the word, the way, the save with its names by their labels, the counts and turns; nothing without the rule', () => {
+    expect(dyingShown(OWN)).toBeNull();
+    expect(dyingShown({ ...OWN, dying: DND, parts: { death: { on: false } } })).toBeNull();
+    expect(dyingShown({ ...OWN, dying: { ...CPR, save: { dice: '1d10', way: 'under', target: '@body + @wis' } } }))
+      .toEqual({ word: 'MORTALLY WOUNDED', way: 'once', save: { dice: '1d10', way: 'under', target: 'BODY + WISDOM' }, to_live: 3, to_die: 3, harder: 1, turns: 6 });
+    // A name the system hasn't got is said as written.
+    expect(dyingShown({ ...OWN, dying: { save: { target: '@gone' } } }).save.target).toBe('GONE');
+  });
+
+  it('in the template a sheet is drawn from', () => {
+    const { renderOf } = require_('../systemBuilder/runtime');
+    expect(renderOf('sys_aaaaaaaaaaaaaaaa', { ...OWN, dying: DND }).dying).toEqual(dyingShown({ ...OWN, dying: DND }));
+    expect(renderOf('sys_aaaaaaaaaaaaaaaa', OWN).dying).toBeNull();
   });
 });
 

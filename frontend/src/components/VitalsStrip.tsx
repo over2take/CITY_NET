@@ -10,6 +10,8 @@ import { createPlayerTokenRow } from './tokenActions';
 import { TokenConditions } from './TokenConditions';
 import { TurnAskRolls } from './TurnAskRolls';
 import { WaitingHits } from './WaitingHits';
+import { DyingBox } from './DyingBox';
+import type { DyingShown } from '../sheets/dyingBox';
 import { useWaitingHits } from '../hooks/useWaitingHits';
 
 // The vitals strip (8s3b; mockup docs/mockups/vitals-strip.html, approved 2026-11-17), in the sheet header on every tab of
@@ -26,6 +28,7 @@ import { useWaitingHits } from '../hooks/useWaitingHits';
 // 8s4a (the user, 2026-11-24: "make the MAX number editable"): MAX set by clicking it, as TEMP is, both typed in place, the
 // size of the number and underlined, no box (the user: "that box just does not fit"). Where a formula works MAX out, the
 // server keeps what was typed as an ADJUST over it.
+// 8c3: under the box, the DYING box while the token is down under the game's dying rule (components/DyingBox.tsx).
 
 const small: React.CSSProperties = {
   background: 'none', fontFamily: 'inherit', fontSize: '0.6rem', letterSpacing: '1px', padding: '2px 6px', cursor: 'pointer', whiteSpace: 'nowrap',
@@ -34,7 +37,7 @@ const button = (color: string): React.CSSProperties => ({ ...small, color, borde
 const label: React.CSSProperties = { fontSize: '0.55rem', letterSpacing: '2px', opacity: 0.7 };
 const big: React.CSSProperties = { fontSize: '1.6rem', lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' };
 
-export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false, maxNote, defense }: {
+export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false, maxNote, defense, dying, gm = false }: {
   vitals: SheetVitals; open: boolean; onToggle: () => void;
   /** The sheet's RESTS section, where there is a rest to take from here (8s3c); none otherwise. */
   rests?: React.ReactNode;
@@ -44,6 +47,10 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
   maxNote?: string;
   /** The token's armor class as the game has it (sheets/vitals.ts defenseOf): its name, and a ranged one's; none without. */
   defense?: Defense;
+  /** The game's rule for when health runs out (8c3), for the DYING box; none without. */
+  dying?: DyingShown;
+  /** The GM looking: A TURN GOES BY in the DYING box. */
+  gm?: boolean;
 }) {
   const { token, system, authToken, socket, reload } = vitals;
   const [amount, setAmount] = useState('');
@@ -172,6 +179,8 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
       <HitPointsPanel target={token as unknown as Location} token={authToken} refreshLocations={reload} gameSystem={system} socket={socket} underStrip />
     </div>
   );
+  // Down (8c3): the DYING box, right under the box, over everything else under it.
+  const downBox = dying && <DyingBox rule={dying} dying={token.dying} locationId={token.id} gm={gm} socket={socket} />;
   const alert = refused
     ? <span role="alert" style={{ color: 'var(--danger)', fontSize: '0.6rem', letterSpacing: '1px' }}>{refused}</span>
     : said && <span role="status" aria-label="What happened" style={{ color: 'var(--cyan)', fontSize: '0.6rem', letterSpacing: '1px' }}>{said}</span>;
@@ -190,6 +199,7 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
             HEALTH {open ? '▴' : '▾'}
           </button>
         </div>
+        {downBox}
         {alert}
         {below}
         {panel}
@@ -315,6 +325,7 @@ export function VitalsStrip({ vitals, open, onToggle, rests, restCalled = false,
           {hp} DETAILS {open ? '▴' : '▾'}
         </button>
       </div>
+      {downBox}
       {alert}
       {below}
       {panel}

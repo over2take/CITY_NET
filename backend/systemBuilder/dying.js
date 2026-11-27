@@ -261,6 +261,22 @@ const deathSave = (rule, st, { definition, values, rng, inFight = false, byGm = 
   return said({ ...base, saves }, `SUCCESS · ${countWords(rule, { ...base, saves })}`);
 };
 
+/**
+ * The rule as a sheet shows it (8c3; sheets/dyingBox.ts draws it): the word, the way, the save in words (its target's names by
+ * their labels: UNDER BODY), the counts and the turns; null where the game has no dying rule.
+ */
+const dyingShown = (definition) => {
+  const rule = dyingRuleOf(definition);
+  if (!rule) return null;
+  const labels = namesOf(definition);
+  const said = (text) => String(text).replace(/@([a-z][a-z0-9_]*)/g, (_, id) => String(labels.get(id) || id).toUpperCase());
+  return {
+    word: rule.word, way: rule.way,
+    save: { dice: rule.save.dice, way: rule.save.way, target: said(rule.save.target) },
+    to_live: rule.to_live, to_die: rule.to_die, harder: rule.harder, turns: rule.turns,
+  };
+};
+
 /** A stored state read back: the known shape, or null for anything else. */
 const stateOf = (v) => {
   let s = v;
@@ -272,5 +288,5 @@ const stateOf = (v) => {
 
 module.exports = {
   WAYS, SAVE_WAYS, HURT, NATURALS, NATURAL_WORDS, LIMITS, START,
-  checkDying, dyingRuleOf, goesDown, startState, afterHealth, aTurn, deathSave, stateOf,
+  checkDying, dyingRuleOf, dyingShown, goesDown, startState, afterHealth, aTurn, deathSave, stateOf,
 };

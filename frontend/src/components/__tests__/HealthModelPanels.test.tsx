@@ -1,7 +1,8 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor, act, within } from '@testing-library/react';
 import { HitPointsPanel, HealthReviewPanel } from '../HitPoints';
+import { registerCustomTemplate } from '../../sheets/customTemplates';
 import type { HealthView } from '../../hooks/useHealthView';
 
 /**
@@ -281,5 +282,37 @@ describe('what other players see', () => {
     render(<HealthReviewPanel location={token(8, 10)} socket={socket} gameSystem="cyberpunk_red" />);
     expect(screen.getByRole('img', { name: /Heart monitor/ })).toBeTruthy();
     expect(socket.emitted.some((x) => x.e === 'requestHealthView')).toBe(false);
+  });
+});
+
+describe("down under the game's dying rule (8c3)", () => {
+  const DOWN_SYSTEM = 'sys_00000000000000dd';
+  const DYING = { word: 'MORTALLY WOUNDED', way: 'turns' as const, save: { dice: '1d20', way: 'at_least' as const, target: '10' }, to_live: 3, to_die: 3, harder: 0, turns: 6 };
+  const full = JSON.stringify({ state: 'dying', saves: 0, fails: 0, made: 0, turns: 2, due: false });
+  const setUp = () => {
+    stubFetch();
+    registerCustomTemplate({ id: DOWN_SYSTEM, name: 'Downfall', words: {}, parts: {}, derived: [], sheet: { sections: [] }, dying: DYING });
+  };
+
+  it("HEALTH, for whoever may change it: the DYING box over the conditions, the GM's A TURN GOES BY", () => {
+    setUp();
+    const socket = fakeSocket({ 7: { model: 'pool' } });
+    render(<HitPointsPanel target={token(0, 10, { dying: full })} token="gm-token" refreshLocations={() => {}} gameSystem={DOWN_SYSTEM} socket={socket} gm />);
+    const box = within(screen.getByRole('region', { name: 'MORTALLY WOUNDED' }));
+    expect(box.getByRole('img', { name: 'TURNS LEFT 4 of 6' })).toBeTruthy();
+    expect(box.getByRole('button', { name: 'A TURN GOES BY' })).toBeTruthy();
+  });
+
+  it("under the sheet's strip, none: the strip has it", () => {
+    setUp();
+    render(<HitPointsPanel target={token(0, 10, { dying: full })} token="" refreshLocations={() => {}} gameSystem={DOWN_SYSTEM} socket={fakeSocket({ 7: { model: 'pool' } })} underStrip />);
+    expect(screen.queryByRole('region', { name: 'MORTALLY WOUNDED' })).toBeNull();
+  });
+
+  it("anyone else's look at the token: the word alone, as they were sent it", () => {
+    setUp();
+    render(<HealthReviewPanel location={token(0, 10, { dying: '{"state":"dying"}' })} socket={fakeSocket({ 7: { model: 'pool' } })} gameSystem={DOWN_SYSTEM} />);
+    expect(screen.getByRole('status', { name: 'Down: MORTALLY WOUNDED' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'A TURN GOES BY' })).toBeNull();
   });
 });

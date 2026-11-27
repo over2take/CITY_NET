@@ -7,6 +7,8 @@ import { useWords, asLabel } from '../sheets/words';
 import { ModelHealthEditor, ModelHealthDescription, NoHealthNotice, monitorBandFor, type SendHealth } from './HealthModelPanels';
 import { TokenResistances } from './TokenResistances';
 import { TokenConditions } from './TokenConditions';
+import { DyingBox, DownWord } from './DyingBox';
+import { customTemplate, useCustomTemplate } from '../sheets/customTemplates';
 import { WaitingHits } from './WaitingHits';
 import { useWaitingHits } from '../hooks/useWaitingHits';
 // Inline SVGs so we can tint them with CSS `color` (currentColor)
@@ -122,9 +124,15 @@ interface HitPointsPanelProps {
    * (8s3c). The map's HEALTH window has it off.
    */
   underStrip?: boolean;
+  /** The GM looking (8c3): A TURN GOES BY in the DYING box. */
+  gm?: boolean;
 }
 
-export function HitPointsPanel({ target, token, refreshLocations, gameSystem, onCreate, socket, underStrip = false }: HitPointsPanelProps) {
+export function HitPointsPanel({ target, token, refreshLocations, gameSystem, onCreate, socket, underStrip = false, gm = false }: HitPointsPanelProps) {
+  // The game's rule for when health runs out (8c3): its DYING box over the conditions, as on the sheet (under the strip, the
+  // strip draws both).
+  useCustomTemplate(gameSystem);
+  const dyingRule = gameSystem ? customTemplate(gameSystem)?.dying : undefined;
   const [actionAmount, setActionAmount] = useState(0);
   const [tempAmount, setTempAmount] = useState(0);
   const [maxAmount, setMaxAmount] = useState(0);
@@ -213,9 +221,12 @@ export function HitPointsPanel({ target, token, refreshLocations, gameSystem, on
   );
   // Right under the HP, above CONDITIONS, so they're seen first (8b6b2; mockup waiting-hits, answer 3 A).
   const waitingBox = !underStrip && <WaitingHits view={waiting.view} act={waiting.act} gm={word('gm', 'short', 'GM')} />;
-  // Whoever has this panel may change the token's health, and so its conditions (4e2b1).
+  // Whoever has this panel may change the token's health, and so its conditions (4e2b1). Above them, the DYING box (8c3).
   const conditions = (
+    <>
+    {dyingRule && <DyingBox rule={dyingRule} dying={target?.dying} locationId={target.id} gm={gm} socket={socket ?? null} />}
     <TokenConditions location={target} gameSystem={gameSystem} socket={socket} canChange authToken={token || undefined} onChanged={refreshLocations} />
+    </>
   );
   // RESISTANCES and VULNERABILITIES (8b3c2b): under CONDITIONS here, under INJURIES under the strip.
   const resistances = (
@@ -381,6 +392,8 @@ interface HealthReviewPanelProps {
  * down is for the table to read, not to count.
  */
 export function HealthReviewPanel({ location, socket, gameSystem, onRolled, authToken }: HealthReviewPanelProps) {
+  useCustomTemplate(gameSystem);
+  const dyingRule = gameSystem ? customTemplate(gameSystem)?.dying : undefined;
   const [injuriesOpen, setInjuriesOpen] = useState(false);
   const [stun, setStun] = useState<{ stun_current: number; stun_monitor: number } | null>(null);
   // A custom system's health model, described: never a number or a note.
@@ -478,7 +491,8 @@ export function HealthReviewPanel({ location, socket, gameSystem, onRolled, auth
       )}
 
       {injuriesOpen && <InjuryMap injuries={injuries} />}
-      {/* Which conditions, and what they mean: never the rounds left or the modifiers (4e2b1). */}
+      {/* Down (8c3): the word, as everyone sees it. Which conditions, and what they mean: never the rounds left or the modifiers (4e2b1). */}
+      <DownWord rule={dyingRule} dying={location.dying} />
       <TokenConditions location={location} gameSystem={gameSystem} socket={socket} canChange={false} />
       {/* Its resistances, to read (8b4b): another player's character's all of them, an NPC's only as the GM revealed them. */}
       <TokenResistances locationId={location.id} authToken={authToken} socket={socket} conditionsKey={String((location as unknown as { conditions?: string }).conditions ?? '')} />
