@@ -3,6 +3,7 @@ import { createRequire } from 'module';
 import {
   dyingOn, dyingOf, withDyingOn, withPreset, presetNow, withDying, withSave, withNpcs, wholeTyped, withNaturalAdded, withNatural, withoutNatural,
   asks, startsWhen, START, LIMITS, PRESETS, WAYS, HURTS, NATURAL_THENS,
+  helperFields, stabilizeConditions, stabilizeOf, withStabilize, withStabilizePart, STABILIZE_THENS,
 } from '../dying';
 import type { Definition } from '../systemsApi';
 
@@ -154,14 +155,85 @@ describe('each number', () => {
 });
 
 describe("what the card doesn't draw", () => {
-  it('kept through every change: STABILIZE from a file stays as it was (8c4a)', () => {
+  it('kept through every change but a preset: STABILIZE from a file stays as it was (8c4a)', () => {
     const stabilize = { field: 'body', vs: '10' };
     let def: Definition = { ...on(H), dying: { ...(on(H).dying as object), stabilize } };
     def = withDying(def, { word: 'Down' });
     def = withSave(def, { dice: '1d12' });
     def = withNpcs(def, { enemy: true });
-    def = withPreset(def, 'cwn');
     def = withNaturalAdded(def);
     expect((def.dying as { stabilize: unknown }).stabilize).toEqual(stabilize);
+    // A preset writes its own (8c4b1), the field picked kept where the game has none of its name.
+    expect(stabilizeOf(withPreset(def, 'cwn'))).toEqual({ field: 'body', vs: '8 + @turns', then: 'back_up' });
+  });
+});
+
+describe("STABILIZE (8c4b1)", () => {
+  // A game with a HEAL and a FIRST AID to roll, a Medicine formula with two rolls, and FRAIL.
+  const HEALERS: Definition = {
+    format: 1, name: 'Healers',
+    stats: [{ id: 'skills', label: 'SKILLS', stats: [{ id: 'heal', label: 'Heal' }, { id: 'first_aid', label: 'First Aid' }, { id: 'body', label: 'Body' }] }],
+    derived: [{ id: 'medicine', label: 'Medicine', formula: '@heal' }],
+    rolls: [
+      { id: 'check', label: 'Check', dice: [{ count: '1', sides: 20 }], add: '@this', by: ['heal', 'first_aid', 'medicine'] },
+      { id: 'hard', label: 'Hard', dice: [{ count: '2', sides: 6 }], add: '@this', by: ['medicine'] },
+    ],
+    conditions: { frail: { name: 'Frail' } },
+  };
+  const ON = withDyingOn(HEALERS, true);
+
+  it('what a helper can roll: each field with a roll, by name, with its rolls; the conditions that are on', () => {
+    expect(helperFields(HEALERS)).toEqual([
+      { field: 'heal', label: 'HEAL', rolls: [{ id: 'check', label: 'CHECK' }] },
+      { field: 'first_aid', label: 'FIRST AID', rolls: [{ id: 'check', label: 'CHECK' }] },
+      { field: 'medicine', label: 'MEDICINE', rolls: [{ id: 'check', label: 'CHECK' }, { id: 'hard', label: 'HARD' }] },
+    ]);
+    expect(helperFields(H)).toEqual([]);
+    expect(stabilizeConditions(HEALERS).map((c) => c.id)).toContain('frail');
+    expect(stabilizeConditions({ ...HEALERS, conditions: { frail: { name: 'Frail' }, prone: { on: false } } }).map((c) => c.id)).not.toContain('prone');
+    expect(STABILIZE_THENS.map((t) => t.id)).toEqual(['stable', 'back_up']);
+  });
+
+  it('each preset finds its game\'s field and condition by name, and passes the server\'s checks', () => {
+    const at = (id: 'dnd' | 'cpr' | 'cwn' | 'none') => withPreset(ON, id);
+    expect(stabilizeOf(at('dnd'))).toEqual({ field: 'medicine', vs: '10', then: 'stable' });
+    expect(stabilizeOf(at('cpr'))).toEqual({ field: 'first_aid', vs: '15', then: 'stable' });
+    expect(stabilizeOf(at('cwn'))).toEqual({ field: 'heal', vs: '8 + @turns', then: 'back_up', gets: 'frail', again: true });
+    expect(stabilizeOf(at('none'))).toBeNull();
+    for (const id of ['dnd', 'cpr', 'cwn', 'none'] as const) expect(problems(at(id)), id).toEqual([]);
+    // No FRAIL in the game: CWN's without it.
+    expect(stabilizeOf(withPreset(withDyingOn({ ...HEALERS, conditions: {} }, true), 'cwn'))).toEqual({ field: 'heal', vs: '8 + @turns', then: 'back_up' });
+  });
+
+  it('no field of that name: the one picked stays; none picked, the GM says', () => {
+    const picked = withStabilizePart(ON, { field: 'heal' });
+    expect(stabilizeOf(withPreset(picked, 'dnd'))).toMatchObject({ field: 'medicine' });
+    const noMedicine = withDyingOn({ ...HEALERS, derived: [], rolls: [{ ...(HEALERS.rolls as object[])[0], by: ['body'] }] } as Definition, true);
+    expect(stabilizeOf(withPreset(noMedicine, 'dnd'))).toBeNull();
+    expect(stabilizeOf(withPreset(withStabilizePart(noMedicine, { field: 'body' }), 'dnd'))).toEqual({ field: 'body', vs: '10', then: 'stable' });
+  });
+
+  it('read as the server reads it; changed a part at a time; a new field drops the old one\'s roll; none, the GM says', () => {
+    // Switched on the first time, D&D 5E's: MEDICINE.
+    expect(stabilizeOf(ON)).toEqual({ field: 'medicine', vs: '10', then: 'stable' });
+    expect(stabilizeOf(withStabilize(ON, null))).toBeNull();
+    expect(stabilizeOf({ ...ON, dying: { stabilize: { field: 'heal', vs: 9, then: 'up', gets: '', again: 'yes' } } })).toEqual({ field: 'heal', vs: '9', then: 'stable' });
+    expect(stabilizeOf({ ...ON, dying: { stabilize: { vs: 9 } } })).toBeNull();
+    let def = withStabilizePart(ON, { field: 'medicine' });
+    expect(stabilizeOf(def)).toEqual({ field: 'medicine', vs: '10', then: 'stable' });
+    def = withStabilizePart(def, { roll: 'hard', vs: '8 + @turns', then: 'back_up', gets: 'frail', again: true });
+    expect(stabilizeOf(def)).toEqual({ field: 'medicine', roll: 'hard', vs: '8 + @turns', then: 'back_up', gets: 'frail', again: true });
+    expect(problems(def)).toEqual([]);
+    def = withStabilizePart(def, { field: 'heal' });
+    expect(stabilizeOf(def)!.roll).toBeUndefined();
+    // The condition taken off takes DEAD AT ONCE with it.
+    def = withStabilizePart(def, { gets: undefined });
+    expect((def.dying as { stabilize: Record<string, unknown> }).stabilize).toEqual({ field: 'heal', vs: '8 + @turns', then: 'back_up' });
+    expect(stabilizeOf(withStabilizePart(def, { field: '' }))).toBeNull();
+    // Nothing left behind for the server to refuse.
+    expect((withStabilizePart(def, { field: '' }).dying as Record<string, unknown>).stabilize).toBeUndefined();
+    expect((withStabilize(def, null).dying as Record<string, unknown>).stabilize).toBeUndefined();
+    // The rest of the rule kept through it.
+    expect(dyingOf(def).word).toBe(dyingOf(ON).word);
   });
 });

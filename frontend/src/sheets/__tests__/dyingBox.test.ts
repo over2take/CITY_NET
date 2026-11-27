@@ -62,6 +62,6 @@ describe('what the box shows', () => {
     expect(none).toMatchObject({ word: 'TAKEN OUT', turnButton: false, note: 'The table decides what happens. Healing above 0 clears it.' });
     expect(none.save).toBeUndefined();
     expect(boxOf(DND, downOf(FULL({ state: 'stable' }))!, { gm: true })).toEqual({ word: 'STABLE', state: 'stable', turnButton: false, note: 'No more saves. Healing above 0 clears it.' });
-    expect(boxOf(CWN, downOf(FULL({ state: 'dead' }))!, { gm: true })).toEqual({ word: 'DEAD', state: 'dead', turnButton: false, note: 'The GM heals them back if the table says so. Nothing on the sheet is lost.' });
+    expect(boxOf(CWN, downOf(FULL({ state: 'dead' }))!, { gm: true })).toEqual({ word: 'DEAD', state: 'dead', turnButton: false, note: 'Any heal above 0 brings them back: a potion, a spell, a rest. Nothing on the sheet is lost.' });
   });
 });

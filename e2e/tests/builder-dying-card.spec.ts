@@ -3,7 +3,8 @@ import { signInAsGm, gmToken, runningSystem, asGm, openBuilder, builderPage } fr
 
 // The RULE LIBRARY's dying card (8c2; approved mockup docs/mockups/rule-library.html, 2026-11-26). The GM switches WHEN
 // HEALTH RUNS OUT on (D&D 5E to start), picks CYBERPUNK RED (under the system's BODY, harder each save), makes it TURNS LEFT
-// with four turns, ticks ENEMY NPCS, and finds PARTS' DEATH SAVES on with it. Saved as the server checks it.
+// with four turns, ticks ENEMY NPCS, sets STABILIZE (HEAL vs 8 + @turns, BACK WITH 1 HP, FRAIL, dead at once down again, 8c4b1),
+// and finds PARTS' DEATH SAVES on with it. Saved as the server checks it.
 
 test('RULE LIBRARY: the dying card switched on, a preset picked and changed, WHO GOES DOWN ticked; PARTS\' DEATH SAVES the same switch (8c2)', async ({ page, request }, info) => {
   test.setTimeout(180_000);
@@ -12,7 +13,10 @@ test('RULE LIBRARY: the dying card switched on, a preset picked and changed, WHO
   const gm = await gmToken(request);
   const id = await runningSystem(request, gm, {
     format: 1, name, core: { health: { model: 'pool' } },
-    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'body', label: 'Body' }] }],
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'body', label: 'Body' }, { id: 'heal', label: 'Heal' }] }],
+    // A HEAL to roll and a FRAIL to get, for STABILIZE (8c4b1).
+    rolls: [{ id: 'check', label: 'Check', dice: [{ count: '1', sides: 20 }], add: '@this', by: ['heal'] }],
+    conditions: { frail: { name: 'Frail' } },
   });
 
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -40,12 +44,21 @@ test('RULE LIBRARY: the dying card switched on, a preset picked and changed, WHO
   await turns.fill('4');
   await expect(presets.getByRole('button', { name: 'CYBERPUNK RED' })).toHaveAttribute('aria-pressed', 'false');
   await card.getByRole('button', { name: 'ENEMY NPCS' }).click();
+  // STABILIZE (8c4b1): HEAL vs 8 + @turns, BACK WITH 1 HP, FRAIL, dead at once down again.
+  const stabilize = card.getByRole('region', { name: 'Stabilize' });
+  await stabilize.getByLabel('THE HELPER ROLLS', { exact: true }).selectOption('heal');
+  await stabilize.getByLabel('VS', { exact: true }).fill('8 + @turns');
+  await stabilize.getByRole('group', { name: 'Then they are' }).getByRole('button', { name: 'BACK WITH 1 HP' }).click();
+  await stabilize.getByLabel('AND GET', { exact: true }).selectOption('frail');
+  await stabilize.getByRole('switch', { name: 'Dead at once down again with it' }).click();
+  await expect(stabilize).toContainText('DEAD AT ONCE');
   await expect(card.getByRole('button', { name: 'ENEMY NPCS' })).toHaveAttribute('aria-pressed', 'true');
 
   await expect(page.getByTestId('save-status')).toHaveText(/· SAVED /, { timeout: 15_000 });
   const saved = await asGm(request, gm, 'get', `/api/systems/${id}`);
   expect(saved.problems).toEqual([]);
-  expect(saved.draft.dying).toMatchObject({ word: 'MORTALLY WOUNDED', way: 'turns', turns: 4, harder: 1, save: { dice: '1d10', way: 'under', target: '@body' }, npcs: { friendly: false, enemy: true } });
+  expect(saved.draft.dying).toMatchObject({ word: 'MORTALLY WOUNDED', way: 'turns', turns: 4, harder: 1, save: { dice: '1d10', way: 'under', target: '@body' }, npcs: { friendly: false, enemy: true },
+    stabilize: { field: 'heal', vs: '8 + @turns', then: 'back_up', gets: 'frail', again: true } });
 
   // PARTS' DEATH SAVES is the same switch: on, and turned off there the card is off.
   await builderPage(page, 'PARTS');

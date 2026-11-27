@@ -1,6 +1,8 @@
 import type { Definition } from './systemsApi';
 import { partIsOn, withPart } from './wordsFeatures';
 import { allStats } from './statsRules';
+import { rollList, fieldsRolledBy, rollables } from './rolls';
+import { conditionList } from './conditions';
 
 // The RULE LIBRARY's dying card, as logic (8c2; approved mockup docs/mockups/rule-library.html, 2026-11-26, every recommended
 // answer): what a game's `dying` section says (backend/systemBuilder/dying.js), read with what a game starts with, and the
@@ -8,6 +10,9 @@ import { allStats } from './statsRules';
 // written. Turned on for the first time it starts as D&D 5E; off it keeps the section, so turning it back on finds it as it
 // was. A preset is the game's numbers written in, then the GM's to change; WHO GOES DOWN stays as the GM set it. Cyberpunk
 // RED rolls under BODY: its preset reads @body where the system has a stat of that id, 10 where it hasn't.
+// STABILIZE (8c4b1): someone else's roll of one of their fields, VS a number or formula (@turns), then STABLE or BACK WITH 1 HP,
+// a condition after and dead at once down again with it. A preset finds its game's field by name (MEDICINE, FIRST AID, HEAL)
+// and its condition (FRAIL) where the system has them; otherwise the field picked stays, or the GM says, by hand.
 // Pure, so the card (components/RuleLibraryPage.tsx) only draws.
 
 export type Way = 'count' | 'once' | 'turns' | 'none';
@@ -77,6 +82,85 @@ const isObject = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Arra
 const whole = (v: unknown, lo: number, hi: number): v is number => Number.isInteger(v) && (v as number) >= lo && (v as number) <= hi;
 const pick = <T extends string>(v: unknown, of: readonly { id: T }[], or: T): T => (of.some((o) => o.id === v) ? v as T : or);
 
+export type StabilizeThen = 'stable' | 'back_up';
+export interface Stabilize { field: string; roll?: string; vs: string; then: StabilizeThen; gets?: string; again?: boolean }
+export const STABILIZE_THENS: { id: StabilizeThen; label: string }[] = [{ id: 'stable', label: 'STABLE, AT 0' }, { id: 'back_up', label: 'BACK WITH 1 HP' }];
+
+/** What each preset's STABILIZE looks for and sets; none: the GM says, by hand. */
+const PRESET_STABILIZE: Record<PresetId, { names: string[]; vs: string; then: StabilizeThen; gets?: string; again?: boolean } | null> = {
+  dnd: { names: ['medicine'], vs: '10', then: 'stable' },
+  cpr: { names: ['firstaid'], vs: '15', then: 'stable' },
+  cwn: { names: ['heal'], vs: '8 + @turns', then: 'back_up', gets: 'frail', again: true },
+  none: null,
+};
+
+/** What a helper can roll: each field ROLLED BY one of the game's rolls, by its name, with those rolls. */
+export const helperFields = (def: Definition): { field: string; label: string; rolls: { id: string; label: string }[] }[] => {
+  const names = new Map(rollables(def).map((r) => [r.id, r.label]));
+  const out = new Map<string, { field: string; label: string; rolls: { id: string; label: string }[] }>();
+  for (const r of rollList(def)) {
+    for (const f of fieldsRolledBy(def, r)) {
+      const at = out.get(f) ?? { field: f, label: names.get(f) ?? f.toUpperCase(), rolls: [] };
+      at.rolls.push({ id: r.id, label: (r.label || r.id).toUpperCase() });
+      out.set(f, at);
+    }
+  }
+  return [...out.values()];
+};
+
+/** The game's conditions that are on, to put on after: id and name. */
+export const stabilizeConditions = (def: Definition): { id: string; name: string }[] =>
+  conditionList(def).filter((c) => c.on).map((c) => ({ id: c.id, name: (c.name || c.id).toUpperCase() }));
+
+const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/** STABILIZE as the section has it, or null where the GM says, by hand. */
+export const stabilizeOf = (def: Definition): Stabilize | null => {
+  const d = isObject(def.dying) ? def.dying : {};
+  const s = isObject(d.stabilize) ? d.stabilize : null;
+  if (!s || typeof s.field !== 'string' || !s.field) return null;
+  return {
+    field: s.field,
+    ...(typeof s.roll === 'string' ? { roll: s.roll } : {}),
+    vs: typeof s.vs === 'number' ? String(s.vs) : typeof s.vs === 'string' ? s.vs : '10',
+    then: s.then === 'back_up' ? 'back_up' : 'stable',
+    ...(typeof s.gets === 'string' && s.gets ? { gets: s.gets } : {}),
+    ...(s.again === true ? { again: true } : {}),
+  };
+};
+
+/** The section with STABILIZE as given, or none (the GM says, by hand). A condition taken off takes DEAD AT ONCE with it. */
+export const withStabilize = (def: Definition, next: Stabilize | null): Definition => {
+  const d: Obj = { ...(isObject(def.dying) ? def.dying : {}) };
+  if (!next) delete d.stabilize;
+  else {
+    const s: Obj = { field: next.field, vs: next.vs, then: next.then };
+    if (next.roll) s.roll = next.roll;
+    if (next.gets) { s.gets = next.gets; if (next.again) s.again = true; }
+    d.stabilize = s;
+  }
+  return { ...def, dying: d };
+};
+
+/** One part of STABILIZE changed: the field picked anew drops a roll that was another field's. */
+export const withStabilizePart = (def: Definition, patch: Partial<Stabilize>): Definition => {
+  const now = stabilizeOf(def) ?? { field: '', vs: '10', then: 'stable' as const };
+  const next: Stabilize = { ...now, ...patch };
+  if (patch.field !== undefined && patch.field !== now.field) delete next.roll;
+  return withStabilize(def, next.field ? next : null);
+};
+
+/** A preset's STABILIZE for this system: its field found by name (or the one picked kept), its condition where the game has it. */
+const presetStabilize = (def: Definition, id: PresetId): Stabilize | null => {
+  const p = PRESET_STABILIZE[id];
+  if (!p) return null;
+  const found = helperFields(def).find((f) => p.names.includes(squash(f.field)) || p.names.includes(squash(f.label)));
+  const field = found?.field ?? stabilizeOf(def)?.field;
+  if (!field) return null;
+  const gets = p.gets && stabilizeConditions(def).some((c) => c.id === p.gets) ? p.gets : undefined;
+  return { field, vs: p.vs, then: p.then, ...(gets ? { gets, ...(p.again ? { again: true } : {}) } : {}) };
+};
+
 /** Whether the rule is on: DEATH SAVES on PARTS, and the section written. */
 export const dyingOn = (def: Definition): boolean => partIsOn(def, 'death') && isObject(def.dying);
 
@@ -115,7 +199,8 @@ const withDyingSection = (def: Definition, dying: Obj): Definition => ({ ...def,
 export const withDyingOn = (def: Definition, on: boolean): Definition => {
   if (!on) return withPart(def, 'death', false);
   const parted = withPart(def, 'death', true);
-  return isObject(def.dying) ? parted : withDyingSection(parted, presetDying(def, 'dnd', START.npcs));
+  // The first time, D&D 5E whole: its STABILIZE (MEDICINE) where the game has one.
+  return isObject(def.dying) ? parted : withStabilize(withDyingSection(parted, presetDying(def, 'dnd', START.npcs)), presetStabilize(def, 'dnd'));
 };
 
 /** A preset's numbers for this system: Cyberpunk RED's target its BODY, where it has one. */
@@ -127,7 +212,8 @@ const presetFor = (def: Definition, id: PresetId): Omit<Dying, 'npcs'> => {
 const presetDying = (def: Definition, id: PresetId, npcs: Dying['npcs']): Obj => ({ ...presetFor(def, id), npcs: { ...npcs } });
 
 /** A preset's numbers written in; WHO GOES DOWN kept as the GM set it. */
-export const withPreset = (def: Definition, id: PresetId): Definition => withDyingSection(def, presetDying(def, id, dyingOf(def).npcs));
+export const withPreset = (def: Definition, id: PresetId): Definition =>
+  withStabilize(withDyingSection(def, presetDying(def, id, dyingOf(def).npcs)), presetStabilize(def, id));
 
 /** The preset the card says now, where every number is one's; null once the GM has changed any. */
 export const presetNow = (def: Definition): PresetId | null => {

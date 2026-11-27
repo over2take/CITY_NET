@@ -68,7 +68,7 @@ export interface Box {
 export const boxOf = (rule: DyingShown, down: Down, { gm }: { gm: boolean }): Box => {
   const word = downWord(rule, down);
   if (down.state === 'stable') return { word, state: 'stable', turnButton: false, note: 'No more saves. Healing above 0 clears it.' };
-  if (down.state === 'dead') return { word, state: 'dead', turnButton: false, note: 'The GM heals them back if the table says so. Nothing on the sheet is lost.' };
+  if (down.state === 'dead') return { word, state: 'dead', turnButton: false, note: 'Any heal above 0 brings them back: a potion, a spell, a rest. Nothing on the sheet is lost.' };
   const base = { word, state: 'dying' as const, turnButton: false };
   const save = { words: saveWords(rule, down), lit: down.due === true };
   switch (rule.way) {
