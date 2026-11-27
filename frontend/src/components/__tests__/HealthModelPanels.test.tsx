@@ -315,4 +315,17 @@ describe("down under the game's dying rule (8c3)", () => {
     expect(screen.getByRole('status', { name: 'Down: MORTALLY WOUNDED' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'A TURN GOES BY' })).toBeNull();
   });
+
+  it("STABILIZE (8c4b2): a player's YOUR HEAL VS 10 in their look; the GM's HELPED BY in HEALTH", () => {
+    stubFetch();
+    const HEALING_SYSTEM = 'sys_00000000000000de';
+    registerCustomTemplate({ id: HEALING_SYSTEM, name: 'Healfall', words: {}, parts: {}, derived: [], sheet: { sections: [] },
+      dying: { ...DYING, way: 'count', stabilize: { field: 'heal', label: 'Heal', roll: null, vs: '10', then: 'stable', gets: null } } });
+    const { unmount } = render(<HealthReviewPanel location={token(0, 10, { dying: '{"state":"dying"}' })} socket={fakeSocket({ 7: { model: 'pool' } })} gameSystem={HEALING_SYSTEM} />);
+    expect(within(screen.getByRole('group', { name: 'Stabilize them' })).getByText('YOUR HEAL VS 10')).toBeTruthy();
+    unmount();
+    render(<HitPointsPanel target={token(0, 10, { dying: full })} token="gm-token" refreshLocations={() => {}} gameSystem={HEALING_SYSTEM} socket={fakeSocket({ 7: { model: 'pool' } })} gm helpers={[{ id: 4, name: 'Ash' }]} />);
+    expect((screen.getByLabelText('HELPED BY') as HTMLSelectElement).value).toBe('4');
+    expect(screen.getByRole('group', { name: 'By hand' })).toBeTruthy();
+  });
 });

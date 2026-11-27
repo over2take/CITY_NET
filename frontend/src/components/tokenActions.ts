@@ -271,6 +271,26 @@ export function attackAsOptions(c: {
   return [...shown.filter((o) => o.inFight), ...shown.filter((o) => !o.inFight)];
 }
 
+/**
+ * Who the GM may have stabilize a token down (8c4b2; the mockup's HELPED BY, as ATTACK AS picks): the characters in its scene,
+ * players' first (one each, however many copies), then NPCs, never the one down nor another copy of them.
+ */
+type SceneToken = { id: number; name?: string | null; shape?: string | null; owner?: string | null; battle_map_id?: number | null; floor_index?: number | null };
+export function stabilizeHelpers(locations: SceneToken[], target: SceneToken | null | undefined): { id: number; name: string }[] {
+  if (!target) return [];
+  const sameScene = (l: SceneToken) => (l.battle_map_id ?? null) === (target.battle_map_id ?? null)
+    && (l.battle_map_id == null || (l.floor_index ?? null) === (target.floor_index ?? null));
+  const them = (l: SceneToken) => l.id === target.id || (target.shape === 'rhombus' && l.shape === 'rhombus' && !!target.owner && l.owner === target.owner);
+  const players = new Map<string, { id: number; name: string }>();
+  const npcs: { id: number; name: string }[] = [];
+  for (const l of locations) {
+    if (!sameScene(l) || them(l)) continue;
+    if (l.shape === 'rhombus' && l.owner) { if (!players.has(l.owner)) players.set(l.owner, { id: l.id, name: l.name || l.owner }); }
+    else if (l.shape === 'enemy_rhombus' || l.shape === 'friendly_rhombus') npcs.push({ id: l.id, name: `${l.name || 'NPC'} (NPC)` });
+  }
+  return [...players.values(), ...npcs];
+}
+
 /** The NPCs in a fight, by token, from its combatants' ids ("npc:12"; a player's is their name). */
 export const fightTokens = (combatants: { id: string }[] | null | undefined): number[] =>
   (combatants ?? []).map((c) => /^npc:(\d+)$/.exec(String(c.id))).filter((m): m is RegExpExecArray => !!m).map((m) => Number(m[1]));

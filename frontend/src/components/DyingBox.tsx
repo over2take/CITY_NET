@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { boxOf, downOf, downWord, type DyingShown } from '../sheets/dyingBox';
+import { boxOf, downOf, downWord, byHandOf, offerOf, type DyingShown } from '../sheets/dyingBox';
 
 // The sheet's DYING box (8c3; approved mockup docs/mockups/rule-library.html, section 2, answers 3 and 5): under the vitals
 // box, on SHEET.EXE and the sheet's own tab alike, while the token is down under its game's dying rule. The word, where the
@@ -14,6 +14,11 @@ interface Props {
   locationId: number;
   gm: boolean;
   socket: { emit: (event: string, ...args: unknown[]) => unknown } | null;
+  /**
+   * The token's HEALTH window, the GM's (8c4b2): who may help (HELPED BY, as ATTACK AS picks), for STABILIZE where the game
+   * says how, and BY HAND, STABLE or DEAD. Absent on the sheet's strip.
+   */
+  helpers?: { id: number; name: string }[];
 }
 
 const tone = { dying: 'var(--danger)', stable: 'var(--cyan)', dead: 'var(--green)' } as const;
@@ -36,24 +41,33 @@ function Pips({ name, made, of, color }: { name: string; made: number; of: numbe
   );
 }
 
-export function DyingBox({ rule, dying, locationId, gm, socket }: Props) {
+export function DyingBox({ rule, dying, locationId, gm, socket, helpers }: Props) {
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
+  const [helper, setHelper] = useState<number | null>(null);
+  const [said, setSaid] = useState<string | null>(null);
   const down = downOf(dying);
   if (!down) return null;
   // Sent only the word (not this token's player, nor the GM): the word alone.
   if (!down.full) return <DownWord rule={rule} dying={dying} />;
   const box = boxOf(rule, down, { gm });
   const color = tone[box.state];
-  const ask = (event: 'deathSave' | 'dyingTurn') => {
+  const ask = (event: 'deathSave' | 'dyingTurn' | 'stabilize' | 'dyingByHand', more: Record<string, unknown> = {}) => {
     if (!socket || busy) return;
     setBusy(true);
     setRefused(null);
-    socket.emit(event, { locationId }, (answer: { ok: boolean; error?: string } | undefined) => {
+    setSaid(null);
+    socket.emit(event, { locationId, ...more }, (answer: { ok: boolean; error?: string; made?: boolean } | undefined) => {
       setBusy(false);
       if (!answer?.ok) setRefused(answer?.error ?? 'Not done');
+      else if (event === 'stabilize') setSaid(answer.made ? 'STABILIZED' : 'NOT THIS TIME: SEE THE TRAY');
     });
   };
+  // The GM's, in the token's HEALTH window (8c4b2): STABILIZE as someone there, and BY HAND.
+  const helping = gm && helpers !== undefined;
+  const chosen = helper !== null && helpers?.some((h) => h.id === helper) ? helper : (helpers?.[0]?.id ?? null);
+  const hands = helping ? byHandOf(down) : [];
+  const offer = helping ? offerOf(rule, down) : null;
 
   return (
     <section aria-label={box.word} style={{ border: `1px solid ${color}`, padding: '6px 10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -81,8 +95,55 @@ export function DyingBox({ rule, dying, locationId, gm, socket }: Props) {
         </span>
       )}
       <span style={{ fontSize: '0.6rem', opacity: 0.75, lineHeight: 1.4 }}>{box.note}</span>
+      {offer && (
+        <span role="group" aria-label="Stabilize them" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+          <label htmlFor={`dying-helper-${locationId}`} style={label}>HELPED BY</label>
+          <select id={`dying-helper-${locationId}`} value={chosen ?? ''} disabled={!helpers?.length} onChange={(e) => setHelper(Number(e.target.value))}
+            style={{ background: 'var(--black)', color: 'var(--green)', border: '1px solid var(--green)', fontFamily: 'inherit', fontSize: '0.65rem' }}>
+            {helpers?.length ? helpers.map((h) => <option key={h.id} value={h.id}>{h.name.toUpperCase()}</option>) : <option value="">NOBODY HERE</option>}
+          </select>
+          <span style={{ ...label, opacity: 0.9 }}>{rule.stabilize!.label.toUpperCase()} VS {rule.stabilize!.vs}</span>
+          <button type="button" disabled={busy || !socket || chosen === null} onClick={() => ask('stabilize', { as: chosen })} style={btn('var(--cyan)')}>STABILIZE</button>
+        </span>
+      )}
+      {hands.length > 0 && (
+        <span role="group" aria-label="By hand" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+          <span style={label}>BY HAND</span>
+          {hands.map((to) => (
+            <button key={to} type="button" disabled={busy || !socket} onClick={() => ask('dyingByHand', { to })} style={btn(to === 'dead' ? 'var(--danger)' : 'var(--cyan)')}>{to.toUpperCase()}</button>
+          ))}
+        </span>
+      )}
+      {said && <span role="status" aria-label="Stabilize" style={{ ...label, color: 'var(--cyan)', opacity: 1 }}>{said}</span>}
       {refused && <span role="alert" style={{ color: 'var(--danger)', fontSize: '0.6rem', letterSpacing: '1px' }}>{refused.toUpperCase()}</span>}
     </section>
+  );
+}
+
+/**
+ * Someone else's token down, as a player looks at it (8c4b2; the mockup's section 3): YOUR HEAL VS 8 + TURNS and STABILIZE, rolled
+ * as their own character, where the game says how; its answer said.
+ */
+export function StabilizeOffer({ rule, dying, locationId, socket }: { rule: DyingShown | null | undefined; dying: string | null | undefined; locationId: number; socket: Props['socket'] }) {
+  const [busy, setBusy] = useState(false);
+  const [answer, setAnswer] = useState<{ ok: boolean; text: string } | null>(null);
+  const offer = offerOf(rule, downOf(dying));
+  if (!offer) return null;
+  const go = () => {
+    if (!socket || busy) return;
+    setBusy(true);
+    setAnswer(null);
+    socket.emit('stabilize', { locationId }, (a: { ok: boolean; error?: string; made?: boolean } | undefined) => {
+      setBusy(false);
+      setAnswer(a?.ok ? { ok: true, text: a.made ? 'STABILIZED' : 'NOT THIS TIME: SEE THE TRAY' } : { ok: false, text: (a?.error ?? 'Not done').toUpperCase() });
+    });
+  };
+  return (
+    <span role="group" aria-label="Stabilize them" style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center' }}>
+      <span style={{ ...label, opacity: 0.9 }}>{offer}</span>
+      <button type="button" disabled={busy || !socket} onClick={go} style={btn('var(--cyan)')}>STABILIZE</button>
+      {answer && <span role={answer.ok ? 'status' : 'alert'} style={{ ...label, opacity: 1, color: answer.ok ? 'var(--cyan)' : 'var(--danger)' }}>{answer.text}</span>}
+    </span>
   );
 }
 
