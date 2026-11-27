@@ -7,6 +7,8 @@ import {
 } from '../sheets/wordsFeatures';
 import { OnlyWith } from './OnlyWith';
 import { ToggleSwitch } from './ToggleSwitch';
+import { dyingOn, withDyingOn } from '../sheets/dying';
+import type { BuilderPage } from '../sheets/builderSession';
 import { ownShopsOf, withOwnShop, withoutOwnShop, withNewShop, typesSoldAt, SHOPS_MOST } from '../sheets/gameShops';
 import { useShopBuildings } from '../hooks/useShopBuildings';
 
@@ -26,6 +28,8 @@ interface Props {
   api?: ReturnType<typeof systemsApi>;
   /** The system open, for those counts. */
   systemId?: string | null;
+  /** To the page a part is set up on (RULE LIBRARY, 8c2). */
+  onGoTo?: (page: BuilderPage) => void;
 }
 
 const small: React.CSSProperties = { fontSize: 10, letterSpacing: 2, opacity: 0.75 };
@@ -202,7 +206,7 @@ function ShopsSettings({ definition, edit, api, systemId }: Props) {
   </>;
 }
 
-export function FeaturesPage({ definition, edit, api, systemId }: Props) {
+export function FeaturesPage({ definition, edit, api, systemId, onGoTo }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   // A part's settings, where it has any.
   const settings: Partial<Record<string, (p: Props) => React.ReactElement>> = { bank: BankSettings, shops: ShopsSettings };
@@ -214,13 +218,14 @@ export function FeaturesPage({ definition, edit, api, systemId }: Props) {
       </p>
       <div style={{ border: '1px solid var(--dark-green)', display: 'flex', flexDirection: 'column' }}>
         {PART_ROWS.map((p) => {
-          const on = !p.unused && partIsOn(definition, p.id);
+          // A RULE LIBRARY rule (8c2): its card's switch, on with the part and the rule written.
+          const on = p.library ? dyingOn(definition) : !p.unused && partIsOn(definition, p.id);
           const Settings = settings[p.id];
           const isOpen = !!Settings && on && !!open[p.id];
           return (
             <div key={p.id} data-testid={`part-${p.id}`} style={{ borderBottom: '1px solid var(--dark-green)' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto', gap: '4px 14px', alignItems: 'center', padding: '10px 14px' }}>
-                <ToggleSwitch on={on} name={p.label} disabled={!!p.unused} onChange={(next) => edit(withPart(definition, p.id, next))} />
+                <ToggleSwitch on={on} name={p.label} disabled={!!p.unused} onChange={(next) => edit(p.library ? withDyingOn(definition, next) : withPart(definition, p.id, next))} />
                 <b style={{ letterSpacing: 1, color: 'var(--green)', opacity: on ? 1 : 0.5 }}>{p.label}</b>
                 {Settings && on
                   ? <button type="button" aria-expanded={isOpen} onClick={() => setOpen({ ...open, [p.id]: !isOpen })}
@@ -229,9 +234,15 @@ export function FeaturesPage({ definition, edit, api, systemId }: Props) {
                     </button>
                   : <span />}
                 <span style={{ ...why, gridColumn: 2, opacity: on ? 0.8 : 0.5 }}>
-                  {p.unused ? `${p.what} Not used by custom systems yet.` : p.what}
+                  {p.unused ? `${p.what} Not used by custom systems yet.` : p.library ? `${p.what} Set up on RULE LIBRARY.` : p.what}
                 </span>
-                {on && (
+                {p.library && onGoTo && (
+                  <span style={{ gridColumn: 2 }}>
+                    <button type="button" className="utility-btn" onClick={() => onGoTo('rule_library')}
+                      style={{ fontFamily: 'monospace', fontSize: 11, letterSpacing: 1, padding: '3px 8px' }}>RULE LIBRARY ▸</button>
+                  </span>
+                )}
+                {on && !p.library && (
                   <span style={{ gridColumn: 2, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <OnlyWith definition={definition} value={partOnlyWith(definition, p.id)} style={small} selectStyle={{ ...field, width: 'auto', border: '1px solid var(--green)' }}
                       onChange={(rule) => edit(withPartOnlyWith(definition, p.id, rule))} />

@@ -15,11 +15,11 @@ import { HINTS } from '../../sheets/builderHelp';
 
 afterEach(() => cleanup());
 
-const open = (start: Definition = { format: 1, name: 'Hearth' }) => {
+const open = (start: Definition = { format: 1, name: 'Hearth' }, onGoTo?: (page: string) => void) => {
   const edits: Definition[] = [];
   const Harness = () => {
     const [def, setDef] = useState(start);
-    return <FeaturesPage definition={def} edit={(next) => { edits.push(next); setDef(next); }} />;
+    return <FeaturesPage definition={def} edit={(next) => { edits.push(next); setDef(next); }} onGoTo={onGoTo} />;
   };
   render(<Harness />);
   return { edits, last: () => edits[edits.length - 1] };
@@ -69,9 +69,29 @@ describe('the parts', () => {
     expect(last().parts).toEqual({ sheet_import: { on: false } });
   });
 
-  it('shows the three a custom system can\'t use yet as off and greyed', () => {
+  it('DEATH SAVES is the RULE LIBRARY card\'s switch (8c2): off until the rule is written, on writes D&D 5E, off keeps it', async () => {
+    const went: string[] = [];
+    const { last } = open({ format: 1, name: 'Hearth', house_rules: [{ id: 'magic', name: 'MAGIC' }] } as unknown as Definition, (p) => went.push(p));
+    expect(sw('DEATH SAVES').getAttribute('aria-checked')).toBe('false');
+    expect(sw('DEATH SAVES').disabled).toBe(false);
+    expect(part('death').textContent).toContain('Set up on RULE LIBRARY.');
+    await userEvent.click(sw('DEATH SAVES'));
+    expect((last().dying as { way: string }).way).toBe('count');
+    expect(last().parts ?? {}).toEqual({});
+    expect(sw('DEATH SAVES').getAttribute('aria-checked')).toBe('true');
+    // No WITH A RULE: a house rule doesn't reach the server's dying.
+    expect(within(part('death')).queryByRole('combobox', { name: 'ONLY WITH' })).toBeNull();
+    expect(within(part('shops')).getByRole('combobox', { name: 'ONLY WITH' })).toBeTruthy();
+    await userEvent.click(sw('DEATH SAVES'));
+    expect(last().parts).toEqual({ death: { on: false } });
+    expect(last().dying).toBeTruthy();
+    await userEvent.click(within(part('death')).getByRole('button', { name: 'RULE LIBRARY ▸' }));
+    expect(went).toEqual(['rule_library']);
+  });
+
+  it('shows the two a custom system can\'t use yet as off and greyed', () => {
     open({ format: 1, name: 'Hearth' });
-    for (const p of ['XP AWARDS', 'DEATH SAVES', 'LUCK']) {
+    for (const p of ['XP AWARDS', 'LUCK']) {
       expect(sw(p).getAttribute('aria-checked'), p).toBe('false');
       expect(sw(p).disabled, p).toBe(true);
     }
