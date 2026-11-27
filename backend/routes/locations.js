@@ -1,12 +1,13 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { authenticate, optionalAuthenticate } = require('../middleware/auth');
+const { authenticate, optionalAuthenticate, verifyHeader } = require('../middleware/auth');
 const identity = require('../sheets/identity');
 const { mutateSheet, patchSheet } = require('../sheets/mutate');
 const { DEFAULT_SYSTEM, applyDerived } = require('../sheets/templates');
 const customSystems = require('../systemBuilder/runtime');
 const { applyHealthAction } = require('../systemBuilder/health');
+const { noticeHealth, publicDying } = require('../tokens/dyingTable');
 const { BUILDING_TYPES, isValidType } = require('../buildingTypes');
 const { ownShops, ownShopOf } = require('../systemBuilder/buildings');
 const { readPct } = require('../shops/buyback');
@@ -105,6 +106,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
   // those who may open the sheet anyway (sheets/npcPrivacy.js).
   router.get('/', optionalAuthenticate, (req, res) => {
     const canRead = canReadNpcSheets(req.user);
+    // Who is asking, a player too (req.user is an editor's alone): a player's own token's dying is theirs (8c1b1).
+    const viewer = req.headers.authorization ? verifyHeader(req.headers.authorization) : null;
     // Each building's type in the running game (8a7b3c1): the game's own shop it is there, else its shared type.
     db.get(`SELECT value FROM global_settings WHERE key = 'game_system'`, (sErr, setting) => {
     const system = (!sErr && setting && setting.value) || DEFAULT_SYSTEM;
@@ -129,7 +132,11 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         // Everyone sees which conditions a token has; how many rounds each has left is the GM's.
         res.json(rows.map((raw) => {
           const row = shops.has(raw.id) ? { ...raw, building_type: locationShops.typeIn(definition, raw.building_type, shops.get(raw.id)) } : raw;
-          return redactLocation(canRead || row.conditions === undefined ? row : { ...row, conditions: publicTokenConditions(row.conditions) }, canRead);
+          const shown = canRead || row.conditions === undefined ? row : { ...row, conditions: publicTokenConditions(row.conditions) };
+          // Down (8c1b1): the word everyone's, the count its player's and the GM's.
+          const own = !!viewer && row.shape === 'rhombus' && row.owner === viewer.username;
+          const dying = canRead || own || shown.dying === undefined || shown.dying === null ? shown : { ...shown, dying: publicDying(shown.dying) };
+          return redactLocation(dying, canRead);
         }));
       }
     );
@@ -713,6 +720,8 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         db.run('UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE shape = "rhombus" AND owner = ?', [newCurrent, newMax, newTemp, row.owner], function(err2) {
           if (err2) return res.status(500).json({ error: err2.message });
           emitUpdate();
+          // Down, hurt while down or back up, under the game's dying rule (8c1b1).
+          noticeHealth(db, { runtime: customSystems, locationId: id, hurt: effAction === 'damage' && amount > 0 });
           // Character sheets mirror token HP - tell open sheets to re-fetch
           io.emit('sheetUpdated', { username: row.owner });
           // Back above 0 HP: no longer mortally wounded, death-save penalty resets
@@ -751,6 +760,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
         db.run('UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE id = ?', [newCurrent, newMax, newTemp, id], function(err2) {
           if (err2) return res.status(500).json({ error: err2.message });
           emitUpdate();
+          noticeHealth(db, { runtime: customSystems, locationId: id, hurt: effAction === 'damage' && amount > 0 });
           res.json({ id, hp_current: newCurrent, hp_max: newMax, hp_temp: newTemp });
         });
       }
@@ -843,6 +853,7 @@ module.exports = (db, io, { emitUpdate, recordAction }) => {
             // window re-reads on the map update.
             emitUpdate();
             if (row.shape === 'rhombus' && row.owner) io.emit('sheetUpdated', { username: row.owner });
+            noticeHealth(db, { runtime: customSystems, locationId: id, hurt: action === 'damage' });
             res.json({
               id, hp_current: t.current, hp_max: t.max, hp_temp: t.temp, out: result.out,
               ...(result.overflow ? { overflow: result.overflow } : {}),

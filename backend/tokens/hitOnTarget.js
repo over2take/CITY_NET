@@ -20,6 +20,7 @@ const { damageTaken, takenWords, seenBy, NOT_APPLIED } = require('../systemBuild
 const { HIDDEN } = require('../systemBuilder/tableRolls');
 const { keepHit, rowWords, WAITING } = require('./waitingHits');
 const { halved, SAVED_HALF, SAVED } = require('./sendTo');
+const { noticeHealth } = require('./dyingTable');
 
 /** How long a HIT waits for its damage (the mockup: "a minute without one, and it waits no more"). */
 const HIT_WAITS_MS = 60_000;
@@ -56,7 +57,11 @@ const takeOff = (db, { system, health, target: { row, player, sheet }, amount },
     const [sql, params] = player
       ? ['UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE shape = "rhombus" AND owner = ?', [t.current, t.max, t.temp, row.owner]]
       : ['UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE id = ?', [t.current, t.max, t.temp, row.id]];
-    db.run(sql, params, (e) => cb(e ? { ok: false, error: 'Could not be saved' } : { ok: true, owner: player ? row.owner : null }));
+    db.run(sql, params, (e) => {
+      // Down, or hurt while down, under the game's dying rule (8c1b1).
+      if (!e) noticeHealth(db, { locationId: row.id, hurt: amount > 0 });
+      cb(e ? { ok: false, error: 'Could not be saved' } : { ok: true, owner: player ? row.owner : null });
+    });
   };
   const token = { current: row.hp_current, max: row.hp_max, temp: row.hp_temp };
   if (!health || health.model === 'pool') return writeToken(poolAfter(token, 'damage', amount));

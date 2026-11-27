@@ -68,6 +68,8 @@ const spendRecovery = async (db, io, { system, definition, username, pool, count
   if (healed) {
     const t = healed.token;
     await run(db, `UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE shape = 'rhombus' AND owner = ?`, [t.current, t.max, t.temp, username]);
+    // Back up, under the game's dying rule (8c1b1).
+    await require('../tokens/dyingTable').noticeHealth(db, { owner: username });
   }
   const line = spendLine(recovery.name, who, spent, healed);
   const results = { [spent.pool.die]: spent.rolls };

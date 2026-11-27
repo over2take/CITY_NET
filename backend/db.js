@@ -32,6 +32,9 @@ db.serialize(() => {
   // A token's conditions (4e2a): JSON [{"id":"prone"},{"id":"poisoned","left":2}], kept per game
   // system like its health (tokens/vitals.js), checked by tokens/conditions.js.
   db.run(`ALTER TABLE locations ADD COLUMN conditions TEXT DEFAULT '[]'`, () => {});
+  // A token down under its game's dying rule (8c1b1): JSON { state, saves, fails, made, turns, due }, null when not; kept
+  // per game system like its health (tokens/vitals.js), worked out by tokens/dyingTable.js.
+  db.run(`ALTER TABLE locations ADD COLUMN dying TEXT`, () => {});
   // Who besides an admin may move this token. JSON: {"all":bool,"users":[names]}.
   // Only friendly NPCs honour it - see backend/sockets/tokenControl.js.
   db.run(`ALTER TABLE locations ADD COLUMN controllers TEXT`, () => {});
@@ -270,6 +273,8 @@ db.serialize(() => {
   db.run(`ALTER TABLE dice_rolls ADD COLUMN historyString TEXT`, (err) => {});
   // A roll's line as players saw it, where its target was kept from them (6c4h); none: as the GM's.
   db.run(`ALTER TABLE dice_rolls ADD COLUMN players_history TEXT`, (err) => {});
+  // Who a line is for, where not everyone (8c1b1): a player's name (theirs and the GM's), '' the GM's alone; none, everyone's.
+  db.run(`ALTER TABLE dice_rolls ADD COLUMN seen_by TEXT`, (err) => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS saved_maps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -393,6 +398,7 @@ db.serialize(() => {
     PRIMARY KEY (location_id, system)
   )`);
   db.run(`ALTER TABLE token_vitals ADD COLUMN conditions TEXT DEFAULT '[]'`, () => {});
+  db.run(`ALTER TABLE token_vitals ADD COLUMN dying TEXT`, () => {});
 
   db.run(`CREATE TABLE IF NOT EXISTS water_bodies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

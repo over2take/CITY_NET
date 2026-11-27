@@ -209,12 +209,14 @@ const asksTable = async (db) => {
  * What a token's turn did, written and told (shared by the table's rolls and an answered ask, 8a9a2): its HP and conditions
  * stored on every token of a player's, each line in the dice log, the map and the player's sheets told.
  */
-const settle = async (db, { io, emitUpdate, runtime }, token, { pool, hpChanged, list, listChanged, lines }) => {
+const settle = async (db, { io, emitUpdate, runtime }, token, { pool, hpChanged, hurt = false, list, listChanged, lines }) => {
   if (hpChanged) {
     const sql = token.player
       ? ["UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE shape = 'rhombus' AND owner = ?", [pool.current, pool.max, pool.temp, token.player]]
       : ['UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ? WHERE id = ?', [pool.current, pool.max, pool.temp, token.row.id]];
     await run(db, sql[0], sql[1]);
+    // Down, hurt while down or back up, under the game's dying rule (8c1b1): hurt by a DAMAGE, even at 0 where HP can't fall.
+    await require('./dyingTable').noticeHealth(db, { runtime, locationId: token.row.id, hurt });
   }
   if (listChanged) {
     const json = JSON.stringify(list);
@@ -279,6 +281,7 @@ const fireTurnMoments = async (db, { io, emitUpdate = () => {}, runtime, system,
       let list = parseTokenConditions(token.row.conditions);
       let pool = pooled ? { current: token.row.hp_current, max: token.row.hp_max, temp: token.row.hp_temp } : null;
       let hpChanged = false;
+      let hurt = false;
       let listChanged = false;
       const lines = [];
       // The rolls first, then AT THE END OF ITS NEXT TURN, so a save rolled at the end of a turn is still rolled.
@@ -298,7 +301,7 @@ const fireTurnMoments = async (db, { io, emitUpdate = () => {}, runtime, system,
           }
           const made = rollEffect({ condition, effect, values, names, pool, who, rng, where });
           if (made.error) continue;
-          if (made.hp) { pool = made.hp; hpChanged = true; }
+          if (made.hp) { pool = made.hp; hpChanged = true; if (effect.does === 'damage' && made.value > 0) hurt = true; }
           if (made.ends) { list = list.filter((t) => t.id !== condition.id); listChanged = true; }
           lines.push({ line: made.line, value: made.value, dice: made.dice, board: condition.name.toUpperCase() });
         }
@@ -309,7 +312,7 @@ const fireTurnMoments = async (db, { io, emitUpdate = () => {}, runtime, system,
         const c = offered.find((x) => x.id === ended);
         lines.push({ line: `${who} · ${String(c ? c.name : ended).toUpperCase()}: ENDED (the end of its next turn)`, value: 0, dice: [] });
       }
-      await settle(db, { io, emitUpdate, runtime }, token, { pool, hpChanged, list, listChanged, lines });
+      await settle(db, { io, emitUpdate, runtime }, token, { pool, hpChanged, hurt, list, listChanged, lines });
     }
   }
   if (asked) io.emit('turnAsksChanged');
@@ -384,8 +387,9 @@ const rollAsk = async (db, { io, emitUpdate = () => {}, runtime, system, id, use
   let hpChanged = false;
   let listChanged = false;
   if (made.hp) { pool = made.hp; hpChanged = true; }
+  const hurt = !!made.hp && effect.does === 'damage' && made.value > 0;
   if (made.ends) { list = list.filter((t) => t.id !== condition.id); listChanged = true; }
-  await settle(db, { io, emitUpdate, runtime }, token, { pool, hpChanged, list, listChanged, lines: [{ line: made.line, value: made.value, dice: made.dice, board: condition.name.toUpperCase() }] });
+  await settle(db, { io, emitUpdate, runtime }, token, { pool, hpChanged, hurt, list, listChanged, lines: [{ line: made.line, value: made.value, dice: made.dice, board: condition.name.toUpperCase() }] });
   io.emit('turnAsksChanged');
   return { ok: true, line: made.line };
 };

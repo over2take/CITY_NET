@@ -146,6 +146,8 @@ const restCharacter = async (db, io, { system, definition, rest, c, rng, by = 'g
     } else {
       await run(db, 'UPDATE locations SET hp_current = ?, hp_max = ?, hp_temp = ?, conditions = ? WHERE id = ?', [t.current, t.max, t.temp, conditions, c.location_id]);
     }
+    // Back up, under the game's dying rule (8c1b1).
+    await require('../tokens/dyingTable').noticeHealth(db, c.kind === 'player' ? { owner: c.username } : { locationId: c.location_id });
   }
   const historyString = restLine(definition, rest.name, c.name, result);
   const { results, total } = restDice(result);

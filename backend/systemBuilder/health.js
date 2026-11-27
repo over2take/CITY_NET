@@ -198,4 +198,22 @@ const applyHealthAction = (health, token, sheet, action) => {
   }
 };
 
-module.exports = { applyHealthAction, poolDamage, poolHeal };
+/**
+ * Whether a token's health has run out now, as each model's DAMAGE says it (8c1b1, for dying): the heaviest type's marks
+ * filling the track, or the token's count at 0 with a maximum to count from. A token with no health set (no maximum) and
+ * a game with no health never have.
+ */
+const outNow = (health, token, sheet) => {
+  const model = health && typeof health === 'object' ? health.model : 'pool';
+  if (model === 'none') return false;
+  const t = token || {};
+  if (model === 'typed') {
+    const types = list(health.types);
+    const boxes = whole(t.max);
+    return types.length > 1 && boxes > 0 && whole((sheet || {})[types[types.length - 1].id]) >= boxes;
+  }
+  const max = model === 'wounds' && num(t.max) <= 0 ? whole(health.count) : num(t.max);
+  return max > 0 && num(t.current) <= 0;
+};
+
+module.exports = { applyHealthAction, poolDamage, poolHeal, outNow };
