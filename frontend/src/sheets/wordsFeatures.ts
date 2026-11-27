@@ -89,7 +89,8 @@ export const readsAs = (def: Definition, row: TermRow): string => {
 
 // ─── PARTS: the parts ───────────────────────────────────────────────────────
 
-export interface PartRow { id: string; label: string; what: string; unused?: true }
+/** `library`: a rule set up on the RULE LIBRARY page (8c2), whose card's switch this row's is. */
+export interface PartRow { id: string; label: string; what: string; unused?: true; library?: true }
 
 /**
  * The parts a system can turn off (parts.js PARTS), in the page's order. `unused` ones have no
@@ -108,7 +109,7 @@ export const PART_ROWS: PartRow[] = [
   { id: 'npc_tiers', label: 'NPC TIERS', what: 'Tiers to pick when generating an NPC sheet.' },
   { id: 'sheet_import', label: 'SHEET IMPORT', what: 'Filling a character sheet from a PDF form or JSON file through IMPORT.' },
   { id: 'xp', label: 'XP AWARDS', what: 'The GM awarding XP from the admin panel.', unused: true },
-  { id: 'death', label: 'DEATH SAVES', what: 'Rolling against death when dying.', unused: true },
+  { id: 'death', label: 'DEATH SAVES', what: 'What happens when a character\'s health runs out: death saves, or the turns they have left.', library: true },
   { id: 'luck', label: 'LUCK', what: 'A pool of luck points to spend on rolls.', unused: true },
 ];
 

@@ -102,6 +102,10 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
     'What kind of hurt a hit is: FIRE, COLD, SLASHING and the rest of the starter set, renamed or switched off, and your own, up to forty. PHYSICAL, ENERGY, KINETIC and EMP start off, for tables that use them.',
     'A hit says its type by name, "2d6 FIRE DMG", so two that are on can\'t share one. Each has an icon (drawn, uploaded or drawn on the pad) and words; at the top, what RESIST, IMMUNE and VULNERABLE mean in your game.',
   ] },
+  { page: 'rule_library', title: 'RULE LIBRARY', body: [
+    'Rules the app already knows, a card each, to switch on and fill in rather than build: start from a preset named after a game, then change anything.',
+    'WHEN HEALTH RUNS OUT (death saves) is the same switch as DEATH SAVES on PARTS. It starts when the game\'s health runs out, in one of four ways: SAVES COUNTED (D&D 5e), ONE FAIL IS DEATH (Cyberpunk RED), TURNS LEFT (Cities Without Number) or NO ROLL. Players\' characters always go down; friendly and enemy NPCs as WHO GOES DOWN says.',
+  ] },
   { page: 'rests', title: 'RESTS', body: [
     'The moments a game refills things: a short rest, a long rest, the end of a scene or a session, and your own. Each says what it refills, in order, and a rest can count as another.',
     'The GM calls one from the GAME tab for everyone or chosen characters, with a preview first.',
@@ -387,6 +391,17 @@ export const HINTS = {
   'damage.name': 'What a hit says: "2d6 FIRE DMG". Letters, digits, spaces, a hyphen or an apostrophe; no two types that are on may share a name.',
   'damage.icon': 'Shown on the HEALTH page beside a resistance: one of the drawn icons, one you upload, or one you DRAW on the 16 x 16 pad.',
   'damage.description': 'What it is, in a line, shown with the type wherever it is named.',
+  // RULE LIBRARY (8c2)
+  'library.presets': 'A game\'s numbers written in for you: D&D 5E (three successes or three failures), CYBERPUNK RED (a save each turn, under BODY, harder each time), CITIES WITHOUT NUMBER (six turns, then dead) or NO ROLL. Change anything after; WHO GOES DOWN stays as you set it.',
+  'library.word': 'What the sheet and the token say while a character is down: DYING, MORTALLY WOUNDED, TAKEN OUT. Everyone at the table sees the word; only the character\'s player and the GM see the count.',
+  'library.way': 'SAVES COUNTED: successes to be stable, failures to be dead. ONE FAIL IS DEATH: a save each turn until stabilized, one miss is death. TURNS LEFT: no roll, dead after so many turns. NO ROLL: only the word.',
+  'library.save': 'The dice rolled, which may add the character\'s numbers (1d20 + @wis_mod), and what they must be AT LEAST or UNDER: a number or a formula of their own (@body). Rolled on the server with the character\'s sheet.',
+  'library.count': 'How many successes make them stable (still at 0, no more saves), and how many failures kill them. Each from 1 to 10.',
+  'library.harder': 'Added to the roll for each save made, so the next is harder: +1 for a game that rolls UNDER, -1 for one that rolls AT LEAST.',
+  'library.naturals': 'What the dice showing a number does, before the target is looked at: BACK WITH 1 HP, STABLE, TWO FAILURES (death where one fail is), or DEAD. The number is the dice alone, before anything added.',
+  'library.turns': 'How many of their turns they have before they die, counted by the initiative tracker in a fight and by the GM\'s A TURN GOES BY out of one.',
+  'library.hurt': 'What a hit does to someone already down: NOTHING MORE, A FAILURE counted (a turn gone, where turns are counted), or DEAD at once.',
+  'library.who': 'Players\' characters always go down when their health runs out. Tick FRIENDLY NPCS or ENEMY NPCS for theirs to go down too; an NPC left out is out at 0, as today.',
   'damage.readAs': 'How a line of gear or a file names it: the dice, the type, and DMG if you like, in any case.',
   'conditions.chip': 'The short word on the condition\'s chip in a token\'s HEALTH folder, up to 8 letters.',
   'conditions.icon': 'Drawn on the chip beside its word: one of the drawn icons, or one you upload.',

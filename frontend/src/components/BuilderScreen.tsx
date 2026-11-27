@@ -18,6 +18,7 @@ import { SheetPage } from './SheetPage';
 import { NpcsPage } from './NpcsPage';
 import { ConditionsPage } from './ConditionsPage';
 import { DamageTypesPage } from './DamageTypesPage';
+import { RuleLibraryPage } from './RuleLibraryPage';
 import { RestsPage } from './RestsPage';
 import { NewCharacterPage } from './NewCharacterPage';
 import { LevelsPage } from './LevelsPage';
@@ -154,6 +155,7 @@ const Icons: Record<BuilderPage | 'builder' | 'systems' | 'help' | 'save' | 'pub
   npcs: icon('M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 3a4 4 0 1 1 0 8 4 4 0 0 1 0-8z', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'),
   conditions: icon(...CONDITION_ICONS.skull),
   damage: icon(...DAMAGE_ICONS.impact),
+  rule_library: icon('M4 19.5A2.5 2.5 0 0 1 6.5 17H20', 'M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z', 'M9 7h7', 'M9 11h5'),
   rests: icon('M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z'),
   house_rules: icon('M9 11l3 3L22 4', 'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'),
   try: icon('M5 3l14 9-14 9z'),
@@ -585,7 +587,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
               <SetupPage api={api} systemId={systemId ?? ''} definition={definition!} edit={edit} say={(text, bad) => setStatus({ text, bad })} />
             )}
             {ready && page === 'words' && <WordsPage definition={definition!} edit={edit} />}
-            {ready && page === 'features' && <FeaturesPage definition={definition!} edit={edit} api={api} systemId={systemId} />}
+            {ready && page === 'features' && <FeaturesPage definition={definition!} edit={edit} api={api} systemId={systemId} onGoTo={(p) => { setPage(p); setStatus(null); }} />}
             {ready && page === 'rules' && !graphOn && <StatsRulesPage definition={definition!} edit={edit} api={api} onEditInGraph={(node) => pickRulesView('graph', node)} onHelp={(topic) => { setHelpTopic(topic); setPage('help'); setStatus(null); }} />}
             {graphOn && (
               <React.Suspense fallback={<p style={{ opacity: 0.7, padding: 24 }}>LOADING THE MAP…</p>}>
@@ -600,6 +602,7 @@ export function BuilderScreen({ token, systemId, startPage = 'setup', running, o
             {ready && page === 'npcs' && <NpcsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'conditions' && <ConditionsPage definition={definition!} edit={edit} api={looking ? undefined : api} />}
             {ready && page === 'damage' && <DamageTypesPage definition={definition!} edit={edit} api={looking ? undefined : api} published={system?.published ?? null} />}
+            {ready && page === 'rule_library' && <RuleLibraryPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'rests' && <RestsPage definition={definition!} edit={edit} api={api} />}
             {ready && page === 'house_rules' && <HouseRulesPage definition={definition!} edit={edit} onGoTo={(p) => { setPage(p); setStatus(null); }} />}
             {ready && page === 'try' && <TryItPage definition={definition!} edit={looking ? undefined : edit} api={api} />}

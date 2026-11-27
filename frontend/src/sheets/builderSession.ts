@@ -141,7 +141,7 @@ export const publishedMessage = (version: number, running: boolean, dropped = 0)
 
 // ─── The sidebar ────────────────────────────────────────────────────────────
 
-export type BuilderPage = 'setup' | 'words' | 'features' | 'rules' | 'choices' | 'items' | 'sheet' | 'new_character' | 'levels' | 'npcs' | 'conditions' | 'damage' | 'rests' | 'house_rules' | 'try' | 'problems';
+export type BuilderPage = 'setup' | 'words' | 'features' | 'rules' | 'choices' | 'items' | 'sheet' | 'new_character' | 'levels' | 'npcs' | 'conditions' | 'damage' | 'rule_library' | 'rests' | 'house_rules' | 'try' | 'problems';
 
 /**
  * The builder's pages, in the sidebar's order, each with the line that says what it is for
@@ -161,6 +161,7 @@ export const BUILDER_PAGES: { id: BuilderPage; label: string; what: string }[] =
   { id: 'npcs', label: 'NPCS', what: 'NPC tiers and their sheets.' },
   { id: 'conditions', label: 'CONDITIONS', what: 'What can happen to a character besides losing health.' },
   { id: 'damage', label: 'DAMAGE TYPES', what: 'What kinds of hurt a hit can be, and what resisting one means.' },
+  { id: 'rule_library', label: 'RULE LIBRARY', what: 'Ready-made rules to switch on and fill in, like what happens when health runs out.' },
   { id: 'rests', label: 'RESTS', what: 'What refills, and what wears off, when the group rests or a scene ends.' },
   { id: 'house_rules', label: 'HOUSE RULES', what: 'Rules the GM can turn on or off for their table.' },
   { id: 'try', label: 'TRY IT', what: 'A test character, to see the rules work.' },

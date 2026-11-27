@@ -101,7 +101,7 @@ test('every control in the builder takes a click, on every page', async ({ page 
   // ROLLS is swept: + MODIFIER gives the open condition ALL ROLLS -1.
   await builderPage(page, 'CONDITIONS');
   await page.getByRole('button', { name: '+ MODIFIER' }).click();
-  for (const p of ['SETUP', 'WORDS', 'PARTS', 'STATS & RULES', 'CHOICES', 'ITEMS', 'CHARACTER SHEET', 'NEW CHARACTER', 'LEVELS', 'NPCS', 'CONDITIONS', 'DAMAGE TYPES', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
+  for (const p of ['SETUP', 'WORDS', 'PARTS', 'STATS & RULES', 'CHOICES', 'ITEMS', 'CHARACTER SHEET', 'NEW CHARACTER', 'LEVELS', 'NPCS', 'CONDITIONS', 'DAMAGE TYPES', 'RULE LIBRARY', 'RESTS', 'HOUSE RULES', 'TRY IT']) {
     await builderPage(page, p);
     if (p === 'CHOICES') {
       // A list picking several, with an option, so every box on the page is there (7a2b1); a second
@@ -285,6 +285,11 @@ test('every control in the builder takes a click, on every page', async ({ page 
       const own = page.getByRole('region', { name: 'New type damage type' });
       await own.getByRole('button', { name: 'DRAW' }).click();
       await expect(own.getByRole('group', { name: 'Drawing of New type' })).toBeVisible();
+    }
+    if (p === 'RULE LIBRARY') {
+      // WHEN HEALTH RUNS OUT on, D&D 5E: the save, the count and the naturals there (8c2).
+      await page.getByRole('switch', { name: 'When health runs out' }).click();
+      await expect(page.getByRole('group', { name: 'On a natural' })).toBeVisible();
     }
     if (p === 'PARTS') {
       // SHOPS opened, with a shop of the game's own made, so BUYS and its row (name, BUYS, ON, DELETE) are there (8a7b3b).
