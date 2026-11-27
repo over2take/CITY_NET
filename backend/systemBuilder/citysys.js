@@ -8,7 +8,8 @@
 //     "rolls": [ ...the system's own rolls, when it has some (rollStyles.js) ],
 //     "symbols": [ ... ], "dice": [ ...its own dice and their symbols (diceFaces.js, 6c1a) ],
 //     "choices": [ ...the lists a character picks from, and their features (choices.js, 7a1a) ],
-//     "damage": { ...its damage types and what resisting means (damageTypes.js, 8b1a) }
+//     "damage": { ...its damage types and what resisting means (damageTypes.js, 8b1a) },
+//     "dying": { ...what happens when health runs out (dying.js, 8c1a) }
 //   }
 //
 // The map's layout, the rolls, the dice and the choices travel beside the system, not in it (2026-10-18, rolls 6a2a): a
@@ -49,7 +50,7 @@ const appVersion = () => {
 const hashOf = (text) => crypto.createHash('sha256').update(String(text)).digest('hex');
 
 /** The sections a file carries beside its definition, for builders from before them. */
-const BESIDE = ['graph', 'rolls', 'symbols', 'dice', 'choices', 'items', 'ranks', 'spend', 'improve', 'damage'];
+const BESIDE = ['graph', 'rolls', 'symbols', 'dice', 'choices', 'items', 'ranks', 'spend', 'improve', 'damage', 'dying'];
 
 /** A file name from a system's name: lowercase, dashes, never empty. */
 const fileNameFor = (name) => {
