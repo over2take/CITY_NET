@@ -217,7 +217,7 @@ const aTurn = (rule, st) => {
 const signed = (n) => (n < 0 ? ` - ${-n}` : ` + ${n}`);
 
 /**
- * A death save rolled for a character down: `{ ok: true, st, heal, total, natural, words }`, `heal` 1 where a natural
+ * A death save rolled for a character down: `{ ok: true, st, heal, total, natural, dice, words }`, `heal` 1 where a natural
  * brings them back with 1 HP; or `{ ok: false, error }`. `values` are the character's, for the target's formula;
  * `inFight` says the tracker counts the turns, so a save waits for theirs unless `byGm`.
  */
@@ -239,7 +239,7 @@ const deathSave = (rule, st, { definition, values, rng, inFight = false, byGm = 
     + ` · ${rule.save.way === 'under' ? `UNDER ${target.value}` : `${target.value} OR MORE`}`;
   // Out of a fight each save is a turn; in one, the tracker has counted it.
   const base = { ...st, due: false, turns: inFight ? st.turns : st.turns + 1 };
-  const said = (s, words, heal = 0) => ({ ok: true, st: s, heal, total, natural, words: `${head} · ${words}` });
+  const said = (s, words, heal = 0) => ({ ok: true, st: s, heal, total, natural, dice: rolled.dice, words: `${head} · ${words}` });
 
   const nat = rule.naturals.find((n) => n.face === natural);
   if (nat) {

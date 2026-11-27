@@ -40,7 +40,7 @@ const { inventoryAdded } = require('../sheets/inventoryImport');
 const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { hitOnTarget, targetOf, takeOff, HIT_WAITS_MS } = require('../tokens/hitOnTarget');
-const { setAnnouncer: setDyingAnnouncer } = require('../tokens/dyingTable');
+const { setAnnouncer: setDyingAnnouncer, rollDeathSave, turnGoesBy } = require('../tokens/dyingTable');
 const { hitsOn, mayApply, shownTo, appliedWords, dismissedWords, keepHit, rowWords } = require('../tokens/waitingHits');
 const { sendableGear, sendableField, targetsOf, sentWords, sendShown, keepSendable, sendsOf, claimSend, nameSend, dropSend } = require('../tokens/sendTo');
 const { attackAsProblem, characterKey, createHitsWaiting } = require('../tokens/attackAs');
@@ -155,12 +155,13 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
       emitUpdate({ isRhombusOnly: true });
       if (owner) io.emit('sheetUpdated', { username: owner });
     }
-    for (const { line, seenBy, account } of lines) {
-      const who = line.split(' · ')[0];
-      const data = { userName: who, account: account || who, results: {}, modifiers: [], color: '#00ff00', total: 0, historyString: line, quiet: true };
-      db.run('INSERT INTO dice_rolls (username, total, results, color, historyString, seen_by) VALUES (?, 0, ?, ?, ?, ?)', [data.account, '{}', data.color, line, seenBy], (e) => {
+    for (const { line, seenBy, account, userName, results, total } of lines) {
+      const who = userName || line.split(' · ')[0];
+      // A death save (8c1b2) comes with its dice, thrown in the tray; any other line has none.
+      const data = { userName: who, account: account || who, results: results || {}, modifiers: [], color: '#00ff00', total: total || 0, historyString: line, ...(results ? {} : { quiet: true }) };
+      db.run('INSERT INTO dice_rolls (username, total, results, color, historyString, seen_by) VALUES (?, ?, ?, ?, ?, ?)', [data.account, data.total, JSON.stringify(data.results), data.color, line, seenBy], (e) => {
         if (e) console.error('[dying] Could not keep a line:', e.message);
-        // No dice in a dying line: its throw is empty, sent as every roll's is.
+        // Sent as every roll's is, with its throw (an empty one for a line with no dice).
         for (const s of connections.values()) if (seesLine(s, seenBy)) s.emit('diceRollBroadcast', withThrow(data));
       });
     }
@@ -3004,6 +3005,33 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           hitsOn(db, target.row, system, (hits) => ack({ ok: true, ...shownTo(hits, { may: mayApply(target.row, caller), editor: isGmSocket(socket), user: info.userName }) }));
         });
       });
+    });
+
+    // DEATH SAVE (8c1b2; the mockup's answer 3): pressed by the token's player or the GM, rolled on the server
+    // (tokens/dyingTable.js). An NPC's is the GM's alone. Answers { ok, error? }.
+    socket.on('deathSave', (payload, ack) => {
+      const reply = typeof ack === 'function' ? ack : () => {};
+      const info = userSockets.get(socket.id);
+      if (!info || !info.userName || !payload || !Number.isInteger(Number(payload.locationId))) return reply({ ok: false, error: 'Which token?' });
+      const gm = isGmSocket(socket);
+      db.get('SELECT shape, owner FROM locations WHERE id = ?', [Number(payload.locationId)], (err, row) => {
+        if (err || !row) return reply({ ok: false, error: 'No such token' });
+        const own = row.shape === 'rhombus' && row.owner === info.userName;
+        if (!gm && !own) return reply({ ok: false, error: 'Only their player or the GM rolls it' });
+        rollDeathSave(db, { runtime: customSystems, hits: { targetOf, takeOff }, locationId: Number(payload.locationId), byGm: gm, who: identity.displayName(info.userName), account: info.userName, rng: cryptoRng })
+          .then((done) => reply(done.ok ? { ok: true } : { ok: false, error: done.error }))
+          .catch(() => reply({ ok: false, error: 'Could not be rolled' }));
+      });
+    });
+
+    // A TURN GOES BY (8c1b2): the GM's, for a token down out of a fight (in one the tracker counts). Answers { ok, error? }.
+    socket.on('dyingTurn', (payload, ack) => {
+      const reply = typeof ack === 'function' ? ack : () => {};
+      if (!isGmSocket(socket)) return reply({ ok: false, error: 'The GM\'s to say' });
+      if (!payload || !Number.isInteger(Number(payload.locationId))) return reply({ ok: false, error: 'Which token?' });
+      turnGoesBy(db, { runtime: customSystems, locationId: Number(payload.locationId) })
+        .then((done) => reply(done.ok ? { ok: true } : { ok: false, error: done.error }))
+        .catch(() => reply({ ok: false, error: 'Could not be counted' }));
     });
 
     // APPLY one, DISMISS one, or APPLY ALL oldest first (answer 2), by whoever may (mayApply). Each taken out of the table

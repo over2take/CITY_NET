@@ -7,6 +7,7 @@ const { onTurns } = require('../systemBuilder/conditions');
 const { tickCombat, combatTokens } = require('../tokens/conditions');
 const { syncConditionsOnSheet } = require('../sheets/conditionsOnSheet');
 const { momentsOfNext, momentsOfBegin, fireTurnMoments, dropAsks } = require('../tokens/turnEffects');
+const { dyingTurns } = require('../tokens/dyingTable');
 
 /** A custom system's own word for initiative in the dice log; today's text for the rest. */
 const initiativeWord = (system) => customSystems.wordIn(system, 'initiative', 'singular', 'INITIATIVE').toUpperCase();
@@ -102,7 +103,9 @@ function registerInitiativeHandlers(io, db, { emitUpdate = () => {} } = {}) {
       const system = !gErr && gRow ? gRow.value : null;
       const go = (list) => fireTurnMoments(db, { io, emitUpdate, runtime: customSystems, system, sceneKey, moments: list })
         .catch((e) => console.error('[initiative] Condition turn effects:', e.message));
-      go(before).then(() => (round ? new Promise((done) => newRound(round, done)) : null)).then(() => go(after));
+      // Then a token down has its turn go by (8c1b2): a death save due, or a turn fewer left.
+      go(before).then(() => (round ? new Promise((done) => newRound(round, done)) : null)).then(() => go(after))
+        .then(() => dyingTurns(db, { runtime: customSystems, moments: after }));
     });
   };
 
