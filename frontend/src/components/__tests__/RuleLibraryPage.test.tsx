@@ -213,3 +213,59 @@ describe("STABILIZE (8c4b1)", () => {
     expect(part().getByRole('switch', { name: 'Dead at once down again with it' }).getAttribute('aria-checked')).toBe('true');
   });
 });
+
+describe("LUCK (8c5b)", () => {
+  const LUCKY: Definition = {
+    format: 1, name: 'Lucky',
+    stats: [{ id: 'abilities', label: 'ABILITIES', stats: [{ id: 'aim', label: 'Aim' }, { id: 'luck', label: 'Luck' }] }],
+    rolls: [{ id: 'shoot', label: 'Shoot', dice: [{ count: '2', sides: 6 }], add: '@this', by: ['aim'] }],
+  };
+  const luckCard = () => within(screen.getByRole('region', { name: 'Luck' }));
+  const luck = (def: Definition) => def.luck as Record<string, unknown>;
+
+  it('off to start; on as CYBERPUNK RED, THE MOST the system\'s LUCK, each part with its "?"', async () => {
+    const { last } = open(LUCKY);
+    const sw = luckCard().getByRole('switch', { name: 'Luck' });
+    expect(sw.getAttribute('aria-checked')).toBe('false');
+    expect(luckCard().queryByRole('group', { name: 'Luck presets' })).toBeNull();
+    await userEvent.click(sw);
+    expect(luck(last())).toEqual({ name: 'LUCK', most: '@luck', each: 'plus', on: 'all', refills: ['end_of_session'] });
+    expect(luckCard().getByRole('group', { name: 'Luck presets' }).querySelector('[aria-pressed="true"]')?.textContent).toBe('CYBERPUNK RED');
+    expect((luckCard().getByRole('textbox', { name: 'The most luck' }) as HTMLInputElement).value).toBe('@luck');
+    for (const k of ['library.luckPresets', 'library.luckName', 'library.luckMost', 'library.luckEach', 'library.luckOn', 'library.luckRefills'] as const) {
+      expect(screen.getAllByLabelText(HINTS[k]).length, k).toBeGreaterThan(0);
+    }
+  });
+
+  it('A DICE POOL GAME, then each part: CALLED, THE MOST, A DIE, ONLY THESE ROLLS, REFILLED BY', async () => {
+    const { last } = open(LUCKY);
+    await userEvent.click(luckCard().getByRole('switch', { name: 'Luck' }));
+    await userEvent.click(luckCard().getByRole('button', { name: 'A DICE POOL GAME' }));
+    expect(luck(last())).toMatchObject({ name: 'EDGE', each: 'die', refills: ['end_of_scene'] });
+    const name = luckCard().getByLabelText('CALLED');
+    await userEvent.clear(name);
+    expect(name.getAttribute('aria-invalid')).toBe('true');
+    await userEvent.type(name, 'Fate');
+    const most = luckCard().getByRole('textbox', { name: 'The most luck' });
+    await userEvent.clear(most);
+    await userEvent.type(most, '@luck + 1');
+    await userEvent.click(within(luckCard().getByRole('group', { name: 'Each point' })).getByRole('button', { name: 'ADDS +1' }));
+    expect(luckCard().queryByRole('group', { name: "Luck's rolls" })).toBeNull();
+    await userEvent.click(within(luckCard().getByRole('group', { name: 'Luck is on' })).getByRole('button', { name: 'ONLY THESE ROLLS' }));
+    await userEvent.click(within(luckCard().getByRole('group', { name: "Luck's rolls" })).getByRole('button', { name: 'SHOOT' }));
+    await userEvent.click(within(luckCard().getByRole('group', { name: 'Refilled by' })).getByRole('button', { name: 'LONG REST' }));
+    // And one unticked.
+    await userEvent.click(within(luckCard().getByRole('group', { name: 'Refilled by' })).getByRole('button', { name: 'END OF SCENE' }));
+    expect(luck(last())).toEqual({ name: 'Fate', most: '@luck + 1', each: 'plus', on: ['shoot'], refills: ['long_rest'] });
+    expect(checkDefinition(last()).problems).toEqual([]);
+    await userEvent.click(within(luckCard().getByRole('group', { name: 'Luck is on' })).getByRole('button', { name: 'EVERY ROLL' }));
+    expect(luck(last()).on).toBe('all');
+  });
+
+  it('ONLY THESE ROLLS in a game with no rolls: says why', async () => {
+    open();
+    await userEvent.click(luckCard().getByRole('switch', { name: 'Luck' }));
+    await userEvent.click(within(luckCard().getByRole('group', { name: 'Luck is on' })).getByRole('button', { name: 'ONLY THESE ROLLS' }));
+    expect(luckCard().getByText(/this game has no rolls yet/)).toBeTruthy();
+  });
+});

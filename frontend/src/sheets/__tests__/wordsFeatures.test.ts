@@ -34,8 +34,8 @@ describe('held to the server', () => {
 
   it('lists every part, marking the two with no rules for a custom system yet, and DEATH SAVES set up on RULE LIBRARY (8c2)', () => {
     expect(PART_ROWS.map((p) => p.id).sort()).toEqual([...PARTS].sort());
-    expect(PART_ROWS.filter((p) => p.unused).map((p) => p.id)).toEqual(['xp', 'luck']);
-    expect(PART_ROWS.filter((p) => p.library).map((p) => p.id)).toEqual(['death']);
+    expect(PART_ROWS.filter((p) => p.unused).map((p) => p.id)).toEqual(['xp']);
+    expect(PART_ROWS.filter((p) => p.library).map((p) => p.id)).toEqual(['death', 'luck']);
   });
 
   it('reads a part on or off as the server does, whatever a file says', () => {

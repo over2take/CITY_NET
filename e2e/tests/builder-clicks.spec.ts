@@ -290,6 +290,10 @@ test('every control in the builder takes a click, on every page', async ({ page 
       // WHEN HEALTH RUNS OUT on, D&D 5E: the save, the count and the naturals there (8c2).
       await page.getByRole('switch', { name: 'When health runs out' }).click();
       await expect(page.getByRole('group', { name: 'On a natural' })).toBeVisible();
+      // LUCK on, ONLY THESE ROLLS, so its parts are there (8c5b).
+      await page.getByRole('switch', { name: 'Luck', exact: true }).click();
+      await page.getByRole('group', { name: 'Luck is on' }).getByRole('button', { name: 'ONLY THESE ROLLS' }).click();
+      await expect(page.getByRole('group', { name: 'Refilled by' })).toBeVisible();
     }
     if (p === 'PARTS') {
       // SHOPS opened, with a shop of the game's own made, so BUYS and its row (name, BUYS, ON, DELETE) are there (8a7b3b).

@@ -110,7 +110,7 @@ export const PART_ROWS: PartRow[] = [
   { id: 'sheet_import', label: 'SHEET IMPORT', what: 'Filling a character sheet from a PDF form or JSON file through IMPORT.' },
   { id: 'xp', label: 'XP AWARDS', what: 'The GM awarding XP from the admin panel.', unused: true },
   { id: 'death', label: 'DEATH SAVES', what: 'What happens when a character\'s health runs out: death saves, or the turns they have left.', library: true },
-  { id: 'luck', label: 'LUCK', what: 'A pool of luck points to spend on rolls.', unused: true },
+  { id: 'luck', label: 'LUCK', what: 'A pool of luck points to spend on rolls.', library: true },
 ];
 
 /** Is a part on? Everything is, unless the system turns it off (parts.js partOn). */
