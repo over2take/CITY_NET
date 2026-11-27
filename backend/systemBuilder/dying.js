@@ -11,11 +11,14 @@
 //     naturals: [{ face: 20, then: 'back_up' }, { face: 1, then: 'two_failures' }], // what the dice showing a number does
 //     turns: 6,                                                // TURNS LEFT: then dead, unless stabilized
 //     hurt: 'failure',                                         // HURT WHILE DOWN: 'nothing' more, 'failure', or 'dead'
+//     npcs: { friendly: true, enemy: false },                  // WHO GOES DOWN: players' characters always, NPCs as ticked
 //   }
 //
 // The rule is on when the PARTS row DEATH SAVES (parts.death) is and the section is written; a system without it has its
 // health run out as before. Every key belongs to one way or another, and a way's keys are kept when the GM picks another,
-// so switching back finds them as they were: only the way's own are read.
+// so switching back finds them as they were: only the way's own are read. WHO GOES DOWN is the GM's (the user, 2026-11-26,
+// "one for friendly and the other for enemy NPCs"): players' characters always; FRIENDLY NPCS and ENEMY NPCS each ticked
+// or not, both off to start, so a D&D table isn't rolling saves for every goblin. An NPC left out is out at 0, as today.
 //
 // A character down is { state: 'dying' | 'stable' | 'dead', saves, fails, made, turns, due }: the successes and failures
 // counted, the saves made (each making the next harder), the turns gone by (in a fight the tracker counts them; out of
@@ -36,11 +39,14 @@ const HURT = ['nothing', 'failure', 'dead'];
 const NATURALS = ['back_up', 'stable', 'two_failures', 'dead'];
 const NATURAL_WORDS = { back_up: 'BACK WITH 1 HP', stable: 'STABLE', two_failures: 'TWO FAILURES', dead: 'DEAD' };
 const LIMITS = { word: 30, text: 200, count: 10, turns: 100, harder: 20, naturals: 6, face: 1000 };
-const START = { word: 'DYING', way: 'count', save: { dice: '1d20', way: 'at_least', target: '10' }, to_live: 3, to_die: 3, harder: 0, naturals: [], turns: 6, hurt: 'nothing' };
+const START = { word: 'DYING', way: 'count', save: { dice: '1d20', way: 'at_least', target: '10' }, to_live: 3, to_die: 3, harder: 0, naturals: [], turns: 6, hurt: 'nothing', npcs: { friendly: false, enemy: false } };
 
-const DYING_KEYS = new Set(['word', 'way', 'save', 'to_live', 'to_die', 'harder', 'naturals', 'turns', 'hurt']);
+const DYING_KEYS = new Set(['word', 'way', 'save', 'to_live', 'to_die', 'harder', 'naturals', 'turns', 'hurt', 'npcs']);
 const SAVE_KEYS = new Set(['dice', 'way', 'target']);
 const NATURAL_KEYS = new Set(['face', 'then']);
+const NPC_KEYS = new Set(['friendly', 'enemy']);
+/** A token's shape, as the map has it: an NPC's says which side it is on; any other is a player's character. */
+const NPC_SHAPES = { friendly_rhombus: 'friendly', enemy_rhombus: 'enemy' };
 /** A word as the sheet and the token say it: letters, digits, spaces, a hyphen or an apostrophe. */
 const WORD = /^[A-Za-z][A-Za-z0-9 '-]*$/;
 
@@ -63,6 +69,15 @@ const checkDying = (definition, problems) => {
     else if (!WORD.test(dying.word.trim())) problems.push({ where: 'dying, word', message: 'Letters, digits, spaces, a hyphen or an apostrophe, starting with a letter' });
   }
   if (dying.way !== undefined && !WAYS.includes(dying.way)) problems.push({ where: 'dying, way', message: `One of ${WAYS.join(', ')}` });
+  if (dying.npcs !== undefined) {
+    if (!isPlainObject(dying.npcs)) problems.push({ where: 'dying, npcs', message: 'Must say whether friendly and enemy NPCs go down' });
+    else {
+      for (const key of Object.keys(dying.npcs)) {
+        if (!NPC_KEYS.has(key)) problems.push({ where: `dying, npcs, ${key}`, message: 'Only friendly and enemy' });
+        else if (typeof dying.npcs[key] !== 'boolean') problems.push({ where: `dying, npcs, ${key}`, message: 'Yes or no' });
+      }
+    }
+  }
   if (dying.hurt !== undefined && !HURT.includes(dying.hurt)) problems.push({ where: 'dying, hurt', message: `One of ${HURT.join(', ')}` });
   for (const key of ['to_live', 'to_die']) {
     if (dying[key] !== undefined && !whole(dying[key], 1, LIMITS.count)) problems.push({ where: `dying, ${key}`, message: `A whole number from 1 to ${LIMITS.count}` });
@@ -137,7 +152,15 @@ const dyingRuleOf = (definition) => {
     naturals: Array.isArray(d.naturals) ? d.naturals.filter((n) => isPlainObject(n) && whole(n.face, 1, LIMITS.face) && NATURALS.includes(n.then)) : [],
     turns: whole(d.turns, 1, LIMITS.turns) ? d.turns : START.turns,
     hurt: HURT.includes(d.hurt) ? d.hurt : START.hurt,
+    npcs: { friendly: isPlainObject(d.npcs) && d.npcs.friendly === true, enemy: isPlainObject(d.npcs) && d.npcs.enemy === true },
   };
+};
+
+/** Whether a token of this shape goes down dying under the rule: a player's character always, an NPC as WHO GOES DOWN says. */
+const goesDown = (rule, shape) => {
+  if (!rule) return false;
+  const side = Object.prototype.hasOwnProperty.call(NPC_SHAPES, shape) ? NPC_SHAPES[shape] : null;
+  return side === null || rule.npcs[side] === true;
 };
 
 /** A character just gone down. */
@@ -249,5 +272,5 @@ const stateOf = (v) => {
 
 module.exports = {
   WAYS, SAVE_WAYS, HURT, NATURALS, NATURAL_WORDS, LIMITS, START,
-  checkDying, dyingRuleOf, startState, afterHealth, aTurn, deathSave, stateOf,
+  checkDying, dyingRuleOf, goesDown, startState, afterHealth, aTurn, deathSave, stateOf,
 };

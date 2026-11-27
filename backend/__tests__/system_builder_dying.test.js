@@ -14,7 +14,7 @@ import { createRequire } from 'module';
 
 const require_ = createRequire(import.meta.url);
 const {
-  WAYS, HURT, NATURALS, LIMITS, START, checkDying, dyingRuleOf, startState, afterHealth, aTurn, deathSave, stateOf,
+  WAYS, HURT, NATURALS, LIMITS, START, checkDying, dyingRuleOf, goesDown, startState, afterHealth, aTurn, deathSave, stateOf,
 } = require_('../systemBuilder/dying');
 const { checkDefinition } = require_('../systemBuilder/definition');
 const citysys = require_('../systemBuilder/citysys');
@@ -29,7 +29,7 @@ const problemsOf = (dying, extra = {}) => { const p = []; checkDying({ ...OWN, .
 const ruleOf = (dying) => dyingRuleOf({ ...OWN, dying });
 /** Dice that land on these faces, in turn, whatever their size. */
 const faces = (sides, ...shown) => { let i = 0; return () => (shown[Math.min(i++, shown.length - 1)] - 0.5) / sides; };
-const DND = { word: 'Dying', way: 'count', save: { dice: '1d20', way: 'at_least', target: '10' }, to_live: 3, to_die: 3, naturals: [{ face: 20, then: 'back_up' }, { face: 1, then: 'two_failures' }], hurt: 'failure' };
+const DND = { word: 'Dying', npcs: { friendly: false, enemy: false }, way: 'count', save: { dice: '1d20', way: 'at_least', target: '10' }, to_live: 3, to_die: 3, naturals: [{ face: 20, then: 'back_up' }, { face: 1, then: 'two_failures' }], hurt: 'failure' };
 const CPR = { word: 'Mortally Wounded', way: 'once', save: { dice: '1d10', way: 'under', target: '@body' }, harder: 1, naturals: [{ face: 10, then: 'dead' }], hurt: 'nothing' };
 const CWN = { word: 'Mortally Wounded', way: 'turns', turns: 6, hurt: 'dead' };
 const save = (rule, st, shown, extra = {}) => deathSave(rule, st, { definition: OWN, values: { body: 7, wis: 2 }, rng: faces(Number(rule.save.dice.split('d')[1].split(' ')[0]), ...shown), ...extra });
@@ -48,6 +48,10 @@ describe('the dying section, checked', () => {
     expect(problemsOf([])).toEqual(['dying: Must say what happens when health runs out']);
     expect(problemsOf({ stabilize: {} })).toEqual(['dying, stabilize: Not part of dying']);
     expect(problemsOf({ way: 'twice', hurt: 'ouch' })).toEqual(['dying, way: One of count, once, turns, none', 'dying, hurt: One of nothing, failure, dead']);
+    expect(problemsOf({ npcs: true })).toEqual(['dying, npcs: Must say whether friendly and enemy NPCs go down']);
+    expect(problemsOf({ npcs: { friendly: 'yes', allies: true } })).toEqual(['dying, npcs, friendly: Yes or no', 'dying, npcs, allies: Only friendly and enemy']);
+    expect(problemsOf({ npcs: { friendly: true, enemy: false } })).toEqual([]);
+    expect(problemsOf({ npcs: {} })).toEqual([]);
     for (const key of ['to_live', 'to_die']) {
       expect(problemsOf({ [key]: 0 })).toEqual([`dying, ${key}: A whole number from 1 to ${LIMITS.count}`]);
       expect(problemsOf({ [key]: LIMITS.count + 1 })).toHaveLength(1);
@@ -123,9 +127,24 @@ describe('the rule a game plays by', () => {
 
   it('every key filled in: as written, or as a game starts', () => {
     expect(ruleOf({})).toEqual(START);
-    expect(START).toEqual({ word: 'DYING', way: 'count', save: { dice: '1d20', way: 'at_least', target: '10' }, to_live: 3, to_die: 3, harder: 0, naturals: [], turns: 6, hurt: 'nothing' });
+    expect(START).toEqual({ word: 'DYING', way: 'count', save: { dice: '1d20', way: 'at_least', target: '10' }, to_live: 3, to_die: 3, harder: 0, naturals: [], turns: 6, hurt: 'nothing', npcs: { friendly: false, enemy: false } });
     expect(ruleOf(CPR)).toEqual({ ...START, word: 'MORTALLY WOUNDED', way: 'once', save: { dice: '1d10', way: 'under', target: '@body' }, harder: 1, naturals: [{ face: 10, then: 'dead' }] });
     expect(ruleOf({ save: { target: 12 }, to_live: 0, naturals: [{ face: 0, then: 'dead' }, { face: 3, then: 'dead' }] })).toEqual({ ...START, save: { ...START.save, target: '12' }, naturals: [{ face: 3, then: 'dead' }] });
+  });
+
+  it("WHO GOES DOWN: players' characters always; friendly and enemy NPCs each as the GM ticks, both off to start", () => {
+    for (const shape of ['rhombus', 'friendly_rhombus', 'enemy_rhombus']) expect(goesDown(ruleOf(DND), shape)).toBe(shape === 'rhombus');
+    const friends = ruleOf({ ...DND, npcs: { friendly: true } });
+    expect(friends.npcs).toEqual({ friendly: true, enemy: false });
+    expect(goesDown(friends, 'friendly_rhombus')).toBe(true);
+    expect(goesDown(friends, 'enemy_rhombus')).toBe(false);
+    const foes = ruleOf({ ...DND, npcs: { enemy: true } });
+    expect(goesDown(foes, 'enemy_rhombus')).toBe(true);
+    expect(goesDown(foes, 'friendly_rhombus')).toBe(false);
+    expect(goesDown(foes, 'rhombus')).toBe(true);
+    expect(ruleOf({ npcs: { friendly: 'yes' } }).npcs).toEqual({ friendly: false, enemy: false });
+    expect(ruleOf({ npcs: true }).npcs).toEqual({ friendly: false, enemy: false });
+    expect(goesDown(null, 'rhombus')).toBe(false);
   });
 
   it('a state stored read back, or nothing for what isn\'t one', () => {
