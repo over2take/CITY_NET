@@ -104,6 +104,7 @@ const PAGE_TOPICS: { page: BuilderPage; title: string; body: string[] }[] = [
   ] },
   { page: 'rule_library', title: 'RULE LIBRARY', body: [
     'Rules the app already knows, a card each, to switch on and fill in rather than build: start from a preset named after a game, then change anything.',
+    'LUCK is the same switch as LUCK on PARTS: points spent on a roll before it is thrown, +1 or a die each, on every roll or some, refilled by the rests ticked.',
     'WHEN HEALTH RUNS OUT (death saves) is the same switch as DEATH SAVES on PARTS. It starts when the game\'s health runs out, in one of four ways: SAVES COUNTED (D&D 5e), ONE FAIL IS DEATH (Cyberpunk RED), TURNS LEFT (Cities Without Number) or NO ROLL. Players\' characters always go down; friendly and enemy NPCs as WHO GOES DOWN says.',
   ] },
   { page: 'rests', title: 'RESTS', body: [
@@ -406,6 +407,12 @@ export const HINTS = {
   'library.then': 'Made: STABLE, AT 0 (no more saves, still at 0), or BACK WITH 1 HP (healed, and up).',
   'library.gets': 'A condition put on them once stabilized, as CITIES WITHOUT NUMBER\'s FRAIL. — nothing for none.',
   'library.again': 'On: going down again while that condition is on is death at once, as FRAIL is. Off: they go down as usual.',
+  'library.luckPresets': 'A game\'s luck written in: CYBERPUNK RED (LUCK, +1 a point, any roll, back at the end of a session) or A DICE POOL GAME (EDGE, a die a point, back at the end of a scene). THE MOST reads your own LUCK or EDGE stat where you have one.',
+  'library.luckName': 'What the sheet and the log call it: LUCK, EDGE, FATE.',
+  'library.luckMost': 'The most a character has: a number, or a formula of their own numbers (@luck). A character starts full.',
+  'library.luckEach': 'What each point spent does to the roll: ADDS +1 to the total, or ADDS A DIE of the roll\'s first kind.',
+  'library.luckOn': 'Which rolls luck can be spent on: EVERY ROLL from the sheet, or ONLY THESE ROLLS, ticked.',
+  'library.luckRefills': 'The rests that bring every character back to their most when the GM calls them. The GM\'s REFILL LUCK on the GAME tab does it any time.',
   'library.who': 'Players\' characters always go down when their health runs out. Tick FRIENDLY NPCS or ENEMY NPCS for theirs to go down too; an NPC left out is out at 0, as today.',
   'damage.readAs': 'How a line of gear or a file names it: the dice, the type, and DMG if you like, in any case.',
   'conditions.chip': 'The short word on the condition\'s chip in a token\'s HEALTH folder, up to 8 letters.',

@@ -5,6 +5,7 @@ import {
   asks, startsWhen, LIMITS, WAYS, HURTS, NATURAL_THENS, PRESETS, type NaturalThen,
   helperFields, stabilizeConditions, stabilizeOf, withStabilizePart, STABILIZE_THENS,
 } from '../sheets/dying';
+import * as L from '../sheets/luck';
 import { useFormulaBox } from '../hooks/useFormulaBox';
 import { HINTS } from '../sheets/builderHelp';
 import { FieldName } from './HelpHint';
@@ -13,8 +14,8 @@ import { ToggleSwitch } from './ToggleSwitch';
 // The builder's RULE LIBRARY page (8c2; approved mockup docs/mockups/rule-library.html, 2026-11-26, every recommended answer):
 // rules the app already knows, a card each, for the GM to switch on and fill in, never wire. Its first, WHEN HEALTH RUNS OUT:
 // death saves in one of four ways, picked from a preset named after a game and then changed as the GM likes. The card's switch
-// is the PARTS row DEATH SAVES'. STABILIZE (8c4b1): what someone else rolls to bring them back, under its own line. LUCK (8c5)
-// comes later. What it reads and writes is sheets/dying.ts; every
+// is the PARTS row DEATH SAVES'. STABILIZE (8c4b1): what someone else rolls to bring them back, under its own line. LUCK (8c5b):
+// points spent on a roll before it is thrown, its switch the PARTS row LUCK's (sheets/luck.ts). What it reads and writes is sheets/dying.ts; every
 // change goes through the builder's `edit`.
 
 interface Props {
@@ -252,11 +253,89 @@ function StabilizePart({ definition, edit }: Pick<Props, 'definition' | 'edit'>)
   );
 }
 
+/** A row of toggles, each pressed or not. */
+function Ticks({ name, of, ticked, onTick }: { name: string; of: { id: string; label: string; on?: boolean }[]; ticked: Set<string>; onTick: (id: string, on: boolean) => void }) {
+  return (
+    <span role="group" aria-label={name} style={row}>
+      {of.map((o) => (
+        <button key={o.id} type="button" aria-pressed={ticked.has(o.id)} onClick={() => onTick(o.id, !ticked.has(o.id))}
+          style={{ ...btn, border: '1px solid var(--green)', cursor: 'pointer', background: ticked.has(o.id) ? 'var(--green)' : 'none', color: ticked.has(o.id) ? 'var(--black)' : 'var(--green)', opacity: o.on === false ? 0.6 : 1 }}>
+          {o.label}{o.on === false ? ' (OFF)' : ''}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+/** LUCK (8c5b; the mockup's LUCK card): what it is called, the most, what a point does, which rolls, which rests refill it. */
+function LuckCard({ definition, edit, api }: Props) {
+  const on = L.luckOn(definition);
+  const l = L.luckOf(definition);
+  const preset = L.luckPresetNow(definition);
+  const rolls = L.luckRolls(definition);
+  const rests = L.luckRests(definition);
+  const most = useFormulaBox({
+    definition, api, kind: 'formula', value: l.most, label: 'The most luck', id: 'luck-most', inputStyle: input, maxLength: L.LIMITS.text,
+    placeholder: '3, @luck', onChange: (text) => edit(L.withLuck(definition, { most: text })),
+  });
+  return (
+    <section aria-label="Luck" style={{ border: '1px solid var(--dark-green)', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 1000 }}>
+      <div style={{ ...row, justifyContent: 'space-between' }}>
+        <h3 style={{ ...small, margin: 0, color: 'var(--green)', opacity: 1, fontSize: 12 }}>LUCK</h3>
+        <span style={row}>
+          <ToggleSwitch on={on} name="Luck" onChange={(next) => edit(L.withLuckOn(definition, next))} />
+          <span style={{ ...small, opacity: 1 }}>{on ? 'ON' : 'OFF'}</span>
+        </span>
+      </div>
+      <p style={why}>Points spent on a roll before it is thrown, like Cyberpunk RED&apos;s LUCK, or Edge in a dice pool game. The same switch as LUCK on PARTS.</p>
+      {on && <>
+        <div style={row}>
+          <FieldName hint={HINTS['library.luckPresets']} style={small}>PRESETS</FieldName>
+          <span role="group" aria-label="Luck presets" style={row}>
+            {L.PRESETS.map((p) => (
+              <button key={p.id} type="button" className="utility-btn" aria-pressed={preset === p.id} onClick={() => edit(L.withLuckPreset(definition, p.id))}
+                style={{ ...btn, background: preset === p.id ? 'var(--green)' : 'none', color: preset === p.id ? 'var(--black)' : 'var(--green)' }}>
+                {p.label}
+              </button>
+            ))}
+          </span>
+        </div>
+        <div style={grid}>
+          <FieldName beside htmlFor="luck-name" hint={HINTS['library.luckName']} style={small}>CALLED</FieldName>
+          <input id="luck-name" type="text" maxLength={L.LIMITS.name} value={l.name} placeholder="LUCK" style={{ ...input, width: '12em', maxWidth: '100%' }}
+            aria-invalid={!l.name.trim() ? true : undefined} onChange={(e) => edit(L.withLuck(definition, { name: e.target.value }))} />
+          <FieldName beside htmlFor="luck-most" hint={HINTS['library.luckMost']} style={small}>THE MOST</FieldName>
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+            <span style={{ width: '10em', minWidth: 0 }}>{most.field}</span>
+            {most.help}
+          </span>
+          <FieldName beside hint={HINTS['library.luckEach']} style={small}>EACH POINT</FieldName>
+          <Segs name="Each point" of={L.EACHES} value={l.each} onPick={(each) => edit(L.withLuck(definition, { each }))} />
+          <FieldName beside hint={HINTS['library.luckOn']} style={small}>ON</FieldName>
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+            <Segs name="Luck is on" of={[{ id: 'all', label: 'EVERY ROLL' }, { id: 'some', label: 'ONLY THESE ROLLS' }] as const} value={l.on === 'all' ? 'all' : 'some'}
+              onPick={(w) => edit(L.withLuck(definition, { on: w === 'all' ? 'all' : [] }))} />
+            {l.on !== 'all' && (rolls.length
+              ? <Ticks name="Luck's rolls" of={rolls} ticked={new Set(l.on)} onTick={(id, t) => edit(L.withLuckRoll(definition, id, t))} />
+              : <span style={{ ...why, fontSize: 11 }}>this game has no rolls yet: give a field one on STATS &amp; RULES</span>)}
+          </span>
+          <FieldName beside hint={HINTS['library.luckRefills']} style={small}>REFILLED BY</FieldName>
+          <span style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+            <Ticks name="Refilled by" of={rests} ticked={new Set(l.refills)} onTick={(id, t) => edit(L.withLuckRefill(definition, id, t))} />
+            <span style={{ ...why, fontSize: 11 }}>and REFILL LUCK on the GAME tab, the GM&apos;s, any time</span>
+          </span>
+        </div>
+      </>}
+    </section>
+  );
+}
+
 export function RuleLibraryPage({ definition, edit, api }: Props) {
   return (
     <div data-testid="rule-library-page" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <p style={{ ...why, maxWidth: '72ch' }}>Rules the app already knows, for you to switch on and fill in: pick a preset named after a game, then change anything.</p>
       <DyingCard definition={definition} edit={edit} api={api} />
+      <LuckCard definition={definition} edit={edit} api={api} />
     </div>
   );
 }

@@ -8,6 +8,13 @@ import {
 import { OnlyWith } from './OnlyWith';
 import { ToggleSwitch } from './ToggleSwitch';
 import { dyingOn, withDyingOn } from '../sheets/dying';
+import { luckOn, withLuckOn } from '../sheets/luck';
+
+/** The RULE LIBRARY's cards, by their PARTS row (8c2, 8c5b): each row's switch is its card's. */
+const LIBRARY: Record<string, { on: (def: Definition) => boolean; set: (def: Definition, on: boolean) => Definition }> = {
+  death: { on: dyingOn, set: withDyingOn },
+  luck: { on: luckOn, set: withLuckOn },
+};
 import type { BuilderPage } from '../sheets/builderSession';
 import { ownShopsOf, withOwnShop, withoutOwnShop, withNewShop, typesSoldAt, SHOPS_MOST } from '../sheets/gameShops';
 import { useShopBuildings } from '../hooks/useShopBuildings';
@@ -219,13 +226,14 @@ export function FeaturesPage({ definition, edit, api, systemId, onGoTo }: Props)
       <div style={{ border: '1px solid var(--dark-green)', display: 'flex', flexDirection: 'column' }}>
         {PART_ROWS.map((p) => {
           // A RULE LIBRARY rule (8c2): its card's switch, on with the part and the rule written.
-          const on = p.library ? dyingOn(definition) : !p.unused && partIsOn(definition, p.id);
+          const card = p.library ? LIBRARY[p.id] : undefined;
+          const on = card ? card.on(definition) : !p.unused && partIsOn(definition, p.id);
           const Settings = settings[p.id];
           const isOpen = !!Settings && on && !!open[p.id];
           return (
             <div key={p.id} data-testid={`part-${p.id}`} style={{ borderBottom: '1px solid var(--dark-green)' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto', gap: '4px 14px', alignItems: 'center', padding: '10px 14px' }}>
-                <ToggleSwitch on={on} name={p.label} disabled={!!p.unused} onChange={(next) => edit(p.library ? withDyingOn(definition, next) : withPart(definition, p.id, next))} />
+                <ToggleSwitch on={on} name={p.label} disabled={!!p.unused} onChange={(next) => edit(card ? card.set(definition, next) : withPart(definition, p.id, next))} />
                 <b style={{ letterSpacing: 1, color: 'var(--green)', opacity: on ? 1 : 0.5 }}>{p.label}</b>
                 {Settings && on
                   ? <button type="button" aria-expanded={isOpen} onClick={() => setOpen({ ...open, [p.id]: !isOpen })}

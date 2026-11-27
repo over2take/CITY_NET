@@ -89,13 +89,23 @@ describe('the parts', () => {
     expect(went).toEqual(['rule_library']);
   });
 
-  it('shows the two a custom system can\'t use yet as off and greyed', () => {
+  it('shows the one a custom system can\'t use yet as off and greyed', () => {
     open({ format: 1, name: 'Hearth' });
-    for (const p of ['XP AWARDS', 'LUCK']) {
-      expect(sw(p).getAttribute('aria-checked'), p).toBe('false');
-      expect(sw(p).disabled, p).toBe(true);
-    }
-    expect(part('luck').textContent).toContain('Not used by custom systems yet.');
+    expect(sw('XP AWARDS').getAttribute('aria-checked')).toBe('false');
+    expect(sw('XP AWARDS').disabled).toBe(true);
+    expect(part('xp').textContent).toContain('Not used by custom systems yet.');
+  });
+
+  it('LUCK is the RULE LIBRARY LUCK card\'s switch (8c5b): on writes CYBERPUNK RED, off keeps it', async () => {
+    const { last } = open({ format: 1, name: 'Hearth' });
+    expect(sw('LUCK').getAttribute('aria-checked')).toBe('false');
+    expect(part('luck').textContent).toContain('Set up on RULE LIBRARY.');
+    await userEvent.click(sw('LUCK'));
+    expect((last().luck as { name: string }).name).toBe('LUCK');
+    expect(sw('LUCK').getAttribute('aria-checked')).toBe('true');
+    await userEvent.click(sw('LUCK'));
+    expect(last().parts).toEqual({ luck: { on: false } });
+    expect(last().luck).toBeTruthy();
   });
 
   it('opens SHOPS\' settings only while shops are on', async () => {
