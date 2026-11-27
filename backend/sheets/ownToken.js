@@ -13,7 +13,8 @@
 const { publicTokenConditions } = require('../tokens/conditions');
 
 // The armor class too, shown by the vitals box for quick reference (the user, 2026-11-17).
-const TOKEN_FIELDS = ['id', 'name', 'shape', 'owner', 'hp_current', 'hp_max', 'hp_temp', 'conditions', 'injuries', 'melee_ac', 'ranged_ac'];
+// And whether it is down (8c3): its player's own, or the GM's to see, count and all (tokens/dyingTable.js).
+const TOKEN_FIELDS = ['id', 'name', 'shape', 'owner', 'hp_current', 'hp_max', 'hp_temp', 'conditions', 'injuries', 'melee_ac', 'ranged_ac', 'dying'];
 
 const ownToken = (db, username, { rounds = false } = {}, cb) => {
   db.get(

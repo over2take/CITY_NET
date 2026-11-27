@@ -523,6 +523,8 @@ function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUp
 }) {
   // The strip's HEALTH drawer, opened by HEALTH ▾ or a click on the HP bar (8s3b). Before the early return: a hook.
   const [healthOpen, setHealthOpen] = useState(false);
+  // The GM looking (8c3): A TURN GOES BY in the DYING box.
+  const gm = React.useContext(GmContext);
   const h = template.header;
   if (!h) return null;
   const name = String(data[h.nameField] ?? '').trim();
@@ -584,7 +586,9 @@ function SheetHeaderBlock({ onLevelUp, template, data, portraitUrl, onPortraitUp
         })()}
         {vitals && <VitalsStrip vitals={vitals} open={healthOpen} onToggle={() => setHealthOpen((o) => !o)} rests={rests} restCalled={restCalled} maxNote={maxNote}
           // The token's armor class, read only, as this game has it: one, two or none (sheets/vitals.ts defenseOf).
-          defense={defenseOf(template) ?? undefined} />}
+          defense={defenseOf(template) ?? undefined}
+          // Down under the game's dying rule (8c3): the DYING box; the GM's A TURN GOES BY.
+          dying={template.dying} gm={!!gm} />}
         {template.deathSave && h.hpField && (hpMax ?? 0) > 0 && (hp ?? 1) <= 0 && (() => {
           const ds = template.deathSave!;
           const body = num(data[ds.statField]);

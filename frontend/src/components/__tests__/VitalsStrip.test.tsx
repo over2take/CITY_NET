@@ -699,3 +699,32 @@ describe('hits waiting on this character (8b6b2; mockup waiting-hits, section 4)
     expect(socket.emit.mock.calls.some((c) => c[0] === 'waitingHits')).toBe(false);
   });
 });
+
+describe('the DYING box (8c3)', () => {
+  const DYING = { word: 'DYING', way: 'count', save: { dice: '1d20', way: 'at_least', target: '10' }, to_live: 3, to_die: 3, harder: 0, turns: 6 };
+  const down = JSON.stringify({ state: 'dying', saves: 1, fails: 0, made: 0, turns: 1, due: true });
+  const drawDown = (dying: string | null, gm = false, way = 'count') => {
+    const vitals: SheetVitals = { token: { ...TOKEN, hp_current: 0, dying }, owner: 'kes', system: 'generic', authToken: 'tok', socket: socketWith(null), reload: vi.fn() };
+    render(<SheetRenderer template={{ ...template, dying: { ...DYING, way } } as unknown as SheetTemplate} data={{ name: 'Kes', hp: 0, hp_max: 20 } as never} onFieldChange={() => {}} vitals={vitals} gm={gm} />);
+    return vitals;
+  };
+
+  it('under the vitals box while the token is down: the word, the count, DEATH SAVE lit on their turn', async () => {
+    const vitals = drawDown(down);
+    const box = within(screen.getByRole('region', { name: 'DYING' }));
+    expect(box.getByRole('img', { name: 'SAVES 1 of 3' })).toBeTruthy();
+    expect(box.getByText('THEIR TURN')).toBeTruthy();
+    await userEvent.click(box.getByRole('button', { name: 'DEATH SAVE' }));
+    expect(vitals.socket!.emit).toHaveBeenCalledWith('deathSave', { locationId: 7 }, expect.any(Function));
+    // The vitals box itself still there above it.
+    expect(screen.getByRole('group', { name: 'Vitals' })).toBeTruthy();
+  });
+
+  it('the GM\'s A TURN GOES BY where turns are counted; nothing while the token is up', () => {
+    drawDown(JSON.stringify({ state: 'dying', saves: 0, fails: 0, made: 0, turns: 2, due: false }), true, 'turns');
+    expect(screen.getByRole('button', { name: 'A TURN GOES BY' })).toBeTruthy();
+    cleanup();
+    drawDown(null);
+    expect(screen.queryByRole('region', { name: 'DYING' })).toBeNull();
+  });
+});

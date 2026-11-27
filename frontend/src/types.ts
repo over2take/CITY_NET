@@ -51,6 +51,8 @@ export interface Location {
   hp_current: number | null;
   hp_max: number | null;
   hp_temp: number | null;
+  /** Down under its game's dying rule (8c1b1): the word's state alone for anyone but its player and the GM. */
+  dying?: string | null;
   melee_ac: number | null;
   ranged_ac: number | null;
   map_scale_multiplier: number;

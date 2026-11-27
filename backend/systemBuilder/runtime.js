@@ -39,6 +39,7 @@ const { loadTableConditions, tableConditionsOf } = require('./tableConditions');
 const { bankOf } = require('./bank');
 const { distanceOf } = require('./core');
 const { houseRulesOf, houseRulesOn, withHouseRules, choicesFrom } = require('./houseRules');
+const { dyingShown } = require('./dying');
 const { damageRulesOf } = require('./damageTypes');
 const templates = require('../sheets/templates');
 const npcTiers = require('../sheets/npcTiers');
@@ -182,6 +183,8 @@ const renderOf = (id, definition, on = new Set()) => ({
     tiers: tiersWhenOn(definition).map((t) => ({ id: t.id, label: t.label })),
   },
   house_rules: houseRuleList(definition, on),
+  // When health runs out (8c3), as the sheet's DYING box says it; null without the rule.
+  dying: dyingShown(definition),
   // Its own rolls (6b2a), only what a sheet needs to offer them: each one's name, the fields with a
   // die button for it, and the changes a player may pick with what they cost. How it rolls stays
   // on the server (tableRolls.js), as its formulas do.

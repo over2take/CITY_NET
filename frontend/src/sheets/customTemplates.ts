@@ -83,6 +83,8 @@ export interface CustomRender {
   items?: import('./gearItems').ItemsShown | null;
   /** Which of the GAME tab's switches it has anything for (8a6b). */
   switches?: import('./tableSwitches').TableSwitches;
+  /** When health runs out (8c3), null without the rule. */
+  dying?: import('./dyingBox').DyingShown | null;
 }
 
 /** Fired on window when a custom template has been loaded, so the app can redraw. */
@@ -160,6 +162,7 @@ export const templateFromRender = (render: CustomRender): SheetTemplate => {
     ...(render.house_rules?.length ? { houseRules: render.house_rules } : {}),
     ...(render.choices?.length ? { choices: render.choices } : {}),
     ...(render.resting ? { resting: render.resting } : {}),
+    ...(render.dying ? { dying: render.dying } : {}),
     ...(render.creation ? { creation: render.creation } : {}),
     ...(render.levels ? { levels: render.levels } : {}),
     ...(render.items ? { items: render.items } : {}),

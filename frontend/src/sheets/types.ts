@@ -299,6 +299,8 @@ export interface SheetTemplate {
   /** A custom system's house rules, each with whether the table has it on (sheets/houseRules.ts
    *  houseRulesIn reads them). Absent on the built-in systems, whose house rules are their own. */
   houseRules?: HouseRuleState[];
+  /** A custom system's rule for when health runs out, as a sheet shows it (8c3, sheets/dyingBox.ts); absent without one. */
+  dying?: import('./dyingBox').DyingShown;
   /** A custom system's lists to pick from, in words (backend choices.js choicesShown, 7a3b1): what
    *  its CHOICES block draws, with the character's own picks from the sheet's worked-out view. */
   choices?: import('./choicesShown').ChoiceListShown[];
@@ -375,5 +377,7 @@ export interface SheetToken {
   injuries: string | null;
   /** Its armor class, for the vitals box to show: ranged null means the melee one stands for both. */
   melee_ac?: number | null;
+  /** Down under its game's dying rule (8c3): as kept, its player's and the GM's to read in full. */
+  dying?: string | null;
   ranged_ac?: number | null;
 }

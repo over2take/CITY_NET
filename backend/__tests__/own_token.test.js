@@ -41,7 +41,11 @@ describe('a player\'s own token', () => {
     const got = await own('kes');
     expect(got.id).toBe(city);
     expect(Object.keys(got).sort()).toEqual([...TOKEN_FIELDS].sort());
-    expect(got).toMatchObject({ name: 'KES', shape: 'rhombus', owner: 'kes', hp_current: 10, hp_max: 20, hp_temp: 2, injuries: '{"head":true}' });
+    expect(got).toMatchObject({ name: 'KES', shape: 'rhombus', owner: 'kes', hp_current: 10, hp_max: 20, hp_temp: 2, injuries: '{"head":true}', dying: null });
+    // Down (8c3): their own, count and all, for the sheet's DYING box.
+    const down = JSON.stringify({ state: 'dying', saves: 1, fails: 0, made: 0, turns: 1, due: false });
+    await run(db, 'UPDATE locations SET dying = ? WHERE id = ?', [down, city]);
+    expect((await own('kes')).dying).toBe(down);
     // With only a battle map's, that one.
     await run(db, 'DELETE FROM locations WHERE id = ?', [city]);
     expect((await own('kes')).id).toBe(battle);
