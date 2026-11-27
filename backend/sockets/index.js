@@ -41,6 +41,7 @@ const tableRolls = require('../systemBuilder/tableRolls');
 const { emitRoll, historyFor } = require('../utils/rollSeen');
 const { hitOnTarget, targetOf, takeOff, HIT_WAITS_MS } = require('../tokens/hitOnTarget');
 const { setAnnouncer: setDyingAnnouncer, rollDeathSave, turnGoesBy, stabilizeToken, byHandToken } = require('../tokens/dyingTable');
+const { luckRuleOf, luckOf, luckOn, withLuck, LUCK_KEY, LIMITS: LUCK_LIMITS } = require('../systemBuilder/luck');
 const { hitsOn, mayApply, shownTo, appliedWords, dismissedWords, keepHit, rowWords } = require('../tokens/waitingHits');
 const { sendableGear, sendableField, targetsOf, sentWords, sendShown, keepSendable, sendsOf, claimSend, nameSend, dropSend } = require('../tokens/sendTo');
 const { attackAsProblem, characterKey, createHitsWaiting } = require('../tokens/attackAs');
@@ -1841,14 +1842,32 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
             try { data = JSON.parse(row.data || '{}'); } catch { return; }
             // The token's conditions as the game runs them (6b3b): HURT -1 on all rolls.
             const on = new Set(conditions.map((c) => c.id));
+            // LUCK set aside on the strip (8c5a): spent on this roll, where the game's luck is on it and there are enough; refused
+            // (nothing rolled) otherwise, as the strip only offers what may be spent.
+            const luckRule = luckRuleOf(custom);
+            const asked = Number.isInteger(payload.luck) && payload.luck > 0 ? Math.min(payload.luck, LUCK_LIMITS.spend) : 0;
+            let lucky = null;
+            if (asked) {
+              const options = tableRolls.rollsFor(custom, payload.fieldId);
+              const rolled = typeof payload.rollId === 'string' ? options.find((r) => r.id === payload.rollId) : options[0];
+              if (!luckRule || !rolled || !luckOn(luckRule, rolled.id) || luckOf(custom, luckRule, data).current < asked) return;
+              lucky = withLuck(luckRule, rolled, asked);
+            }
             const made = tableRolls.rollField({
               definition: custom, data, fieldId: payload.fieldId,
               rollId: typeof payload.rollId === 'string' ? payload.rollId : undefined,
-              chosen: Array.isArray(payload.changes) ? payload.changes.slice(0, 20) : [],
+              chosen: [...(Array.isArray(payload.changes) ? payload.changes.slice(0, 20) : []), ...(lucky ? lucky.chosen : [])],
               rng: cryptoRng, who: identity.displayName(info.userName), forName,
               conditions: customSystems.conditionsIn(system).filter((c) => on.has(c.id)),
+              ...(lucky ? { roll: lucky.roll, terms: lucky.terms } : {}),
             });
             if (!made.ok) return;
+            // The points spent, off the sheet as it is now.
+            if (lucky) {
+              mutateSheet(db, row.id, (d) => ({ ...d, [LUCK_KEY]: Math.max(0, luckOf(custom, luckRule, d).current - asked) }), (e5) => {
+                if (!e5) io.emit('sheetUpdated', updated);
+              });
+            }
             // IMPROVE BY USE (7f3a1): a player's stat rolled as MARKED BY says is marked, on the sheet as it is now.
             if (updated.username) {
               mutateSheet(db, row.id, (d) => markedByRoll(custom, d, payload.fieldId, made.result.success) || undefined, (e4, marked) => {
@@ -3003,6 +3022,30 @@ module.exports = (io, db, { elevatedUsers, emitUpdate, recordAction }) => {
           if (!target) return ack({ ok: false, error: 'No such token' });
           const caller = callerOfSocket(info);
           hitsOn(db, target.row, system, (hits) => ack({ ok: true, ...shownTo(hits, { may: mayApply(target.row, caller), editor: isGmSocket(socket), user: info.userName }) }));
+        });
+      });
+    });
+
+    // REFILL LUCK (8c5a; the mockup's answer 7), the GM's, from the GAME tab: every player's character back to their most, by
+    // letting go of what each kept. Answers { ok, refilled } (how many had spent some) or { ok: false, error }.
+    socket.on('refillLuck', (payload, ack) => {
+      const reply = typeof ack === 'function' ? ack : (typeof payload === 'function' ? payload : () => {});
+      if (!isGmSocket(socket)) return reply({ ok: false, error: 'The GM\'s to do' });
+      getGameSystem((err, system) => {
+        const rule = !err && luckRuleOf(customSystems.definitionOf(system));
+        if (!rule) return reply({ ok: false, error: 'This game has no luck' });
+        db.all('SELECT id, username, data FROM character_sheets WHERE system = ? AND is_npc = 0', [system], (e2, rows) => {
+          if (e2) return reply({ ok: false, error: 'Could not be read' });
+          const spent = (rows || []).filter((r) => { try { return Number.isInteger(JSON.parse(r.data || '{}')[LUCK_KEY]); } catch { return false; } });
+          let left = spent.length;
+          if (!left) return reply({ ok: true, refilled: 0 });
+          for (const r of spent) {
+            mutateSheet(db, r.id, (d) => { const next = { ...d }; delete next[LUCK_KEY]; return next; }, (e3) => {
+              if (!e3) io.emit('sheetUpdated', { username: r.username });
+              left -= 1;
+              if (!left) reply({ ok: true, refilled: spent.length });
+            });
+          }
         });
       });
     });

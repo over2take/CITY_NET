@@ -48,6 +48,7 @@ export const OTHER_NAMES: Record<string, string> = {
   choices: 'choices and their features', creation: 'the new character steps', levels: 'how characters go up',
   spend: 'what XP buys', improve: 'how stats improve by use', damage: 'damage types',
   dying: 'what happens when health runs out',
+  luck: 'luck',
 };
 
 /** A value one character holds, or worked out, written plainly. */

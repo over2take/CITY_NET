@@ -47,7 +47,7 @@ const list = (v) => (Array.isArray(v) ? v : []);
  * list (7f2a1) changes only what is bought next, and IMPROVE BY USE (7f3a1) only what a rest rolls next. DAMAGE TYPES (8b1a) name
  * and picture hits; nothing on a character holds one yet.
  */
-const OTHER = ['name', 'description', 'author', 'license', 'words', 'buildings', 'bank', 'lookups', 'npc', 'rests', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'creation', 'levels', 'spend', 'improve', 'damage', 'dying'];
+const OTHER = ['name', 'description', 'author', 'license', 'words', 'buildings', 'bank', 'lookups', 'npc', 'rests', 'rolls', 'symbols', 'dice', 'target_seen', 'choices', 'creation', 'levels', 'spend', 'improve', 'damage', 'dying', 'luck'];
 
 const fieldMap = (definition) => new Map(fieldsOf(effectiveSheet(definition))
   .filter((f) => isPlainObject(f) && typeof f.id === 'string')

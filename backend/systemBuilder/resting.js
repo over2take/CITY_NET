@@ -22,6 +22,7 @@ const { rollAmount } = require('./tierRolls');
 const { givenBack, restingOf, RECOVERY_KEY, ALL_POOL } = require('./recovery');
 const { improveAt, MARKS_KEY } = require('./improveByUse');
 const { refillCounts } = require('./gearCounts');
+const { luckRuleOf, luckOf, refilledAt, LUCK_KEY } = require('./luck');
 
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const isPlainObject = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -233,6 +234,12 @@ const restOn = ({ definition, restId, sheet = {}, token = null, conditions = [],
     for (const [id, value] of Object.entries(improved.patch)) if (id !== MARKS_KEY) setField(id, value);
     if (improved.patch[MARKS_KEY]) setField(MARKS_KEY, improved.patch[MARKS_KEY]);
     rolls.push(...improved.rolls);
+  }
+  // LUCK (8c5a): back to the most at a rest REFILLED BY names, by letting go of what was kept.
+  const luckRule = luckRuleOf(definition);
+  if (refilledAt(luckRule, ends)) {
+    const now = luckOf(definition, luckRule, data);
+    if (now.current < now.most) { note('luck', luckRule.name, now.current, now.most); setField(LUCK_KEY, null); }
   }
   const wearsOff = new Set(conditionsOf(definition).filter((c) => c.ends === 'rest' && c.at.some((a) => ends.has(a))).map((c) => c.id));
   const kept = list(conditions).filter((c) => !wearsOff.has(c.id));

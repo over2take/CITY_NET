@@ -241,7 +241,8 @@ const trayOf = (result, symbols = [], dice = []) => {
  * conditionsOf gives them; each modifier on all rolls is added to the roll. Returns { ok: true, roll, result, historyText, results,
  * diceSides, own (the tray's own dice, 6c4b1), board (its words for the tray's board, 6c4d1, named 6c4d3), total, glitch,
  * criticalGlitch, players (6c4h: { historyText, board } as players see them where the target is kept from them, else
- * null; historyText and board are then the GM's) } or { ok: false, error } (nothing rolled).
+ * null; historyText and board are then the GM's) } or { ok: false, error } (nothing rolled). `terms` (8c5a): more named terms
+ * added to the roll, as luck spent (+ 2 LUCK).
  */
 /** A condition's modifiers on all rolls, each a term named by its short name: HURT -1. */
 const termsOf = (conditions) => (Array.isArray(conditions) ? conditions : []).flatMap((c) => (isPlainObject(c) && Array.isArray(c.modifiers) ? c.modifiers : [])
@@ -261,7 +262,7 @@ const hiddenAt = (seen, roll) => (seen === 'shown' ? null : {
 /** Said on the GM's line when players were kept from some of it (6c4h). */
 const HIDDEN = ' · HIDDEN FROM PLAYERS';
 
-const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, forName, roll: given, tryCosts = false, conditions = [] }) => {
+const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, forName, roll: given, tryCosts = false, conditions = [], terms: more = [] }) => {
   if (!isPlainObject(definition) || (!given && typeof fieldId !== 'string')) return { ok: false, error: 'Nothing to roll' };
   const options = given ? [given] : rollsFor(definition, fieldId);
   const roll = given ?? (rollId === undefined || rollId === null ? options[0] : options.find((r) => r.id === rollId));
@@ -283,7 +284,7 @@ const rollField = ({ definition, data, fieldId, rollId, chosen = [], rng, who, f
 
   const symbols = symbolsOf(definition);
   const reads = effectiveData(definition, data);
-  const result = makeRoll(roll, valueOf(definition, fieldsFor(definition, reads, fieldId), reads), rng, picks, termsOf(conditions), { dice: diceOf(definition), symbols });
+  const result = makeRoll(roll, valueOf(definition, fieldsFor(definition, reads, fieldId), reads), rng, picks, [...termsOf(conditions), ...more], { dice: diceOf(definition), symbols });
   const label = roll.label || roll.id;
   const what = typeof fieldId === 'string' ? (statOf(definition, fieldId)?.label || formulaOf(definition, fieldId)?.label || fieldId) : null;
   const read = { ...result, read: roll.read ?? 'sum' };
